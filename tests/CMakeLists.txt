@@ -47,6 +47,15 @@ target_link_libraries(appkit_menu_draw PRIVATE App)
 add_executable(menu_view_ink menu_view_ink.m)
 target_link_libraries(menu_view_ink PRIVATE App)
 add_test(NAME appkit-menu-view-ink COMMAND menu_view_ink)
+
+# **AND THE DISPLAY PATH.** The ink tests are all offscreen; this one puts a menu's window on a headless
+# compositor and reads the COMPOSITOR'S OWN FRAMEBUFFER back, which is the only place the present can be seen.
+# It skips when there is no window server, so a component's tests still do not need a sibling's build.
+add_test(NAME appkit-menu-headless
+  COMMAND "${CMAKE_CURRENT_SOURCE_DIR}/run-menu-headless.sh"
+	  "$<TARGET_FILE:appkit_menu_draw>" "${AGORA_WINDOW_SERVER_BINARY}" 3 60)
+set_tests_properties(appkit-menu-headless PROPERTIES SKIP_RETURN_CODE 77
+  ENVIRONMENT "${_agora_app_test_env}")
 set_tests_properties(appkit-menu-view-ink PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
 
 # **THE CLASS THAT CALLS THE CELLS.** One row per item, in order, with the highlighted one distinguished — the
