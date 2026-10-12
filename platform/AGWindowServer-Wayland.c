@@ -47,6 +47,7 @@
 #include <wayland-client.h>
 
 #include "xdg-shell-client-protocol.h"
+#include "agora-shell-client-protocol.h"
 
 /* ---------------------------------------------------------------------------------------------------
  * the shm buffer
@@ -67,6 +68,16 @@ struct AGWindow {
 	struct wl_surface *surface;
 	struct xdg_surface *xdg_surface;
 	struct xdg_toplevel *toplevel;
+	/* THE ROLE, WHEN THE COMPOSITOR SPEAKS AGORA'S OWN PROTOCOL — and then `xdg_surface`/`toplevel` are NULL,
+	 * because a surface has ONE role and the two disagree about who decides the size. */
+	struct agora_window *agora;
+	int frame_x;			/* the application's frame, which this layer remembers whether or not it can
+					 * send it: a compositor that cannot be told still gets a window somewhere */
+	int frame_y;
+	int frame_width;
+	int frame_height;
+	int has_frame;
+	int level;
 
 	struct AGBuffer buffer;
 	struct wl_callback *frame_cb;
@@ -101,6 +112,13 @@ struct AGWindowServer {
 	struct wl_keyboard *keyboard;
 	struct wl_pointer *pointer;
 	struct wl_output *output;
+	struct agora_shell *shell;	/* present only when the compositor speaks it */
+	struct agora_output *agora_output;
+	int work_x;			/* NSScreen's -visibleFrame, as the server said it */
+	int work_y;
+	int work_width;
+	int work_height;
+	int have_work_area;
 
 	/* THE FIRST OUTPUT'S CURRENT MODE, which is all a client is told without asking for more. `have_screen`
 	 * separates "no output has described itself yet" from "the output is zero-sized", which are different. */
@@ -309,6 +327,10 @@ void AGWindowEndFrame(AGWindow *window)
 	wl_surface_attach(window->surface, window->buffer.buffer, 0, 0);
 	wl_surface_damage_buffer(window->surface, 0, 0, window->buffer.width, window->buffer.height);
 	wl_surface_commit(window->surface);
+	/* WHEN THE CALLER CAME HERE FROM `AGWindowShow`, THE FLUSH ALREADY HAPPENED — before the frame was asked
+	 * for and therefore before this commit. Flushing here means the frame just handed over does not wait for
+	 * something else to push it out. */
+	wl_display_flush(window->server->display);
 }
 
 /* ---------------------------------------------------------------------------------------------------
@@ -703,6 +725,24 @@ static const struct wl_output_listener output_listener = {
 	output_scale,
 };
 
+/* THE WORK AREA, WHICH IS THE SERVER'S TO SAY BECAUSE THE FURNITURE IS THE SERVER'S. */
+static void agora_output_work_area(void *data, struct agora_output *output, int32_t x, int32_t y, int32_t width,
+				   int32_t height)
+{
+	AGWindowServer *server = data;
+
+	(void)output;
+	server->work_x = (int)x;
+	server->work_y = (int)y;
+	server->work_width = (int)width;
+	server->work_height = (int)height;
+	server->have_work_area = 1;
+}
+
+static const struct agora_output_listener agora_output_listener = {
+	agora_output_work_area,
+};
+
 static void registry_global(void *data, struct wl_registry *registry, uint32_t name, const char *interface,
 			    uint32_t version)
 {
@@ -728,6 +768,18 @@ static void registry_global(void *data, struct wl_registry *registry, uint32_t n
 		 * NSScreen's own row. The listener is what tells this client the size. */
 		server->output = wl_registry_bind(registry, name, &wl_output_interface, version < 2 ? version : 2);
 		wl_output_add_listener(server->output, &output_listener, server);
+		/* AND THE COMPANION OBJECT, IF THE COMPOSITOR HAS ONE: `wl_output` says what a screen IS and this
+		 * says what is LEFT of it, which is the question `-visibleFrame` asks. */
+		if (server->shell != NULL) {
+			server->agora_output = agora_shell_get_output(server->shell, server->output);
+			agora_output_add_listener(server->agora_output, &agora_output_listener, server);
+		}
+	} else if (strcmp(interface, agora_shell_interface.name) == 0) {
+		/* **AGORA'S OWN PROTOCOL, IF IT IS THERE.** It is what can carry the frame, the level and the work
+		 * area; a stock compositor will not offer it, and then this seam falls back to `xdg-shell` and the
+		 * window is placed by whoever is in charge — a difference a caller can see through
+		 * `AGWindowServerWorkArea` and through its frame being recorded rather than obeyed. */
+		server->shell = wl_registry_bind(registry, name, &agora_shell_interface, 1);
 	}
 }
 
@@ -940,21 +992,41 @@ AGWindow *AGWindowCreate(AGWindowServer *server, int width, int height, const ch
 	window->height = height > 0 ? height : 400;
 
 	window->surface = wl_compositor_create_surface(server->compositor);
-	window->xdg_surface = xdg_wm_base_get_xdg_surface(server->wm_base, window->surface);
-	xdg_surface_add_listener(window->xdg_surface, &xdg_surface_listener, window);
-	window->toplevel = xdg_surface_get_toplevel(window->xdg_surface);
-	xdg_toplevel_add_listener(window->toplevel, &toplevel_listener, window);
-	if (title != NULL) {
-		xdg_toplevel_set_title(window->toplevel, title);
-	}
-	xdg_toplevel_set_app_id(window->toplevel, "org.agora.AppKit");
-
 	window->next = server->windows;
 	server->windows = window;
 
-	/* AN EMPTY COMMIT GIVES THE SURFACE ITS ROLE and is what asks for the first configure. The window has no
-	 * size until that arrives. */
-	wl_surface_commit(window->surface);
+	/* **OPT-IN WHILE THE CLIENT HALF IS UNFINISHED.** `agora_shell` gives the Mac's model — a frame the server
+	 * honours, levels, a work area — and this path is WRITTEN BUT NOT WORKING: the surface is never mapped, so
+	 * the client draws once and the compositor takes only the role's own requests. `AWS_AGORA_SHELL=1` turns it
+	 * on for whoever is working on it; WITHOUT IT the seam uses `xdg-shell`, which is the configuration that has
+	 * been verified, so that a half-finished path cannot regress a working one. */
+	if (server->shell != NULL && getenv("AWS_AGORA_SHELL") != NULL) {
+		/* **THE AGORA ROLE, AND THERE IS NO CONFIGURE TO WAIT FOR.** xdg-shell makes a client ask to be
+		 * configured and take the size it is given; this protocol is the Mac's, where the application states a
+		 * frame and the server honours it — so the window is usable the moment it is made, at the size asked
+		 * for, and the frame it will be shown at is whatever `AGWindowSetFrame` last said. */
+		window->agora = agora_shell_get_window(server->shell, window->surface);
+		if (title != NULL) {
+			agora_window_set_title(window->agora, title);
+		}
+		agora_window_set_app_id(window->agora, "org.agora.AppKit");
+		agora_window_set_frame(window->agora, window->has_frame ? window->frame_x : 0,
+				       window->has_frame ? window->frame_y : 0, window->width, window->height);
+		ag_window_resize(window, window->width, window->height);
+		window->configured = 1;
+	} else {
+		window->xdg_surface = xdg_wm_base_get_xdg_surface(server->wm_base, window->surface);
+		xdg_surface_add_listener(window->xdg_surface, &xdg_surface_listener, window);
+		window->toplevel = xdg_surface_get_toplevel(window->xdg_surface);
+		xdg_toplevel_add_listener(window->toplevel, &toplevel_listener, window);
+		if (title != NULL) {
+			xdg_toplevel_set_title(window->toplevel, title);
+		}
+		xdg_toplevel_set_app_id(window->toplevel, "org.agora.AppKit");
+		/* AN EMPTY COMMIT GIVES THE SURFACE ITS ROLE and is what asks for the first configure. The window has
+		 * no size until that arrives. */
+		wl_surface_commit(window->surface);
+	}
 	wl_display_flush(server->display);
 	return window;
 }
@@ -973,6 +1045,9 @@ void AGWindowDestroy(AGWindow *window)
 	}
 	if (window->buffer.pixels != NULL) {
 		munmap(window->buffer.pixels, window->buffer.size);
+	}
+	if (window->agora != NULL) {
+		agora_window_destroy(window->agora);
 	}
 	if (window->toplevel != NULL) {
 		xdg_toplevel_destroy(window->toplevel);
@@ -995,6 +1070,76 @@ void AGWindowShow(AGWindow *window)
 	 * exists for the case where the caller shows a window that has not been committed yet. */
 	wl_surface_commit(window->surface);
 	wl_display_flush(window->server->display);
+	if (window->agora != NULL) {
+		/* **AND THE FIRST FRAME STARTS HERE.** With `xdg-shell` the compositor's configure is what starts the
+		 * drawing; with this protocol there is no configure, so the door that means "show it" is the one that
+		 * says the first frame may be drawn. */
+		window->frame_ready = 1;
+		ag_window_maybe_frame(window);
+	}
+}
+
+/* ---------------------------------------------------------------------------------------------------
+ * the frame, the level, and the work area
+ * --------------------------------------------------------------------------------------------------- */
+
+void AGWindowSetFrame(AGWindow *window, int x, int y, int width, int height)
+{
+	if (window == NULL) {
+		return;
+	}
+	window->frame_x = x;
+	window->frame_y = y;
+	window->has_frame = 1;
+	/* A RESIZE MAKES THE BACKING STORE AGAIN, and only when the compositor is not holding it: the buffer that
+	 * is on screen is not this process's to free. */
+	if (width > 0 && height > 0 && (width != window->width || height != window->height)) {
+		window->width = width;
+		window->height = height;
+		if (window->configured && !window->buffer.busy) {
+			ag_window_resize(window, width, height);
+		}
+	}
+	if (window->agora != NULL) {
+		agora_window_set_frame(window->agora, x, y, width, height);
+	}
+	wl_display_flush(window->server->display);
+}
+
+void AGWindowSetLevel(AGWindow *window, int level)
+{
+	if (window == NULL) {
+		return;
+	}
+	window->level = level;
+	if (window->agora != NULL) {
+		agora_window_set_level(window->agora, level);
+		wl_display_flush(window->server->display);
+	}
+}
+
+void AGWindowRaise(AGWindow *window)
+{
+	if (window != NULL && window->agora != NULL) {
+		agora_window_raise(window->agora);
+		wl_display_flush(window->server->display);
+	}
+}
+
+void AGWindowServerWorkArea(AGWindowServer *server, int *x, int *y, int *width, int *height)
+{
+	if (x != NULL) {
+		*x = (server != NULL && server->have_work_area) ? server->work_x : 0;
+	}
+	if (y != NULL) {
+		*y = (server != NULL && server->have_work_area) ? server->work_y : 0;
+	}
+	if (width != NULL) {
+		*width = (server != NULL && server->have_work_area) ? server->work_width : 0;
+	}
+	if (height != NULL) {
+		*height = (server != NULL && server->have_work_area) ? server->work_height : 0;
+	}
 }
 
 void AGWindowSetTitle(AGWindow *window, const char *title)

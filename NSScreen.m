@@ -101,10 +101,22 @@ static AGWindowServer *fn_screen_server(void)
 
 - (NSRect)visibleFrame
 {
-	/* THE FRAME ITSELF, AND THAT IS A DEVIATION WITH A REASON: what a screen's visible frame EXCLUDES is a menu
-	 * bar and a dock, and those belong to a window server this tree has not got — Kestrel is parked. Subtracting
-	 * a remembered height would be a number that agrees with no menu bar anybody has. */
-	return [self frame];
+	AGWindowServer *server = fn_screen_server();
+	NSRect whole = [self frame];
+	int x = 0, y = 0, width = 0, height = 0;
+
+	/* **THE FURNITURE IS THE SERVER'S, SO THE WORK AREA IS THE SERVER'S TO SAY** — and that is what this door
+	 * has been missing: it used to answer the frame itself, because there was no menu bar to subtract and a
+	 * remembered height would have agreed with no menu bar anybody has. Now there is one, and the answer comes
+	 * from the component that owns it. */
+	AGWindowServerWorkArea(server, &x, &y, &width, &height);
+	if (width <= 0 || height <= 0) {
+		/* A COMPOSITOR THAT DOES NOT SAY gets the whole screen, which is the honest reading of "no furniture
+		 * was reserved" rather than an invented one. */
+		return whole;
+	}
+	/* THE SEAM MEASURES DOWN FROM THE TOP, AS A DISPLAY DOES; COCOA MEASURES UP FROM THE BOTTOM. */
+	return NSMakeRect((CGFloat)x, whole.size.height - (CGFloat)(y + height), (CGFloat)width, (CGFloat)height);
 }
 
 - (NSDictionary *)deviceDescription

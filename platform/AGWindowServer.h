@@ -125,6 +125,11 @@ void AGWindowServerFlush(AGWindowServer *server);
 /* A human-readable description of why the connection failed, for the caller's log. */
 const char *AGWindowServerLastError(AGWindowServer *server);
 
+/* **THE PART OF THE OUTPUT AN APPLICATION MAY USE**: the frame minus the menu bar and the Dock, which is
+ * `NSScreen`'s `-visibleFrame` and a question only the window server can answer, because the furniture is its.
+ * Zeroes when the compositor does not say; the caller decides what to do about that. */
+void AGWindowServerWorkArea(AGWindowServer *server, int *x, int *y, int *width, int *height);
+
 /* The compositor's first output, as far as a client can know it. `*width` and `*height` receive the output's
  * current mode, and `*name` the model the compositor reported — the closest thing to a screen name a Wayland
  * client is given. Any of the three may be NULL. Width and height are left at 0 when no output has been
@@ -144,6 +149,25 @@ void AGWindowDestroy(AGWindow *window);
 
 void AGWindowShow(AGWindow *window);
 void AGWindowSetTitle(AGWindow *window, const char *title);
+
+/* **THE APPLICATION'S FRAME, AND ON A COMPOSITOR THAT CAN BE TOLD, IT IS HONOURED.** Where the window goes and
+ * how big it is, in the output's coordinates (y downwards, as the display has them). This is the Mac's
+ * `-setFrame:display:`: the application states a frame and the server writes it down — the only thing that
+ * adjusts one is the APPLICATION's `-constrainFrameRect:toScreen:`, against the work area below.
+ *
+ * It is a door on the SEAM rather than on the protocol because a compositor need not be able to express it: a
+ * stock one speaking only `xdg-shell` has no way to be told where a window goes, and this then records the frame
+ * and places nothing. That is a property of the compositor and not of this call. */
+void AGWindowSetFrame(AGWindow *window, int x, int y, int width, int height);
+
+/* WHERE THE WINDOW SITS IN THE STACK — `NSWindow`'s `-level`, AN INTEGER rather than a member of a fixed set, so
+ * that a menu window and a status item and the Dock can be ordered against each other without this layer having
+ * anticipated any of them. */
+void AGWindowSetLevel(AGWindow *window, int level);
+
+/* BRING THE WINDOW TO THE FRONT OF ITS LEVEL — the Mac's `-orderFront:`. It is not a level change and not a
+ * claim on the keyboard: who has FOCUS is the user's click together with `-makeKeyAndOrderFront:`. */
+void AGWindowRaise(AGWindow *window);
 
 int AGWindowWidth(const AGWindow *window);
 int AGWindowHeight(const AGWindow *window);

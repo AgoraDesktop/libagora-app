@@ -707,6 +707,20 @@ static CGFloat fn_clamp_axis(CGFloat v, CGFloat lo, CGFloat hi)
 	 * changed. The Cocoa frame is updated either way — it is this object's own geometry, and the chrome
 	 * arithmetic above is written in its terms. */
 	(void)flag;
+	/* **AND THE SERVER IS TOLD, WHICH IS WHAT `-setFrame:` MEANS ON A COMPOSITOR THAT CAN BE TOLD.** The Mac's
+	 * model is that the application states a frame and the window server honours it; a stock compositor speaking
+	 * only `xdg-shell` cannot be told where a window goes, and the seam records the frame and places nothing —
+	 * which is a property of the compositor and not of this door. The y is flipped because a display measures
+	 * down from the top and Cocoa measures up from the bottom. */
+	if (_agwindow != NULL) {
+		CGFloat screen_height = [[NSScreen mainScreen] frame].size.height;
+
+		if (screen_height > 0.0) {
+			AGWindowSetFrame(_agwindow, (int)_frame.origin.x,
+					 (int)(screen_height - (_frame.origin.y + _frame.size.height)),
+					 (int)_frame.size.width, (int)_frame.size.height);
+		}
+	}
 	if (moved) {
 		/* **AND THE CHILDREN FOLLOW** — Apple's sentence: "moving the window will cause childWin to move". The same
 		 * DELTA, so the attachment keeps its relative position without this file storing one; and a child with
@@ -2002,10 +2016,11 @@ static NSWindow *fn_main_window(NSWindow *except)
 	if (![self cg_ensureWindow]) {
 		return;
 	}
-	/* **`xdg-shell` HAS NO STACKING.** A toplevel's place in the stack is the compositor's, and a client cannot
-	 * lower it — so this door shows the window and changes THIS OBJECT's state, which the header records among
-	 * the deviations a Wayland client lives with. */
+	/* **ORDERING IS THE APPLICATION'S ON THE MAC** — `-orderFront:` raises its own window — so on a compositor
+	 * that can be told, it is told. Where it cannot, this door shows the window and changes THIS OBJECT's state,
+	 * which is the deviation the header records. */
 	AGWindowShow(_agwindow);
+	AGWindowRaise(_agwindow);
 	_visible = YES;
 	[[NSApplication sharedApplication] cg_addWindow:self];
 }

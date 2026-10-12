@@ -87,6 +87,30 @@ file(MAKE_DIRECTORY "${_agora_include_dir}")
 file(CREATE_LINK "${CMAKE_CURRENT_SOURCE_DIR}" "${_agora_include_dir}/AppKit" SYMBOLIC)
 
 # ---------------------------------------------------------------------------
+# AGORA'S OWN WINDOW-MANAGEMENT PROTOCOL
+#
+# The contract is window-server's (`protocol/agora-shell.xml`) — one component's own file, read here from the
+# sibling source tree. **THAT IS A DEVIATION AND IT IS RECORDED RATHER THAN HIDDEN**: this project's rule is that
+# a component consumes another only as that component's BUILT OUTPUT, and a protocol is exactly the thing that
+# should be installed as one. It is read from source for now because window-server installs nothing yet, and a
+# COPY would be worse — two sources of truth for one contract, drifting. When window-server grows an install rule
+# for its protocol, this becomes a `find_package`.
+# ---------------------------------------------------------------------------
+set(AGORA_SHELL_XML "${CMAKE_CURRENT_SOURCE_DIR}/../window-server/protocol/agora-shell.xml")
+add_custom_command(
+  OUTPUT "${_generated}/agora-shell-client-protocol.h"
+  COMMAND ${WAYLAND_SCANNER} client-header "${AGORA_SHELL_XML}" "${_generated}/agora-shell-client-protocol.h"
+  DEPENDS "${AGORA_SHELL_XML}" VERBATIM)
+add_custom_command(
+  OUTPUT "${_generated}/agora-shell-protocol.c"
+  COMMAND ${WAYLAND_SCANNER} private-code "${AGORA_SHELL_XML}" "${_generated}/agora-shell-protocol.c"
+  DEPENDS "${AGORA_SHELL_XML}" VERBATIM)
+add_custom_target(agora-shell-bindings
+  DEPENDS
+    "${_generated}/agora-shell-client-protocol.h"
+    "${_generated}/agora-shell-protocol.c")
+
+# ---------------------------------------------------------------------------
 # The library
 # ---------------------------------------------------------------------------
 file(GLOB APP_SOURCES CONFIGURE_DEPENDS
@@ -96,9 +120,10 @@ file(GLOB APP_SOURCES CONFIGURE_DEPENDS
 
 add_library(App SHARED
   ${APP_SOURCES}
-  "${_generated}/xdg-shell-protocol.c")
+  "${_generated}/xdg-shell-protocol.c"
+  "${_generated}/agora-shell-protocol.c")
 
-add_dependencies(App xdg-shell-bindings)
+add_dependencies(App xdg-shell-bindings agora-shell-bindings)
 
 set_target_properties(App PROPERTIES OUTPUT_NAME agora-app)
 
