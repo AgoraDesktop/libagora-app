@@ -768,12 +768,12 @@ static void registry_global(void *data, struct wl_registry *registry, uint32_t n
 		 * NSScreen's own row. The listener is what tells this client the size. */
 		server->output = wl_registry_bind(registry, name, &wl_output_interface, version < 2 ? version : 2);
 		wl_output_add_listener(server->output, &output_listener, server);
-		/* AND THE COMPANION OBJECT, IF THE COMPOSITOR HAS ONE: `wl_output` says what a screen IS and this
-		 * says what is LEFT of it, which is the question `-visibleFrame` asks. */
-		if (server->shell != NULL) {
-			server->agora_output = agora_shell_get_output(server->shell, server->output);
-			agora_output_add_listener(server->agora_output, &agora_output_listener, server);
-		}
+		/* **THE COMPANION OBJECT IS ASKED FOR LATER, AND THE REGISTRY ORDER IS WHY.** `wl_output` says what a
+		 * screen IS and `agora_output` says what is LEFT of it — but the globals arrive in the order the
+		 * COMPOSITOR registered them, and this server registers `wl_output` BEFORE `agora_shell`. Asking here
+		 * would find `server->shell` still NULL and quietly get no work area at all: MEASURED as a `-visibleFrame`
+		 * that reserved nothing, which is exactly what `visibleFrame` returning `frame` looks like. So it is
+		 * asked once the globals are all in — see `AGWindowServerConnect`. */
 	} else if (strcmp(interface, agora_shell_interface.name) == 0) {
 		/* **AGORA'S OWN PROTOCOL, IF IT IS THERE.** It is what can carry the frame, the level and the work
 		 * area; a stock compositor will not offer it, and then this seam falls back to `xdg-shell` and the
@@ -820,6 +820,19 @@ AGWindowServer *AGWindowServerConnect(void)
 		ag_server_error(server, "wl_display_roundtrip");
 		AGWindowServerDisconnect(server);
 		return NULL;
+	}
+	/* **AND NOW BOTH ARE KNOWN, WHEREVER THEY WERE IN THE REGISTRY.** The work area is the one thing this seam
+	 * needs that arrives as an EVENT, so it takes another roundtrip to have it in hand before the caller is told
+	 * the connection is ready — a `-visibleFrame` that answers zero because the answer is still in flight would
+	 * be a door that works only sometimes. */
+	if (server->shell != NULL && server->output != NULL && server->agora_output == NULL) {
+		server->agora_output = agora_shell_get_output(server->shell, server->output);
+		agora_output_add_listener(server->agora_output, &agora_output_listener, server);
+		if (wl_display_roundtrip(server->display) < 0) {
+			ag_server_error(server, "wl_display_roundtrip");
+			AGWindowServerDisconnect(server);
+			return NULL;
+		}
 	}
 	if (server->compositor == NULL || server->shm == NULL || server->wm_base == NULL) {
 		snprintf(server->error, sizeof server->error,

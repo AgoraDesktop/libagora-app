@@ -36,6 +36,18 @@ add_test(NAME appkit-window-headless
 set_tests_properties(appkit-window-headless PROPERTIES SKIP_RETURN_CODE 77
   ENVIRONMENT "${_agora_app_test_env}")
 
+# **THE APPkit AGAINST AGORA'S OWN WINDOW SERVER**, which is the only one that can answer `-visibleFrame`. The
+# sibling's binary is an OPTION rather than a requirement: a component's tests must not need another component's
+# build to be present, so this SKIPS when there is nothing to run against.
+set(AGORA_WINDOW_SERVER_BINARY "${CMAKE_CURRENT_SOURCE_DIR}/../../window-server/build/window-server"
+    CACHE FILEPATH "window-server's built binary, for the tests that need a compositor of our own")
+
+add_test(NAME appkit-work-area
+  COMMAND "${CMAKE_CURRENT_SOURCE_DIR}/run-appkit-agora.sh"
+	  "$<TARGET_FILE:appkit_window>" "${AGORA_WINDOW_SERVER_BINARY}" 3 24)
+set_tests_properties(appkit-work-area PROPERTIES SKIP_RETURN_CODE 77
+  ENVIRONMENT "${_agora_app_test_env}")
+
 # AND THE INPUT PATH: the seam's event, through NSWindow, to the view that should get it. The headless
 # compositor has no seat, so this test builds the AGEvents a compositor would have sent and pushes them
 # through the window's own door -- the link that is NOT synthetic is the one a configure event already proves.

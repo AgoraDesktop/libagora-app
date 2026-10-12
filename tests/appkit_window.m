@@ -27,6 +27,7 @@
 #import <AppKit/NSColor.h>
 #import <AppKit/NSBezierPath.h>
 #import <AppKit/NSGraphicsContext.h>
+#import <AppKit/NSScreen.h>
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -160,6 +161,24 @@ int main(int argc, char **argv)
 			}
 		}
 
+		/* **THE WORK AREA, WHICH ONLY A WINDOW SERVER THAT OWNS FURNITURE CAN ANSWER.** `-frame` is what the
+		 * screen IS and `-visibleFrame` is what is LEFT of it — the menu bar and the Dock taken out — so this
+		 * prints both and refuses only an impossible answer: a work area is never BIGGER than the screen it is
+		 * part of. The exact reserve is checked by the script that runs this against Agora's own server, because
+		 * a stock compositor has no furniture to subtract and answers the frame. */
+		{
+			NSScreen *screen = [NSScreen mainScreen];
+			NSRect whole = [screen frame];
+			NSRect work = [screen visibleFrame];
+
+			fprintf(stderr, "appkit_window: frame %gx%g, visibleFrame %gx%g at (%g,%g)\n",
+				(double)whole.size.width, (double)whole.size.height, (double)work.size.width,
+				(double)work.size.height, (double)work.origin.x, (double)work.origin.y);
+			if (work.size.width > whole.size.width || work.size.height > whole.size.height) {
+				fprintf(stderr, "appkit_window: THE WORK AREA IS BIGGER THAN THE SCREEN\n");
+				return 1;
+			}
+		}
 		fprintf(stderr, "appkit_window: %d event(s), drew %d frame(s); frame now %gx%g\n", events, s_draws,
 			(double)[window frame].size.width, (double)[window frame].size.height);
 		if (s_draws == 0) {
