@@ -17,6 +17,11 @@
  */
 #import <AppKit/NSMenuItemCell.h>
 #import <AppKit/NSStringDrawing.h>	/* -sizeWithAttributes:, the measurement -calcSize makes */
+/* **THE INK'S OWN HEADERS**, which this file did not need while every drawing door refused: the face the title is
+ * set in, the colour it is drawn in, and the path a separator is stroked with. */
+#import <AppKit/NSFont.h>
+#import <AppKit/NSColor.h>
+#import <AppKit/NSBezierPath.h>
 
 #include <stdio.h>
 
@@ -208,8 +213,19 @@
 {
 	(void)cellFrame;
 	(void)controlView;
-	fprintf(stderr, "APPKIT-REFUSE: -drawSeparatorItemWithFrame:inView: needs THE INK — the separator's own "
-			"style (Apple's is a themed groove, not a line) and the menu view's frame plumbing\n");
+	{
+		/* **A SEPARATOR IS A HAIRLINE ACROSS THE ROW, AND APPLE'S IS A THEMED GROOVE RATHER THAN A LINE** — so
+		 * this draws the line and says so, instead of inventing a groove. The colour is a mid grey rather than a
+		 * named system colour because this tier has no theme to ask, which is the same reason the system font was
+		 * a regular face of no particular family. */
+		NSBezierPath *line = [NSBezierPath bezierPath];
+
+		[[NSColor colorWithCalibratedRed:0.55 green:0.55 blue:0.55 alpha:1.0] setStroke];
+		[line moveToPoint:NSMakePoint(cellFrame.origin.x, cellFrame.origin.y + cellFrame.size.height / 2.0)];
+		[line lineToPoint:NSMakePoint(cellFrame.origin.x + cellFrame.size.width,
+					      cellFrame.origin.y + cellFrame.size.height / 2.0)];
+		[line stroke];
+	}
 }
 
 - (void)drawStateImageWithFrame:(NSRect)cellFrame inView:(id)controlView
@@ -230,18 +246,62 @@
 
 - (void)drawTitleWithFrame:(NSRect)cellFrame inView:(id)controlView
 {
-	(void)cellFrame;
+	NSString *title = [_menuItem title];
+	NSRect rect = [self titleRectForBounds:cellFrame];
+	NSFont *font = [NSFont systemFontOfSize:(CGFloat)12.0];
+	NSDictionary *attributes;
+	CGFloat left, width;
+
 	(void)controlView;
-	fprintf(stderr, "APPKIT-REFUSE: -drawTitleWithFrame:inView: needs TEXT METRICS AND A TEXT RUN — the font "
-			"this tier has not got on this side of the library, which is also why `-titleWidth` is zero\n");
+	/* **AND A DOOR WITH NOTHING TO SAY SAYS NOTHING, WHICH IS NOT A REFUSAL.** A separator has no title, an
+	 * image-only item has none, and a row too narrow for its own parts has an empty title rect — three correct
+	 * answers, and none of them the missing ink this door used to report. */
+	if (title == nil || [title length] == 0 || rect.size.width <= 4.0) {
+		return;
+	}
+	/* THE ONE REFUSAL THAT REMAINS, AND IT IS A REAL ONE: text to draw and no face to draw it in. That is the
+	 * font registry having found nothing, which is a fact about the host and not about this cell. */
+	if (font == nil) {
+		fprintf(stderr, "APPKIT-REFUSE: -drawTitleWithFrame:inView: has a title to draw and NO FACE to draw it "
+				"in — +[NSFont systemFontOfSize:] answered nil, so the font registry found no fonts\n");
+		return;
+	}
+	attributes = [NSDictionary dictionaryWithObjectsAndKeys:font, NSFontAttributeName,
+		      [NSColor controlTextColor], NSForegroundColorAttributeName, nil];
+	/* **THE INSET IS THE ROW'S OWN PADDING, WHICH IS WHY IT IS DRAWN HERE RATHER THAN SUBTRACTED IN THE RECT
+	 * DOOR**: `-titleRectForBounds:` answers where the title's COLUMN is, and how much air an item leaves inside
+	 * its own column is a property of the drawing. */
+	left = rect.origin.x + 2.0;
+	width = rect.size.width - 4.0;
+	if (width <= 0.0) {
+		return;
+	}
+	[title drawInRect:NSMakeRect(left, rect.origin.y, width, rect.size.height) withAttributes:attributes];
 }
 
 - (void)drawKeyEquivalentWithFrame:(NSRect)cellFrame inView:(id)controlView
 {
-	(void)cellFrame;
+	NSString *key = [_menuItem keyEquivalent];
+	NSRect rect = [self keyEquivalentRectForBounds:cellFrame];
+	NSFont *font = [NSFont systemFontOfSize:(CGFloat)12.0];
+	NSDictionary *attributes;
+	CGFloat width;
+
 	(void)controlView;
-	fprintf(stderr, "APPKIT-REFUSE: -drawKeyEquivalentWithFrame:inView: needs TEXT METRICS AND A TEXT RUN, the "
-			"same ground the title's door refuses on\n");
+	if (key == nil || [key length] == 0 || rect.size.width <= 2.0) {
+		return;
+	}
+	if (font == nil) {
+		return;		/* the title's door has already said why, and saying it twice per row is noise */
+	}
+	attributes = [NSDictionary dictionaryWithObjectsAndKeys:font, NSFontAttributeName,
+		      [NSColor controlTextColor], NSForegroundColorAttributeName, nil];
+	width = rect.size.width - 2.0;
+	if (width <= 0.0) {
+		return;
+	}
+	[key drawInRect:NSMakeRect(rect.origin.x, rect.origin.y, width, rect.size.height)
+	 withAttributes:attributes];
 }
 
 - (void)drawBorderAndBackgroundWithFrame:(NSRect)cellFrame inView:(id)controlView

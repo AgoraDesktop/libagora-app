@@ -29,6 +29,14 @@ set_tests_properties(window-headless PROPERTIES SKIP_RETURN_CODE 77
 # says the port works, because it never touches the seam directly.
 add_executable(appkit_window appkit_window.m)
 target_link_libraries(appkit_window PRIVATE App)
+
+# **THE DRAWING HALF, VERIFIED WITHOUT A DISPLAY.** No compositor, no window and no run loop: a bitmap rep, a
+# graphics context over it, and the cell's own geometry door as the check on where the ink landed. It can therefore
+# run anywhere, which is what a test of "does this door draw" should be.
+add_executable(menu_cell_ink menu_cell_ink.m)
+target_link_libraries(menu_cell_ink PRIVATE App)
+add_test(NAME appkit-menu-cell-ink COMMAND menu_cell_ink)
+set_tests_properties(appkit-menu-cell-ink PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
 # It gets its own ctest, and the run takes seconds rather than frames: NSWindow's pump waits on the
 # compositor's frame callbacks rather than counting them.
 add_test(NAME appkit-window-headless
