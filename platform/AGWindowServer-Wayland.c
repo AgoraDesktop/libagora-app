@@ -78,6 +78,9 @@ struct AGWindow {
 	int frame_height;
 	int has_frame;
 	int level;
+	/* Non-zero when this window is a STATUS ITEM: the width the server places it in, and the reason a later
+	 * `AGWindowSetFrame` is remembered but not allowed to move it. */
+	int status_length;
 
 	struct AGBuffer buffer;
 	struct wl_callback *frame_cb;
@@ -1126,6 +1129,22 @@ void AGWindowSetLevel(AGWindow *window, int level)
 	window->level = level;
 	if (window->agora != NULL) {
 		agora_window_set_level(window->agora, level);
+		wl_display_flush(window->server->display);
+	}
+}
+
+/* **THE ONE KIND OF WINDOW THE SERVER PLACES, AND THE DOOR IS A KIND RATHER THAN A FRAME.** `NSStatusItem` says
+ * how long its item is and nothing about where it goes, because an application cannot know what else is in the
+ * status bar. So the width is what is sent — and the frame this layer remembers is left alone, so that a client
+ * that asks to be somewhere anyway does not get to move one. */
+void AGWindowSetStatusItem(AGWindow *window, int length)
+{
+	if (window == NULL) {
+		return;
+	}
+	window->status_length = length > 0 ? length : 0;
+	if (window->agora != NULL) {
+		agora_window_set_status_item(window->agora, window->status_length);
 		wl_display_flush(window->server->display);
 	}
 }

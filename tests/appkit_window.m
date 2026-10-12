@@ -28,6 +28,8 @@
 #import <AppKit/NSBezierPath.h>
 #import <AppKit/NSGraphicsContext.h>
 #import <AppKit/NSScreen.h>
+#import <AppKit/NSStatusBar.h>
+#import <AppKit/NSStatusItem.h>
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -177,6 +179,28 @@ int main(int argc, char **argv)
 			if (work.size.width > whole.size.width || work.size.height > whole.size.height) {
 				fprintf(stderr, "appkit_window: THE WORK AREA IS BIGGER THAN THE SCREEN\n");
 				return 1;
+			}
+			/* **AND THE SECOND DOOR ONTO THE SAME NUMBER.** `NSStatusBar -thickness` is the menu bar's height,
+			 * which is exactly what `-visibleFrame` leaves out — the WindowServer's answer arriving twice by two
+			 * routes. If they ever disagree one of them is wrong, and this is the cheapest place to find out. */
+			{
+				NSStatusBar *bar = [NSStatusBar systemStatusBar];
+				NSStatusItem *item;
+				CGFloat reserved = whole.size.height - work.size.height;
+
+				fprintf(stderr, "appkit_status: the bar is %g tall, against a reserve of %g\n",
+					(double)[bar thickness], (double)reserved);
+				if (reserved > 0.0 && [bar thickness] != reserved) {
+					fprintf(stderr, "appkit_status: THE TWO DOORS ONTO THE RESERVE DISAGREE\n");
+					return 1;
+				}
+				item = [bar statusItemWithLength:64.0];
+				fprintf(stderr, "appkit_status: an item asked for as 64 reads back as %g, its bar is %g\n",
+					(double)[item length], (double)[[item statusBar] thickness]);
+				if ([item length] != 64.0) {
+					fprintf(stderr, "appkit_status: AN ITEM'S LENGTH DID NOT SURVIVE\n");
+					return 1;
+				}
 			}
 		}
 		fprintf(stderr, "appkit_window: %d event(s), drew %d frame(s); frame now %gx%g\n", events, s_draws,

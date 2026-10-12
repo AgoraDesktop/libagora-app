@@ -79,6 +79,9 @@
 - (void)cg_drawFrame;
 - (BOOL)cg_mouseButtonDown;
 - (BOOL)cg_ensureWindow;
+/* **THE DOOR A STATUS ITEM COMES IN BY, and it is here rather than in `NSStatusItem.m` because the seam is this
+ * file's business: a status item needs the window's `AGWindow` and nothing else does. */
+- (void)cg_setStatusItemLength:(CGFloat)length;
 - (NSEvent *)cg_nextEventWaiting:(BOOL)wait milliseconds:(long)ms mask:(NSUInteger)mask
 				dequeue:(BOOL)dequeue;
 /* THE CURSOR DOORS THIS FILE ADDS, declared here because this is the file that defines them. */
@@ -521,6 +524,17 @@ static void fn_draw_chrome(CGContextRef c, NSWindow *w, NSRect content)
 		}
 	}
 
+}
+
+/* **A STATUS ITEM IS A WINDOW WHOSE PLACEMENT IS NOT ITS APPLICATION'S.** Everything else this file does with a
+ * frame is "the application said so"; this is the single exception, and it is a KIND of window rather than a
+ * frame, because the server is the only thing that can know what else is in the status bar. */
+- (void)cg_setStatusItemLength:(CGFloat)length
+{
+	if (![self cg_ensureWindow]) {
+		return;
+	}
+	AGWindowSetStatusItem(_agwindow, (int)length);
 }
 
 - (BOOL)cg_ensureWindow

@@ -165,6 +165,15 @@ void AGWindowSetFrame(AGWindow *window, int x, int y, int width, int height);
  * anticipated any of them. */
 void AGWindowSetLevel(AGWindow *window, int level);
 
+/* **MAKE THIS WINDOW AN ITEM THE SERVER PLACES, OF THIS WIDTH.** The one place the frame rule does not reach:
+ * `NSStatusItem` has a length and no position, because an application does not know what else is in the status bar
+ * and so cannot know where its own item goes. After this, `AGWindowSetFrame` no longer moves the window — a status
+ * item is in the menu bar by definition. A length of zero or less puts it back among the ordinary windows.
+ *
+ * `length` is a width in output coordinates and never a sentinel: resolving `NSVariableStatusItemLength` and
+ * `NSSquareStatusItemLength` is AppKit's, since only it knows how wide its view wants to be. */
+void AGWindowSetStatusItem(AGWindow *window, int length);
+
 /* BRING THE WINDOW TO THE FRONT OF ITS LEVEL — the Mac's `-orderFront:`. It is not a level change and not a
  * claim on the keyboard: who has FOCUS is the user's click together with `-makeKeyAndOrderFront:`. */
 void AGWindowRaise(AGWindow *window);

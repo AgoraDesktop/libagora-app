@@ -40,7 +40,7 @@ done
 
 output=$(WAYLAND_DISPLAY="${SOCK}" "${BINARY}" --seconds "${SECONDS_TO_RUN}" 2>&1)
 status=$?
-echo "${output}" | grep -E "appkit_window:"
+echo "${output}" | grep -E "appkit_(window|status):"
 
 line=$(printf '%s\n' "${output}" | grep -m1 "frame .* visibleFrame")
 if [ -z "${line}" ]; then
@@ -48,6 +48,9 @@ if [ -z "${line}" ]; then
 	exit 1
 fi
 whole=$(printf '%s\n' "${line}" | sed -n 's/.*frame \([0-9.]*\)x\([0-9.]*\),.*/\2/p')
+# **AND THE OTHER DOOR ONTO THE RESERVE**: `NSStatusBar -thickness` is the same number by a different route, so the
+# script asserts the SECOND as well — two answers that agree are worth more than one asserted twice.
+thickness=$(printf '%s\n' "${output}" | sed -n 's/.*appkit_status: the bar is \([0-9.]*\) tall.*/\1/p')
 work=$(printf '%s\n' "${line}" | sed -n 's/.*visibleFrame \([0-9.]*\)x\([0-9.]*\).*/\2/p')
 if [ -z "${whole}" ] || [ -z "${work}" ]; then
 	echo "FAIL: could not read the two frames out of '${line}'" >&2
@@ -64,5 +67,10 @@ if [ "${status}" -ne 0 ]; then
 	echo "FAIL: the client exited ${status}" >&2
 	exit 1
 fi
+if [ "${thickness}" != "${RESERVE}" ]; then
+	echo "FAIL: NSStatusBar's thickness is '${thickness}', want ${RESERVE} — the two doors disagree" >&2
+	exit 1
+fi
 echo "ok: the work area reserves ${reserved} of ${whole} — the menu bar"
+echo "ok: and NSStatusBar -thickness agrees — ${thickness}, the same number by a second route"
 exit 0
