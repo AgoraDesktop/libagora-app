@@ -105,11 +105,22 @@
 		if (image != nil) {
 			_imageWidth = [image size].width;
 		}
-		/* AND THE TWO TEXT WIDTHS STAY ZERO, WHICH IS THE HONEST ANSWER RATHER THAN A GUESS: the title's width
-		 * and the key equivalent's width are font measurements, and this tier has no metrics on this side of the
-		 * library — the same gap `NSMenu`'s `-sizeToFit` refuses over, one class over. A number invented here
-		 * would be a guess wearing a measurement's clothes, and the drawing half that lands a font replaces both
-		 * of these lines. */
+		/* **THE TWO TEXT WIDTHS STILL STAY ZERO — BUT NOT FOR THE REASON THAT STOOD HERE.** The note this replaces
+		 * said this tier has "no metrics on this side of the library". MEASURED, THAT IS NOT THE GROUND: the text
+		 * stack IS here (`-sizeWithAttributes:` in `NSStringDrawing`, the faces in `NSFont`), and what is wrong is
+		 * that MEASURING CRASHES. Asking a cell to measure a title raises
+		 *
+		 *     NSInvalidArgumentException: -[AGDictionaryMutable setObject:forKey:]:
+		 *     value must not be nil - use -removeObjectForKey:
+		 *
+		 * FOR A NIL ATTRIBUTES DICTIONARY *AND* FOR AN EMPTY ONE — Apple's contract allows the first, and the
+		 * second is what a caller wanting the default attributes passes — so the fault is inside
+		 * `NSStringDrawing` and not in its caller. THAT WAS FOUND ONLY BY MAKING THE CALL: nothing had ever
+		 * measured a string here, because everything that would have reached this line refused first.
+		 *
+		 * SO THIS ZERO IS NOW A MEASURED ABSENCE RATHER THAN AN ASSUMED ONE, and the row that puts text in a menu
+		 * is the row that fixes `-sizeWithAttributes:` — not the row that adds an import. */
+
 	}
 	_needsSizing = NO;
 }
