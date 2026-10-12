@@ -22,6 +22,7 @@
  * would announce a tracking session that never began.
  */
 #import <AppKit/NSMenu.h>
+#import <AppKit/NSMenuView.h>
 /* THE HEADERS THIS FILE'S BODIES NEED, AND THEY ARE HERE RATHER THAN BESIDE THE CODE THAT USES THEM: a mid-file
  * import inside an `@implementation` splices the imported header's `@interface` blocks INTO the implementation (see
  * the note in the tracking section, which is where that was learned). The event header serves the key-equivalent
@@ -574,7 +575,9 @@ static const CGFloat NSMenuStateColumnWidth = 20.0;
  * the font, this tier has no metrics on this side, and ONE NUMBER IN ONE PLACE keeps that a change here rather
  * than a hunt. It is also what the session's hit-testing and its painting agree about, which is the property that
  * matters — the two must use the SAME arithmetic or the menu highlights a row it does not draw. */
-static const CGFloat NSMenuRowHeight = 22.0;
+/* **THE ROW HEIGHT MOVED TO `NSMenuView.h` WHEN A SECOND FILE NEEDED IT.** A dropdown's window is measured with it
+ * and the view that fills that window lays its rows out with it, so the two must agree; it is declared once and
+ * defined by the view. */
 
 /* THE PAINT, AND IT IS GEOMETRY RATHER THAN INK: the panel's background, a separator between each pair of rows,
  * and the highlighted row filled — all of which this tier HAS (NSColor, CoreGraphics, a window's context) while

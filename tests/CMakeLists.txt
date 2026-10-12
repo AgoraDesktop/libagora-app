@@ -36,7 +36,16 @@ target_link_libraries(appkit_window PRIVATE App)
 add_executable(menu_cell_ink menu_cell_ink.m)
 target_link_libraries(menu_cell_ink PRIVATE App)
 add_test(NAME appkit-menu-cell-ink COMMAND menu_cell_ink)
-set_tests_properties(appkit-menu-cell-ink PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
+
+# **THE CLASS THAT CALLS THE CELLS.** One row per item, in order, with the highlighted one distinguished — the
+# arrangement `NSMenuItemCell` had no caller to provide.
+add_executable(menu_view_ink menu_view_ink.m)
+target_link_libraries(menu_view_ink PRIVATE App)
+add_test(NAME appkit-menu-view-ink COMMAND menu_view_ink)
+set_tests_properties(appkit-menu-view-ink PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
+
+# **THE CLASS THAT CALLS THE CELLS.** One row per item, in order, with the highlighted one distinguished — the
+# arrangement `NSMenuItemCell` had no caller to provide.
 # It gets its own ctest, and the run takes seconds rather than frames: NSWindow's pump waits on the
 # compositor's frame callbacks rather than counting them.
 add_test(NAME appkit-window-headless
