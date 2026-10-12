@@ -570,6 +570,8 @@ static void fn_draw_chrome(CGContextRef c, NSWindow *w, NSRect content)
 					 (int)(screen_height - (_frame.origin.y + _frame.size.height)),
 					 (int)_frame.size.width, (int)_frame.size.height);
 		}
+		/* AND THE LEVEL IT WAS GIVEN BEFORE IT EXISTED, for the same reason the frame is told here. */
+		AGWindowSetLevel(_agwindow, (int)_level);
 	}
 	/* **AND IT IS NOT SHOWN HERE.** `-cg_ensureWindow` CREATES and `-orderFront:` SHOWS, and this used to do
 	 * both — so a window was shown twice, which is a second commit for no reason and, on a protocol where a
@@ -2797,6 +2799,13 @@ FN_FLAG_PAIR(setPreservesContentDuringLiveResize, preservesContentDuringLiveResi
 - (void)setLevel:(NSInteger)level
 {
 	_level = level;
+	/* **AND THE SERVER IS TOLD, WHICH IS WHAT AN INTEGER LEVEL IS FOR.** `NSWindow`'s level is what a menu
+	 * window, a status item and the Dock are ordered by, and it is an INTEGER rather than a member of a fixed
+	 * set precisely so that this layer need not know which number is which — so it is passed through and never
+	 * interpreted. A compositor that cannot be told keeps `_level` for itself and orders as it likes. */
+	if (_agwindow != NULL) {
+		AGWindowSetLevel(_agwindow, (int)level);
+	}
 }
 
 - (NSURL *)representedURL
