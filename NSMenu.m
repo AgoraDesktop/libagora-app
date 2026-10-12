@@ -23,6 +23,7 @@
  */
 #import <AppKit/NSMenu.h>
 #import <AppKit/NSMenuView.h>
+#import <AppKit/NSMenuItemCell.h>
 /* THE HEADERS THIS FILE'S BODIES NEED, AND THEY ARE HERE RATHER THAN BESIDE THE CODE THAT USES THEM: a mid-file
  * import inside an `@implementation` splices the imported header's `@interface` blocks INTO the implementation (see
  * the note in the tracking section, which is where that was learned). The event header serves the key-equivalent
@@ -581,51 +582,31 @@ static const CGFloat NSMenuStateColumnWidth = 20.0;
 
 /* THE PAINT, AND IT IS GEOMETRY RATHER THAN INK: the panel's background, a separator between each pair of rows,
  * and the highlighted row filled — all of which this tier HAS (NSColor, CoreGraphics, a window's context) while
- * text does not. SO A POPPED-UP MENU IN THIS TIER IS A MENU YOU CAN SEE AND USE BUT NOT READ, and that is stated
- * here rather than discovered: the labels are owed to the font stack, exactly as the cell's are. */
+ * text does not. **AND THAT IS NO LONGER TRUE — THE LABELS LANDED**: the font stack was looking in
+ * `/System/Library/Fonts`, so every label was owed to a registry that found no fonts at all. With that fixed, this
+ * pass draws each row's TITLE and KEY EQUIVALENT through an `NSMenuItemCell`, which is the class that owns a row's
+ * parts. What is still hand-drawn here is the panel, the highlight and the separators. */
 - (void)cg_repaintSession
 {
-	NSGraphicsContext *context;
-	CGContextRef cg;
-	NSInteger i;
-	NSUInteger count = [_items count];
-	NSRect frame = _trackingFrame;
-
-	if (_trackingWindow == nil) {
-		return;
-	}
-	context = [NSGraphicsContext graphicsContextWithWindow:_trackingWindow];
-	if (context == nil) {
-		return;
-	}
-	cg = (CGContextRef)[context graphicsPort];
-	if (cg == NULL) {
-		return;
-	}
-	/* THE PANEL, in the menu's own colour: a menu is a light panel with a border, and both are drawn here so that
-	 * a session that has no window (a host with no display) simply paints nothing rather than crashing. */
-	CGContextSetRGBFillColor(cg, 0.94, 0.94, 0.94, 1.0);
-	CGContextFillRect(cg, CGRectMake(frame.origin.x, frame.origin.y, frame.size.width, frame.size.height));
-	CGContextSetRGBStrokeColor(cg, 0.55, 0.55, 0.55, 1.0);
-	for (i = 0; i < (NSInteger)count; i++) {
-		NSRect row = NSMakeRect(frame.origin.x, frame.origin.y + (CGFloat)i * NSMenuRowHeight, frame.size.width,
-					NSMenuRowHeight);
-		/* THE HIGHLIGHT FIRST, so the separator below draws over its edge rather than under it. */
-		if (count > 0 && [[_items objectAtIndex:(NSUInteger)(count - 1 - (NSUInteger)i)] isEqual:_highlightedItem] &&
-		    _highlightedItem != nil) {
-			CGContextSetRGBFillColor(cg, 0.16, 0.35, 0.72, 1.0);
-			CGContextFillRect(cg, CGRectMake(row.origin.x + 1.0, row.origin.y + 1.0, row.size.width - 2.0,
-							 row.size.height - 2.0));
-		}
-		/* AND THE SEPARATOR ABOVE EACH ROW BUT THE TOP ONE. */
-		if (i > 0) {
-			CGContextMoveToPoint(cg, row.origin.x, row.origin.y);
-			CGContextAddLineToPoint(cg, row.origin.x + row.size.width, row.origin.y);
-			CGContextStrokePath(cg);
-		}
-	}
-	CGContextStrokeRect(cg, CGRectMake(frame.origin.x, frame.origin.y, frame.size.width, frame.size.height));
-	[context flushGraphics];
+	/* **THE REPAINT IS THE VIEW'S NOW, AND IT HAD TO BECOME SO.** This method used to paint the panel, the
+	 * highlight and the separators into a context taken over the tracking window with
+	 * `+graphicsContextWithWindow:` — WHICH REFUSES IN THIS TIER, because the only destination `NSGraphicsContext`
+	 * honours is a bitmap rep. So a popped-up menu drew NOTHING AT ALL: not the panel, not the rows, not the
+	 * labels. The note here claimed a menu "you can see and use but not read" and THAT WAS TOO GENEROUS — there
+	 * was nothing to see.
+	 *
+	 * MEASURED, on a nested run against this project's own window server: a menu with four items was up for 200
+	 * event passes and the composited output held FOUR colours — the background, the bar, the System menu's glyph
+	 * and the application's window. The menu was not among them.
+	 *
+	 * The reason is the PRESENT. A window's pixels reach the compositor only in `NSWindow -cg_drawFrame`, which
+	 * paints its background, its content view's tree, its chrome, and then hands the buffer over. A menu that
+	 * paints into the window's context behind that path writes pixels nobody presents. SO THE MENU'S CONTENT IS
+	 * AN `NSMenuView`, and displaying the window is what draws the menu. */
+	[(NSMenuView *)_menuView setMenu:self];
+	[(NSMenuView *)_menuView setHighlightedItem:_highlightedItem];
+	[(NSMenuView *)_menuView setNeedsDisplay:YES];
+	[_trackingWindow display];
 }
 
 /* THE ROW UNDER A POINT — the arithmetic the paint above shares, which is why the row height is one constant: THE
@@ -825,6 +806,11 @@ static const CGFloat NSMenuStateColumnWidth = 20.0;
 	}
 	/* THE FRAME HANGS BELOW-LEFT OF THE POINT, which is where a menu opens from a click. */
 	_trackingFrame = NSMakeRect(location.x, location.y - size.height, size.width, size.height);
+	/* **AND THE VIEW THAT FILLS IT, MADE BEFORE THE WINDOW IS SHOWN** so that the first display has something to
+	 * draw: a window whose content is set after it is on the screen has been on the screen empty. */
+	_menuView = [[NSMenuView alloc] initWithFrame:NSMakeRect(0.0, 0.0, _trackingFrame.size.width,
+								 _trackingFrame.size.height)];
+	[(NSMenuView *)_menuView setMenu:self];
 	_trackingWindow = [[NSWindow alloc] initWithContentRect:_trackingFrame
 						      styleMask:NSBorderlessWindowMask
 							backing:NSBackingStoreBuffered
@@ -838,6 +824,7 @@ static const CGFloat NSMenuStateColumnWidth = 20.0;
 		fprintf(stderr, "APPKIT-NOTE: no reachable display — this menu is tracking WITHOUT a window, so it is "
 				"invisible but its state is real\n");
 	}
+	[_trackingWindow setContentView:_menuView];
 	[_trackingWindow orderFrontRegardless];
 	_tracking = YES;
 	/* AND THE MENU UPDATES ITSELF FIRST, so that what it shows is what its targets can actually answer — this is

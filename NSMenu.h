@@ -93,6 +93,10 @@ extern NSString *NSMenuDidEndTrackingNotification;
 	 * session hit-tests against, kept here rather than read back off the window because a session that could not
 	 * get a window still tracks. */
 	id _trackingWindow;
+	/* **THE MENU'S OWN VIEW, WHICH IS WHAT THE TRACKING WINDOW'S CONTENT IS.** Not the menu's "representation"
+	 * in Apple's sense — that door is separate — but the thing that draws the rows: a session that hand-painted
+	 * its panel could never reach an output, because A WINDOW PRESENTS ONLY IN ITS OWN DRAW PATH. */
+	id _menuView;
 	BOOL _tracking;
 	id _highlightedItem;
 	NSRect _trackingFrame;

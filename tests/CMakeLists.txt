@@ -39,6 +39,11 @@ add_test(NAME appkit-menu-cell-ink COMMAND menu_cell_ink)
 
 # **THE CLASS THAT CALLS THE CELLS.** One row per item, in order, with the highlighted one distinguished — the
 # arrangement `NSMenuItemCell` had no caller to provide.
+# **A MENU ON A DISPLAY, FOR A PERSON TO LOOK AT.** Not a ctest: it needs a desktop and it is a demonstration
+# rather than an assertion. Run it nested against Agora's own window server, which grabs nothing.
+add_executable(appkit_menu_draw appkit_menu_draw.m)
+target_link_libraries(appkit_menu_draw PRIVATE App)
+
 add_executable(menu_view_ink menu_view_ink.m)
 target_link_libraries(menu_view_ink PRIVATE App)
 add_test(NAME appkit-menu-view-ink COMMAND menu_view_ink)
