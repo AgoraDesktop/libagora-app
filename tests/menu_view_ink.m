@@ -127,6 +127,13 @@ int main(void)
 		check([hv requiredWidth] < 400.0, "and the three together still fit the bar");
 
 		[NSGraphicsContext setCurrentContext:[NSGraphicsContext graphicsContextWithBitmapImageRep:bar]];
+		/* **AND THE CANVAS IS FILLED FIRST, WHICH THIS SECTION DID NOT DO AND THE OTHER ONE DOES.** A BAR PAINTS
+		 * NO PANEL OF ITS OWN — the window's background is the menu bar's, told to it by the server — so a test
+		 * that drew a bar onto an untouched bitmap was measuring UNINITIALISED MEMORY. MEASURED: "ink" of 2046
+		 * pixels in a column 93 wide and 22 tall, which is the whole rectangle, because a zeroed bitmap is black
+		 * and black is ink. The fill stands in for the window's background, which is what a bar is drawn on. */
+		[[NSColor whiteColor] setFill];
+		[[NSBezierPath bezierPathWithRect:[hv bounds]] fill];
 		[hv drawRect:[hv bounds]];
 
 		x0f = 0.0;
@@ -151,6 +158,45 @@ int main(void)
 		      "every COLUMN was drawn, left to right, each with its own title");
 		check(bar_hi[1] > 0 && bar_hi[0] == 0 && bar_hi[2] == 0,
 		      "and the highlight is on the middle COLUMN only");
+
+		/* **AND THE TITLES ARE CENTRED IN THE BAR, WHICH IS A THING A PICTURE SHOWED AND NO TEST SAID.** A bar's
+		 * items are as tall as the BAR and a title is placed on its font's ascent and descent — because Core Text
+		 * fills a frame from its rect's TOP DOWNWARD, so the ink hangs from wherever it is told to start, and
+		 * centring the MEASURED LINE centres a box that contains leading the ink never uses. MEASURED before the
+		 * fix: ink on rows 2..12 of a 24-pixel bar, a centre of 7.0 where the bar's is 11.5. */
+		{
+			int first = -1, last = -1, row_ink = 0;
+
+			for (y = 0; y < 22; y++) {
+				row_ink = 0;
+				for (x = 0; x < 400; x++) {
+					NSColor *c = [bar colorAtX:x y:y];
+
+					if (c != nil && [c redComponent] < 0.5 && [c blueComponent] < 0.5
+					    && !([c blueComponent] > 0.6 && [c redComponent] < 0.4)) {
+						row_ink++;
+					}
+				}
+				if (row_ink > 0) {
+					if (first < 0) { first = y; }
+					last = y;
+				}
+			}
+			check(first >= 0, "the bar's titles put ink on some row");
+			if (first >= 0) {
+				/* **THE CENTRE IS THIS VIEW'S, NOT A NUMBER FROM SOMEWHERE ELSE.** This bar is 22 pixels tall,
+				 * so its centre is 10.5 — and the first version of this check compared against 11.5, which is
+				 * the centre of the 24-pixel MENU BAR the real thing sits in. An assertion carrying another
+				 * geometry's constant passes for the wrong reason or fails for one. */
+				double centre = (first + last) / 2.0;
+				double want = (22.0 - 1.0) / 2.0;
+
+				check(centre >= want - 1.0 && centre <= want + 1.0,
+				      "and that ink is CENTRED in the bar, not hanging from its top");
+				printf("  (note: bar ink on rows %d..%d, centre %.1f, this bar's centre %.1f)\n",
+				       first, last, centre, want);
+			}
+		}
 		printf("  (note: bar columns %d/%d/%d px wide, ink %d/%d/%d, highlight %d/%d/%d)\n",
 		       w[0], w[1], w[2], bar_ink[0], bar_ink[1], bar_ink[2], bar_hi[0], bar_hi[1], bar_hi[2]);
 	}
