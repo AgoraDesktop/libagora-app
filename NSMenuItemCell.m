@@ -102,13 +102,34 @@
 	if (_menuItem != nil) {
 		id image = [_menuItem image];
 
-		/* THE STATE IMAGE'S WIDTH STAYS ZERO, AND FOR A REASON THAT IS NOT THE TEXT'S: `NSMenuItem` in this tier
-		 * has no state-image door — the item's own rows have not carried it — so there is nothing here to
-		 * measure. Calling one would be worse than leaving the zero: THIS PROJECT'S RUNTIME RAISES on a selector
-		 * an object does not implement, so the honest zero beats an abort. When that row lands, this is the line
-		 * that measures it.
+		/* **AND THE STATE IMAGE IS MEASURED NOW, WHICH THIS COMMENT SAID COULD NOT BE DONE.** It claimed
+		 * "`NSMenuItem` in this tier has no state-image door" — and the item HAS THREE (`onStateImage`,
+		 * `offStateImage`, `mixedStateImage`) plus the `state` that chooses between them. The zero here was not
+		 * honesty about a missing door; it was a claim about a door that was there the whole time.
 		 *
-		 * AND THE IMAGE'S WIDTH IS A REAL MEASUREMENT: an image answers `-size`, and this tier has NSImage. */
+		 * THE IMAGE FOR THE ITEM'S OWN STATE IS WHAT THE COLUMN IS SIZED BY, which is Apple's arrangement: a
+		 * menu row's checkmark column is as wide as the picture the item would show, and an item with no such
+		 * picture has a column of no width — so a menu of plain items pays nothing for a column none of them
+		 * use. THIS TIER SHIPS NO SYSTEM CHECKMARK, so the zero is the answer for an item that named none. */
+		{
+			NSImage *state = nil;
+
+			switch ([_menuItem state]) {
+			case NSOnState:
+				state = [_menuItem onStateImage];
+				break;
+			case NSMixedState:
+				state = [_menuItem mixedStateImage];
+				break;
+			default:
+				state = [_menuItem offStateImage];
+				break;
+			}
+			if (state != nil) {
+				_stateImageWidth = [state size].width;
+			}
+		}
+		/* AND THE IMAGE'S WIDTH IS A REAL MEASUREMENT: an image answers `-size`, and this tier has NSImage. */
 		if (image != nil) {
 			_imageWidth = [image size].width;
 		}
@@ -231,11 +252,31 @@
 
 - (void)drawStateImageWithFrame:(NSRect)cellFrame inView:(id)controlView
 {
-	(void)cellFrame;
+	NSImage *state;
+	NSSize size;
+	NSRect rect = [self stateImageRectForBounds:cellFrame];
+
 	(void)controlView;
-	fprintf(stderr, "APPKIT-REFUSE: -drawStateImageWithFrame:inView: has a RECT and nothing to put in it — "
-			"`NSMenuItem` in this tier has NO STATE-IMAGE DOOR, so there is no image to draw and the "
-			"checkmark's column is measured as zero wide (-calcSize says so)\n");
+	if (rect.size.width <= 0.0) {
+		return;		/* the column is zero wide because the item named no state image, which is an answer */
+	}
+	switch ([_menuItem state]) {
+	case NSOnState:
+		state = [_menuItem onStateImage];
+		break;
+	case NSMixedState:
+		state = [_menuItem mixedStateImage];
+		break;
+	default:
+		state = [_menuItem offStateImage];
+		break;
+	}
+	if (state == nil) {
+		return;
+	}
+	size = [state size];
+	[state drawInRect:NSMakeRect(rect.origin.x, cellFrame.origin.y + (cellFrame.size.height - size.height) / 2.0,
+				     rect.size.width, size.height)];
 }
 
 - (void)drawImageWithFrame:(NSRect)cellFrame inView:(id)controlView

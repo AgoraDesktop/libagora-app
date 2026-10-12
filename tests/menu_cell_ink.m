@@ -141,6 +141,55 @@ int main(void)
 		printf("  (note: icon %d ink pixel(s) in a %g-wide column; title %d)\n", icon_ink,
 		       (double)[icell imageWidth], title_ink);
 	}
+
+	/* ---- AND THE CHECKMARK'S COLUMN, WHICH THIS CLASS SAID COULD NOT BE MEASURED ---------------------------------
+	 * `-calcSize` claimed "`NSMenuItem` in this tier has no state-image door". It has three, and the `state` that
+	 * chooses between them — so the zero was a claim about a door that was there the whole time. */
+	{
+		NSBitmapImageRep *tick = [[NSBitmapImageRep alloc] initWithBitmapDataPlanes:NULL pixelsWide:20
+			pixelsHigh:20 bitsPerSample:8 samplesPerPixel:4 hasAlpha:YES isPlanar:NO
+			colorSpaceName:NSCalibratedRGBColorSpace bytesPerRow:20 * 4 bitsPerPixel:32];
+		NSImage *mark = [[NSImage alloc] initWithSize:NSMakeSize(20.0, 20.0)];
+		NSMenuItem *sitem = [[NSMenuItem alloc] initWithTitle:@"Checked" action:NULL keyEquivalent:@""];
+		NSMenuItemCell *scell = [[NSMenuItemCell alloc] initTextCell:@""];
+		NSBitmapImageRep *canvas;
+		NSRect srect;
+		int sx, sy, mark_ink = 0;
+
+		[NSGraphicsContext setCurrentContext:[NSGraphicsContext graphicsContextWithBitmapImageRep:tick]];
+		[[NSColor blackColor] setFill];
+		[[NSBezierPath bezierPathWithRect:NSMakeRect(0.0, 0.0, 20.0, 20.0)] fill];
+		[mark addRepresentation:tick];
+		[sitem setState:NSOnState];
+		[sitem setOnStateImage:mark];
+		[scell setMenuItem:sitem];
+		[scell setNeedsSizing:YES];
+		[scell calcSize];
+		srect = [scell stateImageRectForBounds:frame];
+		check([scell stateImageWidth] > 0.0, "an item with an ON state image MEASURES the checkmark's column");
+		check([scell titleRectForBounds:frame].origin.x >= [scell stateImageWidth],
+		      "and the title starts after it");
+
+		canvas = [[NSBitmapImageRep alloc] initWithBitmapDataPlanes:NULL pixelsWide:INK_W pixelsHigh:INK_H
+			bitsPerSample:8 samplesPerPixel:4 hasAlpha:YES isPlanar:NO
+			colorSpaceName:NSCalibratedRGBColorSpace bytesPerRow:INK_W * 4 bitsPerPixel:32];
+		[NSGraphicsContext setCurrentContext:[NSGraphicsContext graphicsContextWithBitmapImageRep:canvas]];
+		[[NSColor whiteColor] setFill];
+		[[NSBezierPath bezierPathWithRect:frame] fill];
+		[scell drawStateImageWithFrame:frame inView:nil];
+
+		for (sy = 0; sy < INK_H; sy++) {
+			for (sx = 0; sx < INK_W; sx++) {
+				NSColor *c = [canvas colorAtX:sx y:sy];
+
+				if (c != nil && [c redComponent] < 0.5 && (CGFloat)sx < srect.origin.x + srect.size.width) {
+					mark_ink++;
+				}
+			}
+		}
+		check(mark_ink > 0, "the STATE door DREW: the checkmark is ink in its own column");
+		printf("  (note: checkmark %d ink pixel(s) in a %g-wide column)\n", mark_ink, (double)[scell stateImageWidth]);
+	}
 	printf("menu_cell_ink: %d case(s) failed\n", s_failed);
 	return s_failed == 0 ? 0 : 1;
 }
