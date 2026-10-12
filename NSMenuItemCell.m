@@ -16,6 +16,7 @@
  * "where would this go if nothing were measured", and the drawing half that lands a font will replace it.
  */
 #import <AppKit/NSMenuItemCell.h>
+#import <AppKit/NSStringDrawing.h>	/* -sizeWithAttributes:, the measurement -calcSize makes */
 
 #include <stdio.h>
 
@@ -105,21 +106,34 @@
 		if (image != nil) {
 			_imageWidth = [image size].width;
 		}
-		/* **THE TWO TEXT WIDTHS STILL STAY ZERO — BUT NOT FOR THE REASON THAT STOOD HERE.** The note this replaces
-		 * said this tier has "no metrics on this side of the library". MEASURED, THAT IS NOT THE GROUND: the text
-		 * stack IS here (`-sizeWithAttributes:` in `NSStringDrawing`, the faces in `NSFont`), and what is wrong is
-		 * that MEASURING CRASHES. Asking a cell to measure a title raises
+		/* **AND THE TWO TEXT WIDTHS ARE MEASURED NOW — AND THEY ARE ZERO BECAUSE THERE IS NO FONT, NOT BECAUSE
+		 * NOBODY ASKED.** The measurement used to RAISE: `-sizeWithAttributes:` inserted the default font into a
+		 * dictionary even when there was none, and `-setObject:` raises on nil. That is fixed one row over in
+		 * `NSStringDrawing` — a door that raises where the API it clones permits the call is a crash with a good
+		 * excuse rather than a refusal by name — so this call runs now, and what it reports is the truth about
+		 * this host:
 		 *
-		 *     NSInvalidArgumentException: -[AGDictionaryMutable setObject:forKey:]:
-		 *     value must not be nil - use -removeObjectForKey:
+		 *     +[NSFont systemFontOfSize:12.0]            -> NIL          (measured)
+		 *     [@"Open Recent" sizeWithAttributes:nil]    -> 0 x 0        (measured)
 		 *
-		 * FOR A NIL ATTRIBUTES DICTIONARY *AND* FOR AN EMPTY ONE — Apple's contract allows the first, and the
-		 * second is what a caller wanting the default attributes passes — so the fault is inside
-		 * `NSStringDrawing` and not in its caller. THAT WAS FOUND ONLY BY MAKING THE CALL: nothing had ever
-		 * measured a string here, because everything that would have reached this line refused first.
+		 * **SO THE NEXT BLOCKER IS THE FONT SERVICE AND NOT THE DRAWING.** Until `+[NSFont systemFontOfSize:]`
+		 * answers a face, every title is zero wide, and a menu laid out from these numbers would be a column of
+		 * empty rows — which is what a menu looks like today, for a reason that is now named rather than guessed.
 		 *
-		 * SO THIS ZERO IS NOW A MEASURED ABSENCE RATHER THAN AN ASSUMED ONE, and the row that puts text in a menu
-		 * is the row that fixes `-sizeWithAttributes:` — not the row that adds an import. */
+		 * AND A NIL TITLE MEASURES ZERO BY ARITHMETIC RATHER THAN BY A GUARD, which is a DIFFERENT zero from the
+		 * one above and worth keeping distinct: a separator has no title, and neither does an image-only item.
+		 * This paragraph's zero is a missing font; that one's is a missing title. */
+		{
+			NSString *title = [_menuItem title];
+			NSString *key = [_menuItem keyEquivalent];
+
+			if (title != nil) {
+				_titleWidth = [title sizeWithAttributes:nil].width;
+			}
+			if (key != nil && [key length] > 0) {
+				_keyEquivalentWidth = [key sizeWithAttributes:nil].width;
+			}
+		}
 
 	}
 	_needsSizing = NO;

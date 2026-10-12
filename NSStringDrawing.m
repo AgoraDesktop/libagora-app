@@ -76,7 +76,24 @@ static NSDictionary *apk_effective_attributes(NSDictionary *attrs)
 	 * `NSDictionary *` here even though it is a mutable one, so a caller that means to set keys must say so. */
 	effective = (NSMutableDictionary *)[NSMutableDictionary dictionaryWithDictionary:
 		(attrs == nil ? [NSDictionary dictionary] : attrs)];
-	[effective setObject:apk_default_font() forKey:NSFontAttributeName];
+	/* **AND A FONT THAT IS NOT THERE IS NOT INSERTED — WHICH IS THE WHOLE DEFECT, IN ONE LINE.** `-setObject:`
+	 * raises on a nil value, and `+[NSFont systemFontOfSize:]` ANSWERS NIL IN THIS TREE (measured, not inferred),
+	 * so every call to `-sizeWithAttributes:` died inside this dictionary insertion instead of measuring a string.
+	 * Apple's contract for these three doors ALLOWS a nil attributes dictionary, and a caller that names no font
+	 * gets the default — so when the default is missing the answer is NO FONT ATTRIBUTE, which Core Text fills
+	 * with its own default, rather than an exception. A door that raises where the API it clones permits a call is
+	 * not a refusal by name; it is a crash with a good excuse.
+	 *
+	 * **THE ROOT CAUSE IS STILL OWED AND IS NARROW: `+[NSFont systemFontOfSize:]` RETURNS NIL.** That is a FONT
+	 * SERVICE problem rather than a drawing one — the face lookup has nothing to answer with on this host — and it
+	 * belongs to `NSFont`'s row. What THIS file owes is staying usable while it is true. */
+	{
+		NSFont *font = apk_default_font();
+
+		if (font != nil) {
+			[effective setObject:font forKey:NSFontAttributeName];
+		}
+	}
 	return effective;
 }
 
