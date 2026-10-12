@@ -15,6 +15,7 @@ from PIL import Image
 
 PANEL = (240, 240, 240)      # NSMenuView's own panel colour
 ROW = 22                     # NSMenuRowHeight
+BAR_ROWS = 24                # the menu bar's strip, which is a panel too and is NOT the dropdown
 
 
 def main():
@@ -24,7 +25,12 @@ def main():
     im = Image.open(sys.argv[1]).convert("RGB")
     px = im.load()
     w, h = im.size
-    panel = [(x, y) for y in range(h) for x in range(w) if px[x, y] == PANEL]
+    # **THE MENU BAR IS A PANEL TOO, AND IT IS NOT THE DROPDOWN THIS TEST IS ABOUT.** An application's own menus
+    # sit in a window of their own at the top of the screen, drawn by the same `NSMenuView`, so a bounding box over
+    # EVERY panel pixel spans the bar AND the dropdown. MEASURED when the bar was added: "a whole number of
+    # 22-pixel rows" began failing at 14 rows, because 14 was the distance from the bar's top to the dropdown's
+    # bottom. The strip is excluded by row, which is the one thing that tells the two apart.
+    panel = [(x, y) for y in range(BAR_ROWS, h) for x in range(w) if px[x, y] == PANEL]
 
     checks = []
     if not panel:
