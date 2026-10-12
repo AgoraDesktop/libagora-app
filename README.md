@@ -33,7 +33,9 @@ tests/
   window.c                      the seam alone, with no AppKit
   keyboard.c                    the keymap translation, with no compositor anywhere
   appkit_window.m               THE APPkit: a real NSWindow with a real NSView
-  run-*.sh, inspect.py          headless (frame counts) and nested (pixels) runners
+  run-*-headless.sh             ctest: a compositor with a virtual monitor (no desktop input involved)
+  run-*-nested.sh, inspect.py   the PIXEL tests, and they are OPT-IN: `gnome-shell --nested` is a whole
+                                nested session and it grabs the HOST's pointer while it lives
 ```
 
 ### What is measured, not assumed
@@ -44,6 +46,14 @@ Everything below ran on this machine against GNOME Shell / mutter 48.7.
   `NSWindow`, an `NSView` overriding `-drawRect:`, pumped through `NSApplication`.
   `179 frame(s)` in three seconds, and the window came back **configured to 640x422** — the 640x400 content
   rect plus the 22-point title bar this AppKit draws itself.
+**The two `run-*-nested.sh` runners are opt-in (`AGORA_ALLOW_NESTED=1`), and that is not caution for its own
+sake:** a nested `gnome-shell` is a whole nested desktop session, and it takes over the pointer of the
+desktop it is started from while it lives. A run that does not unwind leaves the host with a stuck
+pointer grab — measured once: `XGrabPointer` answered `AlreadyGrabbed` while the keyboard grab was free,
+which is exactly "the cursor moves and the buttons do nothing", cleared by restarting GNOME Shell in
+place (`Alt+F2`, `r`, `Enter`). The script now refuses without the opt-in and escalates the kill until
+the compositor is really gone.
+
 - **The pixels reach an output** (`tests/run-appkit-nested.sh`, a nested compositor on the desktop, two
   screenshots read back by `inspect.py`): red marker at the top-left, green at the bottom-right, the R
   gradient rising left to right and the G gradient top to bottom, and the bar — positioned by the clock —
