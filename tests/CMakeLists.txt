@@ -33,6 +33,16 @@ target_link_libraries(appkit_window PRIVATE App)
 # **THE DRAWING HALF, VERIFIED WITHOUT A DISPLAY.** No compositor, no window and no run loop: a bitmap rep, a
 # graphics context over it, and the cell's own geometry door as the check on where the ink landed. It can therefore
 # run anywhere, which is what a test of "does this door draw" should be.
+# **THE OTHER NUMBER THE SERVER OWNS.** The work area is one question and the bar's usable region is another;
+# this asserts they get two different answers, against a compositor that speaks `agora_shell`.
+add_executable(menubar_area menubar_area.c)
+target_link_libraries(menubar_area PRIVATE App)
+add_test(NAME seam-menubar-area
+  COMMAND "${CMAKE_CURRENT_SOURCE_DIR}/run-menubar-area.sh"
+	  "$<TARGET_FILE:menubar_area>" "${AGORA_WINDOW_SERVER_BINARY}")
+set_tests_properties(seam-menubar-area PROPERTIES SKIP_RETURN_CODE 77
+  ENVIRONMENT "${_agora_app_test_env}")
+
 add_executable(menu_cell_ink menu_cell_ink.m)
 target_link_libraries(menu_cell_ink PRIVATE App)
 add_test(NAME appkit-menu-cell-ink COMMAND menu_cell_ink)

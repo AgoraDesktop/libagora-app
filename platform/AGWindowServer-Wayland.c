@@ -122,6 +122,14 @@ struct AGWindowServer {
 	int work_width;
 	int work_height;
 	int have_work_area;
+	/* **AND THE BAR'S USABLE REGION, WHICH IS NOT THE WORK AREA.** The work area is the screen minus the bar and
+	 * the Dock — a VERTICAL reserve for windows. This is the strip to the right of the System menu's square — a
+	 * HORIZONTAL reserve for an application's own menus, which only the server can name. */
+	int menu_x;
+	int menu_y;
+	int menu_width;
+	int menu_height;
+	int have_menu_bar_area;
 
 	/* THE FIRST OUTPUT'S CURRENT MODE, which is all a client is told without asking for more. `have_screen`
 	 * separates "no output has described itself yet" from "the output is zero-sized", which are different. */
@@ -729,6 +737,19 @@ static const struct wl_output_listener output_listener = {
 };
 
 /* THE WORK AREA, WHICH IS THE SERVER'S TO SAY BECAUSE THE FURNITURE IS THE SERVER'S. */
+static void agora_output_menu_bar_area(void *data, struct agora_output *output, int32_t x, int32_t y, int32_t width,
+				       int32_t height)
+{
+	AGWindowServer *server = data;
+
+	(void)output;
+	server->menu_x = (int)x;
+	server->menu_y = (int)y;
+	server->menu_width = (int)width;
+	server->menu_height = (int)height;
+	server->have_menu_bar_area = 1;
+}
+
 static void agora_output_work_area(void *data, struct agora_output *output, int32_t x, int32_t y, int32_t width,
 				   int32_t height)
 {
@@ -743,7 +764,12 @@ static void agora_output_work_area(void *data, struct agora_output *output, int3
 }
 
 static const struct agora_output_listener agora_output_listener = {
+	/* **IN THE PROTOCOL'S OWN ORDER, WHICH IS WHAT A POSITIONAL INITIALISER MEANS.** `work_area` is declared
+	 * before `menu_bar_area` in `agora-shell.xml`, so these two lines cannot be swapped — MEASURED: swapped, a
+	 * client reads the bar's region as the work area and vice versa, and every consequence of that looks like the
+	 * SERVER lying rather than like a struct in the wrong order. */
 	agora_output_work_area,
+	agora_output_menu_bar_area,
 };
 
 static void registry_global(void *data, struct wl_registry *registry, uint32_t name, const char *interface,
@@ -1154,6 +1180,22 @@ void AGWindowRaise(AGWindow *window)
 	if (window != NULL && window->agora != NULL) {
 		agora_window_raise(window->agora);
 		wl_display_flush(window->server->display);
+	}
+}
+
+void AGWindowServerMenuBarArea(AGWindowServer *server, int *x, int *y, int *width, int *height)
+{
+	if (x != NULL) {
+		*x = (server != NULL && server->have_menu_bar_area) ? server->menu_x : 0;
+	}
+	if (y != NULL) {
+		*y = (server != NULL && server->have_menu_bar_area) ? server->menu_y : 0;
+	}
+	if (width != NULL) {
+		*width = (server != NULL && server->have_menu_bar_area) ? server->menu_width : 0;
+	}
+	if (height != NULL) {
+		*height = (server != NULL && server->have_menu_bar_area) ? server->menu_height : 0;
 	}
 }
 

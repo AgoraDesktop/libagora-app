@@ -130,6 +130,17 @@ const char *AGWindowServerLastError(AGWindowServer *server);
  * Zeroes when the compositor does not say; the caller decides what to do about that. */
 void AGWindowServerWorkArea(AGWindowServer *server, int *x, int *y, int *width, int *height);
 
+/* **WHERE AN APPLICATION'S OWN MENUS MAY BEGIN, WHICH IS A DIFFERENT QUESTION FROM THE WORK AREA.** The server owns
+ * the menu bar's strip and the System menu at its left; this is the strip to the RIGHT of that square, where an
+ * application's own menus go. THE APPLICATION DRAWS THEM — it always did — and this says where they may start and
+ * nothing else.
+ *
+ * IT CANNOT BE DERIVED, WHICH IS WHY IT IS A DOOR: the System menu's width is the server's number, and an
+ * application that guessed would put its first menu UNDER the System menu the first time that width changed. And
+ * the work area cannot carry it: that is a VERTICAL reserve for windows, and the Mac's `-visibleFrame` begins at
+ * x = 0 because the bar spans the whole screen. Zeroes when the compositor does not say. */
+void AGWindowServerMenuBarArea(AGWindowServer *server, int *x, int *y, int *width, int *height);
+
 /* The compositor's first output, as far as a client can know it. `*width` and `*height` receive the output's
  * current mode, and `*name` the model the compositor reported — the closest thing to a screen name a Wayland
  * client is given. Any of the three may be NULL. Width and height are left at 0 when no output has been
