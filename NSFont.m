@@ -129,9 +129,53 @@ static NSFont *apk_font_take(CTFontRef ct)
 }
 
 /* AND THE UI FAMILY'S ONE LINE, ONCE. */
+/* **ASKING FOR A UI FONT ENUMERATES THE ENTIRE FONT REGISTRY, SO THE ANSWER IS KEPT.** `CTFontCreateUIFontForLanguage`
+ * builds its candidate list by WALKING EVERY FONT FILE THE REGISTRY CAN FIND — 118 of them on this host, each
+ * opened and read — and `+[NSFont systemFontOfSize:]` has no cache, so a drawing pass that asks once per cell per
+ * frame re-reads the whole font directory for every row of every frame.
+ *
+ * MEASURED, and it is what this fixes: a menu drawing four rows DID NOT FINISH IN TWELVE SECONDS, and the stack
+ * was here —
+ *
+ *     #12 +[NSFont systemFontOfSize:]              libagora-app
+ *     #13 -[NSMenuItemCell drawKeyEquivalentWithFrame:inView:]
+ *     #11 CTFontCreateUIFontForLanguage            libagora-text
+ *     #10 CTFontMatchingCopyAvailableDescriptors
+ *     #9  cg_font_enumerate                        libagora-drawing   <- 118 files
+ *
+ * — under `NSMenuView -drawRect:`, which is to say the "hang" was never a deadlock: it was the font directory
+ * being read again and again. THE MAC CACHES UI FONTS FOR THE SAME REASON. A fixed table rather than a dictionary
+ * because the key is two scalars and the number of distinct UI faces an application uses is small; a miss after
+ * the table fills simply re-measures rather than growing without bound. */
+#define APK_UI_FONT_CACHE 16
+
+static struct {
+	CTFontUIFontType type;
+	CGFloat size;
+	NSFont *font;		/* retained by this table for the process's life, which is what a font cache is */
+} s_ui_fonts[APK_UI_FONT_CACHE];
+static int s_ui_font_count;
+
 static NSFont *apk_ui_font(CTFontUIFontType type, CGFloat size)
 {
-	return apk_font_take(CTFontCreateUIFontForLanguage(type, size, NULL));
+	int i;
+
+	for (i = 0; i < s_ui_font_count; i++) {
+		if (s_ui_fonts[i].type == type && s_ui_fonts[i].size == size) {
+			return s_ui_fonts[i].font;
+		}
+	}
+	{
+		NSFont *font = apk_font_take(CTFontCreateUIFontForLanguage(type, size, NULL));
+
+		if (font != nil && s_ui_font_count < APK_UI_FONT_CACHE) {
+			s_ui_fonts[s_ui_font_count].type = type;
+			s_ui_fonts[s_ui_font_count].size = size;
+			s_ui_fonts[s_ui_font_count].font = [font retain];
+			s_ui_font_count++;
+		}
+		return font;
+	}
 }
 
 
