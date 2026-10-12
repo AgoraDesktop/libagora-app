@@ -332,7 +332,31 @@
 	if (width <= 0.0) {
 		return;
 	}
-	[title drawInRect:NSMakeRect(left, rect.origin.y, width, rect.size.height) withAttributes:attributes];
+	/* **AND A TITLE IS CENTRED VERTICALLY IN ITS ROW, WHICH IS THE MAC'S ANSWER AND WAS NOT THIS ONE.** MEASURED:
+	 * the titles in an application's menu bar read as sitting too high, and the reason is two-fold — `drawInRect:`
+	 * lays a Core Text frame out FROM THE RECT'S TOP DOWNWARD, and the rect it was given was the row's whole
+	 * height. So the ink hung from the top edge of the row instead of being centred in it, and in a 24-pixel bar a
+	 * row of 22 put it lower still.
+	 *
+	 * `-sizeWithAttributes:` is the same measurement `-calcSize` uses for the column's width, so the two agree by
+	 * construction: this centres the LINE, and the line is what the cell measured. */
+	{
+		/* **CENTRED ON THE FONT'S ASCENT AND DESCENT, NOT ON THE MEASURED LINE — AND THE DIFFERENCE IS THE WHOLE
+		 * BUG.** `-sizeWithAttributes:` answers a LINE height, which includes the leading above the ascent and
+		 * below the descent; the INK hangs from the line's TOP, so centring the line leaves the text visibly high.
+		 * MEASURED: centring the line put the titles' ink on rows 2..12 of a 24-pixel bar, a centre of 7.0 where
+		 * the bar's is 11.5.
+		 *
+		 * The baseline is what has an unambiguous place: Apple's own rule for centring text in a box is to put it
+		 * so that the ascent-and-descent band is centred, and that band is what a reader sees. Core Text fills a
+		 * frame from its rect's top downward, so the rect handed over is exactly that band. */
+		CGFloat ascent = [font ascender];
+		CGFloat descent = (CGFloat)fabs((double)[font descender]);
+		CGFloat band = ascent + descent;
+		CGFloat baseline = rect.origin.y + (rect.size.height - band) / 2.0 + descent;
+
+		[title drawInRect:NSMakeRect(left, baseline - descent, width, band) withAttributes:attributes];
+	}
 }
 
 - (void)drawKeyEquivalentWithFrame:(NSRect)cellFrame inView:(id)controlView

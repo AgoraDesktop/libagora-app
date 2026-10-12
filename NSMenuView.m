@@ -112,7 +112,10 @@ const CGFloat NSMenuRowHeight = 22.0;
 	for (i = 0; i < index; i++) {
 		offset += [self widthForItemAtIndex:i];
 	}
-	return NSMakeRect(offset, 0.0, [self widthForItemAtIndex:index], NSMenuRowHeight);
+	/* **AND A BAR'S ITEMS ARE AS TALL AS THE BAR**, not as tall as a dropdown's row: the bar is 24 pixels and a
+	 * row is 22, so an item that took a row's height would sit 2 pixels below the top of the surface it is part of
+	 * — half of why the titles read as too high. */
+	return NSMakeRect(offset, 0.0, [self widthForItemAtIndex:index], bounds.size.height);
 }
 
 - (void)setHighlightedItem:(NSMenuItem *)item
