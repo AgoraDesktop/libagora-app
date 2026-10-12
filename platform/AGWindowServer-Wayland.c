@@ -995,12 +995,11 @@ AGWindow *AGWindowCreate(AGWindowServer *server, int width, int height, const ch
 	window->next = server->windows;
 	server->windows = window;
 
-	/* **OPT-IN WHILE THE CLIENT HALF IS UNFINISHED.** `agora_shell` gives the Mac's model — a frame the server
-	 * honours, levels, a work area — and this path is WRITTEN BUT NOT WORKING: the surface is never mapped, so
-	 * the client draws once and the compositor takes only the role's own requests. `AWS_AGORA_SHELL=1` turns it
-	 * on for whoever is working on it; WITHOUT IT the seam uses `xdg-shell`, which is the configuration that has
-	 * been verified, so that a half-finished path cannot regress a working one. */
-	if (server->shell != NULL && getenv("AWS_AGORA_SHELL") != NULL) {
+	/* **AGORA'S OWN PROTOCOL WHEN IT IS THERE, `xdg-shell` WHEN IT IS NOT.** This is the path that can carry
+	 * the Mac's model — a frame the server honours, an integer level, a work area — and the other is the
+	 * bootstrap for a compositor that cannot. A stock compositor offers no `agora_shell`, so a caller can tell
+	 * which it got by whether its frame was obeyed and by what `AGWindowServerWorkArea` answers. */
+	if (server->shell != NULL) {
 		/* **THE AGORA ROLE, AND THERE IS NO CONFIGURE TO WAIT FOR.** xdg-shell makes a client ask to be
 		 * configured and take the size it is given; this protocol is the Mac's, where the application states a
 		 * frame and the server honours it — so the window is usable the moment it is made, at the size asked

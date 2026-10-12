@@ -558,7 +558,22 @@ static void fn_draw_chrome(CGContextRef c, NSWindow *w, NSRect content)
 	_cg_windowNumber = s_nextNumberOfWindow++;
 	AGWindowSetEventHandler(_agwindow, fn_ag_event, self);
 	AGWindowSetFrameHandler(_agwindow, fn_ag_frame, self);
-	AGWindowShow(_agwindow);
+	/* **AND THE SERVER IS TOLD THE FRAME IT WAS MADE WITH.** `-initWithContentRect:` sets `_frame` DIRECTLY
+	 * rather than through `-setFrame:`, so a window that is never moved afterwards would never have told the
+	 * server where it is — MEASURED as a window at the origin however far from it the application had asked.
+	 * Telling it here is what makes the frame honoured from the first pixel. */
+	{
+		CGFloat screen_height = [[NSScreen mainScreen] frame].size.height;
+
+		if (screen_height > 0.0) {
+			AGWindowSetFrame(_agwindow, (int)_frame.origin.x,
+					 (int)(screen_height - (_frame.origin.y + _frame.size.height)),
+					 (int)_frame.size.width, (int)_frame.size.height);
+		}
+	}
+	/* **AND IT IS NOT SHOWN HERE.** `-cg_ensureWindow` CREATES and `-orderFront:` SHOWS, and this used to do
+	 * both — so a window was shown twice, which is a second commit for no reason and, on a protocol where a
+	 * commit carries state, a chance to say the wrong thing twice. */
 	return YES;
 }
 
