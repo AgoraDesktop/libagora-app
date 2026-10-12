@@ -56,6 +56,35 @@ static uint32_t now_ms(void)
 @interface AGSmokeView : NSView
 @end
 
+/* **A VIEW THAT BELONGS TO AN ITEM RATHER THAN TO A WINDOW.** It draws a mark nobody could mistake for the bar: a
+ * solid field with three lighter notches. If this lands in the strip then an ITEM'S OWN APPLICATION put it there
+ * and the server only decided where — which is the whole rule, made visible. */
+#define STATUS_ITEM_LENGTH 96
+
+@interface AGStatusItemView : NSView
+@end
+
+@implementation AGStatusItemView
+
+- (void)drawRect:(NSRect)dirtyRect
+{
+	NSRect b = [self bounds];
+	CGFloat w = b.size.width;
+	CGFloat h = b.size.height;
+	int i;
+
+	(void)dirtyRect;
+	[[NSColor colorWithCalibratedRed:0.95 green:0.35 blue:0.10 alpha:1.0] setFill];
+	[[NSBezierPath bezierPathWithRect:b] fill];
+	[[NSColor colorWithCalibratedRed:1.0 green:1.0 blue:1.0 alpha:1.0] setFill];
+	for (i = 0; i < 3; i++) {
+		[[NSBezierPath bezierPathWithRect:NSMakeRect(w * (0.20 + 0.24 * i), h * 0.30, w * 0.12,
+							     h * 0.40)] fill];
+	}
+}
+
+@end
+
 @implementation AGSmokeView
 
 - (void)fillRect:(NSRect)rect red:(CGFloat)red green:(CGFloat)green blue:(CGFloat)blue
@@ -194,12 +223,24 @@ int main(int argc, char **argv)
 					fprintf(stderr, "appkit_status: THE TWO DOORS ONTO THE RESERVE DISAGREE\n");
 					return 1;
 				}
-				item = [bar statusItemWithLength:64.0];
-				fprintf(stderr, "appkit_status: an item asked for as 64 reads back as %g, its bar is %g\n",
-					(double)[item length], (double)[[item statusBar] thickness]);
-				if ([item length] != 64.0) {
+				item = [bar statusItemWithLength:STATUS_ITEM_LENGTH];
+				fprintf(stderr, "appkit_status: an item asked for as %d reads back as %g, its bar is %g\n",
+					STATUS_ITEM_LENGTH, (double)[item length],
+					(double)[[item statusBar] thickness]);
+				if ([item length] != (CGFloat)STATUS_ITEM_LENGTH) {
 					fprintf(stderr, "appkit_status: AN ITEM'S LENGTH DID NOT SURVIVE\n");
 					return 1;
+				}
+				/* **AND A VIEW, WHICH IS WHAT MAKES IT VISIBLE.** The server places the item; what is drawn in it
+				 * is the application's. This is the last inch of that rule and the reason the screenshot has
+				 * something in the strip to look at. */
+				{
+					AGStatusItemView *mark = [[AGStatusItemView alloc] initWithFrame:
+						NSMakeRect(0.0, 0.0, (CGFloat)STATUS_ITEM_LENGTH,
+							   [bar thickness])];
+
+					[item setView:mark];
+					[mark release];
 				}
 			}
 		}

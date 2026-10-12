@@ -238,6 +238,10 @@
 	_fView = aView;
 	if (_fView != nil) {
 		[_fWindow setContentView:_fView];
+		/* **AND THE ITEM APPEARS, WHICH ON THE MAC IS APPKIT'S DOING RATHER THAN THE APPLICATION'S.** An item with
+		 * a view is in the bar; nothing asks it to be. Ordering front is what joins the window to the run loop's
+		 * registry, so the item draws on the same frame callbacks every other window does. */
+		[_fWindow orderFront:nil];
 	}
 }
 

@@ -14,6 +14,8 @@ SERVER="${2:?}"
 SECONDS_TO_RUN="${3:-3}"
 RESERVE="${4:-24}"
 SOCK="agora-appkit-agora-$$"
+# The server's screenshot, which is how the strip is looked at rather than argued about.
+SHOT="${AGORA_SCREENSHOT:-/tmp/agora-appkit-agora-$$.ppm}"
 RUNTIME="${XDG_RUNTIME_DIR:-/tmp}"
 
 if [ ! -x "${SERVER}" ]; then
@@ -24,12 +26,14 @@ fi
 cleanup() {
 	[ -n "${SPID:-}" ] && kill "${SPID}" 2>/dev/null
 	rm -f "${RUNTIME}/${SOCK}" "${RUNTIME}/${SOCK}.lock"
+	# ONLY THE DEFAULT ONE IS REMOVED: a caller that named a path is asking to look at it.
+	[ -n "${AGORA_SCREENSHOT:-}" ] || rm -f "${SHOT}"
 }
 trap cleanup EXIT
 
 rm -f "${RUNTIME}/${SOCK}" "${RUNTIME}/${SOCK}.lock"
 
-"${SERVER}" --backend headless --input none --socket "${SOCK}" --frames 1000000 \
+"${SERVER}" --backend headless --input none --socket "${SOCK}" --frames 1000000 --screenshot "${SHOT}" \
 	>/dev/null 2>/tmp/agora-appkit-agora-server.log &
 SPID=$!
 for _ in $(seq 1 50); do
@@ -39,6 +43,12 @@ done
 [ -S "${RUNTIME}/${SOCK}" ] || { echo "SKIP: the server never came up" >&2; exit 77; }
 
 output=$(WAYLAND_DISPLAY="${SOCK}" "${BINARY}" --seconds "${SECONDS_TO_RUN}" 2>&1)
+# **THE SERVER IS STOPPED BY SIGNAL BEFORE ANYTHING IS ASSERTED, WHICH IS WHAT WRITES THE SCREENSHOT**: the signal
+# stops the loop and the ordinary exit path runs. Left to the exit trap the shot would be written after the
+# assertions, which is useless to them.
+kill -TERM "${SPID}" 2>/dev/null
+wait "${SPID}" 2>/dev/null
+SPID=""
 status=$?
 echo "${output}" | grep -E "appkit_(window|status):"
 
