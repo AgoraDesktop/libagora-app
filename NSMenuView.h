@@ -13,9 +13,9 @@
  * says which, and it is the reason the drawing half is a view rather than a function: a hand-drawn panel at a
  * frame can express a dropdown and CANNOT express a bar.
  *
- * WHAT IS NOT HERE YET, AND IT IS THE NEXT ROW: the horizontal layout. `-isHorizontal` answers, and `-drawRect:`
- * lays out vertically whatever that answer is — so a horizontal view draws as a column of rows today, which is
- * wrong and is RECORDED rather than left to be discovered.
+ * AND BOTH ORIENTATIONS ARE IMPLEMENTED. A vertical view draws rows the width of the menu, stacking DOWN from the
+ * top; a horizontal one draws columns the width of each item's title, running RIGHT from the left edge, and does
+ * NOT draw key equivalents — a menu bar shows titles, and the key equivalents belong to the menu each title opens.
  */
 
 #ifndef APPKIT_NSMENUVIEW_H
@@ -52,9 +52,11 @@ extern const CGFloat NSMenuRowHeight;
  * re-measured every item on every pass would measure the same strings forever. */
 - (NSMenuItemCell *)cellForItemAtIndex:(NSInteger)index;
 
-/* THE ROW A ROW OCCUPIES, in this view's own coordinates. Vertical: the menu's FIRST item is the TOP row, so the
- * count runs down from the top and the Cocoa y runs up from the bottom. */
-- (NSRect)rectForRowAtIndex:(NSInteger)index;
+/* **THE BOX AN ITEM OCCUPIES, AND IT IS NOT CALLED A ROW** because in a bar there are none: vertical is a ROW of
+ * the menu, horizontal is a COLUMN of the bar, and one door answers both rather than two doors that callers have
+ * to choose between. Vertical: the menu's FIRST item is the TOP row, so the index counts down while the Cocoa y
+ * counts up from the bottom. Horizontal: the FIRST item is the LEFTMOST column, and the widths are the items'. */
+- (NSRect)rectForItemAtIndex:(NSInteger)index;
 
 - (void)setHighlightedItem:(NSMenuItem *)item;
 - (NSMenuItem *)highlightedItem;
@@ -62,8 +64,14 @@ extern const CGFloat NSMenuRowHeight;
 - (BOOL)isHorizontal;
 - (void)setHorizontal:(BOOL)flag;
 
-/* How tall the menu has to be to show every item, which is what its window is sized to. */
+/* How big the menu has to be to show every item, which is what its window is sized to: a dropdown is as TALL as
+ * its rows and a bar is as WIDE as its columns, and the caller knows which it is building. */
 - (CGFloat)requiredHeight;
+- (CGFloat)requiredWidth;
+
+/* The width of one item's column in a bar, which is its title and the air either side of it — A MENU BAR'S ITEMS
+ * ARE AS WIDE AS THEIR TITLES, which is why a bar's layout cannot be arithmetic alone and has to ask a cell. */
+- (CGFloat)widthForItemAtIndex:(NSInteger)index;
 
 @end
 
