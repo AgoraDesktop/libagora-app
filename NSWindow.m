@@ -300,6 +300,29 @@ static void fn_ag_frame(void *context, uint32_t time_ms)
 	return fn_server();
 }
 
+/* **THE WINDOW'S BACKGROUND COLOUR.** Apple's door, and the reason it is needed here is the menu bar: an
+ * application's menus are drawn IN the bar, and a panel of the window's own default colour is a SEAM across it. Nil
+ * is the default and means `+[NSColor windowBackgroundColor]`, so every window that says nothing is unchanged. */
+- (NSColor *)backgroundColor
+{
+	return (_backgroundColor != nil) ? _backgroundColor : [NSColor windowBackgroundColor];
+}
+
+- (void)setBackgroundColor:(NSColor *)colour
+{
+	if (colour == _backgroundColor) {
+		return;
+	}
+	[colour retain];
+	[_backgroundColor release];
+	_backgroundColor = colour;
+	/* THE WINDOW IS A DIFFERENT COLOUR NOW, so what is on the screen is stale until it draws again. **THE FLAG IS
+	 * SET DIRECTLY BECAUSE `-[NSWindow setNeedsDisplay:]` IS NOT IMPLEMENTED IN THIS TIER** — MEASURED, it raises
+	 * and takes the process with it, which is how this line was found. What the flag means is the same thing it
+	 * means at the end of `-cg_drawFrame`, where it is cleared. */
+	_viewsNeedDisplay = YES;
+}
+
 /* THE STYLE MASK'S CHROME, which is the frame-to-content arithmetic and its inverse. Both directions exist
  * because both are asked for, and they are written as one pair so a change to the title-bar height cannot
  * make them disagree. */
@@ -1634,7 +1657,7 @@ static CGFloat fn_clamp_axis(CGFloat v, CGFloat lo, CGFloat hi)
 	 * `content.size.height` rows, where the view tree draws at the origin it has always drawn at, and the CHROME is
 	 * the strip above them — which this method paints because nothing else will (appkit-plan §6 D6). There are no
 	 * rows without an author, which is what the white stripe this file once carried was. */
-	CGContextSetFillColorWithColor(c, [[NSColor windowBackgroundColor] CGColor]);
+	CGContextSetFillColorWithColor(c, [[self backgroundColor] CGColor]);
 	CGContextFillRect(c, CGRectMake(0.0, 0.0, content.size.width, content.size.height));
 	if (_contentView != nil) {
 		g = [NSGraphicsContext graphicsContextWithCGContext:_surface flipped:NO];

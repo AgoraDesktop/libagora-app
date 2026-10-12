@@ -166,8 +166,15 @@ const CGFloat NSMenuRowHeight = 22.0;
 	NSRect bounds = [self bounds];
 
 	(void)dirtyRect;
-	[[NSColor colorWithCalibratedRed:0.94 green:0.94 blue:0.94 alpha:1.0] setFill];
-	[[NSBezierPath bezierPathWithRect:bounds] fill];
+	/* **A BAR PAINTS NO PANEL OF ITS OWN, WHICH IS WHAT MAKES IT SEAMLESS.** The strip belongs to the Window Server
+	 * and the WINDOW's background colour is the strip's — told to the client as part of the bar's own description —
+	 * so a view that filled its own panel here would put a rectangle of a slightly different grey across a surface
+	 * meant to be one thing. MEASURED before this: the server's strip at 216,216,216 and this panel at 240,240,240.
+	 * A DROPDOWN still paints its own, because a dropdown is a panel with nothing behind it. */
+	if (!_horizontal) {
+		[[NSColor colorWithCalibratedRed:0.94 green:0.94 blue:0.94 alpha:1.0] setFill];
+		[[NSBezierPath bezierPathWithRect:bounds] fill];
+	}
 
 	for (i = 0; i < count; i++) {
 		NSMenuItem *item = [_shownMenu itemAtIndex:i];

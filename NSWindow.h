@@ -353,6 +353,11 @@ typedef NSUInteger NSWindowSharingType;
 	 * responder is NOT (it is a view inside the content, and a window that retained it would keep a whole
 	 * subtree alive through one pointer). */
 	NSView *_contentView;
+	/* **THE WINDOW'S OWN BACKGROUND COLOUR, WHICH IS A DOOR APPLE HAS AND THIS TIER DID NOT.** The frame's fill has
+	 * always been `+[NSColor windowBackgroundColor]`; a window that is part of a surface it does not own — an
+	 * application's menus, sitting in the menu bar — has to BE that surface's colour instead, and the only way to
+	 * say so is to let the window be told. Nil means the default, so every window that says nothing is unchanged. */
+	id _backgroundColor;
 	NSResponder *_firstResponder;
 	/* WHETHER MOVEMENT WITHOUT A BUTTON IS DELIVERED. Apple's default is NO — a window that wants moves has
 	 * to ask — and it is what makes the pump's MotionNotify branch conditional rather than unconditional. */

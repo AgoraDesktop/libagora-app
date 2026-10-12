@@ -130,6 +130,7 @@ struct AGWindowServer {
 	int menu_width;
 	int menu_height;
 	int have_menu_bar_area;
+	unsigned int menu_colour;	/* the strip's colour, 0xRRGGBB, as the server said it */
 
 	/* THE FIRST OUTPUT'S CURRENT MODE, which is all a client is told without asking for more. `have_screen`
 	 * separates "no output has described itself yet" from "the output is zero-sized", which are different. */
@@ -738,11 +739,12 @@ static const struct wl_output_listener output_listener = {
 
 /* THE WORK AREA, WHICH IS THE SERVER'S TO SAY BECAUSE THE FURNITURE IS THE SERVER'S. */
 static void agora_output_menu_bar_area(void *data, struct agora_output *output, int32_t x, int32_t y, int32_t width,
-				       int32_t height)
+				       int32_t height, uint32_t colour)
 {
 	AGWindowServer *server = data;
 
 	(void)output;
+	server->menu_colour = (unsigned int)(colour & 0xFFFFFFu);
 	server->menu_x = (int)x;
 	server->menu_y = (int)y;
 	server->menu_width = (int)width;
@@ -1196,6 +1198,13 @@ void AGWindowServerMenuBarArea(AGWindowServer *server, int *x, int *y, int *widt
 	}
 	if (height != NULL) {
 		*height = (server != NULL && server->have_menu_bar_area) ? server->menu_height : 0;
+	}
+}
+
+void AGWindowServerMenuBarColour(AGWindowServer *server, unsigned int *rgb)
+{
+	if (rgb != NULL) {
+		*rgb = (server != NULL && server->have_menu_bar_area) ? server->menu_colour : 0u;
 	}
 }
 

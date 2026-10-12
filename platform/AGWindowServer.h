@@ -141,6 +141,13 @@ void AGWindowServerWorkArea(AGWindowServer *server, int *x, int *y, int *width, 
  * x = 0 because the bar spans the whole screen. Zeroes when the compositor does not say. */
 void AGWindowServerMenuBarArea(AGWindowServer *server, int *x, int *y, int *width, int *height);
 
+/* **AND THE STRIP'S COLOUR, BECAUSE AN APPLICATION'S MENUS SIT IN IT.** A menu drawn on a panel of its own colour is
+ * a visible SEAM across a surface that is meant to be one thing — MEASURED: the server's strip at 216,216,216 and
+ * `NSMenuView`'s own panel at 240,240,240. The colour is the server's, so the server is what says it; a client that
+ * picked a colour which looked close is how two greys come to differ by four counts and nobody can say which one is
+ * right. 0xRRGGBB, and 0 when the compositor did not say. */
+void AGWindowServerMenuBarColour(AGWindowServer *server, unsigned int *rgb);
+
 /* The compositor's first output, as far as a client can know it. `*width` and `*height` receive the output's
  * current mode, and `*name` the model the compositor reported — the closest thing to a screen name a Wayland
  * client is given. Any of the three may be NULL. Width and height are left at 0 when no output has been

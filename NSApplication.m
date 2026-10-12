@@ -20,6 +20,7 @@
 #include "AGWindowServer.h"
 #import "NSWindow.h"
 #import "NSMenuView.h"
+#import "NSColor.h"
 
 #import <Foundation/NSThread.h>
 #import <AppKit/NSApplication.h>
@@ -725,7 +726,10 @@ BOOL NSApplicationLoad(void)
 	if (_mainMenu == nil || server == NULL) {
 		return;
 	}
+	unsigned int rgb = 0;
+
 	AGWindowServerMenuBarArea(server, &x, &y, &width, &height);
+	AGWindowServerMenuBarColour(server, &rgb);
 	if (width <= 0 || height <= 0) {
 		return;		/* a compositor that does not say where the bar's free space begins */
 	}
@@ -754,6 +758,16 @@ BOOL NSApplicationLoad(void)
 								 defer:NO];
 		[_menuBarWindow setLevel:NSMainMenuWindowLevel];
 		[_menuBarWindow setContentView:view];
+		/* **AND IT IS THE STRIP'S COLOUR, SO THERE IS NO SEAM.** The window's background is what shows between the
+		 * titles, and the server's strip is what shows either side of this window — two surfaces a person reads as
+		 * ONE BAR, so they had better be the same colour. It is the SERVER's colour because the strip is the
+		 * server's: a client that picked one which looked close is how they come to differ. */
+		if (rgb != 0u) {
+			[_menuBarWindow setBackgroundColor:[NSColor colorWithCalibratedRed:(CGFloat)((rgb >> 16) & 0xFFu) / 255.0
+										     green:(CGFloat)((rgb >> 8) & 0xFFu) / 255.0
+										      blue:(CGFloat)(rgb & 0xFFu) / 255.0
+										     alpha:1.0]];
+		}
 	}
 	[(NSMenuView *)_menuBarView setMenu:(NSMenu *)_mainMenu];
 	needed = [(NSMenuView *)_menuBarView requiredWidth];
