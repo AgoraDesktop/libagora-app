@@ -469,6 +469,7 @@ static void keyboard_key(void *data, struct wl_keyboard *keyboard, uint32_t seri
 	if (server->keyboard_state != NULL) {
 		AGKeyboardTranslate(server->keyboard_state, key, event.text, sizeof event.text,
 				    &event.modifiers);
+		event.modifier = AGKeyboardKeyIsModifier(server->keyboard_state, key);
 	}
 	ag_window_deliver(window, &event);
 }

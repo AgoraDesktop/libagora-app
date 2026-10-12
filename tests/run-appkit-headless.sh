@@ -4,7 +4,7 @@
 # window, so a zero count means the whole path is broken rather than slow.
 set -u
 
-BINARY="${1:?usage: run-appkit-headless.sh BINARY [SECONDS]}"
+BINARY="${1:?usage: run-appkit-headless.sh BINARY [SECONDS] [EXPECTED-OUTPUT]}"
 SECONDS_TO_RUN="${2:-3}"
 DISP="agora-appkit-$$"
 RUNTIME="${XDG_RUNTIME_DIR:-/tmp}"
@@ -45,6 +45,19 @@ if [ "${status}" -ne 0 ]; then
 	echo "FAIL: the AppKit test exited ${status}" >&2
 	exit 1
 fi
+# THE ASSERTION DEPENDS ON WHICH TEST THIS IS: the window smoke test proves a view was ASKED TO DRAW (which
+# cannot happen until the compositor configured the window), and the events test prints its own verdict. So an
+# expected pattern may be passed in, and the frame count is the default.
+EXPECT="${3:-}"
+if [ -n "${EXPECT}" ]; then
+	if ! printf '%s\n' "${output}" | grep -q "${EXPECT}"; then
+		echo "FAIL: the output did not contain '${EXPECT}'" >&2
+		exit 1
+	fi
+	echo "ok: ${EXPECT}"
+	exit 0
+fi
+
 drew=$(printf '%s\n' "${output}" | sed -n 's/.*drew \([0-9]*\) frame(s).*/\1/p' | tail -1)
 if [ -z "${drew}" ] || [ "${drew}" -eq 0 ]; then
 	echo "FAIL: the view was never asked to draw" >&2

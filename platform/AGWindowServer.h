@@ -88,6 +88,7 @@ typedef struct AGEvent {
 	uint32_t button;		/* evdev button code */
 	int pressed;
 	uint32_t keycode;		/* evdev key code */
+	int modifier;			/* nonzero when `keycode` is a MODIFIER key rather than one that types */
 	uint32_t modifiers;		/* AGModifier... */
 	char text[8];			/* UTF-8; empty when the key produces no text */
 } AGEvent;

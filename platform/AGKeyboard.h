@@ -52,6 +52,13 @@ int AGKeyboardTranslate(AGKeyboard *keyboard, uint32_t evdev_keycode, char *utf8
 /* The modifier mask for the state last fed in. */
 uint32_t AGKeyboardModifiers(AGKeyboard *keyboard);
 
+/* IS THIS KEY A MODIFIER RATHER THAN A CHARACTER? Nonzero when the keymap says the key is one of the modifier
+ * keysyms (Shift, Control, Alt, Super, Caps Lock, Num Lock, the ISO group and level keys). It is a separate
+ * question because the ANSWER changes how an event is delivered rather than what it says: AppKit sends
+ * `-flagsChanged:` for a modifier and `-keyDown:`/`-keyUp:` for everything else, so a tool that delivered
+ * every key press as a key down would leave `-flagsChanged:` unreachable. */
+int AGKeyboardKeyIsModifier(AGKeyboard *keyboard, uint32_t evdev_keycode);
+
 #ifdef __cplusplus
 }
 #endif

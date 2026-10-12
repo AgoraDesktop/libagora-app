@@ -1353,6 +1353,29 @@ NSString *NSDefinitionPresentationTypeOverlay = @"Overlay";
 	return NO;
 }
 
+/* **A VIEW'S SUCCESSOR IS ITS SUPERVIEW.** `NSApplication.h` names this chain — "`NSView` → its superview →
+ * … → the window → the application" — and NOTHING EVER WIRED IT: `-addSubview:` set `_superview` and left
+ * this to NSResponder's ivar, which is nil unless somebody sets it. The consequence was not subtle, because
+ * EVERY event method NSResponder implements is one line that FORWARDS to `-nextResponder`: a view whose
+ * successor was nil SWALLOWED the event it did not itself override, and the chain stopped there. That is why
+ * `-makeFirstResponder:` in NSWindow.m carried a workaround linking the first responder straight to the
+ * content view, skipping every ancestor between them.
+ *
+ * AN EXPLICIT LINK STILL WINS, which is Apple's behaviour as well: `-setNextResponder:` on a view overrides
+ * the computed answer, so this asks for one before falling back. */
+- (NSResponder *)nextResponder
+{
+	NSResponder *explicit = [super nextResponder];
+
+	if (explicit != nil) {
+		return explicit;
+	}
+	if (_superview != nil) {
+		return _superview;
+	}
+	return (NSResponder *)_window;
+}
+
 - (NSView *)hitTest:(NSPoint)point
 {
 	NSPoint here;

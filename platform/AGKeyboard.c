@@ -16,6 +16,7 @@
 #include <string.h>
 
 #include <xkbcommon/xkbcommon.h>
+#include <xkbcommon/xkbcommon-keysyms.h>
 
 /* Wayland's key codes are evdev; xkbcommon's are evdev + 8 (X11's historical offset). */
 #define AG_EVDEV_TO_XKB(code) ((xkb_keycode_t)((code) + 8))
@@ -172,6 +173,36 @@ uint32_t AGKeyboardModifiers(AGKeyboard *keyboard)
 		result |= AGModifierNumLock;
 	}
 	return result;
+}
+
+int AGKeyboardKeyIsModifier(AGKeyboard *keyboard, uint32_t evdev_keycode)
+{
+	xkb_keysym_t sym;
+
+	if (keyboard == NULL || keyboard->state == NULL) {
+		return 0;
+	}
+	sym = xkb_state_key_get_one_sym(keyboard->state, AG_EVDEV_TO_XKB(evdev_keycode));
+	/* THE MODIFIER KEYSYMS ARE ONE CONTIGUOUS RANGE plus a few that sit outside it: Shift_L (0xffe1) through
+	 * Hyper_R (0xffee) covers Shift, Control, Meta and the Alt/Level keys; Num Lock (0xff7f) and the ISO
+	 * group and level keys are the ones that are not in that block. Caps Lock IS in it, which is why it is not
+	 * named again below. */
+	if (sym >= XKB_KEY_Shift_L && sym <= XKB_KEY_Hyper_R) {
+		return 1;
+	}
+	switch (sym) {
+	case XKB_KEY_Num_Lock:
+	case XKB_KEY_Mode_switch:
+	case XKB_KEY_ISO_Level3_Shift:
+	case XKB_KEY_ISO_Level5_Shift:
+	case XKB_KEY_ISO_Next_Group:
+	case XKB_KEY_ISO_Prev_Group:
+	case XKB_KEY_ISO_First_Group:
+	case XKB_KEY_ISO_Last_Group:
+		return 1;
+	default:
+		return 0;
+	}
 }
 
 int AGKeyboardTranslate(AGKeyboard *keyboard, uint32_t evdev_keycode, char *utf8, size_t size,

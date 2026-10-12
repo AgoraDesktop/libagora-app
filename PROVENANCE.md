@@ -73,7 +73,28 @@ Xfb/X11 or named the X server as the authority for a value. Each was updated to 
 OLD behaviour was the reason a design exists, the reason was kept and re-stated (`NSWindow.m`'s header still
 says why the coordinate conversion lives in one function).
 
-### 4. What was added rather than changed
+### 4. Two defects in the import, found by testing the input path
+
+Neither of these is a porting change — they are bugs the imported code had, found when the event path was
+tested for the first time (`tests/appkit_events.m`, in this repository). Both are recorded here because they
+are changes to imported behaviour rather than additions.
+
+- **The responder chain between views was never wired.** `NSApplication.h` names the chain — `NSView` → its
+  superview → … → the window → the application — and nothing ever set it: `-addSubview:` set `_superview` and
+  left `-nextResponder` to `NSResponder`'s ivar, which is nil unless someone sets it. Because EVERY event
+  method `NSResponder` implements is one line that forwards to `-nextResponder`, a view whose successor was
+  nil SWALLOWED the event it did not override. `NSWindow.m` carried the workaround — `-makeFirstResponder:`
+  linked the responder straight to the content view — which made a click arrive but skipped every ancestor
+  between them. `-nextResponder` is computed from the hierarchy now, an explicit `-setNextResponder:` still
+  wins, the window's successor is the application, and the workaround is gone.
+- **`-[NSWindow sendEvent:]` never hit-tested.** Every mouse event went to the first responder, so a click on
+  a control inside a subview reached that subview only if it happened to be the first responder. Mouse events
+  now go to the deepest view containing the point, which is `NSView`'s own `-hitTest:`. And `-flagsChanged:`
+  was unreachable — it was in `sendEvent:`'s switch and nothing ever produced the type — so the seam now
+  reports whether a key is a MODIFIER (`AGKeyboardKeyIsModifier`, from the xkbcommon keysyms) and the AppKit
+  chooses `NSFlagsChanged` from that answer rather than treating every key as a keystroke.
+
+### 5. What was added rather than changed
 
 - `platform/AGWindowServer.h`, `platform/AGWindowServer-Wayland.c` — the seam and its `xdg-shell`
   implementation, including the `wl_output` handling `NSScreen` needs.

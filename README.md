@@ -33,6 +33,7 @@ tests/
   window.c                      the seam alone, with no AppKit
   keyboard.c                    the keymap translation, with no compositor anywhere
   appkit_window.m               THE APPkit: a real NSWindow with a real NSView
+  appkit_events.m               the INPUT PATH: the seam's event, to the view that should get it
   run-*-headless.sh             ctest: a compositor with a virtual monitor (no desktop input involved)
   run-*-nested.sh, inspect.py   the PIXEL tests, and they are OPT-IN: `gnome-shell --nested` is a whole
                                 nested session and it grabs the HOST's pointer while it lives
@@ -59,6 +60,11 @@ the compositor is really gone.
   gradient rising left to right and the G gradient top to bottom, and the bar — positioned by the clock —
   moving `+290 px` between two captures 1.2 s apart. That is `NSView -drawRect:` → `NSWindow` → the seam →
   the compositor → a screenshot, with nothing mocked.
+- **Events arrive where they should** (`ctest`, `tests/appkit_events.m`): the seam's `AGEvent` built by hand
+  and pushed through the window, then pumped by `NSApplication` and dispatched by `-sendEvent:` — 10 checks,
+  including that a key reaches the FIRST RESPONDER with the character xkbcommon produced, that a MODIFIER
+  arrives as `-flagsChanged:` rather than as a keystroke, that a click lands on THE VIEW UNDER THE POINTER,
+  and that a view which does not handle an event BUBBLES it up the responder chain.
 - **The seam alone** (`ctest`): exactly 60 of 60 frames headless, and the keymap translation checked against
   a pinned `us` keymap.
 - **`ctest`: 3 of 3 passed** (keyboard, window-headless, appkit-window-headless).
@@ -75,6 +81,24 @@ These are properties of the protocol rather than gaps, and each is written at th
   why `-display` and the seam's frame handler both end in the same draw.
 - **The screen is an output.** `NSScreen` asks the seam, which learns the size from `wl_output`; with no
   output described yet the frame is a zero rect rather than an invented size.
+
+### Two things the import got wrong, found by testing the input path
+
+- **The responder chain between views was never wired.** `NSApplication.h` names it — `NSView` → its superview
+  → … → the window → the application — and nothing set it, so every event method `NSResponder` implements
+  (each one a FORWARD to `-nextResponder`) stopped at the first view that did not override. `NSWindow.m`
+  carried a workaround linking the first responder straight to the content view, which made a click arrive but
+  SKIPPED every ancestor on the way. `-nextResponder` is computed from the hierarchy now and the workaround is
+  gone.
+- **`-sendEvent:` never hit-tested.** Every mouse event went to the first responder, so a click on a control
+  inside a subview reached it only if the subview happened to be the first responder — a control you could see
+  and not press. Mouse events now go to the deepest view containing the point (`NSView`'s own `-hitTest:`), and
+  `-flagsChanged:` is reachable at all because the seam reports whether a key is a modifier (`xkbcommon`
+  keysyms) rather than folding every key into a keystroke.
+
+Both fixes were falsified before they were kept: removing the chain fails the bubbling check, and removing the
+hit test fails the "click lands on the subview" check — which the first version of the test did NOT catch,
+because it had made the clicked subview the first responder.
 
 ### Still absent, and why
 

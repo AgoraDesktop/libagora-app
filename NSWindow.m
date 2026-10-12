@@ -241,7 +241,10 @@ static NSEvent *fn_translate(NSWindow *w, const AGEvent *e, NSTimeInterval now)
 		if (chars == nil) {
 			chars = @"";
 		}
-		return [NSEvent keyEventWithType:(e->pressed ? NSKeyDown : NSKeyUp)
+		/* **A MODIFIER IS NOT A KEYSTROKE**, and this is where that shows: AppKit delivers one as
+		 * `-flagsChanged:` and everything else as `-keyDown:`/`-keyUp:`, so the type is chosen from the seam's
+		 * own answer rather than guessed here. The characters travel either way — a modifier's are empty. */
+		return [NSEvent keyEventWithType:(e->modifier ? NSFlagsChanged : (e->pressed ? NSKeyDown : NSKeyUp))
 					location:where modifierFlags:flags
 				       timestamp:now windowNumber:win context:nil
 				      characters:chars
@@ -1188,6 +1191,16 @@ static CGFloat fn_clamp_axis(CGFloat v, CGFloat lo, CGFloat hi)
 	return _firstResponder;
 }
 
+/* **THE WINDOW'S SUCCESSOR IS THE APPLICATION**, which is where Apple's chain ends and where
+ * `-targetForAction:`'s walk expects to arrive (NSApplication.m's own comment says so). A caller that has put
+ * something in between — a window controller, say — keeps it, because an explicit link wins. */
+- (NSResponder *)nextResponder
+{
+	NSResponder *explicit = [super nextResponder];
+
+	return explicit != nil ? explicit : (NSResponder *)[NSApplication sharedApplication];
+}
+
 - (BOOL)makeFirstResponder:(NSResponder *)aResponder
 {
 	/* A NIL RESPONDER IS ACCEPTED AND MEANS "NOBODY", which is Apple's contract (a window whose field
@@ -1206,9 +1219,13 @@ static CGFloat fn_clamp_axis(CGFloat v, CGFloat lo, CGFloat hi)
 	 * the direction they moved in AFTER the selection, so a `-becomeFirstResponder` reached through Tab is told
 	 * which way it arrived. */
 	_keyViewSelectionDirection = NSDirectSelection;
-	if (aResponder != nil && aResponder != (NSResponder *)_contentView) {
-		[aResponder setNextResponder:(NSResponder *)_contentView];
-	}
+	/* **AND NOTHING IS LINKED HERE ANY MORE, BECAUSE THE CHAIN IS REAL NOW.** This door used to set the
+	 * responder's successor to the CONTENT VIEW, which was a workaround for `NSView` never wiring
+	 * `-nextResponder` at all (see that method): with the successor unset, NSResponder's forwarding methods
+	 * had nowhere to go and the click was lost. Linking straight to the content view made the click arrive,
+	 * but SKIPPED EVERY ANCESTOR between the responder and the content view — so an intermediate view could
+	 * never hear an event its descendant did not handle. `-nextResponder` is computed now, so the walk is the
+	 * real one and there is nothing to patch up. */
 	return YES;
 }
 
@@ -1354,18 +1371,19 @@ static CGFloat fn_clamp_axis(CGFloat v, CGFloat lo, CGFloat hi)
 {
 	SEL sel = NULL;
 	id target;
+	BOOL mouse = NO;
 
 	switch ([theEvent type]) {
-	case NSLeftMouseDown:      sel = @selector(mouseDown:); break;
-	case NSLeftMouseUp:        sel = @selector(mouseUp:); break;
-	case NSLeftMouseDragged:   sel = @selector(mouseDragged:); break;
-	case NSRightMouseDown:     sel = @selector(rightMouseDown:); break;
-	case NSRightMouseUp:       sel = @selector(rightMouseUp:); break;
-	case NSRightMouseDragged:  sel = @selector(rightMouseDragged:); break;
-	case NSOtherMouseDown:     sel = @selector(otherMouseDown:); break;
-	case NSOtherMouseUp:       sel = @selector(otherMouseUp:); break;
-	case NSOtherMouseDragged:  sel = @selector(otherMouseDragged:); break;
-	case NSMouseMoved:         sel = @selector(mouseMoved:); break;
+	case NSLeftMouseDown:      sel = @selector(mouseDown:); mouse = YES; break;
+	case NSLeftMouseUp:        sel = @selector(mouseUp:); mouse = YES; break;
+	case NSLeftMouseDragged:   sel = @selector(mouseDragged:); mouse = YES; break;
+	case NSRightMouseDown:     sel = @selector(rightMouseDown:); mouse = YES; break;
+	case NSRightMouseUp:       sel = @selector(rightMouseUp:); mouse = YES; break;
+	case NSRightMouseDragged:  sel = @selector(rightMouseDragged:); mouse = YES; break;
+	case NSOtherMouseDown:     sel = @selector(otherMouseDown:); mouse = YES; break;
+	case NSOtherMouseUp:       sel = @selector(otherMouseUp:); mouse = YES; break;
+	case NSOtherMouseDragged:  sel = @selector(otherMouseDragged:); mouse = YES; break;
+	case NSMouseMoved:         sel = @selector(mouseMoved:); mouse = YES; break;
 	case NSKeyDown:            sel = @selector(keyDown:); break;
 	case NSKeyUp:              sel = @selector(keyUp:); break;
 	case NSFlagsChanged:       sel = @selector(flagsChanged:); break;
@@ -1374,9 +1392,25 @@ static CGFloat fn_clamp_axis(CGFloat v, CGFloat lo, CGFloat hi)
 	if (sel == NULL) {
 		return;
 	}
-	target = _firstResponder;
-	if (target == nil || ![target respondsToSelector:sel]) {
-		target = _contentView;
+	if (mouse) {
+		/* **THE VIEW UNDER THE POINTER, WHICH IS WHAT `-hitTest:` IS FOR, AND WHAT THIS DOOR DID NOT DO.**
+		 * Every mouse event went to the FIRST RESPONDER, so a click on a control inside a subview never
+		 * reached the subview unless the subview happened to be the first responder — a control you could
+		 * see and not press. Apple's rule is the deepest view containing the point, which is exactly
+		 * `NSView`'s own `-hitTest:`; and a view that does not implement the selector still gets it, because
+		 * `NSResponder` implements every one of them as a FORWARD to the next responder — which is how a
+		 * click on a plain subview walks up to the content view and the window by itself. */
+		target = [_contentView hitTest:[theEvent locationInWindow]];
+		if (target == nil) {
+			/* A point outside the content — the window's own chrome — is this window's business. */
+			target = _contentView;
+		}
+	} else {
+		/* A KEY GOES TO THE FIRST RESPONDER, and nowhere else: that is what the first responder means. */
+		target = _firstResponder;
+		if (target == nil) {
+			target = _contentView;
+		}
 	}
 	if (target != nil && [target respondsToSelector:sel]) {
 		[target performSelector:sel withObject:theEvent];

@@ -35,3 +35,15 @@ add_test(NAME appkit-window-headless
   COMMAND "${CMAKE_CURRENT_SOURCE_DIR}/run-appkit-headless.sh" "$<TARGET_FILE:appkit_window>" 3)
 set_tests_properties(appkit-window-headless PROPERTIES SKIP_RETURN_CODE 77
   ENVIRONMENT "${_agora_app_test_env}")
+
+# AND THE INPUT PATH: the seam's event, through NSWindow, to the view that should get it. The headless
+# compositor has no seat, so this test builds the AGEvents a compositor would have sent and pushes them
+# through the window's own door -- the link that is NOT synthetic is the one a configure event already proves.
+add_executable(appkit_events appkit_events.m)
+target_link_libraries(appkit_events PRIVATE App)
+
+add_test(NAME appkit-events-headless
+  COMMAND "${CMAKE_CURRENT_SOURCE_DIR}/run-appkit-headless.sh" "$<TARGET_FILE:appkit_events>" 2
+	  "all checks passed" )
+set_tests_properties(appkit-events-headless PROPERTIES SKIP_RETURN_CODE 77
+  ENVIRONMENT "${_agora_app_test_env}")

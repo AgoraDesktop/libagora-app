@@ -27,6 +27,7 @@
 #define KEY_1          2
 #define KEY_A          30
 #define KEY_LEFTSHIFT  42
+#define KEY_CAPSLOCK   58
 #define KEY_SPACE      57
 
 static int failures;
@@ -126,6 +127,14 @@ int main(void)
 	check(translate(keyboard, KEY_A, "A"), "caps lock makes evdev 30 \"A\"");
 	check((translate_modifiers(keyboard, KEY_A) & AGModifierCapsLock) != 0,
 	      "AGModifierCapsLock is reported while caps lock is on");
+
+	/* AND WHICH KEYS ARE MODIFIERS, which is a different question from what they type — the AppKit delivers a
+	 * modifier as `-flagsChanged:` and everything else as `-keyDown:`, so a keymap that answered this wrongly
+	 * would make every Shift press a keystroke. */
+	check(AGKeyboardKeyIsModifier(keyboard, KEY_LEFTSHIFT) != 0, "evdev 42 (Shift) IS a modifier");
+	check(AGKeyboardKeyIsModifier(keyboard, KEY_CAPSLOCK) != 0, "evdev 58 (Caps Lock) IS a modifier");
+	check(AGKeyboardKeyIsModifier(keyboard, KEY_A) == 0, "evdev 30 (A) is NOT a modifier");
+	check(AGKeyboardKeyIsModifier(keyboard, KEY_SPACE) == 0, "evdev 57 (Space) is NOT a modifier");
 
 	/* AND A KEYMAP THAT IS GARBAGE IS REFUSED RATHER THAN CRASHING. */
 	check(AGKeyboardUseKeymapText(keyboard, "this is not a keymap", 21) != 0,
