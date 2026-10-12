@@ -14,6 +14,13 @@
  * waits when none has anything — which is what makes a window's pump part of a program rather than a probe.
  */
 #import "AppKitRefusal.h"
+
+/* THE PIECES THE BAR IS MADE OF, named here because this file is where they are used: the seam (for the region the
+ * server owns), the window (which owns the connection), and the view that lays a bar out. */
+#include "AGWindowServer.h"
+#import "NSWindow.h"
+#import "NSMenuView.h"
+
 #import <Foundation/NSThread.h>
 #import <AppKit/NSApplication.h>
 #import <AppKit/NSEvent.h>
@@ -377,6 +384,10 @@ BOOL NSApplicationLoad(void)
 - (void)run
 {
 	[self finishLaunching];
+	/* **AGAIN HERE, BECAUSE A MAIN MENU SET BEFORE THE CONNECTION EXISTED HAS NOWHERE TO GO.** An application that
+	 * sets its menu and then runs is the ordinary shape, and at `-setMainMenu:` time there may be no server to ask.
+	 * This is the second chance, and the door is idempotent: a bar that already exists is merely re-measured. */
+	[self cg_updateMenuBarWindow];
 	_running = YES;
 	_stopped = NO;
 	while (!_stopped) {
@@ -690,6 +701,75 @@ BOOL NSApplicationLoad(void)
 - (void)setMainMenu:(id)menu
 {
 	_mainMenu = menu;
+	/* **AND THE MENUS GO IN THE BAR, WHICH IS WHAT THIS DOOR COULD NOT DO BEFORE.** The header used to say that the
+	 * part which cannot be honoured — "anything DRAWING that menu" — was named there rather than silently dropped.
+	 * It is honoured now: the server says where the bar's free space begins, `NSMenuView` lays the titles out, and a
+	 * window of the application's own holds them. */
+	[self cg_updateMenuBarWindow];
+}
+
+/* **THE APPLICATION'S OWN MENUS, BESIDE THE SYSTEM MENU.** Three numbers come from the server and one from the
+ * menus: where the bar's free space begins, how tall it is, and how wide these menus happen to be.
+ *
+ * **AND THE WINDOW IS ONLY AS WIDE AS THE MENUS**, not as wide as the region. A bar stretched across the whole free
+ * space would swallow clicks meant for the STATUS ITEMS — other CLIENTS at `NSStatusWindowLevel`, one level above
+ * this one, which would find themselves under a window that has no business being there. */
+- (void)cg_updateMenuBarWindow
+{
+	AGWindowServer *server = [NSWindow cg_sharedServer];
+	int x = 0, y = 0, width = 0, height = 0;
+	int screen_width = 0, screen_height = 0;
+	CGFloat cocoa_y;
+	CGFloat needed;
+
+	if (_mainMenu == nil || server == NULL) {
+		return;
+	}
+	AGWindowServerMenuBarArea(server, &x, &y, &width, &height);
+	if (width <= 0 || height <= 0) {
+		return;		/* a compositor that does not say where the bar's free space begins */
+	}
+	/* **AND THE ROW IS CONVERTED, BECAUSE THE TWO SIDES COUNT FROM OPPOSITE ENDS.** The server's region is in
+	 * OUTPUT coordinates — y downwards, from the TOP, as a display has them — and this class's frames are Cocoa's,
+	 * which run UP from the bottom. MEASURED, with the server's y passed straight through: the bar appeared at the
+	 * BOTTOM of the screen (its panel pixels reached y = 479 of a 480-row output), which looks like the server
+	 * naming the wrong row rather than like an arithmetic mistake here.
+	 *
+	 * The conversion needs the screen, and the seam already answers that: `AGWindowServerScreenSize`. */
+	AGWindowServerScreenSize(server, &screen_width, &screen_height, NULL);
+	if (screen_height <= 0) {
+		return;		/* no screen described yet, so there is no row to convert into */
+	}
+	cocoa_y = (CGFloat)(screen_height - (y + height));
+	if (_menuBarWindow == nil) {
+		NSMenuView *view = [[NSMenuView alloc] initWithFrame:NSMakeRect(0.0, 0.0, (CGFloat)width,
+									       (CGFloat)height)];
+
+		[view setHorizontal:YES];
+		_menuBarView = view;
+		_menuBarWindow = [[NSWindow alloc] initWithContentRect:NSMakeRect((CGFloat)x, cocoa_y, (CGFloat)width,
+										 (CGFloat)height)
+							     styleMask:NSBorderlessWindowMask
+							       backing:NSBackingStoreBuffered
+								 defer:NO];
+		[_menuBarWindow setLevel:NSMainMenuWindowLevel];
+		[_menuBarWindow setContentView:view];
+	}
+	[(NSMenuView *)_menuBarView setMenu:(NSMenu *)_mainMenu];
+	needed = [(NSMenuView *)_menuBarView requiredWidth];
+	if (needed > (CGFloat)width) {
+		needed = (CGFloat)width;
+	}
+	/* **`-setFrame:display:` AND NOT `-setFrame:`.** This tier implements the one Apple's own frame sets all pass
+	 * through — `-setFrameOrigin:`, `-setContentSize:` and `-zoom:` go through it too — and the bare `-setFrame:`
+	 * is NOT implemented: MEASURED, it raises `-[NSWindow setFrame:] is not implemented` and takes the process with
+	 * it, which is how this line was found rather than assumed. */
+	if (getenv("APPKIT_MENUBAR_DIAG") != NULL) {
+		fprintf(stderr, "  DIAG menubar: region x=%d y=%d %dx%d -> cocoa y=%g, the menus need %g\n", x, y, width,
+			height, (double)cocoa_y, (double)needed);
+	}
+	[_menuBarWindow setFrame:NSMakeRect((CGFloat)x, cocoa_y, needed, (CGFloat)height) display:NO];
+	[_menuBarWindow orderFront:nil];
 }
 
 - (nullable id)mainMenu
@@ -1429,6 +1509,7 @@ struct _NSModalSession {
 /* THE ONE IMPORT THIS SLICE ADDS, and it is here rather than at the top because it is this slice's alone: a second
  * sheet on the same window is a CALLER ERROR, and this tree reports one by name rather than by silence. */
 #import <Foundation/NSException.h>
+
 
 /* **AND WHY THE DOORS ARE NOT DECLARED HERE WITH THE SEAM.** The seam crosses a file boundary, so it is declared
  * where it is called; the doors are this class's own API and belong in its own implementation block — clang

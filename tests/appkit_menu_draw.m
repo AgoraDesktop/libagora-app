@@ -36,6 +36,20 @@ int main(void)
 	[window setContentView:[[[NSView alloc] initWithFrame:NSMakeRect(0, 0, 420, 260)] autorelease]];
 	[window orderFront:nil];
 
+	/* **AND THE APPLICATION'S OWN MENUS, IN THE BAR — WHICH IS WHAT `-setMainMenu:` COULD NOT DO BEFORE.** The
+	 * server says where the bar's free space begins; this application's menus go there, in a window of its own at
+	 * `NSMainMenuWindowLevel`. THE WINDOW IS ONLY AS WIDE AS THE MENUS, because a bar stretched across the whole
+	 * free space would swallow clicks meant for the status items. */
+	{
+		NSMenu *bar = [[NSMenu alloc] initWithTitle:@"MainMenu"];
+
+		[bar addItemWithTitle:@"File" action:NULL keyEquivalent:@""];
+		[bar addItemWithTitle:@"Edit" action:NULL keyEquivalent:@""];
+		[bar addItemWithTitle:@"View" action:NULL keyEquivalent:@""];
+		[bar addItemWithTitle:@"Help" action:NULL keyEquivalent:@""];
+		[app setMainMenu:bar];
+	}
+
 	menu = [[NSMenu alloc] initWithTitle:@"File"];
 	[menu addItemWithTitle:@"New Window" action:NULL keyEquivalent:@"n"];
 	[menu addItemWithTitle:@"Open Recent" action:NULL keyEquivalent:@"o"];

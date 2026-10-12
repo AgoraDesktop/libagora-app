@@ -221,6 +221,13 @@ typedef NSUInteger NSApplicationPresentationOptions;
 	NSMutableArray *_searchHandlers;
 	NSString *_searchString;
 	id _mainMenu;
+	/* **AND THE BAR ITSELF, WHICH IS A WINDOW THE APPLICATION OWNS.** The Window Server owns the strip and the
+	 * SYSTEM menu at its left; these menus are the application's and so is the window they are drawn in — which is
+	 * why it sits at `NSMainMenuWindowLevel`: above the server's strip, and BELOW the status items, which are other
+	 * CLIENTS. Both start nil and are made the first time a main menu is set on a connection that can say where the
+	 * bar's free space begins. */
+	id _menuBarWindow;
+	id _menuBarView;
 	id _windowsMenu;
 	id _servicesMenu;
 	id _helpMenu;

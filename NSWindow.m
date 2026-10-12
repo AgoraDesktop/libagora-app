@@ -286,6 +286,20 @@ static void fn_ag_frame(void *context, uint32_t time_ms)
 
 @implementation NSWindow
 
+/* **THE CONNECTION THIS PROCESS USES, ASKED FOR RATHER THAN MADE AGAIN.** A Wayland client has ONE connection to
+ * its compositor and this file is where it is made. Anything else that needs to ASK THE SERVER A QUESTION — the
+ * application asking where its OWN menus may begin — has to use the same one: a second `AGWindowServerConnect`
+ * would be a second connection, carrying a second registry, a second output and a second set of proxies, and two
+ * connections that each believe they know the screen is a class of bug this tree does not need to have.
+ *
+ * AND IT IS A METHOD ON `NSWindow` RATHER THAN A FREE FUNCTION because the connection is this class's to own: the
+ * static above is where it is made and cached, and a door that handed it out from anywhere else would be a second
+ * place that knows how a client connects. */
++ (AGWindowServer *)cg_sharedServer
+{
+	return fn_server();
+}
+
 /* THE STYLE MASK'S CHROME, which is the frame-to-content arithmetic and its inverse. Both directions exist
  * because both are asked for, and they are written as one pair so a change to the title-bar height cannot
  * make them disagree. */
