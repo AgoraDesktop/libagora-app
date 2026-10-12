@@ -22,6 +22,7 @@
 #import <AppKit/NSFont.h>
 #import <AppKit/NSColor.h>
 #import <AppKit/NSBezierPath.h>
+#import <AppKit/NSImage.h>
 
 #include <stdio.h>
 
@@ -232,16 +233,30 @@
 {
 	(void)cellFrame;
 	(void)controlView;
-	fprintf(stderr, "APPKIT-REFUSE: -drawStateImageWithFrame:inView: needs THE INK — an image destination and a "
-			"compositing operation; the RECT this would draw into is real (-stateImageRectForBounds:)\n");
+	fprintf(stderr, "APPKIT-REFUSE: -drawStateImageWithFrame:inView: has a RECT and nothing to put in it — "
+			"`NSMenuItem` in this tier has NO STATE-IMAGE DOOR, so there is no image to draw and the "
+			"checkmark's column is measured as zero wide (-calcSize says so)\n");
 }
 
 - (void)drawImageWithFrame:(NSRect)cellFrame inView:(id)controlView
 {
-	(void)cellFrame;
+	NSImage *image = [_menuItem image];
+	NSSize size;
+
 	(void)controlView;
-	fprintf(stderr, "APPKIT-REFUSE: -drawImageWithFrame:inView: needs THE INK — the same missing compositing "
-			"path as the state image's door\n");
+	/* NOTHING TO DRAW IS NOT A REFUSAL, the rule the title's door keeps: an item without an image is a row with
+	 * an empty image column, which is a correct answer. */
+	if (image == nil || _imageWidth <= 0.0) {
+		return;
+	}
+	size = [image size];
+	/* **AND THE IMAGE IS DRAWN IN ITS OWN COLUMN AND CENTRED IN THE ROW.** `-imageWidth` is the column's width
+	 * — measured in `-calcSize` — and the image's own height is what it is: a row is 22 pixels and a menu icon is
+	 * rarely that tall, so a picture drawn into the whole row would be stretched to fill a space nobody asked it
+	 * to fill. */
+	[image drawInRect:NSMakeRect(cellFrame.origin.x + _stateImageWidth,
+				     cellFrame.origin.y + (cellFrame.size.height - size.height) / 2.0,
+				     _imageWidth, size.height)];
 }
 
 - (void)drawTitleWithFrame:(NSRect)cellFrame inView:(id)controlView

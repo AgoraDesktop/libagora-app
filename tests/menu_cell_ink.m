@@ -20,6 +20,7 @@
 #import <AppKit/NSGraphicsContext.h>
 #import <AppKit/NSColor.h>
 #import <AppKit/NSBezierPath.h>
+#import <AppKit/NSImage.h>
 
 #include <stdio.h>
 #include <string.h>
@@ -84,6 +85,62 @@ int main(void)
 	check(ink > 0, "the door DREW: a menu title is ink on a surface, where it used to refuse by name");
 	check(outside_frame == 0, "and every ink pixel is INSIDE the column `-titleRectForBounds:` named");
 	printf("  (note: %d ink pixel(s), in a %g-wide column)\n", ink, (double)[cell titleWidth]);
+
+	/* ---- AND AN ITEM THAT HAS AN IMAGE: THE OTHER DOOR THAT REFUSED FOR "THE INK" ------------------
+	 * An item's icon goes in its OWN column, between the state image's empty strip and the title — and the
+	 * title then starts further right, which is the part worth asserting: a door that drew the image OVER the
+	 * title would still put ink on the surface. */
+	{
+		NSBitmapImageRep *icon = [[NSBitmapImageRep alloc] initWithBitmapDataPlanes:NULL pixelsWide:16
+			pixelsHigh:16 bitsPerSample:8 samplesPerPixel:4 hasAlpha:YES isPlanar:NO
+			colorSpaceName:NSCalibratedRGBColorSpace bytesPerRow:16 * 4 bitsPerPixel:32];
+		NSImage *image = [[NSImage alloc] initWithSize:NSMakeSize(16.0, 16.0)];
+		NSMenuItem *iitem = [[NSMenuItem alloc] initWithTitle:@"With Icon" action:NULL keyEquivalent:@""];
+		NSMenuItemCell *icell = [[NSMenuItemCell alloc] initTextCell:@""];
+		NSBitmapImageRep *canvas;
+		NSRect ititle;
+		int ix, iy, icon_ink = 0, title_ink = 0;
+
+		[NSGraphicsContext setCurrentContext:[NSGraphicsContext graphicsContextWithBitmapImageRep:icon]];
+		[[NSColor blackColor] setFill];
+		[[NSBezierPath bezierPathWithRect:NSMakeRect(0.0, 0.0, 16.0, 16.0)] fill];
+		[image addRepresentation:icon];
+		[iitem setImage:image];
+		[icell setMenuItem:iitem];
+		[icell setNeedsSizing:YES];
+		[icell calcSize];
+		ititle = [icell titleRectForBounds:frame];
+		check([icell imageWidth] > 0.0, "an item WITH an image measures its image's column");
+		check(ititle.origin.x >= [icell imageWidth], "and the title's column starts AFTER it");
+
+		canvas = [[NSBitmapImageRep alloc] initWithBitmapDataPlanes:NULL pixelsWide:INK_W pixelsHigh:INK_H
+			bitsPerSample:8 samplesPerPixel:4 hasAlpha:YES isPlanar:NO
+			colorSpaceName:NSCalibratedRGBColorSpace bytesPerRow:INK_W * 4 bitsPerPixel:32];
+		[NSGraphicsContext setCurrentContext:[NSGraphicsContext graphicsContextWithBitmapImageRep:canvas]];
+		[[NSColor whiteColor] setFill];
+		[[NSBezierPath bezierPathWithRect:frame] fill];
+		[icell drawImageWithFrame:frame inView:nil];
+		[icell drawTitleWithFrame:frame inView:nil];
+
+		for (iy = 0; iy < INK_H; iy++) {
+			for (ix = 0; ix < INK_W; ix++) {
+				NSColor *c = [canvas colorAtX:ix y:iy];
+
+				if (c == nil || [c redComponent] >= 0.5) {
+					continue;
+				}
+				if ((CGFloat)ix < [icell imageWidth]) {
+					icon_ink++;
+				} else if ((CGFloat)ix >= ititle.origin.x) {
+					title_ink++;
+				}
+			}
+		}
+		check(icon_ink > 0, "the IMAGE door DREW: an item's icon is ink on a surface");
+		check(title_ink > 0, "and the title still drew, in the column the image pushed it to");
+		printf("  (note: icon %d ink pixel(s) in a %g-wide column; title %d)\n", icon_ink,
+		       (double)[icell imageWidth], title_ink);
+	}
 	printf("menu_cell_ink: %d case(s) failed\n", s_failed);
 	return s_failed == 0 ? 0 : 1;
 }
