@@ -36,6 +36,18 @@ pkg_check_modules(WAYLAND_CLIENT REQUIRED IMPORTED_TARGET wayland-client)
 pkg_check_modules(XKBCOMMON REQUIRED IMPORTED_TARGET xkbcommon)
 find_program(WAYLAND_SCANNER wayland-scanner REQUIRED)
 
+# THE APPkit STACK'S OWN THREE, IN APPLE'S OWN ORDER: Foundation under everything, Core Graphics for what a
+# window draws with, Core Text for what a font is. A PUBLIC link for each, because the AppKit HEADERS name
+# their types -- NSColor.h includes CoreGraphics, NSFont.h names CTFontRef -- so a consumer of this library
+# reaches all three itself.
+# AND THE RUNTIME ITSELF: this is an Objective-C library, so a consumer that has ObjC code of its own needs
+# `libobjc` on ITS link line -- a shared library's private dependencies are not propagated, and the failure is
+# "DSO missing from command line" at the consumer, not here.
+find_package(libobjc CONFIG REQUIRED)          # -> objc
+find_package(Foundation CONFIG REQUIRED)
+find_package(AgoraDrawing CONFIG REQUIRED)
+find_package(AgoraText CONFIG REQUIRED)
+
 # ---------------------------------------------------------------------------
 # xdg-shell: generated from the system's protocol XML
 # ---------------------------------------------------------------------------
@@ -66,6 +78,15 @@ add_custom_target(xdg-shell-bindings
     "${_generated}/xdg-shell-protocol.c")
 
 # ---------------------------------------------------------------------------
+# Include shim: these headers are included as <AppKit/...>, which is how
+# Apple's own include each other and how a consumer writes them.
+# ---------------------------------------------------------------------------
+set(_agora_include_dir "${CMAKE_BINARY_DIR}/agora-include")
+file(REMOVE_RECURSE "${_agora_include_dir}")
+file(MAKE_DIRECTORY "${_agora_include_dir}")
+file(CREATE_LINK "${CMAKE_CURRENT_SOURCE_DIR}" "${_agora_include_dir}/AppKit" SYMBOLIC)
+
+# ---------------------------------------------------------------------------
 # The library
 # ---------------------------------------------------------------------------
 file(GLOB APP_SOURCES CONFIGURE_DEPENDS
@@ -83,6 +104,7 @@ set_target_properties(App PROPERTIES OUTPUT_NAME agora-app)
 
 target_include_directories(App
   PUBLIC
+    "$<BUILD_INTERFACE:${_agora_include_dir}>"
     "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/platform>"
     "$<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>"
   PRIVATE
@@ -90,6 +112,11 @@ target_include_directories(App
     "${CMAKE_CURRENT_SOURCE_DIR}/platform")
 
 target_link_libraries(App
+  PUBLIC
+    objc
+    Foundation::Foundation
+    AgoraDrawing::Drawing
+    AgoraText::Text
   PRIVATE
     PkgConfig::WAYLAND_CLIENT
     PkgConfig::XKBCOMMON)

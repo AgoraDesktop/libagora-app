@@ -1,0 +1,19 @@
+/*
+ * NSActionCell — the link between a cell and the control that reads it.
+ *
+ * Copyright © 2026 Kyle J. Cardoza. MIT licensed — see LICENSE.
+ * SPDX-License-Identifier: MIT
+ *
+ * THE IMPLEMENTATION IS EMPTY ON PURPOSE AND THE HEADER SAYS WHY: this class adds no member, because the three
+ * Apple declares on it — `target`, `action` and `tag` — are already on this tree's `NSCell`, which is where the era
+ * header puts them too. An empty `@implementation` is the truthful body for a class whose contribution is the
+ * HIERARCHY, and filling it with doors that belong one level up would be a way of hiding that.
+ *
+ * WHAT IT MEANS FOR A CALLER: `-respondsToSelector:` and `-isKindOfClass:` now answer the way Apple's do for a cell
+ * that has an action, which is what a control that stores its cells by class will ask.
+ */
+#import <AppKit/NSActionCell.h>
+
+@implementation NSActionCell
+
+@end

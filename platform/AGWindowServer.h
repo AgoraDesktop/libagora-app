@@ -112,11 +112,23 @@ int AGWindowServerDispatchPending(AGWindowServer *server);
 /* Block until something happens, then dispatch it. Returns -1 if the connection is gone. */
 int AGWindowServerDispatch(AGWindowServer *server);
 
+/* Block until something happens or `timeout_ms` passes, dispatching whatever arrives. `timeout_ms` < 0 waits
+ * with no timeout and 0 is a poll — which is the pair an event loop is built from: poll each window, then
+ * wait once, so a window that appears mid-wait is drained rather than missed. Returns -1 if the connection is
+ * gone, 1 otherwise. */
+int AGWindowServerDispatchTimeout(AGWindowServer *server, int timeout_ms);
+
 /* Send anything buffered. */
 void AGWindowServerFlush(AGWindowServer *server);
 
 /* A human-readable description of why the connection failed, for the caller's log. */
 const char *AGWindowServerLastError(AGWindowServer *server);
+
+/* The compositor's first output, as far as a client can know it. `*width` and `*height` receive the output's
+ * current mode, and `*name` the model the compositor reported — the closest thing to a screen name a Wayland
+ * client is given. Any of the three may be NULL. Width and height are left at 0 when no output has been
+ * described yet, which is a state and not an error. */
+void AGWindowServerScreenSize(AGWindowServer *server, int *width, int *height, const char **name);
 
 /* ---------------------------------------------------------------------------------------------------
  * windows

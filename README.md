@@ -8,95 +8,89 @@ directory (`../README.md`). `libagora-app` is the top of its stack: above it the
 
 ## Status
 
-**The window-server seam is made. AppKit itself is next.**
+**The AppKit is imported and its windows run on Agora's window server. The X11 seam is gone.**
 
-`NSWindow` has to put pixels on a screen and get events back, and it must not know HOW. The Fiwix AppKit
-this component is being built from knows: it calls `XOpenDisplay`, `XCreateSimpleWindow`, `XMapWindow`,
-`XPutImage` and `XNextEvent` directly, in `NSWindow.m` and `NSScreen.m`. Agora's target is **Wayland**, with
-no X11-native target, so those calls go — and `platform/` replaces them.
+The classes here come from the Fiwix AppKit (same author, same licence — see `PROVENANCE.md`), and they
+talked to an X server: `NSWindow.m` called `XOpenDisplay`, `XCreateSimpleWindow`, `XMapWindow`, `XPutImage`
+and `XNextEvent` directly, and `NSScreen.m` opened the display for its own size. Agora's display target is
+**Wayland**, with no X11-native target, so that seam was replaced by this repository's own
+`platform/AGWindowServer.h` — an interface, with an `xdg-shell` client as its first implementation. The
+library no longer links `libX11` at all:
+
+```
+$ readelf -d build/libagora-app.so | grep NEEDED
+  libagora-base.so  libagora-text.so  libagora-drawing.so  libagora-core.so
+  libobjc.so.4.6  libm.so.6  libwayland-client.so.0  libxkbcommon.so.0  libc.so.6
+```
 
 ```
 platform/
   AGWindowServer.h              the seam: connection, windows, frames, events
-  AGWindowServer-Wayland.c      its first implementation: an xdg-shell client
+  AGWindowServer-Wayland.c      its first implementation: an xdg-shell client + wl_output
   AGKeyboard.h / AGKeyboard.c   evdev key codes -> text and modifiers, through xkbcommon
+NS*.h / NS*.m                   the AppKit itself — window, view, application, controls, menus, fonts
 tests/
-  window.c                      the seam driven the way NSWindow will drive it
+  window.c                      the seam alone, with no AppKit
   keyboard.c                    the keymap translation, with no compositor anywhere
-  run-window-headless.sh        ctest: asserts the frame count against a headless compositor
-  run-window-nested.sh          a person's test: nested compositor, screenshots, inspect.py
-  inspect.py                    reads the pixels back out of a screenshot
+  appkit_window.m               THE APPkit: a real NSWindow with a real NSView
+  run-*.sh, inspect.py          headless (frame counts) and nested (pixels) runners
 ```
-
-### Why the seam is an interface, and why `xdg-shell` is not the destination
-
-Agora's own window server — `window-server`, the compositor — does not exist yet. While it is written, the
-seam's implementation is a client of a **stock** compositor; afterwards it has to speak to Agora's own. And
-Agora's window management (client-side chrome, a system-owned menu bar, a dock, sheets, the drag session)
-needs more than `xdg-shell` carries. So the protocol is behind an interface and can change without
-`NSWindow` noticing, and `xdg-shell` is the bootstrap: the thing that makes the seam measurable today.
 
 ### What is measured, not assumed
 
-`AGWindowServer.h` is the only header `tests/window.c` includes — no Wayland type, no xdg-shell name, no
-shm. Two tests hold it up:
+Everything below ran on this machine against GNOME Shell / mutter 48.7.
 
-- **Frame callbacks** (`ctest`): a headless compositor and an exact frame count.
+- **The AppKit draws through a real window** (`ctest`, headless compositor with a virtual monitor): an
+  `NSWindow`, an `NSView` overriding `-drawRect:`, pumped through `NSApplication`.
+  `179 frame(s)` in three seconds, and the window came back **configured to 640x422** — the 640x400 content
+  rect plus the 22-point title bar this AppKit draws itself.
+- **The pixels reach an output** (`tests/run-appkit-nested.sh`, a nested compositor on the desktop, two
+  screenshots read back by `inspect.py`): red marker at the top-left, green at the bottom-right, the R
+  gradient rising left to right and the G gradient top to bottom, and the bar — positioned by the clock —
+  moving `+290 px` between two captures 1.2 s apart. That is `NSView -drawRect:` → `NSWindow` → the seam →
+  the compositor → a screenshot, with nothing mocked.
+- **The seam alone** (`ctest`): exactly 60 of 60 frames headless, and the keymap translation checked against
+  a pinned `us` keymap.
+- **`ctest`: 3 of 3 passed** (keyboard, window-headless, appkit-window-headless).
 
-  ```
-  $ ctest
-      1/2 Test #1: keyboard ......... Passed
-      2/2 Test #2: window-headless .. Passed
-  100% tests passed, 0 tests failed out of 2
-  ```
+### What a Wayland client does not get, and where each is recorded
 
-  The count is the assertion: 0 means the configure/present path is broken, and more than asked for means
-  more than one frame callback is in flight — which is how a double-scheduling bug was found (61 frames
-  when 60 were asked for).
+These are properties of the protocol rather than gaps, and each is written at the door that carries it:
 
-- **Pixels and motion** (`tests/run-window-nested.sh`): a nested compositor on the desktop, two captured
-  screenshots a second apart, read back by `inspect.py`:
+- **A client does not place its own window.** `-setFrameOrigin:` moves the Cocoa frame and not the window;
+  the compositor places it.
+- **There is no unmap, no iconify and no stacking.** `-orderOut:`, `-miniaturize:`, `-orderBack:` and
+  `-orderFrontRegardless` change *this object's* state and not the screen's.
+- **There is no Expose.** The client owns the pixels; a repaint is asked for by the frame callback, which is
+  why `-display` and the seam's frame handler both end in the same draw.
+- **The screen is an output.** `NSScreen` asks the seam, which learns the size from `wl_output`; with no
+  output described yet the frame is a zero rect rather than an invented size.
 
-  ```
-  red marker   : 701 px at (691,384)..(725,418)      upper-left   (a wedge is eaten by corner rounding)
-  green marker : 1225 px at (1193,692)..(1227,726)   lower-right  (a solid 35x35)
-  window on screen: 537x343 at (691,384)             (the 720x460 buffer, compositor-scaled)
-  bar moved    : +215 px between the two captures
-    [ok] red top-left   [ok] green bottom-right   [ok] square markers
-    [ok] gradient R rises left->right (53 -> 222) [ok] gradient G rises top->bottom (45 -> 163)
-    [ok] bar present    [ok] bar MOVED
-  ```
+### Still absent, and why
 
-  The red square at buffer `(0,0)` and green at `(W-1,H-1)` make **orientation a measurement**: a bottom-up
-  buffer or a stride in the wrong unit puts them in the wrong corners. The moving bar can only move if the
-  frame handler is being called repeatedly. The red marker's missing quarter is the compositor's window
-  corner rounding — a clean arc, identical in both captures, and the reason the test asserts a *square*
-  marker rather than a solid one.
-
-- **Keymap translation** (`ctest`): a `us` keymap in the form `wl_keyboard.keymap` sends, fed known evdev
-  codes — `30 -> "a"`, with shift `30 -> "A"` and `2 -> "!"`, caps lock `30 -> "A"`, `57 -> " "`, `42`
-  (Shift) and Escape -> `U+001B`, and a keymap that does not compile is refused.
+The sheets, the toolbar, the drawer, the frame-autosave strings, the script-command doors, the cursor-rect
+invalidation and the child-window list all need subsystems this stage has not reached; the window's
+minimise/close BUTTONS are a window manager's (Kestrel is parked). Each is absent rather than stubbed, and
+the refusals name themselves.
 
 ## Build
 
-**clang is required.** Agora builds with clang only, and this is an Objective-C component: the seam is C,
-but AppKit's classes arrive as `.m` files and the language is enabled for them now.
+**clang is required** — Agora builds with clang only, and this is an Objective-C component.
 
 ```sh
-cmake -S . -B build -DCMAKE_C_COMPILER=clang -DCMAKE_OBJC_COMPILER=clang
+cmake -S . -B build -DCMAKE_C_COMPILER=clang -DCMAKE_OBJC_COMPILER=clang \
+      -DCMAKE_PREFIX_PATH="$PWD/../build-prefix"
 cmake --build build
 cd build && ctest
 ```
 
-A plain `cmake -S . -B build` will take the system `cc`, which on a machine without GCC's Objective-C
-frontend fails at the language check before it ever reaches this tree.
-
-Requires `wayland-client`, `xkbcommon` and `wayland-protocols` (system packages, not vendored — the same
-terms as ICU and OpenSSL elsewhere in Agora). The `xdg-shell` bindings are **generated** at build time by
-`wayland-scanner` from the system's protocol XML, so they cannot silently age against the protocol on the
-machine.
+The siblings it builds on — `libagora-base` (Foundation), `libagora-drawing`, `libagora-text`,
+`libagora-core` — come from the install prefix. `wayland-client`, `xkbcommon` and `wayland-protocols` are
+system packages, not vendored, on the same terms as ICU and OpenSSL elsewhere in Agora; the `xdg-shell`
+bindings are **generated** at build time by `wayland-scanner`, so a checked-in copy cannot silently age
+against the protocol on the machine.
 
 ## Licence
 
-MIT — see [`LICENSE`](LICENSE). The seam is Agora's own code. The AppKit classes being imported are the same
-author's and the same licence; that will be recorded in `PROVENANCE.md` when they land.
+MIT — see [`LICENSE`](LICENSE). The seam is Agora's own. The AppKit classes are the Fiwix AppKit's,
+imported and then changed — the changes are recorded in [`PROVENANCE.md`](PROVENANCE.md).

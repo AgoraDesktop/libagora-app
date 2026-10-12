@@ -100,6 +100,14 @@ struct AGWindowServer {
 	struct wl_seat *seat;
 	struct wl_keyboard *keyboard;
 	struct wl_pointer *pointer;
+	struct wl_output *output;
+
+	/* THE FIRST OUTPUT'S CURRENT MODE, which is all a client is told without asking for more. `have_screen`
+	 * separates "no output has described itself yet" from "the output is zero-sized", which are different. */
+	int screen_width;
+	int screen_height;
+	int have_screen;
+	char screen_name[128];
 
 	AGKeyboard *keyboard_state;
 	int keymap_seen;
@@ -647,6 +655,53 @@ static const struct wl_seat_listener seat_listener = {
 	seat_name,
 };
 
+/* ---- THE OUTPUT, WHICH IS HOW A CLIENT LEARNS HOW BIG THE SCREEN IS ---------------------------------- */
+
+static void output_geometry(void *data, struct wl_output *output, int32_t x, int32_t y, int32_t physical_width,
+			    int32_t physical_height, int32_t subpixel, const char *make, const char *model,
+			    int32_t transform)
+{
+	AGWindowServer *server = data;
+
+	(void)output; (void)x; (void)y; (void)physical_width; (void)physical_height; (void)subpixel;
+	(void)transform;
+	/* THE MODEL IS THE ONLY NAME A WAYLAND CLIENT IS GIVEN for a screen. Apple's is whatever the display's
+	 * preferences carry; this is the closest honest answer, and it is empty on a compositor that reports
+	 * none — which NSScreen turns into its own fallback. */
+	snprintf(server->screen_name, sizeof server->screen_name, "%s", model != NULL ? model : "");
+}
+
+static void output_mode(void *data, struct wl_output *output, uint32_t flags, int32_t width, int32_t height,
+			int32_t refresh)
+{
+	AGWindowServer *server = data;
+
+	(void)output; (void)refresh;
+	/* ONLY THE CURRENT MODE IS THE SCREEN'S SIZE; a compositor advertises every mode it can drive. */
+	if (flags & WL_OUTPUT_MODE_CURRENT) {
+		server->screen_width = width;
+		server->screen_height = height;
+		server->have_screen = 1;
+	}
+}
+
+static void output_done(void *data, struct wl_output *output)
+{
+	(void)data; (void)output;
+}
+
+static void output_scale(void *data, struct wl_output *output, int32_t factor)
+{
+	(void)data; (void)output; (void)factor;
+}
+
+static const struct wl_output_listener output_listener = {
+	output_geometry,
+	output_mode,
+	output_done,
+	output_scale,
+};
+
 static void registry_global(void *data, struct wl_registry *registry, uint32_t name, const char *interface,
 			    uint32_t version)
 {
@@ -666,6 +721,12 @@ static void registry_global(void *data, struct wl_registry *registry, uint32_t n
 	} else if (strcmp(interface, wl_seat_interface.name) == 0) {
 		server->seat = wl_registry_bind(registry, name, &wl_seat_interface, version < 5 ? version : 5);
 		wl_seat_add_listener(server->seat, &seat_listener, server);
+	} else if (strcmp(interface, wl_output_interface.name) == 0 && server->output == NULL) {
+		/* THE FIRST OUTPUT ONLY, and that is a decision rather than a simplification: Agora's window server is
+		 * one screen at a time for now, and a second output would need a screens ARRAY on the AppKit side —
+		 * NSScreen's own row. The listener is what tells this client the size. */
+		server->output = wl_registry_bind(registry, name, &wl_output_interface, version < 2 ? version : 2);
+		wl_output_add_listener(server->output, &output_listener, server);
 	}
 }
 
@@ -736,6 +797,9 @@ void AGWindowServerDisconnect(AGWindowServer *server)
 	if (server->keyboard != NULL) {
 		wl_keyboard_destroy(server->keyboard);
 	}
+	if (server->output != NULL) {
+		wl_output_destroy(server->output);
+	}
 	if (server->seat != NULL) {
 		wl_seat_destroy(server->seat);
 	}
@@ -796,6 +860,44 @@ int AGWindowServerDispatch(AGWindowServer *server)
 	return 1;
 }
 
+int AGWindowServerDispatchTimeout(AGWindowServer *server, int timeout_ms)
+{
+	struct pollfd pfd;
+	int ready;
+
+	if (server == NULL) {
+		return -1;
+	}
+	/* DRAIN WHAT IS ALREADY QUEUED FIRST: a caller asking for a poll must not block on a socket that has
+	 * nothing to say while events are sitting in the queue behind it. */
+	if (wl_display_dispatch_pending(server->display) < 0) {
+		ag_server_error(server, "wl_display_dispatch_pending");
+		return -1;
+	}
+	if (wl_display_prepare_read(server->display) != 0) {
+		/* Events arrived in between, or another reader holds the display: take what is there rather than
+		 * blocking, because a timeout of zero must not. */
+		return wl_display_dispatch_pending(server->display) < 0 ? -1 : 1;
+	}
+	wl_display_flush(server->display);
+	pfd.fd = wl_display_get_fd(server->display);
+	pfd.events = POLLIN;
+	ready = poll(&pfd, 1, timeout_ms);
+	if (ready > 0 && (pfd.revents & POLLIN)) {
+		if (wl_display_read_events(server->display) < 0) {
+			ag_server_error(server, "wl_display_read_events");
+			return -1;
+		}
+	} else {
+		wl_display_cancel_read(server->display);
+	}
+	if (wl_display_dispatch_pending(server->display) < 0) {
+		ag_server_error(server, "wl_display_dispatch_pending");
+		return -1;
+	}
+	return 1;
+}
+
 void AGWindowServerFlush(AGWindowServer *server)
 {
 	if (server != NULL) {
@@ -806,6 +908,19 @@ void AGWindowServerFlush(AGWindowServer *server)
 const char *AGWindowServerLastError(AGWindowServer *server)
 {
 	return server != NULL ? server->error : "no connection";
+}
+
+void AGWindowServerScreenSize(AGWindowServer *server, int *width, int *height, const char **name)
+{
+	if (width != NULL) {
+		*width = server != NULL ? server->screen_width : 0;
+	}
+	if (height != NULL) {
+		*height = server != NULL ? server->screen_height : 0;
+	}
+	if (name != NULL) {
+		*name = (server != NULL && server->screen_name[0] != '\0') ? server->screen_name : NULL;
+	}
 }
 
 AGWindow *AGWindowCreate(AGWindowServer *server, int width, int height, const char *title)
