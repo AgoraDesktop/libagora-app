@@ -221,7 +221,12 @@ const CGFloat NSMenuRowHeight = 22.0;
 						[open cg_beginSessionAt:NSMakePoint(frame.origin.x + box.origin.x,
 										    frame.origin.y + box.origin.y)];
 					}
-					while (!ended) {
+					/* **AND THE EVENTS ARE ONLY FETCHED WHEN THERE IS A RUN LOOP TO FETCH THEM FROM.** An application
+					 * that has not called `-run` has no event source: this loop would wait forever for a click that
+					 * cannot come, and MEASURED, that is exactly what happened — the display-path test hung for its
+					 * whole sixty-second budget. A program without a run loop gets the menu BEGIN and no loop, which
+					 * is what it had before this commit and what a demonstration wants. */
+					while (!ended && [app isRunning]) {
 						NSEvent *next = [app nextEventMatchingMask:NSAnyEventMask
 										 untilDate:[NSDate dateWithTimeIntervalSinceNow:1.0 / 60.0]
 										    inMode:nil dequeue:YES];
@@ -263,6 +268,13 @@ const CGFloat NSMenuRowHeight = 22.0;
 								ended = YES;
 							}
 						}
+					}
+					/* **AND WITH NO RUN LOOP THE OUTER LOOP MUST STOP TOO.** The inner one is skipped
+					 * entirely when the application is not running — there is no event source — so without
+					 * this the OUTER one re-begins the same menu for ever. MEASURED: the display-path test
+					 * hung for its whole budget with the inner guard already in place and this one missing. */
+					if (![app isRunning]) {
+						break;
 					}
 				}
 				[self setHighlightedItem:nil];
