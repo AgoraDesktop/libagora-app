@@ -5,6 +5,7 @@
  */
 
 #import "NSMenuView.h"
+#import "NSWindow.h"
 #import "NSMenu.h"
 #import "NSMenuItem.h"
 #import "NSMenuItemCell.h"
@@ -226,7 +227,7 @@ const CGFloat NSMenuRowHeight = 22.0;
 					 * cannot come, and MEASURED, that is exactly what happened — the display-path test hung for its
 					 * whole sixty-second budget. A program without a run loop gets the menu BEGIN and no loop, which
 					 * is what it had before this commit and what a demonstration wants. */
-					while (!ended && [app isRunning]) {
+					while (!ended && [app isRunning] && ![NSWindow cg_connectionIsGone]) {
 						NSEvent *next = [app nextEventMatchingMask:NSAnyEventMask
 										 untilDate:[NSDate dateWithTimeIntervalSinceNow:1.0 / 60.0]
 										    inMode:nil dequeue:YES];
@@ -273,7 +274,15 @@ const CGFloat NSMenuRowHeight = 22.0;
 					 * entirely when the application is not running — there is no event source — so without
 					 * this the OUTER one re-begins the same menu for ever. MEASURED: the display-path test
 					 * hung for its whole budget with the inner guard already in place and this one missing. */
-					if (![app isRunning]) {
+					/* **AND A COMPOSITOR THAT HAS GONE ENDS THIS LOOP TOO, WHICH IS WHERE IT MATTERS MOST.** The
+					 * check for a dead connection lives in the run loop — and a session loop NESTS INSIDE the run
+					 * loop, so while one is up the run loop's check never runs. MEASURED: the client sat for two
+					 * minutes with its server dead and its own log silent, turning in here. A loop that has events
+					 * to fetch is a loop that has to ask whether there is anything left to fetch them from. */
+					if (![app isRunning] || [NSWindow cg_connectionIsGone]) {
+						if ([NSWindow cg_connectionIsGone]) {
+							fprintf(stderr, "APPKIT-NOTE: the window server has gone — ending the menu session\n");
+						}
 						break;
 					}
 				}
