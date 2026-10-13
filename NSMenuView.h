@@ -68,6 +68,41 @@ extern const CGFloat NSMenuRowHeight;
  * `super`, because a dropdown is tracked by `NSMenu` and its rows are not click-to-open. */
 - (void)mouseDown:(NSEvent *)event;
 
+/* ============================================================================================ *
+ * AND THE ONE THING A MENU BAR STILL CANNOT DO, WRITTEN DOWN AS A DECIDED PLAN.                  *
+ * ============================================================================================ *
+ *
+ * **DRAGGING ACROSS THE BAR WHILE THE BUTTON IS HELD TURNS A MENU INSTEAD OF MOVING IT.** On the Mac you press
+ * `File`, slide to `View` and the menu under the pointer changes without releasing. Here the menu closes and you have
+ * to click again.
+ *
+ * WHY, EXACTLY: the opened menu's tracking loop OWNS THE EVENTS while it is up, so this view is blocked inside the
+ * call that opened it and never sees the movement. The bar cannot switch a menu whose events it is not given.
+ *
+ * AND WHY IT IS NOT A PATCH: the half-measure — let the menu end on a drag and have this view re-open for whatever
+ * the pointer is over — WAS TRIED, and it produces exactly what was reported: the session ends on the smallest
+ * movement, the dropdown is ordered out and built again, and a hand that jitters destroys and remakes the menu
+ * several times a second. A menu that flickers is worse than one that does not follow.
+ *
+ * THE SHAPE OF THE FIX, so the next attempt starts from a decision rather than a derivation:
+ *
+ *   1. `NSMenu` gains a door that BEGINS A SESSION WITHOUT RUNNING IT — the tracking window made, the session marked,
+ *      the first repaint done, and the loop left to the caller. Everything `-popUpMenuPositioningItem:` does up to
+ *      the loop, and nothing after it.
+ *   2. THIS VIEW becomes the session's owner: it fetches events, calls `-[NSApplication updateWindows]` (a tracking
+ *      loop that stops painting is its own bug — see `NSMenu.m`), and dispatches —
+ *        - an event in the open menu's window goes to `-cg_trackOneEvent:`, which already handles rows, submenus,
+ *          picks and Escape;
+ *        - an event over the BAR moves the session: end the open menu, begin the one under the pointer, and keep
+ *          the chip down across the change so nothing flickers;
+ *        - a press or a release with no menu under it ends the session.
+ *   3. AND THE RULE ALREADY BUILT FOR SUBMENUS KEEPS WORKING UNCHANGED: a menu whose PARENT IS TRACKING is the
+ *      parent's to drive, so a child opened by hovering inside an open menu never starts a loop of its own — which
+ *      is the same question `NSMenu -popUpMenuPositioningItem:` asks before it tracks, and the reason it can be
+ *      reused here rather than re-decided.
+ *
+ * IT IS A PIECE OF WORK AND NOT A LINE, and it is the last one between this menu bar and the Mac's. */
+
 /* **AND A CLICK ON AN INACTIVE BAR OPENS THE MENU RATHER THAN ONLY WAKING THE WINDOW.** The Mac's own behaviour,
  * and the reason `-acceptsFirstMouse:` exists at all: the click that brings a window forward should do what the
  * person meant it to do, not be spent on the wake-up. */
