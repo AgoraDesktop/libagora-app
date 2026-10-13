@@ -882,7 +882,17 @@ static const CGFloat NSMenuStateColumnWidth = 20.0;
 							 untilDate:[NSDate dateWithTimeIntervalSinceNow:0.1]
 							    inMode:nil
 							   dequeue:YES];
-			BOOL more = [self cg_trackOneEvent:next];
+			BOOL more;
+
+			/* **AND THE WINDOWS ARE PAINTED, WHICH IS WHAT A TRACKING LOOP OWES THEM.** This loop BLOCKS the
+			 * application's own run loop for as long as a menu is up — and the update pass that paints stale
+			 * windows lives in that loop, not in `-nextEventMatchingMask:`. So without this line NOTHING IS DRAWN
+			 * WHILE A MENU IS OPEN: not the menu itself if the compositor happened to hold its buffer at the one
+			 * moment it asked, and not the bar's highlighted title, which the click set a flag for and nothing ever
+			 * painted. A tracking loop that stops the world is not what a menu does on the Mac — there the loop
+			 * keeps updating, which is why a menu bar can repaint its title while the menu is down. */
+			[app updateWindows];
+			more = [self cg_trackOneEvent:next];
 
 			if (getenv("APPKIT_MENU_DIAG") != NULL) {
 				fprintf(stderr, "  DIAG menu: event type %ld -> %s\n", (long)(next != nil ? [next type] : -1),
