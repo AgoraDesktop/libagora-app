@@ -62,6 +62,9 @@ int main(int argc, char **argv)
 				run_loop = 1;
 				click_the_bar = 0;	/* a person does the clicking in a session */
 			}
+			if (strcmp(argv[a], "--click") == 0) {
+				click_the_bar = 1;	/* ...and a probe does it for itself */
+			}
 		}
 	}
 	NSWindow *window;
@@ -154,7 +157,15 @@ int main(int argc, char **argv)
 
 			printf("appkit_menu_draw: clicking \"%s\" in the bar (window %ld, at x=%.0f, y=%.0f)\n",
 			       [[item title] UTF8String], (long)[bar_window windowNumber], (double)at.x, (double)at.y);
-			[app sendEvent:click];
+			/* **A CLICK SENT BEFORE THE LOOP STARTS IS NOT THE SAME CLICK AS ONE THE LOOP DELIVERS.** With
+			 * `--run` the application is not yet running, so a menu opened by `-sendEvent:` right here would not
+			 * track at all — it would open and STAY, which is the very symptom being measured. POSTING it puts it
+			 * in the queue `-run` drains, so what is exercised is the click a person makes. */
+			if (run_loop) {
+				[app postEvent:click atStart:YES];
+			} else {
+				[app sendEvent:click];
+			}
 		}
 	}
 

@@ -160,10 +160,16 @@ const CGFloat NSMenuRowHeight = 22.0;
 		if (submenu != nil) {
 			NSRect frame = [[self window] frame];
 
+			/* **AND THE TITLE IS HIGHLIGHTED FOR AS LONG AS ITS MENU IS OPEN**, which is how a menu bar says
+			 * WHICH menu you are looking at — the row that is down stays down until it is dismissed. The menu is
+			 * opened from here and returns when it ends, so the highlight is this door's to put up and take down;
+			 * nothing else knows the two are the same gesture. */
+			[self setHighlightedItem:item];
 			[submenu popUpMenuPositioningItem:nil
 					       atLocation:NSMakePoint(frame.origin.x + box.origin.x,
 								      frame.origin.y + box.origin.y)
 						 inView:nil];
+			[self setHighlightedItem:nil];
 		}
 		return;
 	}

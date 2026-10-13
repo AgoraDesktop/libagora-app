@@ -300,6 +300,15 @@ static void fn_ag_frame(void *context, uint32_t time_ms)
 	return fn_server();
 }
 
+/* **AND THE FLAG, WHICH IS ALL THIS DOOR DOES.** `-display` paints now and returns early if the compositor still
+ * holds the previous buffer — leaving the flag set, so the run loop's `-displayIfNeeded` tries again next pass.
+ * A CALLER THAT WANTS THE PAINT TO HAPPEN NOW calls `-displayIfNeeded` after this, which is the pair the menu's
+ * repaint uses. */
+- (void)setNeedsDisplay:(BOOL)flag
+{
+	_viewsNeedDisplay = flag ? YES : NO;
+}
+
 /* **THE WINDOW'S BACKGROUND COLOUR.** Apple's door, and the reason it is needed here is the menu bar: an
  * application's menus are drawn IN the bar, and a panel of the window's own default colour is a SEAM across it. Nil
  * is the default and means `+[NSColor windowBackgroundColor]`, so every window that says nothing is unchanged. */
@@ -316,11 +325,10 @@ static void fn_ag_frame(void *context, uint32_t time_ms)
 	[colour retain];
 	[_backgroundColor release];
 	_backgroundColor = colour;
-	/* THE WINDOW IS A DIFFERENT COLOUR NOW, so what is on the screen is stale until it draws again. **THE FLAG IS
-	 * SET DIRECTLY BECAUSE `-[NSWindow setNeedsDisplay:]` IS NOT IMPLEMENTED IN THIS TIER** — MEASURED, it raises
-	 * and takes the process with it, which is how this line was found. What the flag means is the same thing it
-	 * means at the end of `-cg_drawFrame`, where it is cleared. */
-	_viewsNeedDisplay = YES;
+	/* THE WINDOW IS A DIFFERENT COLOUR NOW, so what is on the screen is stale until it draws again. **THE DOOR IS
+	 * WHAT SETS THE FLAG** — when this line was first written `-setNeedsDisplay:` did not exist here and the ivar
+	 * was set by hand, with a comment saying why. It exists now, and the hand-write is gone with it. */
+	[self setNeedsDisplay:YES];
 }
 
 /* THE STYLE MASK'S CHROME, which is the frame-to-content arithmetic and its inverse. Both directions exist

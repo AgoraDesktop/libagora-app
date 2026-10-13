@@ -606,7 +606,13 @@ static const CGFloat NSMenuStateColumnWidth = 20.0;
 	[(NSMenuView *)_menuView setMenu:self];
 	[(NSMenuView *)_menuView setHighlightedItem:_highlightedItem];
 	[(NSMenuView *)_menuView setNeedsDisplay:YES];
-	[_trackingWindow display];
+	/* **MARKED STALE AND THEN TRIED — AND BOTH HALVES ARE THE FIX.** `-display` alone PAINTS NOW and gives up if
+	 * the compositor still holds the previous buffer: MEASURED, a menu opened by a click did not appear until the
+	 * pointer moved again, because the one paint it asked for was dropped and NOTHING RETRIED IT. The flag is what
+	 * makes the run loop's per-pass `-displayIfNeeded` try again; the `-displayIfNeeded` here is what paints at
+	 * once when the buffer is free, so a session with no run loop still draws. */
+	[_trackingWindow setNeedsDisplay:YES];
+	[_trackingWindow displayIfNeeded];
 }
 
 /* THE ROW UNDER A POINT — the arithmetic the paint above shares, which is why the row height is one constant: THE
@@ -845,6 +851,10 @@ static const CGFloat NSMenuStateColumnWidth = 20.0;
 	if (_supermenu == nil && [[NSApplication sharedApplication] isRunning]) {
 		NSApplication *app = [NSApplication sharedApplication];
 
+		if (getenv("APPKIT_MENU_DIAG") != NULL) {
+			fprintf(stderr, "  DIAG menu: tracking \"%s\" (%ld item(s))\n",
+				[[self title] UTF8String] ?: "?", (long)[_items count]);
+		}
 		for (;;) {
 			/* ONE POOL PER PASS, the discipline the application's own loop keeps: a menu that ran for the life of
 			 * a gesture and never drained its own autoreleased objects would grow while the hand is still moving. */
@@ -854,6 +864,11 @@ static const CGFloat NSMenuStateColumnWidth = 20.0;
 							    inMode:nil
 							   dequeue:YES];
 			BOOL more = [self cg_trackOneEvent:next];
+
+			if (getenv("APPKIT_MENU_DIAG") != NULL) {
+				fprintf(stderr, "  DIAG menu: event type %ld -> %s\n", (long)(next != nil ? [next type] : -1),
+					more ? "still up" : "ended");
+			}
 
 			[pool release];
 			if (!more) {

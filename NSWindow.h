@@ -425,6 +425,13 @@ typedef NSUInteger NSWindowSharingType;
 - (void)setContentMinSize:(NSSize)size;
 - (NSSize)contentMaxSize;
 - (void)setContentMaxSize:(NSSize)size;
+/* **THE WINDOW NEEDS DRAWING AGAIN — APPLE'S DOOR, AND THE ONE THIS TIER DID NOT HAVE.** Without it a caller had
+ * no way to say "this is stale": `-display` PAINTS NOW and gives up if the compositor still owns the buffer, so a
+ * paint can be lost with nothing to retry it. `-setNeedsDisplay:` only SETS A FLAG, and the run loop calls
+ * `-displayIfNeeded` on every window each pass — so the paint happens when the buffer is free, however many passes
+ * that takes. That is the difference between a menu that appears and one that waits for the mouse to move. */
+- (void)setNeedsDisplay:(BOOL)flag;
+
 - (void)setFrameOrigin:(NSPoint)aPoint;
 - (void)setContentSize:(NSSize)aSize;
 - (NSUInteger)styleMask;
