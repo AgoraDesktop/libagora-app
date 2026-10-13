@@ -737,8 +737,23 @@ static const CGFloat NSMenuStateColumnWidth = 20.0;
 		 * do that from outside this loop — the loop owns the events — so the loop ends itself and the bar re-opens
 		 * whatever title the pointer is over. A drag WITHIN the menu is untouched. */
 		if (type == NSLeftMouseDragged && [self cg_itemAtPoint:[event locationInWindow]] == nil) {
-			[self cancelTracking];
-			return NO;
+			/* **AND NOT WHEN THE DRAG IS STILL INSIDE THIS MENU'S PARENT, WHICH IS THE CASE THE FIRST VERSION GOT
+			 * WRONG.** A menu opened from the MENU BAR is held down while the pointer sits OVER THE BAR — that is
+			 * where a person's hand is — and the bar is outside the menu's frame by definition, so every small
+			 * movement ended the session: MEASURED, "the highlight chip shows for one frame, and sometimes the menu
+			 * is visible for that frame, and then nothing". The rule is about a pointer that has LEFT THE THING THE
+			 * MENU BELONGS TO, not one that has left the menu's own rectangle. */
+			/* **AND THE QUESTION IS THE SAME ONE THAT DECIDED WHETHER THIS MENU TRACKS AT ALL: IS ITS PARENT
+			 * RUNNING A SESSION?** A submenu opened by hovering inside its parent is the parent's to drive, so a
+			 * drag off it means "leave the submenu" and the child ends. A menu opened from the BAR has a parent
+			 * that is NOT tracking — the bar is not a session, it is a window with a view — and the pointer is
+			 * legitimately over that bar the whole time the button is held. MEASURED, the first version asked
+			 * whether the drag was outside the PARENT'S TRACKING WINDOW, and the bar has none, so it answered
+			 * "yes, it left" for every movement and the menu closed on the first one. */
+			if (_supermenu != nil && ((NSMenu *)_supermenu)->_tracking) {
+				[self cancelTracking];
+				return NO;
+			}
 		}
 		/* MOVEMENT SETS THE HIGHLIGHT AND NOTHING ELSE. A press is deliberately not a pick: Apple sends the action
 		 * on the RELEASE, which is what makes a drag off a row cancel it. */

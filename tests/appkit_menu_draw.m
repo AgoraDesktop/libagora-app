@@ -45,6 +45,7 @@ int main(int argc, char **argv)
 	int run_loop = 0;
 	int click_the_bar = 1;
 	int switch_titles = 0;
+	int drag_during = 0;
 
 	if (argc > 2 && strcmp(argv[1], "--passes") == 0) {
 		passes = atoi(argv[2]);
@@ -65,6 +66,9 @@ int main(int argc, char **argv)
 			}
 			if (strcmp(argv[a], "--click") == 0) {
 				click_the_bar = 1;	/* ...and a probe does it for itself */
+			}
+			if (strcmp(argv[a], "--drag") == 0) {
+				drag_during = 1;	/* a movement while the button is still down */
 			}
 			if (strcmp(argv[a], "--switch") == 0) {
 				switch_titles = 1;	/* a second click on the next title: the menu must MOVE */
@@ -174,6 +178,21 @@ int main(int argc, char **argv)
 			 * click that says "that one" is captured by the first menu's tracking loop — the loop owns the events —
 			 * so this is the case that decides whether a menu bar switches or merely closes. `--switch` asks for it
 			 * because only the switching test wants two clicks. */
+			/* **AND A DRAG, BECAUSE THAT IS WHAT A PERSON DOES WHILE THEY HOLD A MENU DOWN.** A press and a
+			 * movement over the bar is the gesture the report was about: the menu must survive it. `--drag` asks
+			 * for it. */
+			if (drag_during) {
+				NSRect held = [view rectForItemAtIndex:2];
+				NSPoint at3 = NSMakePoint(held.origin.x + held.size.width / 2.0 + 8.0,
+							  held.origin.y + held.size.height / 2.0);
+				NSEvent *drag = [NSEvent mouseEventWithType:NSLeftMouseDragged location:at3
+							      modifierFlags:0 timestamp:0
+							       windowNumber:[bar_window windowNumber]
+								    context:nil eventNumber:0 clickCount:1 pressure:1.0];
+
+				printf("appkit_menu_draw: then dragging 8 px along the bar, still held\n");
+				[app postEvent:drag atStart:NO];
+			}
 			if (switch_titles) {
 				NSRect other = [view rectForItemAtIndex:3];	/* the next title along */
 				NSPoint at2 = NSMakePoint(other.origin.x + other.size.width / 2.0,
