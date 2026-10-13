@@ -388,6 +388,11 @@ BOOL NSApplicationLoad(void)
 	return _running;
 }
 
+/* THE LOOP'S OWN COUNTERS, for the diagnostic above: a static rather than an ivar because they are instrumentation
+ * and not state the application has. */
+static int s_passes;
+static double s_last_report;
+
 - (void)run
 {
 	[self finishLaunching];
@@ -401,7 +406,13 @@ BOOL NSApplicationLoad(void)
 		/* A POOL PER PASS, because a loop that runs for the life of a process and never drains its own
 		 * autoreleased objects grows without bound — the reason a run loop owns a pool at all. */
 		id pool = [[NSClassFromString(@"NSAutoreleasePool") alloc] init];
-		NSDate *slice = [NSDate dateWithTimeIntervalSinceNow:0.1];
+		/* **A SLICE IS A FRAME, NOT A TENTH OF A SECOND.** Every window is updated once per pass, so this number
+		 * IS the rate the desktop draws at: MEASURED, 0.1 s gave TEN passes per second — the whole interface
+		 * repainting ten times a second and every click waiting up to a tenth of one. A display's frame is the
+		 * honest deadline for a loop whose job is to keep windows drawn, and a loop with nothing to do now BLOCKS
+		 * on the compositor for the rest of the slice rather than waking to ask. BOTH LOOPS GET IT: this one and
+		 * the modal one below draw the same windows and were slow in the same way. */
+		NSDate *slice = [NSDate dateWithTimeIntervalSinceNow:1.0 / 60.0];
 		NSEvent *e;
 
 		/* THE UPDATE PAIR, ONCE PER PASS: Apple sends these when the loop is about to update the windows and
@@ -409,6 +420,25 @@ BOOL NSApplicationLoad(void)
 		 * rather than in response to an event. */
 		fn_announce(self, NSApplicationWillUpdateNotification, @selector(applicationWillUpdate:));
 		e = [self nextEventMatchingMask:NSAnyEventMask untilDate:slice inMode:nil dequeue:YES];
+
+		/* **HOW FAST THIS LOOP ACTUALLY TURNS, WHICH IS WHAT "SLOW" IS.** Every window is updated once per pass,
+		 * so the pass rate IS the frame rate the whole desktop draws at — and the wait below is where that rate is
+		 * decided, not here. MEASURED rather than reasoned about, because "the interface feels slow" is a
+		 * measurement and this is the instrument for it. */
+		if (getenv("APPKIT_LOOP_DIAG") != NULL) {
+			double now = [NSDate timeIntervalSinceReferenceDate];
+
+			s_passes++;
+			if (s_last_report == 0.0) {
+				s_last_report = now;
+			}
+			if (now - s_last_report >= 1.0) {
+				fprintf(stderr, "  DIAG loop: %.1f pass(es) per second\n",
+					(double)s_passes / (now - s_last_report));
+				s_passes = 0;
+				s_last_report = now;
+			}
+		}
 		if (e != nil) {
 			[self sendEvent:e];
 		}
@@ -593,12 +623,24 @@ BOOL NSApplicationLoad(void)
 		}
 		/* AND ONLY THEN THE WAIT, ON THE SERVER'S OWN CONNECTION. A slice rather than the whole remaining
 		 * time, so a window that appears mid-wait is drained rather than missed. */
-		if (![NSWindow cg_waitForEventInMilliseconds:50]) {
-			if (expiration == nil) {
-				continue;
+		/* **AND THE WAIT IS THE TIME LEFT, NOT A CONSTANT THAT OVERSHOOTS IT.** A fixed 50 ms under a 16 ms slice
+		 * would cap the loop at twenty passes a second however short the slice was — THE WAIT, NOT THE SLICE, IS
+		 * WHAT DECIDES. Waiting the remaining time means a pass ends when its deadline does. */
+		{
+			int wait_ms = 50;
+
+			if (expiration != nil) {
+				double left = [expiration timeIntervalSinceNow] * 1000.0;
+
+				wait_ms = (left < 1.0) ? 1 : ((left < 50.0) ? (int)left : 50);
 			}
-			if ([expiration timeIntervalSinceNow] <= 0.0) {
-				return nil;
+			if (![NSWindow cg_waitForEventInMilliseconds:wait_ms]) {
+				if (expiration == nil) {
+					continue;
+				}
+				if ([expiration timeIntervalSinceNow] <= 0.0) {
+					return nil;
+				}
 			}
 		}
 	}
@@ -1433,7 +1475,13 @@ struct _NSModalSession {
 	 * `NSModalPanelRunLoopMode` carries — but `-nextEventMatchingMask:` says of itself that it does not route by
 	 * one yet: a caller relying on the distinction would be relying on nothing, and this is where that is said. */
 	{
-		NSDate *slice = [NSDate dateWithTimeIntervalSinceNow:0.1];
+		/* **A SLICE IS A FRAME, NOT A TENTH OF A SECOND.** Every window is updated once per pass, so this number
+		 * IS the rate the desktop draws at: MEASURED, 0.1 s gave TEN passes per second — the whole interface
+		 * repainting ten times a second and every click waiting up to a tenth of one. A display's frame is the
+		 * honest deadline for a loop whose job is to keep windows drawn, and a loop with nothing to do now BLOCKS
+		 * on the compositor for the rest of the slice rather than waking to ask. BOTH LOOPS GET IT: this one and
+		 * the modal one below draw the same windows and were slow in the same way. */
+		NSDate *slice = [NSDate dateWithTimeIntervalSinceNow:1.0 / 60.0];
 		NSEvent *e = [self nextEventMatchingMask:NSAnyEventMask
 					   untilDate:slice
 						  inMode:NSModalPanelRunLoopMode
