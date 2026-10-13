@@ -24,11 +24,46 @@
 #import <Foundation/NSDate.h>
 
 #include <stdio.h>
+#include <stdlib.h>
 #include <time.h>
 
-int main(void)
+int main(int argc, char **argv)
 {
 	NSApplication *app = [NSApplication sharedApplication];
+	/* **HOW LONG TO STAY UP.** 200 passes is about four seconds — long enough to photograph — and a caller who
+	 * wants to SIT AT the thing passes more. Declared before it is read, which the first version of this did not
+	 * manage: the `--passes` parsing went in above the declaration block and the compiler said so. */
+	int passes = 200;
+	/* **AND WHETHER TO USE THE REAL RUN LOOP, WHICH IS THE DIFFERENCE BETWEEN A DEMONSTRATION AND A SESSION.**
+	 * A hand-rolled pump makes `-[NSApplication isRunning]` NO, and a menu that cannot see a running loop OPENS AND
+	 * THEN STAYS — it never tracks, so it never dismisses, and the next click is refused with "cannot begin a
+	 * session while one is already up". MEASURED, in a session left open for a person to click.
+	 *
+	 * `--run` uses `-[NSApplication run]`, which is the loop a real application has: menus track, dismiss and
+	 * reopen, and the program stays up until it is stopped. `--passes N` remains for the demonstrations that
+	 * photograph a fixed moment. */
+	int run_loop = 0;
+	int click_the_bar = 1;
+
+	if (argc > 2 && strcmp(argv[1], "--passes") == 0) {
+		passes = atoi(argv[2]);
+		if (passes <= 0) {
+			passes = 1;
+		}
+	}
+	{
+		/* **`i` IS NOT DECLARED YET AT THIS POINT** — the declaration block is below, which is where the first
+		 * version of this loop read it from. A scope of its own is the honest fix: this is argument parsing and it
+		 * has nothing to do with the window this function is about to make. */
+		int a;
+
+		for (a = 1; a < argc; a++) {
+			if (strcmp(argv[a], "--run") == 0) {
+				run_loop = 1;
+				click_the_bar = 0;	/* a person does the clicking in a session */
+			}
+		}
+	}
 	NSWindow *window;
 	NSMenu *menu;
 	int i;
@@ -91,7 +126,7 @@ int main(void)
 	 *
 	 * The bar is found by its LEVEL, which is what makes it the bar — nothing else is at
 	 * `NSMainMenuWindowLevel` — and the item is the third, which after the application menu is `Edit`. */
-	{
+	if (click_the_bar) {
 		NSArray *windows = [app windows];
 		NSWindow *bar_window = nil;
 		NSUInteger i;
@@ -123,14 +158,26 @@ int main(void)
 		}
 	}
 
-	/* AND THE PUMPING IS THE TEST'S OWN, because nothing else will do it: every frame the menu's window draws on
-	 * comes from the seam's frame callback, and those are dispatched here. */
-	for (i = 0; i < 200; i++) {
-		NSEvent *event = [app nextEventMatchingMask:NSAnyEventMask
-						  untilDate:[NSDate dateWithTimeIntervalSinceNow:0.02]
-						     inMode:nil dequeue:YES];
+	/* **AND THE PUMPING IS THIS PROGRAM'S, WHICH MEANS THE EVENTS HAVE TO BE DISPATCHED.** Every frame the menu's
+	 * window draws on comes from the seam's frame callback, and those are fetched here — but the FIRST version of
+	 * this loop took each event and DISCARDED it, so a person clicking the bar watched the click arrive and do
+	 * nothing. A run loop that fetches an event and does not send it is not a run loop; this is the same
+	 * `-sendEvent:` a real `-run` uses, and it is why clicks work in this demonstration at all.
+	 *
+	 * THE PASSES COME FROM THE COMMAND LINE so the same program can be a demonstration for a minute or a session
+	 * somebody leaves open: `appkit_menu_draw --passes N`. */
+	if (run_loop) {
+		[app run];	/* the real loop: menus track, dismiss and reopen, and this returns when the app stops */
+	} else {
+		for (i = 0; i < passes; i++) {
+			NSEvent *event = [app nextEventMatchingMask:NSAnyEventMask
+							  untilDate:[NSDate dateWithTimeIntervalSinceNow:0.02]
+							     inMode:nil dequeue:YES];
 
-		(void)event;
+			if (event != nil) {
+				[app sendEvent:event];
+			}
+		}
 	}
 	printf("appkit_menu_draw: a menu with %ld items was up for %d passes\n", (long)[menu numberOfItems], i);
 	return 0;
