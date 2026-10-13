@@ -98,9 +98,31 @@
  * why this is a method rather than a number written twice. */
 - (NSFont *)cg_titleFont
 {
-	NSFont *font = [NSFont systemFontOfSize:[NSFont systemFontSize]];
+	CGFloat size = [NSFont systemFontSize];
+	NSFont *font = _bold ? [NSFont boldSystemFontOfSize:size] : [NSFont systemFontOfSize:size];
 
-	return (font != nil) ? font : [NSFont systemFontOfSize:(CGFloat)12.0];
+	if (font == nil) {
+		font = [NSFont systemFontOfSize:(CGFloat)12.0];
+	}
+	return font;
+}
+
+- (BOOL)bold
+{
+	return _bold;
+}
+
+- (void)setBold:(BOOL)flag
+{
+	if (flag == _bold) {
+		return;
+	}
+	_bold = flag;
+	/* **AND THE MEASUREMENT IS NOW STALE**, which is the other half of this being one door: a bold face is WIDER,
+	 * so the column this row was measured into is too narrow for what will be drawn in it. The flag that makes
+	 * `-calcSize` measure again is the fix, and forgetting it is how a bold title comes to be clipped by its own
+	 * cell. */
+	_needsSizing = YES;
 }
 
 - (void)calcSize

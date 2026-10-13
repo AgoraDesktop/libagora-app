@@ -50,6 +50,10 @@ NS_ASSUME_NONNULL_BEGIN
 	CGFloat _keyEquivalentWidth;
 	BOOL _needsSizing;
 	BOOL _needsDisplay;
+	/* **AND WHETHER THIS ROW'S TITLE IS SET IN THE BOLD SYSTEM FACE**, which is one item's due rather than a
+	 * property of the item: the APPLICATION MENU carries it (see `NSMenuView`), and the name a desktop is judged by
+	 * is the one at the far left of its menu bar. */
+	BOOL _bold;
 }
 
 /* THE ITEM THIS CELL DRAWS, and the door is the WRITER of both flags below: giving a cell a different item
@@ -66,6 +70,11 @@ NS_ASSUME_NONNULL_BEGIN
  * CLAIMING ANY ATTRIBUTE, which is what a subclass override needs — and Apple's own `NSMenuItemCell.h` spells it
  * that way for the same reason. */
 - (NSInteger)tag;
+
+/* **WHETHER THIS ROW IS SET IN BOLD.** The face is the bold SYSTEM font at the system's size, so this is a
+ * property OF THE ROW and not of the item it draws — which matches where the answer comes from: the menu BAR knows
+ * that its own first item is the application menu, and the item itself has no idea. */
+@property BOOL bold;
 
 /* THE TWO FLAGS. `-needsSizing` IS READ BY `-calcSize`, which measures the item only when the answer is yes and
  * clears the flag when it has — so the flag is not a field stored and consulted nowhere, it is what makes

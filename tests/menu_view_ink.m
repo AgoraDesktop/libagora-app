@@ -9,6 +9,11 @@
  * neighbours. Offscreen, so it runs anywhere.
  */
 #import <AppKit/NSMenuView.h>
+/* **THE CELL'S OWN HEADER, NOT JUST THE VIEW'S FORWARD DECLARATION OF IT.** `NSMenuView.h` says `@class
+ * NSMenuItemCell` — enough to hold a pointer and not enough to ask it anything: without this the compiler answers
+ * `id` for `-titleWidth` and then refuses to cast a pointer to a double. THE SECOND TIME TODAY, one class over from
+ * `NSMenu` in the application, and the same reading both times: the error looks like arithmetic. */
+#import <AppKit/NSMenuItemCell.h>
 #import <AppKit/NSMenu.h>
 #import <AppKit/NSMenuItem.h>
 #import <AppKit/NSBitmapImageRep.h>
@@ -156,6 +161,62 @@ int main(void)
 		}
 		check(bar_ink[0] > 0 && bar_ink[1] > 0 && bar_ink[2] > 0,
 		      "every COLUMN was drawn, left to right, each with its own title");
+		/* **AND THE FIRST COLUMN OF A BAR IS SET IN BOLD, WHICH IS THE APPLICATION MENU'S DUE.**
+		 *
+		 * THE MEASURE IS THE SAME TITLE TWICE, AND IT HAD TO BE. The first version of this compared the first
+		 * column's INK PER PIXEL against its neighbours' — and the neighbours are DIFFERENT STRINGS: `Open
+		 * Recent` is a denser word than `Close` whatever face it is set in, so that check could have passed with
+		 * no bold anywhere. A weight is a property of a face applied to a string, and the only way to ask about it
+		 * is to set THE SAME STRING both ways.
+		 *
+		 * Two questions, because they fail for different reasons: the bold face must MEASURE wider (a
+		 * `-calcSize` question, and the column is what would clip it), and it must DRAW denser (a `-drawRect:`
+		 * question). Width alone would pass on a face that measured bold and drew regular. */
+		{
+			NSMenuItemCell *plain = [[NSMenuItemCell alloc] initTextCell:@""];
+			NSBitmapImageRep *other;
+			double bold_ink, plain_ink;
+
+			[plain setMenuItem:[menu itemAtIndex:0]];
+			[plain setNeedsSizing:YES];
+			[plain calcSize];
+			NSMenuItemCell *bold_cell = [hv cellForItemAtIndex:0];
+
+			/* **AND THE CELLS ARE ASKED, NOT THE PICTURE — because a weight is the cell's own answer.** The
+			 * surroundings are read into locals first: `check([a && [b c]], ...)` parses its leading bracket as a
+			 * MESSAGE SEND, which is a compile error that reads like a mistake in `check`. */
+			check(![plain bold], "a cell is NOT bold until it is told to be");
+			check(bold_cell != nil && [bold_cell bold], "and the BAR's first cell says it is");
+			check(bold_cell != nil && [bold_cell titleWidth] > [plain titleWidth],
+			      "the BOLD face measures wider than the plain one for the same title");
+
+			other = [[NSBitmapImageRep alloc] initWithBitmapDataPlanes:NULL pixelsWide:400 pixelsHigh:22
+				bitsPerSample:8 samplesPerPixel:4 hasAlpha:YES isPlanar:NO
+				colorSpaceName:NSCalibratedRGBColorSpace bytesPerRow:400 * 4 bitsPerPixel:32];
+			[NSGraphicsContext setCurrentContext:[NSGraphicsContext graphicsContextWithBitmapImageRep:other]];
+			[[NSColor whiteColor] setFill];
+			[[NSBezierPath bezierPathWithRect:NSMakeRect(0.0, 0.0, 400.0, 22.0)] fill];
+			[plain drawTitleWithFrame:NSMakeRect(0.0, 0.0, 400.0, 22.0) inView:nil];
+
+			plain_ink = 0.0;
+			for (y = 0; y < 22; y++) {
+				for (x = 0; x < 400; x++) {
+					NSColor *c = [other colorAtX:x y:y];
+
+					if (c != nil && [c redComponent] < 0.5) {
+						plain_ink += 1.0;
+					}
+				}
+			}
+			/* the bar's first column, over the width THAT cell measured */
+			bold_ink = (double)bar_ink[0] / (double)w[0];
+			plain_ink = plain_ink / (double)[plain titleWidth];
+			check(bold_ink > plain_ink,
+			      "and it DRAWS denser for the same title, which is what bold means to a reader");
+			printf("  (note: the same title — ink per column pixel, bold %.2f vs plain %.2f)\n",
+			       bold_ink, plain_ink);
+			check(w[0] > 0, "and the bar's first column has a width to divide by");
+		}
 		check(bar_hi[1] > 0 && bar_hi[0] == 0 && bar_hi[2] == 0,
 		      "and the highlight is on the middle COLUMN only");
 

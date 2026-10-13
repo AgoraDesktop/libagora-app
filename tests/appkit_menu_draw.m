@@ -43,10 +43,13 @@ int main(void)
 	{
 		NSMenu *bar = [[NSMenu alloc] initWithTitle:@"MainMenu"];
 
+		/* **AND HELP IS PUT SECOND ON PURPOSE.** The HIG says it belongs LAST, and a main menu that already had it
+		 * last would be a demonstration that proves nothing: this way the bar has to MOVE it, and the picture says
+		 * whether it did. */
 		[bar addItemWithTitle:@"File" action:NULL keyEquivalent:@""];
+		[bar addItemWithTitle:@"Help" action:NULL keyEquivalent:@""];
 		[bar addItemWithTitle:@"Edit" action:NULL keyEquivalent:@""];
 		[bar addItemWithTitle:@"View" action:NULL keyEquivalent:@""];
-		[bar addItemWithTitle:@"Help" action:NULL keyEquivalent:@""];
 		[app setMainMenu:bar];
 	}
 

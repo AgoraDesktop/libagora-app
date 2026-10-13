@@ -72,6 +72,11 @@ const CGFloat NSMenuRowHeight = 22.0;
 	if ((id)cell == [NSNull null]) {
 		cell = [[NSMenuItemCell alloc] initTextCell:@""];
 		[cell setMenuItem:item];
+		/* **A BAR'S FIRST ITEM IS THE APPLICATION MENU, AND THE HIG SETS IT IN BOLD.** That is the whole of why
+		 * this view is the one that decides: the first item of a HORIZONTAL menu is the application's own — put
+		 * there by `NSApplication`, which is the only thing that knows the application's name — and a DROPDOWN's
+		 * first row is just its first row. */
+		[cell setBold:(_horizontal && index == 0)];
 		/* **MEASURED ONCE, HERE.** `-calcSize` reads `-needsSizing`, so this is the flag that makes the
 		 * measurement happen rather than a call that happens to work the first time. */
 		[cell setNeedsSizing:YES];
@@ -136,7 +141,13 @@ const CGFloat NSMenuRowHeight = 22.0;
 
 - (void)setHorizontal:(BOOL)flag
 {
+	if (flag == _horizontal) {
+		return;
+	}
 	_horizontal = flag;
+	/* **AND THE CELLS GO WITH IT, because which item is bold is a fact about the ORIENTATION.** A cell that was
+	 * made for a dropdown carried no bold row; the same items in a bar have one. */
+	[_cells removeAllObjects];
 	[self setNeedsDisplay:YES];
 }
 

@@ -20,6 +20,12 @@
 #include "AGWindowServer.h"
 #import "NSWindow.h"
 #import "NSMenuView.h"
+/* **THE MENU'S OWN HEADER, NOT JUST ITS ITEMS'.** `NSMenu` was forward-declared here — enough to write
+ * `NSMenu *menu` and not enough to ask it anything: without this the compiler answers `id` for
+ * `-numberOfItems` and then refuses to subtract from a pointer. MEASURED as two errors that read like mistakes in
+ * the arithmetic rather than like a missing import. */
+#import "NSMenu.h"
+#import "NSMenuItem.h"
 #import "NSColor.h"
 
 #import <Foundation/NSThread.h>
@@ -702,6 +708,7 @@ BOOL NSApplicationLoad(void)
 - (void)setMainMenu:(id)menu
 {
 	_mainMenu = menu;
+	[self cg_arrangeMenuBar];
 	/* **AND THE MENUS GO IN THE BAR, WHICH IS WHAT THIS DOOR COULD NOT DO BEFORE.** The header used to say that the
 	 * part which cannot be honoured — "anything DRAWING that menu" — was named there rather than silently dropped.
 	 * It is honoured now: the server says where the bar's free space begins, `NSMenuView` lays the titles out, and a
@@ -811,9 +818,77 @@ BOOL NSApplicationLoad(void)
 	return _servicesMenu;
 }
 
+/* **THE MENU BAR'S SHAPE, WHICH IS THE HIG'S AND NOT EACH APPLICATION'S TO GET RIGHT.** Two rules, and both are
+ * about a menu the application did not write:
+ *
+ *   1. THE FIRST MENU IS THE APPLICATION'S OWN, AND IT IS NAMED AFTER THE APPLICATION. It is put here rather than
+ *      asked for, because an application that had to remember would eventually not — and the name is the one thing
+ *      on the bar that says WHICH program you are looking at.
+ *   2. HELP IS LAST. Wherever the application put it.
+ *
+ * THIS MUTATES THE MENU IT WAS GIVEN, which is the Mac's own arrangement: `[NSApp mainMenu]` IS the menu bar, its
+ * item 0 IS the application menu, and there is no second copy to keep in step. Doing it here rather than deriving a
+ * menu also avoids handing an `NSMenuItem` two parents, which nothing in this tree would enjoy.
+ *
+ * AND IT IS IDEMPOTENT, so setting a main menu twice — or setting one, then setting a help menu — does not stack
+ * up application menus. An item already at the front with the application's name IS the application menu. */
+- (void)cg_arrangeMenuBar
+{
+	NSString *appName = [[NSProcessInfo processInfo] processName];
+	NSMenu *menu;
+	NSArray *items;
+	NSMenuItem *first;
+	NSMenuItem *help;
+	NSInteger i, count;
+
+	if (_mainMenu == nil) {
+		return;
+	}
+	if (appName == nil || [appName length] == 0) {
+		appName = @"Application";
+	}
+	/* **`_mainMenu` IS `id`** — Apple's own type for it, because a main menu may be a nib-loaded object this tier
+	 * does not model — SO EVERY DOOR ON IT IS ASKED THROUGH A LOCAL THAT SAYS WHAT IT IS. Without one the compiler
+	 * answers `id` for `-numberOfItems` and then does arithmetic on a pointer: MEASURED, two errors, one of them
+	 * "arithmetic on pointer to interface 'id'". */
+	menu = (NSMenu *)_mainMenu;
+	items = [menu itemArray];
+	first = ([items count] > 0) ? [items objectAtIndex:0] : nil;
+	if (first == nil || ![[first title] isEqualToString:appName]) {
+		NSMenuItem *appItem = [[NSMenuItem alloc] initWithTitle:appName action:NULL keyEquivalent:@""];
+
+		[appItem setSubmenu:[[[NSMenu alloc] initWithTitle:appName] autorelease]];
+		[menu insertItem:appItem atIndex:0];
+		[appItem release];
+	}
+
+	/* AND HELP LAST. `-setHelpMenu:` is the door that says which one it is; a menu merely TITLED "Help" is taken
+	 * as the same claim, because an application that has one and never called that door has still written a help
+	 * menu and the HIG still puts it last. */
+	count = [menu numberOfItems];
+	help = (NSMenuItem *)_helpMenu;
+	if (help == nil) {
+		for (i = 1; i < count; i++) {
+			NSMenuItem *item = [menu itemAtIndex:i];
+
+			if ([[item title] isEqualToString:@"Help"]) {
+				help = item;
+				break;
+			}
+		}
+	}
+	if (help != nil && [menu indexOfItem:help] != [menu numberOfItems] - 1) {
+		[help retain];
+		[menu removeItem:help];
+		[menu addItem:help];
+		[help release];
+	}
+}
+
 - (void)setHelpMenu:(id)menu
 {
 	_helpMenu = menu;
+	[self cg_arrangeMenuBar];
 }
 
 - (nullable id)helpMenu
