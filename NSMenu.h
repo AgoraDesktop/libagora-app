@@ -114,6 +114,13 @@ extern NSString *NSMenuDidEndTrackingNotification;
 	 * consumed. Without this the menu opened on press and closed on release, which reads as "the highlight only
 	 * shows while the mouse is held down". */
 	BOOL _openedByPress;
+	/* **WHERE THE PRESS THAT ENDED THE SESSION LANDED, WHEN ONE DID.** A menu bar has to know this: clicking one
+	 * title and then another must SWITCH menus, and the click that says "that one" is captured by the first menu's
+	 * tracking loop — the loop owns the events. So the session records the point it was dismissed at, and the bar
+	 * reads it back and opens whatever title is underneath. WITHOUT THIS THE SECOND CLICK IS SIMPLY EATEN, which is
+	 * what "the menus do not work" is: press File, press Edit, and all you get is File's menu closing. */
+	NSPoint _dismissedAt;
+	BOOL _hasDismissedAt;
 }
 
 /* ============================================================================================ *
@@ -299,6 +306,11 @@ extern NSString *NSMenuDidEndTrackingNotification;
  * (The fifth time this session a probe has driven a non-null annotation with a literal nil, and the second time
  * the right fix was the HEADER rather than the probe: the annotation should describe the door, and these doors
  * are built to be asked with nothing.) */
+/* **THE POINT A SESSION WAS DISMISSED AT, ONCE, AND ONLY IF A PRESS DISMISSED IT.** Read-and-clear: a caller that
+ * acts on it is the only one that should, and a stale point would re-open a menu nobody asked for. NO when the
+ * session ended any other way — a pick, a key, a programmatic cancel — because there is then nothing to re-open. */
+- (BOOL)cg_takeDismissedAt:(NSPoint *)where;
+
 - (void)cancelTracking;
 - (void)cancelTrackingWithoutAnimation;
 - (BOOL)isAttached;

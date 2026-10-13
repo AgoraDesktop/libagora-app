@@ -1177,6 +1177,21 @@ void AGWindowSetStatusItem(AGWindow *window, int length)
 	}
 }
 
+/* **AND THE ONE WAY TO HIDE A SURFACE THE PROTOCOL HAS.** A `wl_surface` is not "on" or "off" — it is a picture
+ * that may or may not be attached — so the compositor is TOLD, and an Agora server takes it off the glass. A client
+ * of a stock compositor gets the state change and nothing else, which is why `-orderOut:`'s comment could say the
+ * screen never changed: it was true of `xdg-shell` and is not true of this. */
+void AGWindowHide(AGWindow *window)
+{
+	if (window == NULL) {
+		return;
+	}
+	if (window->agora != NULL) {
+		agora_window_set_visible(window->agora, 0);
+		wl_display_flush(window->server->display);
+	}
+}
+
 void AGWindowRaise(AGWindow *window)
 {
 	if (window != NULL && window->agora != NULL) {

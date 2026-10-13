@@ -714,6 +714,22 @@ static const CGFloat NSMenuStateColumnWidth = 20.0;
 		}
 		return YES;
 	}
+	/* **AND A PRESS OUTSIDE THE MENU ENDS IT AT ONCE, REMEMBERING WHERE — AND IT GOES FIRST.** The branch below
+	 * handles `NSLeftMouseDown` too ("a press is deliberately not a pick"), so a check placed after it is DEAD CODE
+	 * that never runs: MEASURED, the second click was still eaten and the open menu never moved. Waiting for the
+	 * release would swallow the whole click, and the click is how a menu bar is told to switch: the loop that owns
+	 * the events must hand the point back rather than keep it. A press INSIDE is the menu's own, and nothing changes
+	 * for it. */
+	if (type == NSLeftMouseDown) {
+		NSPoint at = [event locationInWindow];
+
+		if ([self cg_itemAtPoint:at] == nil) {
+			_dismissedAt = at;
+			_hasDismissedAt = YES;
+			[self cancelTracking];
+			return NO;
+		}
+	}
 	if (type == NSLeftMouseDown || type == NSLeftMouseDragged || type == NSMouseMoved ||
 	    type == NSRightMouseDown) {
 		/* **AND A DRAG THAT LEAVES THE MENU ENDS THE SESSION, which is how a menu bar switches menus.** On the Mac
@@ -918,6 +934,18 @@ static const CGFloat NSMenuStateColumnWidth = 20.0;
 			}
 		}
 	}
+}
+
+- (BOOL)cg_takeDismissedAt:(NSPoint *)where
+{
+	if (!_hasDismissedAt) {
+		return NO;
+	}
+	if (where != NULL) {
+		*where = _dismissedAt;
+	}
+	_hasDismissedAt = NO;
+	return YES;
 }
 
 - (void)cancelTracking

@@ -1078,9 +1078,16 @@ static CGFloat fn_clamp_axis(CGFloat v, CGFloat lo, CGFloat hi)
 		[_cg_parentWindow removeChildWindow:self];
 	}
 	(void)sender;
-	/* **THERE IS NO UNMAP IN `xdg-shell`** — a toplevel is on the screen or it is destroyed — so this door
-	 * changes THIS OBJECT's state and not the screen's. The header records the deviation where the rest are. */
+	/* **AND THE SCREEN CHANGES TOO, WHICH IT DID NOT BEFORE.** The comment here used to say that `xdg-shell` has no
+	 * unmap — a toplevel is on the screen or it is destroyed — and that was true and is no longer the whole story:
+	 * AGORA'S OWN PROTOCOL HAS THE DOOR, so a window that is ordered out is TAKEN OFF THE GLASS. MEASURED, before
+	 * this: closing a menu left its panel painted, every menu ever opened was still there, and the run loop was
+	 * repainting the whole stack every pass — which is what "the menus never close" and "it gets slower and slower"
+	 * both were. */
 	_visible = NO;
+	if (_agwindow != NULL) {
+		AGWindowHide(_agwindow);
+	}
 }
 
 /* THE ORDERING MODE IS THE RELATIVE ONE, and X has no `relativeTo` for a bare map: this tree runs one

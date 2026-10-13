@@ -44,6 +44,7 @@ int main(int argc, char **argv)
 	 * photograph a fixed moment. */
 	int run_loop = 0;
 	int click_the_bar = 1;
+	int switch_titles = 0;
 
 	if (argc > 2 && strcmp(argv[1], "--passes") == 0) {
 		passes = atoi(argv[2]);
@@ -64,6 +65,9 @@ int main(int argc, char **argv)
 			}
 			if (strcmp(argv[a], "--click") == 0) {
 				click_the_bar = 1;	/* ...and a probe does it for itself */
+			}
+			if (strcmp(argv[a], "--switch") == 0) {
+				switch_titles = 1;	/* a second click on the next title: the menu must MOVE */
 			}
 		}
 	}
@@ -165,6 +169,27 @@ int main(int argc, char **argv)
 				[app postEvent:click atStart:YES];
 			} else {
 				[app sendEvent:click];
+			}
+			/* **AND A SECOND CLICK ON A DIFFERENT TITLE, WHICH MUST MOVE THE MENU RATHER THAN BE EATEN.** The
+			 * click that says "that one" is captured by the first menu's tracking loop — the loop owns the events —
+			 * so this is the case that decides whether a menu bar switches or merely closes. `--switch` asks for it
+			 * because only the switching test wants two clicks. */
+			if (switch_titles) {
+				NSRect other = [view rectForItemAtIndex:3];	/* the next title along */
+				NSPoint at2 = NSMakePoint(other.origin.x + other.size.width / 2.0,
+							  other.origin.y + other.size.height / 2.0);
+				NSEvent *click2 = [NSEvent mouseEventWithType:NSLeftMouseDown location:at2
+							       modifierFlags:0 timestamp:0
+								windowNumber:[bar_window windowNumber]
+								     context:nil eventNumber:0 clickCount:1 pressure:1.0];
+
+				printf("appkit_menu_draw: then clicking \"%s\" at x=%.0f\n",
+				       [[(NSMenuItem *)[[view menu] itemAtIndex:3] title] UTF8String], (double)at2.x);
+				if (run_loop) {
+					[app postEvent:click2 atStart:NO];
+				} else {
+					[app sendEvent:click2];
+				}
 			}
 		}
 	}

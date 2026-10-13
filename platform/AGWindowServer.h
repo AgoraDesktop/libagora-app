@@ -166,6 +166,13 @@ AGWindow *AGWindowCreate(AGWindowServer *server, int width, int height, const ch
 void AGWindowDestroy(AGWindow *window);
 
 void AGWindowShow(AGWindow *window);
+
+/* **TAKE THE WINDOW OFF THE SCREEN, AND PUT IT BACK.** `NSWindow`'s `-orderOut:`, and the door `xdg-shell` does not
+ * have: a toplevel there is mapped or destroyed, so hiding a window means destroying it and building another to
+ * show it again — which is not what a menu does when it closes. On a compositor that speaks Agora's own protocol
+ * this is a request; on one that speaks only `xdg-shell` it is recorded here and the window stays where it is,
+ * which is a property of the compositor and not of this call. */
+void AGWindowHide(AGWindow *window);
 void AGWindowSetTitle(AGWindow *window, const char *title);
 
 /* **THE APPLICATION'S FRAME, AND ON A COMPOSITOR THAT CAN BE TOLD, IT IS HONOURED.** Where the window goes and

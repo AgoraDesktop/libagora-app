@@ -135,10 +135,28 @@ const CGFloat NSMenuRowHeight = 22.0;
  *
  * AND IT IS THE ITEM'S BOTTOM, NOT ITS TOP: a bar's items run the height of the bar, so their bottom edge IS the
  * bar's bottom edge, and a menu hung below that hangs below the bar rather than over it. */
+/* **WHICH TITLE A POINT IS OVER, WHICH IS THE BAR'S OWN ARITHMETIC** — the same boxes the click was matched
+ * against, asked as a question rather than searched in a loop. -1 for none. */
+- (NSInteger)cg_indexOfItemAtPoint:(NSPoint)point
+{
+	NSInteger i, count = (_shownMenu != nil) ? [_shownMenu numberOfItems] : 0;
+
+	for (i = 0; i < count; i++) {
+		NSRect box = [self rectForItemAtIndex:i];
+
+		if (point.x >= box.origin.x && point.x <= box.origin.x + box.size.width && point.y >= box.origin.y &&
+		    point.y <= box.origin.y + box.size.height) {
+			return i;
+		}
+	}
+	return -1;
+}
+
 - (void)mouseDown:(NSEvent *)event
 {
 	NSPoint p;
 	NSInteger i, count;
+	NSInteger current;
 
 	if (!_horizontal || _shownMenu == nil) {
 		[super mouseDown:event];	/* a dropdown is tracked by NSMenu, not by clicking its rows */
@@ -150,6 +168,11 @@ const CGFloat NSMenuRowHeight = 22.0;
 	 * `-convertPoint:fromView:` with a nil view means "from the window's", which is what this is. */
 	p = [self convertPoint:[event locationInWindow] fromView:nil];
 	count = [_shownMenu numberOfItems];
+	/* **`current` AND NOT `index`.** `index` is a FUNCTION in POSIX's `<strings.h>` — the same family as `rindex` —
+	 * so a variable of that name is a redeclaration the compiler reads as assigning to the function: MEASURED,
+	 * "non-object type 'char *(const char *, int)' is not assignable". The name is `current` because that is what it
+	 * is: the title whose menu is open right now. */
+	current = -1;
 	for (i = 0; i < count; i++) {
 		NSRect box = [self rectForItemAtIndex:i];
 		NSMenuItem *item = [_shownMenu itemAtIndex:i];
@@ -167,19 +190,46 @@ const CGFloat NSMenuRowHeight = 22.0;
 			 * WHICH menu you are looking at — the row that is down stays down until it is dismissed. The menu is
 			 * opened from here and returns when it ends, so the highlight is this door's to put up and take down;
 			 * nothing else knows the two are the same gesture. */
-			[self setHighlightedItem:item];
-			/* **AND THE HIGHLIGHT IS PAINTED BEFORE THE CALL, BECAUSE THE CALL DOES NOT RETURN UNTIL THE MENU IS
-			 * DISMISSED.** The menu now tracks — it is the root of a session — so everything after it happens long
-			 * after the click, and a bar that merely SET the flag would show its title highlighted only once the
-			 * menu was gone. The window's update pass is inside the run loop, and the run loop is inside this call;
-			 * so the paint happens here or not at all. */
+			/* **AND THE BAR SWITCHES MENUS, WHICH IS THE WHOLE OF WHAT A MENU BAR DOES.** Pressing one title and
+			 * then another must MOVE the open menu, not close one and eat the click — and the click that means
+			 * "that one" is captured by the first menu's tracking loop, because the loop owns the events. So the
+			 * session hands the point back when a press outside dismisses it, and this loops: open, read, open
+			 * whatever is underneath, until the press was somewhere with no menu of its own. */
+			for (;;) {
+				NSPoint dismissed;
+
+				[self setHighlightedItem:item];
+				/* **THE HIGHLIGHT IS PAINTED BEFORE THE CALL, BECAUSE THE CALL DOES NOT RETURN UNTIL THE MENU IS
+				 * DISMISSED.** The window's update pass is inside the run loop, and the run loop is inside this
+				 * call, so the paint happens here or not at all. */
+				[[self window] setNeedsDisplay:YES];
+				[[self window] displayIfNeeded];
+				[submenu popUpMenuPositioningItem:nil
+						       atLocation:NSMakePoint(frame.origin.x + box.origin.x,
+									      frame.origin.y + box.origin.y)
+							 inView:nil];
+				if (![(NSMenu *)submenu cg_takeDismissedAt:&dismissed]) {
+					break;		/* it ended any other way: a pick, a key, or a click on nothing */
+				}
+				{
+					NSPoint here = [self convertPoint:dismissed fromView:nil];
+					NSInteger next = [self cg_indexOfItemAtPoint:here];
+
+					if (next < 0 || next == current) {
+						break;
+					}
+					item = [_shownMenu itemAtIndex:next];
+					box = [self rectForItemAtIndex:next];
+					submenu = [item submenu];
+					current = next;
+					if (submenu == nil) {
+						break;	/* a title with no menu of its own: nothing to move to */
+					}
+				}
+			}
+			[self setHighlightedItem:nil];
 			[[self window] setNeedsDisplay:YES];
 			[[self window] displayIfNeeded];
-			[submenu popUpMenuPositioningItem:nil
-					       atLocation:NSMakePoint(frame.origin.x + box.origin.x,
-								      frame.origin.y + box.origin.y)
-						 inView:nil];
-			[self setHighlightedItem:nil];
 		}
 		return;
 	}
