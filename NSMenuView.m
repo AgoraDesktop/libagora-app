@@ -22,9 +22,12 @@ const CGFloat NSMenuRowHeight = 22.0;
 #define APPKIT_MENUBAR_TITLE_PADDING  12.0
 #define APPKIT_MENUBAR_MIN_ITEM_WIDTH 40.0
 
-#define APPKIT_MENU_HIGHLIGHT_RED   0.16
-#define APPKIT_MENU_HIGHLIGHT_GREEN 0.35
-#define APPKIT_MENU_HIGHLIGHT_BLUE  0.72
+/* **ARGENTUM'S ACCENT, WHICH IS THE COLOUR OF "THIS ONE IS CHOSEN".** Sampled 164,154,255 — a periwinkle — and it
+ * is used for every selection in the sample, not only the menu bar's: a highlight is the same statement wherever it
+ * is made, so it is the same colour. The previous values here were a blue that appeared nowhere in the design. */
+#define APPKIT_MENU_HIGHLIGHT_RED   0.643
+#define APPKIT_MENU_HIGHLIGHT_GREEN 0.604
+#define APPKIT_MENU_HIGHLIGHT_BLUE  1.0
 
 @implementation NSMenuView
 
