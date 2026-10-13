@@ -788,6 +788,8 @@ static const CGFloat NSMenuStateColumnWidth = 20.0;
  * IS NOT BLOCKED ON — see the header: this tier has no run loop to block in. */
 - (void)popUpMenuPositioningItem:(NSMenuItem *)item atLocation:(NSPoint)location inView:(id)view
 {
+	double t0 = [NSDate timeIntervalSinceReferenceDate];
+#define DIAG(...) do { if (getenv("APPKIT_MENU_DIAG") != NULL) { fprintf(stderr, __VA_ARGS__); } } while (0)
 	NSSize size;
 
 	(void)item;
@@ -803,6 +805,7 @@ static const CGFloat NSMenuStateColumnWidth = 20.0;
 		return;
 	}
 	size = [self size];
+	DIAG("  DIAG open: -size took %.1f ms\n", ([NSDate timeIntervalSinceReferenceDate] - t0) * 1000.0);
 	if (size.width <= 0.0) {
 		size.width = 120.0;	/* a floor, because a menu narrower than this is not usable */
 	}
@@ -830,6 +833,8 @@ static const CGFloat NSMenuStateColumnWidth = 20.0;
 		fprintf(stderr, "APPKIT-NOTE: no reachable display — this menu is tracking WITHOUT a window, so it is "
 				"invisible but its state is real\n");
 	}
+	DIAG("  DIAG open: the tracking WINDOW (with its socket and buffer) took %.1f ms\n",
+	     ([NSDate timeIntervalSinceReferenceDate] - t0) * 1000.0);
 	[_trackingWindow setContentView:_menuView];
 	[_trackingWindow orderFrontRegardless];
 	_tracking = YES;
@@ -837,6 +842,8 @@ static const CGFloat NSMenuStateColumnWidth = 20.0;
 	 * `-update` getting its caller, one unit after it was given its reader. */
 	[self update];
 	[self cg_repaintSession];
+	DIAG("  DIAG open: the first repaint took %.1f ms — the menu is on screen now\n",
+	     ([NSDate timeIntervalSinceReferenceDate] - t0) * 1000.0);
 	[[NSNotificationCenter defaultCenter] postNotificationName:NSMenuDidBeginTrackingNotification object:self];
 	/* **AND INSIDE A RUNNING APPLICATION IT TRACKS UNTIL IT IS DISMISSED, WHICH IS WHAT A MENU DOES.** This tier
 	 * HAS a run loop — `NSApplication`'s `-run`, which the first version of this class's plan note claimed it had
@@ -848,7 +855,19 @@ static const CGFloat NSMenuStateColumnWidth = 20.0;
 	 * question therefore has two halves — `-isRunning` for the application, `-supermenu` for the child — AND BOTH
 	 * ARE ASKED RATHER THAN ASSUMED, so a popup from a script, a probe or a host with no loop returns at once and
 	 * lets its caller step the session itself. */
-	if (_supermenu == nil && [[NSApplication sharedApplication] isRunning]) {
+	/* **A MENU TRACKS UNLESS IT WAS OPENED FROM INSIDE A SESSION THAT IS ALREADY RUNNING.** The old test was
+	 * `_supermenu == nil`, and it was wrong in the one case that matters most: AN ITEM IN THE MENU BAR'S MENU HAS A
+	 * SUPERMENU — the bar itself — so a menu opened by CLICKING A TITLE never tracked at all. Nothing dismissed it,
+	 * the title's highlight was taken down the instant the call returned, and every click after it was refused with
+	 * "cannot begin a session while one is already up" — WHICH IS EXACTLY "SLOW, NO HIGHLIGHT, NEVER CLOSES".
+	 *
+	 * The question is not whether this menu HAS a parent but WHETHER ITS PARENT IS TRACKING: a submenu opened by
+	 * hovering inside its parent's session is the parent's to drive, and one opened from a bar — where the parent is
+	 * just sitting there — is the root of a session and drives itself. Reading the parent's own `_tracking` is the
+	 * idiom this file already uses two screens up, where the child's window is read straight off the child because
+	 * these fields are protected. */
+	if ((_supermenu == nil || !((NSMenu *)_supermenu)->_tracking) &&
+	    [[NSApplication sharedApplication] isRunning]) {
 		NSApplication *app = [NSApplication sharedApplication];
 
 		if (getenv("APPKIT_MENU_DIAG") != NULL) {
@@ -887,6 +906,7 @@ static const CGFloat NSMenuStateColumnWidth = 20.0;
 	/* AND A SUBMENU GOES WITH ITS PARENT, which is the rule the other way round from the pick: a session that ends
 	 * ends everything it opened. */
 	[self cg_closeSubmenu];
+	DIAG("  DIAG close: the session ended\n");
 	_tracking = NO;
 	/* NOT RELEASED — the items belong to this menu, and the highlight is a POINTER to one of them rather than a
 	 * thing of its own. */

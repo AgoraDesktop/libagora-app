@@ -1000,6 +1000,10 @@ BOOL NSApplicationLoad(void)
 	}
 	w = [self windowWithWindowNumber:[theEvent windowNumber]];
 	if (w == nil) {
+		if (getenv("APPKIT_MENU_DIAG") != NULL) {
+			fprintf(stderr, "  DIAG dispatch: a type-%ld event for window %ld has NO window and is being "
+					"dropped\n", (long)[theEvent type], (long)[theEvent windowNumber]);
+		}
 		w = _keyWindow;
 	}
 	if (w == nil) {

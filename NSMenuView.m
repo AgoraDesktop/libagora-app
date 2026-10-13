@@ -168,6 +168,13 @@ const CGFloat NSMenuRowHeight = 22.0;
 			 * opened from here and returns when it ends, so the highlight is this door's to put up and take down;
 			 * nothing else knows the two are the same gesture. */
 			[self setHighlightedItem:item];
+			/* **AND THE HIGHLIGHT IS PAINTED BEFORE THE CALL, BECAUSE THE CALL DOES NOT RETURN UNTIL THE MENU IS
+			 * DISMISSED.** The menu now tracks — it is the root of a session — so everything after it happens long
+			 * after the click, and a bar that merely SET the flag would show its title highlighted only once the
+			 * menu was gone. The window's update pass is inside the run loop, and the run loop is inside this call;
+			 * so the paint happens here or not at all. */
+			[[self window] setNeedsDisplay:YES];
+			[[self window] displayIfNeeded];
 			[submenu popUpMenuPositioningItem:nil
 					       atLocation:NSMakePoint(frame.origin.x + box.origin.x,
 								      frame.origin.y + box.origin.y)
