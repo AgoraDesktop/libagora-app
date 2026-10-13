@@ -88,6 +88,21 @@
 
 /* ---- THE MEASUREMENT ---------------------------------------------------------------------------- */
 
+/* **WHAT A MENU ROW IS SET IN: THE SYSTEM FONT AT THE SYSTEM'S OWN SIZE.** The two halves were 12 and 13 in the
+ * wrong order — the drawing doors asked for `systemFontOfSize:12.0`, a number nobody had chosen, while
+ * `+[NSFont systemFontSize]` answered 13, which is the Mac's own menu size and had been in this tree all along. The
+ * menus came out visibly smaller than the system they are part of.
+ *
+ * AND IT IS ONE DOOR BECAUSE THE MEASUREMENT HAS TO MOVE WITH THE DRAWING: `-calcSize` computes the columns the
+ * titles are drawn into, so a row set in a larger face than it was measured in would clip its own text. That is
+ * why this is a method rather than a number written twice. */
+- (NSFont *)cg_titleFont
+{
+	NSFont *font = [NSFont systemFontOfSize:[NSFont systemFontSize]];
+
+	return (font != nil) ? font : [NSFont systemFontOfSize:(CGFloat)12.0];
+}
+
 - (void)calcSize
 {
 	/* MEASURING ONLY WHEN SOMETHING CHANGED is what the flag is for, and clearing it here is what makes the flag
@@ -133,34 +148,34 @@
 		if (image != nil) {
 			_imageWidth = [image size].width;
 		}
-		/* **AND THE TWO TEXT WIDTHS ARE MEASURED NOW — AND THEY ARE ZERO BECAUSE THERE IS NO FONT, NOT BECAUSE
-		 * NOBODY ASKED.** The measurement used to RAISE: `-sizeWithAttributes:` inserted the default font into a
-		 * dictionary even when there was none, and `-setObject:` raises on nil. That is fixed one row over in
-		 * `NSStringDrawing` — a door that raises where the API it clones permits the call is a crash with a good
-		 * excuse rather than a refusal by name — so this call runs now, and what it reports is the truth about
-		 * this host:
-		 *
-		 *     +[NSFont systemFontOfSize:12.0]            -> NIL          (measured)
-		 *     [@"Open Recent" sizeWithAttributes:nil]    -> 0 x 0        (measured)
-		 *
-		 * **SO THE NEXT BLOCKER IS THE FONT SERVICE AND NOT THE DRAWING.** Until `+[NSFont systemFontOfSize:]`
-		 * answers a face, every title is zero wide, and a menu laid out from these numbers would be a column of
-		 * empty rows — which is what a menu looks like today, for a reason that is now named rather than guessed.
-		 *
-		 * AND A NIL TITLE MEASURES ZERO BY ARITHMETIC RATHER THAN BY A GUARD, which is a DIFFERENT zero from the
-		 * one above and worth keeping distinct: a separator has no title, and neither does an image-only item.
-		 * This paragraph's zero is a missing font; that one's is a missing title. */
-		{
-			NSString *title = [_menuItem title];
-			NSString *key = [_menuItem keyEquivalent];
+					/* **AND THE TWO TEXT WIDTHS ARE MEASURED IN THE FACE AND THE SIZE THE TITLE IS DRAWN IN.** This block
+			 * passed NIL for the attributes, which means THE DEFAULT attributes — `NSStringDrawing`'s own default font
+			 * at its own size — while the drawing doors asked for the system font at a size of their own. MEASURED:
+			 * twelve and thirteen, so every row was LAID OUT one size and SET IN another. Fixing "the menus are too
+			 * small" without this line would have replaced one wrong thing with a CLIPPED one.
+			 *
+			 * AND THE NIL WAS NOT LAZINESS, which is worth the two lines: this call used to RAISE — the default font
+			 * was put into a dictionary even when there was none, and `-setObject:` raises on nil — so the widths
+			 * were zero for as long as the font registry found no fonts at all. Nil then was what WORKED, and what
+			 * works is not the same question as what a row is set in.
+			 *
+			 * A NIL TITLE STILL MEASURES ZERO BY ARITHMETIC RATHER THAN BY A GUARD, which is a different zero and
+			 * worth keeping apart: a separator has no title, and neither does an image-only item. */
+			{
+				NSString *title = [_menuItem title];
+				NSString *key = [_menuItem keyEquivalent];
+				NSFont *font = [self cg_titleFont];
+				NSDictionary *attributes = (font != nil)
+					? [NSDictionary dictionaryWithObject:font forKey:NSFontAttributeName]
+					: [NSDictionary dictionary];
 
-			if (title != nil) {
-				_titleWidth = [title sizeWithAttributes:nil].width;
+				if (title != nil) {
+					_titleWidth = [title sizeWithAttributes:attributes].width;
+				}
+				if (key != nil && [key length] > 0) {
+					_keyEquivalentWidth = [key sizeWithAttributes:attributes].width;
+				}
 			}
-			if (key != nil && [key length] > 0) {
-				_keyEquivalentWidth = [key sizeWithAttributes:nil].width;
-			}
-		}
 
 	}
 	_needsSizing = NO;
@@ -304,7 +319,7 @@
 {
 	NSString *title = [_menuItem title];
 	NSRect rect = [self titleRectForBounds:cellFrame];
-	NSFont *font = [NSFont systemFontOfSize:(CGFloat)12.0];
+	NSFont *font = [self cg_titleFont];
 	NSDictionary *attributes;
 	CGFloat left, width;
 
@@ -363,7 +378,7 @@
 {
 	NSString *key = [_menuItem keyEquivalent];
 	NSRect rect = [self keyEquivalentRectForBounds:cellFrame];
-	NSFont *font = [NSFont systemFontOfSize:(CGFloat)12.0];
+	NSFont *font = [self cg_titleFont];
 	NSDictionary *attributes;
 	CGFloat width;
 
