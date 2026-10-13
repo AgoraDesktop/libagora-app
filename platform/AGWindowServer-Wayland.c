@@ -309,9 +309,22 @@ static const struct wl_callback_listener frame_listener = {
 uint32_t *AGWindowBeginFrame(AGWindow *window, int *stride)
 {
 	if (window == NULL || !window->configured || window->buffer.buffer == NULL) {
+		/* **AND THE REASON IS NAMED, BECAUSE A DIAGNOSTIC THAT GUESSES IS WORSE THAN NONE.** The window's draw
+		 * used to report every refusal as "the compositor still holds its buffer" — WHICH WAS MY INTERPRETATION AND
+		 * NOT THE CONDITION: this door refuses for three different reasons, and on a protocol with no configure the
+		 * `configured` one is the one that fires. MEASURED, chasing the wrong two for two rounds. */
+		if (getenv("APPKIT_DRAW_DIAG") != NULL) {
+			fprintf(stderr, "  DIAG begin: refused — %s\n",
+				window == NULL ? "no window"
+				: !window->configured ? "NOT CONFIGURED (and this protocol sends no configure)"
+				: "the buffer has not been created");
+		}
 		return NULL;
 	}
 	if (window->buffer.busy) {
+		if (getenv("APPKIT_DRAW_DIAG") != NULL) {
+			fprintf(stderr, "  DIAG begin: refused — the compositor still holds the buffer\n");
+		}
 		return NULL;		/* the compositor still owns it */
 	}
 	if (window->begun) {
