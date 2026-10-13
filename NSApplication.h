@@ -276,6 +276,11 @@ typedef NSUInteger NSApplicationPresentationOptions;
  * search handlers also keep, and the reason the setters exist at all is that a ported program calls them. */
 - (void)setMainMenu:(nullable id)menu;
 - (nullable id)mainMenu;
+
+/* **THE APPLICATION'S WINDOWS.** Apple's own door, and it is here because the MENU BAR is one of them: a caller
+ * that wants to know which window the bar is — a test, or an application arranging its own furniture — has no
+ * other way to ask. The ORDER is the registry's, which is the order windows were ordered in. */
+@property (readonly) NSArray *windows;
 - (void)setWindowsMenu:(nullable id)menu;
 - (nullable id)windowsMenu;
 - (void)setServicesMenu:(nullable id)menu;

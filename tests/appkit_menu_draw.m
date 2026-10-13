@@ -18,6 +18,9 @@
 #import <AppKit/NSMenu.h>
 #import <AppKit/NSMenuItem.h>
 #import <AppKit/NSEvent.h>
+#import <Foundation/NSArray.h>
+#import <AppKit/NSMenuView.h>	/* the bar, and the boxes its items occupy */
+#import <AppKit/NSWindow.h>
 #import <Foundation/NSDate.h>
 
 #include <stdio.h>
@@ -43,13 +46,33 @@ int main(void)
 	{
 		NSMenu *bar = [[NSMenu alloc] initWithTitle:@"MainMenu"];
 
-		/* **AND HELP IS PUT SECOND ON PURPOSE.** The HIG says it belongs LAST, and a main menu that already had it
+		/* **AND EVERY TITLE CARRIES A MENU, BECAUSE A BAR TITLE WITH NOTHING BEHIND IT HAS NOTHING TO OPEN.**
+		 * `-addItemWithTitle:action:keyEquivalent:` makes a LEAF — an item you can click and that is that — and the
+		 * first version of this demonstration used four of them and then wondered why clicking the bar did nothing.
+		 * A menu bar's titles are MENUS; the leaf items are what is INSIDE them.
+		 *
+		 * **AND HELP IS PUT SECOND ON PURPOSE.** The HIG says it belongs LAST, and a main menu that already had it
 		 * last would be a demonstration that proves nothing: this way the bar has to MOVE it, and the picture says
 		 * whether it did. */
-		[bar addItemWithTitle:@"File" action:NULL keyEquivalent:@""];
-		[bar addItemWithTitle:@"Help" action:NULL keyEquivalent:@""];
-		[bar addItemWithTitle:@"Edit" action:NULL keyEquivalent:@""];
-		[bar addItemWithTitle:@"View" action:NULL keyEquivalent:@""];
+		{
+			NSArray *titles = [NSArray arrayWithObjects:@"File", @"Help", @"Edit", @"View", nil];
+			NSUInteger t;
+
+			for (t = 0; t < [titles count]; t++) {
+				NSString *name = [titles objectAtIndex:t];
+				NSMenuItem *title = [[NSMenuItem alloc] initWithTitle:name action:NULL
+									 keyEquivalent:@""];
+				NSMenu *contents = [[NSMenu alloc] initWithTitle:name];
+
+				[contents addItemWithTitle:[NSString stringWithFormat:@"%@ Item One", name]
+						    action:NULL keyEquivalent:@""];
+				[contents addItemWithTitle:[NSString stringWithFormat:@"%@ Item Two", name]
+						    action:NULL keyEquivalent:@""];
+				[title setSubmenu:contents];
+				[bar addItem:title];
+				[title release];
+			}
+		}
 		[app setMainMenu:bar];
 	}
 
@@ -59,8 +82,46 @@ int main(void)
 	[menu addItemWithTitle:@"Save a Copy" action:NULL keyEquivalent:@"s"];
 	[menu addItemWithTitle:@"Close" action:NULL keyEquivalent:@"w"];
 
-	/* NOT RUNNING, SO THIS RETURNS AND LEAVES THE MENU UP — the door's own documented behaviour. */
-	[menu popUpMenuPositioningItem:[menu itemAtIndex:1] atLocation:NSMakePoint(180.0, 240.0) inView:nil];
+	/* **AND A CLICK ON ONE OF THE BAR'S TITLES, CONSTRUCTED AND SENT THE WAY A REAL ONE ARRIVES.**
+	 *
+	 * The click goes through `-[NSApplication sendEvent:]` rather than being handed to the view, so what is
+	 * exercised is the whole path a person's click takes: the application looks the window up BY NUMBER, the
+	 * window hit-tests its content view, and the view opens the menu of the item under the point. Sending it
+	 * straight to the view would prove the last step and skip the two that the user's report was about.
+	 *
+	 * The bar is found by its LEVEL, which is what makes it the bar — nothing else is at
+	 * `NSMainMenuWindowLevel` — and the item is the third, which after the application menu is `Edit`. */
+	{
+		NSArray *windows = [app windows];
+		NSWindow *bar_window = nil;
+		NSUInteger i;
+
+		for (i = 0; i < [windows count]; i++) {
+			NSWindow *w = [windows objectAtIndex:i];
+
+			if ([w level] == NSMainMenuWindowLevel) {
+				bar_window = w;
+				break;
+			}
+		}
+		if (bar_window == nil) {
+			printf("appkit_menu_draw: no window is at the menu bar's level\n");
+		} else {
+			NSMenuView *view = (NSMenuView *)[bar_window contentView];
+			NSMenuItem *item = (NSMenuItem *)[[view menu] itemAtIndex:2];
+			NSRect box = [view rectForItemAtIndex:2];
+			NSPoint at = NSMakePoint(box.origin.x + box.size.width / 2.0,
+						 box.origin.y + box.size.height / 2.0);
+			NSEvent *click = [NSEvent mouseEventWithType:NSLeftMouseDown location:at
+						       modifierFlags:0 timestamp:0
+							windowNumber:[bar_window windowNumber]
+							     context:nil eventNumber:0 clickCount:1 pressure:1.0];
+
+			printf("appkit_menu_draw: clicking \"%s\" in the bar (window %ld, at x=%.0f, y=%.0f)\n",
+			       [[item title] UTF8String], (long)[bar_window windowNumber], (double)at.x, (double)at.y);
+			[app sendEvent:click];
+		}
+	}
 
 	/* AND THE PUMPING IS THE TEST'S OWN, because nothing else will do it: every frame the menu's window draws on
 	 * comes from the seam's frame callback, and those are dispatched here. */

@@ -123,6 +123,58 @@ const CGFloat NSMenuRowHeight = 22.0;
 	return NSMakeRect(offset, 0.0, [self widthForItemAtIndex:index], bounds.size.height);
 }
 
+/* **THE CLICK, AND THE ONE ARITHMETIC THAT IS NOT OBVIOUS: WHERE THE MENU GOES.** `-popUpMenuPositioningItem:`
+ * takes a point in the space a WINDOW FRAME lives in — the space the popped-up menu's own window is placed in —
+ * and hangs the menu BELOW that point. So the point to give it is the clicked item's BOTTOM-LEFT CORNER carried
+ * from this view's coordinates into the window's, which is this window's frame origin plus the corner. Handing it
+ * the view's own point instead would put every menu at the screen's top-left, which is what a coordinate-space
+ * mistake always looks like.
+ *
+ * AND IT IS THE ITEM'S BOTTOM, NOT ITS TOP: a bar's items run the height of the bar, so their bottom edge IS the
+ * bar's bottom edge, and a menu hung below that hangs below the bar rather than over it. */
+- (void)mouseDown:(NSEvent *)event
+{
+	NSPoint p;
+	NSInteger i, count;
+
+	if (!_horizontal || _shownMenu == nil) {
+		[super mouseDown:event];	/* a dropdown is tracked by NSMenu, not by clicking its rows */
+		return;
+	}
+	/* **AND THE POINT IS CONVERTED, WHICH IS A DOOR AND NOT A COINCIDENCE.** `-locationInWindow` is the WINDOW's
+	 * coordinates and the item boxes are THIS VIEW's; for a borderless window whose content fills it the two
+	 * happen to agree, and a bar whose content is inset by a single pixel would then open the wrong menu — or none.
+	 * `-convertPoint:fromView:` with a nil view means "from the window's", which is what this is. */
+	p = [self convertPoint:[event locationInWindow] fromView:nil];
+	count = [_shownMenu numberOfItems];
+	for (i = 0; i < count; i++) {
+		NSRect box = [self rectForItemAtIndex:i];
+		NSMenuItem *item = [_shownMenu itemAtIndex:i];
+		id submenu;
+
+		if (p.x < box.origin.x || p.x > box.origin.x + box.size.width || p.y < box.origin.y ||
+		    p.y > box.origin.y + box.size.height) {
+			continue;
+		}
+		submenu = [item submenu];
+		if (submenu != nil) {
+			NSRect frame = [[self window] frame];
+
+			[submenu popUpMenuPositioningItem:nil
+					       atLocation:NSMakePoint(frame.origin.x + box.origin.x,
+								      frame.origin.y + box.origin.y)
+						 inView:nil];
+		}
+		return;
+	}
+}
+
+- (BOOL)acceptsFirstMouse:(NSEvent *)event
+{
+	(void)event;
+	return YES;
+}
+
 - (void)setHighlightedItem:(NSMenuItem *)item
 {
 	_highlightedItem = item;

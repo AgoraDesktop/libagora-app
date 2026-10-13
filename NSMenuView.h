@@ -58,7 +58,20 @@ extern const CGFloat NSMenuRowHeight;
  * counts up from the bottom. Horizontal: the FIRST item is the LEFTMOST column, and the widths are the items'. */
 - (NSRect)rectForItemAtIndex:(NSInteger)index;
 
-- (void)setHighlightedItem:(NSMenuItem *)item;
+/* **A CLICK ON ONE OF THE BAR'S TITLES OPENS THAT TITLE'S MENU.** Before this the bar was a picture: `NSWindow
+ * -sendEvent:` hit-tested correctly and delivered `-mouseDown:` to this view, and the view had no such method, so
+ * every click on the menu bar did nothing at all — the responder chain forwarded it to the next responder and the
+ * next responder was the application, which had no opinion either.
+ *
+ * IT IS THE BAR'S OWN DOOR BECAUSE THE BAR IS WHAT KNOWS WHERE ITS ITEMS ARE: `-rectForItemAtIndex:` is this
+ * view's arithmetic, and the item under a point is a question only this view can answer. A DROPDOWN forwards to
+ * `super`, because a dropdown is tracked by `NSMenu` and its rows are not click-to-open. */
+- (void)mouseDown:(NSEvent *)event;
+
+/* **AND A CLICK ON AN INACTIVE BAR OPENS THE MENU RATHER THAN ONLY WAKING THE WINDOW.** The Mac's own behaviour,
+ * and the reason `-acceptsFirstMouse:` exists at all: the click that brings a window forward should do what the
+ * person meant it to do, not be spent on the wake-up. */
+- (BOOL)acceptsFirstMouse:(nullable NSEvent *)event;
 - (NSMenuItem *)highlightedItem;
 
 - (BOOL)isHorizontal;
