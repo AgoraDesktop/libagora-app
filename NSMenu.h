@@ -121,6 +121,11 @@ extern NSString *NSMenuDidEndTrackingNotification;
 	 * what "the menus do not work" is: press File, press Edit, and all you get is File's menu closing. */
 	NSPoint _dismissedAt;
 	BOOL _hasDismissedAt;
+	/* **AND WHETHER THE CALLER IS DRIVING THIS SESSION RATHER THAN THE MENU.** One flag, because
+	 * `-popUpMenuPositioningItem:` already does everything a session's beginning needs: the window, the view, the
+	 * first repaint, the notification. With this set it RETURNS at the point the loop would start, which is exactly
+	 * "begin a session without running it" and not one line of duplicate work. */
+	BOOL _callerDrives;
 }
 
 /* ============================================================================================ *
@@ -312,6 +317,19 @@ extern NSString *NSMenuDidEndTrackingNotification;
 - (BOOL)cg_takeDismissedAt:(NSPoint *)where;
 
 - (void)cancelTracking;
+
+/* **BEGIN A SESSION AND RETURN, LEAVING THE LOOP TO THE CALLER.** What the MENU BAR needs: it owns the session for a
+ * menu opened from a title, because the events a menu bar must act on — a drag across the bar, a click on another
+ * title — land in the BAR'S window and would otherwise be eaten by a loop the menu was running. The menu does
+ * everything a session's beginning does and then hands the events back through `-cg_trackOneEvent:` and
+ * `-cancelTracking`, which are already the two doors a session's driver needs. */
+- (void)cg_beginSessionAt:(NSPoint)location;
+
+/* **AND WHETHER AN EVENT BELONGS TO THIS SESSION** — this menu's window, or an open submenu's, recursively. The
+ * routing inside `-cg_trackOneEvent:` asks the same question by hand for submenus; a caller driving the session has
+ * to ask it BEFORE dispatching, since the alternative is guessing from coordinates that are in another window's
+ * space. */
+- (BOOL)cg_ownsEvent:(id)event;
 - (void)cancelTrackingWithoutAnimation;
 - (BOOL)isAttached;
 - (nullable id)attachedMenu;

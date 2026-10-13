@@ -182,6 +182,7 @@ const CGFloat NSMenuRowHeight = 22.0;
 		    p.y > box.origin.y + box.size.height) {
 			continue;
 		}
+		current = i;	/* WHICH TITLE, which is the session's whole state: the loop below moves it */
 		submenu = [item submenu];
 		if (submenu != nil) {
 			NSRect frame = [[self window] frame];
@@ -190,46 +191,84 @@ const CGFloat NSMenuRowHeight = 22.0;
 			 * WHICH menu you are looking at — the row that is down stays down until it is dismissed. The menu is
 			 * opened from here and returns when it ends, so the highlight is this door's to put up and take down;
 			 * nothing else knows the two are the same gesture. */
-			/* **AND THE BAR SWITCHES MENUS, WHICH IS THE WHOLE OF WHAT A MENU BAR DOES.** Pressing one title and
-			 * then another must MOVE the open menu, not close one and eat the click — and the click that means
-			 * "that one" is captured by the first menu's tracking loop, because the loop owns the events. So the
-			 * session hands the point back when a press outside dismisses it, and this loops: open, read, open
-			 * whatever is underneath, until the press was somewhere with no menu of its own. */
-			for (;;) {
-				NSPoint dismissed;
+			/* **THE BAR OWNS THIS SESSION, AND THAT IS THE WHOLE OF WHY DRAGGING CAN WORK.** A menu that runs
+			 * its own tracking loop EATS the events a menu bar has to act on — a drag across the bar, a press on
+			 * another title — because that loop is inside this call and this view never sees them. So the menu is
+			 * BEGUN here (`-cg_beginSessionAt:`, which is the beginning of a session and not its loop) and driven
+			 * from here: the loop below fetches the events, asks the menu whether each one is its
+			 * (`-cg_ownsEvent:`), hands over the ones that are, and acts on the ones that are the BAR's — moving the
+			 * session to whatever title the pointer is over, and ending it when the press was somewhere that has no
+			 * menu of its own. */
+			{
+				NSApplication *app = [NSApplication sharedApplication];
+				BOOL consume_release = YES;	/* the release of the press that opened this menu */
+				BOOL ended = NO;
 
-				[self setHighlightedItem:item];
-				/* **THE HIGHLIGHT IS PAINTED BEFORE THE CALL, BECAUSE THE CALL DOES NOT RETURN UNTIL THE MENU IS
-				 * DISMISSED.** The window's update pass is inside the run loop, and the run loop is inside this
-				 * call, so the paint happens here or not at all. */
-				[[self window] setNeedsDisplay:YES];
-				[[self window] displayIfNeeded];
-				[submenu popUpMenuPositioningItem:nil
-						       atLocation:NSMakePoint(frame.origin.x + box.origin.x,
-									      frame.origin.y + box.origin.y)
-							 inView:nil];
-				if (![(NSMenu *)submenu cg_takeDismissedAt:&dismissed]) {
-					break;		/* it ended any other way: a pick, a key, or a click on nothing */
-				}
-				{
-					NSPoint here = [self convertPoint:dismissed fromView:nil];
-					NSInteger next = [self cg_indexOfItemAtPoint:here];
+				while (!ended) {
+					NSMenu *open = (NSMenu *)[[_shownMenu itemAtIndex:current] submenu];
+					NSRect box;
 
-					if (next < 0 || next == current) {
+					if (open == nil) {
 						break;
 					}
-					item = [_shownMenu itemAtIndex:next];
-					box = [self rectForItemAtIndex:next];
-					submenu = [item submenu];
-					current = next;
-					if (submenu == nil) {
-						break;	/* a title with no menu of its own: nothing to move to */
+					box = [self rectForItemAtIndex:current];
+					{
+						NSRect frame = [[self window] frame];
+
+						[self setHighlightedItem:[_shownMenu itemAtIndex:current]];
+						[[self window] setNeedsDisplay:YES];
+						[[self window] displayIfNeeded];
+						[open cg_beginSessionAt:NSMakePoint(frame.origin.x + box.origin.x,
+										    frame.origin.y + box.origin.y)];
+					}
+					while (!ended) {
+						NSEvent *next = [app nextEventMatchingMask:NSAnyEventMask
+										 untilDate:[NSDate dateWithTimeIntervalSinceNow:1.0 / 60.0]
+										    inMode:nil dequeue:YES];
+
+						/* **AND THE WINDOWS ARE PAINTED, WHICH IS WHAT A TRACKING LOOP OWES THEM.** */
+						[app updateWindows];
+						if (next == nil) {
+							continue;
+						}
+						if ([open cg_ownsEvent:next]) {
+							if (![open cg_trackOneEvent:next]) {
+								ended = YES;	/* a pick, a dismissal, or Escape */
+							}
+							continue;
+						}
+						{
+							NSUInteger type = [next type];
+							NSPoint at = [self convertPoint:[next locationInWindow] fromView:nil];
+							NSInteger hit = [self cg_indexOfItemAtPoint:at];
+
+							if (type == NSLeftMouseUp) {
+								if (consume_release) {
+									consume_release = NO;	/* the press that opened it, coming up */
+									continue;
+								}
+								[open cancelTracking];
+								ended = YES;
+								continue;
+							}
+							if (hit >= 0 && hit != current) {
+								/* **THE POINTER MOVED TO ANOTHER TITLE AND THE SESSION FOLLOWS IT** — the
+								 * gesture that could not work while the menu owned its own loop. */
+								[open cancelTracking];
+								current = hit;
+								break;
+							}
+							if (type == NSLeftMouseDown && hit < 0) {
+								[open cancelTracking];
+								ended = YES;
+							}
+						}
 					}
 				}
+				[self setHighlightedItem:nil];
+				[[self window] setNeedsDisplay:YES];
+				[[self window] displayIfNeeded];
 			}
-			[self setHighlightedItem:nil];
-			[[self window] setNeedsDisplay:YES];
-			[[self window] displayIfNeeded];
 		}
 		return;
 	}

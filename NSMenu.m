@@ -910,6 +910,13 @@ static const CGFloat NSMenuStateColumnWidth = 20.0;
 	 * just sitting there — is the root of a session and drives itself. Reading the parent's own `_tracking` is the
 	 * idiom this file already uses two screens up, where the child's window is read straight off the child because
 	 * these fields are protected. */
+	/* **AND A CALLER THAT ASKED TO DRIVE GETS THE SESSION AND NO LOOP.** It has the window, the view, the first
+	 * paint and the notification — everything a beginning is — and it will hand events back through
+	 * `-cg_trackOneEvent:` until it calls `-cancelTracking`. */
+	if (_callerDrives) {
+		_callerDrives = NO;
+		return;
+	}
 	if ((_supermenu == nil || !((NSMenu *)_supermenu)->_tracking) &&
 	    [[NSApplication sharedApplication] isRunning]) {
 		NSApplication *app = [NSApplication sharedApplication];
@@ -961,6 +968,27 @@ static const CGFloat NSMenuStateColumnWidth = 20.0;
 	}
 	_hasDismissedAt = NO;
 	return YES;
+}
+
+- (void)cg_beginSessionAt:(NSPoint)location
+{
+	_callerDrives = YES;
+	[self popUpMenuPositioningItem:nil atLocation:location inView:nil];
+	/* the call above returns as soon as the session is up: `_callerDrives` is what tells it to */
+}
+
+- (BOOL)cg_ownsEvent:(id)event
+{
+	if (event == nil || ![event respondsToSelector:@selector(window)]) {
+		return NO;
+	}
+	if (_trackingWindow != nil && [event window] == _trackingWindow) {
+		return YES;
+	}
+	if (_openSubmenu != nil) {
+		return [(NSMenu *)_openSubmenu cg_ownsEvent:event];
+	}
+	return NO;
 }
 
 - (void)cancelTracking
