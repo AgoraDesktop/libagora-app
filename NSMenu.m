@@ -662,6 +662,11 @@ static const CGFloat NSMenuStateColumnWidth = 20.0;
 {
 	if (item != _highlightedItem) {
 		_highlightedItem = item;
+		if (getenv("APPKIT_MENU_DIAG") != NULL) {
+			fprintf(stderr, "  DIAG highlight: \"%s\" (%s)\n",
+				item != nil ? [[item title] UTF8String] : "(none)",
+				_tracking ? "repainting" : "NOT TRACKING, so not repainting");
+		}
 		if (_tracking) {
 			[self cg_repaintSession];
 		}

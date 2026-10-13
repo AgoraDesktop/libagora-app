@@ -1691,6 +1691,13 @@ static CGFloat fn_clamp_axis(CGFloat v, CGFloat lo, CGFloat hi)
 	 * Expose to wait for because the client owns the pixels. */
 	frame = AGWindowBeginFrame(_agwindow, &stride);
 	if (frame == NULL) {
+		/* **A REFUSED PAINT, NAMED.** The compositor still holds this window's previous buffer, so this pass draws
+		 * nothing — and the retry is the run loop's `-displayIfNeeded`, which only happens if the flag is still set.
+		 * It is, and this line is what makes a paint that never happens visible instead of invisible. */
+		if (getenv("APPKIT_DRAW_DIAG") != NULL) {
+			fprintf(stderr, "  DIAG draw: window %ld could not paint — the compositor still holds its buffer\n",
+				(long)[self windowNumber]);
+		}
 		return;
 	}
 	for (y = 0; y < _surfaceHeight; y++) {
