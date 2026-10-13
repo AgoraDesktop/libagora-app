@@ -16,6 +16,11 @@
  * "where would this go if nothing were measured", and the drawing half that lands a font will replace it.
  */
 #import <AppKit/NSMenuItemCell.h>
+/* **THE MENU VIEW'S HEADER, BECAUSE THIS FILE ASKS IT A QUESTION** — whether the row being drawn has a column to be
+ * centred in. It imports the AppKit spelling rather than the local path: this file includes its own class the same
+ * way, and the generated include directory is what a consumer sees. Forward-declaring it would leave `-isHorizontal`
+ * answering `id`, which is the error this tree has already paid for twice. */
+#import <AppKit/NSMenuView.h>
 #import <AppKit/NSStringDrawing.h>	/* -sizeWithAttributes:, the measurement -calcSize makes */
 /* **THE INK'S OWN HEADERS**, which this file did not need while every drawing door refused: the face the title is
  * set in, the colour it is drawn in, and the path a separator is stroked with. */
@@ -364,8 +369,30 @@
 	/* **THE INSET IS THE ROW'S OWN PADDING, WHICH IS WHY IT IS DRAWN HERE RATHER THAN SUBTRACTED IN THE RECT
 	 * DOOR**: `-titleRectForBounds:` answers where the title's COLUMN is, and how much air an item leaves inside
 	 * its own column is a property of the drawing. */
-	left = rect.origin.x + 2.0;
-	width = rect.size.width - 4.0;
+	/* **A BAR'S TITLE IS CENTRED IN ITS COLUMN AND A DROPDOWN'S IS NOT.** The column is the title's own width
+	 * plus the bar's padding either side, so a title drawn at the column's LEFT edge puts all the slack on the
+	 * right: MEASURED, the accent chip was x=215..260 (46 px) with the title's ink at x=218..238 — three pixels of
+	 * air on the left and twenty-two on the right, which is what "aligned to the left of the text" is. A DROPDOWN's
+	 * title stays left-aligned, because that is its indent.
+	 *
+	 * **AND IT IS THE VIEW THAT IS ASKED, NOT A FLAG ON THE CELL.** Whether a row is a bar's title or a dropdown's
+	 * is a property of the MENU VIEW the cell is being drawn in — the same division the background door states, one
+	 * door down: the parts are the cell's and the arrangement is the view's. A cell with no view (a measurement, a
+	 * test drawing one on its own) is therefore left-aligned, which is the dropdown's answer and the safe one. */
+	{
+		NSSize text = [title sizeWithAttributes:attributes];
+
+		if ([controlView respondsToSelector:@selector(isHorizontal)] &&
+		    [(NSMenuView *)controlView isHorizontal]) {
+			CGFloat slack = rect.size.width - text.width;
+
+			width = text.width;
+			left = rect.origin.x + ((slack > 0.0) ? slack / 2.0 : 0.0);
+		} else {
+			left = rect.origin.x + 2.0;
+			width = rect.size.width - 4.0;
+		}
+	}
 	if (width <= 0.0) {
 		return;
 	}

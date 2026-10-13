@@ -108,6 +108,12 @@ extern NSString *NSMenuDidEndTrackingNotification;
 	/* AND THE TEAR-OFF FLAG, which is the last piece of the session's state: a menu that has been TORN OFF stays up
 	 * instead of dismissing. */
 	BOOL _tornOff;
+	/* **AND WHETHER THE PRESS THAT OPENED THIS SESSION HAS BEEN RELEASED YET.** A menu opened by a CLICK stays
+	 * open after the button comes up — that is what clicking a menu bar title does on the Mac, and what a
+	 * right-click on a context menu does — so the FIRST release in a session is the gesture that opened it and is
+	 * consumed. Without this the menu opened on press and closed on release, which reads as "the highlight only
+	 * shows while the mouse is held down". */
+	BOOL _openedByPress;
 }
 
 /* ============================================================================================ *

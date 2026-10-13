@@ -716,6 +716,14 @@ static const CGFloat NSMenuStateColumnWidth = 20.0;
 	}
 	if (type == NSLeftMouseDown || type == NSLeftMouseDragged || type == NSMouseMoved ||
 	    type == NSRightMouseDown) {
+		/* **AND A DRAG THAT LEAVES THE MENU ENDS THE SESSION, which is how a menu bar switches menus.** On the Mac
+		 * you press a title, drag sideways and the menus change under the pointer without releasing. The bar cannot
+		 * do that from outside this loop — the loop owns the events — so the loop ends itself and the bar re-opens
+		 * whatever title the pointer is over. A drag WITHIN the menu is untouched. */
+		if (type == NSLeftMouseDragged && [self cg_itemAtPoint:[event locationInWindow]] == nil) {
+			[self cancelTracking];
+			return NO;
+		}
 		/* MOVEMENT SETS THE HIGHLIGHT AND NOTHING ELSE. A press is deliberately not a pick: Apple sends the action
 		 * on the RELEASE, which is what makes a drag off a row cancel it. */
 		[self setHighlightedItem:[self cg_itemAtPoint:[event locationInWindow]]];
@@ -735,6 +743,10 @@ static const CGFloat NSMenuStateColumnWidth = 20.0;
 			[self cg_closeSubmenu];
 		}
 		return YES;
+	}
+	if (type == NSLeftMouseUp && _openedByPress) {
+		_openedByPress = NO;
+		return YES;		/* the press that opened the menu, coming up: the menu stays */
 	}
 	if (type == NSLeftMouseUp) {
 		/* **THE PICK IS THE RELEASE, AND RELEASING OVER NOTHING IS A DISMISSAL RATHER THAN A PICK** — which is what
@@ -838,6 +850,7 @@ static const CGFloat NSMenuStateColumnWidth = 20.0;
 	[_trackingWindow setContentView:_menuView];
 	[_trackingWindow orderFrontRegardless];
 	_tracking = YES;
+	_openedByPress = YES;
 	/* AND THE MENU UPDATES ITSELF FIRST, so that what it shows is what its targets can actually answer — this is
 	 * `-update` getting its caller, one unit after it was given its reader. */
 	[self update];
