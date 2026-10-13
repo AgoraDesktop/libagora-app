@@ -421,6 +421,16 @@ static double s_last_report;
 		fn_announce(self, NSApplicationWillUpdateNotification, @selector(applicationWillUpdate:));
 		e = [self nextEventMatchingMask:NSAnyEventMask untilDate:slice inMode:nil dequeue:YES];
 
+		/* **AND AN APPLICATION WHOSE WINDOW SERVER HAS GONE STOPS.** There is nothing left to draw on and no events
+		 * will ever come: a loop that keeps turning is a process nobody can tell is dead, and this one kept turning
+		 * in front of a person for a minute and a half. Saying so and stopping is the difference between a session
+		 * that ended and a session that looks broken. */
+		if ([NSWindow cg_connectionIsGone]) {
+			fprintf(stderr, "APPKIT-NOTE: the window server has gone — stopping the run loop\n");
+			_stopped = YES;
+			break;
+		}
+
 		/* **HOW FAST THIS LOOP ACTUALLY TURNS, WHICH IS WHAT "SLOW" IS.** Every window is updated once per pass,
 		 * so the pass rate IS the frame rate the whole desktop draws at — and the wait below is where that rate is
 		 * decided, not here. MEASURED rather than reasoned about, because "the interface feels slow" is a

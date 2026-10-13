@@ -645,6 +645,18 @@ static void fn_draw_chrome(CGContextRef c, NSWindow *w, NSRect content)
  *
  * THE EVENTS LAND IN THE WINDOWS' OWN QUEUES, so what this door answers is "did anything arrive", and the
  * count `s_queued_events` is that answer. */
+/* **WHETHER THE COMPOSITOR HAS GONE AWAY, WHICH IS NOT THE SAME THING AS NOTHING HAPPENING.** The seam answers a
+ * NEGATIVE from its dispatch when the connection is dead, and this door used to fold that into "no event" — so an
+ * application whose window server died SPUN FOR EVER, repainting nothing, refusing every buffer, looking exactly
+ * like an application that was merely slow. MEASURED: a live session ran a minute and a half against a compositor
+ * that had been killed, and the only clue was a frame counter that had stopped. */
+static int s_connection_gone;
+
++ (BOOL)cg_connectionIsGone
+{
+	return s_connection_gone ? YES : NO;
+}
+
 + (BOOL)cg_waitForEventInMilliseconds:(long)ms
 {
 	AGWindowServer *server = fn_server();
@@ -656,6 +668,7 @@ static void fn_draw_chrome(CGContextRef c, NSWindow *w, NSRect content)
 		return YES;
 	}
 	if (AGWindowServerDispatchTimeout(server, (int)ms) < 0) {
+		s_connection_gone = 1;
 		return NO;
 	}
 	return s_queued_events > 0;
