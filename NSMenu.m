@@ -613,6 +613,14 @@ static const CGFloat NSMenuStateColumnWidth = 20.0;
 	 * once when the buffer is free, so a session with no run loop still draws. */
 	[_trackingWindow setNeedsDisplay:YES];
 	[_trackingWindow displayIfNeeded];
+	/* **AND IT STAYS STALE, BECAUSE ONE PAINT IS NOT ENOUGH TO GET ON THE GLASS.** The window is SHOWN before it
+	 * has anything to show — `-orderFrontRegardless` commits the surface so the compositor maps it — and the paint
+	 * that follows is the one that attaches the first buffer. MEASURED, from a session driven by a person: the menu
+	 * does not appear on the click that opens it, the bar's title highlights correctly, the rows do not highlight as
+	 * the pointer moves over them, and the menu IS there after a drag. THE BAR'S WINDOW IS NOT AFFECTED and never
+	 * was: it was created once, long after its surface was mapped. A window whose surface was mapped empty needs a
+	 * SECOND commit before it is seen, and marking it stale again is what asks for one. */
+	[_trackingWindow setNeedsDisplay:YES];
 }
 
 /* THE ROW UNDER A POINT — the arithmetic the paint above shares, which is why the row height is one constant: THE

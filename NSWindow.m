@@ -1708,7 +1708,11 @@ static CGFloat fn_clamp_axis(CGFloat v, CGFloat lo, CGFloat hi)
 		 * nothing — and the retry is the run loop's `-displayIfNeeded`, which only happens if the flag is still set.
 		 * It is, and this line is what makes a paint that never happens visible instead of invisible. */
 		if (getenv("APPKIT_DRAW_DIAG") != NULL) {
-			fprintf(stderr, "  DIAG draw: window %ld could not paint — the compositor still holds its buffer\n",
+			/* **AND IT DOES NOT GUESS AT THE REASON.** This line used to say "the compositor still holds its
+			 * buffer" for every refusal, and the door refuses for four different reasons — MEASURED, that sentence
+			 * sent two rounds into buffer lifetime for a fault that was never there. The seam names its own
+			 * condition (see `AGWindowBeginFrame`), so this only says WHICH WINDOW could not paint. */
+			fprintf(stderr, "  DIAG draw: window %ld could not paint (the reason is named by the seam)\n",
 				(long)[self windowNumber]);
 		}
 		return;

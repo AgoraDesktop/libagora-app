@@ -319,11 +319,25 @@ uint32_t *AGWindowBeginFrame(AGWindow *window, int *stride)
 				: !window->configured ? "NOT CONFIGURED (and this protocol sends no configure)"
 				: "the buffer has not been created");
 		}
+		/* **THE RAW STATE, NOT A LABEL.** A label is a reading, and this session has paid twice for readings: a
+		 * diagnostic that said "the compositor holds the buffer" for four different conditions sent two rounds
+		 * into buffer lifetime, and the next version fired on ordinary behaviour. These five numbers are the whole
+		 * answer and none of them is an interpretation. */
+		if (getenv("APPKIT_DRAW_DIAG") != NULL) {
+			fprintf(stderr, "  DIAG begin: refused — frame_ready=%d busy=%d begun=%d configured=%d"
+					" have_buffer=%d\n", window->frame_ready, window->buffer.busy, window->begun,
+				window->configured, window->buffer.buffer != NULL);
+		}
 		return NULL;
 	}
 	if (window->buffer.busy) {
 		if (getenv("APPKIT_DRAW_DIAG") != NULL) {
-			fprintf(stderr, "  DIAG begin: refused — the compositor still holds the buffer\n");
+			/* **THE RAW STATE, BECAUSE THE LABEL IS WHAT MISLED ME.** This branch's message sent two rounds into
+			 * buffer lifetime; the numbers say which of the four conditions is actually true, and a number cannot be
+			 * misread the way a sentence can. */
+			fprintf(stderr, "  DIAG begin: refused — frame_ready=%d busy=%d begun=%d configured=%d"
+					" have_buffer=%d\n", window->frame_ready, window->buffer.busy, window->begun,
+				window->configured, window->buffer.buffer != NULL);
 		}
 		return NULL;		/* the compositor still owns it */
 	}
@@ -1122,9 +1136,18 @@ void AGWindowShow(AGWindow *window)
 	if (window == NULL) {
 		return;
 	}
-	/* WAYLAND HAS NO SEPARATE "MAP": a surface with a role and a committed buffer is shown. The commit
-	 * exists for the case where the caller shows a window that has not been committed yet. */
-	wl_surface_commit(window->surface);
+	/* **AND IT DOES NOT COMMIT, WHICH IS THE WHOLE OF A BUG THIS TOOK A PERSON TO SPOT.** Wayland has no separate
+	 * "map": a surface with a role and a committed buffer is shown — so committing HERE, before the caller has
+	 * drawn anything, MAPS THE WINDOW EMPTY. The paint that follows is then one commit too late: the compositor has
+	 * already seen this surface with nothing in it, and MEASURED, a menu opened this way does not appear on the
+	 * click, its rows do not highlight as the pointer moves over them, and it shows up only after something else
+	 * makes the window stale enough to be drawn twice. A WINDOW CREATED LONG BEFORE ITS FIRST PAINT NEVER SHOWED
+	 * THE SYMPTOM — which is the menu BAR's window, and the asymmetry that gave it away.
+	 *
+	 * **THE MAC'S OWN ORDER IS DRAW FIRST AND SHOW AFTERWARDS**, and leaving the commit to the first
+	 * `AGWindowEndFrame` is how a client gets that order for free: the first commit the compositor ever sees
+	 * carries the buffer, so there is never a moment when the window is on the screen and empty. A window shown and
+	 * never drawn is then never mapped at all, which is right — it has nothing to show. */
 	wl_display_flush(window->server->display);
 	if (window->agora != NULL) {
 		/* **AND THE FIRST FRAME STARTS HERE.** With `xdg-shell` the compositor's configure is what starts the
