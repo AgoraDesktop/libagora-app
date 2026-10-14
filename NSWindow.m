@@ -57,6 +57,7 @@
 #import <AppKit/NSGraphicsContext.h>
 #import <AppKit/NSResponder.h>
 #import <AppKit/NSView.h>
+#import <AppKit/NSCell.h>	/* NS_CELL_BEZEL_WIDTH — the one border width every control in this tier wears */
 #import <Foundation/NSDate.h>
 #import <Foundation/NSString.h>
 
@@ -143,11 +144,28 @@
  * rather than discovered: it is where the chrome and this arithmetic will have to agree. A borderless window
  * has no chrome and adds nothing. */
 static const CGFloat fn_TITLE_BAR = 22.0;
-/* AND A TITLE-BAR BUTTON'S DIAMETER, which is the second of the TWO numbers the chrome needs: the strip's height
- * above, and the size of the three buttons the window draws in it. Everything else about the chrome — where the
- * buttons sit, how much room `-minFrameWidthWithTitle:` owes them — is derived from these two rather than written
- * a third and fourth time, which is what this file used to do. */
-static const CGFloat fn_BUTTON = 16.0;
+/* **AND THE CHROME'S OWN MEASURES, WHICH ARE FIVE NUMBERS RATHER THAN TWO.** What the strip's height leaves is the
+ * size of a drawn SYMBOL and how far apart they sit, the strip's own edge padding, and the shape of the TOOLBAR PILL
+ * at the far end. Everything else about the chrome — where the symbols start, how much room a title has, what
+ * `+minFrameWidthWithTitle:styleMask:` owes them — is DERIVED from these rather than written a third and fourth
+ * time, which is what this file used to do. */
+static const CGFloat fn_SYMBOL = 11.0;		/* the box ONE drawn symbol lives in */
+static const CGFloat fn_SYMBOL_STROKE = 3.0;	/* "very thick": a little over a quarter of the box */
+static const CGFloat fn_SYMBOL_GAP = 9.0;	/* between one symbol's box and the next */
+static const CGFloat fn_CHROME_EDGE = 8.0;	/* the strip's own padding, at either end */
+/* **AND 35 PER CENT SHORTER, WHICH TAKES IT FROM 30 TO 19.5.** The height came down last round and now the width
+ * has followed, so the shape is closer to square than to a bar — which is what a toolbar TOGGLE should look like next
+ * to the three symbols, where a long capsule read as a second button. 35 per cent is the design's number and it is
+ * kept EXACTLY rather than rounded to a whole point, because that is what was asked for: the consequence is that the
+ * box's left edge lands on a half pixel, and it is worth stating which edge that is — the STRAIGHT ones (the top and
+ * the bottom, and the y is snapped below) stay crisp, and it is the arc CAPS at the ends that carry the half, where a
+ * part-covered pixel is what a curve looks like anyway. */
+static const CGFloat fn_PILL_WIDTH = 19.5;	/* the toolbar pill, HORIZONTAL: wider than it is tall, but not by much */
+/* **AND HALF THE HEIGHT IT STARTED AT, WHICH MAKES IT A MARK RATHER THAN A BAR.** At 14 points it was as deep as the
+ * symbols beside it and read as a second button; 7 reads as what it is — a small filled shape at the end of the
+ * strip. It is STILL A PILL because its radius is half its height and not a number of its own, which is the one
+ * property the height was never allowed to change. */
+static const CGFloat fn_PILL_HEIGHT = 7.0;
 
 /* ONE CONNECTION FOR THE PROCESS, made on first use and never dropped: a connection to the window server is a
  * resource a window does not own, and one per window would give two windows two event queues and two
@@ -485,7 +503,14 @@ static NSDictionary *fn_title_attributes(void)
 	static NSDictionary *attributes = nil;
 
 	if (attributes == nil) {
-		NSFont *font = [NSFont titleBarFontOfSize:(CGFloat)0.0];
+		/* **THE TITLE IS BOLD, AND THE DOOR THAT SAYS BOLD IS THE ONE READ FOR IT.** `+titleBarFontOfSize:` is answered
+		 * with Core Text's `kCTFontWindowTitleFontType`, which names WHERE a font is used and says nothing about how
+		 * heavy it is; a design that asks for a bold title is asking about WEIGHT, and the door whose own name is the
+		 * weight is `+boldSystemFontOfSize:` — answered here with `kCTFontEmphasizedSystemFontType`, EMPHASIZED being
+		 * what bold is called in this vocabulary. The SIZE still comes from the title-bar door, so each door is read
+		 * for the one thing it knows. A title-bar font that will not answer leaves the emphasized default size. */
+		NSFont *titleBarFont = [NSFont titleBarFontOfSize:(CGFloat)0.0];
+		NSFont *font = [NSFont boldSystemFontOfSize:(titleBarFont != nil) ? [titleBarFont pointSize] : (CGFloat)0.0];
 		NSColor *colour = [NSColor windowFrameTextColor];
 		NSMutableDictionary *built;
 
@@ -535,69 +560,219 @@ static CGFloat fn_title_baseline(NSRect content, CGFloat ascent, CGFloat descent
 	return content.size.height + (fn_TITLE_BAR - (ascent - descent)) / 2.0 - descent;
 }
 
+/* ============================================================================================ *
+ * THE THREE SYMBOLS ARE DRAWN, NOT TYPESET, AND THAT IS THE POINT OF THEM.                     *
+ *                                                                                                *
+ * Agora's window chrome is NOT the Apple trio of coloured circles: it is an X, a minus and a      *
+ * plus, in ONE ink, and they are PATHS rather than glyphs. A glyph would be a character the font   *
+ * has to have — the same argument the System menu's hamburger is drawn on — and it would also be  *
+ * a WEIGHT the font has to have, where "very thick" here is a stroke width and nothing else. The  *
+ * shapes are arithmetic on a box, so they are drawn from a box.                                  *
+ * ============================================================================================ */
+
+/* ONE SYMBOL, IN ITS OWN BOX. The box is inset by half the stroke before anything is drawn, which is the rule this
+ * tier keeps everywhere a stroke has to stay inside a rectangle it was given (the bezel, the field's border, the
+ * indicator's): a stroke is CENTRED on its path, so a line drawn on the box's edge would hang half of itself outside
+ * it. With the round caps below, the insetting is exactly cancelled at the ends — the ink of each stroke reaches the
+ * box and no further — which is what makes three boxes of one size look like one set. */
+static void fn_draw_symbol(CGContextRef c, CGRect box, int kind)
+{
+	CGFloat t = fn_SYMBOL_STROKE;		/* the bar's thickness, one number for all three marks */
+	CGFloat cx = CGRectGetMidX(box);
+	CGFloat cy = CGRectGetMidY(box);
+	CGFloat half = fn_SYMBOL / 2.0;
+	CGFloat ht = t / 2.0;
+
+	CGContextSetFillColorWithColor(c, [[NSColor cg_chromeInkColor] CGColor]);
+	if (kind == 0) {
+		/* **THE X IS TWO RECTANGLES DRAWN THE SAME WAY THE OTHER TWO MARKS ARE, WITH THE CTM DOING THE TURNING.**
+		 * The first version built each bar as a four-point PATH and filled it, and it came out asymmetric — MEASURED,
+		 * the ink's centre of mass sat 0.8 rows above the box's centre and the bottom two rows were nearly empty,
+		 * while the minus and the plus beside it were exact. The difference between them was not the geometry: the
+		 * same four corners, rasterized by pixel centre, are a clean mirrored X. It was the DRAWING CALL — the two
+		 * axis-aligned marks go through `CGContextFillRect` and the X went through `CGContextFillPath`, and only the
+		 * filled RECTANGLE is exact. So the bars are rectangles now and the rotation is the context's, which is what
+		 * a CTM is for.
+		 *
+		 * `len` IS DERIVED, NOT CHOSEN. A bar's half-length projects onto each axis as `len/2 · cos 45`, its
+		 * half-thickness as `ht · sin 45`, and those two must sum to half the box for the bar's corners to land ON
+		 * the box's edges — so len = 2 · (half − ht / root two) · root two, which is 12.56 points for an eleven-point
+		 * box at three points thick. Both bars are the same length; only the sign of the turn differs. */
+		CGFloat len = 2.0 * (half - ht / sqrt(2.0)) * sqrt(2.0);
+		int k;
+
+		for (k = 0; k < 2; k++) {
+			CGContextSaveGState(c);
+			CGContextTranslateCTM(c, cx, cy);
+			CGContextRotateCTM(c, (k == 0) ? (CGFloat)(M_PI / 4.0) : (CGFloat)(-M_PI / 4.0));
+			CGContextFillRect(c, CGRectMake(-len / 2.0, -ht, len, t));
+			CGContextRestoreGState(c);
+		}
+		return;
+	}
+	if (kind == 1) {
+		/* − — the single rectangle everything else here is made of. */
+		CGContextFillRect(c, CGRectMake(cx - half, cy - ht, fn_SYMBOL, t));
+		return;
+	}
+	/* **AND THE PLUS IS THE MINUS PLUS THE SAME RECTANGLE TURNED A QUARTER TURN** — the two of them at 90 degrees,
+	 * as asked, and the same two numbers as the X's bars so all three marks are the same weight. */
+	CGContextFillRect(c, CGRectMake(cx - half, cy - ht, fn_SYMBOL, t));
+	CGContextFillRect(c, CGRectMake(cx - ht, cy - half, t, fn_SYMBOL));
+}
+
+/* **AND THE TOOLBAR PILL: A ROUNDED RECTANGLE WHOSE RADIUS IS HALF ITS HEIGHT.** That single sentence is the whole
+ * shape, which is why it is drawn from the two numbers instead of from a radius — there is no third number to get
+ * wrong, and a pill is what a rounded rectangle IS once its caps are semicircles. It is HORIZONTAL because a toolbar
+ * is: the control will show and hide a strip that runs across the window, and a mark wider than it is tall is the
+ * one that says so.
+ *
+ * IT IS A BUTTON AND NOT YET ONE. Its action is "toggle the window's toolbar", and this tier has no toolbar for it
+ * to toggle, so it is drawn and does nothing — stated here rather than left to be discovered by whoever presses it.
+ * The fill and the border are the CONTROL's, from `NSColor`'s own vocabulary and from the one border width every
+ * control in this tier wears (`NS_CELL_BEZEL_WIDTH`), so the pill is already the button it will become. */
+static void fn_draw_toolbar_pill(CGContextRef c, CGRect box)
+{
+	CGRect r = box;
+	CGFloat radius = r.size.height / 2.0;
+	CGFloat my = CGRectGetMidY(r);
+
+	CGContextBeginPath(c);
+	CGContextAddArc(c, CGRectGetMinX(r) + radius, my, radius, M_PI / 2.0, 3.0 * M_PI / 2.0, 0);
+	CGContextAddLineToPoint(c, CGRectGetMaxX(r) - radius, CGRectGetMinY(r));
+	CGContextAddArc(c, CGRectGetMaxX(r) - radius, my, radius, -M_PI / 2.0, M_PI / 2.0, 0);
+	CGContextClosePath(c);
+	/* **IT IS A FILLED SHAPE AND NOT A BUTTON OUTLINE, WHICH IS WHAT MAKES IT THE SAME KIND OF THING AS THE MARK
+	 * BESIDE IT.** It used to be a control's face with a control's border round it — `+controlColor` inside a
+	 * one-point `+controlDarkShadowColor` — and beside three flat symbols that reads as a different species: a chip
+	 * of chrome pretending to be a widget. Now all four are ONE grey, filled, with no stroke at all, and the pill's
+	 * SHAPE is the whole of what distinguishes it from the symbols next to it.
+	 *
+	 * THE HALF-STROKE INSET WENT WITH THE STROKE, which was the only thing it was ever for — the same subtraction
+	 * the menu panel's border made one file over. AND IT IS ONE CALL: a path is CONSUMED by the drawing call that
+	 * uses it (this function carries the note about `CGContextFillPath` below, which is how that was learned), so
+	 * `kCGPathFill` says fill and nothing else, which is exactly the claim. */
+	CGContextSetFillColorWithColor(c, [[NSColor cg_chromeInkColor] CGColor]);
+	CGContextDrawPath(c, kCGPathFill);
+}
+
 static void fn_draw_chrome(CGContextRef c, NSWindow *w, NSRect content)
 {
-	const CGFloat d = fn_BUTTON;
-	CGFloat y = content.size.height + (fn_TITLE_BAR - d) / 2.0;
-	CGFloat x = 8.0;
+	NSUInteger mask = [w styleMask];
+	CGFloat block = 3.0 * fn_SYMBOL + 2.0 * fn_SYMBOL_GAP;	/* the three symbols and the air between them */
+	/* **AND THE BOXES SIT ON WHOLE POINTS, WHICH IS WHAT MAKES AN ODD-WIDTH STROKE CRISP.** The centre of an 11-point
+	 * box starting at a whole point and the centre of one starting at a half point are both integral, and only ONE of
+	 * them puts a 3-point stroke on the pixel grid: a stroke is centred on its path, so a centre at a pixel BOUNDARY
+	 * covers half of one row, all of the next two, and half of the one after — MEASURED on the desktop, that is a
+	 * minus FOUR rows thick with both edges blended (`.::::` over `+########:` in the capture), which is the "fuzzy
+	 * and messy" this fixes. Snapping the origin puts the stroke's centre at 300.5, where three points cover exactly
+	 * three rows. It is the same fencepost the pill's height has, and it is resolved the same way: `floor`, because a
+	 * half-pixel box has no crisp centred answer. */
+	CGFloat y = floor(content.size.height + (fn_TITLE_BAR - fn_SYMBOL) / 2.0);
+	CGFloat x = fn_CHROME_EDGE;
 	int i;
 
 	/* THE STRIP FIRST, in the frame colour — the fill that had no author before. */
 	CGContextSetFillColorWithColor(c, [[NSColor windowFrameColor] CGColor]);
 	CGContextFillRect(c, CGRectMake(0.0, content.size.height, content.size.width, fn_TITLE_BAR));
 
-	/* **AND THE THREE BUTTONS, EACH DRAWN ONLY IF THE STYLE MASK ASKS FOR IT** — close for the closable bit,
-	 * miniaturize for the miniaturizable one and zoom for the resizable one, in the order every window manager puts
-	 * them and in the colours that order is read by. THE COLOURS ARE OURS, on the same ground the colour's own
-	 * header states; the MASK RULE is Apple's, whose scripting reference defines the abilities as the buttons:
-	 * "returns YES if the receiver can be miniaturized (has a minimize button)", "is zoomable (has a zoom button)".
+	/* **THE X, THE MINUS AND THE PLUS, EACH DRAWN ONLY IF THE STYLE MASK ASKS FOR IT** — close for the closable bit,
+	 * miniaturize for the miniaturizable one and zoom for the resizable one, in the order a window manager puts them.
+	 * THE MASK RULE IS APPLE'S, whose scripting reference defines the abilities as the buttons: "returns YES if the
+	 * receiver can be miniaturized (has a minimize button)", "is zoomable (has a zoom button)". The site inherited it
+	 * with the circles and it is kept, because it is about WHICH abilities exist rather than about how they are drawn:
+	 * a titled-but-not-closable window has no close to offer, so it gets no X. The x advances only for a symbol that
+	 * is actually drawn, so a window with one bit gets one symbol at the left edge.
 	 *
-	 * THIS IS A FIX RATHER THAN A NEW BEHAVIOUR: the three dots used to be painted for EVERY window, so a
-	 * titled-but-not-closable window showed a close box it did not have. The x advances only for a button that is
-	 * actually drawn, so a window with one bit gets one dot at the left edge. */
+	 * ONE INK FOR ALL THREE. The circles were red, yellow and green because they were three SENTENCES about state;
+	 * these are three WORDS in a title bar, and a title bar reads as one surface with one ink on it. `+windowFrameTextColor`
+	 * is the ink the title beside them is already drawn in, so the strip has one foreground and the symbols are part
+	 * of it rather than decorations that happen to sit there. */
+	/* **AND THE MARKS ARE ANTIALIASED, WHICH IS THE CONTEXT'S OWN DEFAULT AND IS NOW THE RIGHT ANSWER.** The last
+	 * round turned antialiasing OFF here, on the theory that blending was what made these look wrong. It was not:
+	 * the SHAPE was, and the evidence was in the same capture — a stroke's round cap covers about a tenth of its end
+	 * column where a rectangle's end face covers all of it, and no amount of aliasing fixes a shape that has no
+	 * square end to be crisp about. With rectangles the blend is uniform along an edge, which is what antialiasing is
+	 * FOR, so the override is gone and the default applies: the pill's caps and the window's TITLE keep the same
+	 * setting they always had. */
+	CGContextSetStrokeColorWithColor(c, [[NSColor cg_chromeInkColor] CGColor]);
+	CGContextSetLineWidth(c, fn_SYMBOL_STROKE);
+	CGContextSetLineCap(c, kCGLineCapRound);
+	CGContextSetLineJoin(c, kCGLineJoinRound);
 	for (i = 0; i < 3; i++) {
 		static const NSUInteger bits[3] = { NSClosableWindowMask, NSMiniaturizableWindowMask, NSResizableWindowMask };
-		CGFloat r, g, b;
 
-		if (([w styleMask] & bits[i]) == 0) {
+		if ((mask & bits[i]) == 0) {
 			continue;
 		}
-		switch (i) {
-		case 0: r = 0.85; g = 0.25; b = 0.20; break;	/* close */
-		case 1: r = 0.90; g = 0.75; b = 0.25; break;	/* miniaturize */
-		default: r = 0.30; g = 0.80; b = 0.35; break;	/* zoom */
-		}
-		CGContextSetRGBFillColor(c, r, g, b, 1.0);
-		CGContextFillEllipseInRect(c, CGRectMake(x, y, d, d));
-		x += d + 8.0;
+		fn_draw_symbol(c, CGRectMake(x, y, fn_SYMBOL, fn_SYMBOL), i);
+		x += fn_SYMBOL + fn_SYMBOL_GAP;
 	}
 
-	/* AND THE EDITED DOT INSIDE THE CLOSE BUTTON — which exists only when there IS a close button. `-isDocumentEdited`'s
-	 * own note used to say "a window manager draws this as the dot in the close button" — and under D6 the window IS
-	 * the window manager here, so this is where that sentence stops being a promise about somebody else and becomes a
-	 * thing this code does. */
-	if ([w isDocumentEdited] && ([w styleMask] & NSClosableWindowMask) != 0) {
-		CGContextSetRGBFillColor(c, 0.15, 0.15, 0.15, 1.0);
-		CGContextFillEllipseInRect(c, CGRectMake(8.0 + d / 4.0, y + d / 4.0, d / 2.0, d / 2.0));
+	/* **AND THE EDITED MARK IN THE CLOSE SYMBOL, WHICH IS WHERE THE ERA PUTS IT AND THE ONE PLACE THE REDESIGN FORCED
+	 * A JUDGEMENT.** `-isDocumentEdited` is a real door with a real reader (`NSWindowController`), and the convention
+	 * it comes from is a dot inside the close button. A circle has a middle to put a dot in; an X's middle is where its
+	 * two strokes CROSS, which is already ink — so the dot goes there and the pair reads as a marked X rather than as a
+	 * marked circle. That is a reading, not a measurement: it is the closest thing this shape has to the place the
+	 * convention names, and it is called out here so changing it is a decision rather than a repair. */
+	if ([w isDocumentEdited] && (mask & NSClosableWindowMask) != 0) {
+		CGFloat dot = fn_SYMBOL / 4.0;
+		CGFloat cx = fn_CHROME_EDGE + fn_SYMBOL / 2.0;
+		CGFloat cy = y + fn_SYMBOL / 2.0;
+
+		CGContextSetFillColorWithColor(c, [[NSColor cg_chromeInkColor] CGColor]);
+		CGContextFillEllipseInRect(c, CGRectMake(cx - dot / 2.0, cy - dot / 2.0, dot, dot));
 	}
 
-	if (([w styleMask] & NSTitledWindowMask) != 0) {
+	/* **AND THE PILL AT THE FAR END, WHICH IS WHY THE TITLE IS CENTRED RATHER THAN STRETCHED.** The strip has a block
+	 * at each end now — three symbols at the left, one pill at the right — so a title drawn from the left after them
+	 * would sit against one end and wander as its length changed. Centring is what makes the TITLE the middle of the
+	 * bar whatever is at either side of it, and the two blocks are what the centre has to clear. */
+	/* **AND ITS TOP EDGE IS SNAPPED TO A WHOLE POINT, WHICH AN ODD HEIGHT IN AN EVEN STRIP MAKES NECESSARY.** 22 less 7
+	 * is 15, so a centred pill would start at a half pixel and its top and bottom rows would each be half covered —
+	 * MEASURED, the top edge that the whole "no border" claim rests on read as a blend rather than as the ink. A
+	 * fencepost has no CENTRED answer here; it has a crisp one, and crisp is the one that shows. */
+	fn_draw_toolbar_pill(c, CGRectMake(content.size.width - fn_CHROME_EDGE - fn_PILL_WIDTH,
+					   floor(content.size.height + (fn_TITLE_BAR - fn_PILL_HEIGHT) / 2.0),
+					   fn_PILL_WIDTH, fn_PILL_HEIGHT));
+
+	if ((mask & NSTitledWindowMask) != 0) {
 		NSDictionary *attributes = fn_title_attributes();
 		NSFont *font = attributes == nil ? nil : [attributes objectForKey:NSFontAttributeName];
-		NSString *title = fn_title_that_fits([w title], attributes, content.size.width - x - 8.0);
+		/* WHAT THE TITLE MAY USE IS WHAT THE TWO BLOCKS LEAVE, which is the strip less both ends — and a title that
+		 * will not fit is cut rather than allowed to run under a symbol. The measurement and the drawing read the same
+		 * dictionary for the reason `-fn_title_attributes` states. */
+		CGFloat available = content.size.width - 2.0 * fn_CHROME_EDGE - block - fn_PILL_WIDTH - 2.0 * fn_CHROME_EDGE;
+		NSString *title = fn_title_that_fits([w title], attributes, available);
 
 		if (title != nil) {
+			CGFloat width = [title sizeWithAttributes:attributes].width;
 			NSGraphicsContext *g = [NSGraphicsContext graphicsContextWithCGContext:c flipped:NO];
 			NSGraphicsContext *prev = [[NSGraphicsContext currentContext] retain];
 
 			[NSGraphicsContext setCurrentContext:g];
-			[title drawAtPoint:NSMakePoint(x, fn_title_baseline(content, [font ascender], [font descender]))
+			[title drawAtPoint:NSMakePoint((content.size.width - width) / 2.0,
+						       fn_title_baseline(content, [font ascender], [font descender]))
 			     withAttributes:attributes];
 			[NSGraphicsContext setCurrentContext:prev];
 			[prev release];
 		}
 	}
+}
 
+/* **AND THE CHROME REACHED THROUGH A CONTEXT, WHICH IS HOW ANY OF IT GETS CHECKED WITHOUT A COMPOSITOR.** The
+ * painter above takes a `CGContextRef` because that is what drawing into a window's own pixels is; this door takes
+ * the `NSGraphicsContext` an AppKit caller has, so `-cg_drawFrame:` and `tests/window_chrome.m` reach the same code.
+ * A nil context draws nothing, which is what this file's other drawing doors do for the same reason — a draw with
+ * nowhere to put it is not a crash. */
+- (void)cg_drawChromeInContext:(NSGraphicsContext *)context
+{
+	CGContextRef c = (context != nil) ? (CGContextRef)[context graphicsPort] : NULL;
+
+	if (c == NULL) {
+		return;
+	}
+	fn_draw_chrome(c, self, [self contentRectForFrameRect:_frame]);
 }
 
 /* **A STATUS ITEM IS A WINDOW WHOSE PLACEMENT IS NOT ITS APPLICATION'S.** Everything else this file does with a
@@ -1953,8 +2128,8 @@ static CGFloat fn_clamp_axis(CGFloat v, CGFloat lo, CGFloat hi)
 		[NSGraphicsContext setCurrentContext:prev];
 		[prev release];
 	}
-	fn_draw_chrome(c, self, content);
-
+	/* THE CHROME, THROUGH THE SAME DOOR A TEST USES — see `-cg_drawChromeInContext:` for why it is a method. */
+	[self cg_drawChromeInContext:[NSGraphicsContext graphicsContextWithCGContext:c flipped:NO]];
 	/* **THE PRESENT.** `AGWindowBeginFrame` answers NULL while the compositor still owns the previous frame, and
 	 * that is not a failure: the seam calls the frame handler again when the buffer comes back, and there is no
 	 * Expose to wait for because the client owns the pixels. */
@@ -2166,14 +2341,19 @@ const CGFloat NSScreenSaverWindowLevel = 1000.0;
 
 + (CGFloat)minFrameWidthWithTitle:(NSString *)aTitle styleMask:(NSUInteger)aStyle
 {
-	/* THE MASK'S WHOLE CONTRIBUTION HERE IS WHETHER THERE IS ANY CHROME AT ALL, because this tree has no named
-	 * style-mask bits yet — the style mask is a plain integer (see the header), so a decorated window pays for
-	 * its buttons and a borderless one does not. Apple's answer also depends on WHICH buttons, through bits
-	 * this tree has not named; that is the owed part, stated. The per-character term is an ESTIMATE: Apple
-	 * measures the rendered title and this window owns no font metrics. */
-	/* THE BUTTONS' ALLOWANCE IS DERIVED, not chosen: three buttons of `fn_BUTTON` plus the leading inset —
-	 * the same constant the chrome is DRAWN with, so a window cannot be too narrow for what it paints. */
-	CGFloat chrome = (aStyle == 0) ? 0.0 : 3.0 * fn_BUTTON;
+	/* **THE CHROME'S ALLOWANCE IS DERIVED FROM THE CHROME, NOT CHOSEN.** It is the block of three symbols and the air
+	 * between them at one end, the toolbar pill at the other, and the strip's own padding around all of it — the SAME
+	 * numbers the painter lays out with, so a window cannot be too narrow for what it paints. It used to be
+	 * `3.0 * fn_BUTTON`, which was this sentence with the old circles' diameter in it.
+	 *
+	 * THE MASK'S CONTRIBUTION HERE IS STILL ONLY WHETHER THERE IS ANY CHROME AT ALL, because this tree has no named
+	 * style-mask bits yet — the style mask is a plain integer (see the header) — so a decorated window pays for the
+	 * symbols and a borderless one pays for nothing. Apple's answer also depends on WHICH symbols, through bits this
+	 * tree has not named; that is the owed part, stated. It is deliberately conservative in the meantime: a window
+	 * whose mask draws no close button still gets the whole block's worth of room, which is room it does not need
+	 * rather than a title it cannot read. */
+	CGFloat block = 3.0 * fn_SYMBOL + 2.0 * fn_SYMBOL_GAP;
+	CGFloat chrome = (aStyle == 0) ? 0.0 : (2.0 * fn_CHROME_EDGE + block + fn_PILL_WIDTH);
 	CGFloat title = 0.0;
 
 	/* **THE MEASUREMENT IS REAL NOW, AND IT WAS AN ESTIMATE**: this used to multiply the title's LENGTH by seven
@@ -2184,7 +2364,7 @@ const CGFloat NSScreenSaverWindowLevel = 1000.0;
 	if (aTitle != nil && fn_title_attributes() != nil) {
 		title = [aTitle sizeWithAttributes:fn_title_attributes()].width;
 	}
-	return chrome + 16.0 + title;
+	return chrome + fn_CHROME_EDGE + title;
 }
 
 /* ---- THE ZOOM, WHICH ALTERNATES -------------------------------------------------------------- */

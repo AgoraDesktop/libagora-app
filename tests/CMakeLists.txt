@@ -146,3 +146,10 @@ add_test(NAME appkit-events-headless
 set_tests_properties(appkit-events-headless PROPERTIES SKIP_RETURN_CODE 77
   ENVIRONMENT "${_agora_app_test_env}")
 
+# AND THE CHROME: Agora's title bar is an X, a minus and a plus drawn in one ink, a centred bold title, and a pill
+# at the far end — so what is checked is the SHAPES, which is a question about pixels and not about intent. The
+# client draws its own chrome, so this needs no compositor: `-cg_drawChromeInContext:` takes a bitmap rep's context.
+add_executable(window_chrome window_chrome.m)
+target_link_libraries(window_chrome PRIVATE App m)
+add_test(NAME appkit-window-chrome COMMAND window_chrome)
+set_tests_properties(appkit-window-chrome PROPERTIES ENVIRONMENT "${_agora_app_test_env}")

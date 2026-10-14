@@ -537,6 +537,14 @@ typedef NSUInteger NSWindowSharingType;
 - (void)displayIfNeeded;
 - (void)update;
 
+/* **AND THE TITLE BAR'S OWN PAINTER, WHICH IS A DOOR FOR THE SAME REASON THE CELLS HAVE ONE.** The chrome is the
+ * CLIENT'S here — the window server draws none of it — so it is this class's drawing and nobody else's, and without
+ * a way to hand it a context the only surface it could ever be checked on is a running compositor. Taking an
+ * `NSGraphicsContext` makes it a bitmap rep's business as much as a window's, which is what a test of "is the title
+ * centred" needs and what a live screenshot alone cannot give (see `tests/window_chrome.m`). The context is the
+ * caller's and is not retained. */
+- (void)cg_drawChromeInContext:(nullable NSGraphicsContext *)context;
+
 /* AND THE ONE PIECE OF STATE THAT DECIDES WHETHER `-displayIfNeeded` DOES ANYTHING. */
 @property BOOL viewsNeedDisplay;
 
