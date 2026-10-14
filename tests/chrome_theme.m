@@ -234,6 +234,22 @@ int main(void)
 				[rep release];
 			}
 
+			/* 8. **AND THE HAIRLINE BETWEEN THE CHROME AND THE CONTENT.** One dark grey point along the TOP row of the
+			 * CONTENT, full width — which is the chrome's bottom edge as a person reads the window. It is the row
+			 * BELOW the strip because a theme's buttons fill the strip, so a line on its last row would cut across
+			 * the buttons' bottoms. */
+			{
+				NSBitmapImageRep *rep = draw_chrome(w);
+
+				check(is_rgb(at_win(rep, 5, CH - 1), 0.32, 0.32, 0.32)
+				      && is_rgb(at_win(rep, 50, CH - 1), 0.32, 0.32, 0.32)
+				      && is_rgb(at_win(rep, CW - 5, CH - 1), 0.32, 0.32, 0.32),
+				      "a dark grey HAIRLINE runs the full width between the chrome and the content");
+				check(!is_rgb(at_win(rep, 50, CH - 2), 0.32, 0.32, 0.32),
+				      "and it is one point, not a band");
+				[rep release];
+			}
+
 			[w release];
 		}
 	}

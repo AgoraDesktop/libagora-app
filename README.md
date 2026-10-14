@@ -183,6 +183,13 @@ all keeps the marks `NSWindow` draws.
 nested Agora compositor — an ordinary X window that grabs nothing, unlike a nested `gnome-shell` — with the tree's
 own `themes/` as the demonstration's default, and prints which theme resolved and its strip height.
 
+**AND ONE DARK GREY POINT DIVIDES THE CHROME FROM THE CONTENT.** A title bar and a content view are two surfaces,
+and with nothing between them the boundary is wherever the reader guesses it is — so one 0.32-grey row runs the
+full width across the top of the CONTENT (the chrome's bottom edge as a person reads the window), drawn last so a
+theme's buttons cannot paint over it. It is GRAY rather than black on the ground `+controlDarkShadowColor` stands
+on: a black line reads as something drawn ON the window, where a dark grey reads as the shadow of the surface
+above it. A borderless window has no chrome and gets no line.
+
 **A THEME IS NOT PART OF THIS LIBRARY AND MUST NOT BE.** It is somebody else's work under somebody else's
 licence — the one this was built against is GPL — and reading it from disk is not linking it, so Agora's MIT is
 untouched and the theme's provenance travels with the theme. No theme is committed and none is installed;

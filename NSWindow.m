@@ -178,6 +178,14 @@ static const CGFloat fn_PILL_WIDTH = 19.5;	/* the toolbar pill, HORIZONTAL: wide
  * property the height was never allowed to change. */
 static const CGFloat fn_PILL_HEIGHT = 7.0;
 
+/* **AND THE HAIRLINE BETWEEN THE CHROME AND THE CONTENT.** A title bar and a content view are two surfaces, and
+ * with nothing between them the boundary is wherever the reader happens to guess it is — so one dark grey point
+ * runs the full width at the top of the CONTENT, which is the chrome's bottom edge as a person reads the window.
+ * IT IS DRAWN LAST, so a theme's buttons — which fill the strip's height — cannot paint over it, and it is a DARK
+ * GREY rather than black for the ground `+controlDarkShadowColor` exists on: a black line reads as something
+ * DRAWN onto the window, where a dark grey reads as the shadow of the surface above it. */
+static const CGFloat fn_CHROME_HAIRLINE = 0.32;
+
 /* ============================================================================================ *
  * THE CHROME'S THEME, AND WHY THE HEIGHT IS A FUNCTION NOW.                                     *
  *                                                                                                *
@@ -231,7 +239,12 @@ static void fn_chrome_layout(NSWindow *w, fn_chrome_layout_t *layout)
 	int i;
 
 	memset(layout, 0, sizeof *layout);
-	layout->height = fn_title_bar_height();
+	/* **A BORDERLESS WINDOW HAS NO CHROME AND SO NO HEIGHT**, which is the same rule `+fn_chromeForStyleMask:`
+	 * applies to the frame arithmetic — and the two MUST agree, because this height is what the painter fills and
+	 * what the hairline's guard reads. It was `fn_title_bar_height()` unconditionally, which is 22 (or the theme's
+	 * height) for a BORDERLESS window too: the strip fill landed above the window and was clipped away, so nothing
+	 * showed — but the hairline did not, and drew a dark row across the top of a MENU'S own window. */
+	layout->height = ([w styleMask] & NSTitledWindowMask) ? fn_title_bar_height() : 0.0;
 	for (i = 0; i < AGChromeButtonCount; i++) {
 		layout->present[i] = fn_chrome_button_present(w, (AGChromeButton)i);
 	}
@@ -891,8 +904,11 @@ static void fn_draw_chrome(CGContextRef c, NSWindow *w, NSRect content)
 
 	if (theme != NULL) {
 		/* **THE THEME'S OWN TITLE BAR FIRST, THEN ITS BUTTONS ON TOP.** A bar is a corner at each end and a strip of
-		 * title pieces between them; the buttons and the title text sit on THAT, not on a flat fill. */
-		fn_draw_themed_title_bar(c, theme, content, [w isKeyWindow], layout.height);
+		 * title pieces between them; the buttons and the title text sit on THAT, not on a flat fill. Only a window
+		 * with chrome has a bar to draw. */
+		if (layout.height > 0.0) {
+			fn_draw_themed_title_bar(c, theme, content, [w isKeyWindow], layout.height);
+		}
 		/* **THE THEME'S BUTTONS, AT THEIR OWN SIZE.** Each is asked for the state the pointer and the window make,
 		 * and a theme that is missing one file falls back to the drawn mark for THAT button rather than for the
 		 * whole bar — a half-themed window is still a window. */
@@ -963,6 +979,15 @@ static void fn_draw_chrome(CGContextRef c, NSWindow *w, NSRect content)
 			[NSGraphicsContext setCurrentContext:prev];
 			[prev release];
 		}
+	}
+
+	/* **AND THE HAIRLINE, LAST SO NOTHING IN THE BAR CAN COVER IT.** It is the TOP ROW OF THE CONTENT rather than
+	 * the strip's own bottom row, because a theme's buttons fill the bar and a line on the last row would cut
+	 * across their bottoms. A borderless window has no chrome and so gets no line. */
+	if (layout.height > 0.0 && top >= 1.0) {
+		CGContextSetFillColorWithColor(c,
+			[[NSColor colorWithCalibratedWhite:fn_CHROME_HAIRLINE alpha:1.0] CGColor]);
+		CGContextFillRect(c, CGRectMake(0.0, top - 1.0, content.size.width, 1.0));
 	}
 }
 
