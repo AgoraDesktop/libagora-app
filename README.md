@@ -45,6 +45,7 @@ tests/
   text_input.m                  the first slice of the text system, driven a keystroke at a time
   clip_view.m                   the INSIDE of a scroll view: the arithmetic, and the wire that re-runs it
   scroller.m                    and its BAR: a fraction into a knob, a point into a part, a drag back into a value
+  scroll_view.m                 and the FRAME that joins them: the tiling, the loop, and -enclosingScrollView
   window_chrome.m               the DRAWN chrome, offscreen: the symbols, the centred title and the pill
   menu_validation.m             validation and state, which the view tests do not reach
   appkit_activation.m           only the ACTIVE application's menu bar shows
@@ -157,9 +158,20 @@ the compositor is really gone.
   proportion still draws a knob as long as the control is THICK, because a knob too small to grab is not a knob; and
   `-NSScrollerArrowsNone` is a GEOMETRY change (the line parts vanish and the slot becomes the whole frame) and not
   an ink one.
-- **`ctest`: 23 of 23 passed** (the keyboard and the seam, the AppKit and its input path, the controls and their
-  metrics, what a drag costs, the resize by edge, the tracking engine, the text path, the clip view and the scroller,
-  the chrome and what its buttons do, the chrome theme, the menus and activation).
+- **And the frame that joins them** (`ctest`, offscreen): `NSScrollView` tiles its content view and its two bars —
+  a 200x200 frame with both scrollers gives the content `(0,15)` 185x185, the vertical bar the right column and the
+  horizontal one the bottom row — and the two class conversions are EXACT INVERSES of each other and of `-tile`. The
+  loop runs both ways: `-reflectScrolledClipView:` sets the knob's SIZE from the visible fraction (185/400) and its
+  PLACE from how far the clip view has scrolled, and a scroller's ACTION moves the clip view — a knob to its value's
+  place, a page by the visible extent less a line, a line by `-lineScroll`. And `NSView -enclosingScrollView` is a
+  walk now rather than a `nil` with a reason. **ONE THING A SCROLL DOES NOT YET DO IS SHOW:** the arithmetic is
+  exact, but the drawing layer does not render a non-zero `bounds` origin — `fn_draw_view` refuses one by name and
+  `-displayRect:`, the path a window draws through, ignores it — so a scrolled clip view answers every geometry door
+  correctly while a window still draws the unscrolled tree. That is the one piece of the scrolling slice still owed,
+  and it is named here rather than left to be discovered.
+- **`ctest`: 24 of 24 passed** (the keyboard and the seam, the AppKit and its input path, the controls and their
+  metrics, what a drag costs, the resize by edge, the tracking engine, the text path, the clip view and the scroller
+  and the scroll view, the chrome and what its buttons do, the chrome theme, the menus and activation).
 - **And the desktop's own text is SUB-PIXEL ANTIALIASED**, which is the AppKit's half of a renderer change in
   CoreGraphics: a window's surface is OPAQUE (`kCGImageAlphaNoneSkipFirst`), and the destination's opacity is
   exactly what decides whether a glyph is rasterised in colour. MEASURED on the live session: the window title's

@@ -113,11 +113,11 @@ typedef NSInteger NSWritingDirection;
 	 * so it is REMEMBERED here rather than recomputed from the selection — see `-mouseDown:` for what recomputing
 	 * it costs, which is a drag that works in one direction only. */
 	NSUInteger _dragAnchor;
-	/* **AND HOW FAR THE FIELD HAS SCROLLED ITSELF, BECAUSE NOTHING ELSE CAN.** A field whose text outruns its frame
-	 * has to move that text so the caret stays in view, and this tier has no scroll view to do it — the drawing layer
-	 * REFUSES a non-zero BOUNDS ORIGIN by name ("that is a scroll offset, and this layer does not model one"), so the
-	 * offset is kept here and subtracted from the three things this class draws. ZERO WHENEVER THE TEXT FITS, because
-	 * `-scrollRangeToVisible:` clamps it there. */
+	/* **AND HOW FAR THE FIELD HAS SCROLLED ITSELF, BECAUSE THE DRAWING LAYER CANNOT MOVE IT.** A field whose text
+	 * outruns its frame has to move that text so the caret stays in view, and the offset a clip view scrolls by is a
+	 * non-zero BOUNDS ORIGIN — which the drawing layer does not render (`fn_draw_view` refuses one by name and
+	 * `-displayRect:` ignores one). So the offset is kept here and subtracted from the three things this class draws.
+	 * ZERO WHENEVER THE TEXT FITS, because `-scrollRangeToVisible:` clamps it there. */
 	CGFloat _originX;
 }
 
@@ -139,10 +139,12 @@ typedef NSInteger NSWritingDirection;
 - (void)setSelectedRange:(NSRange)range;
 - (void)selectAll:(nullable id)sender;
 
-/* **AND THE DOOR THAT KEEPS THE CARET IN VIEW.** Apple scrolls the ENCLOSING SCROLL VIEW, which this tier does not
- * have, so what moves here is the field's own text — the implementation says exactly what that is and is not the same
- * as, and what becomes of this arithmetic when the scrolling slice lands. It is called by every edit and every caret
- * move rather than by a caller alone, which is what makes typing past the right edge scroll without anybody asking. */
+/* **AND THE DOOR THAT KEEPS THE CARET IN VIEW.** Apple scrolls the ENCLOSING SCROLL VIEW; the class exists now, but
+ * the drawing layer does not render the offset a clip view scrolls by, so what moves here is still the field's own
+ * text — the implementation says exactly what that is and is not the same as, and what becomes of this arithmetic
+ * when the drawing layer renders a bounds offset, which is the one piece of the scrolling slice still owed. It is
+ * called by every edit and every caret move rather than by a caller alone, which is what makes typing past the right
+ * edge scroll without anybody asking. */
 - (void)scrollRangeToVisible:(NSRange)range;
 
 /* THE FACE. `-font` and `-alignment` are the two a plain-text view has; the ink is the window's text colour, which is

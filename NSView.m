@@ -15,6 +15,7 @@
 #import "AppKitRefusal.h"
 #include <math.h>
 #import <AppKit/NSView.h>
+#import <AppKit/NSScrollView.h>
 #import <AppKit/NSCursor.h>
 #import <AppKit/NSGraphicsContext.h>
 #import <AppKit/NSWindow.h>
@@ -854,10 +855,19 @@ static NSRect fn_intersect(NSRect a, NSRect b)
 
 - (nullable NSView *)enclosingScrollView
 {
-	/* **NIL, AND NOT BECAUSE A WALK FAILED: `NSScrollView` IS NOT IN THIS TIER.** NSClipView.h says so — a scroll
-	 * view is the frame, the scrollers and the ruler — so there is no class to find. The first draft walked for it
-	 * and the compiler answered `use of undeclared identifier 'NSScrollView'`, which is the honest answer arriving
-	 * a round early. */
+	/* **THE WALK THAT COULD NOT BE WRITTEN UNTIL THE CLASS EXISTED.** This door used to answer nil BECAUSE THERE WAS
+	 * NO `NSScrollView` — a scroll view is the frame, the scrollers and the ruler, and only the clip view was here —
+	 * and the comment recorded the compiler's own answer (`use of undeclared identifier 'NSScrollView'`). The class
+	 * exists now, so the walk does too: the nearest ancestor that IS a scroll view, exactly as `-opaqueAncestor`
+	 * above walks for the nearest opaque one. */
+	NSView *v = [self superview];
+
+	while (v != nil) {
+		if ([v isKindOfClass:[NSScrollView class]]) {
+			return v;
+		}
+		v = [v superview];
+	}
 	return nil;
 }
 

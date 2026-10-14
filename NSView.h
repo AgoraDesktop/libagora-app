@@ -473,10 +473,9 @@ extern NSString *NSDefinitionPresentationTypeOverlay;
 /* **THE ONES THAT COMPUTE, which is where this class's real behaviour is.** `-hiddenOrHasHiddenAncestor` and
  * `-opaqueAncestor` walk the SUPERVIEW chain, the second stopping at the first view whose `-isOpaque` says YES;
  * `-rectPreservedDuringLiveResize` asks the door the promise is declared on; `-registeredDraggedTypes` reports the
- * set the drag pair keeps. AND `-enclosingScrollView` CANNOT WALK FOR ANYTHING: `NSScrollView` is not in this tier
- * at all — NSClipView.h says as much, a scroll view being the frame, the scrollers and the ruler — so nil is the
- * answer with that reason rather than a search of a tree for a class that does not exist. The same reading costs
- * `-enclosingMenuItem` its search: this tier has no menus. */
+ * set the drag pair keeps. `-enclosingScrollView` WALKS the superview chain for the nearest `NSScrollView`, which
+ * it could not do while there was no such class here; the absent half was the class and not the walk. And the same
+ * search still costs `-enclosingMenuItem` its answer: this tier has no menu ITEM for a view to be inside. */
 - (BOOL)hiddenOrHasHiddenAncestor;
 - (nullable NSView *)opaqueAncestor;
 - (nullable NSView *)enclosingScrollView;

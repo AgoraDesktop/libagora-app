@@ -4,8 +4,15 @@
  *
  * **THE ARITHMETIC IN THIS CLASS IS THE WHOLE OF IT**, and it is checked in exact points rather than by drawing:
  * where a short document SITS, where a long one STOPS, and what a scroll request becomes once it has been
- * constrained. `NSScrollView` is not here — it is the frame, the scrollers and the ruler, and a clip view without
- * one is still useful and still testable.
+ * constrained. `NSScrollView` is the frame and the scrollers around it — a clip view is the INSIDE of one and was
+ * testable before that class existed, which is the point this header has always made; what the scroll view adds is
+ * where the clip view sits and the bars that drive it.
+ *
+ * **AND THE ONE THING A SCROLL STILL DOES NOT DO IS SHOW.** This class scrolls by moving `-bounds`.origin, and the
+ * drawing layer does not yet render a non-zero bounds origin: `fn_draw_view` REFUSES one by name and `-displayRect:`
+ * ignores it. So the arithmetic here is exact and the offset is real — a clip view that has scrolled answers every
+ * geometry door correctly — while what a window draws is still the unscrolled tree. That is recorded where it lives
+ * (see `NSView.m`'s two drawing paths and `NSText`'s own scrolling note) rather than left for a reader to discover.
  *
  * THE SURFACE IS APPLE'S 10.6 HEADER, read for the era's members: the document view and its geometry, the
  * background and its cursor, the copy-on-scroll flag, and the three scrolling doors. The post-10.6 members

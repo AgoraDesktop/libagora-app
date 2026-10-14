@@ -142,6 +142,15 @@ target_link_libraries(scroller PRIVATE App m)
 add_test(NAME appkit-scroller COMMAND scroller)
 set_tests_properties(appkit-scroller PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
 
+# **AND THE FRAME THAT JOINS THEM.** A scroll view owns a clip view and two scrollers, tiles them, and carries the two
+# directions of the scroll loop — a scroller's action moves the clip view, a moved clip view updates the scrollers.
+# Offscreen: it is a view with three subviews and an arithmetic between them, and `NSView -enclosingScrollView` is
+# finally a walk rather than a nil with a reason.
+add_executable(scroll_view scroll_view.m)
+target_link_libraries(scroll_view PRIVATE App m)
+add_test(NAME appkit-scroll-view COMMAND scroll_view)
+set_tests_properties(appkit-scroll-view PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
+
 # **AND THE DISPLAY PATH.** The ink tests are all offscreen; this one puts a menu's window on a headless
 # compositor and reads the COMPOSITOR'S OWN FRAMEBUFFER back, which is the only place the present can be seen.
 # It skips when there is no window server, so a component's tests still do not need a sibling's build.
