@@ -33,6 +33,17 @@ struct App {
 	int frames;
 	int max_frames;
 	int done;
+	/* **AND A RESIZE, WHICH IS THE ONE PATH WHERE THE SEAM DEFERS.** A resize cannot free the buffer the
+	 * compositor is showing (the surface's current buffer is the last one ATTACHED, and a surface with none is not
+	 * drawn at all), so the seam keeps the outgoing one and makes the new size when its release arrives. THAT
+	 * DEFERRAL IS THE THING THAT CAN GO WRONG QUIETLY: a release that never finishes the job leaves a window that
+	 * can never be drawn again. So the seam's own test asks for a size once and insists that a frame is presented
+	 * at it. */
+	int want_width;
+	int want_height;
+	int asked;
+	int answered;
+	int answered_width;
 };
 
 static uint32_t now_ms(void)
@@ -89,6 +100,21 @@ static void on_frame(void *context, uint32_t time_ms)
 
 	if (pixels == NULL) {
 		return;			/* the compositor still holds the buffer; the handler will be called again */
+	}
+	/* **THE RESIZE IS ASKED FOR BETWEEN TWO FRAMES**, which is what a drag does, and the frame that follows it
+	 * must be at the NEW size: the seam makes the buffer when the outgoing one's release arrives, and a frame
+	 * drawn at the old width through a new buffer — or never drawn at all — is the failure this asks about. The
+	 * STRIDE is where the answer lives: it is the buffer's row pitch, so it is the size that was actually given. */
+	if (!app->asked) {
+		app->want_width = AGWindowWidth(app->window) + 40;
+		app->want_height = AGWindowHeight(app->window) + 30;
+		AGWindowSetFrame(app->window, 0, 0, app->want_width, app->want_height);
+		app->asked = 1;
+	} else if (!app->answered) {
+		app->answered = 1;
+		app->answered_width = stride / 4;
+		/* AND THE RUN CARRIES ON: this client's contract is a frame count, and one that stopped here would be
+		 * presenting two of the sixty the runner asks for. The answer is checked at the end. */
 	}
 	draw(pixels, stride, AGWindowWidth(app->window), AGWindowHeight(app->window),
 	     time_ms != 0 ? time_ms : now_ms());
@@ -192,5 +218,19 @@ int main(int argc, char **argv)
 		fprintf(stderr, "window: NO FRAME WAS PRESENTED\n");
 		return 1;
 	}
+	/* **AND THE FRAME AFTER THE RESIZE IS THE SIZE THAT WAS ASKED FOR**, which is the deferral's whole promise:
+	 * the seam keeps the outgoing buffer so the window stays on screen, and makes the new size when its release
+	 * arrives. A width that never catches up is a window that can never be drawn again. */
+	if (app.asked && !app.answered) {
+		fprintf(stderr, "window: A RESIZE WAS ASKED FOR AND NO FRAME FOLLOWED IT\n");
+		return 1;
+	}
+	if (app.answered && app.answered_width != app.want_width) {
+		fprintf(stderr, "window: the frame after the resize is %d wide, want %d\n", app.answered_width,
+			app.want_width);
+		return 1;
+	}
+	fprintf(stderr, "window: the frame after a resize to %dx%d is %d wide\n", app.want_width, app.want_height,
+		app.answered_width);
 	return 0;
 }

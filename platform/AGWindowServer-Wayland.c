@@ -88,6 +88,15 @@ struct AGWindow {
 	int has_global;
 
 	struct AGBuffer buffer;
+	/* **AND THE BUFFER THAT IS STILL ON SCREEN WHILE A DIFFERENT ONE IS BEING MADE.** A resize cannot free the
+	 * buffer the compositor is showing: the surface's CURRENT buffer is the last one ATTACHED, and destroying it
+	 * makes the surface have none at all — which the compositor draws as nothing and does not even hit-test. The
+	 * outgoing buffer is moved here instead and freed when the new one has been attached, and THE CONNECTION'S OWN
+	 * ORDER IS WHAT MAKES THAT SAFE: the attach and the destroy travel in that order on one connection, so by the
+	 * time the compositor frees this one it has already taken the new one. MEASURED, the version that freed it in
+	 * place made a window dragged by its edge FLICKER — gone for a frame at a time, for the whole drag. */
+	struct AGBuffer retiring;
+	int has_retiring;
 	struct wl_callback *frame_cb;
 
 	int asked_width;		/* what the compositor last asked for; 0 means "you choose" */
@@ -261,12 +270,41 @@ static int ag_create_shm_file(size_t size)
 	return fd;
 }
 
+static void ag_window_resize(AGWindow *window, int width, int height);
+
+/* LET GO OF A BUFFER'S RESOURCES, whichever of the two it is. */
+static void ag_buffer_dispose(struct AGBuffer *buffer)
+{
+	if (buffer->buffer != NULL) {
+		wl_buffer_destroy(buffer->buffer);
+	}
+	if (buffer->pixels != NULL) {
+		munmap(buffer->pixels, buffer->size);
+	}
+	memset(buffer, 0, sizeof *buffer);
+}
+
 static void buffer_release(void *data, struct wl_buffer *wl_buffer)
 {
 	AGWindow *window = data;
 
-	(void)wl_buffer;
+	/* **THE RELEASE NAMES ITS BUFFER, AND WITH TWO ALIVE AT ONCE THAT MATTERS.** A window mid-resize has the
+	 * outgoing buffer waiting to be freed; its release is not the one a frame is waiting for. */
+	if (window->has_retiring && wl_buffer == window->retiring.buffer) {
+		window->retiring.busy = 0;
+		return;
+	}
+	if (wl_buffer != window->buffer.buffer) {
+		return;
+	}
 	window->buffer.busy = 0;
+	/* **AND A SIZE THAT WAS ASKED FOR WHILE IT WAS HELD IS MADE NOW.** A resize cannot free a buffer the
+	 * compositor is drawing (see `ag_window_resize`), so it leaves the request in the window's own size — which is
+	 * exactly the comparison here: the buffer no longer matches the window, and THIS is the moment the old one
+	 * becomes this process's again. */
+	if (window->buffer.width != window->width || window->buffer.height != window->height) {
+		ag_window_resize(window, window->width, window->height);
+	}
 	ag_window_maybe_frame(window);
 }
 
@@ -282,11 +320,26 @@ static void ag_window_resize(AGWindow *window, int width, int height)
 	int fd;
 	void *data;
 
+	/* **THE SIZE IS REMEMBERED WHATEVER HAPPENS, so a DEFERRED resize is not a lost one.** The window's own size
+	 * is the record of what was asked for, and the buffer's is what exists — the pair is the whole of the state a
+	 * release needs to finish the job. */
+	window->width = width;
+	window->height = height;
+	/* **AND A BUFFER THE COMPOSITOR IS HOLDING IS NOT THIS PROCESS'S TO FREE.** Freeing it does not merely waste
+	 * it: the compositor drops the surface's buffer, and A SURFACE WITH NO BUFFER IS NOT THERE AT ALL — it is not
+	 * drawn, and it is not even hit-tested. MEASURED, a window dragged by its edge FLICKERED, disappearing for a
+	 * frame at a time for the whole drag, because every resize freed the very buffer that was on screen. The
+	 * release is what makes it free again, and `buffer_release` is where the deferred size is made. */
+	if (window->buffer.buffer != NULL && window->buffer.busy) {
+		return;
+	}
 	if (window->buffer.buffer != NULL) {
-		wl_buffer_destroy(window->buffer.buffer);
-		munmap(window->buffer.pixels, window->buffer.size);
-		window->buffer.buffer = NULL;
-		window->buffer.pixels = NULL;
+		/* **THE ONE LEAVING IS KEPT, NOT FREED** — see the note on `retiring`. Whatever was already waiting there
+		 * has been replaced by an attached buffer and is safe to let go now. */
+		ag_buffer_dispose(&window->retiring);
+		window->retiring = window->buffer;
+		window->has_retiring = 1;
+		memset(&window->buffer, 0, sizeof window->buffer);
 	}
 	fd = ag_create_shm_file(size);
 	if (fd < 0) {
@@ -357,6 +410,19 @@ uint32_t *AGWindowBeginFrame(AGWindow *window, int *stride)
 		}
 		return NULL;
 	}
+	/* **AND A BUFFER OF THE WRONG SIZE IS NOT ONE TO DRAW INTO.** A resize the compositor was still holding
+	 * arrives as a window whose size and whose buffer disagree — the buffer is the old one, kept alive on purpose
+	 * (see `ag_window_resize`) so the window stays ON SCREEN while the hand moves. Handing it to a caller that has
+	 * just resized its own pixels would draw the new frame into the old extent — the caller's copy is written per
+	 * ROW of ITS OWN width — so this refuses instead, the compositor keeps showing the old buffer, and the size is
+	 * made good on the release. A REFUSED FRAME IS NOT A MISSING WINDOW; THAT IS THE WHOLE POINT. */
+	if (window->buffer.width != window->width || window->buffer.height != window->height) {
+		if (getenv("APPKIT_DRAW_DIAG") != NULL) {
+			fprintf(stderr, "  DIAG begin: refused — the buffer is %dx%d and the window is %dx%d\n",
+				window->buffer.width, window->buffer.height, window->width, window->height);
+		}
+		return NULL;
+	}
 	if (window->buffer.busy) {
 		if (getenv("APPKIT_DRAW_DIAG") != NULL) {
 			/* **THE RAW STATE, BECAUSE THE LABEL IS WHAT MISLED ME.** This branch's message sent two rounds into
@@ -393,6 +459,13 @@ void AGWindowEndFrame(AGWindow *window)
 	wl_surface_attach(window->surface, window->buffer.buffer, 0, 0);
 	wl_surface_damage_buffer(window->surface, 0, 0, window->buffer.width, window->buffer.height);
 	wl_surface_commit(window->surface);
+	/* **AND NOW THE ONE IT REPLACED IS THIS PROCESS'S AGAIN.** The attach above is what takes it off the screen,
+	 * and the destroy travels after it on the same connection — so the compositor has already moved on by the time
+	 * it is freed. */
+	if (window->has_retiring) {
+		ag_buffer_dispose(&window->retiring);
+		window->has_retiring = 0;
+	}
 	/* WHEN THE CALLER CAME HERE FROM `AGWindowShow`, THE FLUSH ALREADY HAPPENED — before the frame was asked
 	 * for and therefore before this commit. Flushing here means the frame just handed over does not wait for
 	 * something else to push it out. */
@@ -1216,12 +1289,11 @@ void AGWindowDestroy(AGWindow *window)
 	if (window->frame_cb != NULL) {
 		wl_callback_destroy(window->frame_cb);
 	}
-	if (window->buffer.buffer != NULL) {
-		wl_buffer_destroy(window->buffer.buffer);
+	if (window->has_retiring) {
+		ag_buffer_dispose(&window->retiring);
+		window->has_retiring = 0;
 	}
-	if (window->buffer.pixels != NULL) {
-		munmap(window->buffer.pixels, window->buffer.size);
-	}
+	ag_buffer_dispose(&window->buffer);
 	if (window->agora != NULL) {
 		agora_window_destroy(window->agora);
 	}
