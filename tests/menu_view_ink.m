@@ -40,7 +40,7 @@ static void check(int ok, const char *name)
 static void scan(NSBitmapImageRep *rep, int top_row, int *ink, int *highlight)
 {
 	int x, y;
-	int y0 = (VIEW_ROWS - 1 - top_row) * 22;	/* Cocoa y counts up from the bottom */
+	int y0 = (int)NSMenuPanelPadding + (VIEW_ROWS - 1 - top_row) * 22;	/* y up from the bottom, one padding in */
 	int y1 = y0 + 22;
 
 	*ink = 0;
@@ -73,17 +73,18 @@ int main(void)
 	[menu addItemWithTitle:@"Close" action:NULL keyEquivalent:@"w"];
 
 	rep = [[NSBitmapImageRep alloc] initWithBitmapDataPlanes:NULL pixelsWide:VIEW_W
-		pixelsHigh:VIEW_ROWS * 22 bitsPerSample:8 samplesPerPixel:4 hasAlpha:YES isPlanar:NO
+		pixelsHigh:VIEW_ROWS * 22 + (int)(2 * NSMenuPanelPadding) bitsPerSample:8 samplesPerPixel:4 hasAlpha:YES isPlanar:NO
 		colorSpaceName:NSCalibratedRGBColorSpace bytesPerRow:VIEW_W * 4 bitsPerPixel:32];
 	if (rep == nil) {
 		printf("FAIL: no bitmap rep\n");
 		return 1;
 	}
 	view = [[NSMenuView alloc] initWithFrame:NSMakeRect(0.0, 0.0, (CGFloat)VIEW_W,
-							   (CGFloat)(VIEW_ROWS * 22))];
+							   (CGFloat)(VIEW_ROWS * 22) + 2.0 * NSMenuPanelPadding)];
 	[view setMenu:menu];
 	check([view isHorizontal] == NO, "a menu view is a DROPDOWN unless it is told otherwise");
-	check([view requiredHeight] == (CGFloat)(VIEW_ROWS * 22), "and it asks for one row per item");
+	check([view requiredHeight] == (CGFloat)(VIEW_ROWS * 22) + 2.0 * NSMenuPanelPadding,
+	      "and it asks for a row per item PLUS the panel's own padding");
 
 	/* THE MIDDLE ROW IS THE HIGHLIGHTED ONE, so a view that highlighted the first row every time would fail. */
 	[view setHighlightedItem:[menu itemAtIndex:1]];

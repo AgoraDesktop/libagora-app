@@ -34,6 +34,12 @@
  * disagree about how tall the menu is. It was a file-static in `NSMenu.m` until a second file needed it. */
 extern const CGFloat NSMenuRowHeight;
 
+/* **AND THE AIR A DROPDOWN KEEPS BETWEEN ITS PANEL'S EDGE AND ITS ROWS.** `NSMenu` sizes its window with it and this
+ * view insets its rows by it, for the same reason the row height is shared: a second copy of the number is how a
+ * menu's window and a menu's contents come to disagree about how tall the menu is. THE BAR HAS NO SUCH PADDING —
+ * its height is the server's strip, and a seam there is exactly what the strip exists to avoid. */
+extern const CGFloat NSMenuPanelPadding;
+
 @interface NSMenuView : NSView
 {
 @private

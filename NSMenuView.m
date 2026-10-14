@@ -18,6 +18,12 @@
 
 const CGFloat NSMenuRowHeight = 22.0;
 
+/* **THE PANEL'S OWN PADDING, WHICH IS THE AIR BETWEEN THE EDGE AND THE FIRST ROW.** The rows used to run EDGE TO
+ * EDGE, so the only air inside the panel was the highlight chip's own 2-point inset — which left the chip almost
+ * touching the panel's rounded edge. Four points on every side gives the panel a margin, and it is a SHARED number
+ * (`NSMenuView.h`) because `NSMenu` sizes the window with it and this view insets the rows by it. */
+const CGFloat NSMenuPanelPadding = 4.0;
+
 /* A BAR'S ITEM IS ITS TITLE PLUS THE AIR EITHER SIDE OF IT, and a floor so that a one-letter title is still a
  * target a person can hit. Both are the bar's own measures, so they live beside the bar's drawing. */
 #define APPKIT_MENUBAR_TITLE_PADDING  12.0
@@ -182,8 +188,11 @@ static void apk_fill_vertical_gradient(NSRect rect, CGFloat radius,
 	if (!_horizontal) {
 		/* **THE FIRST ITEM IS THE TOP ROW, WHICH IS THE CONVERSION WORTH WRITING DOWN.** A menu's item 0 is the
 		 * row the reader sees first, at the TOP; a view's coordinates are Cocoa's and run UP from the bottom. So
-		 * the row index counts down while the y counts up. */
-		return NSMakeRect(0.0, bounds.size.height - (CGFloat)(index + 1) * NSMenuRowHeight, bounds.size.width,
+		 * the row index counts down while the y counts up — and the panel's own padding is taken off BOTH ends, so
+		 * the rows sit inside the panel rather than against it. */
+		return NSMakeRect(NSMenuPanelPadding,
+				  bounds.size.height - NSMenuPanelPadding - (CGFloat)(index + 1) * NSMenuRowHeight,
+				  bounds.size.width - 2.0 * NSMenuPanelPadding,
 				  NSMenuRowHeight);
 	}
 	/* **AND IN A BAR THE FIRST ITEM IS THE LEFTMOST COLUMN**, running right from the left edge, each as wide as
@@ -421,6 +430,11 @@ static void apk_fill_vertical_gradient(NSRect rect, CGFloat radius,
 	NSInteger count = (_shownMenu != nil) ? [_shownMenu numberOfItems] : 0;
 	CGFloat height = (CGFloat)count * NSMenuRowHeight;
 
+	/* **THE DROPDOWN KEEPS AIR ABOVE AND BELOW ITS ROWS; THE BAR DOES NOT.** A bar's height IS the strip the server
+	 * draws, so padding it would lift its titles off the surface they are part of. */
+	if (!_horizontal) {
+		height += 2.0 * NSMenuPanelPadding;
+	}
 	return (height < NSMenuRowHeight) ? NSMenuRowHeight : height;
 }
 
@@ -440,7 +454,9 @@ static void apk_fill_vertical_gradient(NSRect rect, CGFloat radius,
 			width = item;
 		}
 	}
-	return width;
+	/* THE SAME PADDING AS THE HEIGHT, for the same reason: a dropdown's rows do not touch its left or right edge
+	 * either, and the bar's columns run the whole width of the strip. */
+	return _horizontal ? width : (width + 2.0 * NSMenuPanelPadding);
 }
 
 /* **THE ROW'S OWN BACKGROUND, DRAWN BY THE VIEW RATHER THAN BY THE CELL — WHICH IS THE RULE, NOT A SHORTCUT.**

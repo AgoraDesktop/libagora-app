@@ -15,6 +15,7 @@ from PIL import Image
 
 PANEL = (240, 240, 240)      # the OLD flat panel colour, kept only as the record of what this used to key on
 ROW = 22                     # NSMenuRowHeight
+PAD = 4                      # NSMenuPanelPadding — the panel's own air, above, below and at the sides
 BAR_ROWS = 24                # the menu bar's strip, which is a panel too and is NOT the dropdown
 BORDER = 139                 # the dropdown's own hairline border, and nothing else in the picture has it
 
@@ -74,8 +75,8 @@ def main():
         ink = sum(1 for y in range(y0, y1 + 1) for x in range(x0, x1 + 1) if sum(px[x, y]) < 400)
         checks.append((f"a menu panel reached the composited output, {x1 - x0 + 1}x{y1 - y0 + 1} "
                        f"at ({x0},{y0})", True))
-        checks.append((f"it is a whole number of {ROW}-pixel rows ({(y1 - y0 + 1) // ROW})",
-                       (y1 - y0 + 1) % ROW == 0 and (y1 - y0 + 1) // ROW >= 2))
+        checks.append((f"it is a whole number of {ROW}-pixel rows ({((y1 - y0 + 1) - 2*PAD) // ROW})",
+                       ((y1 - y0 + 1) - 2*PAD) % ROW == 0 and ((y1 - y0 + 1) - 2*PAD) // ROW >= 2))
         checks.append((f"and its rows have TEXT in them ({ink} ink pixel(s))", ink > 0))
     failed = 0
     for name, ok in checks:

@@ -686,7 +686,13 @@ static const CGFloat NSMenuStateColumnWidth = 20.0;
 	    screen.y < _trackingFrame.origin.y || screen.y > NSMaxY(_trackingFrame)) {
 		return nil;
 	}
-	y = screen.y - _trackingFrame.origin.y;
+	/* **THE PADDING IS NOT A ROW.** The point is measured from the frame's bottom, and the rows start one padding
+	 * above it; a point in the padding is over the PANEL and over no row, which is a nil answer rather than a wrapped
+	 * one — an integer division of a negative y truncates toward zero and would name the LAST row instead. */
+	y = screen.y - _trackingFrame.origin.y - NSMenuPanelPadding;
+	if (y < 0.0) {
+		return nil;
+	}
 	row = count - 1 - (NSInteger)(y / NSMenuRowHeight);
 	if (row < 0 || row >= count) {
 		return nil;
@@ -921,7 +927,10 @@ static const CGFloat NSMenuStateColumnWidth = 20.0;
 	}
 	size = [self size];
 	DIAG("  DIAG open: -size took %.1f ms\n", ([NSDate timeIntervalSinceReferenceDate] - t0) * 1000.0);
-	size.height = (CGFloat)[_items count] * NSMenuRowHeight;
+	/* **AND THE PANEL'S OWN PADDING IS PART OF THE WINDOW'S HEIGHT, not something the view adds inside it.** The view
+	 * is sized to the frame and the frame is sized here, so a padding known only to the view would be drawn with its
+	 * rows hanging off the bottom of the panel. */
+	size.height = (CGFloat)[_items count] * NSMenuRowHeight + 2.0 * NSMenuPanelPadding;
 	if (size.height < NSMenuRowHeight) {
 		size.height = NSMenuRowHeight;
 	}
@@ -1184,9 +1193,10 @@ static const CGFloat NSMenuStateColumnWidth = 20.0;
 		 * answer: it is where a menu with no such row would put one. */
 		return NSMakePoint(NSMaxX(_trackingFrame), NSMaxY(_trackingFrame));
 	}
-	row = NSMakeRect(_trackingFrame.origin.x,
-			 _trackingFrame.origin.y + (CGFloat)([_items count] - 1 - index) * NSMenuRowHeight,
-			 _trackingFrame.size.width, NSMenuRowHeight);
+	row = NSMakeRect(_trackingFrame.origin.x + NSMenuPanelPadding,
+			 _trackingFrame.origin.y + NSMenuPanelPadding
+			   + (CGFloat)([_items count] - 1 - index) * NSMenuRowHeight,
+			 _trackingFrame.size.width - 2.0 * NSMenuPanelPadding, NSMenuRowHeight);
 	return NSMakePoint(NSMaxX(row), NSMaxY(row));
 }
 
