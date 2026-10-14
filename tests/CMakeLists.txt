@@ -9,6 +9,14 @@
 # resolve. The directory comes from an imported target rather than being written down.
 set(_agora_app_test_env "LD_LIBRARY_PATH=$<TARGET_FILE_DIR:Foundation::Foundation>:$<TARGET_FILE_DIR:App>")
 
+# **THE SIBLING'S WINDOW SERVER IS AN OPTION RATHER THAN A REQUIREMENT, AND IT HAS TO BE NAMED BEFORE IT IS USED.**
+# A component's tests must not need another component's build to be present, so the tests that want a compositor of
+# our own SKIP (77) when there is nothing to run against. A `set(... CACHE ...)` defined BELOW its first use expands
+# to NOTHING on a fresh configure — the cache entry does not exist yet — and the skip becomes a failure, because the
+# script is handed an empty server path. Declared here, once, above every test that names it.
+set(AGORA_WINDOW_SERVER_BINARY "${CMAKE_CURRENT_SOURCE_DIR}/../../window-server/build/window-server"
+    CACHE FILEPATH "window-server's built binary, for the tests that need a compositor of our own")
+
 add_executable(keyboard keyboard.c)
 target_link_libraries(keyboard PRIVATE App PkgConfig::XKBCOMMON)
 
@@ -117,6 +125,15 @@ target_link_libraries(text_input PRIVATE App m)
 add_test(NAME appkit-text-input COMMAND text_input)
 set_tests_properties(appkit-text-input PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
 
+# **AND THE INSIDE OF A SCROLL VIEW.** `NSClipView`'s arithmetic is "the whole of it" (its own header), and it is
+# checked in EXACT POINTS rather than by drawing: where a short document sits, where a long one stops, and the
+# notification wire that re-constrains the scroll when the document's own frame or bounds changes. Offscreen, so it
+# runs anywhere — which is the property `NSClipView.h` claims for a clip view without an `NSScrollView`.
+add_executable(clip_view clip_view.m)
+target_link_libraries(clip_view PRIVATE App m)
+add_test(NAME appkit-clip-view COMMAND clip_view)
+set_tests_properties(appkit-clip-view PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
+
 # **AND THE DISPLAY PATH.** The ink tests are all offscreen; this one puts a menu's window on a headless
 # compositor and reads the COMPOSITOR'S OWN FRAMEBUFFER back, which is the only place the present can be seen.
 # It skips when there is no window server, so a component's tests still do not need a sibling's build.
@@ -136,12 +153,7 @@ add_test(NAME appkit-window-headless
 set_tests_properties(appkit-window-headless PROPERTIES SKIP_RETURN_CODE 77
   ENVIRONMENT "${_agora_app_test_env}")
 
-# **THE APPkit AGAINST AGORA'S OWN WINDOW SERVER**, which is the only one that can answer `-visibleFrame`. The
-# sibling's binary is an OPTION rather than a requirement: a component's tests must not need another component's
-# build to be present, so this SKIPS when there is nothing to run against.
-set(AGORA_WINDOW_SERVER_BINARY "${CMAKE_CURRENT_SOURCE_DIR}/../../window-server/build/window-server"
-    CACHE FILEPATH "window-server's built binary, for the tests that need a compositor of our own")
-
+# **THE APPkit AGAINST AGORA'S OWN WINDOW SERVER**, which is the only one that can answer `-visibleFrame`.
 add_test(NAME appkit-work-area
   COMMAND "${CMAKE_CURRENT_SOURCE_DIR}/run-appkit-agora.sh"
 	  "$<TARGET_FILE:appkit_window>" "${AGORA_WINDOW_SERVER_BINARY}" 3 24)

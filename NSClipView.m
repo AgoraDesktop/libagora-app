@@ -28,6 +28,10 @@
 
 - (void)dealloc
 {
+	/* **AND THE WATCH ENDS WITH THE VIEW.** The document is a retained subview and is still alive here, so the
+	 * registration can be named exactly — but `-removeObserver:` without a name is the one removal that cannot go
+	 * stale, and nothing else in this class registers. */
+	[[NSNotificationCenter defaultCenter] removeObserver:self];
 	[_backgroundColor release];
 	[super dealloc];
 }
@@ -39,11 +43,30 @@
 	/* A BORROWED POINTER AND AN OWNED SUBVIEW: the view is ADDED, so the tree retains it and this class does not —
 	 * the same shape as `NSView`'s own superview relationship, which is why `_superview` is borrowed too. */
 	if (_docView != nil) {
+		/* **AND THE OLD DOCUMENT STOPS BEING WATCHED BEFORE THE NEW ONE STARTS.** A frame or bounds change is
+		 * ANNOUNCED by `NSView` itself (`-setPostsFrameChangedNotifications`, whose default is YES), so
+		 * re-constraining the scroll after a document changed shape is a question of LISTENING — see the two
+		 * handlers below. A REPLACED document that was still watched would move a clip view that no longer holds
+		 * it, which is exactly the bug a second `-setDocumentView:` would otherwise hide. */
+		[[NSNotificationCenter defaultCenter] removeObserver:self
+			name:NSViewFrameDidChangeNotification object:_docView];
+		[[NSNotificationCenter defaultCenter] removeObserver:self
+			name:NSViewBoundsDidChangeNotification object:_docView];
 		[_docView removeFromSuperview];
 	}
 	_docView = aView;
 	if (aView != nil) {
 		[self addSubview:aView];
+		/* **THE WIRE THE TWO HANDLERS BELOW WERE ALWAYS WRITTEN FOR.** They existed and nothing ever called them,
+		 * because the clip view was never registered for the document's own announcements — so "a document that
+		 * SHRANK pulls the visible area back with it" was a promise the header made and the class did not keep.
+		 * `tests/clip_view.m` drives a document's frame directly and asks whether the visible origin moved; this is
+		 * what makes the answer yes. Registered on the DOCUMENT and not the clip view, so a scroll's own
+		 * `-setBoundsOrigin:` cannot call back into the handler that made it. */
+		[[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(viewFrameChanged:)
+			name:NSViewFrameDidChangeNotification object:aView];
+		[[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(viewBoundsChanged:)
+			name:NSViewBoundsDidChangeNotification object:aView];
 	}
 }
 

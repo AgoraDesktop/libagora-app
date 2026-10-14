@@ -43,6 +43,7 @@ tests/
   slider_ink.m                  a control whose VALUE is a POSITION: the knob and its inverse
   tracking_area.m               an AREA's region, owner and SCOPE — and a control's own hover area
   text_input.m                  the first slice of the text system, driven a keystroke at a time
+  clip_view.m                   the INSIDE of a scroll view: the arithmetic, and the wire that re-runs it
   window_chrome.m               the DRAWN chrome, offscreen: the symbols, the centred title and the pill
   menu_validation.m             validation and state, which the view tests do not reach
   appkit_activation.m           only the ACTIVE application's menu bar shows
@@ -139,9 +140,17 @@ the compositor is really gone.
   25 captures had no window in them at all; after the seam keeps the outgoing buffer until the new one is attached,
   0 of 25. `tests/window.c` holds the half a headless test can: a deferred resize must finish, so a frame is asked
   for at the new size and the stride it arrives with is the size that was given.
-- **`ctest`: 21 of 21 passed** (the keyboard and the seam, the AppKit and its input path, the controls and their
-  metrics, what a drag costs, the resize by edge, the tracking engine, the text path, the chrome and what its
-  buttons do, the chrome theme, the menus and activation).
+- **The inside of a scroll view** (`ctest`, offscreen): `NSClipView`'s arithmetic in exact points — a short
+  document is CENTRED rather than pinned (a 40-wide document in a 100-wide clip sits at -30), a long one stops at
+  the far edge (300-100 by 200-100) and never shows blank space, `-documentVisibleRect` answers in the DOCUMENT's
+  coordinates, a scroll tells its enclosing view where it landed, and a drag past an edge steps 16 points. **AND THE
+  PART THAT WAS NOT THERE:** the two change handlers were written and NOTHING WAS REGISTERED for the document's own
+  frame and bounds notifications, so a document that SHRANK did not pull the visible area back with it — the header
+  promised it and the class did not do it. `-setDocumentView:` now observes the document (and stops observing the one
+  it replaces), and `tests/clip_view.m` drives that through `-setFrame:` rather than by calling the handler.
+- **`ctest`: 22 of 22 passed** (the keyboard and the seam, the AppKit and its input path, the controls and their
+  metrics, what a drag costs, the resize by edge, the tracking engine, the text path, the clip view, the chrome and
+  what its buttons do, the chrome theme, the menus and activation).
 - **And the desktop's own text is SUB-PIXEL ANTIALIASED**, which is the AppKit's half of a renderer change in
   CoreGraphics: a window's surface is OPAQUE (`kCGImageAlphaNoneSkipFirst`), and the destination's opacity is
   exactly what decides whether a glyph is rasterised in colour. MEASURED on the live session: the window title's
