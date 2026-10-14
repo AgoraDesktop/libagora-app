@@ -45,7 +45,9 @@
 /* THE PRIVATE DOORS, redeclared here: this tree's own pattern for a private contract a second file has to reach. */
 @interface NSWindow (AGWindowResizeTestDoor)
 - (void)cg_handleSeamEvent:(const AGEvent *)event;
-- (void)cg_applyPendingResize;
+/* **AND WHETHER THE WINDOW IS WAITING TO BE PAINTED**, which is the half of a resize that is not the geometry: a
+ * frame change remakes the backing store, so a window that is not marked stale has no buffer at its new size. */
+- (BOOL)cg_needsDisplay;
 @end
 
 static int g_checks;
@@ -189,7 +191,10 @@ static NSPoint edge_point(NSWindow *window, int which)
 	return NSMakePoint(x, y);
 }
 
-/* A DRAG: press on an edge, one motion, the pass, the release. */
+/* A DRAG: press on an edge, one motion, THE PASS, the release. **THE PASS IS THE APPLICATION'S OWN DOOR**, which
+ * is what makes this a test of the whole path rather than of the arithmetic: `-updateWindows` is where a pending
+ * resize is applied and where a stale window is painted, and the two belong together — a pass that resized without
+ * painting is exactly the bug this test now holds down. */
 static void drag_edge(NSApplication *application, NSWindow *window, int which, CGFloat dx, CGFloat dy)
 {
 	NSPoint from = edge_point(window, which);
@@ -197,7 +202,7 @@ static void drag_edge(NSApplication *application, NSWindow *window, int which, C
 
 	deliver_window_point(application, window, from, 1);
 	deliver_move(application, window, to);
-	[window cg_applyPendingResize];		/* the pass would do this; the test makes the pass */
+	[application updateWindows];		/* the pass: the aim applied, the window painted */
 	deliver_window_point(application, window, to, 0);
 }
 
@@ -263,6 +268,30 @@ int main(void)
 		      (double)([window frame].size.width - before.size.width));
 		check([window frame].origin.x == before.origin.x && [window frame].origin.y == before.origin.y,
 		      "and only a left or bottom edge moves the ORIGIN — the right edge left it alone");
+
+		/* 1b. **AND A RESIZE MARKS THE WINDOW STALE, WHERE A MOVE DOES NOT.** That asymmetry is the half of this
+		 * door that is not geometry, and it is the one that was WRONG: a move changes no surface, so its window
+		 * follows the pointer with the buffer it already has — while a RESIZE remakes the backing store, so the
+		 * pixels the compositor last saw belong to a store that no longer exists and the window has NO BUFFER AT
+		 * ITS NEW SIZE until one is attached. MEASURED before this was fixed: a window dragged by its edge
+		 * disappeared for the whole drag, the desktop showing through where it had been, and it came back on the
+		 * release because the release was what marked it stale. */
+		{
+			NSRect f = [window frame];
+
+			[window setNeedsDisplay:NO];
+			check(![window cg_needsDisplay], "the window could not be marked clean, so the pair cannot judge");
+			[window setFrame:NSMakeRect(f.origin.x, f.origin.y, f.size.width + 30.0, f.size.height)
+				 display:NO];
+			check([window cg_needsDisplay],
+			      "a RESIZE marks the window stale, so it is painted at the size it just took");
+			[window setNeedsDisplay:NO];
+			[window setFrameOrigin:NSMakePoint(f.origin.x + 10.0, f.origin.y)];
+			check(![window cg_needsDisplay],
+			      "and a MOVE leaves that alone, because a move changes no surface");
+			[window setFrame:f display:NO];
+			[window setNeedsDisplay:NO];
+		}
 
 		/* 2. THE LEFT EDGE, WHICH MOVES THE ORIGIN BY WHAT IT TAKES FROM THE WIDTH — the right edge is a
 		 * constant, and that is the assertion. */

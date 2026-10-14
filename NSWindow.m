@@ -1417,6 +1417,18 @@ static CGFloat fn_clamp_axis(CGFloat v, CGFloat lo, CGFloat hi)
 		fn_announce(self, NSWindowWillMoveNotification, @selector(windowWillMove:));
 	}
 	_frame = frameRect;
+	/* **A RESIZE OWES A REPAINT AND A MOVE DOES NOT, WHICH IS AN ASYMMETRY THIS DOOR DID NOT HAVE TO KNOW
+	 * ABOUT UNTIL A WINDOW COULD BE DRAGGED BY ITS EDGE.** A move changes no surface: `cg_ensureSurface` sees
+	 * the same size, keeps the same backing store, and the compositor re-places a buffer that is still valid —
+	 * so the pass has nothing to draw and the window follows the pointer by itself. A RESIZE remakes the
+	 * backing store from scratch (it is allocated per size), so the pixels the compositor last saw now belong
+	 * to a store that no longer exists, and there is no buffer at the new size until one is attached.
+	 * MEASURED: a window dragged by its edge DISAPPEARED for the whole drag — the desktop showed through where
+	 * it had been, and the mid-drag capture had no window in it at all — and came back on the release, because
+	 * the release is what marked it stale. A RESIZE MARKS ITSELF STALE. */
+	if (resized) {
+		[self setNeedsDisplay:YES];
+	}
 	/* **THERE IS NO `XMoveResizeWindow` BEHIND THIS DOOR ANY MORE.** A Wayland client neither places nor
 	 * moves its toplevel; what a client CAN do is attach a frame of the new size, and the next `-display`
 	 * does exactly that, because `cg_ensureSurface` remakes the backing store when the frame's size has
@@ -3483,6 +3495,16 @@ static NSWindow *fn_main_window(NSWindow *except)
 - (NSInteger)cg_flushCount
 {
 	return _flushCount;
+}
+
+/* **AND WHETHER THE WINDOW IS WAITING TO BE PAINTED.** The flag a pass consumes, unobservable from outside for the
+ * same reason the flush count is: a caller cannot see the state that decides whether the next frame is DRAWN, and a
+ * test that wants to ask "did this mark the window stale" has nothing else to read. MEASURED, the answer matters:
+ * a resize that did not set this flag left the window with no buffer at its new size, and the window DISAPPEARED
+ * for the whole drag — the desktop showed through where it had been. */
+- (BOOL)cg_needsDisplay
+{
+	return _viewsNeedDisplay;
 }
 
 - (NSInteger)cg_flushPushCount
