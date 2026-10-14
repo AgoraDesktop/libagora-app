@@ -2949,9 +2949,23 @@ static CGFloat fn_clamp_axis(CGFloat v, CGFloat lo, CGFloat hi)
 	/* THE CHROME, THROUGH THE SAME DOOR A TEST USES — see `-cg_drawChromeInContext:` for why it is a method. */
 	[self cg_drawChromeInContext:[NSGraphicsContext graphicsContextWithCGContext:c flipped:NO]];
 	for (y = 0; y < _surfaceHeight; y++) {
-		memcpy((char *)frame + (size_t)y * (size_t)stride,
-		       _pixels + (size_t)y * (size_t)_surfaceWidth * 4u,
-		       (size_t)_surfaceWidth * 4u);
+		uint32_t *row = (uint32_t *)(void *)((char *)frame + (size_t)y * (size_t)stride);
+		const uint32_t *source = (const uint32_t *)(const void *)(_pixels + (size_t)y * (size_t)_surfaceWidth * 4u);
+		NSInteger x;
+
+		/* **AND THE FRAME IS HANDED OVER OPAQUE, WHICH IS A FACT ITS OWN FORMAT CANNOT CARRY.** The surface is
+		 * `kCGImageAlphaNoneSkipFirst` because THAT is what lets the text be smoothed (an alpha channel is what
+		 * switches sub-pixel coverage off in CoreGraphics), and an `X` format HAS NO ALPHA CHANNEL: the fourth byte
+		 * of every pixel this window draws is left exactly as it was, and every one of them is ZERO. READ AS ARGB
+		 * THE WINDOW IS THEREFORE FULLY TRANSPARENT — MEASURED, which is how this was found — and what keeps it on
+		 * screen is two accidents downstream: the seam's `wl_shm` buffers are `XRGB8888`, so the compositor treats
+		 * them as opaque, and the compositor ORs in `0xFF000000` when it copies them. TWO ACCIDENTS HOLDING ONE
+		 * PROMISE IS NOT A PROMISE. A window is opaque, and this is where its pixels are handed over, so this is
+		 * where that is said: the copy is a copy with the alpha set, and it costs a word-at-a-time loop where it
+		 * used to be a `memcpy` — the same pass over the same bytes, with the top byte decided instead of copied. */
+		for (x = 0; x < _surfaceWidth; x++) {
+			row[x] = source[x] | 0xFF000000u;
+		}
 	}
 	AGWindowEndFrame(_agwindow);
 	_viewsNeedDisplay = NO;

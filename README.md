@@ -146,6 +146,16 @@ the compositor is really gone.
   CoreGraphics: a window's surface is OPAQUE (`kCGImageAlphaNoneSkipFirst`), and the destination's opacity is
   exactly what decides whether a glyph is rasterised in colour. MEASURED on the live session: the window title's
   twenty-six ink pixels all carry a per-channel split and the checkbox's label carries it in 586 of 613.
+- **AND THE FRAME IS HANDED OVER OPAQUE, WHICH IS A FACT ITS OWN FORMAT CANNOT CARRY.** The surface is the `X`
+  spelling because that is what makes the text smoothed, and an `X` format has NO alpha channel: the fourth byte
+  of every pixel is never written, so the compositor's own buffer arrives with every one of them ZERO. Read as
+  ARGB the window is therefore FULLY TRANSPARENT — MEASURED, which is how this was found — and two accidents are
+  what keep it on the glass: the seam's buffers are `XRGB8888`, so Agora's server never consults that byte and ORs
+  in `0xFF000000` when it copies (`window-server/src/output.c`), and a stock compositor treats the format the same
+  way. TWO ACCIDENTS HOLDING ONE PROMISE IS NOT A PROMISE, so `-cg_drawFrame` sets the byte where the pixels are
+  handed over — the same pass over the same bytes, one word at a time where it used to be a `memcpy`, with the top
+  byte DECIDED rather than copied. What that promise is NOT is a screenshot: the compositor masks exactly the byte
+  a capture could read, so no pixel test in this tree can hold it, and the copy is the one place it is said.
 
 ### What a Wayland client does not get, and where each is recorded
 
