@@ -95,6 +95,7 @@
 - (NSEvent *)cg_nextEventWaiting:(BOOL)wait milliseconds:(long)ms mask:(NSUInteger)mask
 				dequeue:(BOOL)dequeue;
 /* THE CURSOR DOORS THIS FILE ADDS, declared here because this is the file that defines them. */
+- (void)cg_setPointerGrab:(BOOL)flag;
 - (NSScreen *)cg_screenFor:(NSScreen *)screen;
 - (void)cg_rebuildCursorRectsIfNeeded;
 - (NSCursor *)cg_cursorForContentPoint:(NSPoint)p;
@@ -2122,6 +2123,16 @@ static CGFloat fn_clamp_axis(CGFloat v, CGFloat lo, CGFloat hi)
 - (BOOL)cg_mouseButtonDown
 {
 	return _cg_mouseButtonDown;
+}
+
+/* **TAKE THE POINTER'S FALLBACK WHILE A POPUP TRACKS.** A menu's window asks for this when its session begins and
+ * gives it back when the session ends, so a click that lands on the DESKTOP — where a Wayland compositor would
+ * otherwise have nobody to deliver it to — arrives at the menu and dismisses it. See `AGWindowSetPointerGrab`. */
+- (void)cg_setPointerGrab:(BOOL)flag
+{
+	if (_agwindow != NULL) {
+		AGWindowSetPointerGrab(_agwindow, flag ? 1 : 0);
+	}
 }
 
 /* DRAW AND PRESENT. The content view is drawn through an `NSGraphicsContext` over this window's own backing

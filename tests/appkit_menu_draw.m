@@ -17,6 +17,7 @@
 #import <AppKit/NSView.h>
 #import <AppKit/NSMenu.h>
 #import <AppKit/NSMenuItem.h>
+#import <AppKit/NSCell.h>	/* NSOnState / NSOffState, which `-validateMenuItem:` sets */
 #import <AppKit/NSEvent.h>
 #import <Foundation/NSArray.h>
 #import <AppKit/NSMenuView.h>	/* the bar, and the boxes its items occupy */
@@ -26,6 +27,35 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <time.h>
+
+/* **A TARGET THAT VALIDATES, SO THE DEMONSTRATION HAS SOMETHING TO SHOW.** Menu validation is what greys out an
+ * item that cannot be chosen, and its protocol is also where an item's target sets the item's own state — so
+ * this one turns the FIRST item of every submenu into a CHECKED item and disables the second, and the picture
+ * says whether either happened. An item with no target would be left alone by the walk (the responder chain),
+ * which is why the demo gives its items this one. */
+@interface AGMenuDemoValidator : NSObject
+@end
+
+@implementation AGMenuDemoValidator
+- (BOOL)validateMenuItem:(NSMenuItem *)item
+{
+	NSString *title = [item title];
+
+	if ([title hasSuffix:@"Item One"]) {
+		[item setState:NSOnState];	/* a checked item, set from the validator */
+		return YES;
+	}
+	if ([title hasSuffix:@"Item Two"]) {
+		return NO;			/* disabled: drawn dimmed and not choosable */
+	}
+	return YES;
+}
+
+- (void)cg_demoAction:(id)sender
+{
+	(void)sender;
+}
+@end
 
 int main(int argc, char **argv)
 {
@@ -103,17 +133,29 @@ int main(int argc, char **argv)
 		{
 			NSArray *titles = [NSArray arrayWithObjects:@"File", @"Help", @"Edit", @"View", nil];
 			NSUInteger t;
+			/* THE VALIDATOR THE SUBMENU ITEMS NAME AS THEIR TARGET, so `-update` has someone to ask. It is not
+			 * released: a target is NOT retained by an item, so it has to outlive the menu, and the process is
+			 * about to be the demonstration's lifetime anyway. */
+			AGMenuDemoValidator *validator = [[AGMenuDemoValidator alloc] init];
 
 			for (t = 0; t < [titles count]; t++) {
 				NSString *name = [titles objectAtIndex:t];
 				NSMenuItem *title = [[NSMenuItem alloc] initWithTitle:name action:NULL
 									 keyEquivalent:@""];
 				NSMenu *contents = [[NSMenu alloc] initWithTitle:name];
+				NSMenuItem *one;
+				NSMenuItem *two;
 
-				[contents addItemWithTitle:[NSString stringWithFormat:@"%@ Item One", name]
-						    action:NULL keyEquivalent:@""];
-				[contents addItemWithTitle:[NSString stringWithFormat:@"%@ Item Two", name]
-						    action:NULL keyEquivalent:@""];
+				one = [[NSMenuItem alloc] initWithTitle:[NSString stringWithFormat:@"%@ Item One", name]
+								 action:@selector(cg_demoAction:) keyEquivalent:@"o"];
+				two = [[NSMenuItem alloc] initWithTitle:[NSString stringWithFormat:@"%@ Item Two", name]
+								 action:@selector(cg_demoAction:) keyEquivalent:@"s"];
+				[one setTarget:validator];
+				[two setTarget:validator];
+				[contents addItem:one];
+				[contents addItem:two];
+				[one release];
+				[two release];
 				[title setSubmenu:contents];
 				[bar addItem:title];
 				[title release];

@@ -821,6 +821,11 @@ static double s_last_report;
 							       backing:NSBackingStoreBuffered
 								 defer:NO];
 		[_menuBarWindow setLevel:NSMainMenuWindowLevel];
+		/* **THE BAR WANTS THE MOTION, AND NOT WANTING IT WAS HALF OF A BUG.** This tier drops a plain
+		 * `NSMouseMoved` for a window that has not asked (`NSWindow -fn_translate`), and nothing had ever asked —
+		 * so the bar's own tracking loop never heard the pointer cross from one title to another, and the menu a
+		 * click had opened could not follow it. See `-setAcceptsMouseMovedEvents:`. */
+		[_menuBarWindow setAcceptsMouseMovedEvents:YES];
 		[_menuBarWindow setContentView:view];
 		/* **AND IT IS THE STRIP'S COLOUR, SO THERE IS NO SEAM.** The window's background is what shows between the
 		 * titles, and the server's strip is what shows either side of this window — two surfaces a person reads as

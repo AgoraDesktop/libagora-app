@@ -68,6 +68,15 @@ add_executable(menu_view_ink menu_view_ink.m)
 target_link_libraries(menu_view_ink PRIVATE App)
 add_test(NAME appkit-menu-view-ink COMMAND menu_view_ink)
 
+# **VALIDATION AND STATE, WHICH THE VIEW TESTS DO NOT REACH.** A target's `-validateMenuItem:` decides
+# enablement (and may change the item while it answers), the fallback rule enables an item whose target answers
+# its action, and an item that is ON draws a default checkmark when it named no image. Offscreen, so it runs
+# anywhere.
+add_executable(menu_validation menu_validation.m)
+target_link_libraries(menu_validation PRIVATE App)
+add_test(NAME appkit-menu-validation COMMAND menu_validation)
+set_tests_properties(appkit-menu-validation PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
+
 # **THE CONTROL LAYER: A VIEW THAT DELEGATES ITS FACE TO A CELL.** Offscreen, and the claim is the INK — a button's
 # bezel and title, a switch's indicator, the value doors forwarding, and `-performClick:` reaching the target.
 add_executable(control_ink control_ink.m)

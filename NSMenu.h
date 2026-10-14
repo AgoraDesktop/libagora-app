@@ -62,6 +62,18 @@ extern NSString *NSMenuWillSendActionNotification;
 extern NSString *NSMenuDidBeginTrackingNotification;
 extern NSString *NSMenuDidEndTrackingNotification;
 
+/* **THE INFORMAL PROTOCOL AN ITEM'S TARGET IMPLEMENTS TO VALIDATE ITSELF — APPLE'S OWN `NSMenuValidation`.**
+ * `-update`'s auto-enabling walk asks it when it can: a target that implements `-validateMenuItem:` decides
+ * whether its item is enabled, AND MAY CHANGE THE ITEM WHILE IT ANSWERS — setting its state, its title, its
+ * image — which is how a Check for Updates item shows a checkmark and how a title names the thing it will act on.
+ * That second half is the reason the walk must call it rather than merely reading `-respondsToSelector:` of the
+ * action. It is `@optional` because a target that does not implement it is the ordinary case, and `-update` asks
+ * `-respondsToSelector:` first. */
+@protocol NSMenuValidation <NSObject>
+@optional
+- (BOOL)validateMenuItem:(NSMenuItem *)menuItem;
+@end
+
 @interface NSMenu : NSObject
 {
 	NSString *_title;			/* RETAINED (a copy of what was set) */

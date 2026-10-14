@@ -23,7 +23,10 @@
  *   3. A click goes to THE VIEW UNDER THE POINTER, not to the first responder.
  *   4. A view that does not implement the event method BUBBLES it up the responder chain, which is what
  *      `NSResponder`'s forwarding methods are for and what an unwired chain silently swallowed.
- *   5. The compositor's close request closes the window.
+ *   5. A move is DELIVERED ONLY TO A WINDOW THAT ASKED FOR IT — the default drops it, and a window that says
+ *      `-setAcceptsMouseMovedEvents:YES` (the menu bar and every menu window now do) receives it. Without the
+ *      request every move over a menu was thrown away, so a row never highlighted under the pointer.
+ *   6. The compositor's close request closes the window.
  */
 
 #import <Foundation/Foundation.h>
@@ -67,6 +70,7 @@ static void check(int ok, const char *what)
 	int flagsChangeds;
 	int mouseDowns;
 	int mouseUps;
+	int mouseMoveds;
 	NSString *lastCharacters;
 	NSUInteger lastModifiers;
 	NSPoint lastPoint;
@@ -110,6 +114,12 @@ static void check(int ok, const char *what)
 {
 	(void)event;
 	mouseUps++;
+}
+
+- (void)mouseMoved:(NSEvent *)event
+{
+	(void)event;
+	mouseMoveds++;
 }
 
 - (void)dealloc
@@ -186,6 +196,19 @@ static void deliver(NSApplication *application, NSWindow *window, const AGEvent 
 static AGEvent click_at_content_point(NSWindow *window, CGFloat x, CGFloat y)
 {
 	return pointer_button(0x110, 1, (int)x, (int)([window frame].size.height - y));
+}
+
+/* A MOVE, in the same space the click is built in. There is no button, so the seam sees a plain motion and not
+ * a drag. */
+static AGEvent motion_at_content_point(NSWindow *window, CGFloat x, CGFloat y)
+{
+	AGEvent event;
+
+	memset(&event, 0, sizeof event);
+	event.type = AGEventPointerMotion;
+	event.x = (int)x;
+	event.y = (int)([window frame].size.height - y);
+	return event;
 }
 
 int main(void)
@@ -276,7 +299,25 @@ int main(void)
 		check(content->mouseDowns == before + 1,
 		      "a click on a view that does not handle it BUBBLES to its superview");
 
-		/* 5. THE COMPOSITOR'S CLOSE REQUEST CLOSES THE WINDOW. The close is deferred by design — it is acted
+		/* Release the button the check above left down, so the move below is a MOVE and not a drag. */
+		event = pointer_button(0x110, 0, 200, 30);
+		deliver(application, window, &event);
+
+		/* 5. A PLAIN MOVE IS DROPPED UNLESS THE WINDOW ASKED FOR IT, and that request is what lets a menu row
+		 * light up under the pointer: a window's default is NO, the menu bar and every menu window now say YES,
+		 * and before they did, EVERY move over a menu was thrown away — the row never highlighted and a submenu
+		 * never opened by hovering. Both halves are asserted, because only the pair catches a tier that dropped
+		 * the event for a window that asked, or delivered it for one that did not. */
+		before = inner->mouseMoveds;
+		event = motion_at_content_point(window, 60.0, 30.0);	/* over `inner` */
+		deliver(application, window, &event);
+		check(inner->mouseMoveds == before, "a move the window did NOT ask for is dropped");
+		[window setAcceptsMouseMovedEvents:YES];
+		event = motion_at_content_point(window, 60.0, 30.0);
+		deliver(application, window, &event);
+		check(inner->mouseMoveds == before + 1, "and a move it DID ask for reaches the view under the pointer");
+
+		/* 6. THE COMPOSITOR'S CLOSE REQUEST CLOSES THE WINDOW. The close is deferred by design — it is acted
 		 * on by the pump, not inside the seam's dispatch — so it takes one more pass to be seen. */
 		memset(&event, 0, sizeof event);
 		event.type = AGEventClose;

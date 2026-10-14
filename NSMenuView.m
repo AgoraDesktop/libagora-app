@@ -4,6 +4,7 @@
  * Copyright © 2026 Kyle J. Cardoza. MIT licensed. SPDX-License-Identifier: MIT
  */
 
+#include <stdlib.h>
 #import "NSMenuView.h"
 #import "NSWindow.h"
 #import "NSMenu.h"
@@ -11,24 +12,79 @@
 #import "NSMenuItemCell.h"
 #import "NSColor.h"
 #import "NSBezierPath.h"
+#import "NSGraphicsContext.h"
 
 #import <Foundation/NSArray.h>
 
 const CGFloat NSMenuRowHeight = 22.0;
 
-/* THE HIGHLIGHT, IN THE COLOUR `NSMenu`'s own hand-drawn pass used — so that the day this view replaces that pass,
- * the menu does not change colour. */
 /* A BAR'S ITEM IS ITS TITLE PLUS THE AIR EITHER SIDE OF IT, and a floor so that a one-letter title is still a
  * target a person can hit. Both are the bar's own measures, so they live beside the bar's drawing. */
 #define APPKIT_MENUBAR_TITLE_PADDING  12.0
 #define APPKIT_MENUBAR_MIN_ITEM_WIDTH 40.0
 
-/* **ARGENTUM'S ACCENT, WHICH IS THE COLOUR OF "THIS ONE IS CHOSEN".** Sampled 164,154,255 — a periwinkle — and it
- * is used for every selection in the sample, not only the menu bar's: a highlight is the same statement wherever it
- * is made, so it is the same colour. The previous values here were a blue that appeared nowhere in the design. */
-#define APPKIT_MENU_HIGHLIGHT_RED   0.643
-#define APPKIT_MENU_HIGHLIGHT_GREEN 0.604
-#define APPKIT_MENU_HIGHLIGHT_BLUE  1.0
+/* ============================================================================================ *
+ * THE DROPDOWN'S PANEL AND ITS SELECTION, WHICH ARE SNOW LEOPARD'S.                             *
+ *                                                                                                *
+ * A MENU IS A LIGHT ROUNDED PANEL WITH A HAIRLINE BORDER, and the row under the pointer is a      *
+ * rounded chip INSET inside that panel — not a full-width bar of colour — with its title and its  *
+ * shortcut inked to sit on it. What this replaces filled the entire row with a flat colour and   *
+ * left the ink dark, which is none of those three things.                                       *
+ *                                                                                                *
+ * THE SELECTION IS ARGENTUM'S PERIWINKLE, AND THE INK ON IT IS BLACK. The chip was Snow Leopard's blue with    *
+ * white ink for one pass; the desktop's own sampled accent is the periwinkle (164,154,255), and a chip LIGHT     *
+ * enough to carry dark ink is exactly what that accent is. So the STRUCTURE stays Snow Leopard's — a rounded     *
+ * chip inset inside the panel, with the title and its shortcut inked to match — and the COLOUR is the design's.  *
+ * ============================================================================================ */
+#define APPKIT_MENU_PANEL_TOP        0.985
+#define APPKIT_MENU_PANEL_BOTTOM     0.925
+#define APPKIT_MENU_PANEL_RADIUS     4.0
+#define APPKIT_MENU_HIGHLIGHT_INSET  2.0
+#define APPKIT_MENU_HIGHLIGHT_RADIUS 3.0
+/* **THE ACCENT IS `NSColor`'S, NOT THIS VIEW'S.** These six numbers used to be `#define`s here — the platform's
+ * sampled periwinkle, copied into the one file that drew a selection chip — and the moment a CONTROL wanted the same
+ * colour there were two of it. `[NSColor cg_accentColor]` is now the single definition and the menu asks for it; the
+ * gradient stays (both stops are the accent today, and the shape is what a later two-tone selection uses). */
+#define APPKIT_MENU_HIGHLIGHT_RADIUS 3.0
+
+/* **A TWO-STOP VERTICAL GRADIENT IN A ROUNDED RECTANGLE, CLIPPED TO IT.** CoreGraphics owns the ramp and
+ * `NSBezierPath` owns the clip; the fallback is the FLAT BOTTOM COLOUR rather than nothing, because a menu chip
+ * that vanished when there was no `CGContext` would be a worse bug than one without its gradient. */
+static void apk_fill_vertical_gradient(NSRect rect, CGFloat radius,
+				       CGFloat tr, CGFloat tg, CGFloat tb,
+				       CGFloat br, CGFloat bg, CGFloat bb)
+{
+	NSBezierPath *path = [NSBezierPath bezierPathWithRoundedRect:rect xRadius:radius yRadius:radius];
+	CGContextRef c = [[NSGraphicsContext currentContext] CGContext];
+	CGFloat components[8];
+	CGColorSpaceRef space;
+	CGGradientRef gradient;
+
+	if (c == NULL) {
+		[[NSColor colorWithCalibratedRed:br green:bg blue:bb alpha:1.0] setFill];
+		[path fill];
+		return;
+	}
+	components[0] = tr; components[1] = tg; components[2] = tb; components[3] = 1.0;
+	components[4] = br; components[5] = bg; components[6] = bb; components[7] = 1.0;
+	space = CGColorSpaceCreateDeviceRGB();
+	gradient = CGGradientCreateWithColorComponents(space, components, NULL, 2);
+	if (gradient == NULL) {
+		[[NSColor colorWithCalibratedRed:br green:bg blue:bb alpha:1.0] setFill];
+		[path fill];
+		CGColorSpaceRelease(space);
+		return;
+	}
+	CGContextSaveGState(c);
+	[path addClip];
+	/* USER SPACE RUNS UP, so the top stop is the rect's MAX y — which is what makes this a gradient from the
+	 * top down and not, as the first version of any gradient always is, upside down. */
+	CGContextDrawLinearGradient(c, gradient, CGPointMake(NSMidX(rect), NSMaxY(rect)),
+				    CGPointMake(NSMidX(rect), NSMinY(rect)), 0);
+	CGContextRestoreGState(c);
+	CGGradientRelease(gradient);
+	CGColorSpaceRelease(space);
+}
 
 @implementation NSMenuView
 
@@ -94,12 +150,27 @@ const CGFloat NSMenuRowHeight = 22.0;
 - (CGFloat)widthForItemAtIndex:(NSInteger)index
 {
 	NSMenuItemCell *cell = [self cellForItemAtIndex:index];
-	CGFloat width = [cell titleWidth] + 2.0 * APPKIT_MENUBAR_TITLE_PADDING;
 
-	/* **A BAR'S ITEMS ARE AS WIDE AS THEIR TITLES, WHICH IS WHY A BAR'S LAYOUT HAS TO ASK A CELL.** A dropdown's
-	 * rows are all the menu's width and their geometry is arithmetic; a bar's columns are the ITEM's, and only
-	 * the cell that measured the title knows how wide that is. */
-	return (width < APPKIT_MENUBAR_MIN_ITEM_WIDTH) ? APPKIT_MENUBAR_MIN_ITEM_WIDTH : width;
+	/* **THE TWO ORIENTATIONS MEASURE DIFFERENT THINGS, WHICH IS WHY THIS DOOR ASKS WHICH ONE IT IS.** A DROPDOWN
+	 * row is as wide as its own CONTENT — the gutter, the title, the least gap, the shortcut, the right padding —
+	 * and the menu is as wide as its widest row. A BAR column is just its title and its air, and the bar is the
+	 * SUM of them. */
+	if (!_horizontal) {
+		CGFloat width = APPKIT_MENU_LEFT_GUTTER + [cell titleWidth] + APPKIT_MENU_RIGHT_PADDING;
+
+		if ([cell keyEquivalentWidth] > 0.0) {
+			width += APPKIT_MENU_ITEM_GAP + [cell keyEquivalentWidth];
+		}
+		return width;
+	}
+	{
+		CGFloat width = [cell titleWidth] + 2.0 * APPKIT_MENUBAR_TITLE_PADDING;
+
+		/* **A BAR'S ITEMS ARE AS WIDE AS THEIR TITLES, WHICH IS WHY A BAR'S LAYOUT HAS TO ASK A CELL.** A
+		 * dropdown's rows are all the menu's width and their geometry is arithmetic; a bar's columns are the
+		 * ITEM's, and only the cell that measured the title knows how wide that is. */
+		return (width < APPKIT_MENUBAR_MIN_ITEM_WIDTH) ? APPKIT_MENUBAR_MIN_ITEM_WIDTH : width;
+	}
 }
 
 - (NSRect)rectForItemAtIndex:(NSInteger)index
@@ -237,6 +308,10 @@ const CGFloat NSMenuRowHeight = 22.0;
 						if (next == nil) {
 							continue;
 						}
+						if (getenv("APPKIT_MENU_DIAG") != NULL) {
+							fprintf(stderr, "  DIAG bar: event type %ld, the menu owns it: %s\n",
+								(long)[next type], [open cg_ownsEvent:next] ? "yes" : "no");
+						}
 						if ([open cg_ownsEvent:next]) {
 							if (![open cg_trackOneEvent:next]) {
 								ended = YES;	/* a pick, a dismissal, or Escape */
@@ -253,6 +328,10 @@ const CGFloat NSMenuRowHeight = 22.0;
 									consume_release = NO;	/* the press that opened it, coming up */
 									continue;
 								}
+								if (getenv("APPKIT_MENU_DIAG") != NULL) {
+									fprintf(stderr, "  DIAG bar: ENDING the session here (event type %ld)\n",
+										(long)type);
+								}
 								[open cancelTracking];
 								ended = YES;
 								continue;
@@ -260,11 +339,19 @@ const CGFloat NSMenuRowHeight = 22.0;
 							if (hit >= 0 && hit != current) {
 								/* **THE POINTER MOVED TO ANOTHER TITLE AND THE SESSION FOLLOWS IT** — the
 								 * gesture that could not work while the menu owned its own loop. */
+								if (getenv("APPKIT_MENU_DIAG") != NULL) {
+									fprintf(stderr, "  DIAG bar: ENDING the session here (event type %ld)\n",
+										(long)type);
+								}
 								[open cancelTracking];
 								current = hit;
 								break;
 							}
 							if (type == NSLeftMouseDown && hit < 0) {
+								if (getenv("APPKIT_MENU_DIAG") != NULL) {
+									fprintf(stderr, "  DIAG bar: ENDING the session here (event type %ld)\n",
+										(long)type);
+								}
 								[open cancelTracking];
 								ended = YES;
 							}
@@ -342,8 +429,16 @@ const CGFloat NSMenuRowHeight = 22.0;
 	NSInteger i, count = (_shownMenu != nil) ? [_shownMenu numberOfItems] : 0;
 	CGFloat width = 0.0;
 
+	/* **A BAR IS THE SUM OF ITS COLUMNS AND A DROPDOWN IS THE WIDEST OF ITS ROWS.** One door, because both answer
+	 * "how wide does this menu need to be", and the orientation is what decides how. */
 	for (i = 0; i < count; i++) {
-		width += [self widthForItemAtIndex:i];
+		CGFloat item = [self widthForItemAtIndex:i];
+
+		if (_horizontal) {
+			width += item;
+		} else if (item > width) {
+			width = item;
+		}
 	}
 	return width;
 }
@@ -362,10 +457,21 @@ const CGFloat NSMenuRowHeight = 22.0;
 	 * and the WINDOW's background colour is the strip's — told to the client as part of the bar's own description —
 	 * so a view that filled its own panel here would put a rectangle of a slightly different grey across a surface
 	 * meant to be one thing. MEASURED before this: the server's strip at 216,216,216 and this panel at 240,240,240.
-	 * A DROPDOWN still paints its own, because a dropdown is a panel with nothing behind it. */
+	 * A DROPDOWN still paints its own, because a dropdown is a panel with nothing behind it.
+	 *
+	 * **AND IT IS AGORA'S PANEL: ROUNDED, BARELY GRADED, AND WITH NO BORDER AT ALL.** A menu is a flat sheet of the
+	 * panel's own colour; a hairline around it is a frame, and the panel's own rounded shade is already doing that
+	 * job without one.
+	 *
+	 * THE HALF-PIXEL INSET WENT WITH THE BORDER, because the border was the whole of its reason — "inset half a
+	 * pixel so the one-pixel border falls INSIDE the surface rather than half off it" was the sentence, and a panel
+	 * with nothing to keep inside it is the surface itself. */
 	if (!_horizontal) {
-		[[NSColor colorWithCalibratedRed:0.94 green:0.94 blue:0.94 alpha:1.0] setFill];
-		[[NSBezierPath bezierPathWithRect:bounds] fill];
+		NSRect panel = bounds;
+
+		apk_fill_vertical_gradient(panel, APPKIT_MENU_PANEL_RADIUS,
+					   APPKIT_MENU_PANEL_TOP, APPKIT_MENU_PANEL_TOP, APPKIT_MENU_PANEL_TOP,
+					   APPKIT_MENU_PANEL_BOTTOM, APPKIT_MENU_PANEL_BOTTOM, APPKIT_MENU_PANEL_BOTTOM);
 	}
 
 	for (i = 0; i < count; i++) {
@@ -377,9 +483,18 @@ const CGFloat NSMenuRowHeight = 22.0;
 			continue;
 		}
 		if (item == _highlightedItem) {
-			[[NSColor colorWithCalibratedRed:APPKIT_MENU_HIGHLIGHT_RED green:APPKIT_MENU_HIGHLIGHT_GREEN
-						   blue:APPKIT_MENU_HIGHLIGHT_BLUE alpha:1.0] setFill];
-			[[NSBezierPath bezierPathWithRect:row] fill];
+			/* **A CHIP INSET INSIDE THE ROW, NOT THE WHOLE ROW.** That inset-and-round is most of what makes a
+			 * Mac menu read as a menu; a full-width band of colour is what a Windows menu does. The bar's chip is
+			 * inset the same way, a little more vertically, so it does not touch the strip's edges. */
+			NSRect chip = _horizontal ? NSInsetRect(row, 1.0, 2.0)
+						  : NSInsetRect(row, APPKIT_MENU_HIGHLIGHT_INSET,
+								APPKIT_MENU_HIGHLIGHT_INSET);
+
+			NSColor *accent = [NSColor cg_accentColor];
+
+			apk_fill_vertical_gradient(chip, APPKIT_MENU_HIGHLIGHT_RADIUS,
+						   [accent redComponent], [accent greenComponent], [accent blueComponent],
+						   [accent redComponent], [accent greenComponent], [accent blueComponent]);
 		}
 		if ([item isSeparatorItem]) {
 			[cell drawSeparatorItemWithFrame:row inView:self];
@@ -388,7 +503,10 @@ const CGFloat NSMenuRowHeight = 22.0;
 		/* **AND THE TWO IMAGE DOORS ARE ASKED ONLY WHEN THERE IS AN IMAGE**, so that a menu of plain titles does
 		 * not make a door that has no work print a refusal once per row per frame. A door that refuses is doing
 		 * its job; a row with no image is not its caller. */
-		if ([cell stateImageWidth] > 0.0) {
+		/* **AND THE STATE DOOR IS ASKED WHEN THERE IS ANYTHING TO SHOW: a state image the item named, OR the
+		 * default checkmark its own state asks for.** An item that is ON with no picture of its own used to draw
+		 * nothing at all, so a menu could not say which of its items was chosen. */
+		if ([cell stateImageWidth] > 0.0 || [item state] != NSOffState) {
 			[cell drawStateImageWithFrame:row inView:self];
 		}
 		if ([cell imageWidth] > 0.0) {

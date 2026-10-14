@@ -37,6 +37,22 @@
 
 NS_ASSUME_NONNULL_BEGIN
 
+/* ============================================================================================ *
+ * THE DROPDOWN'S OWN MEASURES, WHICH ARE SNOW LEOPARD'S.                                        *
+ *                                                                                                *
+ * THE VIEW LAYS THE ROWS OUT AND THE CELL DRAWS THEM, so the numbers they have to agree about    *
+ * live in one place: a menu width computed from one gutter and a title drawn at another is a      *
+ * menu whose ink runs under its own key equivalents.                                             *
+ *                                                                                                *
+ * A MENU ROW, LEFT TO RIGHT: a GUTTER that holds the checkmark (reserved for EVERY row, whether  *
+ * or not it has one, so titles line up), the title, then the key equivalent pinned to the right   *
+ * edge with the right padding outside it. The gap is the least air between a title and a key —    *
+ * a menu is as wide as its WIDEST row, so the gap is a minimum and not a fixed space.            *
+ * ============================================================================================ */
+#define APPKIT_MENU_LEFT_GUTTER    20.0
+#define APPKIT_MENU_RIGHT_PADDING  14.0
+#define APPKIT_MENU_ITEM_GAP       18.0
+
 @interface NSMenuItemCell : NSButtonCell
 {
 	/* NOT RETAINED, AND THAT IS APPLE'S ARRANGEMENT: a cell belongs to the menu view it draws in and points AT

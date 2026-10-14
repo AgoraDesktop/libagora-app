@@ -1250,6 +1250,21 @@ void AGWindowSetLevel(AGWindow *window, int level)
 	}
 }
 
+void AGWindowSetPointerGrab(AGWindow *window, int grab)
+{
+	if (window == NULL) {
+		return;
+	}
+	/* **AND NOTHING IS REMEMBERED HERE, WHICH IS THE DIFFERENCE FROM THE OTHER SETTERS.** A compositor that does
+	 * not speak `agora_shell` has no door for this, and a client that recorded the request would believe it holds
+	 * a pointer the compositor never gave it — so the request simply is not made, and the popup behaves as it did
+	 * before: a click on the desktop goes nowhere. */
+	if (window->agora != NULL) {
+		agora_window_set_pointer_grab(window->agora, grab ? 1 : 0);
+		wl_display_flush(window->server->display);
+	}
+}
+
 /* **THE ONE KIND OF WINDOW THE SERVER PLACES, AND THE DOOR IS A KIND RATHER THAN A FRAME.** `NSStatusItem` says
  * how long its item is and nothing about where it goes, because an application cannot know what else is in the
  * status bar. So the width is what is sent — and the frame this layer remembers is left alone, so that a client

@@ -36,6 +36,24 @@
 
 #include <stdio.h>
 
+/* **THE APPLICATION'S WINDOW REGISTRY, WHICH A MENU'S TRACKING WINDOW JOINS AND MUST LEAVE.**
+ * `-orderFrontRegardless` registers the window — the tracking loop reaches it through the application's pump,
+ * which drains that list and nothing else — and `-orderOut:` does NOT take it back out. So a closed menu's window
+ * stayed in the list, RETAINED, with its `AGWindow` and its Wayland surface alive: MEASURED, every menu ever
+ * opened was still a mapped-but-hidden surface in the server. This is the door that takes it out, declared here
+ * the way `NSWindow.m` declares the same seam. */
+@interface NSApplication (APPKITMenuWindowRegistry)
+- (void)cg_removeWindow:(NSWindow *)aWindow;
+@end
+
+/* **THE POINTER'S FALLBACK, WHICH A MENU'S TRACKING WINDOW TAKES WHILE IT IS UP.** Declared here for the same
+ * reason the registry above is: this file is where it is called. While a menu is tracking it holds the fallback,
+ * so a click on the DESKTOP — where the compositor has no surface to give it to — arrives at the menu and
+ * dismisses it, which is what "click anywhere to close" means. */
+@interface NSWindow (APPKITMenuPointerGrab)
+- (void)cg_setPointerGrab:(BOOL)flag;
+@end
+
 NSString *NSMenuDidAddItemNotification = @"NSMenuDidAddItemNotification";
 NSString *NSMenuDidChangeItemNotification = @"NSMenuDidChangeItemNotification";
 NSString *NSMenuDidRemoveItemNotification = @"NSMenuDidRemoveItemNotification";
@@ -63,6 +81,13 @@ NSString *NSMenuDidEndTrackingNotification = @"NSMenuDidEndTrackingNotification"
 		 * "announces-by-default" check is what caught the difference, which is the case for asserting defaults
 		 * rather than only transitions. */
 		_menuChangedMessagesEnabled = YES;
+		/* **AND THE OTHER ONE, BY THE SAME LESSON ONE FIELD OVER: ZEROED STORAGE IS NOT A DEFAULT.** `NSMenu`
+		 * auto-enables its items UNLESS told not to — that is Apple's default, and `-autoenablesItems` is a switch
+		 * a caller TURNS OFF, not one it turns on. The tree had it as NO, so `-update`'s enabling walk never ran,
+		 * and menu VALIDATION was unreachable: a target's `-validateMenuItem:` was never asked and an item whose
+		 * action nobody implemented stayed enabled. The probe found it the first time it asserted a DEFAULT rather
+		 * than a transition — the same shape as the flag above, which is why the sentence is written twice. */
+		_autoenablesItems = YES;
 	}
 	return self;
 }
@@ -75,6 +100,9 @@ NSString *NSMenuDidEndTrackingNotification = @"NSMenuDidEndTrackingNotification"
 	[self removeAllItems];
 	[_items release];
 	[_title release];
+	/* AND THE TRACKING VIEW, which an open session releases when it ends; a menu deallocated mid-session (or one
+	 * that never opened) still owns it, so this is the other half of that pair and not a double release. */
+	[_menuView release];
 	[super dealloc];
 }
 
@@ -371,26 +399,21 @@ NSString *NSMenuDidEndTrackingNotification = @"NSMenuDidEndTrackingNotification"
 	/* THE WILL-SEND NOTICE GOES OUT BEFORE THE SEND, which is what makes it useful for a caller that wants to
 	 * know an action is about to happen, and the DID-SEND one after — Apple's pair, in Apple's order. */
 	[[NSNotificationCenter defaultCenter] postNotificationName:NSMenuWillSendActionNotification object:item];
-	/* TARGET/ACTION, AND ONLY ONE OF THE TWO SHAPES IS THIS CLASS'S. A NAMED TARGET is dispatched right here,
-	 * through the item's own action and with the item as the argument. A NIL TARGET MEANS "whoever implements
-	 * it" — the RESPONDER CHAIN — and that needs the APPLICATION'S dispatch: a key window, its first responder
-	 * and the walk up from there, which is the wiring the tracking half of this class owns. So the door REFUSES
-	 * BY NAME rather than reaching for a walk this class cannot make, because a wrong dispatch is worse than a
-	 * named refusal: this object is a menu, and the first thing a guessed walk would do is send an action to it.
+	/* TARGET/ACTION, AND BOTH SHAPES ARE NOW DISPATCHED. A NAMED TARGET is sent directly, through the item's own
+	 * action and with the item as the argument. A NIL TARGET MEANS "WHOEVER IMPLEMENTS IT" — the RESPONDER CHAIN
+	 * — and the APPLICATION owns that walk, so the menu hands it over rather than making a second, partial walk
+	 * of its own. (THE FIRST VERSION OF THIS DOOR CALLED `-tryToPerform:with:` ON ITSELF, a method NSMenu does
+	 * not implement, and this tree RAISES on that rather than returning nil — which is why the walk goes through
+	 * the application, where it has always been.)
 	 *
-	 * (THE FIRST VERSION OF THIS DOOR CALLED `-tryToPerform:with:` ON ITSELF — a method NSMenu does not
-	 * implement — and THIS TREE RAISES on that rather than returning nil, so it ABORTED THE PROBE instead of
-	 * failing a check. That is the loudest way a wrong guess can present, and the reason the check is now
-	 * asserted through a named refusal rather than through a walk that does not exist.) */
+	 * A NIL TARGET WITH NOTHING IN THE CHAIN ANSWERING IS A REFUSAL AND NOT A CRASH: the enabling walk has
+	 * usually already disabled such an item, so a click on one is the case where that walk was stale. */
 	if ([item target] != nil) {
 		if (![[item target] respondsToSelector:[item action]]) {
 			return NO;
 		}
 		[[item target] performSelector:[item action] withObject:item];
-	} else {
-		fprintf(stderr, "APPKIT-REFUSE: -performActionForItemAtIndex: cannot dispatch an item whose target "
-				"is NIL — that means the responder chain, and the walk belongs to the application's "
-				"dispatch (the tracking half of this class). Give the item a target\n");
+	} else if (![[NSApplication sharedApplication] sendAction:[item action] to:nil from:item]) {
 		return NO;
 	}
 	[[NSNotificationCenter defaultCenter] postNotificationName:NSMenuDidSendActionNotification object:item];
@@ -537,12 +560,25 @@ static const CGFloat NSMenuStateColumnWidth = 20.0;
 			continue;
 		}
 		target = [item target];
-		/* THE AUTO-ENABLING RULE, AND ONLY THE HALF THIS CLASS CAN ANSWER: an item that NAMES a target is enabled
-		 * exactly when that target answers the action. AN ITEM WITH NO TARGET MEANS THE RESPONDER CHAIN, and this
-		 * class cannot walk it — the same ground `-performActionForItemAtIndex:` refuses on — so the item is LEFT
-		 * ALONE rather than enabled or disabled on a guess. A guessed enablement is a menu offering an action
-		 * that then does nothing, which is worse than a menu that declines to say. */
-		if (target != nil) {
+		/* **A TARGET THAT VALIDATES DECIDES — AND MAY CHANGE THE ITEM WHILE IT DOES.** `-validateMenuItem:` is
+		 * the Mac's own protocol for this, and its SECOND half is the reason the walk calls it rather than merely
+		 * reading `-respondsToSelector:` of the action: the validator is allowed to set the item's state, its title
+		 * and its image as it answers, which is how a "Check for Updates" item carries a checkmark and how a title
+		 * comes to name the thing it will act on.
+		 *
+		 * **AND AN ITEM WITH NO TARGET MEANS THE RESPONDER CHAIN, WHICH THE APPLICATION WALKS.** `-targetForAction:`
+		 * starts at the key window's first responder and walks view → superview → window → application, so the
+		 * item is validated against WHOEVER WOULD RECEIVE ITS ACTION — which is what makes a nil-target item enable
+		 * and disable as the first responder changes. The first version of this walk LEFT such an item alone on the
+		 * ground that this class could not make the walk; it can, by asking, and leaving it alone was the same as
+		 * promising an action nobody had checked. NO TARGET AT ALL disables the item, which is the Mac's answer and
+		 * the honest one: an enabled item whose action nobody answers is a promise the menu cannot keep. */
+		if (target == nil && [item action] != NULL) {
+			target = [[NSApplication sharedApplication] targetForAction:[item action]];
+		}
+		if ([target respondsToSelector:@selector(validateMenuItem:)]) {
+			[item setEnabled:[(id <NSMenuValidation>)target validateMenuItem:item]];
+		} else {
 			[item setEnabled:([item action] != NULL && [target respondsToSelector:[item action]])];
 		}
 	}
@@ -658,6 +694,18 @@ static const CGFloat NSMenuStateColumnWidth = 20.0;
 	return [_items objectAtIndex:(NSUInteger)row];
 }
 
+/* **WHETHER A ROW MAY LIGHT UP AT ALL — WHICH IS NOT THE SAME QUESTION AS WHETHER THE POINTER IS OVER IT.**
+ * A DISABLED item and a SEPARATOR both take NO highlight on the Mac: the chip disappears as the pointer crosses
+ * one, because the highlight is the menu saying "release here and this happens", and a row where nothing happens
+ * must not say it. It is written as its own door so the decision is one place and can be ASKED — the tracking loop
+ * asks it on every move, and the check beside it asks it directly. It is also what makes the SUBMENU rule correct
+ * for free: opening follows the highlight, so a disabled item's submenu never opens because there is no highlight
+ * to follow. */
+- (BOOL)cg_itemTakesHighlight:(NSMenuItem *)item
+{
+	return item != nil && [item isEnabled] && ![item isSeparatorItem];
+}
+
 /* THE ROW THE POINTER IS OVER, written by the step below and READ BY THE PAINT above — which is the reader this
  * row was owed while the session did not exist. Setting it repaints when a session is up, because the highlight IS
  * what the paint draws. */
@@ -714,10 +762,16 @@ static const CGFloat NSMenuStateColumnWidth = 20.0;
 	 * coordinate space — the parent only has to recognise that the event is not its. (The child's window is read
 	 * straight off the child because these fields are PROTECTED: another instance of the same class may read them,
 	 * which is exactly the case here and the reason no accessor is owed.) AN EVENT THAT NAMES NO WINDOW IS THE
-	 * PARENT'S — a stand-in, or a host with no display — since the parent is the only space it could be in. */
+	 * PARENT'S — a stand-in, or a host with no display — since the parent is the only space it could be in.
+	 *
+	 * **THE TEST IS THE WINDOW NUMBER AND NOT THE WINDOW OBJECT, WHICH IS THE DEFECT THIS FIXED.** `NSEvent` in
+	 * this tier has `-windowNumber` and NOT `-window` (see its header), so `[event window]` — even guarded by
+	 * `-respondsToSelector:` — was always NO: THE MENU NEVER OWNED A SINGLE EVENT. Every motion over an open
+	 * menu fell through to the BAR'S loop, which read the menu's coordinates in its own space, hit the first
+	 * title, and "switched" to it — so moving onto a menu row closed the menu and lit up the application title. */
 	if (_openSubmenu != nil && ((NSMenu *)_openSubmenu)->_trackingWindow != nil &&
-	    [event respondsToSelector:@selector(window)] &&
-	    [event window] == ((NSMenu *)_openSubmenu)->_trackingWindow) {
+	    [event respondsToSelector:@selector(windowNumber)] &&
+	    [event windowNumber] == [((NSMenu *)_openSubmenu)->_trackingWindow windowNumber]) {
 		if (![_openSubmenu cg_trackOneEvent:event]) {
 			/* THE CHILD ENDED ITSELF — a pick in it, or a dismissal — AND THAT TAKES THE PARENT WITH IT: choosing
 			 * from a submenu closes the whole menu, which is what a menu is. */
@@ -769,8 +823,13 @@ static const CGFloat NSMenuStateColumnWidth = 20.0;
 			}
 		}
 		/* MOVEMENT SETS THE HIGHLIGHT AND NOTHING ELSE. A press is deliberately not a pick: Apple sends the action
-		 * on the RELEASE, which is what makes a drag off a row cancel it. */
-		[self setHighlightedItem:[self cg_itemAtPoint:[event locationInWindow]]];
+		 * on the RELEASE, which is what makes a drag off a row cancel it. **AND A ROW THAT CANNOT BE CHOSEN DOES
+		 * NOT LIGHT UP** — see `-cg_itemTakesHighlight:`. */
+		{
+			NSMenuItem *under = [self cg_itemAtPoint:[event locationInWindow]];
+
+			[self setHighlightedItem:[self cg_itemTakesHighlight:under] ? under : nil];
+		}
 		/* **AND THE SUBMENU FOLLOWS THE HIGHLIGHT, WHICH IS THE WHOLE OF THE SUBMENU'S RULE**: an item that HAS one
 		 * opens it beside itself; an item that has not closes whatever is open. The child is opened as A SESSION OF
 		 * ITS OWN through the ordinary popup door — at the place `-locationForSubmenu:` computes, which makes that
@@ -862,24 +921,37 @@ static const CGFloat NSMenuStateColumnWidth = 20.0;
 	}
 	size = [self size];
 	DIAG("  DIAG open: -size took %.1f ms\n", ([NSDate timeIntervalSinceReferenceDate] - t0) * 1000.0);
-	if (size.width <= 0.0) {
-		size.width = 120.0;	/* a floor, because a menu narrower than this is not usable */
-	}
 	size.height = (CGFloat)[_items count] * NSMenuRowHeight;
 	if (size.height < NSMenuRowHeight) {
 		size.height = NSMenuRowHeight;
+	}
+	/* **THE WIDTH IS THE WIDER OF THE CALLER'S FLOOR AND THE CONTENT, WHICH THIS TIER CAN NOW MEASURE.** `-size`
+	 * is the floor; the VIEW is what holds the cells that measured each row's title and shortcut, and a menu is
+	 * as wide as its WIDEST row. So the view is made FIRST — it is the thing with the measurement — and the
+	 * window is placed around the width that comes back, which is why the frame is set again just below. */
+	_menuView = [[NSMenuView alloc] initWithFrame:NSMakeRect(0.0, 0.0, (size.width > 0.0) ? size.width : 1.0,
+								 size.height)];
+	[(NSMenuView *)_menuView setMenu:self];
+	if ([(NSMenuView *)_menuView requiredWidth] > size.width) {
+		size.width = [(NSMenuView *)_menuView requiredWidth];
+	}
+	if (size.width <= 0.0) {
+		size.width = 120.0;	/* a floor, because a menu narrower than this is not usable */
 	}
 	/* THE FRAME HANGS BELOW-LEFT OF THE POINT, which is where a menu opens from a click. */
 	_trackingFrame = NSMakeRect(location.x, location.y - size.height, size.width, size.height);
 	/* **AND THE VIEW THAT FILLS IT, MADE BEFORE THE WINDOW IS SHOWN** so that the first display has something to
 	 * draw: a window whose content is set after it is on the screen has been on the screen empty. */
-	_menuView = [[NSMenuView alloc] initWithFrame:NSMakeRect(0.0, 0.0, _trackingFrame.size.width,
-								 _trackingFrame.size.height)];
-	[(NSMenuView *)_menuView setMenu:self];
+	[_menuView setFrame:NSMakeRect(0.0, 0.0, _trackingFrame.size.width, _trackingFrame.size.height)];
 	_trackingWindow = [[NSWindow alloc] initWithContentRect:_trackingFrame
 						      styleMask:NSBorderlessWindowMask
 							backing:NSBackingStoreBuffered
 							  defer:NO];
+	/* **A MENU HAS TO HEAR THE POINTER MOVE OR ITS ROWS CANNOT HIGHLIGHT.** `-cg_trackOneEvent:` sets the
+	 * highlight from `NSMouseMoved`, and this tier DROPS a plain move for a window that has not asked for one
+	 * (`NSWindow -fn_translate`) — so the row under the pointer never lit up and a submenu never opened by
+	 * hovering, which is the second half of the reported behaviour. Asking here is the whole of the fix. */
+	[_trackingWindow setAcceptsMouseMovedEvents:YES];
 	if (_trackingWindow == nil) {
 		/* **A SESSION WITH NO WINDOW IS NOTED RATHER THAN REFUSED, AND THE DIFFERENCE MATTERS.** A host with no
 		 * reachable display cannot show a menu, but the session's own state — its frame, its rows, its highlight,
@@ -893,8 +965,18 @@ static const CGFloat NSMenuStateColumnWidth = 20.0;
 	     ([NSDate timeIntervalSinceReferenceDate] - t0) * 1000.0);
 	[_trackingWindow setContentView:_menuView];
 	[_trackingWindow orderFrontRegardless];
+	/* **AND IT TAKES THE POINTER'S FALLBACK, so a click outside it — on the desktop, which has no surface — still
+	 * reaches it and dismisses the menu.** A surface under the pointer is untouched, so the menu bar's own
+	 * switching and the menu's hover keep working. */
+	[_trackingWindow cg_setPointerGrab:YES];
 	_tracking = YES;
-	_openedByPress = YES;
+	/* **A MENU THE CALLER DRIVES DOES NOT SWALLOW THE OPENING RELEASE ITSELF — THE CALLER DOES.** The bar's own
+	 * loop consumes the release of the click that opened the menu (`consume_release`), so a flag set here never
+	 * sees that release; it swallows the NEXT one instead, which is the first click on a MENU ITEM. That is
+	 * exactly "the first click on a menu item is ignored": the pick happened on the second click, because the
+	 * first release was eaten as if it were the press that opened the menu. A menu that drives ITSELF still needs
+	 * the flag, because the opening release does reach it and must not pick the item under the pointer. */
+	_openedByPress = _callerDrives ? NO : YES;
 	/* AND THE MENU UPDATES ITSELF FIRST, so that what it shows is what its targets can actually answer — this is
 	 * `-update` getting its caller, one unit after it was given its reader. */
 	[self update];
@@ -992,10 +1074,14 @@ static const CGFloat NSMenuStateColumnWidth = 20.0;
 
 - (BOOL)cg_ownsEvent:(id)event
 {
-	if (event == nil || ![event respondsToSelector:@selector(window)]) {
+	/* **`-windowNumber`, NOT `-window`.** `NSEvent` in this tier has no `-window` (its header says why), so the
+	 * old guard `-respondsToSelector:@selector(window)` made this door answer NO for every event — the menu never
+	 * owned anything, and a move onto a menu row was handled by the bar as if it were a move over the bar. See
+	 * `-cg_trackOneEvent:`. */
+	if (event == nil || ![event respondsToSelector:@selector(windowNumber)]) {
 		return NO;
 	}
-	if (_trackingWindow != nil && [event window] == _trackingWindow) {
+	if (_trackingWindow != nil && [event windowNumber] == [_trackingWindow windowNumber]) {
 		return YES;
 	}
 	if (_openSubmenu != nil) {
@@ -1015,12 +1101,26 @@ static const CGFloat NSMenuStateColumnWidth = 20.0;
 	[self cg_closeSubmenu];
 	DIAG("  DIAG close: the session ended\n");
 	_tracking = NO;
+	/* GIVE THE POINTER'S FALLBACK BACK BEFORE THE WINDOW GOES, so nothing is left believing it takes desktop
+	 * clicks. The teardown below destroys the surface anyway, and `aws_seat_surface_gone` clears it on the way
+	 * out — but saying so here is what keeps the two ends of this in one place. */
+	[_trackingWindow cg_setPointerGrab:NO];
 	/* NOT RELEASED — the items belong to this menu, and the highlight is a POINTER to one of them rather than a
 	 * thing of its own. */
 	_highlightedItem = nil;
 	[_trackingWindow orderOut:nil];
+	/* **AND IT LEAVES THE REGISTRY, WHICH IS WHAT ACTUALLY DESTROYS IT.** `-orderFrontRegardless` put the window
+	 * in the application's list, and THAT list retains it; `-orderOut:` changes what is on the glass and nothing
+	 * else. So the `-release` below only dropped this menu's own reference, and the window — with its `AGWindow`
+	 * and its surface — lived for the life of the process. Removing it from the list is what lets `-release` reach
+	 * zero and `-dealloc` tear the surface down. */
+	[[NSApplication sharedApplication] cg_removeWindow:_trackingWindow];
 	[_trackingWindow release];
 	_trackingWindow = nil;
+	/* AND THE VIEW GOES WITH THE WINDOW. It was made for this session and retained here as well as by the window
+	 * as its content view; releasing the window drops the window's half, and this drops the menu's. */
+	[_menuView release];
+	_menuView = nil;
 	[[NSNotificationCenter defaultCenter] postNotificationName:NSMenuDidEndTrackingNotification object:self];
 }
 

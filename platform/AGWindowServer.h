@@ -197,6 +197,15 @@ void AGWindowSetFrame(AGWindow *window, int x, int y, int width, int height);
  * anticipated any of them. */
 void AGWindowSetLevel(AGWindow *window, int level);
 
+/* **TAKE THE POINTER WHEN IT IS OVER NO SURFACE AT ALL.** A Wayland compositor sends pointer events to the surface
+ * under the pointer and to nobody when the pointer is over the desktop, so a popup could not hear the click that
+ * lands outside it — and "click anywhere to dismiss" was not expressible. While this is set, events that would go
+ * to NO surface are delivered to THIS one, with coordinates relative to it, which may fall outside its frame. A
+ * surface under the pointer is untouched, ON PURPOSE: a menu bar is a separate window from the menu it opened and
+ * the pointer has to be able to cross back to it. A compositor that does not speak `agora_shell` has no door for
+ * this and simply delivers nothing, which is the behaviour every popup had before it. */
+void AGWindowSetPointerGrab(AGWindow *window, int grab);
+
 /* **MAKE THIS WINDOW AN ITEM THE SERVER PLACES, OF THIS WIDTH.** The one place the frame rule does not reach:
  * `NSStatusItem` has a length and no position, because an application does not know what else is in the status bar
  * and so cannot know where its own item goes. After this, `AGWindowSetFrame` no longer moves the window — a status

@@ -31,6 +31,12 @@
 
 #include <stdio.h>
 
+/* THE INK A ROW IS DRAWN IN, which three of this file's doors ask: `-controlTextColor` normally, black on the
+ * highlight (the periwinkle chip is light), and a fixed grey when the item is DISABLED — the whole point of menu
+ * validation is that a person can SEE which items cannot be chosen. Defined below with the state door and declared
+ * here because the title and the key equivalent are drawn above it. */
+static NSColor *fn_item_ink(BOOL enabled, BOOL highlighted);
+
 @implementation NSMenuItemCell
 
 - (instancetype)init
@@ -110,6 +116,55 @@
 		font = [NSFont systemFontOfSize:(CGFloat)12.0];
 	}
 	return font;
+}
+
+/* **WHAT A KEY EQUIVALENT LOOKS LIKE: THE COMMAND SYMBOL AND THE KEY, WHICH IS NOT WHAT IS STORED.** An item
+ * stores the bare character (`"o"`); a reader sees `⌘O`. Drawing the stored string is why the menus showed a
+ * lone letter floating at the right edge. The few non-character keys Apple spells with a symbol are mapped here
+ * too, because an item may legitimately carry a return or a tab and a reader should not be shown a control code. */
+- (NSString *)cg_displayKeyEquivalent
+{
+	NSString *key = [_menuItem keyEquivalent];
+	unichar c;
+
+	if (key == nil || [key length] == 0) {
+		return nil;
+	}
+	c = [key characterAtIndex:0];
+	switch (c) {
+	case '\r':
+		return @"\u21a9";	/* ↩ */
+	case '\t':
+		return @"\u21e5";	/* ⇥ */
+	case 0x1b:
+		return @"\u238b";	/* ⎋ */
+	case 0x08:
+	case 0x7f:
+		return @"\u232b";	/* ⌫ */
+	case ' ':
+		return @"Space";
+	default:
+		break;
+	}
+	return [@"\u2318" stringByAppendingString:[key uppercaseString]];	/* ⌘ */
+}
+
+/* **WHETHER THIS ROW IS THE ONE THE MENU HAS HIGHLIGHTED**, which the cell has to ask its view: the highlight is
+ * the VIEW's state (it paints the chip and knows which item it is on), and the CELL is what has to change the
+ * INK to match it — a title inked for the panel on top of the periwinkle chip is the thing that looks wrong. A
+ * cell with no view (a measurement, an offscreen test) is not highlighted. */
+- (BOOL)cg_isHighlightedInView:(id)controlView
+{
+	if (controlView != nil && [controlView respondsToSelector:@selector(highlightedItem)]) {
+		return [(NSMenuView *)controlView highlightedItem] == _menuItem;
+	}
+	return NO;
+}
+
+- (BOOL)cg_viewIsHorizontal:(id)controlView
+{
+	return controlView != nil && [controlView respondsToSelector:@selector(isHorizontal)] &&
+	       [(NSMenuView *)controlView isHorizontal];
 }
 
 - (BOOL)bold
@@ -199,8 +254,15 @@
 				if (title != nil) {
 					_titleWidth = [title sizeWithAttributes:attributes].width;
 				}
-				if (key != nil && [key length] > 0) {
-					_keyEquivalentWidth = [key sizeWithAttributes:attributes].width;
+				/* **THE WIDTH MEASURED IS THE WIDTH DRAWN, WHICH MEANS THE COMMAND SYMBOL IS COUNTED.** The door that
+				 * draws a key equivalent draws `⌘O`; measuring the bare `o` would leave the symbol hanging outside
+				 * the column the geometry reserved for it. */
+				{
+					NSString *displayKey = [self cg_displayKeyEquivalent];
+
+					if (displayKey != nil) {
+						_keyEquivalentWidth = [displayKey sizeWithAttributes:attributes].width;
+					}
 				}
 			}
 
@@ -256,11 +318,12 @@
 
 - (NSRect)keyEquivalentRectForBounds:(NSRect)cellFrame
 {
-	/* THE RIGHTMOST STRIP: the key equivalent is pinned to the trailing edge, so its rect is measured from the
-	 * far side rather than from the near one. */
+	/* THE RIGHTMOST STRIP: the key equivalent is pinned to the trailing edge, with the menu's right padding
+	 * OUTSIDE it. The padding is part of where the key equivalent lives, so it belongs here and not only in the
+	 * drawing — a rect that named the last pixel would put the ink against the panel's border. */
 	NSRect rect = cellFrame;
 
-	rect.origin.x += cellFrame.size.width - _keyEquivalentWidth;
+	rect.origin.x += cellFrame.size.width - _keyEquivalentWidth - APPKIT_MENU_RIGHT_PADDING;
 	rect.size.width = _keyEquivalentWidth;
 	return rect;
 }
@@ -283,13 +346,30 @@
 		 * named system colour because this tier has no theme to ask, which is the same reason the system font was
 		 * a regular face of no particular family. */
 		NSBezierPath *line = [NSBezierPath bezierPath];
+		CGFloat y = cellFrame.origin.y + cellFrame.size.height / 2.0;
+		CGFloat inset = 1.0;
 
-		[[NSColor colorWithCalibratedRed:0.55 green:0.55 blue:0.55 alpha:1.0] setStroke];
-		[line moveToPoint:NSMakePoint(cellFrame.origin.x, cellFrame.origin.y + cellFrame.size.height / 2.0)];
-		[line lineToPoint:NSMakePoint(cellFrame.origin.x + cellFrame.size.width,
-					      cellFrame.origin.y + cellFrame.size.height / 2.0)];
+		/* A HAIRLINE, LIGHTENED AND INSET A PIXEL FROM BOTH EDGES — Snow Leopard's separator is a groove rather
+		 * than a rule, and the dark 0.55 line this drew read as a border around a section. */
+		[[NSColor colorWithCalibratedRed:0.80 green:0.80 blue:0.80 alpha:1.0] setStroke];
+		[line setLineWidth:1.0];
+		[line moveToPoint:NSMakePoint(cellFrame.origin.x + inset, y)];
+		[line lineToPoint:NSMakePoint(cellFrame.origin.x + cellFrame.size.width - inset, y)];
 		[line stroke];
 	}
+}
+
+/* **THE INK A ROW'S STATE IS DRAWN IN, AND WHETHER IT IS DIMMED — the two questions every part of a DISABLED
+ * item has to answer.** A disabled item is drawn in a quieter grey on the Mac, and the checkmark goes quiet with
+ * the title it sits beside. On the highlight the title is black (the periwinkle chip is light), and the title
+ * colours are the three this tier's other cells use: `controlTextColor` normally, black on the highlight, and a
+ * fixed grey when the item cannot be chosen. */
+static NSColor *fn_item_ink(BOOL enabled, BOOL highlighted)
+{
+	if (!enabled) {
+		return [NSColor colorWithCalibratedRed:0.55 green:0.55 blue:0.55 alpha:1.0];
+	}
+	return highlighted ? [NSColor blackColor] : [NSColor controlTextColor];
 }
 
 - (void)drawStateImageWithFrame:(NSRect)cellFrame inView:(id)controlView
@@ -297,12 +377,10 @@
 	NSImage *state;
 	NSSize size;
 	NSRect rect = [self stateImageRectForBounds:cellFrame];
+	NSInteger itemState = [_menuItem state];
+	CGFloat column = [self cg_viewIsHorizontal:controlView] ? rect.size.width : APPKIT_MENU_LEFT_GUTTER;
 
-	(void)controlView;
-	if (rect.size.width <= 0.0) {
-		return;		/* the column is zero wide because the item named no state image, which is an answer */
-	}
-	switch ([_menuItem state]) {
+	switch (itemState) {
 	case NSOnState:
 		state = [_menuItem onStateImage];
 		break;
@@ -313,12 +391,50 @@
 		state = [_menuItem offStateImage];
 		break;
 	}
+	/* **AND WHEN THE ITEM NAMED NO PICTURE, THE STATE IS DRAWN ANYWAY — WHICH IS THE HALF THAT WAS MISSING.**
+	 * `NSMenuItem`'s state images DEFAULT to the system checkmark on the Mac; this tier ships no system image, so a
+	 * checked item with no picture of its own showed NOTHING and a menu could not say which of its items was on.
+	 * The two marks are drawn here in the same ink as the title: a check for `NSOnState`, a dash for the mixed
+	 * state, and nothing at all for off. */
 	if (state == nil) {
+		NSBezierPath *mark;
+		CGFloat w, h, x0, y0;
+
+		if (itemState == NSOffState || column <= 0.0) {
+			return;
+		}
+		w = 10.0;
+		h = 10.0;
+		x0 = cellFrame.origin.x + (column - w) / 2.0;
+		y0 = cellFrame.origin.y + (cellFrame.size.height - h) / 2.0;
+		mark = [NSBezierPath bezierPath];
+		[mark setLineWidth:1.6];
+		[fn_item_ink([_menuItem isEnabled], [self cg_isHighlightedInView:controlView]) setStroke];
+		if (itemState == NSMixedState) {
+			/* A DASH CENTRED IN THE COLUMN — the Mac's "some of these", not "all". */
+			[mark moveToPoint:NSMakePoint(x0 + 0.10 * w, y0 + 0.50 * h)];
+			[mark lineToPoint:NSMakePoint(x0 + 0.90 * w, y0 + 0.50 * h)];
+		} else {
+			[mark moveToPoint:NSMakePoint(x0 + 0.08 * w, y0 + 0.52 * h)];
+			[mark lineToPoint:NSMakePoint(x0 + 0.38 * w, y0 + 0.18 * h)];
+			[mark lineToPoint:NSMakePoint(x0 + 0.94 * w, y0 + 0.84 * h)];
+		}
+		[mark stroke];
 		return;
 	}
+	if (rect.size.width <= 0.0 && column <= 0.0) {
+		return;		/* the column is zero wide because the item named no state image, which is an answer */
+	}
 	size = [state size];
-	[state drawInRect:NSMakeRect(rect.origin.x, cellFrame.origin.y + (cellFrame.size.height - size.height) / 2.0,
-				     rect.size.width, size.height)];
+	/* **CENTRED IN THE GUTTER, NOT FLUSH WITH THE CELL'S EDGE.** A dropdown reserves the checkmark's column for
+	 * every row, so a checkmark narrower than that column is centred in it; a bar has no such column and keeps
+	 * the picture where its own strip begins. */
+	{
+		CGFloat x = cellFrame.origin.x + (column - size.width) / 2.0;
+
+		[state drawInRect:NSMakeRect(x, cellFrame.origin.y + (cellFrame.size.height - size.height) / 2.0,
+					     size.width, size.height)];
+	}
 }
 
 - (void)drawImageWithFrame:(NSRect)cellFrame inView:(id)controlView
@@ -365,7 +481,8 @@
 		return;
 	}
 	attributes = [NSDictionary dictionaryWithObjectsAndKeys:font, NSFontAttributeName,
-		      [NSColor controlTextColor], NSForegroundColorAttributeName, nil];
+		      fn_item_ink([_menuItem isEnabled], [self cg_isHighlightedInView:controlView]),
+		      NSForegroundColorAttributeName, nil];
 	/* **THE INSET IS THE ROW'S OWN PADDING, WHICH IS WHY IT IS DRAWN HERE RATHER THAN SUBTRACTED IN THE RECT
 	 * DOOR**: `-titleRectForBounds:` answers where the title's COLUMN is, and how much air an item leaves inside
 	 * its own column is a property of the drawing. */
@@ -382,15 +499,23 @@
 	{
 		NSSize text = [title sizeWithAttributes:attributes];
 
-		if ([controlView respondsToSelector:@selector(isHorizontal)] &&
-		    [(NSMenuView *)controlView isHorizontal]) {
+		if ([self cg_viewIsHorizontal:controlView]) {
 			CGFloat slack = rect.size.width - text.width;
 
 			width = text.width;
 			left = rect.origin.x + ((slack > 0.0) ? slack / 2.0 : 0.0);
 		} else {
-			left = rect.origin.x + 2.0;
-			width = rect.size.width - 4.0;
+			/* **A DROPDOWN'S TITLE STARTS AT THE GUTTER, NOT AT THE CELL'S EDGE.** The checkmark's column is
+			 * reserved for EVERY row — so titles line up whether or not one of them carries a check — and the
+			 * ink begins after it. The width runs to the key equivalent's column, which is where `rect`'s own
+			 * right edge already is. MEASURED before this: a title two pixels from the panel's border, which is
+			 * half of why the menus read as wrong. */
+			left = cellFrame.origin.x + APPKIT_MENU_LEFT_GUTTER;
+			width = (rect.origin.x + rect.size.width) - left;
+			if (width <= 0.0) {
+				left = rect.origin.x + 2.0;
+				width = rect.size.width - 4.0;
+			}
 		}
 	}
 	if (width <= 0.0) {
@@ -425,27 +550,43 @@
 
 - (void)drawKeyEquivalentWithFrame:(NSRect)cellFrame inView:(id)controlView
 {
-	NSString *key = [_menuItem keyEquivalent];
+	NSString *key = [self cg_displayKeyEquivalent];
 	NSRect rect = [self keyEquivalentRectForBounds:cellFrame];
 	NSFont *font = [self cg_titleFont];
 	NSDictionary *attributes;
-	CGFloat width;
+	NSSize text;
+	CGFloat x;
 
-	(void)controlView;
 	if (key == nil || [key length] == 0 || rect.size.width <= 2.0) {
 		return;
 	}
 	if (font == nil) {
 		return;		/* the title's door has already said why, and saying it twice per row is noise */
 	}
+	/* **A KEY EQUIVALENT IS SET IN A QUIETER GREY THAN THE TITLE, AND GOES BLACK WITH THE HIGHLIGHT** — and quiet
+	 * again when the item is disabled, because a shortcut offered by an item that cannot be chosen is a lie. */
 	attributes = [NSDictionary dictionaryWithObjectsAndKeys:font, NSFontAttributeName,
-		      [NSColor controlTextColor], NSForegroundColorAttributeName, nil];
-	width = rect.size.width - 2.0;
-	if (width <= 0.0) {
-		return;
+		      (![_menuItem isEnabled]
+				? [NSColor colorWithCalibratedRed:0.55 green:0.55 blue:0.55 alpha:1.0]
+				: ([self cg_isHighlightedInView:controlView]
+					? [NSColor blackColor]
+					: [NSColor colorWithCalibratedRed:0.36 green:0.36 blue:0.36 alpha:1.0])),
+		      NSForegroundColorAttributeName, nil];
+	text = [key sizeWithAttributes:attributes];
+	/* RIGHT-ALIGNED IN ITS OWN COLUMN, so rows whose shortcuts are different widths line up on their trailing
+	 * edge, which is how a reader scans them. */
+	x = rect.origin.x + rect.size.width - text.width;
+	if (x < rect.origin.x) {
+		x = rect.origin.x;
 	}
-	[key drawInRect:NSMakeRect(rect.origin.x, rect.origin.y, width, rect.size.height)
-	 withAttributes:attributes];
+	{
+		CGFloat ascent = [font ascender];
+		CGFloat descent = (CGFloat)fabs((double)[font descender]);
+		CGFloat band = ascent + descent;
+		CGFloat baseline = cellFrame.origin.y + (cellFrame.size.height - band) / 2.0 + descent;
+
+		[key drawInRect:NSMakeRect(x, baseline - descent, text.width, band) withAttributes:attributes];
+	}
 }
 
 - (void)drawBorderAndBackgroundWithFrame:(NSRect)cellFrame inView:(id)controlView
