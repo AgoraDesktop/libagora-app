@@ -306,6 +306,12 @@ typedef NSUInteger NSWindowSharingType;
 	NSPoint _cg_pointer;    /* where the seam last saw the pointer, in COCOA coordinates */
 	BOOL _cg_hasPointer;
 	BOOL _cg_mouseButtonDown; /* a button is held, so a move is a DRAG rather than a move */
+	/* **AND WHERE THE POINTER IS, FOR THE TRACKING ENGINE.** The engine's walk asks whether the point CHANGED, so that
+	 * a re-evaluation which is not a motion — an area installed under a resting pointer, a window resigning key — does
+	 * not fire `-mouseMoved:` at an owner who never moved. `_cg_hasTrackingPoint` is NO until the first report, which
+	 * makes the first walk a movement by definition. */
+	NSPoint _cg_trackingPoint;
+	BOOL _cg_hasTrackingPoint;
 	NSInteger _cg_windowNumber; /* Apple's window number, assigned when the AGWindow is made; -1 before */
 	BOOL _cg_closeRequested; /* the compositor asked the window to close; acted on in the pump */
 	NSRect _frame;          /* COCOA's coordinates: bottom-left origin */

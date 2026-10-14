@@ -37,10 +37,13 @@
  */
 #include "AGWindowServer.h"
 
+#include <math.h>	/* M_PI — the arcs a pill's caps are made of */
+
 #import "AppKitRefusal.h"
 #import <CoreGraphics/CGBitmapContext.h>
 
 #import <AppKit/NSWindow.h>
+#import <AppKit/NSTrackingArea.h>
 #import <AppKit/NSColor.h>
 #import <AppKit/NSCursor.h>
 #import <AppKit/NSScreen.h>
@@ -97,6 +100,25 @@
  * of the relationship that must NOT go through the public door, because that door takes the child's side and would
  * recurse back into the parent's. */
 - (void)cg_setParentWindow:(NSWindow *)parent;
+/* **AND THE TRACKING ENGINE, WHICH IS THIS FILE'S BECAUSE AN `NSTrackingArea` HAS NO WINDOW OF ITS OWN.** An area is
+ * installed on a VIEW and names an OWNER; turning a rectangle in a view's coordinates into "the pointer is inside
+ * region R of view V, whose owner wants to hear about it" takes a walk of the tree AND the window's own state (is it
+ * key? is a button held?), so the window is the only object that can do it. Called from three places: the pointer's
+ * motion, a mouse event, and the pointer leaving the window. */
+- (void)cg_updateTrackingForPoint:(NSPoint)windowPoint;
+- (void)cg_clearTracking;
+@end
+
+/* The engine's doors into an area and into the event it builds: declared in every file that uses them and DEFINED by
+ * the class that owns the storage — this tree's shape for a `cg_` door that is the tier's own business rather than
+ * anybody's API. */
+@interface NSTrackingArea (APPKITTrackingEngine)
+- (BOOL)cg_isInside;
+- (void)cg_setInside:(BOOL)flag;
+@end
+
+@interface NSEvent (APPKITTrackingEngine)
+- (void)cg_setTrackingArea:(NSTrackingArea *)area;
 @end
 
 
@@ -224,6 +246,13 @@ static NSEvent *fn_translate(NSWindow *w, const AGEvent *e, NSTimeInterval now)
 
 			[(c != nil ? c : [NSCursor arrowCursor]) set];
 		}
+		/* **AND THE TRACKING ENGINE RUNS HERE, ABOVE THE EARLY RETURN, WHICH IS THE WHOLE POINT OF PUTTING IT FIRST.**
+		 * `-acceptsMouseMovedEvents` decides whether a bare move becomes an `NSEvent` for the responder chain, and an
+		 * area's enter and exit are NOT gated on it — an AppKit button prelights in a window that never asked for
+		 * `-mouseMoved:`. The engine is handed the position and the event is not built until the return below lets it
+		 * through. MEASURED, when this lived under that line: a pointer resting on a button in an ordinary window
+		 * changed nothing at all. */
+		[w cg_updateTrackingForPoint:where];
 		/* A MOVE WITH NO BUTTON IS DELIVERED ONLY IF THE WINDOW ASKED FOR IT — see the header. */
 		if (!dragging && ![w acceptsMouseMovedEvents]) {
 			return nil;
@@ -1205,6 +1234,13 @@ static CGFloat fn_clamp_axis(CGFloat v, CGFloat lo, CGFloat hi)
 		return;
 	}
 	_key = NO;
+	/* **AND THE TRACKING IS RE-EVALUATED, WHICH IS THE WHOLE REASON THE SCOPE BITS ARE WORTH HAVING.** Every area
+	 * whose scope is `NSTrackingActiveInKeyWindow` — which is the default, and what every control in this tree installs
+	 * — has just stopped being live, so a control the pointer is resting on gives up its prelight the moment its window
+	 * stops being the key one. NO MOTION EVENT IS COMING to say so: the pointer has not moved, and the fact that
+	 * changed is the WINDOW's. Re-running the engine at the pointer's last known position is what turns that into the
+	 * exits the owners are owed. */
+	[self cg_updateTrackingForPoint:[self mouseLocationOutsideOfEventStream]];
 	fn_announce(self, NSWindowDidResignKeyNotification, @selector(windowDidResignKey:));
 }
 
@@ -1515,6 +1551,13 @@ static CGFloat fn_clamp_axis(CGFloat v, CGFloat lo, CGFloat hi)
 			/* A point outside the content — the window's own chrome — is this window's business. */
 			target = _contentView;
 		}
+		/* **AND THE TRACKING ENGINE RUNS FROM THE SAME ANSWER, which is why it is here and not in a second walk.** Every
+		 * mouse event already names the deepest view containing the point, so a re-evaluation here keeps an enter/exit
+		 * correct for a press that arrived without a motion — a click after the window appeared under the pointer. The
+		 * engine does its OWN walk (an area belongs to a region and an owner, not to the deepest view), so this is a
+		 * second traversal for the same event; it is idempotent and the alternative is a press that reports a pointer
+		 * position the tracking state disagrees with. */
+		[self cg_updateTrackingForPoint:[theEvent locationInWindow]];
 	} else {
 		/* A KEY GOES TO THE FIRST RESPONDER, and nowhere else: that is what the first responder means. */
 		target = _firstResponder;
@@ -1525,6 +1568,180 @@ static CGFloat fn_clamp_axis(CGFloat v, CGFloat lo, CGFloat hi)
 	if (target != nil && [target respondsToSelector:sel]) {
 		[target performSelector:sel withObject:theEvent];
 	}
+}
+
+/* ============================================================================================ *
+ * THE TRACKING ENGINE.                                                                          *
+ *                                                                                                *
+ * **IT IS A WALK, AND THE WALK IS THE DESIGN.** An `NSTrackingArea` names a rectangle in a         *
+ * VIEW's coordinates and an OWNER who wants to hear about it, and the window is what knows where   *
+ * that view currently sits, whether the window is key, and whether a button is held — so the       *
+ * engine RE-DERIVES the whole picture on every motion instead of keeping a registry of live       *
+ * regions that would go stale the moment anything moved. The only state it keeps is ONE BIT PER    *
+ * AREA (is the pointer inside it right now, and that bit lives on the area); the rectangle, the     *
+ * owner and the options are the area's, and the pointer's path is not remembered at all.           *
+ * ============================================================================================ */
+
+/* **THE WALK, TOPMOST FIRST.** The last subview is drawn on top (the subview order IS the z order, which `-hitTest:`
+ * already relies on), so the subviews are visited in REVERSE and a view's own areas come AFTER its children's — which
+ * puts the deepest, topmost region at the FRONT of `hits`. That is what `NSTrackingCursorUpdate` needs (the topmost
+ * owner who asked is the one who sets the cursor) and it costs the other two callbacks nothing, because they fire for
+ * every area that changed regardless of where it sits. */
+- (void)cg_walkTrackingInView:(NSView *)view point:(NSPoint)p moved:(BOOL)moved hits:(NSMutableArray *)hits
+{
+	NSArray *subs = [view subviews];
+	NSArray *areas;
+	NSInteger i;
+	NSUInteger j;
+
+	for (i = (NSInteger)[subs count] - 1; i >= 0; i--) {
+		[self cg_walkTrackingInView:[subs objectAtIndex:(NSUInteger)i] point:p moved:moved hits:hits];
+	}
+	areas = [view trackingAreas];
+	for (j = 0; j < [areas count]; j++) {
+		NSTrackingArea *area = [areas objectAtIndex:j];
+		NSTrackingAreaOptions o = [area options];
+		BOOL want;
+
+		/* **FROZEN DURING A DRAG, WHICH IS NOT THE SAME AS "OUTSIDE".** An area that did not ask for
+		 * `NSTrackingEnabledDuringMouseDrag` is SKIPPED ENTIRELY while a button is held, leaving its bit exactly as it
+		 * was — because a drag belongs to whoever began it, and firing an exit here would unlight a button halfway
+		 * through its own press. The flag is what a caller sets to say "keep telling me while the pointer sweeps me
+		 * with a button down". */
+		if ([self cg_mouseButtonDown] && (o & NSTrackingEnabledDuringMouseDrag) == 0) {
+			continue;
+		}
+		want = [self cg_areaIsActive:area] && [self cg_area:area ofView:view containsPoint:p];
+		if (want) {
+			[hits addObject:area];
+			if (![area cg_isInside]) {
+				[area cg_setInside:YES];
+				[self cg_trackArea:area type:NSMouseEntered];
+			} else if (moved && (o & NSTrackingMouseMoved) != 0) {
+				[self cg_trackArea:area type:NSMouseMoved];
+			}
+		} else if ([area cg_isInside]) {
+			[area cg_setInside:NO];
+			[self cg_trackArea:area type:NSMouseExited];
+		}
+	}
+}
+
+/* **WHEN AN AREA IS LIVE, WHICH IS THE QUESTION THE WHOLE CLASS EXISTS TO ANSWER.** The four `Active…` bits are
+ * mutually exclusive, and **NONE OF THEM SET MEANS `NSTrackingActiveInKeyWindow`** — Apple's documented default, and
+ * the reason a background window's controls stay unlit. The tier used to decide this by looking at whichever window
+ * the pointer happened to be over, so a button in a window that was not key prelighted anyway; the option word is
+ * what makes the scope a property of the REGION rather than of the pointer's luck. */
+- (BOOL)cg_areaIsActive:(NSTrackingArea *)area
+{
+	NSTrackingAreaOptions o = [area options];
+
+	if ((o & NSTrackingActiveAlways) != 0) {
+		return YES;
+	}
+	if ((o & NSTrackingActiveInActiveApp) != 0) {
+		return [[NSApplication sharedApplication] isActive];
+	}
+	if ((o & NSTrackingActiveWhenFirstResponder) != 0) {
+		/* THE OWNER IS THE RESPONDER THIS ASKS ABOUT, because the owner is who the callbacks go to. Apple's sentence
+		 * names "the view"; a view-only reading would make the bit unusable for the one thing an area is FOR — an
+		 * owner that is not the view — so the owner is what is asked, and the reading is stated rather than assumed. */
+		return [self firstResponder] == [area owner];
+	}
+	return [self isKeyWindow];
+}
+
+- (BOOL)cg_area:(NSTrackingArea *)area ofView:(NSView *)view containsPoint:(NSPoint)p
+{
+	/* **`NSTrackingInVisibleRect` REPLACES THE RECTANGLE RATHER THAN ADJUSTING IT**, which is Apple's own rule ("the
+	 * rect is ignored") and the reason the door can follow a scrolled view for free: `-visibleRect` is COMPUTED from
+	 * the ancestors' bounds every time it is asked, so a clip view scrolling under a view moves the region with no
+	 * `-updateTrackingAreas` pass at all. */
+	NSRect r = (([area options] & NSTrackingInVisibleRect) != 0) ? [view visibleRect] : [area rect];
+
+	return NSPointInRect(p, [view convertRect:r toView:nil]);
+}
+
+/* **ONE MESSAGE, AND THE OWNER IS ASKED FIRST.** An area's owner is any object a caller named, so a door it does not
+ * implement is a callback it declined — quieter than a crash, and the same shape `-sendEvent:` uses for a responder. */
+- (void)cg_trackArea:(NSTrackingArea *)area type:(NSEventType)type
+{
+	id owner = [area owner];
+	SEL sel = (type == NSMouseEntered) ? @selector(mouseEntered:)
+		: (type == NSMouseExited) ? @selector(mouseExited:)
+		: @selector(mouseMoved:);
+
+	if ([owner respondsToSelector:sel]) {
+		[owner performSelector:sel withObject:[self cg_eventForArea:area type:type]];
+	}
+}
+
+/* **AND THE EVENT, WHICH IS WHERE THE AREA REACHES THE OWNER.** Apple hands `-mouseEntered:` an `NSEvent` carrying the
+ * `NSTrackingArea` that fired it, and that is the ONLY channel by which one owner serving several areas can tell them
+ * apart — so the area is attached, and `[[event trackingArea] userInfo]` is the dictionary the caller installed.
+ *
+ * THE TWO TYPES USE THE TWO CONSTRUCTORS APPLE GIVES THEM: `+enterExitEventWithType:…` is the one that carries a
+ * tracking number and user data (which is what a tracking RECT's event needs, and its `-trackingArea` is nil), and a
+ * `-mouseMoved:` is an ordinary mouse event. The TIMESTAMP is read here rather than carried from the motion that
+ * caused the call, because the engine fires from three different places and only one of them has an event. */
+- (NSEvent *)cg_eventForArea:(NSTrackingArea *)area type:(NSEventType)type
+{
+	NSTimeInterval now = [NSDate timeIntervalSinceReferenceDate];
+	NSEvent *e;
+
+	if (type == NSMouseMoved) {
+		e = [NSEvent mouseEventWithType:type location:_cg_trackingPoint modifierFlags:0
+				      timestamp:now windowNumber:[self windowNumber] context:nil
+				    eventNumber:0 clickCount:0 pressure:0.0f];
+	} else {
+		e = [NSEvent enterExitEventWithType:type location:_cg_trackingPoint modifierFlags:0
+					  timestamp:now windowNumber:[self windowNumber] context:nil
+					  eventNumber:0 trackingNumber:0 userData:NULL];
+	}
+	[e cg_setTrackingArea:area];
+	return e;
+}
+
+- (void)cg_updateTrackingForPoint:(NSPoint)windowPoint
+{
+	NSMutableArray *hits = [[NSMutableArray alloc] init];
+	BOOL moved = !_cg_hasTrackingPoint ||
+		     windowPoint.x != _cg_trackingPoint.x || windowPoint.y != _cg_trackingPoint.y;
+	NSUInteger i;
+
+	_cg_trackingPoint = windowPoint;
+	_cg_hasTrackingPoint = YES;
+	if (_contentView != nil) {
+		[self cg_walkTrackingInView:_contentView point:windowPoint moved:moved hits:hits];
+	}
+	/* **AND THE CURSOR GOES TO THE TOPMOST AREA THAT ASKED — one message, not one per area.** A cursor is a single
+	 * global thing, so a second `-cursorUpdate:` would be a second opinion the first owner cannot see; the deepest
+	 * region is the one the pointer is "in" for cursor purposes, which is the rule `-hitTest:` already follows. THE
+	 * EVENT'S TYPE IS `NSMouseEntered` AND THAT IS THIS TIER'S CHOICE: the constructor is the enter/exit one, an
+	 * arrival in a region is what the message reports, and Apple names no type for this door. */
+	for (i = 0; i < [hits count]; i++) {
+		NSTrackingArea *area = [hits objectAtIndex:i];
+
+		if (([area options] & NSTrackingCursorUpdate) != 0) {
+			id owner = [area owner];
+
+			if ([owner respondsToSelector:@selector(cursorUpdate:)]) {
+				[owner cursorUpdate:[self cg_eventForArea:area type:NSMouseEntered]];
+			}
+			break;
+		}
+	}
+	[hits release];
+}
+
+/* **THE POINTER LEAVING THE WINDOW, WHICH THE SEAM REPORTS WITHOUT A POSITION.** Fed a point that cannot be inside any
+ * view, the engine does exactly the right thing with no second code path: every area that was inside takes its exit
+ * and every area that was not is left alone. A pointer that left a button and never moved again would otherwise leave
+ * it prelighted for good. */
+- (void)cg_clearTracking
+{
+	[self cg_updateTrackingForPoint:NSMakePoint(-1000000.0, -1000000.0)];
+	_cg_hasTrackingPoint = NO;
 }
 
 - (NSPoint)mouseLocationOutsideOfEventStream
@@ -1641,7 +1858,10 @@ static CGFloat fn_clamp_axis(CGFloat v, CGFloat lo, CGFloat hi)
 			_cg_mouseButtonDown = event->pressed;
 		}
 		if (event->type == AGEventPointerEnter && !event->pressed) {
-			/* THE POINTER LEFT THE WINDOW: there is no motion and no button in it. */
+			/* THE POINTER LEFT THE WINDOW: there is no motion and no button in it — AND THE AREAS IT WAS INSIDE ARE TOLD,
+			 * because the crossing has to be synthesised from SOMETHING and no motion event is coming to carry it. A
+			 * pointer that leaves a button and never moves again would otherwise leave the button prelighted for good. */
+			[self cg_clearTracking];
 			return;
 		}
 		ev = fn_translate(self, event, [NSDate timeIntervalSinceReferenceDate]);
@@ -2161,6 +2381,9 @@ static NSWindow *fn_main_window(NSWindow *except)
 		[previous resignKeyWindow];
 	}
 	_key = YES;
+	/* AND THE SAME RE-EVALUATION ON THE WAY IN: the areas that were dead a moment ago are live again, so a control the
+	 * pointer is already resting on lights up without waiting for the hand to move. */
+	[self cg_updateTrackingForPoint:[self mouseLocationOutsideOfEventStream]];
 	fn_announce(self, NSWindowDidBecomeKeyNotification, @selector(windowDidBecomeKey:));
 }
 

@@ -38,6 +38,7 @@
  * cannot do that" from "this tier did it and the answer was empty".
  */
 #import <AppKit/NSEvent.h>
+#import <AppKit/NSTrackingArea.h>
 
 #include "AppKitRefusal.h"	/* fn_refuse_window — the one refusal message, in one place (the .m files
 				 * import it, never the headers: NSView.m, NSWindow.m and NSApplication.m all do). */
@@ -592,14 +593,25 @@ static NSMutableArray *s_monitors;
 	return nil;
 }
 
-/* AND THE TRACKING AREA IS AN ANSWER RATHER THAN A REFUSAL, which is a distinction worth making: nothing in
- * this tier attaches a tracking area to an event, and Apple's own header says nil is what an event
- * corresponding to a tracking RECT installed with `-addTrackingRect:…` returns. So nil is the whole truth
- * here, not half of it — the door is spelled `id` only because naming `NSTrackingArea` would credit a class
- * row this tier has not earned. */
-- (nullable id)trackingArea
+/* **AND THE TRACKING AREA, WHICH IS NOW AN ANSWER WITH CONTENT.** The tier's own engine (`NSWindow
+ * -cg_updateTrackingForPoint:`) sets it on the enter/exit events it builds, so an owner can read WHICH of its areas
+ * fired — and, through `[[event trackingArea] userInfo]`, tell two areas in one view apart. An event built for a
+ * tracking RECT carries none and answers nil, which is what Apple's header documents for it. */
+- (NSTrackingArea *)trackingArea
 {
-	return nil;
+	return _trackingArea;
+}
+
+@end
+
+@implementation NSEvent (APPKITTrackingEngine)
+
+/* **THE ENGINE'S DOOR, AND IT IS THE ONLY WRITER.** Not public because it is not a caller's business: an event's area
+ * is decided by whoever built the event for a tracking area, and a caller who could set it could make an event claim
+ * an area that never fired. */
+- (void)cg_setTrackingArea:(NSTrackingArea *)area
+{
+	_trackingArea = area;	/* NOT RETAINED — see the ivar's note */
 }
 
 @end

@@ -46,6 +46,7 @@
 
 #import <AppKit/NSResponder.h>
 #import <AppKit/NSBitmapImageRep.h>
+#import <AppKit/NSTrackingArea.h>
 /* AND `NSGraphics.h` IS IMPORTED RATHER THAN ASSUMED, because this header USES `NSFocusRingType` for a property and
  * two doors (`-focusRingType`, `-setFocusRingType:`, `+defaultFocusRingType`) and no longer declares it: the type
  * moved to its APPLE home, which is the drawing vocabulary's header. AppKit's own `NSView.h` declares the type itself,
@@ -211,6 +212,9 @@ extern NSString *NSDefinitionPresentationTypeOverlay;
 	NSString *_toolTip;
 	NSMutableArray *_trackingAreas;
 	NSMutableArray *_toolTips;
+	/* AND THE LEGACY TRACKING RECTS' OWN TAGS — see the note at the doors: the two families shared one array, which was
+	 * survivable while both held placeholders and would not be once that array holds real `NSTrackingArea`s. */
+	NSMutableArray *_cg_trackingRects;
 	NSPoint _cg_translation;
 	NSSize _cg_unitSquareSize;
 	CGFloat _cg_rotation;
@@ -365,16 +369,29 @@ extern NSString *NSDefinitionPresentationTypeOverlay;
 - (void)viewWillStartLiveResize;
 - (void)viewDidEndLiveResize;
 - (void)layout;
+/* **AND THE DOOR THAT RECOMPUTES AN AREA'S REGION, WHICH USED TO BE A RECORDED NO-OP.** Apple calls it when the view's
+ * geometry changed, and this class calls it from `-cg_frameDidChangeFrom:` — the one place a frame change is noticed.
+ * Its default POSTS `NSViewDidUpdateTrackingAreasNotification` and otherwise does nothing, which is the honest answer
+ * for this engine: a region is resolved against the view's CURRENT position on every motion (see
+ * `NSWindow -cg_updateTrackingForPoint:`), so a plain area never needs recomputing and neither does one whose rect
+ * follows the view's own bounds. The case the hook exists for is `NSTrackingInVisibleRect`, whose rectangle is
+ * `-visibleRect` — and even that is computed, so the hook is where a caller recomputes what THEY baked, not where
+ * this class repairs itself. */
 - (void)updateTrackingAreas;
 
-/* AND THE TRACKING AND TOOL-TIP FAMILY, WHICH THIS CLASS OWNS THE STORAGE FOR: the two tracking-rect doors take and
- * return the tag type this class declares, the two tracking-AREA doors keep an array (the type is `id` here because
- * `NSTrackingArea` is a class this tier does not ship, and naming it would flip a class row), and the tool-tip trio
- * keeps a list with the same shape. */
+/* **THE TRACKING AND TOOL-TIP FAMILY, AND THE AREA HALF IS NOW A REAL MECHANISM RATHER THAN A STORE.** The two AREA
+ * doors take a real `NSTrackingArea` — the class was a row this tier had not earned when these were written, so they
+ * were spelled `id` and the array was a list nobody read. The class exists now, so the type is named and the window's
+ * tracking engine is what reads the list.
+ *
+ * THE TRACKING-RECT PAIR IS THE PRE-10.5 FORM OF THE SAME IDEA AND STILL STORES TAGS RATHER THAN FIRING CALLBACKS,
+ * which is stated rather than implied: the areas are the engine it will be built on, and until that is done a caller
+ * who wants enter and exit gets them from an area. Its tags live in their OWN list, because the two doors shared one
+ * array and mixing tags with areas is how `-trackingAreas` would have started answering a mixture of two types. */
 - (NSTrackingRectTag)addTrackingRect:(NSRect)aRect owner:(nullable id)anObject userData:(nullable void *)data assumeInside:(BOOL)flag;
 - (void)removeTrackingRect:(NSTrackingRectTag)tag;
-- (void)addTrackingArea:(id)trackingArea;
-- (void)removeTrackingArea:(id)trackingArea;
+- (void)addTrackingArea:(NSTrackingArea *)trackingArea;
+- (void)removeTrackingArea:(NSTrackingArea *)trackingArea;
 - (NSToolTipTag)addToolTipRect:(NSRect)aRect owner:(nullable id)anObject userData:(nullable void *)data;
 - (void)removeToolTip:(NSToolTipTag)tag;
 - (void)removeAllToolTips;

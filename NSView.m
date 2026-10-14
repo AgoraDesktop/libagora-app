@@ -119,6 +119,16 @@ static NSRect fn_intersect(NSRect a, NSRect b)
 - (NSUInteger)cg_cursorRectCount;
 @end
 
+/* **THE TRACKING ENGINE'S DOOR INTO AN AREA, declared here because this is the file that writes the verdict.** The
+ * bit lives on the area (see `NSTrackingArea.m`), and only two objects ever touch it: the window's engine, which
+ * decides whether the pointer moved in or out, and the door below, which clears it on removal. Declared in `NSView.m`
+ * AND again in `NSWindow.m` rather than in the public header, which is this tree's shape for a `cg_` door that is
+ * nobody's API but the tier's own. */
+@interface NSTrackingArea (APPKITTrackingEngine)
+- (BOOL)cg_isInside;
+- (void)cg_setInside:(BOOL)flag;
+@end
+
 /* THE PRIVATE DOOR THE SUPERVIEW USES TO HAND ITS WINDOW DOWN, declared here because this is the file that
  * defines it — and called from `-addSubview:`/`-removeFromSuperview` above it. */
 @interface NSView ()
@@ -237,6 +247,11 @@ static NSRect fn_intersect(NSRect a, NSRect b)
 	    oldFrame.size.width == _frame.size.width && oldFrame.size.height == _frame.size.height) {
 		return;	/* NO NET CHANGE, NOTHING TO ANNOUNCE. */
 	}
+	/* **AND THE TRACKING AREAS ARE TOLD, BEFORE THE NOTIFICATION RULE BELOW CAN DECLINE TO ANNOUNCE ANYTHING.** A
+	 * caller who muted FRAME notifications has not asked to stop tracking, and Apple's sentence attaches
+	 * `-updateTrackingAreas` to the GEOMETRY CHANGE rather than to the announcement — so the two are separate here and
+	 * the early return below is about the notification alone. */
+	[self updateTrackingAreas];
 	if (!_postsFrameChangedNotifications) {
 		_cg_frameChangedWhileMuted = YES;	/* remembered, for the rule about the flag coming back */
 		return;
@@ -488,9 +503,12 @@ static NSRect fn_intersect(NSRect a, NSRect b)
 
 - (void)updateTrackingAreas
 {
-	/* RECORDED, AND ITS NOTHING-TO-DO IS THE TRUTH: this tier keeps the tracking areas a caller adds (see the
-	 * doors below) and does not recompute them, because the recomputation exists to follow the view's geometry and
-	 * the registry here is a list rather than a live owner. */
+	/* **THE ONE THING THIS DOOR OWES THAT IS NOT NOTHING, AND IT IS THE NOTIFICATION.** Apple's sentence is that a
+	 * view whose tracking areas may have gone stale posts `NSViewDidUpdateTrackingAreasNotification`, and this class
+	 * posts it — so the constant that used to be declared and never sent is now sent from the door it names. THE REST
+	 * OF THE DOOR STAYS EMPTY ON PURPOSE: this engine resolves an area's rectangle against the view's CURRENT position
+	 * on every motion rather than baking a screen rectangle at install time, so there is nothing here to repair. */
+	[[NSNotificationCenter defaultCenter] postNotificationName:NSViewDidUpdateTrackingAreasNotification object:self];
 }
 
 /* ---- THE TRACKING AND TOOL-TIP FAMILY, WHOSE STORAGE THIS CLASS OWNS --------------------------------- */
@@ -499,34 +517,63 @@ static NSRect fn_intersect(NSRect a, NSRect b)
 {
 	(void)aRect; (void)anObject; (void)data; (void)flag;
 	/* A TAG RATHER THAN A NO-OP: the door's contract is an opaque handle the caller hands back to remove it, so
-	 * this hands one out and keeps the list. */
-	if (_trackingAreas == nil) {
-		_trackingAreas = [[NSMutableArray alloc] init];
+	 * this hands one out and keeps the list — ITS OWN LIST, because the area doors used to share this one and a tag
+	 * and an `NSTrackingArea` in the same array is a mixture `-trackingAreas` would answer. */
+	if (_cg_trackingRects == nil) {
+		_cg_trackingRects = [[NSMutableArray alloc] init];
 	}
-	[_trackingAreas addObject:[NSValue valueWithPointer:(const void *)NULL]];
-	return (NSTrackingRectTag)[_trackingAreas count];
+	[_cg_trackingRects addObject:[NSValue valueWithPointer:(const void *)NULL]];
+	return (NSTrackingRectTag)[_cg_trackingRects count];
 }
 
 - (void)removeTrackingRect:(NSTrackingRectTag)tag
 {
-	if (_trackingAreas != nil && tag > 0 && (NSUInteger)tag <= [_trackingAreas count]) {
-		[_trackingAreas removeObjectAtIndex:(NSUInteger)tag - 1];
+	if (_cg_trackingRects != nil && tag > 0 && (NSUInteger)tag <= [_cg_trackingRects count]) {
+		[_cg_trackingRects removeObjectAtIndex:(NSUInteger)tag - 1];
 	}
 }
 
-- (void)addTrackingArea:(id)trackingArea
+- (void)addTrackingArea:(NSTrackingArea *)trackingArea
 {
+	if (trackingArea == nil) {
+		return;
+	}
 	if (_trackingAreas == nil) {
 		_trackingAreas = [[NSMutableArray alloc] init];
 	}
-	if (trackingArea != nil && ![_trackingAreas containsObject:trackingArea]) {
-		[_trackingAreas addObject:trackingArea];
+	if (![_trackingAreas containsObject:trackingArea]) {
+		[_trackingAreas addObject:trackingArea];	/* RETAINED by the array */
+		/* **AND THE WINDOW RE-EVALUATES AT ONCE, WHICH IS THE ONE THING INSTALLING AN AREA OWES THE POINTER.** An area
+		 * added while the pointer is ALREADY INSIDE its region would otherwise wait for a motion that may never come: a
+		 * control that appears under a resting pointer would not prelight until the hand moved. Running the engine once
+		 * at the current position is what makes the state true the moment it is asked about — and it is why the pointer's
+		 * last position is a door on `NSWindow` rather than something only the event pump knows. */
+		NSWindow *w = [self window];
+
+		if (w != nil) {
+			[w cg_updateTrackingForPoint:[w mouseLocationOutsideOfEventStream]];
+		}
 	}
 }
 
-- (void)removeTrackingArea:(id)trackingArea
+- (void)removeTrackingArea:(NSTrackingArea *)trackingArea
 {
-	[_trackingAreas removeObject:trackingArea];
+	if (trackingArea == nil || _trackingAreas == nil) {
+		return;
+	}
+	/* **AN AREA REMOVED WHILE THE POINTER IS INSIDE IT OWES ITS OWNER A FAREWELL**, because nothing will walk it again —
+	 * the engine finds areas BY WALKING THE TREE, and this one is leaving the list. Without the exit, a caller who
+	 * removes an area out from under the pointer leaves its owner in a state it can never leave: the same stuck
+	 * prelight the per-area "inside" bit prevents for a REMOVED VIEW, one level down. */
+	if ([trackingArea cg_isInside]) {
+		id owner = [trackingArea owner];
+
+		[trackingArea cg_setInside:NO];
+		if ([owner respondsToSelector:@selector(mouseExited:)]) {
+			[owner mouseExited:nil];
+		}
+	}
+	[_trackingAreas removeObject:trackingArea];	/* RELEASED by the array */
 }
 
 - (NSToolTipTag)addToolTipRect:(NSRect)aRect owner:(id)anObject userData:(void *)data
@@ -1266,6 +1313,14 @@ NSString *NSDefinitionPresentationTypeOverlay = @"Overlay";
 	if (flag) {
 		_dirtyRect = _bounds;
 		_hasDirtyRect = YES;
+		/* **AND THE WINDOW IS TOLD, WHICH IS THE LINE WHOSE ABSENCE MADE A CONTROL'S VALUE INVISIBLE.**
+		 * `NSWindow -displayIfNeeded` gates on the WINDOW's `-viewsNeedDisplay`; a view marking ITSELF dirty used to
+		 * leave that flag alone, so `[window displayIfNeeded]` — the door a tracking loop calls to make what it just
+		 * changed appear — did nothing at all, and the ONLY things that ever set the flag were a compositor
+		 * configure and `-update`. MEASURED: a slider's value moved, its action fired on every point, and its knob
+		 * sat at 50 through the whole drag, because nothing between the value and the pixels asked the window to
+		 * paint. This is the missing half of the pair, and it is one walk up the superview chain. */
+		[[self window] setViewsNeedDisplay:YES];
 	} else {
 		_hasDirtyRect = NO;
 	}
@@ -1626,6 +1681,11 @@ const CGFloat NSFullScreenModeWindowLevel = 100.0;
 		 * opposite corners draws their bounding box. */
 		_dirtyRect = NSUnionRect(_dirtyRect, invalidRect);
 	}
+	/* AND THE WINDOW IS TOLD HERE TOO, for the same reason `-setNeedsDisplay:` does it: a cell that invalidates a
+	 * STRIP — which is every cell, because `-highlight:withFrame:inView:` names the one rect it repainted — is
+	 * still a reason for the window to paint, and a half-fixed pair would leave button highlights invisible
+	 * while slider knobs moved. */
+	[[self window] setViewsNeedDisplay:YES];
 }
 
 - (BOOL)needsDisplayInRect:(NSRect)rect
@@ -1659,6 +1719,7 @@ const CGFloat NSFullScreenModeWindowLevel = 100.0;
 - (void)displayRect:(NSRect)rect
 {
 	NSUInteger i;
+	CGContextRef cg = [[NSGraphicsContext currentContext] CGContext];
 
 	if (_hidden) {
 		return;
@@ -1668,8 +1729,36 @@ const CGFloat NSFullScreenModeWindowLevel = 100.0;
 	}
 	for (i = 0; i < [_subviews count]; i++) {
 		NSView *c = [_subviews objectAtIndex:i];
+		NSRect cf = [c frame];
 
+		/* **A CHILD IS DRAWN IN ITS OWN COORDINATES, WHICH IS A TRANSLATION AND NOT AN ARGUMENT.** This loop used
+		 * to call the child's `-displayRect:` and nothing else, so EVERY SUBVIEW DREW AT ITS SUPERVIEW'S ORIGIN —
+		 * `-convertRect:toView:` converts the RECT, and the child's `-drawRect:` draws about ITS OWN origin, so
+		 * without moving the CTM the two disagree by exactly the child's frame. It went unnoticed while the only
+		 * view a window drew was its content view; the first CONTROL — a subview by definition — stacked under
+		 * every other control at the corner, and the live probe is what showed it (five buttons, one place).
+		 * THE MIRRORING BRANCH IS `fn_draw_view`'s, in `fn_draw_view`'s ORDER — translate to the frame's TOP edge,
+		 * then scale — because a child that flips relative to its parent has to be entered that way round. */
+		if (cg != NULL) {
+			CGContextSaveGState(cg);
+			if ([c isFlipped] != [self isFlipped]) {
+				CGContextTranslateCTM(cg, cf.origin.x, cf.origin.y + cf.size.height);
+				CGContextScaleCTM(cg, 1.0, -1.0);
+			} else {
+				CGContextTranslateCTM(cg, cf.origin.x, cf.origin.y);
+			}
+			/* **AND THE CHILD'S OWN CLIP, IN THE CHILD'S OWN COORDINATES.** `fn_draw_view` has always clipped a
+			 * view to its bounds — "so a subclass cannot draw outside itself" — and THIS path did not, and this is
+			 * the one a live window draws through. MEASURED: a text view whose string was wider than its frame drew
+			 * the overflow straight across its neighbours, because nothing between `-drawRect:` and the surface
+			 * said stop. IT BELONGS IN BOTH PATHS because they draw the same tree: a rule that holds in one of them
+			 * is a rule a caller cannot rely on, and the two would drift the moment either was touched. */
+			CGContextClipToRect(cg, [c bounds]);
+		}
 		[c displayRect:[self convertRect:rect toView:c]];
+		if (cg != NULL) {
+			CGContextRestoreGState(cg);
+		}
 	}
 }
 

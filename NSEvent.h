@@ -42,6 +42,11 @@
 #import <Foundation/Foundation.h>
 #import <AppKit/NSGraphicsContext.h>
 
+/* FORWARD, because `NSEvent` names an `NSTrackingArea` and a tracking area may name an event: importing the class's
+ * header here would close that circle. The forward declaration is all this header needs — every use of the type in it
+ * is a pointer. */
+@class NSTrackingArea;
+
 /* THE EVENT TYPES. A plain C enum plus a typedef, which is what Apple's own header does — `NSEventType`
  * is not an NS_ENUM in the 10.6 header and does not become one here, because the era is the ground. */
 enum {
@@ -217,6 +222,28 @@ enum {
 	NSModeSwitchFunctionKey = 0xF747
 };
 
+/* **AND THE CONTROL CHARACTERS, WHICH ARE THE OTHER HALF OF WHAT `characters` CARRIES.** A key that TYPES arrives as
+ * the character it types, and a key that COMMANDS arrives as one of these — Apple's own split, and the reason a text
+ * view can tell a Backspace from a left arrow without ever seeing a key code: THE CHARACTER IS THE COMMAND'S NAME.
+ * Each value is the code point the character actually has in Unicode (or in ASCII, which agrees for all of these), so
+ * nothing here is a transcription that could be wrong: `NSDeleteCharacter` is U+007F because DELETE is U+007F, and
+ * `NSBackTabCharacter` is U+0019 because that is what a Shift-Tab sends.
+ *
+ * **AND TWO OF THEM ARE THE SAME GESTURE ON DIFFERENT KEYMAPS.** A Backspace key sends `NSBackspaceCharacter` on one
+ * keymap and `NSDeleteCharacter` on another, which is why a text view treats BOTH as backward delete and reserves
+ * `NSDeleteFunctionKey` (a FUNCTION key, in the enum above) for the forward one. It is stated here rather than left to
+ * be discovered, because the alternative is a field that deletes the wrong way on someone else's keyboard. */
+enum {
+	NSEnterCharacter = 0x03,
+	NSBackspaceCharacter = 0x08,
+	NSTabCharacter = 0x09,
+	NSNewlineCharacter = 0x0A,
+	NSFormFeedCharacter = 0x0C,
+	NSCarriageReturnCharacter = 0x0D,
+	NSBackTabCharacter = 0x19,
+	NSDeleteCharacter = 0x7F
+};
+
 /* THE POINTING-DEVICE TYPES a tablet proximity event reports, and the PEN BUTTON MASK a tablet point event
  * reports — two families from IOLLEvent.h's `NX_TABLET_*`, transcribed (see this file's top comment). */
 enum {
@@ -302,6 +329,10 @@ NS_ASSUME_NONNULL_BEGIN
 	NSInteger _buttonNumber;
 	NSInteger _eventNumber;
 	NSInteger _trackingNumber;
+	/* **AND THE AREA THAT GENERATED THIS ENTER/EXIT EVENT, WHICH THE TIER'S OWN ENGINE SETS.** NOT RETAINED: an event is
+	 * handed to a responder for the length of one call, and the area belongs to the view that installed it. A tracking
+	 * RECT's event has no area and answers nil here, which is the same nil Apple's own header documents for it. */
+	NSTrackingArea *_trackingArea;
 	float _pressure;
 	CGFloat _deltaX;
 	CGFloat _deltaY;
@@ -484,12 +515,12 @@ NS_ASSUME_NONNULL_BEGIN
 - (nullable void *)CGEvent;
 + (nullable NSEvent *)eventWithCGEvent:(nullable void *)cgEvent;
 
-/* AND THE TRACKING AREA THAT GENERATED AN ENTER/EXIT EVENT. `NSTrackingArea` IS A CLASS THIS TIER DOES NOT
- * SHIP and stage A has no view with tracking areas to hand back, so the return is spelled `id` — naming the
- * class would credit its row (see this file's own note on NSWindow above), and a tracking RECT installed
- * with `-[NSView addTrackingRect:owner:userData:assumeInside:]` is exactly the case Apple's own header says
- * answers nil. */
-- (nullable id)trackingArea;
+/* AND THE TRACKING AREA THAT GENERATED AN ENTER/EXIT EVENT. `NSTrackingArea` IS A CLASS THIS TIER SHIPS NOW, so this
+ * door names it — the return was spelled `id` while the class was an unearned row, and the door's own comment said
+ * naming it was the thing that would change. AN EVENT WITH NO AREA ANSWERS NIL, and that is a real case rather than a
+ * failure: an enter/exit built for a tracking RECT (`-[NSView addTrackingRect:owner:userData:assumeInside:]`) has a
+ * `-trackingNumber` and a `-userData` and no area, which is exactly what Apple's header says such an event returns. */
+- (nullable NSTrackingArea *)trackingArea;
 
 /* AND THE TOUCH DOOR, WHICH IS REFUSED BY NAME FOR A REASON THAT IS A DECISION AND NOT AN OMISSION:
  * `NSTouch` is PARKED (appkit-plan.md §3 — gesture and touch input have no source in the seam's seat).
