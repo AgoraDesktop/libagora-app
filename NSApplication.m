@@ -449,8 +449,19 @@ static double s_last_report;
 				s_last_report = now;
 			}
 		}
-		if (e != nil) {
+		/* **AND THE WHOLE QUEUE IS DRAINED, NOT ONE EVENT PER PASS.** A pass is a FRAME — it ends by updating the
+		 * windows once — and a loop that takes ONE event per frame can process at most sixty events a second. A
+		 * mouse that reports faster than that (MEASURED: a hand at 125 Hz) then leaves a BACKLOG that grows for as
+		 * long as the drag lasts, so the window trails further and further behind the pointer. "It is very laggy"
+		 * is a QUEUE, not a slow frame: the compositor was measured compositing 3 ms a frame in step with every
+		 * motion. Draining costs nothing when the queue is empty — the poll returns at once — and it means a pass
+		 * ends with the windows drawn at the LATEST position whatever the input's rate. */
+		while (e != nil) {
 			[self sendEvent:e];
+			e = [self nextEventMatchingMask:NSAnyEventMask
+					       untilDate:[NSDate distantPast]
+						  inMode:nil
+						dequeue:YES];
 		}
 		/* **AND THE STALE WINDOWS ARE PAINTED, WHICH THE FRAME CALLBACK NO LONGER DOES FOR FREE.** A window's
 		 * frame callback now declines to draw unless the window is stale, so SOMETHING has to act on "stale" —
@@ -1525,8 +1536,14 @@ struct _NSModalSession {
 						  inMode:NSModalPanelRunLoopMode
 						 dequeue:YES];
 
-		if (e != nil) {
+		/* THE SAME DRAIN AS THE MAIN LOOP: a modal session is a frame too, and taking one event per frame would
+		 * leave the same backlog behind a fast hand. */
+		while (e != nil) {
 			[self sendEvent:e];
+			e = [self nextEventMatchingMask:NSAnyEventMask
+					       untilDate:[NSDate distantPast]
+						  inMode:NSModalPanelRunLoopMode
+						dequeue:YES];
 		}
 	}
 	/* AND THE APPLICATION BEING STOPPED ENDS THE SESSION TOO — otherwise `-stop:` while a modal loop is running
