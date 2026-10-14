@@ -49,6 +49,7 @@ tests/
   appkit_controls_draw.m        a window full of controls, for a person to look at
   chrome_theme.m                the THEME: an XFWM `.xpm` set becomes the chrome's buttons, 1:1
   chrome_buttons.m              and what a chrome button DOES: a click through the seam, and what happened
+  control_drag.m                and what a DRAG costs: forty motions, and how many frames the window committed
   run-*-headless.sh             ctest: a compositor with a virtual monitor (no desktop input involved)
   run-*-nested.sh, inspect.py   the PIXEL tests, and they are OPT-IN: `gnome-shell --nested` is a whole
                                 nested session and it grabs the HOST's pointer while it lives
@@ -111,9 +112,16 @@ the compositor is really gone.
   question asked of the WINDOW rather than of the pixels — the plus zooms and a second click restores, a release
   that slid off the button performs nothing while one that slid back does, the minus miniaturizes, the pill
   changes nothing, and the X asks a delegate's `-windowShouldClose:` and honours a refusal.
-- **`ctest`: 19 of 19 passed** (the keyboard and the seam, the AppKit and its input path, the controls and their
-  metrics, the tracking engine, the text path, the chrome and what its buttons do, the chrome theme, the menus and
-  activation).
+- **What a DRAG costs** (`ctest`, a real run loop): a control's tracking is a MODAL LOOP, so everything the run loop
+  does once per pass has to be done there by hand — and it did one full draw and one commit PER MOTION. Forty
+  motions committed FORTY-THREE frames before, and ONE after: the values are all still applied and the action
+  still speaks for each one, only the drawing waits for a frame. MEASURED on the live session at 82 motions a
+  second: the client's CPU for the drag fell from 1.24 s (82 % of a core) to 0.73 s (48 %), and the value the drag
+  ENDED at moved from 69.5 — seventeen points short of where the pointer stopped, because a client that cannot
+  keep up loses motions — to 87.0, which is exactly where it was let go.
+- **`ctest`: 20 of 20 passed** (the keyboard and the seam, the AppKit and its input path, the controls and their
+  metrics, what a drag costs, the tracking engine, the text path, the chrome and what its buttons do, the chrome
+  theme, the menus and activation).
 
 ### What a Wayland client does not get, and where each is recorded
 

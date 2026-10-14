@@ -2630,6 +2630,28 @@ static CGFloat fn_clamp_axis(CGFloat v, CGFloat lo, CGFloat hi)
 	if (_agwindow == NULL || ![self cg_ensureSurface]) {
 		return;
 	}
+	/* **AND THE COMPOSITOR IS ASKED FOR THE FRAME BEFORE A SINGLE PIXEL IS DRAWN.** `AGWindowBeginFrame` answers
+	 * NULL while the compositor still owns the previous frame — THE ORDINARY CASE FOR A WINDOW BEING DRAWN FASTER
+	 * THAN THE OUTPUT CAN TAKE IT, which is exactly when a frame is most expensive to waste. Asking AFTER the drawing
+	 * threw the whole frame away: the background fill, the view tree, the chrome and the copy, all for a commit that
+	 * was never going to happen — and then the next turn drew and threw away the same again. IT IS NOT A FAILURE
+	 * EITHER WAY: the seam calls the frame handler again when the buffer comes back, and there is no Expose to wait
+	 * for because the client owns the pixels. LEAVING THE WINDOW STALE is what makes that retry happen. */
+	frame = AGWindowBeginFrame(_agwindow, &stride);
+	if (frame == NULL) {
+		/* **A REFUSED PAINT, NAMED.** The compositor still holds this window's previous buffer, so this pass draws
+		 * nothing — and the retry is the run loop's `-displayIfNeeded`, which only happens if the flag is still set.
+		 * It is, and this line is what makes a paint that never happens visible instead of invisible. */
+		if (getenv("APPKIT_DRAW_DIAG") != NULL) {
+			/* **AND IT DOES NOT GUESS AT THE REASON.** This line used to say "the compositor still holds its
+			 * buffer" for every refusal, and the door refuses for four different reasons — MEASURED, that sentence
+			 * sent two rounds into buffer lifetime for a fault that was never there. The seam names its own
+			 * condition (see `AGWindowBeginFrame`), so this only says WHICH WINDOW could not paint. */
+			fprintf(stderr, "  DIAG draw: window %ld could not paint (the reason is named by the seam)\n",
+				(long)[self windowNumber]);
+		}
+		return;
+	}
 	c = (CGContextRef)_surface;
 	content = [self contentRectForFrameRect:_frame];
 	/* **THE TWO HALVES OF A CLIENT-SIDE-DECORATED FRAME, IN THE ORDER THEY STACK.** The surface is the FRAME (see
@@ -2651,24 +2673,6 @@ static CGFloat fn_clamp_axis(CGFloat v, CGFloat lo, CGFloat hi)
 	}
 	/* THE CHROME, THROUGH THE SAME DOOR A TEST USES — see `-cg_drawChromeInContext:` for why it is a method. */
 	[self cg_drawChromeInContext:[NSGraphicsContext graphicsContextWithCGContext:c flipped:NO]];
-	/* **THE PRESENT.** `AGWindowBeginFrame` answers NULL while the compositor still owns the previous frame, and
-	 * that is not a failure: the seam calls the frame handler again when the buffer comes back, and there is no
-	 * Expose to wait for because the client owns the pixels. */
-	frame = AGWindowBeginFrame(_agwindow, &stride);
-	if (frame == NULL) {
-		/* **A REFUSED PAINT, NAMED.** The compositor still holds this window's previous buffer, so this pass draws
-		 * nothing — and the retry is the run loop's `-displayIfNeeded`, which only happens if the flag is still set.
-		 * It is, and this line is what makes a paint that never happens visible instead of invisible. */
-		if (getenv("APPKIT_DRAW_DIAG") != NULL) {
-			/* **AND IT DOES NOT GUESS AT THE REASON.** This line used to say "the compositor still holds its
-			 * buffer" for every refusal, and the door refuses for four different reasons — MEASURED, that sentence
-			 * sent two rounds into buffer lifetime for a fault that was never there. The seam names its own
-			 * condition (see `AGWindowBeginFrame`), so this only says WHICH WINDOW could not paint. */
-			fprintf(stderr, "  DIAG draw: window %ld could not paint (the reason is named by the seam)\n",
-				(long)[self windowNumber]);
-		}
-		return;
-	}
 	for (y = 0; y < _surfaceHeight; y++) {
 		memcpy((char *)frame + (size_t)y * (size_t)stride,
 		       _pixels + (size_t)y * (size_t)_surfaceWidth * 4u,

@@ -360,33 +360,64 @@
 		NSEvent *next;
 		NSPoint where;
 		BOOL over;
+		BOOL up = NO;
 
-		if (window != nil) {
-			[window displayIfNeeded];
-		}
+		/* **WAIT FOR THE FIRST THING THAT HAPPENS, AND TREAT THE WAIT AS THE FRAME'S DEADLINE.** This is the only
+		 * place the loop yields, and the wait is what dispatches the compositor's frame callback — so the drawing is
+		 * paced by the output rather than by the hand. */
 		next = [app nextEventMatchingMask:(NSLeftMouseDraggedMask | NSLeftMouseUpMask)
 					untilDate:[NSDate dateWithTimeIntervalSinceNow:1.0 / 60.0]
 					   inMode:nil
 					  dequeue:YES];
 		if (next == nil) {
-			continue;	/* nothing happened this turn: the control is still pressed */
+			/* NOTHING CAME: draw whatever is still owed, and keep tracking. */
+			if (window != nil) {
+				[window displayIfNeeded];
+			}
+			continue;
 		}
 		if (![app isRunning]) {
 			break;
 		}
-		where = [self convertPoint:[next locationInWindow] fromView:nil];
-		(void)[_cell continueTracking:lastPoint at:where inView:self];
-		lastPoint = where;
-		over = NSPointInRect(where, bounds);
-		if (over != [_cell isHighlighted]) {
-			[_cell highlight:over withFrame:bounds inView:self];
-			[self setNeedsDisplay:YES];
+		/* **AND THEN EVERY OTHER MOTION ALREADY QUEUED, WITHOUT DRAWING ANY OF THEM — WHICH IS THE WHOLE FIX.** A
+		 * VALUE is cheap: `-continueTracking:at:inView:` and a call to the action. A FRAME is not: the background,
+		 * the view tree, the chrome, a `AGWindowBeginFrame` and a copy of the surface — and MEASURED, drawing once
+		 * per motion made a drag of forty motions commit FORTY-THREE frames. That is a rate the output cannot take
+		 * and does not need, and a hand that reports faster than the loop can draw leaves a backlog that grows for
+		 * as long as the drag lasts, so the knob trails the pointer further and further behind. THE VALUE IS STILL
+		 * APPLIED FOR EVERY MOTION and the action still speaks for each one; only the DRAWING waits for the frame —
+		 * the same rule the window's own drag follows, for the same reason. */
+		for (;;) {
+			where = [self convertPoint:[next locationInWindow] fromView:nil];
+			(void)[_cell continueTracking:lastPoint at:where inView:self];
+			lastPoint = where;
+			over = NSPointInRect(where, bounds);
+			if (over != [_cell isHighlighted]) {
+				[_cell highlight:over withFrame:bounds inView:self];
+				[self setNeedsDisplay:YES];
+			}
+			if (continuous) {
+				[self sendAction:[_cell action] to:[_cell target]];
+			}
+			if ([next type] == NSLeftMouseUp) {
+				inside = over;
+				up = YES;
+				break;
+			}
+			/* A DEADLINE ALREADY PAST IS THE POLL FORM, which is what makes this a drain rather than a second wait. */
+			next = [app nextEventMatchingMask:(NSLeftMouseDraggedMask | NSLeftMouseUpMask)
+						untilDate:[NSDate distantPast]
+						   inMode:nil
+						  dequeue:YES];
+			if (next == nil) {
+				break;	/* the queue is empty: this frame is over */
+			}
 		}
-		if (continuous) {
-			[self sendAction:[_cell action] to:[_cell target]];
+		/* ONE DRAW FOR THE WHOLE FRAME'S WORTH OF MOTIONS. */
+		if (window != nil) {
+			[window displayIfNeeded];
 		}
-		if ([next type] == NSLeftMouseUp) {
-			inside = over;
+		if (up) {
 			break;
 		}
 	}

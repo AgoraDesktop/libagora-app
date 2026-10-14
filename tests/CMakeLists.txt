@@ -184,6 +184,20 @@ add_test(NAME appkit-chrome-buttons
 set_tests_properties(appkit-chrome-buttons PROPERTIES SKIP_RETURN_CODE 77
   ENVIRONMENT "${_agora_app_test_env}")
 
+# **AND HOW MANY FRAMES A DRAG COSTS.** A control's tracking is a MODAL LOOP: `NSControl -mouseDown:` runs its own
+# event pump while the application's run loop is NOT turning, so everything the run loop does once per pass has to
+# be done there by hand — and it was done once per EVENT. This counts the window's own draws for a forty-motion
+# drag, so "laggy to drag and snappy to click" becomes a number. `timeout` is there because this is the one test
+# that starts a real run loop: a drag that never reaches the control must FAIL rather than hang the suite.
+add_executable(control_drag control_drag.m)
+target_link_libraries(control_drag PRIVATE App)
+
+add_test(NAME appkit-control-drag
+  COMMAND timeout 60 "${CMAKE_CURRENT_SOURCE_DIR}/run-appkit-headless.sh" "$<TARGET_FILE:control_drag>" 2
+	  "all checks passed" )
+set_tests_properties(appkit-control-drag PROPERTIES SKIP_RETURN_CODE 77
+  ENVIRONMENT "${_agora_app_test_env}")
+
 # AND THE CHROME: Agora's title bar is an X, a minus and a plus drawn in one ink, a centred bold title, and a pill
 # at the far end — so what is checked is the SHAPES, which is a question about pixels and not about intent. The
 # client draws its own chrome, so this needs no compositor: `-cg_drawChromeInContext:` takes a bitmap rep's context.
