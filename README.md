@@ -47,6 +47,7 @@ tests/
   menu_validation.m             validation and state, which the view tests do not reach
   appkit_activation.m           only the ACTIVE application's menu bar shows
   appkit_controls_draw.m        a window full of controls, for a person to look at
+  chrome_theme.m                the THEME: an XFWM `.xpm` set becomes the chrome's buttons, 1:1
   run-*-headless.sh             ctest: a compositor with a virtual monitor (no desktop input involved)
   run-*-nested.sh, inspect.py   the PIXEL tests, and they are OPT-IN: `gnome-shell --nested` is a whole
                                 nested session and it grabs the HOST's pointer while it lives
@@ -100,8 +101,12 @@ the compositor is really gone.
 - **Activation** (`ctest`, against Agora's own server): the menu bar window is shown while the compositor says
   this client has the keyboard, hidden when it does not, and shown again — a window ordered out is not
   destroyed.
-- **`ctest`: 17 of 17 passed** (the keyboard and the seam, the AppKit and its input path, the controls and their
-  metrics, the tracking engine, the text path, the chrome, the menus and activation).
+- **The window chrome, when a theme provides it** (`ctest`): an XFWM theme's `.xpm` files become the four
+  buttons, at the theme's own size — the strip takes the theme's height, each state (`active`/`inactive`/
+  `prelight`/`pressed`) is selected by the window's key state and the pointer, and a button's transparent
+  pixel is at its TOP. It runs against `tests/fixtures/chrome`, Agora's own MIT fixture.
+- **`ctest`: 18 of 18 passed** (the keyboard and the seam, the AppKit and its input path, the controls and their
+  metrics, the tracking engine, the text path, the chrome, the chrome theme, the menus and activation).
 
 ### What a Wayland client does not get, and where each is recorded
 
@@ -149,6 +154,35 @@ because it had made the clicked subview the first responder.
 - **An NSTrackingArea's SCOPE is what a background window needed.** Before the option word, the window decided
   the crossing for the deepest view of whatever window the pointer was over, so a control in a window that was
   not key prelighted anyway. The area's own `Active…` bits are the fix, and the test pins both answers.
+- **`CGContextDrawImage` wrote the destination in one byte order and nothing else did.** Its hand sampler wrote
+  blue to `d[0]` whatever the surface was — right for a WINDOW's surface (`PremultipliedFirst |
+  ByteOrder32Little`, memory B,G,R,A) and wrong for a bitmap rep's (`PremultipliedLast | ByteOrder32Big`, memory
+  R,G,B,A) — so an image drawn into a rep came out with red and blue swapped while the same image on a window was
+  right. It is fixed in `libagora-drawing`, by asking the surface which order it uses; the chrome's own test found
+  it, because a themed button is the first saturated COLOUR anything here has drawn into a rep.
+
+### The window chrome's buttons, and where they can come from
+
+The chrome is the CLIENT's — the window server draws no title bar — and with no theme resolved it is the marks
+`NSWindow` draws: an X, a minus, a plus and a toolbar pill. **A theme can replace them.** Point
+`AGORA_CHROME_THEME` at an XFWM theme (the directory of `.xpm` files, or a theme root with an `xfwm4/` inside
+it), or drop one at `~/.local/share/agora/chrome/xfwm4`. The buttons are then `close`, `hide`, `maximize` and
+`menu` — the pill is what a toolbar toggle has no XFWM file for, and `menu` is the nearest thing the theme
+offers — in the four states XFWM ships, `active`, `inactive`, `prelight` and `pressed`. They are drawn at their
+OWN size: the strip grows to the theme's height and a 24x26 button IS 24x26 pixels. That is what "1:1" means,
+and it is why `+contentRectForFrameRect:styleMask:` is a function of the theme rather than of a constant.
+
+**A THEME IS NOT PART OF THIS LIBRARY AND MUST NOT BE.** It is somebody else's work under somebody else's
+licence — the one this was built against is GPL — and reading it from disk is not linking it, so Agora's MIT is
+untouched and the theme's provenance travels with the theme. No theme is committed and none is installed;
+`/themes/` and `/resources/` are ignored, and a theme keeps its own licence file beside its `.xpm` files.
+`tests/fixtures/chrome` is the one theme in the tree and it is Agora's OWN MIT fixture — sixteen hand-written
+XPMs — so `tests/chrome_theme.m` never depends on a licence a checkout does not carry. The reader is `AGXPM.c`
+(this tree decodes PNG and JPEG only; XPM is text, not a codec) and the loader is `AGChromeTheme`.
+
+WHAT THE FOUR BUTTONS DO IS STILL A WINDOW MANAGER'S, so a press draws the pressed art and nothing else: the
+close/hide/zoom behaviour is the part parked with Kestrel, and naming it beats a button that quietly does half
+of something.
 
 ### Still absent, and why
 
