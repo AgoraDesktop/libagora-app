@@ -44,10 +44,12 @@
  *   as the DEFAULT value, not as a failure. `NSInterfaceStyleForKey` therefore answers the responder it is
  *   given rather than a table this tier cannot read, and says so.
  *
- *   `-interpretKeyEvents:` IS REFUSED BY NAME. Apple hands each event to the receiver's INPUT CONTEXT, and
- *   the answers come back as `-insertText:` and `-doCommandBySelector:`; there is no input method in this
- *   tier, and the key-binding commands themselves are stage J's informal protocol. A door that quietly did
- *   nothing would swallow keystrokes, so it says what is missing instead.
+ *   `-interpretKeyEvents:` WAS REFUSED BY NAME, and it no longer is. Apple hands each event to the receiver's INPUT
+ *   CONTEXT, and the answers come back as `-insertText:` and `-doCommandBySelector:`; there is no input method in this
+ *   tier. WHAT THE DOOR DOES NOW IS THE DIRECT MAPPING — a key that types becomes `-insertText:` and a key that
+ *   commands becomes `-doCommandBySelector:` with the selector the key binding names — which is enough for typing and
+ *   is stated in the implementation to be exactly that: THE INPUT-METHOD HALF IS STILL ABSENT, and it is named there
+ *   rather than papered over. (Apple's informal protocol for the commands themselves is declared below.)
  *
  * AND TWO DECLARATIONS ARE SPELLED `id` FOR A REASON THAT HAS NOTHING TO DO WITH THIS CLASS: `-menu` and
  * `-setMenu:` hold an `NSMenu`, which is a class this tier does not ship — naming it, even forward, would
@@ -167,7 +169,66 @@ typedef NSUInteger NSInterfaceStyle;
    didPresentSelector:(nullable SEL)didPresentSelector
 	contextInfo:(nullable void *)contextInfo;
 
-/* AND THE ONE KEY DOOR THAT NEEDS AN INPUT METHOD, REFUSED BY NAME. */
+/* ============================================================================================ *
+ * THE STANDARD KEY-BINDING COMMANDS, WHICH ARE AN INFORMAL PROTOCOL.                            *
+ *                                                                                                *
+ * **THEY ARE DECLARED ON THE RESPONDER RATHER THAN ON THE TEXT CLASS, WHICH IS APPLE'S OWN       *
+ * PLACEMENT AND THE REASON THEY WORK AT ALL.** A command is a message sent to the FIRST          *
+ * RESPONDER and forwarded up the chain when nobody answers — so a window with three text fields   *
+ * and a button does not have to know which one is editing, and an Edit menu's item can carry      *
+ * `-copy:` with a NIL TARGET and reach whatever is. THE BASE DECLARES THEM AND DOES NOTHING BUT   *
+ * FORWARD: a responder that does not implement `-moveLeft:` is not refusing it, it is one that    *
+ * has not been asked to handle it yet, and the chain's end in this tier is silent because there   *
+ * is no beep to give it.                                                                          *
+ *                                                                                                *
+ * THIS IS THE SUBSET A SINGLE-LINE FIELD NEEDS, AND THE REST OF APPLE'S FAMILY IS NAMED RATHER   *
+ * THAN GUESSED: the word-granularity commands (`-moveWordLeft:`, `-deleteWordForward:`), the      *
+ * paragraph and document commands, `-yank:`, `-transpose:`, `-complete:`, `-setMark:` and the    *
+ * three that go with it, and the substitution and container-break insertions all need a LAYOUT    *
+ * MODEL — words, paragraphs, several lines — that one line of text does not have. Adding them    *
+ * later is adding methods; adding them now would be adding guesses.                               *
+ * ============================================================================================ */
+
+/* INSERTION: what an input context, or a key binding, produces. */
+- (void)insertText:(id)insertString;
+/* **AND THE ANSWER TO A KEY THAT IS A COMMAND RATHER THAN TEXT.** An input context sends the SELECTOR the key is
+ * bound to, and this is the door that performs it — which is why it is the one method an input method needs from a
+ * responder and the reason it is on the responder rather than on any view. */
+- (void)doCommandBySelector:(SEL)aSelector;
+
+/* MOVEMENT, BY CHARACTER AND BY LINE. */
+- (void)moveLeft:(nullable id)sender;
+- (void)moveRight:(nullable id)sender;
+- (void)moveLeftAndModifySelection:(nullable id)sender;
+- (void)moveRightAndModifySelection:(nullable id)sender;
+- (void)moveToBeginningOfLine:(nullable id)sender;
+- (void)moveToEndOfLine:(nullable id)sender;
+- (void)moveToBeginningOfLineAndModifySelection:(nullable id)sender;
+- (void)moveToEndOfLineAndModifySelection:(nullable id)sender;
+
+/* DELETION. */
+- (void)deleteBackward:(nullable id)sender;
+- (void)deleteForward:(nullable id)sender;
+- (void)deleteToBeginningOfLine:(nullable id)sender;
+- (void)deleteToEndOfLine:(nullable id)sender;
+
+/* AND THE FOUR WHOSE ARGUMENT IS A POSITION OR A STRUCTURE RATHER THAN A DIRECTION. */
+- (void)insertNewline:(nullable id)sender;
+- (void)insertTab:(nullable id)sender;
+- (void)insertBacktab:(nullable id)sender;
+- (void)cancelOperation:(nullable id)sender;
+
+/* THE FIVE AN EDIT MENU'S ITEMS CARRY, each sent to a nil target so the chain finds the editor. */
+- (void)selectAll:(nullable id)sender;
+- (void)copy:(nullable id)sender;
+- (void)cut:(nullable id)sender;
+- (void)paste:(nullable id)sender;
+- (void)delete:(nullable id)sender;
+
+/* **AND THE DOOR THAT TURNS EVENTS INTO COMMANDS.** Apple hands each event to the receiver's INPUT CONTEXT and the
+ * answers come back as `-insertText:` and `-doCommandBySelector:`. THIS TIER HAS NO INPUT CONTEXT — no dead-key
+ * composition, no marked text, no input method — so what this does instead is the DIRECT mapping for the keys a text
+ * view needs, and its refusals are named where they stand. See the implementation. */
 - (void)interpretKeyEvents:(NSArray *)eventArray;
 
 @end

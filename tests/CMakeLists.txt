@@ -59,6 +59,11 @@ set_tests_properties(appkit-menu-cell-ink PROPERTIES ENVIRONMENT "${_agora_app_t
 add_executable(appkit_menu_draw appkit_menu_draw.m)
 target_link_libraries(appkit_menu_draw PRIVATE App)
 
+# **A WINDOW FULL OF CONTROLS, FOR A PERSON TO LOOK AT.** Not a ctest: it needs a display and it is a demonstration
+# rather than an assertion. It is what found the subview-placement defect in `NSView -displayRect:`.
+add_executable(appkit_controls_draw appkit_controls_draw.m)
+target_link_libraries(appkit_controls_draw PRIVATE App)
+
 add_executable(menu_view_ink menu_view_ink.m)
 target_link_libraries(menu_view_ink PRIVATE App)
 add_test(NAME appkit-menu-view-ink COMMAND menu_view_ink)
@@ -90,6 +95,13 @@ add_executable(control_metrics control_metrics.m)
 target_link_libraries(control_metrics PRIVATE App m)
 add_test(NAME appkit-control-metrics COMMAND control_metrics)
 set_tests_properties(appkit-control-metrics PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
+
+# AND TEXT INPUT: the first slice of the text system, driven the way a window drives it — an NSEvent turned into a
+# command by -interpretKeyEvents:, and the command editing the string.
+add_executable(text_input text_input.m)
+target_link_libraries(text_input PRIVATE App m)
+add_test(NAME appkit-text-input COMMAND text_input)
+set_tests_properties(appkit-text-input PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
 
 # **AND THE DISPLAY PATH.** The ink tests are all offscreen; this one puts a menu's window on a headless
 # compositor and reads the COMPOSITOR'S OWN FRAMEBUFFER back, which is the only place the present can be seen.

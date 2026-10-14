@@ -1309,6 +1309,8 @@ static CGFloat fn_clamp_axis(CGFloat v, CGFloat lo, CGFloat hi)
 
 - (void)setContentView:(NSView *)aView
 {
+	NSView *previousContent = _contentView;
+
 	if (aView == _contentView) {
 		return;
 	}
@@ -1325,10 +1327,15 @@ static CGFloat fn_clamp_axis(CGFloat v, CGFloat lo, CGFloat hi)
 		 * the window's content view and had nothing to start from. */
 		[_contentView cg_setWindow:self];
 	}
-	/* AND A WINDOW WITH A CONTENT VIEW ALWAYS HAS SOMEWHERE FOR A KEY TO GO, which is why installing one
-	 * makes it the first responder unless something else already is. */
-	if (_firstResponder == nil && _contentView != nil) {
-		_firstResponder = _contentView;
+	/* **AND THE FIRST RESPONDER MOVES THROUGH THE REAL DOOR RATHER THAN BY ASSIGNMENT.** This used to write
+	 * `_firstResponder` straight, which made the new content view the first responder WITHOUT EVER ASKING IT —
+	 * neither `-acceptsFirstResponder` nor `-becomeFirstResponder` — and without telling the one it displaced.
+	 * MEASURED, that is the SAME defect as the door that never called `-becomeFirstResponder` at all, reached by a
+	 * second route: a text view that IS the first responder, and whose editing session therefore never opened, so
+	 * its caret was missing. AND A CONTENT VIEW THAT DOES NOT WANT THE KEYBOARD IS A REAL CASE — the window then has
+	 * no first responder, which is why `-sendEvent:` falls back to the content view for key events. */
+	if (_firstResponder == nil || _firstResponder == previousContent) {
+		[self makeFirstResponder:_contentView];
 	}
 }
 
@@ -1359,6 +1366,26 @@ static CGFloat fn_clamp_axis(CGFloat v, CGFloat lo, CGFloat hi)
 	 * exactly what happened, and the diagnostic was a click the app pumped, dispatched and then lost —
 	 * `sendEvent returned; stopped=0`. Linking the first responder to the CONTENT VIEW is what makes the
 	 * chain reach the view, and through it the window and the application. */
+	/* **AND THE THREE QUESTIONS APPLE ASKS, WHICH THIS DOOR DID NOT ASK AT ALL.** A responder is not made the first
+	 * responder by being NAMED — it is made one by AGREEING, and by the one it displaces agreeing to go. MEASURED,
+	 * the absence was a text view with NO CARET: `-becomeFirstResponder` is where an editor opens its session, and
+	 * nothing in this tier ever called it, so every field was permanently "not editing" and a delegate's
+	 * `-textShouldBeginEditing:` was never consulted either. */
+	NSResponder *previous = _firstResponder;
+
+	/* THE ORDER IS THE CONTRACT. The newcomer is asked whether it wants the keyboard FIRST, so a view that declines
+	 * is never asked to become anything; the incumbent is asked to let go SECOND, and a refusal ABANDONS the whole
+	 * change — a field that will not give up its editing keeps it; and only then does the newcomer become it, with a
+	 * refusal there UNDOING the change rather than leaving the window with a first responder that said no. */
+	if (aResponder == previous) {
+		return YES;
+	}
+	if (aResponder != nil && ![aResponder acceptsFirstResponder]) {
+		return NO;
+	}
+	if (previous != nil && ![previous resignFirstResponder]) {
+		return NO;
+	}
 	_firstResponder = aResponder;
 	/* A DIRECT SELECTION IS NOT A TRAVERSAL: Apple's `NSDirectSelection` means the window is not using the key view
 	 * loop, which is exactly what a caller naming the responder has done. The four traversal doors set this back to
@@ -1372,6 +1399,15 @@ static CGFloat fn_clamp_axis(CGFloat v, CGFloat lo, CGFloat hi)
 	 * but SKIPPED EVERY ANCESTOR between the responder and the content view — so an intermediate view could
 	 * never hear an event its descendant did not handle. `-nextResponder` is computed now, so the walk is the
 	 * real one and there is nothing to patch up. */
+	if (aResponder != nil && ![aResponder becomeFirstResponder]) {
+		/* IT CHANGED ITS MIND ON THE WAY IN, so the change is undone and the one it displaced is put back — the only
+		 * answer that leaves the window with a first responder rather than with none. */
+		_firstResponder = previous;
+		if (previous != nil) {
+			[previous becomeFirstResponder];
+		}
+		return NO;
+	}
 	return YES;
 }
 

@@ -403,19 +403,162 @@
 }
 
 /* ------------------------------------------------------------------------- */
-/* The key door that needs an input method                                    */
+/* The standard key-binding commands                                        */
 /* ------------------------------------------------------------------------- */
 
+/* **EVERY ONE OF THESE DEFAULTS TO THE SAME THING: HAND IT TO THE NEXT RESPONDER.** That is not a stub — it is the
+ * contract of an informal protocol, and it is what makes a command work in a window whose editor is a view the sender
+ * has never heard of: an Edit menu's Copy item carries `-copy:` with a NIL target, the chain is walked, and the first
+ * responder that IMPLEMENTS it stops the walk. A responder that does not implement it is not refusing it.
+ *
+ * THE CHAIN'S END IS SILENT because this tier has no beep: Apple's last responder rings the system bell, and there is
+ * no bell here to ring — stated rather than left as a mystery about why a stray keystroke does nothing. */
+- (void)insertText:(id)insertString
+{
+	(void)insertString;
+	[[self nextResponder] insertText:insertString];
+}
+
+/* **AND THIS ONE'S DEFAULT IS SUBTLY DIFFERENT, WHICH IS THE POINT OF IT.** An input context calls
+ * `-doCommandBySelector:` to ask the responder to PERFORM a command, so the responder's own implementation is tried
+ * FIRST and only an unimplemented command is forwarded — otherwise a text view that answers `-moveLeft:` and forwards
+ * blindly would send its own command past itself. The `-respondsToSelector:` check is the whole difference, and the
+ * guard against this very selector is what keeps a responder whose ``-doCommandBySelector:`` is the only thing it
+ * implements from calling itself forever. */
+- (void)doCommandBySelector:(SEL)aSelector
+{
+	if (aSelector == NULL) {
+		return;
+	}
+	if (aSelector != @selector(doCommandBySelector:) && [self respondsToSelector:aSelector]) {
+		[self performSelector:aSelector withObject:nil];
+		return;
+	}
+	[[self nextResponder] doCommandBySelector:aSelector];
+}
+
+- (void)moveLeft:(id)sender				{ [[self nextResponder] moveLeft:sender]; }
+- (void)moveRight:(id)sender				{ [[self nextResponder] moveRight:sender]; }
+- (void)moveLeftAndModifySelection:(id)sender		{ [[self nextResponder] moveLeftAndModifySelection:sender]; }
+- (void)moveRightAndModifySelection:(id)sender		{ [[self nextResponder] moveRightAndModifySelection:sender]; }
+- (void)moveToBeginningOfLine:(id)sender			{ [[self nextResponder] moveToBeginningOfLine:sender]; }
+- (void)moveToEndOfLine:(id)sender			{ [[self nextResponder] moveToEndOfLine:sender]; }
+- (void)moveToBeginningOfLineAndModifySelection:(id)sender
+{
+	[[self nextResponder] moveToBeginningOfLineAndModifySelection:sender];
+}
+- (void)moveToEndOfLineAndModifySelection:(id)sender
+{
+	[[self nextResponder] moveToEndOfLineAndModifySelection:sender];
+}
+- (void)deleteBackward:(id)sender			{ [[self nextResponder] deleteBackward:sender]; }
+- (void)deleteForward:(id)sender			{ [[self nextResponder] deleteForward:sender]; }
+- (void)deleteToBeginningOfLine:(id)sender		{ [[self nextResponder] deleteToBeginningOfLine:sender]; }
+- (void)deleteToEndOfLine:(id)sender			{ [[self nextResponder] deleteToEndOfLine:sender]; }
+- (void)insertNewline:(id)sender			{ [[self nextResponder] insertNewline:sender]; }
+- (void)insertTab:(id)sender				{ [[self nextResponder] insertTab:sender]; }
+- (void)insertBacktab:(id)sender			{ [[self nextResponder] insertBacktab:sender]; }
+- (void)cancelOperation:(id)sender			{ [[self nextResponder] cancelOperation:sender]; }
+- (void)selectAll:(id)sender				{ [[self nextResponder] selectAll:sender]; }
+- (void)copy:(id)sender					{ [[self nextResponder] copy:sender]; }
+- (void)cut:(id)sender					{ [[self nextResponder] cut:sender]; }
+- (void)paste:(id)sender					{ [[self nextResponder] paste:sender]; }
+- (void)delete:(id)sender				{ [[self nextResponder] delete:sender]; }
+
+/* ------------------------------------------------------------------------- */
+/* The door that turns events into commands                                    */
+/* ------------------------------------------------------------------------- */
+
+/* **A DIRECT KEY BINDING, AND THE INPUT METHOD'S ABSENCE IS THE FIRST THING IT SAYS.** Apple hands every event to the
+ * receiver's input context and lets the CONTEXT decide whether the key typed something, marked something, or named a
+ * command; that is where dead keys, composition and every input method live. THIS TIER HAS NO CONTEXT, so what this
+ * does is the mapping a US keyboard needs and no more:
+ *
+ *   * A FUNCTION KEY becomes the command it names, with Shift turning a movement into a selection-extending one.
+ *   * A CONTROL CHARACTER becomes the command it names — Backspace and Delete both backward, the function-key Delete
+ *     forward, Return and Enter a newline, Tab and Shift-Tab their insertions, Escape a cancellation.
+ *   * ANYTHING ELSE THAT IS PRINTABLE becomes `-insertText:`.
+ *
+ * AND WHAT IT REFUSES BY NAME IS THE HALF IT CANNOT DO: `-interpretKeyEvents:`'s whole point in Apple's design is the
+ * CONTEXT, and no mapping table is a substitute for one. A caller who ports an application expecting composed text
+ * from an input method gets plain characters here, and the difference is stated at this door rather than discovered.
+ *
+ * A COMMAND MODIFIER IS NOT READ. Command-A and Command-C are key EQUIVALENTS — the menu bar's business — and a
+ * window whose menu does not carry them should not have them invented by its text view. So an event with Command held
+ * falls through to "printable", which for a control combination means the character it produced, which is nothing. */
 - (void)interpretKeyEvents:(NSArray *)eventArray
 {
-	/* REFUSED BY NAME, AND IT DOES NOT FORWARD EITHER, which is the difference between this and the event
-	 * methods above: Apple hands each event to the receiver's INPUT CONTEXT and the answers come back as
-	 * `-insertText:` and `-doCommandBySelector:`. With no input context the events would have nowhere to go,
-	 * and forwarding them would pretend a keystroke had been interpreted by handing it on as if nothing had
-	 * happened. Saying what is missing is the only honest answer. */
-	(void)eventArray;
-	fn_refuse_window("-interpretKeyEvents:", "the input-method machinery (an input context and the key"
-			 " bindings that answer it; the commands themselves are stage J's)");
+	NSUInteger i, count = [eventArray count];
+
+	for (i = 0; i < count; i++) {
+		NSEvent *event = [eventArray objectAtIndex:i];
+		NSString *chars = [event characters];
+		NSUInteger flags = [event modifierFlags];
+		BOOL shift;
+		unichar c;
+		SEL command = NULL;
+
+		if ([event type] != NSKeyDown || [chars length] == 0) {
+			continue;
+		}
+		if ((flags & NSCommandKeyMask) != 0) {
+			continue;	/* a key equivalent belongs to the menu bar, not to this */
+		}
+		shift = ((flags & NSShiftKeyMask) != 0);
+		c = [chars characterAtIndex:0];
+
+		switch (c) {
+		case NSUpArrowFunctionKey:
+		case NSDownArrowFunctionKey:
+		case NSPageUpFunctionKey:
+		case NSPageDownFunctionKey:
+			/* NO VERTICAL MOVEMENT IN A SINGLE RUN: these are named as the family's remainder rather than mapped onto
+			 * a line, which would be inventing a document model this class does not have. */
+			break;
+		case NSLeftArrowFunctionKey:
+			command = shift ? @selector(moveLeftAndModifySelection:) : @selector(moveLeft:);
+			break;
+		case NSRightArrowFunctionKey:
+			command = shift ? @selector(moveRightAndModifySelection:) : @selector(moveRight:);
+			break;
+		case NSHomeFunctionKey:
+			command = shift ? @selector(moveToBeginningOfLineAndModifySelection:)
+					: @selector(moveToBeginningOfLine:);
+			break;
+		case NSEndFunctionKey:
+			command = shift ? @selector(moveToEndOfLineAndModifySelection:) : @selector(moveToEndOfLine:);
+			break;
+		case NSDeleteFunctionKey:
+			command = @selector(deleteForward:);
+			break;
+		case NSBackspaceCharacter:
+		case NSDeleteCharacter:
+			/* BOTH ARE BACKWARD DELETE, which is the keymap difference the constants above record. */
+			command = @selector(deleteBackward:);
+			break;
+		case NSNewlineCharacter:
+		case NSCarriageReturnCharacter:
+		case NSEnterCharacter:
+			command = @selector(insertNewline:);
+			break;
+		case NSTabCharacter:
+			command = @selector(insertTab:);
+			break;
+		case NSBackTabCharacter:
+			command = @selector(insertBacktab:);
+			break;
+		case 0x1B:	/* ESC — no constant of Apple's names it, so the code point stands with this note */
+			command = @selector(cancelOperation:);
+			break;
+		default:
+			break;
+		}
+		if (command != NULL) {
+			[self doCommandBySelector:command];
+		} else if (c >= 0x20 && c != NSDeleteCharacter) {
+			[self insertText:chars];
+		}
+	}
 }
 
 @end
