@@ -1150,6 +1150,19 @@ void AGWindowShow(AGWindow *window)
 	 * never drawn is then never mapped at all, which is right — it has nothing to show. */
 	wl_display_flush(window->server->display);
 	if (window->agora != NULL) {
+		/* **AND A WINDOW THAT IS SHOWN IS VISIBLE, WHICH THIS NEVER SAID.** `-orderOut:` was wired to a hide
+		 * request when that door was built and THIS half was not wired to its opposite — so a window hidden once
+		 * could NEVER BE SHOWN AGAIN: the server went on skipping it while the client drew into it, and MEASURED,
+		 * from the server's own log, that is exactly what a menu's window looked like:
+		 *
+		 *     surface: mapped=1 visible=0 level=0 buffer=1
+		 *
+		 * mapped, at the right level, WITH a buffer, and skipped by the one guard nobody had asked about. The menu
+		 * bar's window was never hidden, which is why it painted all along — the same asymmetry that has been
+		 * pointing at this since the first report.
+		 *
+		 * A hide without a show is not a door, it is a trap. */
+		agora_window_set_visible(window->agora, 1);
 		/* **AND THE FIRST FRAME STARTS HERE.** With `xdg-shell` the compositor's configure is what starts the
 		 * drawing; with this protocol there is no configure, so the door that means "show it" is the one that
 		 * says the first frame may be drawn. */
