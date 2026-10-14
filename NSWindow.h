@@ -317,6 +317,12 @@ typedef NSUInteger NSWindowSharingType;
 	 * drawing and the pointer both read them. */
 	NSInteger _cg_hoverChrome;
 	NSInteger _cg_pressedChrome;
+	/* **AND WHERE A CHROME DRAG GRABBED THE BAR, AND WHETHER ONE IS RUNNING.** A press on the chrome that misses a
+	 * button is a MOVE; the grab point is kept so the point under the pointer STAYS under it, which is the whole
+	 * arithmetic a client-side drag needs — there is no accumulated delta, so a dropped motion cannot make the
+	 * window drift away from the pointer. */
+	NSPoint _cg_dragGrab;
+	BOOL _cg_draggingChrome;
 	NSInteger _cg_windowNumber; /* Apple's window number, assigned when the AGWindow is made; -1 before */
 	BOOL _cg_closeRequested; /* the compositor asked the window to close; acted on in the pump */
 	NSRect _frame;          /* COCOA's coordinates: bottom-left origin */

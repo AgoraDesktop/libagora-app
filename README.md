@@ -113,8 +113,11 @@ the compositor is really gone.
 
 These are properties of the protocol rather than gaps, and each is written at the door that carries it:
 
-- **A client does not place its own window.** `-setFrameOrigin:` moves the Cocoa frame and not the window;
-  the compositor places it.
+- **A STOCK Wayland client does not place its own window.** Under `xdg-shell` the compositor places it, and
+  `-setFrameOrigin:` moves only the Cocoa frame. **Agora's own server is the exception, and it is the one that
+  matters here**: `agora-shell`'s `set_frame` is the Mac's model — the application states a frame and the server
+  honours it, position included — which is what makes the chrome DRAGGABLE (see the chrome section). The
+  distinction is a property of the COMPOSITOR and not of `NSWindow`.
 - **There is no unmap, no iconify and no stacking.** `-orderOut:`, `-miniaturize:`, `-orderBack:` and
   `-orderFrontRegardless` change *this object's* state and not the screen's.
 - **There is no Expose.** The client owns the pixels; a repaint is asked for by the frame callback, which is
@@ -182,6 +185,12 @@ all keeps the marks `NSWindow` draws.
 **`tests/run-controls.sh` IS HOW TO LOOK AT A THEME WHILE CHANGING IT.** It opens the controls demonstration in a
 nested Agora compositor — an ordinary X window that grabs nothing, unlike a nested `gnome-shell` — with the tree's
 own `themes/` as the demonstration's default, and prints which theme resolved and its strip height.
+
+**AND THE CHROME IS THE WINDOW'S HANDLE.** A press on the title bar that misses a button starts a MOVE: the window
+follows the pointer and the grabbed point stays under it. `-locationInWindow` is relative to a window that MOVES
+with the drag, so the pointer's place in the world is the frame's origin PLUS that point, and putting the grab back
+under it is that sum minus the grab — one subtraction, with no accumulated delta to drift. `-isMovable` decides
+whether it happens; a borderless window has no chrome and so no handle.
 
 **AND ONE DARK GREY POINT DIVIDES THE CHROME FROM THE CONTENT.** A title bar and a content view are two surfaces,
 and with nothing between them the boundary is wherever the reader guesses it is — so one 0.32-grey row runs the

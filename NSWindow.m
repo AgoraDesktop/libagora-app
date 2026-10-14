@@ -819,6 +819,22 @@ static void fn_draw_toolbar_pill(CGContextRef c, CGRect box)
  * assumption every bottom-left context needs it, and drew every button upside down; `tests/chrome_theme.m` asks the
  * top and the bottom corners precisely so that mistake cannot return. ANTIALIASING IS OFF because a theme's button
  * is drawn at its OWN size (1:1) and resampling it would soften the pixels the theme's author placed. */
+/* **WHETHER A POINT IS IN THE TITLE BAR — THE WINDOW'S HANDLE, AS OPPOSED TO ITS CONTENT.** It is the same
+ * `fn_chrome_layout` the painter and the button hit test use, so "in the chrome" cannot mean one rectangle here and
+ * another there. A borderless window has no chrome and so has no handle: it answers NO. */
+static BOOL fn_pointInChrome(NSWindow *w, NSPoint p)
+{
+	NSRect content = [w contentRectForFrameRect:[w frame]];
+	fn_chrome_layout_t layout;
+
+	fn_chrome_layout(w, &layout);
+	if (layout.height <= 0.0) {
+		return NO;
+	}
+	return p.x >= 0.0 && p.x < content.size.width
+		&& p.y >= content.size.height && p.y < content.size.height + layout.height;
+}
+
 static void fn_draw_image(CGContextRef c, NSRect rect, CGImageRef image)
 {
 	CGContextSaveGState(c);
@@ -1991,15 +2007,38 @@ static CGFloat fn_clamp_axis(CGFloat v, CGFloat lo, CGFloat hi)
 		 * release clears it. THE ACTION EACH BUTTON PERFORMS IS NOT WIRED HERE; that is a window manager's (see the
 		 * README), so what this buys is the state the theme's pressed art exists for. */
 		if ([theEvent type] == NSLeftMouseDown) {
-			NSInteger hit = [self cg_chromeButtonAtPoint:[theEvent locationInWindow]];
+			NSPoint p = [theEvent locationInWindow];
+			NSInteger hit = [self cg_chromeButtonAtPoint:p];
 
 			if (hit >= 0) {
 				_cg_pressedChrome = hit;
 				[self setNeedsDisplay:YES];
 				return;
 			}
-		} else if ([theEvent type] == NSLeftMouseUp && _cg_pressedChrome >= 0) {
+			/* **A PRESS ON THE CHROME THAT MISSED A BUTTON IS A MOVE.** The title bar is the window's handle, and
+			 * `-isMovable` is the flag Apple's own header says decides it — so a window that refuses to be moved keeps
+			 * its chrome to itself. The grab point is remembered; see the drag case below for the arithmetic. */
+			if ([self isMovable] && fn_pointInChrome(self, p)) {
+				_cg_draggingChrome = YES;
+				_cg_dragGrab = p;
+				return;
+			}
+		} else if ([theEvent type] == NSLeftMouseDragged && _cg_draggingChrome) {
+			/* **THE WINDOW FOLLOWS THE POINTER, AND THE ARITHMETIC IS ONE SUBTRACTION.** `-locationInWindow` is
+			 * relative to a window that MOVES with the drag, so the pointer's place in the world is the frame's origin
+			 * PLUS this point; putting the grabbed point back under it is that sum minus the grab. There is no
+			 * accumulated delta and no remembered last position, so a dropped or duplicated motion cannot make the
+			 * window drift — and on Agora's own server `-setFrame:` reaches `set_frame`, which moves the surface. */
+			NSPoint p = [theEvent locationInWindow];
+			NSPoint origin = _frame.origin;
+
+			origin.x += p.x - _cg_dragGrab.x;
+			origin.y += p.y - _cg_dragGrab.y;
+			[self setFrameOrigin:origin];
+			return;
+		} else if ([theEvent type] == NSLeftMouseUp && (_cg_pressedChrome >= 0 || _cg_draggingChrome)) {
 			_cg_pressedChrome = -1;
+			_cg_draggingChrome = NO;
 			[self setNeedsDisplay:YES];
 			return;
 		}

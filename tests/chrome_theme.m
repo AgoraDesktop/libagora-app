@@ -250,6 +250,40 @@ int main(void)
 				[rep release];
 			}
 
+			/* 9. **AND THE CHROME DRAGS THE WINDOW.** A press on the bar that misses the buttons starts a move, and the
+			 * window's origin moves by exactly the pointer's own delta — the grabbed point stays under the pointer.
+			 * Headless there is no seam to move a surface with, so what moves is the COCOA frame, which is the half
+			 * `-setFrame:` updates either way and the half `AGWindowSetFrame` is told from. */
+			{
+				NSRect before = [w frame];
+				NSEvent *down = [NSEvent mouseEventWithType:NSLeftMouseDown
+					location:NSMakePoint(50.0, CH + 4.0) modifierFlags:0 timestamp:0.0
+					windowNumber:[w windowNumber] context:nil eventNumber:0 clickCount:1 pressure:0.0f];
+				NSEvent *move = [NSEvent mouseEventWithType:NSLeftMouseDragged
+					location:NSMakePoint(90.0, CH - 10.0) modifierFlags:0 timestamp:0.01
+					windowNumber:[w windowNumber] context:nil eventNumber:0 clickCount:1 pressure:0.0f];
+				NSEvent *up = [NSEvent mouseEventWithType:NSLeftMouseUp
+					location:NSMakePoint(90.0, CH - 10.0) modifierFlags:0 timestamp:0.02
+					windowNumber:[w windowNumber] context:nil eventNumber:0 clickCount:1 pressure:0.0f];
+
+				[w sendEvent:down];
+				[w sendEvent:move];
+				check(fabs([w frame].origin.x - (before.origin.x + 40.0)) < 0.5
+				      && fabs([w frame].origin.y - (before.origin.y - 14.0)) < 0.5,
+				      "a drag on the TITLE BAR moves the window by the pointer's own delta");
+
+				/* AND A PRESS ON A BUTTON IS NOT A DRAG: the close button's own press must leave the frame where it
+				 * is, or a click on a control would shove the window aside by however far the hand moved. */
+				before = [w frame];
+				[w sendEvent:[NSEvent mouseEventWithType:NSLeftMouseDown
+					location:NSMakePoint((CGFloat)(close_x() + s_buttonW / 2), CH + 4.0)
+					modifierFlags:0 timestamp:0.03 windowNumber:[w windowNumber] context:nil
+					eventNumber:0 clickCount:1 pressure:0.0f]];
+				[w sendEvent:up];
+				check([w frame].origin.x == before.origin.x && [w frame].origin.y == before.origin.y,
+				      "and a press on a BUTTON does not move the window");
+			}
+
 			[w release];
 		}
 	}
