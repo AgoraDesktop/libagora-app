@@ -214,8 +214,10 @@ int main(void)
 			plain_ink = plain_ink / (double)[plain titleWidth];
 			check(bold_ink > plain_ink,
 			      "and it DRAWS denser for the same title, which is what bold means to a reader");
-			printf("  (note: the same title — ink per column pixel, bold %.2f vs plain %.2f)\n",
-			       bold_ink, plain_ink);
+			printf("  (note: the same title — ink per column pixel, bold %.2f vs plain %.2f; the bar's "
+			       "column is %.1f wide with %d inked, the plain cell's title %.1f wide with %.0f "
+			       "inked)\n", bold_ink, plain_ink, (double)w[0], bar_ink[0],
+			       (double)[plain titleWidth], plain_ink * (double)[plain titleWidth]);
 			check(w[0] > 0, "and the bar's first column has a width to divide by");
 		}
 		check(bar_hi[1] > 0 && bar_hi[0] == 0 && bar_hi[2] == 0,
