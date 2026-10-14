@@ -325,6 +325,12 @@ NS_ASSUME_NONNULL_BEGIN
 	NSInteger _windowNumber;
 	NSGraphicsContext *_context;	/* RETAINED */
 	NSPoint _locationInWindow;
+	/* **AND WHERE THE POINTER IS IN THE OUTPUT, WHEN THE COMPOSITOR SAID SO.** `-locationInWindow` is relative to
+	 * the window, which a window being DRAGGED moves — so a title-bar drag needs the absolute pair, and it has to
+	 * travel WITH the event: a single "latest" value is read after the seam has already advanced it past the press
+	 * (MEASURED: the grab was recorded at the FINAL pointer and the window jumped to the origin instead). */
+	NSPoint _cg_globalPoint;
+	BOOL _cg_hasGlobalPoint;
 	NSInteger _clickCount;
 	NSInteger _buttonNumber;
 	NSInteger _eventNumber;

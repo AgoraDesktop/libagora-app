@@ -81,6 +81,11 @@ struct AGWindow {
 	/* Non-zero when this window is a STATUS ITEM: the width the server places it in, and the reason a later
 	 * `AGWindowSetFrame` is remembered but not allowed to move it. */
 	int status_length;
+	/* **AND WHERE THE POINTER IS IN THE OUTPUT, KEPT FROM THE COMPOSITOR'S `pointer_global`.** Absolute, so a
+	 * drag that moves this window can follow the pointer without depending on where the window is. */
+	int global_x;
+	int global_y;
+	int has_global;
 
 	struct AGBuffer buffer;
 	struct wl_callback *frame_cb;
@@ -639,6 +644,12 @@ static void pointer_motion(void *data, struct wl_pointer *pointer, uint32_t time
 	event.time_ms = time != 0 ? time : ag_now_ms();
 	event.x = server->pointer_x;
 	event.y = server->pointer_y;
+	/* THE ABSOLUTE POSITION THE COMPOSITOR LAST SENT FOR THIS WINDOW, attached so the two travel together. */
+	if (server->pointer_focus != NULL && server->pointer_focus->has_global) {
+		event.global_x = server->pointer_focus->global_x;
+		event.global_y = server->pointer_focus->global_y;
+		event.has_global = 1;
+	}
 	ag_window_deliver(server->pointer_focus, &event);
 }
 
@@ -656,6 +667,12 @@ static void pointer_button(void *data, struct wl_pointer *pointer, uint32_t seri
 	event.pressed = state == WL_POINTER_BUTTON_STATE_PRESSED;
 	event.x = server->pointer_x;
 	event.y = server->pointer_y;
+	/* AND WITH A BUTTON TOO, because a drag's GRAB POINT is a press. */
+	if (server->pointer_focus != NULL && server->pointer_focus->has_global) {
+		event.global_x = server->pointer_focus->global_x;
+		event.global_y = server->pointer_focus->global_y;
+		event.has_global = 1;
+	}
 	ag_window_deliver(server->pointer_focus, &event);
 }
 
@@ -825,6 +842,52 @@ static const struct agora_output_listener agora_output_listener = {
 	 * SERVER lying rather than like a struct in the wrong order. */
 	agora_output_work_area,
 	agora_output_menu_bar_area,
+};
+
+/* ============================================================================================ *
+ * THE WINDOW'S OWN EVENTS, which are per-window where the output's are per-screen.               *
+ *                                                                                                *
+ * **THE POINTER'S ABSOLUTE POSITION IS THE ONE THAT MATTERS HERE.** See the protocol's            *
+ * `pointer_global`: a title-bar drag MOVES the window, so the surface-relative `wl_pointer.motion`  *
+ * becomes a moving target, and a client that used it drifted — MEASURED, a fast drag put the window *
+ * hundreds of pixels past the pointer. The absolute position is kept on the window and attached to  *
+ * the AGEvent the relative motion becomes, so the two travel together.                              *
+ * ============================================================================================ */
+static void agora_window_close(void *data, struct agora_window *window)
+{
+	AGWindow *w = data;
+	AGEvent event;
+
+	(void)window;
+	memset(&event, 0, sizeof event);
+	event.type = AGEventClose;
+	ag_window_deliver(w, &event);
+}
+
+static void agora_window_work_area_changed(void *data, struct agora_window *window, int32_t x, int32_t y,
+					   int32_t width, int32_t height)
+{
+	/* THE PER-WINDOW FORM OF WHAT THE OUTPUT'S `work_area` ALREADY SAID. The seam reads the OUTPUT's, because the
+	 * work area is a property of the screen and the client constrains itself against it; this copy is the same
+	 * answer and there is nothing to do with it here. */
+	(void)data; (void)window; (void)x; (void)y; (void)width; (void)height;
+}
+
+static void agora_window_pointer_global(void *data, struct agora_window *window, int32_t x, int32_t y)
+{
+	AGWindow *w = data;
+
+	(void)window;
+	w->global_x = (int)x;
+	w->global_y = (int)y;
+	w->has_global = 1;
+}
+
+static const struct agora_window_listener agora_window_listener = {
+	/* IN THE PROTOCOL'S OWN ORDER: `close`, `work_area_changed`, `pointer_global`. */
+	agora_window_close,
+	agora_window_work_area_changed,
+	agora_window_pointer_global,
 };
 
 static void registry_global(void *data, struct wl_registry *registry, uint32_t name, const char *interface,
@@ -1116,6 +1179,9 @@ AGWindow *AGWindowCreate(AGWindowServer *server, int width, int height, const ch
 		 * frame and the server honours it — so the window is usable the moment it is made, at the size asked
 		 * for, and the frame it will be shown at is whatever `AGWindowSetFrame` last said. */
 		window->agora = agora_shell_get_window(server->shell, window->surface);
+		/* **AND THE WINDOW'S OWN EVENTS ARE LISTENED FOR, WHICH IS WHAT CARRIES THE POINTER'S ABSOLUTE POSITION.**
+		 * Without this the `pointer_global` events go nowhere and a drag is back to the moving target. */
+		agora_window_add_listener(window->agora, &agora_window_listener, window);
 		if (title != NULL) {
 			agora_window_set_title(window->agora, title);
 		}

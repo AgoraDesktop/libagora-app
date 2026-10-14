@@ -133,6 +133,14 @@
 - (void)cg_setTrackingArea:(NSTrackingArea *)area;
 @end
 
+/* **AND THE POINTER'S ABSOLUTE POSITION, WHICH A TITLE-BAR DRAG MEASURES AGAINST.** The same shape as the door
+ * above: a private pair on `NSEvent`, declared wherever it is used and defined by the class that owns the storage. */
+@interface NSEvent (APPKITGlobalPoint)
+- (void)cg_setGlobalPoint:(NSPoint)point;
+- (NSPoint)cg_globalPoint;
+- (BOOL)cg_hasGlobalPoint;
+@end
+
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -369,6 +377,23 @@ static NSPoint fn_window_point(NSWindow *w, int x, int y)
 	return NSMakePoint((CGFloat)x, frame.size.height - (CGFloat)y);
 }
 
+/* **THE POINTER'S ABSOLUTE POSITION RIDES WITH THE EVENT, NOT ON THE WINDOW.** A single "latest" value is read
+ * after the seam has already advanced past the press — MEASURED: the grab was recorded at the FINAL pointer, so the
+ * window jumped to the origin on the first motion — and attaching it to the event is what pairs the two. The output
+ * measures DOWN and Cocoa UP, so the y is flipped here, once. */
+static NSEvent *fn_with_global(NSEvent *ev, const AGEvent *e)
+{
+	if (ev != nil && e->has_global) {
+		CGFloat screen_height = [[NSScreen mainScreen] frame].size.height;
+
+		if (screen_height > 0.0) {
+			[ev cg_setGlobalPoint:NSMakePoint((CGFloat)e->global_x,
+							  screen_height - (CGFloat)e->global_y)];
+		}
+	}
+	return ev;
+}
+
 /* THE TRANSLATION ITSELF, and it is one function for the same reason the point conversion is: the pump, the
  * mouse-location door and any future monitor all have to agree about what a seam event means. A NULL answer
  * is "this is not an event this class delivers" — a configure, a close — and the pump handles those itself
@@ -396,10 +421,10 @@ static NSEvent *fn_translate(NSWindow *w, const AGEvent *e, NSTimeInterval now)
 		} else {
 			count = [w currentClickCount];
 		}
-		return [NSEvent mouseEventWithType:t location:where modifierFlags:flags
+		return fn_with_global([NSEvent mouseEventWithType:t location:where modifierFlags:flags
 					 timestamp:now windowNumber:win context:nil
 					 eventNumber:(NSInteger)e->time_ms
-					  clickCount:count pressure:1.0f];
+					  clickCount:count pressure:1.0f], e);
 	}
 	case AGEventPointerMotion: {
 		BOOL dragging = [w cg_mouseButtonDown];
@@ -424,11 +449,11 @@ static NSEvent *fn_translate(NSWindow *w, const AGEvent *e, NSTimeInterval now)
 		if (!dragging && ![w acceptsMouseMovedEvents]) {
 			return nil;
 		}
-		return [NSEvent mouseEventWithType:(dragging ? NSLeftMouseDragged : NSMouseMoved)
+		return fn_with_global([NSEvent mouseEventWithType:(dragging ? NSLeftMouseDragged : NSMouseMoved)
 					  location:where modifierFlags:flags
 					 timestamp:now windowNumber:win context:nil
 					 eventNumber:(NSInteger)e->time_ms
-					  clickCount:0 pressure:1.0f];
+					  clickCount:0 pressure:1.0f], e);
 	}
 	case AGEventKey: {
 		/* **THE TEXT ARRIVES ALREADY TRANSLATED**, which is the seam's job and xkbcommon's: `AGKeyboard` turned
@@ -2021,24 +2046,56 @@ static CGFloat fn_clamp_axis(CGFloat v, CGFloat lo, CGFloat hi)
 			if ([self isMovable] && fn_pointInChrome(self, p)) {
 				_cg_draggingChrome = YES;
 				_cg_dragGrab = p;
+				/* **AND WHICH POINTER THE DRAG WILL USE: the compositor's absolute one if the PRESS carried it, the
+				 * window-relative one otherwise.** What is kept is the GRAB OFFSET — where in the window the hand took
+				 * hold — because the window that follows is `pointer - offset` in absolute terms. It comes off the EVENT,
+				 * not the window, because the window's "latest" has already moved on by the time the press is processed. */
+				_cg_dragUsesGlobal = [theEvent cg_hasGlobalPoint];
+				if (_cg_dragUsesGlobal) {
+					NSPoint g = [theEvent cg_globalPoint];
+
+					_cg_dragGlobalOffset = NSMakePoint(g.x - _frame.origin.x, g.y - _frame.origin.y);
+				}
+				/* **AND THE POINTER IS TAKEN FOR THE DURATION OF THE DRAG, WHICH IS WHAT KEEPS A FAST ONE FROM
+				 * LOSING IT.** The compositor delivers pointer events to the surface UNDER the pointer and to nobody
+				 * when there is none: a hand that outruns the window puts the pointer on the desktop, and the motion
+				 * and the release simply stop arriving — MEASURED, a fast drag moved the window zero pixels and left
+				 * it still believing a drag was in progress. `set_pointer_grab` is the fallback that sends those
+				 * no-surface events to THIS window (the same door the menus use to hear a click outside themselves),
+				 * and it is given back on the release. */
+				[self cg_setPointerGrab:YES];
 				return;
 			}
 		} else if ([theEvent type] == NSLeftMouseDragged && _cg_draggingChrome) {
-			/* **THE WINDOW FOLLOWS THE POINTER, AND THE ARITHMETIC IS ONE SUBTRACTION.** `-locationInWindow` is
-			 * relative to a window that MOVES with the drag, so the pointer's place in the world is the frame's origin
-			 * PLUS this point; putting the grabbed point back under it is that sum minus the grab. There is no
-			 * accumulated delta and no remembered last position, so a dropped or duplicated motion cannot make the
-			 * window drift — and on Agora's own server `-setFrame:` reaches `set_frame`, which moves the surface. */
-			NSPoint p = [theEvent locationInWindow];
-			NSPoint origin = _frame.origin;
+			/* **THE ABSOLUTE POSITION WHEN THE COMPOSITOR SENT ONE, AND THE RELATIVE ONE ONLY AS A FALLBACK.** The
+			 * relative arithmetic is correct while this client's frame and the compositor's surface agree, and WRONG
+			 * the moment they do not — which a fast drag makes happen, because the compositor processes a batch of
+			 * motions before it processes the `set_frame`s they produce, and the error COMPOUNDS. MEASURED: a fast
+			 * drag moved the window hundreds of pixels past the pointer, while the slow one was exact. The absolute
+			 * position has no such coupling — the window goes where the pointer is, whatever the round trip is doing. */
+			NSPoint origin;
 
-			origin.x += p.x - _cg_dragGrab.x;
-			origin.y += p.y - _cg_dragGrab.y;
+			if (_cg_dragUsesGlobal && [theEvent cg_hasGlobalPoint]) {
+				NSPoint g = [theEvent cg_globalPoint];
+
+				origin.x = g.x - _cg_dragGlobalOffset.x;
+				origin.y = g.y - _cg_dragGlobalOffset.y;
+			} else {
+				NSPoint p = [theEvent locationInWindow];
+
+				origin = _frame.origin;
+				origin.x += p.x - _cg_dragGrab.x;
+				origin.y += p.y - _cg_dragGrab.y;
+			}
 			[self setFrameOrigin:origin];
 			return;
 		} else if ([theEvent type] == NSLeftMouseUp && (_cg_pressedChrome >= 0 || _cg_draggingChrome)) {
+			if (_cg_draggingChrome) {
+				[self cg_setPointerGrab:NO];	/* the drag is over; the pointer is the compositor's again */
+			}
 			_cg_pressedChrome = -1;
 			_cg_draggingChrome = NO;
+			_cg_dragUsesGlobal = NO;
 			[self setNeedsDisplay:YES];
 			return;
 		}

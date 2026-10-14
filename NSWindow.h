@@ -323,6 +323,12 @@ typedef NSUInteger NSWindowSharingType;
 	 * window drift away from the pointer. */
 	NSPoint _cg_dragGrab;
 	BOOL _cg_draggingChrome;
+	/* **AND THE POINTER THE DRAG MEASURES AGAINST, WHICH COMES OFF EACH EVENT RATHER THAN OFF THE WINDOW.**
+	 * `_cg_dragGlobalOffset` is where in the window the pointer grabbed it (the press's absolute position minus the
+	 * window's origin), so the window that follows is `pointer - offset` and the grabbed point stays under the hand;
+	 * the relative arithmetic stays as the fallback for a compositor that sends no absolute position at all. */
+	NSPoint _cg_dragGlobalOffset;
+	BOOL _cg_dragUsesGlobal;
 	NSInteger _cg_windowNumber; /* Apple's window number, assigned when the AGWindow is made; -1 before */
 	BOOL _cg_closeRequested; /* the compositor asked the window to close; acted on in the pump */
 	NSRect _frame;          /* COCOA's coordinates: bottom-left origin */

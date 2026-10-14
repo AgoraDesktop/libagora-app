@@ -90,6 +90,13 @@ static NSBitmapImageRep *draw_chrome(NSWindow *w)
 - (void)cg_updateTrackingForPoint:(NSPoint)windowPoint;
 @end
 
+/* **THE ABSOLUTE POINTER, WHICH ONLY A COMPOSITOR CAN SUPPLY AND ONLY A DRAG READS.** Declared so the offscreen
+ * probe can put one on an event; without it the drag has only the relative fallback, which is the half that is
+ * wrong for a fast hand. */
+@interface NSEvent (APPKITGlobalPointTest)
+- (void)cg_setGlobalPoint:(NSPoint)point;
+@end
+
 /* THE FIXTURE'S GEOMETRY, READ FROM THE THEME rather than written down twice: a 6x8 button, offset 2, spacing 1. */
 static int s_buttonW, s_buttonH, s_offset;
 
@@ -282,6 +289,34 @@ int main(void)
 				[w sendEvent:up];
 				check([w frame].origin.x == before.origin.x && [w frame].origin.y == before.origin.y,
 				      "and a press on a BUTTON does not move the window");
+			}
+
+			/* 10. **AND THE ABSOLUTE POINTER, WHEN THE COMPOSITOR SENT ONE, IS WHAT THE DRAG USES.** The relative
+			 * arithmetic above is only right while this client's frame and the compositor's surface agree — which a
+			 * fast hand makes them stop doing. With an absolute pair the window goes to `pointer - offset`, which does
+			 * not depend on where the window is at all. There is no compositor here, so the probe supplies the
+			 * absolutes itself; `fn_translate` is what puts them on an event in a real run. */
+			{
+				NSRect before = [w frame];
+				NSEvent *down = [NSEvent mouseEventWithType:NSLeftMouseDown
+					location:NSMakePoint(50.0, CH + 4.0) modifierFlags:0 timestamp:0.5
+					windowNumber:[w windowNumber] context:nil eventNumber:0 clickCount:1 pressure:0.0f];
+				NSEvent *move = [NSEvent mouseEventWithType:NSLeftMouseDragged
+					location:NSMakePoint(0.0, 0.0) modifierFlags:0 timestamp:0.51
+					windowNumber:[w windowNumber] context:nil eventNumber:0 clickCount:1 pressure:0.0f];
+
+				[down cg_setGlobalPoint:NSMakePoint(200.0, 400.0)];
+				[move cg_setGlobalPoint:NSMakePoint(260.0, 380.0)];
+				[w sendEvent:down];
+				[w sendEvent:move];
+				/* The offset is the press minus the origin, so the new origin is the press origin plus (60,-20) — the
+				 * POINTER's delta, whatever the window was doing. */
+				check(fabs([w frame].origin.x - (before.origin.x + 60.0)) < 0.5
+				      && fabs([w frame].origin.y - (before.origin.y - 20.0)) < 0.5,
+				      "an ABSOLUTE pointer moves the window to `pointer - offset`, independent of its own position");
+				[w sendEvent:[NSEvent mouseEventWithType:NSLeftMouseUp
+					location:NSMakePoint(0.0, 0.0) modifierFlags:0 timestamp:0.52
+					windowNumber:[w windowNumber] context:nil eventNumber:0 clickCount:1 pressure:0.0f]];
 			}
 
 			[w release];

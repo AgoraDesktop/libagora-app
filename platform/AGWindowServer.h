@@ -85,6 +85,14 @@ typedef struct AGEvent {
 	uint32_t time_ms;
 	int x;				/* pointer or new size, window coordinates */
 	int y;
+	/* **AND WHERE THE POINTER IS IN THE OUTPUT, WHEN THE COMPOSITOR SAID.** `x`/`y` above are relative to THIS
+	 * window, and a title-bar drag MOVES the window — which turns the relative pair into a moving target that a
+	 * fast hand outruns. These are the absolute position the relative one was computed from. `has_global` is zero
+	 * for a compositor that does not send them (a stock `xdg-shell` one), where a drag falls back to the relative
+	 * arithmetic. */
+	int global_x;
+	int global_y;
+	int has_global;
 	uint32_t button;		/* evdev button code */
 	int pressed;
 	uint32_t keycode;		/* evdev key code */

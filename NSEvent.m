@@ -614,4 +614,23 @@ static NSMutableArray *s_monitors;
 	_trackingArea = area;	/* NOT RETAINED — see the ivar's note */
 }
 
+/* **THE POINTER'S ABSOLUTE POSITION, WHICH IS WHAT A TITLE-BAR DRAG MEASURES AGAINST.** Written by the
+ * translation that builds the event from the seam's, and read by the drag — never by a caller, because an event
+ * whose absolute point a caller could set would be an event that lies about where the pointer was. */
+- (void)cg_setGlobalPoint:(NSPoint)point
+{
+	_cg_globalPoint = point;
+	_cg_hasGlobalPoint = YES;
+}
+
+- (NSPoint)cg_globalPoint
+{
+	return _cg_globalPoint;
+}
+
+- (BOOL)cg_hasGlobalPoint
+{
+	return _cg_hasGlobalPoint;
+}
+
 @end
