@@ -375,9 +375,16 @@ static NSFont *apk_ui_font(CTFontUIFontType type, CGFloat size)
 	return CTFontGetAscent(_font);
 }
 
+/* **THE ONE METRIC WHOSE SIGN THIS CLASS OWNS, AND IT IS NEGATIVE — APPLE'S OWN CONTRACT.** Every other door here
+ * forwards a Core Text answer, and `CTFontGetDescent` (like `CGFontGetDescent` under it) answers a descent as a
+ * MAGNITUDE, because the line arithmetic that consumes it is `ascent + descent + leading`. THIS door's contract is
+ * the other one: Apple's own sentence for `NSFont -descender` is "the value is negative", so the sign is put back
+ * here and nowhere else — one negation, in the one layer whose documentation asks for it. It is also why a caller
+ * measuring a text line must use `fabs` on this door, which is what `NSButtonCell` already does when it centres a
+ * title in its bezel. */
 - (CGFloat)descender
 {
-	return CTFontGetDescent(_font);
+	return -CTFontGetDescent(_font);
 }
 
 - (CGFloat)leading

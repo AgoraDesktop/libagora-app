@@ -755,13 +755,36 @@ static void fn_cmyk_of(NSColor *self, CGFloat cmyk[4])
 + (NSColor *)controlColor
 {
 	static NSColor *s;
-	return fn_singleton(&s, 0.90, 0.90, 0.90, 1.0);
+	/* **THE FACE OF A CONTROL IS LIGHTER THAN THE WINDOW IT SITS ON, AND THAT IS A RULE RATHER THAN A NUMBER.**
+	 * `windowBackgroundColor` is 0.93, so a control's face is 0.95: a button is a raised thing, and raised means the
+	 * light falls on it — a face BELOW the window's reads as a hole rather than as a button, which is what 0.90 here
+	 * was. The margin is deliberately small, because the border is what separates the two shapes and the fill only has
+	 * to say which side of the surface it is on. */
+	return fn_singleton(&s, 0.95, 0.95, 0.95, 1.0);
 }
 
 + (NSColor *)controlBackgroundColor
 {
 	static NSColor *s;
 	return fn_singleton(&s, 1.0, 1.0, 1.0, 1.0);
+}
+
+/* **AND THE SAME RULE FROM THE OTHER SIDE: A DISABLED CONTROL IS NOT RAISED, SO ITS FACE SITS BELOW THE WINDOW'S.**
+ * 0.86 against `windowBackgroundColor`'s 0.93, which is the mirror of what `controlColor` does above it — the two
+ * faces plus the window's own grey are three STEPS that read in the right order at a glance, and a disabled button
+ * whose face was the same as an enabled one (or brighter, which is what white was) would say nothing at all until its
+ * title was read. THE INK THEN HAS TO CLEAR THE FACE, which is `disabledControlTextColor`'s 0.50 — the darkest of the
+ * three greys here, and the only one of them that is text. */
++ (NSColor *)cg_disabledControlFaceColor
+{
+	static NSColor *s;
+	return fn_singleton(&s, 0.86, 0.86, 0.86, 1.0);
+}
+
++ (NSColor *)cg_chromeInkColor
+{
+	static NSColor *s;
+	return fn_singleton(&s, 0.50, 0.50, 0.50, 1.0);
 }
 
 + (NSColor *)controlShadowColor
@@ -792,6 +815,32 @@ static void fn_cmyk_of(NSColor *self, CGFloat cmyk[4])
 {
 	static NSColor *s;
 	return fn_singleton(&s, 0.20, 0.42, 0.80, 1.0);
+}
+
+/* **THE ACCENT, AND WHY IT IS A LITERAL HERE RATHER THAN A BLEND ANYWHERE ELSE.** 164/255 = 0.643, 154/255 = 0.604
+ * and 255/255 = 1.0, which is the platform's own chip as it was SAMPLED — so the numbers are the record, not a
+ * formula that happens to land near them. `NSMenuView`'s gradient used to carry this same triple as six `#define`s of
+ * its own (§A10..); it now asks this door, which is the difference between one accent and two that agree today. */
++ (NSColor *)cg_accentColor
+{
+	static NSColor *s;
+	return fn_singleton(&s, 0.643, 0.604, 1.0, 1.0);
+}
+
++ (NSColor *)cg_accentPrelightColor
+{
+	static NSColor *s;
+
+	/* **THE PRELIGHT IS THE ACCENT BLENDED TOWARD WHITE, WHICH IS A MEASURED RELATIONSHIP AND NOT A SECOND GUESS.**
+	 * A lightened accent keeps the hue the pressed state has, so the two states read as one control in two states
+	 * rather than as two colours; a hand-picked second triple would drift from the first the moment either moved. */
+	if (s == nil) {
+		s = [[[self cg_accentColor] blendedColorWithFraction:0.45 ofColor:[NSColor whiteColor]] retain];
+		if (s == nil) {
+			s = [[NSColor colorWithDeviceRed:0.84 green:0.82 blue:1.0 alpha:1.0] retain];
+		}
+	}
+	return s;
 }
 
 + (NSColor *)selectedControlTextColor

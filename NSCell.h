@@ -171,6 +171,22 @@ typedef NSUInteger NSControlSize;
  * state whose doors need nothing from a font or a view. The rest of Apple's cell — the value accessors, the format
  * and the object formatter, the drawing — stays OWED, row by row, in the ledger, and is what the next slices of
  * stage E will close. */
+/* ============================================================================================ *
+ * AND THE STANDARD BEZEL'S TWO NUMBERS, IN ONE PLACE BECAUSE TWO CLASSES DRAW IT.                 *
+ *                                                                                                *
+ * A push button's face is this rounded rectangle (`NSButtonCell`) and a text field's border is    *
+ * THE SAME ONE (`NSText`) — matching them is the whole point — so they are named here rather than *
+ * written twice: a second copy of `4.0` in the other file is exactly how two borders that are     *
+ * supposed to be identical come to differ by a point, and the difference is invisible until       *
+ * somebody puts them side by side.                                                                *
+ *                                                                                                *
+ * THE RADIUS IS THE REGULAR CONTROL SIZE'S, which is the only size this tier draws a bezel for —   *
+ * the same footing the bezel's HEIGHT is on (`NSButtonCell`'s `NS_BUTTON_BEZEL_HEIGHT_REGULAR`,    *
+ * transcribed from the era's guidelines because no header states it).                              *
+ * ============================================================================================ */
+#define NS_CELL_BEZEL_RADIUS 4.0
+#define NS_CELL_BEZEL_WIDTH  1.0
+
 @interface NSCell : NSObject
 {
 	/* APPLE'S OWN LAYOUT IS A BITFIELD STRUCT (`struct __CFlags`), and this tier's is plain ivars: the layout is
@@ -219,6 +235,13 @@ typedef NSUInteger NSControlSize;
 	id _menu;				/* NOT RETAINED: a menu outlives the cell that may raise it */
 	NSInteger _mouseDownFlags;
 	id _controlView;			/* NOT RETAINED */
+	/* **AND WHERE THE POINTER IS, WHICH IS THE ONE PIECE OF STATE THIS CLASS HOLDS FOR A FACE IT DOES NOT DRAW.**
+	 * Apple's AppKit learns this through `NSTrackingArea` — a class this tier does not ship, which is why
+	 * `-addTrackingArea:` here takes an `id` — so the CONTROL catches `-mouseEntered:`/`-mouseExited:` and stores the
+	 * answer on the cell, and a cell that wants to look different under the pointer (`NSButtonCell`'s prelight,
+	 * and `-showsBorderOnlyWhileMouseInside`'s whole reason for existing) has somewhere to read it. It is a plain
+	 * bit because OFF is the quiet answer: a cell with no view in front of it has no pointer over it. */
+	BOOL _mouseInside;
 	/* AND THE ATTRIBUTE WORD, WHICH IS WHERE `NSCellAttribute` LIVES. That enum has been declared since this class's
 	 * first slice and NOTHING STORED IT, so all seventeen of its values were unreadable — a declared vocabulary with
 	 * no word to read. One unsigned word, wide enough for the enum's highest position and for the era's `NSInteger`
@@ -255,6 +278,10 @@ typedef NSUInteger NSControlSize;
 	 * them. A nil formatter is the documented "no formatter", so the storage's own zeroing is the answer and `-init`
 	 * says nothing about it — the third default in this class that costs no line. See appkit-plan.md §A10bm. */
 	NSFormatter *_formatter;
+	/* **AND THE FONT THE TITLE IS SET IN, RETAINED, WHICH THE DRAWING SLICE ADDS.** It is the sixth owned thing in
+	 * this class beside the value, the two strings, the image and the formatter, and it is the one a TITLE cannot
+	 * be drawn without — see the header. */
+	id _font;
 	/* **AND THE LAYOUT STATE — FIVE VALUES, TWO OF WHOSE DEFAULTS ARE NOT ZERO.** The line-break mode, the focus ring
 	 * and the user interface layout direction all start at the first member of their type, which IS zero, so the
 	 * storage's own zeroing is the documented answer. THE OTHER TWO ARE NOT: `-alignment`'s documented default is
@@ -326,6 +353,19 @@ typedef NSUInteger NSControlSize;
 - (void)setBordered:(BOOL)flag;
 @property (getter=isEditable) BOOL editable;
 - (void)setEditable:(BOOL)flag;
+
+/* **AND THE TWO DOORS THE TIER ADDS, WHICH ARE HOW A CELL LEARNS WHERE THE POINTER IS.** They are spelled `cg_`
+ * because they are this tree's, exactly as `-cg_clearDirtyRegion` on `NSView` is: APPLE HAS NO SUCH PAIR, because
+ * `NSTrackingArea` is the class that carries this fact on the other platform and this tier does not ship it. The
+ * CONTROL is what calls the setter — from the `-mouseEntered:`/`-mouseExited:` the WINDOW synthesises out of the
+ * pointer's motion — and the getter is what a face reads: `NSButtonCell`'s prelight, and
+ * `-showsBorderOnlyWhileMouseInside`, whose entire meaning is this one bit.
+ *
+ * IT IS ON THE BASE CLASS RATHER THAN ON THE BUTTON'S CELL because it is a fact about the pointer and the control,
+ * not about any face: a checkbox, a slider and a text field are all equally "under the pointer or not", and a
+ * subclass that finds a use for it should not have to ask its control for a second copy of the answer. */
+- (BOOL)cg_mouseIsInside;
+- (void)cg_setMouseInside:(BOOL)flag;
 
 /* ============================================================================================ *
  * AND THE REST OF THE STATE, WHICH IS THE SAME SHAPE AND TWO MORE KINDS.                        *
@@ -941,6 +981,39 @@ enum {
  * tell "there is no attributed answer here" from "the text is empty". See appkit-plan.md §A10bs. */
 - (nullable NSAttributedString *)attributedStringValue;
 - (void)setAttributedStringValue:(NSAttributedString *)obj;
+
+/* ============================================================================================ *
+ * AND THE INK: THE FONT, THE THREE RECTS THAT PLACE A TITLE, AND THE TWO DOORS THAT PAINT.       *
+ * ============================================================================================ */
+
+/* **THE CELL'S FONT, WHICH THIS CLASS HAS TO HAVE THE MOMENT IT DRAWS A TITLE.** Apple declares `-font`/`-setFont:`
+ * on `NSCell`; this tier's cell had no such door because NOTHING IN IT DREW — a font is what a TITLE is set in, and a
+ * cell that drew no title needed none. It is RETAINED (this tree's rule for a font: a caller hands one over and keeps
+ * using it) and it is typed `id` where Apple types `NSFont` for the reason this header's other cross-class doors are:
+ * the header includes Foundation and not the AppKit. A nil font is the documented "the default", which the drawing
+ * door answers with the system font. */
+- (nullable id)font;
+- (void)setFont:(nullable id)font;
+
+/* **THE THREE RECT DOORS, WHOSE NUMBERS APPLE DOES NOT PUBLISH — SO THIS TIER'S ARE NOW ITS OWN AND SAID SO.** All
+ * three eras declare them and comment NONE of them; the prose says only "slightly inset" and "a small offset", which
+ * is not a number, and a guessed inset is a wrong rect in every bordered cell with nothing to check it against. THE
+ * ROWS CLOSE HERE RATHER THAN STAY OPEN because the drawing DOES need an answer: a title has to be placed somewhere,
+ * so the arithmetic is stated as THIS TIER'S — the drawing rect is the bounds inset by the border, the title and the
+ * image share it — and a subclass that wants different arithmetic overrides the door, which is what the doors are
+ * for. ONE CONSTANT (`NS_CELL_BORDER_INSET`) is the whole of the choice. */
+- (NSRect)drawingRectForBounds:(NSRect)theRect;
+- (NSRect)titleRectForBounds:(NSRect)theRect;
+- (NSRect)imageRectForBounds:(NSRect)theRect;
+
+/* **AND THE TWO DOORS THAT PAINT — APPLE'S SPLIT, AND IT IS WORTH KEEPING EXACTLY.** `-drawWithFrame:inView:`
+ * paints the BORDER and the BACKGROUND and then calls `-drawInteriorWithFrame:inView:`, which paints what sits
+ * INSIDE them. A subclass that changes only the face (a button's bezel) overrides the first and inherits the second;
+ * one that changes only the contents overrides the second. THAT SPLIT IS THE WHOLE REASON `NSButtonCell` CAN BE A
+ * THIN CLASS: it draws a bezel and hands the interior back to this one. The view is typed `id` because this header
+ * does not include `NSView`. */
+- (void)drawWithFrame:(NSRect)cellFrame inView:(nullable id)controlView;
+- (void)drawInteriorWithFrame:(NSRect)cellFrame inView:(nullable id)controlView;
 
 @end
 

@@ -198,6 +198,8 @@ NS_ASSUME_NONNULL_BEGIN
 - (NSRect)boundingRectForFont;
 - (NSSize)maximumAdvancement;
 - (CGFloat)ascender;
+/* NEGATIVE, which is this door's own contract rather than the engine's — see the note in the implementation for why
+ * the negation lives at exactly this layer. A caller measuring a line of text wants `-ascender + fabs(descender)`. */
 - (CGFloat)descender;
 - (CGFloat)leading;
 - (CGFloat)underlinePosition;

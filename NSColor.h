@@ -267,6 +267,38 @@ extern NSString *NSSystemColorsDidChangeNotification;
 + (NSColor *)selectedMenuItemTextColor;
 + (NSColor *)windowFrameTextColor;
 
+/* **AND THE PLATFORM'S ACCENT, WHICH IS THE ONE COLOUR THIS TIER ADDS RATHER THAN ANSWERS.** Argentum's accent is
+ * the periwinkle `(164,154,255)` — SAMPLED from the platform, not chosen here — and NO ERA DOOR CARRIES IT:
+ * `+controlAccentColor` is 10.14 and this tree pins 10.5/10.6, while the era's own `+selectedControlColor` is a
+ * BLUE (0.20, 0.42, 0.80) that is a different colour on purpose. So the accent is named `cg_`, which is this tree's
+ * mark for a door the tier adds, and it is defined ONCE — the menu's selection chip and every control that
+ * highlights now read the same two numbers instead of each carrying its own copy of them.
+ *
+ * THE SECOND IS THE PRELIGHT SHADE: the same hue LIGHTENED, which is what a control wears while the pointer is over
+ * it and it is not yet pressed. Apple's AppKit has no such door either, because its prelight is a private drawing
+ * state; naming it here is what keeps "lighter than the accent" a MEASURED relationship (`+blendedColorWithFraction:`
+ * of white) rather than a second pair of invented numbers. */
++ (NSColor *)cg_accentColor;
++ (NSColor *)cg_accentPrelightColor;
+/* **AND THE ONE FACE THE ERA'S OWN NAMES DO NOT COVER.** `+controlColor` is a raised control, `+controlBackgroundColor`
+ * is the surface a control shows THROUGH (a field's white), and a DISABLED control's face is neither: the era dims the
+ * title and leaves the face alone, which is a face that still says "press me". So it is named `cg_` with the accent,
+ * and its one relationship is stated where it is defined — BELOW the window's grey, the way `+controlColor` is above
+ * it. */
++ (NSColor *)cg_disabledControlFaceColor;
+/* **AND THE INK THE TITLE BAR'S MARKS ARE DRAWN IN: THE X, THE MINUS, THE PLUS, AND THE TOOLBAR PILL.** All four are
+ * one grey, and they get a name of their own because NO ERA COLOUR COVERS THEM: they are neither text
+ * (`+windowFrameTextColor` is the TITLE's ink, and a title is read while these are aimed at) nor a control's face nor
+ * a border.
+ *
+ * 0.50, AND THE SAMPLE'S OWN VALUE WAS 0.70 (179 on its `#EBEBEB` strip). The sample is not being ignored — it is
+ * being READ AGAINST THE SURFACE IT SITS ON, which is the thing a sampled colour cannot carry with it: ITS strip is
+ * 0.92 and OURS is 0.82, so the same grey that reads as a mark there reads as a smudge here, and the ink has to come
+ * down with the surface. It started at the title's black, which was too heavy for four small shapes, and stopped at
+ * 0.70 on the way past, which was too light for this strip. 0.50 is a DARK grey on a light one — a full step below
+ * `+controlShadowColor`'s 0.60 — and still nothing like black. */
++ (NSColor *)cg_chromeInkColor;
+
 /* ============================================================================================ *
  * THE ERA'S REMAINING ROWS, AND WHAT EACH ONE'S ANSWER IS. TWO KINDS, and the difference is     *
  * what a ported program meets — a refusal it can read at the call, or a nil it has to expect:    *

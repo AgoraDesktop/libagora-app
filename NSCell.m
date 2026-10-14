@@ -15,6 +15,23 @@
  * POSITION rather than only the transitions, which is the lesson a wrong default taught two stages ago.
  */
 #import <AppKit/NSCell.h>
+/* **THE INK'S HEADERS, WHICH THIS FILE DID NOT NEED WHILE EVERY DRAWING DOOR REFUSED.** The face a title is set in,
+ * the colour it is drawn in, the path a border is stroked with, the string measurement, and the context the current
+ * view draws through — the same five `NSMenuItemCell` imports one class over. */
+#import <AppKit/NSFont.h>
+#import <AppKit/NSColor.h>
+#import <AppKit/NSBezierPath.h>
+#import <AppKit/NSStringDrawing.h>
+#import <AppKit/NSGraphicsContext.h>
+#import <AppKit/NSImage.h>
+
+/* **THE CELL'S OWN MEASURES, WHICH APPLE DOES NOT PUBLISH AND THIS TIER THEREFORE OWNS.** The three rect doors are
+ * "slightly inset" and "a small offset" in Apple's prose and nothing more, so here is the number: a bordered cell
+ * insets its drawing rect by `NS_CELL_BORDER_INSET`, and the content inside takes `NS_CELL_CONTENT_PADDING` of air.
+ * ONE PLACE, so a subclass that wants different arithmetic OVERRIDES A DOOR rather than chasing a constant. They are
+ * at the top because `-cellSizeForBounds:` measures with them and a macro is not visible below its own #define. */
+#define NS_CELL_BORDER_INSET   2.0
+#define NS_CELL_CONTENT_PADDING 3.0
 /* AND THE ONE IMPORT THIS FILE'S LAST DOOR NEEDED — `NSCursor`, for the cursor a text cell declares over itself. It
  * stands here rather than beside the door for the reason §A10aw measured: a header that declares its own types would
  * collide with the tree's, and the head of the file is where an import belongs. `NSView.h` only FORWARD-declares
@@ -67,6 +84,7 @@
 	[_keyEquivalent release];
 	[_image release];
 	[_formatter release];
+	[_font release];
 	[super dealloc];
 }
 
@@ -149,6 +167,29 @@
 - (void)setHighlighted:(BOOL)flag
 {
 	_highlighted = flag;
+}
+
+/* ---- AND WHERE THE POINTER IS, WHICH IS THE TIER'S PAIR RATHER THAN APPLE'S ------------------------ */
+
+- (BOOL)cg_mouseIsInside
+{
+	return _mouseInside;
+}
+
+- (void)cg_setMouseInside:(BOOL)flag
+{
+	if (flag == _mouseInside) {
+		return;
+	}
+	_mouseInside = flag;
+	/* **AND THE FACE IS REDRAWN, WHICH IS THE ONLY THING THIS DOOR OWES ANYONE.** A prelight IS the face — the whole
+	 * button changes colour — so the whole control is invalidated rather than one rect, which is the same redisplay
+	 * `-highlight:withFrame:inView:` performs one door over. THE EARLY RETURN ABOVE IS NOT AN OPTIMISATION: the window
+	 * synthesises an enter and an exit from the pointer's motion, and a redraw per motion event with the pointer
+	 * merely NEAR a control would repaint the window for nothing. */
+	if (_controlView != nil && [_controlView respondsToSelector:@selector(setNeedsDisplay:)]) {
+		[_controlView setNeedsDisplay:YES];
+	}
 }
 
 - (BOOL)isBordered
@@ -434,11 +475,12 @@
 		 * touched: the IMAGE. Apple's own text adds that an image cell's `NSImage` "is not freed" by this conversion,
 		 * so this door leaves `_image` standing, and the probe checks that the cell still answers it. */
 		_type = NSTextCellType;
-		/* APPKIT-REFUSE: the same sentence gives the conversion the user's system font at 12.0 points. THE GROUND IS
-		 * THE MISSING `NSFont` OBJECT RATHER THAN INK — ⚠ "a font is ink in this tier" is FALSE and appkit-plan.md
-		 * §A10bt retracts it: the engine, the metrics, the advances, the name→face registry and the whole `CGContext`
-		 * text surface are here, and what is absent is AppKit's font CLASS. So the KIND and the VALUE are what this
-		 * door can honestly do, and the third thing the sentence asks for is named here rather than half-done. */
+		/* **AND THE FONT, WHICH THIS DOOR USED TO REFUSE ON A GROUND THAT HAS SINCE EXPIRED.** The same sentence
+		 * gives the conversion "the user's system font at 12.0 points"; the refusal said the missing thing was
+		 * AppKit's font CLASS — and `NSFont` EXISTS in this tree, and `-setFont:` is this class's own door (the
+		 * control slice added it). So the third thing the sentence asks for is DONE rather than named, and the
+		 * retraction §A10bt recorded is acted on instead of quoted. */
+		[self setFont:[NSFont systemFontOfSize:12.0]];
 	}
 }
 
@@ -1007,11 +1049,14 @@ static NSInteger NSCellNextStateValue(BOOL allowsMixed, NSInteger state)
  * selector, and a door that pretended to draw would be a lie with a frame argument in front of it. */
 - (void)highlight:(BOOL)flag withFrame:(NSRect)cellFrame inView:(id)controlView
 {
-	(void)cellFrame;
-	(void)controlView;
 	[self setHighlighted:flag];
-	/* APPKIT-REFUSE: the cell's face is drawn here in Apple's cell (the frame greys and the content dims while the
-	 * mouse is down). This tier refuses the drawing half, and the state above is the half a caller can act on. */
+	/* **AND THE FACE IS REDRAWN, WHICH IS THE HALF THAT WAS REFUSED.** The STATE was always real; what was missing was
+	 * the ink, and this is where it goes out — the control view is asked to redraw the cell's frame, and ITS
+	 * `-drawRect:` calls `-drawWithFrame:inView:`, which paints the face in the state just set. A nil or non-view
+	 * control (a caller driving a cell with no view in front of it) is the quiet case and nothing is asked. */
+	if (controlView != nil && [controlView respondsToSelector:@selector(setNeedsDisplayInRect:)]) {
+		[controlView setNeedsDisplayInRect:cellFrame];
+	}
 }
 
 /* ---- AND THE ACTION MASK, WHOSE READER IS A LOOP THIS TIER HAS NOT WRITTEN ---------------------------- */
@@ -1235,12 +1280,11 @@ static BOOL fn_entry_is_number(NSString *string, BOOL allowFraction, BOOL allowS
 	if (_type != NSTextCellType) {
 		_type = NSTextCellType;
 		[self setTitle:@"Cell"];
+		/* **AND THE FONT, FOR THE SAME REASON `-setStringValue:` NOW SETS IT** — the sentence names the system font
+		 * at 12.0 points, and both the class and the door are here now, so it is set rather than refused. THE
+		 * FORMATTER CLAUSE BELOW STILL STANDS, and on a different ground. */
+		[self setFont:[NSFont systemFontOfSize:12.0]];
 	}
-	/* APPKIT-REFUSE: the system font at 12.0 points is the third thing that sentence asks for. THE GROUND IS THE
-	 * MISSING `NSFont` OBJECT AND NOT INK — ⚠ "a font is ink in this tier" is FALSE and appkit-plan.md §A10bt retracts
-	 * it: the engine, the metrics and the whole glyph surface are here, and what is absent is AppKit's font CLASS,
-	 * which is also why `-setFont:` is owed. It is the same refusal, for the same reason, that §A10bj's
-	 * `-setStringValue:` carries out of the very same sentence. */
 	/* APPKIT-REFUSE: "the formatter associated with the receiver is replaced with a newly instantiated formatter
 	 * appropriate to the entry type" — WHICH FORMATTER IS APPROPRIATE TO WHICH ENTRY TYPE IS NOT PUBLISHED. Apple
 	 * names the entry types' MEANINGS and stops, so the mapping would be invented; and this tier HAS the formatter
@@ -1333,11 +1377,11 @@ static const NSSize FN_CELL_NO_OPINION = { 10000.0, 10000.0 };
 	if (_type == NSNullCellType) {
 		return FN_CELL_NO_OPINION;
 	}
-	/* APPKIT-REFUSE: a TEXT cell's size is its title's measured extent (the font the geometry family is blocked on) and
-	 * an IMAGE cell's is its image "within a certain offset determined by the border type" — a phrase, not a number, in
-	 * every vintage. Both answer the no-opinion sentinel rather than an approximation, and the probe asserts that the
-	 * image cell WITH an image does not answer zero. */
-	return FN_CELL_NO_OPINION;
+	/* **AND THE MEASUREMENT IS THE SAME ONE `-cellSizeForBounds:` MAKES, WITH NO BOUND** — the sentinel above is
+	 * exactly the large rectangle that means "no bound" here, so the two doors cannot disagree about what a cell
+	 * measures. A TEXT cell's size is its title in the cell's font; an IMAGE cell's is its picture; both plus the
+	 * air the rect doors leave. The empty-image and null-cell answers above stay the published exceptions. */
+	return [self cellSizeForBounds:NSMakeRect(0.0, 0.0, FN_CELL_NO_OPINION.width, FN_CELL_NO_OPINION.height)];
 }
 
 - (NSSize)cellSizeForBounds:(NSRect)aRect
@@ -1352,11 +1396,35 @@ static const NSSize FN_CELL_NO_OPINION = { 10000.0, 10000.0 };
 	if (_type == NSNullCellType) {
 		return aRect.size;
 	}
-	/* APPKIT-REFUSE: "the text is resized to fit within `aRect`" (a font) and, for an image cell, the content size
-	 * "constrained to `aRect`" — which needs the offset `-cellSize` refuses above. The empty-image sentinel is
-	 * deliberately NOT what these answer: this tier's refusal value is the no-opinion pair, so the two states stay
-	 * apart. */
-	return FN_CELL_NO_OPINION;
+	/* **AND THE MEASUREMENT IS WHAT THIS DOOR WAS OWED.** A TEXT cell's size is its title in the cell's font PLUS the
+	 * air the rect doors leave around it; an IMAGE cell's is its picture plus the same air. Both are CLAMPED to
+	 * `aRect`, which is what "the text is resized to fit within `aRect`" says: a cell is being asked how large its
+	 * CONTENTS are, and a caller's rectangle is the bound. The empty-image sentinel above stays the no-opinion
+	 * exception, so "an image cell with no image" and "an image cell with an image" remain distinguishable. */
+	{
+		CGFloat pad = NS_CELL_CONTENT_PADDING + ((_bordered || _bezeled) ? NS_CELL_BORDER_INSET : 0.0);
+		NSSize content = NSZeroSize;
+
+		if (_type == NSTextCellType && _title != nil) {
+			id font = [self fn_cellDrawFont];
+			NSDictionary *attributes = (font != nil)
+				? [NSDictionary dictionaryWithObject:font forKey:NSFontAttributeName]
+				: [NSDictionary dictionary];
+
+			content = [_title sizeWithAttributes:attributes];
+		} else if (_image != nil) {
+			content = [_image size];
+		}
+		content.width += 2.0 * pad;
+		content.height += 2.0 * pad;
+		if (content.width > aRect.size.width) {
+			content.width = aRect.size.width;
+		}
+		if (content.height > aRect.size.height) {
+			content.height = aRect.size.height;
+		}
+		return content;
+	}
 }
 
 - (void)calcDrawInfo:(NSRect)aRect
@@ -1472,6 +1540,147 @@ static const NSSize FN_CELL_NO_OPINION = { 10000.0, 10000.0 };
 	 * not understand the attributed string, the formatter marks the cell's object as invalid" — has no home in this
 	 * tier: `-hasValidObjectValue` answers "is there a value" (§A10az) and nothing here can mark an object invalid.
 	 * Named rather than half-built, and §A10bs records the divergence rather than leaving it to be discovered. */
+}
+
+/* ============================================================================================ *
+ * AND THE INK, WHICH THIS CLASS NOW HAS: A FONT, THREE RECTS, AND TWO DOORS THAT PAINT.          *
+ * ============================================================================================ */
+
+- (id)font
+{
+	return _font;
+}
+
+- (void)setFont:(id)font
+{
+	/* RETAINED, THIS TREE'S RULE FOR A FONT — see the header. The one owned thing this slice adds. */
+	if (font != _font) {
+		id held = [font retain];
+
+		[_font release];
+		_font = held;
+	}
+}
+
+/* THE FACE A TITLE IS DRAWN IN: the cell's own font, or the system font at the system's size. A nil `-font` is the
+ * documented "the default", and the default is the system font — the SAME door `NSMenuItemCell` uses, so a control
+ * with no font does not come out in a different face from a menu row two classes over. */
+- (id)fn_cellDrawFont
+{
+	id font = _font;
+
+	if (font == nil) {
+		font = [NSFont systemFontOfSize:[NSFont systemFontSize]];
+	}
+	return font;
+}
+
+/* ---- THE THREE RECTS, WITH THIS TIER'S NUMBERS ------------------------------------------------ */
+
+- (NSRect)drawingRectForBounds:(NSRect)theRect
+{
+	/* THE BORDER'S AIR IS TAKEN ONLY WHEN THERE IS A BORDER TO TAKE IT FOR: an unbordered cell draws over its whole
+	 * bounds, which is what a table cell and a menu row want. */
+	if (_bordered || _bezeled) {
+		return NSInsetRect(theRect, NS_CELL_BORDER_INSET, NS_CELL_BORDER_INSET);
+	}
+	return theRect;
+}
+
+- (NSRect)titleRectForBounds:(NSRect)theRect
+{
+	/* A TEXT CELL'S TITLE TAKES THE DRAWING RECT less the content padding. A cell of any other kind has no title to
+	 * place and answers the EMPTY rect, which is Apple's own "does nothing" and — unlike a plausible inset — a
+	 * something a caller can tell apart from a real rectangle. */
+	if (_type != NSTextCellType) {
+		return NSZeroRect;
+	}
+	return NSInsetRect([self drawingRectForBounds:theRect], NS_CELL_CONTENT_PADDING, NS_CELL_CONTENT_PADDING);
+}
+
+- (NSRect)imageRectForBounds:(NSRect)theRect
+{
+	/* **THE IMAGE'S RECT IS CENTRED ON ITS OWN SIZE RATHER THAN FILLING THE DRAWING RECT.** "Typically offset to make
+	 * room for the cell border" is Apple's whole sentence; what an image cell actually needs is that offset AND a box
+	 * its picture sits in the middle of, because a 16-point icon stretched into a 200-point button is not an icon. */
+	NSRect rect = [self drawingRectForBounds:theRect];
+	NSSize size = (_image != nil) ? [_image size] : NSZeroSize;
+
+	return NSMakeRect(NSMidX(rect) - size.width / 2.0, NSMidY(rect) - size.height / 2.0, size.width, size.height);
+}
+
+/* ---- AND THE TWO DOORS THAT PAINT ------------------------------------------------------------- */
+
+- (void)drawWithFrame:(NSRect)cellFrame inView:(id)controlView
+{
+	/* **THE FACE, THEN THE CONTENTS — APPLE'S SPLIT, IN APPLE'S ORDER.** A bordered or bezeled cell paints its border
+	 * and its background here; everything else belongs to the interior below, which is why a subclass that changes
+	 * only the face overrides THIS door and inherits the other. THE HIGHLIGHTED STATE DARKENS THE FACE rather than
+	 * changing its colour, which is the Mac's answer for a button being pressed. */
+	if (_bezeled) {
+		NSBezierPath *face = [NSBezierPath bezierPathWithRoundedRect:cellFrame xRadius:4.0 yRadius:4.0];
+
+		[(_highlighted ? [NSColor selectedControlColor] : [NSColor controlColor]) setFill];
+		[face fill];
+		[[NSColor controlDarkShadowColor] setStroke];
+		[face setLineWidth:1.0];
+		[face stroke];
+	} else if (_bordered) {
+		NSBezierPath *edge = [NSBezierPath bezierPathWithRect:cellFrame];
+
+		[[NSColor controlDarkShadowColor] setStroke];
+		[edge setLineWidth:1.0];
+		[edge stroke];
+	}
+	[self drawInteriorWithFrame:cellFrame inView:controlView];
+}
+
+- (void)drawInteriorWithFrame:(NSRect)cellFrame inView:(id)controlView
+{
+	NSColor *ink = _enabled ? [NSColor controlTextColor] : [NSColor disabledControlTextColor];
+
+	(void)controlView;
+	/* THE IMAGE FIRST, so a title that overlaps it lands ON TOP rather than under; then the title. */
+	if (_image != nil) {
+		NSRect where = [self imageRectForBounds:cellFrame];
+
+		if (where.size.width > 0.0 && where.size.height > 0.0) {
+			[_image drawInRect:where];
+		}
+	}
+	if (_type == NSTextCellType && _title != nil && [_title length] > 0) {
+		NSRect rect = [self titleRectForBounds:cellFrame];
+		id font = [self fn_cellDrawFont];
+		NSDictionary *attributes;
+		NSSize text;
+		CGFloat x;
+
+		if (font == nil || rect.size.width <= 0.0 || rect.size.height <= 0.0) {
+			return;
+		}
+		attributes = [NSDictionary dictionaryWithObjectsAndKeys:font, NSFontAttributeName, ink,
+			      NSForegroundColorAttributeName, nil];
+		text = [_title sizeWithAttributes:attributes];
+		x = rect.origin.x;
+		if (_alignment == NSCenterTextAlignment) {
+			x = rect.origin.x + (rect.size.width - text.width) / 2.0;
+		} else if (_alignment == NSRightTextAlignment) {
+			x = rect.origin.x + rect.size.width - text.width;
+		}
+		if (x < rect.origin.x) {
+			x = rect.origin.x;
+		}
+		/* VERTICALLY CENTRED ON THE FONT'S ASCENT AND DESCENT BAND, not on the measured line — the same arithmetic,
+		 * and the same measurement, `NSMenuItemCell -drawTitleWithFrame:inView:` uses one class over. */
+		{
+			CGFloat ascent = [font ascender];
+			CGFloat descent = (CGFloat)fabs((double)[font descender]);
+			CGFloat band = ascent + descent;
+			CGFloat baseline = rect.origin.y + (rect.size.height - band) / 2.0 + descent;
+
+			[_title drawInRect:NSMakeRect(x, baseline - descent, text.width, band) withAttributes:attributes];
+		}
+	}
 }
 
 @end
