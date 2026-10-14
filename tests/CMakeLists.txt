@@ -46,6 +46,11 @@ set_tests_properties(seam-menubar-area PROPERTIES SKIP_RETURN_CODE 77
 add_executable(menu_cell_ink menu_cell_ink.m)
 target_link_libraries(menu_cell_ink PRIVATE App)
 add_test(NAME appkit-menu-cell-ink COMMAND menu_cell_ink)
+# The seam's libraries live in the install prefix and RUNPATH does NOT apply to a transitive dependency, so a
+# test that links only the AppKit still has to be told where the prefix's lib directory is — the same reason
+# every other test here sets it. Without this the loader cannot find libagora-dispatch.so and the test fails
+# before main runs, which reads as a broken cell rather than a missing path.
+set_tests_properties(appkit-menu-cell-ink PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
 
 # **THE CLASS THAT CALLS THE CELLS.** One row per item, in order, with the highlighted one distinguished — the
 # arrangement `NSMenuItemCell` had no caller to provide.
@@ -100,3 +105,4 @@ add_test(NAME appkit-events-headless
 	  "all checks passed" )
 set_tests_properties(appkit-events-headless PROPERTIES SKIP_RETURN_CODE 77
   ENVIRONMENT "${_agora_app_test_env}")
+
