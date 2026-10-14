@@ -116,6 +116,10 @@
  * motion, a mouse event, and the pointer leaving the window. */
 - (void)cg_updateTrackingForPoint:(NSPoint)windowPoint;
 - (void)cg_clearTracking;
+/* **AND THE DRAG'S MOVE, MADE ONCE PER PASS AT THE LATEST POINTER RATHER THAN PER EVENT.** The window is moved to
+ * the pointer, so applying every motion inside a frame would walk it along the sampled PATH — a fast flick's
+ * intermediate points — instead of straight to where the hand is. */
+- (void)cg_applyPendingDrag;
 /* **AND WHERE A CHROME BUTTON IS, in WINDOW coordinates.** The painter and the pointer ask the one function, so
  * a hovered button cannot be a different rectangle from a drawn one. */
 - (NSInteger)cg_chromeButtonAtPoint:(NSPoint)windowPoint;
@@ -2087,10 +2091,15 @@ static CGFloat fn_clamp_axis(CGFloat v, CGFloat lo, CGFloat hi)
 				origin.x += p.x - _cg_dragGrab.x;
 				origin.y += p.y - _cg_dragGrab.y;
 			}
-			[self setFrameOrigin:origin];
+			/* **THE MOVE IS REMEMBERED, NOT MADE.** A pass is a frame, and applying every motion inside one sends the
+			 * window along the SAMPLED PATH — every intermediate point a fast flick produced — instead of straight to
+			 * where the pointer is now. The pass applies the LATEST one; see `-cg_applyPendingDrag`. */
+			_cg_dragPendingOrigin = origin;
+			_cg_dragPending = YES;
 			return;
 		} else if ([theEvent type] == NSLeftMouseUp && (_cg_pressedChrome >= 0 || _cg_draggingChrome)) {
 			if (_cg_draggingChrome) {
+				[self cg_applyPendingDrag];	/* the drag's LAST move is not lost to a pass boundary */
 				[self cg_setPointerGrab:NO];	/* the drag is over; the pointer is the compositor's again */
 			}
 			_cg_pressedChrome = -1;
@@ -2476,6 +2485,21 @@ static CGFloat fn_clamp_axis(CGFloat v, CGFloat lo, CGFloat hi)
 {
 	if (_agwindow != NULL) {
 		AGWindowSetPointerGrab(_agwindow, flag ? 1 : 0);
+	}
+}
+
+/* **THE DRAG'S MOVE, MADE ONCE PER PASS AND ONLY EVER AT THE LATEST POINTER.** Every motion inside a frame updates
+ * the target and only the LAST one is applied, so a fast flick puts the window WHERE THE POINTER IS rather than
+ * walking it through the points the hand passed over — MEASURED, that walk is what "it crawls towards the target,
+ * following the path of the mouse" is. One call per pass also means one `set_frame` and one flush per frame instead
+ * of one per motion. `NSApplication -updateWindows` is what calls this, at the end of every pass. */
+- (void)cg_applyPendingDrag
+{
+	if (_cg_dragPending) {
+		NSPoint origin = _cg_dragPendingOrigin;
+
+		_cg_dragPending = NO;
+		[self setFrameOrigin:origin];
 	}
 }
 

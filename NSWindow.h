@@ -329,6 +329,11 @@ typedef NSUInteger NSWindowSharingType;
 	 * the relative arithmetic stays as the fallback for a compositor that sends no absolute position at all. */
 	NSPoint _cg_dragGlobalOffset;
 	BOOL _cg_dragUsesGlobal;
+	/* **AND THE DRAG'S TARGET, KEPT FOR THE END OF THE PASS RATHER THAN APPLIED PER EVENT.** A pass is a frame,
+	 * and applying every motion inside one sends the window along the SAMPLED PATH — every intermediate point of a
+	 * fast flick — instead of straight to where the pointer is. The MOVE is made once, at the LATEST one. */
+	NSPoint _cg_dragPendingOrigin;
+	BOOL _cg_dragPending;
 	NSInteger _cg_windowNumber; /* Apple's window number, assigned when the AGWindow is made; -1 before */
 	BOOL _cg_closeRequested; /* the compositor asked the window to close; acted on in the pump */
 	NSRect _frame;          /* COCOA's coordinates: bottom-left origin */

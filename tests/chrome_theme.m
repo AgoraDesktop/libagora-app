@@ -97,6 +97,12 @@ static NSBitmapImageRep *draw_chrome(NSWindow *w)
 - (void)cg_setGlobalPoint:(NSPoint)point;
 @end
 
+/* **THE DRAG'S MOVE IS DEFERRED TO THE END OF A PASS, so a probe has to make that pass.** Applying every motion
+ * inside a frame would walk the window along the sampled path; the pass takes the latest. */
+@interface NSWindow (APPKITPendingDragTest)
+- (void)cg_applyPendingDrag;
+@end
+
 /* THE FIXTURE'S GEOMETRY, READ FROM THE THEME rather than written down twice: a 6x8 button, offset 2, spacing 1. */
 static int s_buttonW, s_buttonH, s_offset;
 
@@ -275,6 +281,7 @@ int main(void)
 
 				[w sendEvent:down];
 				[w sendEvent:move];
+				[w cg_applyPendingDrag];	/* the pass would do this; the probe makes the pass */
 				check(fabs([w frame].origin.x - (before.origin.x + 40.0)) < 0.5
 				      && fabs([w frame].origin.y - (before.origin.y - 14.0)) < 0.5,
 				      "a drag on the TITLE BAR moves the window by the pointer's own delta");
@@ -309,6 +316,7 @@ int main(void)
 				[move cg_setGlobalPoint:NSMakePoint(260.0, 380.0)];
 				[w sendEvent:down];
 				[w sendEvent:move];
+				[w cg_applyPendingDrag];
 				/* The offset is the press minus the origin, so the new origin is the press origin plus (60,-20) — the
 				 * POINTER's delta, whatever the window was doing. */
 				check(fabs([w frame].origin.x - (before.origin.x + 60.0)) < 0.5

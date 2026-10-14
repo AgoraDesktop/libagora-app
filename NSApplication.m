@@ -99,6 +99,13 @@
 - (BOOL)cg_takeSheetReplyDelegate:(id *)delegate selector:(SEL *)selector contextInfo:(void **)contextInfo;
 @end
 
+/* **THE WINDOW'S PENDING DRAG MOVE, DECLARED HERE BECAUSE THIS IS WHAT APPLIES IT.** A pass ends by updating the
+ * windows, and that is the one place a drag's move is made: every motion inside a frame updates a target and only
+ * the last is applied, so the window goes to where the POINTER is instead of walking the points it passed over. */
+@interface NSWindow (APPKITPendingDrag)
+- (void)cg_applyPendingDrag;
+@end
+
 
 /* ============================================================================================ *
  * TELLING THE DELEGATE.                                                                         *
@@ -1349,7 +1356,13 @@ static const struct {
 	NSUInteger i;
 
 	for (i = 0; i < [_windows count]; i++) {
-		[[_windows objectAtIndex:i] displayIfNeeded];
+		NSWindow *w = [_windows objectAtIndex:i];
+
+		/* **THE DRAG'S PENDING MOVE FIRST, THEN THE PAINT.** A drag's move is applied once per pass at the LATEST
+		 * pointer (see `NSWindow -cg_applyPendingDrag`), and the window is then painted at its new place by the
+		 * display pass below. One move and one `set_frame` per frame, never one per motion event. */
+		[w cg_applyPendingDrag];
+		[w displayIfNeeded];
 	}
 }
 
