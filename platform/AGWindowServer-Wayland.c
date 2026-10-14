@@ -148,6 +148,13 @@ struct AGWindowServer {
 	int pointer_x;
 	int pointer_y;
 
+	/* **WHETHER THIS APPLICATION HAS THE KEYBOARD, and who to tell when that changes.** It is derived from
+	 * `keyboard_focus` and not stored twice: the handler fires on the transition and nothing else reads a
+	 * separate flag. */
+	AGActivationFunction activation_fn;
+	void *activation_context;
+	int active;
+
 	char error[256];
 };
 
@@ -161,6 +168,21 @@ static uint32_t ag_now_ms(void)
 
 	clock_gettime(CLOCK_MONOTONIC, &now);
 	return (uint32_t)((uint64_t)now.tv_sec * 1000u + (uint64_t)now.tv_nsec / 1000000u);
+}
+
+/* **THE ONE PLACE ACTIVATION CHANGES, so the handler fires exactly once per transition.** `keyboard_enter` and
+ * `keyboard_leave` are per WINDOW; this application is active while ANY of its windows has the keyboard, so
+ * entering a second window while already active is not a change and says nothing. */
+static void ag_server_set_active(AGWindowServer *server, int active)
+{
+	active = active ? 1 : 0;
+	if (server->active == active) {
+		return;
+	}
+	server->active = active;
+	if (server->activation_fn != NULL) {
+		server->activation_fn(server->activation_context, active);
+	}
 }
 
 static void ag_server_error(AGWindowServer *server, const char *what)
@@ -501,6 +523,9 @@ static void keyboard_enter(void *data, struct wl_keyboard *keyboard, uint32_t se
 			break;
 		}
 	}
+	/* **THE KEYBOARD IS THE ACTIVE STATE: the client that has it is the application in front**, which is what an
+	 * application shows its menu bar for. */
+	ag_server_set_active(server, server->keyboard_focus != NULL);
 }
 
 static void keyboard_leave(void *data, struct wl_keyboard *keyboard, uint32_t serial,
@@ -510,6 +535,7 @@ static void keyboard_leave(void *data, struct wl_keyboard *keyboard, uint32_t se
 
 	(void)keyboard; (void)serial; (void)surface;
 	server->keyboard_focus = NULL;
+	ag_server_set_active(server, 0);
 }
 
 static void keyboard_key(void *data, struct wl_keyboard *keyboard, uint32_t serial, uint32_t time,
@@ -1032,6 +1058,20 @@ void AGWindowServerFlush(AGWindowServer *server)
 const char *AGWindowServerLastError(AGWindowServer *server)
 {
 	return server != NULL ? server->error : "no connection";
+}
+
+int AGWindowServerIsActive(AGWindowServer *server)
+{
+	return server != NULL ? server->active : 0;
+}
+
+void AGWindowServerSetActivationHandler(AGWindowServer *server, AGActivationFunction function, void *context)
+{
+	if (server == NULL) {
+		return;
+	}
+	server->activation_fn = function;
+	server->activation_context = context;
 }
 
 void AGWindowServerScreenSize(AGWindowServer *server, int *width, int *height, const char **name)

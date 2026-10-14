@@ -137,6 +137,23 @@ int main(int argc, char **argv)
 	 *
 	 * The bar is found by its LEVEL, which is what makes it the bar — nothing else is at
 	 * `NSMainMenuWindowLevel` — and the item is the third, which after the application menu is `Edit`. */
+	/* **AND THE PROBE WAITS TO BE THE ACTIVE APPLICATION FIRST, BECAUSE ONLY ITS MENUS SHOW.** The bar window is
+	 * created before the compositor has said this client has the keyboard — it says so ASYNCHRONOUSLY — and an
+	 * application that is not active does not put its menu bar on the glass. `--run` pumps for a person; this
+	 * pumps once for the probe, so the click lands on a bar that is really there. */
+	{
+		int k;
+
+		for (k = 0; k < 60; k++) {
+			NSEvent *e = [app nextEventMatchingMask:NSAnyEventMask
+						      untilDate:[NSDate dateWithTimeIntervalSinceNow:0.01]
+							 inMode:nil dequeue:YES];
+
+			if (e != nil) {
+				[app sendEvent:e];
+			}
+		}
+	}
 	if (click_the_bar) {
 		NSArray *windows = [app windows];
 		NSWindow *bar_window = nil;

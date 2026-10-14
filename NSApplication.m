@@ -847,7 +847,13 @@ static double s_last_report;
 			height, (double)cocoa_y, (double)needed);
 	}
 	[_menuBarWindow setFrame:NSMakeRect((CGFloat)x, cocoa_y, needed, (CGFloat)height) display:NO];
-	[_menuBarWindow orderFront:nil];
+	/* **ONLY THE ACTIVE APPLICATION'S MENUS SHOW.** A window that is not in front leaves the bar empty for whoever
+	 * is; the `-activate`/`-deactivate` pair is what puts this on the glass and takes it away, and this door only
+	 * creates or re-measures. An application that has not been told it is active yet — the compositor says so
+	 * asynchronously — will be told, and the bar comes out then. */
+	if (_active) {
+		[_menuBarWindow orderFront:nil];
+	}
 }
 
 - (nullable id)mainMenu
@@ -1142,6 +1148,12 @@ static double s_last_report;
 			[[_windows objectAtIndex:i] orderFront:nil];
 		}
 	}
+	/* **AND THE MENU BAR COMES BACK, BECAUSE IT IS THE ACTIVE APPLICATION'S THAT SHOWS.** Only this application's
+	 * own menus are in this window — the bar's strip and its System menu belong to the server — so showing it is
+	 * exactly "show the active application's menus". */
+	if (_menuBarWindow != nil) {
+		[_menuBarWindow orderFront:nil];
+	}
 }
 
 - (void)activate
@@ -1156,6 +1168,12 @@ static double s_last_report;
 {
 	/* `-isActive` REPORTS THIS, so the flag is set where the state changes. */
 	_active = NO;
+	/* **AND THE MENU BAR GOES WITH IT, so only the application in front shows menus.** The window is not DESTROYED —
+	 * `-orderOut:` is the door that takes it off the glass and leaves it to be shown again, which is what an
+	 * application being activated and deactivated repeatedly needs. */
+	if (_menuBarWindow != nil) {
+		[_menuBarWindow orderOut:nil];
+	}
 	/* NOTHING TO GIVE UP: there is no manager to give the focus to. The state that matters — which window is
 	 * key — is left where it is, because a deactivated application still owns its key window. */
 	fn_announce(self, NSApplicationWillResignActiveNotification, @selector(applicationWillResignActive:));

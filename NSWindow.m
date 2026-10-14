@@ -185,10 +185,30 @@ static AGWindowServer *s_server;
  * PER-WINDOW queues — so the count is the one piece of state that spans them. */
 static NSInteger s_queued_events;
 
+/* **THE COMPOSITOR'S `/`YOU HAVE THE KEYBOARD`/` IS THE APPLICATION'S ACTIVE STATE**, and this is the one place it
+ * is turned into the application's own pair. The seam says which CLIENT has the keyboard (per client, so a second
+ * window of this application taking focus is not a change), and \"active\" is exactly that — the application in
+ * front, whose menu bar is the one on the screen. The handler is registered when the connection is made because
+ * the application cannot be told before it can be talked to. */
+static void fn_activation(void *context, int active)
+{
+	NSApplication *app = [NSApplication sharedApplication];
+
+	(void)context;
+	if (active) {
+		[app activate];
+	} else {
+		[app deactivate];
+	}
+}
+
 static AGWindowServer *fn_server(void)
 {
 	if (s_server == NULL) {
 		s_server = AGWindowServerConnect();
+		if (s_server != NULL) {
+			AGWindowServerSetActivationHandler(s_server, fn_activation, NULL);
+		}
 	}
 	return s_server;
 }

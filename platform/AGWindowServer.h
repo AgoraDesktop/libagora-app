@@ -96,6 +96,13 @@ typedef struct AGEvent {
 typedef void (*AGEventFunction)(void *context, const AGEvent *event);
 typedef void (*AGFrameFunction)(void *context, uint32_t time_ms);
 
+/* **WHETHER THIS APPLICATION HAS THE KEYBOARD — WHICH IS WHAT "ACTIVE" MEANS, AND WHY ONLY THE ACTIVE APP'S MENUS
+ * SHOW.** The compositor already says which CLIENT has the keyboard: it sends `wl_keyboard.enter` to the client
+ * whose surface is focused and `wl_keyboard.leave` when that client gives the keyboard up — so a client can answer
+ * this without asking anyone, and a window manager never has to be told who is in front. The handler below is
+ * called when the answer CHANGES, which is the moment an application shows or hides its menu bar. */
+typedef void (*AGActivationFunction)(void *context, int active);
+
 /* ---------------------------------------------------------------------------------------------------
  * the connection
  * --------------------------------------------------------------------------------------------------- */
@@ -210,6 +217,11 @@ int AGWindowIsConfigured(const AGWindow *window);
 
 void AGWindowSetEventHandler(AGWindow *window, AGEventFunction function, void *context);
 void AGWindowSetFrameHandler(AGWindow *window, AGFrameFunction function, void *context);
+
+/* WHETHER THIS APPLICATION HAS THE KEYBOARD, and a door to be told when that changes. Zero when the connection is
+ * NULL, which is the honest answer for "no server, no focus". */
+int AGWindowServerIsActive(AGWindowServer *server);
+void AGWindowServerSetActivationHandler(AGWindowServer *server, AGActivationFunction function, void *context);
 
 /* The pixel buffer to draw into, or NULL when the compositor still holds the previous one — in which case
  * the caller must NOT draw and should wait for the frame handler. `*stride` receives the row pitch in

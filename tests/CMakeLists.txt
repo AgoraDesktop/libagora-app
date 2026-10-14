@@ -134,6 +134,17 @@ add_test(NAME appkit-work-area
 set_tests_properties(appkit-work-area PROPERTIES SKIP_RETURN_CODE 77
   ENVIRONMENT "${_agora_app_test_env}")
 
+# **ONLY THE ACTIVE APPLICATION'S MENUS SHOW.** The compositor already says which CLIENT has the keyboard, so an
+# application knows when it is in front without a protocol of its own; this asserts that the menu bar window is
+# shown while active and HIDDEN when deactivated. It needs Agora's own server, since the menu bar is its strip.
+add_executable(appkit_activation appkit_activation.m)
+target_link_libraries(appkit_activation PRIVATE App)
+add_test(NAME appkit-menu-activation
+  COMMAND "${CMAKE_CURRENT_SOURCE_DIR}/run-activation-headless.sh"
+	  "$<TARGET_FILE:appkit_activation>" "${AGORA_WINDOW_SERVER_BINARY}" 3)
+set_tests_properties(appkit-menu-activation PROPERTIES SKIP_RETURN_CODE 77
+  ENVIRONMENT "${_agora_app_test_env}")
+
 # AND THE INPUT PATH: the seam's event, through NSWindow, to the view that should get it. The headless
 # compositor has no seat, so this test builds the AGEvents a compositor would have sent and pushes them
 # through the window's own door -- the link that is NOT synthetic is the one a configure event already proves.
