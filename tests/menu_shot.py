@@ -15,7 +15,7 @@ from PIL import Image
 
 PANEL = (235, 235, 235)      # the panel's colour, WHICH IS THE MENU BAR'S — the server's `AWS_MENU_BAR_COLOUR`
 ROW = 22                     # NSMenuRowHeight
-PAD = 4                      # NSMenuPanelPadding — the panel's own air, above, below and at the sides
+PAD = 2                      # NSMenuPanelPadding — the panel's own air, above, below and at the sides
 BAR_ROWS = 24                # the menu bar's strip, which is a panel too and is NOT the dropdown
 
 

@@ -20,9 +20,10 @@ const CGFloat NSMenuRowHeight = 22.0;
 
 /* **THE PANEL'S OWN PADDING, WHICH IS THE AIR BETWEEN THE EDGE AND THE FIRST ROW.** The rows used to run EDGE TO
  * EDGE, so the only air inside the panel was the highlight chip's own 2-point inset — which left the chip almost
- * touching the panel's rounded edge. Four points on every side gives the panel a margin, and it is a SHARED number
- * (`NSMenuView.h`) because `NSMenu` sizes the window with it and this view insets the rows by it. */
-const CGFloat NSMenuPanelPadding = 4.0;
+ * touching the panel's rounded edge. Two points on every side gives the panel a margin — the chip's own inset again,
+ * on the panel's behalf — and it is a SHARED number (`NSMenuView.h`) because `NSMenu` sizes the window with it and
+ * this view insets the rows by it. */
+const CGFloat NSMenuPanelPadding = 2.0;
 
 /* A BAR'S ITEM IS ITS TITLE PLUS THE AIR EITHER SIDE OF IT, and a floor so that a one-letter title is still a
  * target a person can hit. Both are the bar's own measures, so they live beside the bar's drawing. */
