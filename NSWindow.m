@@ -123,6 +123,11 @@
 /* **AND WHERE A CHROME BUTTON IS, in WINDOW coordinates.** The painter and the pointer ask the one function, so
  * a hovered button cannot be a different rectangle from a drawn one. */
 - (NSInteger)cg_chromeButtonAtPoint:(NSPoint)windowPoint;
+/* **AND WHAT A BUTTON DOES, WHICH IS THE THIRD PART OF THAT ONE ANSWER.** The rectangles are `fn_chrome_layout`'s and
+ * the pressed state is the pointer's; this is the ACTION, and it goes through the `-perform…` doors rather than the
+ * bare ones so that a DELEGATE's refusal reaches a click on the chrome exactly as it reaches the menu item beside
+ * it — a window whose document has unsaved changes must not close because a hand found the X. */
+- (void)cg_performChromeButton:(NSInteger)index;
 @end
 
 /* The engine's doors into an area and into the event it builds: declared in every file that uses them and DEFINED by
@@ -898,10 +903,16 @@ static void fn_draw_image(CGContextRef c, NSRect rect, CGImageRef image)
 /* **THE STATE A BUTTON IS DRAWN IN, AND ITS PRECEDENCE IS THE POINTER'S.** A press outranks a hover, and both
  * outrank the window's key state: the pointer's answer is the newer one, and a theme's pressed art exists to say
  * "this is happening now". A window that is neither key nor under the pointer is the inactive state — the ADJUST
- * half of the four every XFWM theme ships. */
+ * half of the four every XFWM theme ships.
+ *
+ * **AND A PRESS COUNTS ONLY WHILE THE POINTER IS STILL ON THE BUTTON.** `_cg_pressedChrome` is "the press began
+ * here", kept for the whole press so that the RELEASE can ask whether it should count; the INK is the POINTER's
+ * answer, so a hand that slid off the X turns it back to a hover and a hand that slid back turns it pressed
+ * again. Reading the two together is what makes sliding off a way to change your mind — a button drawn pressed
+ * while the pointer is nowhere near it is a button claiming something that is not true. */
 static AGChromeButtonState fn_chrome_state(NSWindow *w, NSInteger index)
 {
-	if (w->_cg_pressedChrome == index) {
+	if (w->_cg_pressedChrome == index && w->_cg_hoverChrome == index) {
 		return AGChromeButtonStatePressed;
 	}
 	if (w->_cg_hoverChrome == index) {
@@ -2055,15 +2066,27 @@ static CGFloat fn_clamp_axis(CGFloat v, CGFloat lo, CGFloat hi)
 	if (mouse) {
 		/* **A PRESS THAT LANDS ON THE CHROME IS THE WINDOW'S, NOT A VIEW'S.** There is no view in the title bar, so
 		 * the hit test below would hand the click to the content view — which is where a title-bar click used to go.
-		 * A chrome button consumes it instead: the press is remembered so the button can draw PRESSED, and the matching
-		 * release clears it. THE ACTION EACH BUTTON PERFORMS IS NOT WIRED HERE; that is a window manager's (see the
-		 * README), so what this buys is the state the theme's pressed art exists for. */
+		 * A chrome button consumes the whole press instead: the press is REMEMBERED here, its ink follows the pointer
+		 * for as long as the hand is down (see `fn_chrome_state`), and THE RELEASE IS WHAT PERFORMS IT — through
+		 * `-cg_performChromeButton:`, and only if the pointer is still on the button that was pressed. */
 		if ([theEvent type] == NSLeftMouseDown) {
 			NSPoint p = [theEvent locationInWindow];
 			NSInteger hit = [self cg_chromeButtonAtPoint:p];
 
+			/* **A NEW PRESS FORGETS WHAT THE LAST ONE WAS DOING.** One press means one thing, and it is decided
+			 * entirely below — so a release that never arrived (a compositor that lost it, a hand that left the
+			 * surface) cannot leave a button pressed for good, with every later drag of the window swallowed as that
+			 * button's. */
+			_cg_pressedChrome = -1;
+			_cg_draggingChrome = NO;
 			if (hit >= 0) {
 				_cg_pressedChrome = hit;
+				/* **AND THE POINTER IS ON THE BUTTON BY DEFINITION — `hit` IS the hit test's answer for where the
+				 * hand is.** So the press sets the HOVER with it, and `fn_chrome_state`'s pair is satisfied by a CLICK:
+				 * press and release with no motion between them, which is the common case and which arrives with no
+				 * hover of its own. A press that drew no pressed art because the pointer had not been seen to move
+				 * first would be a button that only answers a hand that wobbles. */
+				_cg_hoverChrome = hit;
 				[self setNeedsDisplay:YES];
 				return;
 			}
@@ -2120,15 +2143,43 @@ static CGFloat fn_clamp_axis(CGFloat v, CGFloat lo, CGFloat hi)
 			_cg_dragPendingOrigin = origin;
 			_cg_dragPending = YES;
 			return;
+		} else if ([theEvent type] == NSLeftMouseDragged && _cg_pressedChrome >= 0) {
+			/* **A HAND HOLDING A BUTTON DOWN IS THE BUTTON'S, NOT A VIEW'S.** The press never reached a view, so the
+			 * drag that follows it must not either. What the drag IS for is the ink: the engine re-answers which button
+			 * the pointer is over, `fn_chrome_state` reads that with the press, and the bar repaints only when the
+			 * answer CHANGES — which is the same rule the hover already followed. It also settles the release below:
+			 * `_cg_hoverChrome` says whether the pointer came back. */
+			[self cg_updateTrackingForPoint:[theEvent locationInWindow]];
+			return;
 		} else if ([theEvent type] == NSLeftMouseUp && (_cg_pressedChrome >= 0 || _cg_draggingChrome)) {
+			NSInteger pressed = _cg_pressedChrome;
+			BOOL releaseIsOnIt = NO;
+
 			if (_cg_draggingChrome) {
 				[self cg_applyPendingDrag];	/* the drag's LAST move is not lost to a pass boundary */
 				[self cg_setPointerGrab:NO];	/* the drag is over; the pointer is the compositor's again */
+			} else if (pressed >= 0) {
+				NSPoint p = [theEvent locationInWindow];
+
+				/* **AND ONLY A RELEASE THAT IS STILL ON THE BUTTON COUNTS.** The press said "this button"; the release
+				 * says whether the hand is still of that mind. It is asked of the release's OWN point rather than of
+				 * `_cg_hoverChrome`, because a release is not always preceded by a drag — a click that never moved has
+				 * only these two events, and the hover would still be describing wherever the pointer was before. */
+				releaseIsOnIt = ([self cg_chromeButtonAtPoint:p] == pressed);
+				/* AND THE INK AFTER THE RELEASE IS THE POINTER'S ANSWER TOO, from that same point: a release just
+				 * outside the X would otherwise leave it prelighted until the next motion came along to say otherwise. */
+				[self cg_updateTrackingForPoint:p];
 			}
 			_cg_pressedChrome = -1;
 			_cg_draggingChrome = NO;
 			_cg_dragUsesGlobal = NO;
 			[self setNeedsDisplay:YES];
+			/* **AND THE ACTION GOES LAST, BECAUSE ONE OF THEM DESTROYS THE WINDOW.** `-performClose:` ends in
+			 * `-close`, which destroys the surface and takes this window off the application's list — so every line
+			 * above has to have run before it does. */
+			if (releaseIsOnIt) {
+				[self cg_performChromeButton:pressed];
+			}
 			return;
 		}
 		/* **THE VIEW UNDER THE POINTER, WHICH IS WHAT `-hitTest:` IS FOR, AND WHAT THIS DOOR DID NOT DO.**
@@ -2309,6 +2360,42 @@ static CGFloat fn_clamp_axis(CGFloat v, CGFloat lo, CGFloat hi)
 		}
 	}
 	return -1;
+}
+
+/* **WHAT A CHROME BUTTON DOES, IN THE ONE PLACE THAT SAYS SO.** Three things have to agree for a title bar to be
+ * true — where a button IS (`fn_chrome_layout`), what state it is DRAWN in (`fn_chrome_state`), and what it DOES
+ * (here) — and the third was missing: the rects and the ink were wired and the action was not, so a press lit the
+ * theme's pressed art and a release did nothing at all.
+ *
+ * **EACH GOES THROUGH THE `-perform…` DOOR, WHICH IS THE ONE THE MENU ITEM ALSO SENDS.** Their whole reason for
+ * existing is that a click on a piece of chrome and the same command from a menu must be the SAME act — a delegate
+ * that refuses `-windowShouldClose:` refuses it in both places, and a subclass that overrides `-zoom:` gets the
+ * button's behaviour too. Sending `-close`, `-miniaturize:` and `-zoom:` from here instead would be a second road
+ * to each that skips every question the first one asks.
+ *
+ * **AND THE PILL HAS NO ACTION, WHICH IS `NSToolbar`'S ABSENCE RATHER THAN A GAP IN THIS SWITCH.** It is the
+ * toolbar toggle and there is no toolbar to toggle; `-toggleToolbarShown:` is the door that already refuses by
+ * name. So a press on it draws the theme's pressed art and settles back, which is exactly what the mark has always
+ * done — stated here rather than left to be discovered by whoever presses it. */
+- (void)cg_performChromeButton:(NSInteger)index
+{
+	switch ((AGChromeButton)index) {
+	case AGChromeButtonClose:
+		[self performClose:self];
+		break;
+	case AGChromeButtonHide:
+		/* **THE MINUS MARKS THE STATE AND ANNOUNCES IT; IT DOES NOT TAKE THE WINDOW OFF THE SCREEN**, and that is
+		 * `-miniaturize:`'s own recorded state rather than this button's shortfall: there is no Dock to put a
+		 * miniaturized window in and no door in the protocol to ask for one. Wiring the button to the door that
+		 * EXISTS beats inventing a behaviour here that the tier cannot honour. */
+		[self performMiniaturize:self];
+		break;
+	case AGChromeButtonMaximize:
+		[self performZoom:self];
+		break;
+	default:
+		break;
+	}
 }
 
 - (void)cg_updateTrackingForPoint:(NSPoint)windowPoint

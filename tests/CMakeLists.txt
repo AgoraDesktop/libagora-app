@@ -171,6 +171,19 @@ add_test(NAME appkit-events-headless
 set_tests_properties(appkit-events-headless PROPERTIES SKIP_RETURN_CODE 77
   ENVIRONMENT "${_agora_app_test_env}")
 
+# **AND WHAT A CHROME BUTTON DOES, WHICH IS THE HALF NO PIXEL TEST CAN SEE.** `appkit-chrome-theme` proves a press
+# lights the theme's pressed art; this proves the RELEASE performs the action — and only when the pointer is still
+# on the button that was pressed. Same harness as the events test, for the same reason: the seam's struct is
+# public and the pump is the application's own, so the only synthetic link is the compositor calling that door.
+add_executable(chrome_buttons chrome_buttons.m)
+target_link_libraries(chrome_buttons PRIVATE App)
+
+add_test(NAME appkit-chrome-buttons
+  COMMAND "${CMAKE_CURRENT_SOURCE_DIR}/run-appkit-headless.sh" "$<TARGET_FILE:chrome_buttons>" 2
+	  "all checks passed" )
+set_tests_properties(appkit-chrome-buttons PROPERTIES SKIP_RETURN_CODE 77
+  ENVIRONMENT "${_agora_app_test_env}")
+
 # AND THE CHROME: Agora's title bar is an X, a minus and a plus drawn in one ink, a centred bold title, and a pill
 # at the far end — so what is checked is the SHAPES, which is a question about pixels and not about intent. The
 # client draws its own chrome, so this needs no compositor: `-cg_drawChromeInContext:` takes a bitmap rep's context.

@@ -48,6 +48,7 @@ tests/
   appkit_activation.m           only the ACTIVE application's menu bar shows
   appkit_controls_draw.m        a window full of controls, for a person to look at
   chrome_theme.m                the THEME: an XFWM `.xpm` set becomes the chrome's buttons, 1:1
+  chrome_buttons.m              and what a chrome button DOES: a click through the seam, and what happened
   run-*-headless.sh             ctest: a compositor with a virtual monitor (no desktop input involved)
   run-*-nested.sh, inspect.py   the PIXEL tests, and they are OPT-IN: `gnome-shell --nested` is a whole
                                 nested session and it grabs the HOST's pointer while it lives
@@ -106,8 +107,13 @@ the compositor is really gone.
   size, with each state (`active`/`inactive`/`prelight`/`pressed`) selected by the window's key state and the
   pointer, and a button's transparent pixel at its TOP. It runs against `tests/fixtures/chrome`, Agora's own MIT
   fixture.
-- **`ctest`: 18 of 18 passed** (the keyboard and the seam, the AppKit and its input path, the controls and their
-  metrics, the tracking engine, the text path, the chrome, the chrome theme, the menus and activation).
+- **What a chrome button DOES** (`ctest`): a pointer pressed and released through the seam's own door, and the
+  question asked of the WINDOW rather than of the pixels — the plus zooms and a second click restores, a release
+  that slid off the button performs nothing while one that slid back does, the minus miniaturizes, the pill
+  changes nothing, and the X asks a delegate's `-windowShouldClose:` and honours a refusal.
+- **`ctest`: 19 of 19 passed** (the keyboard and the seam, the AppKit and its input path, the controls and their
+  metrics, the tracking engine, the text path, the chrome and what its buttons do, the chrome theme, the menus and
+  activation).
 
 ### What a Wayland client does not get, and where each is recorded
 
@@ -207,17 +213,26 @@ untouched and the theme's provenance travels with the theme. No theme is committ
 XPMs — so `tests/chrome_theme.m` never depends on a licence a checkout does not carry. The reader is `AGXPM.c`
 (this tree decodes PNG and JPEG only; XPM is text, not a codec) and the loader is `AGChromeTheme`.
 
-WHAT THE FOUR BUTTONS DO IS STILL A WINDOW MANAGER'S, so a press draws the pressed art and nothing else: the
-close/hide/zoom behaviour is the part parked with Kestrel, and naming it beats a button that quietly does half
-of something.
+**WHAT A BUTTON DOES IS WIRED, AND EACH ONE GOES THROUGH THE DOOR ITS MENU ITEM SENDS.** The X performs
+`-performClose:`, so a delegate's `-windowShouldClose:` is asked and can refuse it; the minus performs
+`-performMiniaturize:` and the plus `-performZoom:`. A PRESS performs nothing on its own — it is remembered and
+drawn pressed, and the RELEASE is what acts, and only if the pointer is still on the button that was pressed, so
+sliding off the X is how a hand changes its mind. THE PILL PERFORMS NOTHING, because it is the toolbar toggle and
+`NSToolbar` does not exist here — `-toggleToolbarShown:` is the door that refuses by name. And THE MINUS MARKS THE
+STATE AND ANNOUNCES IT RATHER THAN TAKING THE WINDOW OFF THE SCREEN: there is no Dock to put a miniaturized window
+in and no iconify in the protocol, which `-miniaturize:` states where it stands. `tests/chrome_buttons.m` is what
+holds all of that to account — it presses the buttons through the seam and asks what HAPPENED, which is the half
+no test about pixels can see.
 
 ### Still absent, and why
 
 The sheets, the drawer, the frame-autosave strings, the script-command doors, the cursor-rect invalidation and
-the child-window list all need subsystems this stage has not reached; the window's minimise/close BEHAVIOUR is a
-window manager's (Kestrel is parked), though the chrome now DRAWS a title bar — an X, a minus, a plus and a
-toolbar pill. The pill is drawn and does nothing, because there is no toolbar for it to toggle yet, and the
-three symbols are not yet buttons; each is stated where it stands. The input-method half of the text system is
+the child-window list all need subsystems this stage has not reached; what the window's close, minimise and zoom
+buttons DO is now this tier's — each goes through the `-perform…` door its menu item sends — but the MINIMISE is
+still only a state the window marks and announces, because there is no Dock to put a miniaturized window in and no
+iconify in the protocol (Kestrel is parked). The chrome's toolbar pill is drawn and performs nothing, because
+there is no toolbar for it to toggle; the three symbols beside it ARE buttons now, and `tests/chrome_buttons.m`
+presses them. The input-method half of the text system is
 still absent (`-interpretKeyEvents:` does the direct mapping and says so), and the multi-line text view, the
 word-granularity movement commands and the field editor are named rather than guessed. Each absence is stated
 rather than stubbed, and the refusals name themselves.
