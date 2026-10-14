@@ -528,6 +528,28 @@ static void fn_ag_frame(void *context, uint32_t time_ms)
 	return fn_server();
 }
 
+/* **AND THE MENU BAR'S COLOUR, AS A COLOUR RATHER THAN AS THREE BYTES.** The server owns the strip and says what
+ * colour it is; this turns that into the `NSColor` both the bar window's background and a dropdown's panel are
+ * filled with, so the two cannot drift — MEASURED, they had: the strip was 235 and the panel a 251-to-236 ramp, so a
+ * menu was lighter than the bar it hung from. THE FALLBACK IS THE BAR'S SAMPLED FACE (235,235,235), for a process
+ * with no compositor to ask. */
++ (NSColor *)cg_menuBarColor
+{
+	AGWindowServer *server = [NSWindow cg_sharedServer];
+	unsigned int rgb = 0;
+
+	if (server != NULL) {
+		AGWindowServerMenuBarColour(server, &rgb);
+	}
+	if (rgb == 0u) {
+		return [NSColor colorWithCalibratedRed:0.9215686 green:0.9215686 blue:0.9215686 alpha:1.0];
+	}
+	return [NSColor colorWithCalibratedRed:(CGFloat)((rgb >> 16) & 0xFFu) / 255.0
+					green:(CGFloat)((rgb >> 8) & 0xFFu) / 255.0
+					 blue:(CGFloat)(rgb & 0xFFu) / 255.0
+					alpha:1.0];
+}
+
 /* **AND THE FLAG, WHICH IS ALL THIS DOOR DOES.** `-display` paints now and returns early if the compositor still
  * holds the previous buffer — leaving the flag set, so the run loop's `-displayIfNeeded` tries again next pass.
  * A CALLER THAT WANTS THE PAINT TO HAPPEN NOW calls `-displayIfNeeded` after this, which is the pair the menu's

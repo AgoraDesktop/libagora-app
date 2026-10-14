@@ -808,10 +808,7 @@ static double s_last_report;
 	if (_mainMenu == nil || server == NULL) {
 		return;
 	}
-	unsigned int rgb = 0;
-
 	AGWindowServerMenuBarArea(server, &x, &y, &width, &height);
-	AGWindowServerMenuBarColour(server, &rgb);
 	if (width <= 0 || height <= 0) {
 		return;		/* a compositor that does not say where the bar's free space begins */
 	}
@@ -847,14 +844,10 @@ static double s_last_report;
 		[_menuBarWindow setContentView:view];
 		/* **AND IT IS THE STRIP'S COLOUR, SO THERE IS NO SEAM.** The window's background is what shows between the
 		 * titles, and the server's strip is what shows either side of this window — two surfaces a person reads as
-		 * ONE BAR, so they had better be the same colour. It is the SERVER's colour because the strip is the
-		 * server's: a client that picked one which looked close is how they come to differ. */
-		if (rgb != 0u) {
-			[_menuBarWindow setBackgroundColor:[NSColor colorWithCalibratedRed:(CGFloat)((rgb >> 16) & 0xFFu) / 255.0
-										     green:(CGFloat)((rgb >> 8) & 0xFFu) / 255.0
-										      blue:(CGFloat)(rgb & 0xFFu) / 255.0
-										     alpha:1.0]];
-		}
+		 * ONE BAR, so they had better be the same colour. It comes through `+[NSWindow cg_menuBarColor]` NOW rather
+		 * than being built here, because A DROPDOWN'S PANEL IS THE SAME QUESTION: the menus hang from the bar and a
+		 * second copy of "the server's colour, as an NSColor" is how the panel came to be lighter than the strip. */
+		[_menuBarWindow setBackgroundColor:[NSWindow cg_menuBarColor]];
 	}
 	[(NSMenuView *)_menuBarView setMenu:(NSMenu *)_mainMenu];
 	needed = [(NSMenuView *)_menuBarView requiredWidth];

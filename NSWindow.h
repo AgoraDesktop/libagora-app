@@ -567,6 +567,13 @@ typedef NSUInteger NSWindowSharingType;
  * caller's and is not retained. */
 - (void)cg_drawChromeInContext:(nullable NSGraphicsContext *)context;
 
+/* **AND THE MENU BAR'S OWN COLOUR, WHICH THE SERVER OWNS AND BOTH THE BAR AND THE MENUS USE.** The strip belongs to
+ * the server, so it is the SERVER that says what colour it is (`agora-shell`'s `menu_bar_area`, whose colour
+ * argument exists for exactly this); this door answers it as an `NSColor` so that the bar window's background and a
+ * dropdown's panel are the same colour BY CONSTRUCTION rather than by two people choosing similar ones. It falls
+ * back to the bar's sampled face when there is no server to ask, so an offscreen draw still has a bar to draw in. */
++ (NSColor *)cg_menuBarColor;
+
 /* AND THE ONE PIECE OF STATE THAT DECIDES WHETHER `-displayIfNeeded` DOES ANYTHING. */
 @property BOOL viewsNeedDisplay;
 

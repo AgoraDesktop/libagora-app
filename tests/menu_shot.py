@@ -13,29 +13,23 @@ tracking window had no content view and nothing presented it.
 import sys
 from PIL import Image
 
-PANEL = (240, 240, 240)      # the OLD flat panel colour, kept only as the record of what this used to key on
+PANEL = (235, 235, 235)      # the panel's colour, WHICH IS THE MENU BAR'S — the server's `AWS_MENU_BAR_COLOUR`
 ROW = 22                     # NSMenuRowHeight
 PAD = 4                      # NSMenuPanelPadding — the panel's own air, above, below and at the sides
 BAR_ROWS = 24                # the menu bar's strip, which is a panel too and is NOT the dropdown
-BORDER = 139                 # the dropdown's own hairline border, and nothing else in the picture has it
 
 
 def is_panel_top(r, g, b):
-    """The dropdown panel's TOP EDGE: neutral, and brighter than the menu bar.
+    """The dropdown panel's TOP EDGE: EXACTLY the menu bar's colour, because the panel now IS that colour.
 
-    **THE MARKER USED TO BE THE PANEL'S BORDER, AND THE BORDER IS GONE.** That is the change this detector had to
-    survive: it matched "a neutral grey in the 120..165 band", which was `APPKIT_MENU_PANEL_BORDER` (0.545) and
-    nothing else in the scene — so with the hairline removed it started matching the antialiased pixels of the menu's
-    own TEXT instead, and the box it returned was the text's spread rather than the panel's (MEASURED: 133x32, which
-    is not a whole number of rows, where the panel is 155x44).
-
-    WHAT IDENTIFIES A PANEL NOW IS ITS OWN COLOUR. The panel's ramp runs 0.985 down to 0.925 (251 to 236), the menu
-    bar is a flat 235 and the window behind it a flat 237, and the wallpaper is not neutral at all — so the panel's
-    TOP is the brightest neutral thing below the bar, and that is what this finds. Its BOTTOM cannot be found by
-    colour alone, because the end of the ramp is one level BELOW the window's grey; the walk in `main` uses
-    neutrality instead, which the wallpaper fails and the panel passes.
+    **THIS DETECTOR USED TO KEY ON "BRIGHTER THAN THE BAR", AND THE MENU BEING THE BAR'S COLOUR IS THE CHANGE IT
+    HAD TO SURVIVE.** The panel was a Snow-Leopard ramp of its own — 0.985 down to 0.925, 251 to 236 — while the
+    bar was a flat 235, so the panel's top was the brightest neutral thing below the bar and `r >= 245` found it.
+    The bar and the menus are the SAME colour now, so no brightness is left to key on; an EXACT match is what still
+    separates the panel from everything else in the picture. The bar's own rows are excluded by row, and the
+    wallpaper is not neutral at all.
     """
-    return abs(r - g) < 4 and abs(g - b) < 4 and r >= 245
+    return (r, g, b) == PANEL
 
 
 def main():

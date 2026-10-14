@@ -32,7 +32,7 @@ const CGFloat NSMenuPanelPadding = 4.0;
 /* ============================================================================================ *
  * THE DROPDOWN'S PANEL AND ITS SELECTION, WHICH ARE SNOW LEOPARD'S.                             *
  *                                                                                                *
- * A MENU IS A LIGHT ROUNDED PANEL WITH A HAIRLINE BORDER, and the row under the pointer is a      *
+ * A MENU IS A ROUNDED PANEL WITH NO BORDER — ITS COLOUR IS THE MENU BAR'S — and the row under the  *
  * rounded chip INSET inside that panel — not a full-width bar of colour — with its title and its  *
  * shortcut inked to sit on it. What this replaces filled the entire row with a flat colour and   *
  * left the ink dark, which is none of those three things.                                       *
@@ -42,8 +42,6 @@ const CGFloat NSMenuPanelPadding = 4.0;
  * enough to carry dark ink is exactly what that accent is. So the STRUCTURE stays Snow Leopard's — a rounded     *
  * chip inset inside the panel, with the title and its shortcut inked to match — and the COLOUR is the design's.  *
  * ============================================================================================ */
-#define APPKIT_MENU_PANEL_TOP        0.985
-#define APPKIT_MENU_PANEL_BOTTOM     0.925
 #define APPKIT_MENU_PANEL_RADIUS     4.0
 #define APPKIT_MENU_HIGHLIGHT_INSET  2.0
 #define APPKIT_MENU_HIGHLIGHT_RADIUS 3.0
@@ -475,7 +473,7 @@ static void apk_fill_vertical_gradient(NSRect rect, CGFloat radius,
 	 * meant to be one thing. MEASURED before this: the server's strip at 216,216,216 and this panel at 240,240,240.
 	 * A DROPDOWN still paints its own, because a dropdown is a panel with nothing behind it.
 	 *
-	 * **AND IT IS AGORA'S PANEL: ROUNDED, BARELY GRADED, AND WITH NO BORDER AT ALL.** A menu is a flat sheet of the
+	 * **AND IT IS AGORA'S PANEL: ROUNDED, ONE FLAT COLOUR, AND WITH NO BORDER AT ALL.** A menu is a flat sheet of the
 	 * panel's own colour; a hairline around it is a frame, and the panel's own rounded shade is already doing that
 	 * job without one.
 	 *
@@ -483,11 +481,17 @@ static void apk_fill_vertical_gradient(NSRect rect, CGFloat radius,
 	 * pixel so the one-pixel border falls INSIDE the surface rather than half off it" was the sentence, and a panel
 	 * with nothing to keep inside it is the surface itself. */
 	if (!_horizontal) {
-		NSRect panel = bounds;
+		/* **THE PANEL IS THE MENU BAR'S OWN COLOUR, WHICH IS THE SERVER'S — see `+[NSWindow cg_menuBarColor]`.**
+		 * It used to be a Snow-Leopard ramp of this file's own (0.985 down to 0.925), which made a menu LIGHTER
+		 * at its top than the bar it hung from: MEASURED, the strip at 235 and the panel's first row at 251. A
+		 * menu is part of the bar it comes out of, so it is the same colour as it — by CONSTRUCTION rather than
+		 * by a second guess. */
+		NSBezierPath *shape = [NSBezierPath bezierPathWithRoundedRect:bounds
+								     xRadius:APPKIT_MENU_PANEL_RADIUS
+								      yRadius:APPKIT_MENU_PANEL_RADIUS];
 
-		apk_fill_vertical_gradient(panel, APPKIT_MENU_PANEL_RADIUS,
-					   APPKIT_MENU_PANEL_TOP, APPKIT_MENU_PANEL_TOP, APPKIT_MENU_PANEL_TOP,
-					   APPKIT_MENU_PANEL_BOTTOM, APPKIT_MENU_PANEL_BOTTOM, APPKIT_MENU_PANEL_BOTTOM);
+		[[NSWindow cg_menuBarColor] setFill];
+		[shape fill];
 	}
 
 	for (i = 0; i < count; i++) {
