@@ -102,9 +102,10 @@ the compositor is really gone.
   this client has the keyboard, hidden when it does not, and shown again — a window ordered out is not
   destroyed.
 - **The window chrome, when a theme provides it** (`ctest`): an XFWM theme's `.xpm` files become the four
-  buttons, at the theme's own size — the strip takes the theme's height, each state (`active`/`inactive`/
-  `prelight`/`pressed`) is selected by the window's key state and the pointer, and a button's transparent
-  pixel is at its TOP. It runs against `tests/fixtures/chrome`, Agora's own MIT fixture.
+  buttons AND the title bar they sit on — corners at each end, title pieces tiled between — at the theme's own
+  size, with each state (`active`/`inactive`/`prelight`/`pressed`) selected by the window's key state and the
+  pointer, and a button's transparent pixel at its TOP. It runs against `tests/fixtures/chrome`, Agora's own MIT
+  fixture.
 - **`ctest`: 18 of 18 passed** (the keyboard and the seam, the AppKit and its input path, the controls and their
   metrics, the tracking engine, the text path, the chrome, the chrome theme, the menus and activation).
 
@@ -171,6 +172,16 @@ it), or drop one at `~/.local/share/agora/chrome/xfwm4`. The buttons are then `c
 offers — in the four states XFWM ships, `active`, `inactive`, `prelight` and `pressed`. They are drawn at their
 OWN size: the strip grows to the theme's height and a 24x26 button IS 24x26 pixels. That is what "1:1" means,
 and it is why `+contentRectForFrameRect:styleMask:` is a function of the theme rather than of a constant.
+
+**AND THE BAR THE BUTTONS SIT ON IS THE THEME'S TOO.** XFWM composes a title bar from a corner at each end
+(`top-left` / `top-right`) and a strip of `title-1`…`title-5` pieces tiled between them, and those files are the
+ground the buttons were drawn against — so they are read as well, and a theme's buttons no longer sit on this
+tier's flat grey. A theme missing any of them keeps the frame colour for that part, and a process with no theme at
+all keeps the marks `NSWindow` draws.
+
+**`tests/run-controls.sh` IS HOW TO LOOK AT A THEME WHILE CHANGING IT.** It opens the controls demonstration in a
+nested Agora compositor — an ordinary X window that grabs nothing, unlike a nested `gnome-shell` — with the tree's
+own `themes/` as the demonstration's default, and prints which theme resolved and its strip height.
 
 **A THEME IS NOT PART OF THIS LIBRARY AND MUST NOT BE.** It is somebody else's work under somebody else's
 licence — the one this was built against is GPL — and reading it from disk is not linking it, so Agora's MIT is
