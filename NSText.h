@@ -113,11 +113,12 @@ typedef NSInteger NSWritingDirection;
 	 * so it is REMEMBERED here rather than recomputed from the selection — see `-mouseDown:` for what recomputing
 	 * it costs, which is a drag that works in one direction only. */
 	NSUInteger _dragAnchor;
-	/* **AND HOW FAR THE FIELD HAS SCROLLED ITSELF, BECAUSE THE DRAWING LAYER CANNOT MOVE IT.** A field whose text
-	 * outruns its frame has to move that text so the caret stays in view, and the offset a clip view scrolls by is a
-	 * non-zero BOUNDS ORIGIN — which the drawing layer does not render (`fn_draw_view` refuses one by name and
-	 * `-displayRect:` ignores one). So the offset is kept here and subtracted from the three things this class draws.
-	 * ZERO WHENEVER THE TEXT FITS, because `-scrollRangeToVisible:` clamps it there. */
+	/* **AND HOW FAR THE FIELD HAS SCROLLED ITSELF.** A field whose text outruns its frame has to move that text so
+	 * the caret stays in view, and a SINGLE-LINE field does it by carrying its own horizontal origin — the text, the
+	 * selection and the caret are all drawn at `x - _originX` (see `-fn_viewXForIndex:`) and a click puts it back.
+	 * ZERO WHENEVER THE TEXT FITS, because `-scrollRangeToVisible:` clamps it there. (Moving this to an enclosing
+	 * clip view is a later slice: the drawing layer renders a bounds offset now, but this view is a FIELD rather than
+	 * a document, and where a single line's origin lives is a change worth making on its own.) */
 	CGFloat _originX;
 }
 
@@ -139,12 +140,10 @@ typedef NSInteger NSWritingDirection;
 - (void)setSelectedRange:(NSRange)range;
 - (void)selectAll:(nullable id)sender;
 
-/* **AND THE DOOR THAT KEEPS THE CARET IN VIEW.** Apple scrolls the ENCLOSING SCROLL VIEW; the class exists now, but
- * the drawing layer does not render the offset a clip view scrolls by, so what moves here is still the field's own
- * text — the implementation says exactly what that is and is not the same as, and what becomes of this arithmetic
- * when the drawing layer renders a bounds offset, which is the one piece of the scrolling slice still owed. It is
- * called by every edit and every caret move rather than by a caller alone, which is what makes typing past the right
- * edge scroll without anybody asking. */
+/* **AND THE DOOR THAT KEEPS THE CARET IN VIEW.** Apple scrolls the ENCLOSING SCROLL VIEW; this FIELD is not a
+ * document, so what moves here is its own text — the implementation says exactly what that is and is not the same as,
+ * and moving it to a clip view is a later slice. It is called by every edit and every caret move rather than by a
+ * caller alone, which is what makes typing past the right edge scroll without anybody asking. */
 - (void)scrollRangeToVisible:(NSRange)range;
 
 /* THE FACE. `-font` and `-alignment` are the two a plain-text view has; the ink is the window's text colour, which is

@@ -45,21 +45,33 @@ static BOOL fn_same_y_direction(NSView *v)
 	return [v isFlipped] == [s isFlipped];
 }
 
+/* **THE BOUNDS ORIGIN IS PART OF THE CONVERSION, AND IT IS THE PART A SCROLL NEEDS.** `-bounds`.origin is the point
+ * of the view's own coordinates that sits at its frame's origin, so a point given in the view's coordinates is
+ * shifted by it before the frame places it; the two functions below are exact inverses and the shift is what makes
+ * that true. It was missing while every bounds here was zero, and a scrolled clip view is exactly the caller that
+ * makes it matter: without it a click on scrolled content lands where the content USED to be. */
 static NSPoint fn_to_super(NSPoint p, NSView *v)
 {
 	NSRect f = [v frame];
+	NSRect b = [v bounds];
 	BOOL same = fn_same_y_direction(v);
+	CGFloat x = p.x - b.origin.x;
+	CGFloat y = p.y - b.origin.y;
 
-	return NSMakePoint(f.origin.x + p.x, f.origin.y + (same ? p.y : f.size.height - p.y));
+	return NSMakePoint(f.origin.x + x, f.origin.y + (same ? y : f.size.height - y));
 }
 
 static NSPoint fn_from_super(NSPoint p, NSView *v)
 {
 	NSRect f = [v frame];
+	NSRect b = [v bounds];
 	BOOL same = fn_same_y_direction(v);
 	CGFloat y = p.y - f.origin.y;
 
-	return NSMakePoint(p.x - f.origin.x, same ? y : f.size.height - y);
+	if (!same) {
+		y = f.size.height - y;
+	}
+	return NSMakePoint(p.x - f.origin.x + b.origin.x, y + b.origin.y);
 }
 
 /* THE ROOT VIEW STANDS IN FOR "THE WINDOW'S COORDINATE SYSTEM", which is the one place this slice has to
@@ -1538,9 +1550,10 @@ NSString *NSDefinitionPresentationTypeOverlay = @"Overlay";
  * load-bearing, measured in NSImage's canvas: SCALE FIRST, THEN TRANSLATE, because a translate applied
  * after a scale is not itself mirrored.
  *
- * A NON-ZERO BOUNDS ORIGIN IS REFUSED BY NAME, and it is the one thing this draw does not model: a
- * bounds origin that is not zero is a scroll offset, which C8.14's header already lists as not modelled,
- * and offsetting it here would be a second, silently different answer to the same question. */
+ * A NON-ZERO BOUNDS ORIGIN IS APPLIED, NOT REFUSED. It used to be the one thing this draw would not
+ * model — a scroll offset, refused by name — and that is exactly what a clip view moves: because the
+ * refusal covered the WHOLE view, a scrolled clip view drew NEITHER itself nor its document, so the
+ * scroll view's arithmetic had no picture at all. The offset is one translate, further down. */
 static void fn_draw_view(NSView *v, CGContextRef cg, NSRect dirty)
 {
 	NSRect f = [v frame];
@@ -1550,12 +1563,6 @@ static void fn_draw_view(NSView *v, CGContextRef cg, NSRect dirty)
 	NSArray *subs;
 	NSUInteger i;
 
-	if (b.origin.x != 0.0 || b.origin.y != 0.0) {
-		fprintf(stderr, "APPKIT-REFUSE: -cacheDisplayInRect: will not draw a view whose BOUNDS ORIGIN "
-				"is not zero (%g, %g) — that is a scroll offset, and this layer does not model "
-				"one\n", (double)b.origin.x, (double)b.origin.y);
-		return;
-	}
 	CGContextSaveGState(cg);
 	/* ENTER THE VIEW'S RECTANGLE IN THE PARENT'S SYSTEM, then its own.
 	 *
@@ -1579,6 +1586,11 @@ static void fn_draw_view(NSView *v, CGContextRef cg, NSRect dirty)
 	} else {
 		CGContextTranslateCTM(cg, f.origin.x, f.origin.y);
 	}
+	/* **AND THE VIEW'S OWN BOUNDS ORIGIN, WHICH IS WHERE A SCROLL LIVES.** The translate above put the frame's
+	 * origin at (0, 0); the bounds origin is the point of the view's own coordinates that belongs THERE, so the
+	 * view's coordinates are shifted back by it — after which `b` is the view's rectangle in its own coordinates
+	 * and the clip below is the frame region, as it should be. */
+	CGContextTranslateCTM(cg, -b.origin.x, -b.origin.y);
 	/* THE VIEW'S OWN CLIP, so a subclass cannot draw outside itself. */
 	CGContextClipToRect(cg, b);
 	[v drawRect:dirty];
@@ -1734,6 +1746,15 @@ const CGFloat NSFullScreenModeWindowLevel = 100.0;
 	if (_hidden) {
 		return;
 	}
+	/* **THE VIEW'S OWN BOUNDS ORIGIN, WHICH IS WHERE A SCROLL LIVES.** The parent has already put this view's
+	 * frame origin at user (0, 0); `_bounds`.origin is the point of THIS view's coordinates that belongs there,
+	 * so the coordinates are shifted back by it before anything is drawn — the view's own `-drawRect:` and every
+	 * child frame below are both written in that shifted space. This is the one line that makes a scrolled clip
+	 * view move on the glass, and it was missing: the arithmetic scrolled and the tree drew where it always had. */
+	if (cg != NULL) {
+		CGContextSaveGState(cg);
+		CGContextTranslateCTM(cg, -_bounds.origin.x, -_bounds.origin.y);
+	}
 	if (NSIntersectsRect(rect, _bounds)) {
 		[self drawRect:rect];
 	}
@@ -1762,13 +1783,20 @@ const CGFloat NSFullScreenModeWindowLevel = 100.0;
 			 * the one a live window draws through. MEASURED: a text view whose string was wider than its frame drew
 			 * the overflow straight across its neighbours, because nothing between `-drawRect:` and the surface
 			 * said stop. IT BELONGS IN BOTH PATHS because they draw the same tree: a rule that holds in one of them
-			 * is a rule a caller cannot rely on, and the two would drift the moment either was touched. */
-			CGContextClipToRect(cg, [c bounds]);
+			 * is a rule a caller cannot rely on, and the two would drift the moment either was touched.
+			 *
+			 * AND IT IS THE CHILD'S FRAME REGION AND NOT ITS BOUNDS RECT, because the child's OWN bounds origin is
+			 * applied inside its own `-displayRect:` a moment from now. Clipping to `[c bounds]` was correct only
+			 * while that origin was zero; for a scrolled child it would clip a region the child is not drawn in. */
+			CGContextClipToRect(cg, NSMakeRect(0.0, 0.0, cf.size.width, cf.size.height));
 		}
 		[c displayRect:[self convertRect:rect toView:c]];
 		if (cg != NULL) {
 			CGContextRestoreGState(cg);
 		}
+	}
+	if (cg != NULL) {
+		CGContextRestoreGState(cg);
 	}
 }
 

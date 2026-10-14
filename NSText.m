@@ -229,17 +229,16 @@ static void fn_announce(NSText *text, NSString *name, SEL delegateSelector)
  * THE SCROLLING, WHICH THIS FIELD DOES TO ITSELF                                             *
  * ============================================================================================ */
 
-/* **A SINGLE-LINE FIELD SCROLLS ITS OWN TEXT, BECAUSE THE DRAWING LAYER CANNOT MOVE IT FOR THEM.** Apple's
- * `NSText` lives inside an `NSScrollView`/`NSClipView` pair and `-scrollRangeToVisible:` moves THAT; a clip view
- * scrolls by moving its BOUNDS ORIGIN, and this tier's drawing layer REFUSES a non-zero bounds origin BY NAME
- * (`fn_draw_view`: "that is a scroll offset, and this layer does not model one"). So what one line of text can
- * honestly do is carry its own horizontal origin — the text, the selection and the caret are all drawn at
- * `x - _originX` (see `-fn_viewXForIndex:`) and a click puts it back — and that is what this door sets.
+/* **A SINGLE-LINE FIELD SCROLLS ITS OWN TEXT, BECAUSE IT IS A FIELD AND NOT A DOCUMENT.** Apple's `NSText` lives
+ * inside an `NSScrollView`/`NSClipView` pair and `-scrollRangeToVisible:` moves THAT; this tier's `NSText` is the
+ * single-line editable base under a control, so what it does is carry its own horizontal origin — the text, the
+ * selection and the caret are all drawn at `x - _originX` (see `-fn_viewXForIndex:`) and a click puts it back — and
+ * that is what this door sets. (The drawing layer renders a non-zero bounds origin now, so a clip view scrolls
+ * visibly; moving THIS view's scrolling onto an enclosing clip view is a later slice, and a change worth making on
+ * its own.)
  *
  * WHAT IT IS NOT: it moves nothing outside this view, so a caller expecting a scroll view to have moved has not been
- * given one — the scroll view class exists now, but `-displayRect:` ignores a bounds origin and `fn_draw_view`
- * refuses one, so moving this view's clip view would move nothing on the glass. WHEN THE DRAWING LAYER RENDERS AN
- * OFFSET this becomes the clip view's question and the arithmetic below becomes a
+ * given one. WHEN THIS BECOMES THE CLIP VIEW'S QUESTION the arithmetic below becomes a
  * `-scrollToPoint:` on whatever ancestor owns the offset — which is why the offset has a NAME here rather than being
  * folded into each of the four draws.
  *

@@ -29,6 +29,10 @@
 #import <AppKit/NSScroller.h>
 #import <AppKit/NSScrollerCell.h>
 #import <AppKit/NSView.h>
+#import <AppKit/NSColor.h>
+#import <AppKit/NSBezierPath.h>
+#import <AppKit/NSBitmapImageRep.h>
+#import <AppKit/NSGraphicsContext.h>
 
 #include <math.h>
 #include <stdio.h>
@@ -75,6 +79,39 @@ static void aim_scroller(NSScroller *sc, NSPoint press, CGFloat value)
 
 	[cell startTrackingAt:press inView:sc];
 	[sc setFloatValue:value knobProportion:[sc knobProportion]];
+}
+
+/* A DOCUMENT THAT MARKS ONE PLACE IN ITS OWN COORDINATES, so a scroll can be read as the mark MOVING. It is flipped
+ * to match the clip view it goes into, which keeps the mark's arithmetic out of the flip's way. */
+@interface AGScrollMarker : NSView
+@end
+
+@implementation AGScrollMarker
+- (BOOL)isFlipped
+{
+	return YES;
+}
+- (void)drawRect:(NSRect)r
+{
+	(void)r;
+	[[NSColor redColor] setFill];
+	[[NSBezierPath bezierPathWithRect:NSMakeRect(0.0, 100.0, 185.0, 20.0)] fill];
+}
+@end
+
+static NSBitmapImageRep *new_185(void)
+{
+	return [[NSBitmapImageRep alloc] initWithBitmapDataPlanes:NULL pixelsWide:185 pixelsHigh:185
+		bitsPerSample:8 samplesPerPixel:4 hasAlpha:YES isPlanar:NO
+		colorSpaceName:NSCalibratedRGBColorSpace bytesPerRow:185 * 4 bitsPerPixel:32];
+}
+
+/* A RED PIXEL at a DRAWING y: the bitmap counts rows from the top and the drawing from its own origin. */
+static int red_at(NSBitmapImageRep *rep, int x, int drawing_y)
+{
+	NSColor *c = [rep colorAtX:x y:(184 - drawing_y)];
+
+	return c != nil && [c redComponent] > 0.8 && [c greenComponent] < 0.25 && [c blueComponent] < 0.25;
 }
 
 int main(void)
@@ -195,6 +232,35 @@ int main(void)
 			      "`-enclosingScrollView` finds the scroll view from the document inside it");
 			check([clip enclosingScrollView] == sv, "and from the clip view too");
 			[doc release];
+		}
+
+		/* 8. **AND THE WHOLE SLICE TOGETHER: A SCROLLED DOCUMENT IS DRAWN OFFSET.** The mark is at the document's
+		 * own y 100..120; with the clip view at the top it draws at 100, and after a scroll of 100 the SAME mark draws
+		 * at 0 — which is the one thing the arithmetic alone could not prove. */
+		{
+			AGScrollMarker *mark = [[AGScrollMarker alloc] initWithFrame:NSMakeRect(0.0, 0.0, 185.0, 400.0)];
+			NSBitmapImageRep *rep = new_185();
+
+			[sv setDocumentView:mark];
+			[clip scrollToPoint:NSMakePoint(0.0, 0.0)];
+			[NSGraphicsContext setCurrentContext:[NSGraphicsContext graphicsContextWithBitmapImageRep:rep]];
+			[[NSColor whiteColor] setFill];
+			[[NSBezierPath bezierPathWithRect:NSMakeRect(0.0, 0.0, 185.0, 185.0)] fill];
+			[clip displayRect:[clip bounds]];
+			check(red_at(rep, 90, 110),
+			      "with the clip view at the top the document's mark is drawn where the document put it");
+			[rep release];
+
+			rep = new_185();
+			[clip scrollToPoint:NSMakePoint(0.0, 100.0)];
+			[NSGraphicsContext setCurrentContext:[NSGraphicsContext graphicsContextWithBitmapImageRep:rep]];
+			[[NSColor whiteColor] setFill];
+			[[NSBezierPath bezierPathWithRect:NSMakeRect(0.0, 0.0, 185.0, 185.0)] fill];
+			[clip displayRect:[clip bounds]];
+			check(red_at(rep, 90, 10), "and after scrolling 100 the SAME mark is drawn 100 points further up");
+			check(!red_at(rep, 90, 110), "and not where it was, which is the offset being drawn and not just computed");
+			[rep release];
+			[mark release];
 		}
 
 		/* AND TAKING A SCROLLER AWAY GIVES THE CONTENT ITS ROOM BACK. */

@@ -151,6 +151,14 @@ target_link_libraries(scroll_view PRIVATE App m)
 add_test(NAME appkit-scroll-view COMMAND scroll_view)
 set_tests_properties(appkit-scroll-view PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
 
+# **AND THE ONE THING A SCROLL ACTUALLY MOVES: A NON-ZERO `bounds` ORIGIN.** It is read in the conversions, in the live
+# `-displayRect:`, and in the offscreen `fn_draw_view` that used to refuse it — so a clip view scrolled correctly and
+# nothing moved. Offscreen, into a bitmap rep.
+add_executable(view_offset view_offset.m)
+target_link_libraries(view_offset PRIVATE App m)
+add_test(NAME appkit-view-offset COMMAND view_offset)
+set_tests_properties(appkit-view-offset PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
+
 # **AND THE DISPLAY PATH.** The ink tests are all offscreen; this one puts a menu's window on a headless
 # compositor and reads the COMPOSITOR'S OWN FRAMEBUFFER back, which is the only place the present can be seen.
 # It skips when there is no window server, so a component's tests still do not need a sibling's build.
