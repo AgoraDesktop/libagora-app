@@ -24,8 +24,12 @@
 #import <AppKit/NSCell.h>
 #import <AppKit/NSMenu.h>
 #import <AppKit/NSMenuItem.h>
+#import <AppKit/AGChromeTheme.h>	/* the chrome's theme, which this demonstration loads by DEFAULT */
+#import <AppKit/NSEvent.h>
 #import <Foundation/Foundation.h>
 #include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 
 /* **THE TARGET BOTH HALVES POINT AT.** A menu item's action, a button's action and a validator all end here, which
  * is what makes the checkbox and the View menu one piece of state rather than two that look alike. */
@@ -127,8 +131,27 @@ static NSMenuItem *add_menu(NSMenu *bar, NSString *title, NSArray *itemTitles, i
 	return titleItem;
 }
 
-int main(void)
+int main(int argc, char **argv)
 {
+	int seconds = 0;
+	int i;
+
+	/* **THE CHROME'S THEME IS THIS DEMONSTRATION'S DEFAULT, WHICH IS WHAT MAKES IT THE THING TO ITERATE ON.** The
+	 * library reads a theme only when `AGORA_CHROME_THEME` names one — that is the whole of the mechanism, and it is
+	 * the right default for a LIBRARY, which must not go looking for other people's art. A DEMONSTRATION is the other
+	 * case: the chrome is the thing being looked at, so this points the variable at the tree's own `themes/` when a
+	 * caller has not, and an explicit `AGORA_CHROME_THEME` still wins. A checkout with no theme there resolves none and
+	 * falls back to the marks `NSWindow` draws, which is why the default can be unconditional. */
+	for (i = 1; i < argc; i++) {
+		if (strcmp(argv[i], "--seconds") == 0 && i + 1 < argc) {
+			seconds = atoi(argv[++i]);
+		}
+	}
+#ifdef AGORA_CHROME_DEFAULT_THEME
+	if (getenv("AGORA_CHROME_THEME") == NULL) {
+		setenv("AGORA_CHROME_THEME", AGORA_CHROME_DEFAULT_THEME, 1);
+	}
+#endif
 	@autoreleasepool {
 		NSApplication *app = [NSApplication sharedApplication];
 		AGControlsController *controller = [[AGControlsController alloc] init];
@@ -246,7 +269,11 @@ int main(void)
 		add_menu(bar, @"Help", [NSArray arrayWithObjects:@"Agora Help", nil], controller, @selector(noop:));
 		[app setMainMenu:bar];
 
-		[w orderFront:nil];
+		/* **AND IT IS MADE KEY, WHICH IS WHAT A FRONTMOST WINDOW IS.** A theme's four states are the point of
+		 * looking at it, and `-orderFront:` alone leaves the window inactive — so the ACTIVE art a theme ships for a
+		 * focused window would never be on screen, and the thing being iterated on would be the grey half of it. On
+		 * a real desktop the compositor's keyboard enter makes the APPLICATION active; the WINDOW is made key here. */
+		[w makeKeyAndOrderFront:nil];
 		/* **AND THE TEXT VIEW TAKES THE KEYBOARD.** A window sends KEY events to its FIRST RESPONDER and nowhere
 		 * else, so a field that is not the first responder is a field nobody can type into — which is what this line
 		 * is for, rather than a decoration. */
@@ -262,7 +289,34 @@ int main(void)
 		 * into — and printing this is cheaper than guessing when it is not. */
 		fprintf(stderr, "controls: first responder = %s\n",
 			([w firstResponder] == field) ? "the text field" : "NOT the text field");
-		[app run];
+		/* **AND WHICH CHROME THIS WINDOW WILL WEAR**, printed for the same reason the geometry is: iterating on a
+		 * theme means knowing whether the one you pointed at is the one that resolved. */
+		{
+			AGChromeTheme *theme = [AGChromeTheme sharedTheme];
+
+			if (theme != nil) {
+				fprintf(stderr, "controls: chrome theme = %s (%g-point strip)\n",
+					[[theme directory] UTF8String], (double)[theme titleBarHeight]);
+			} else {
+				fprintf(stderr, "controls: no chrome theme — drawing Agora's own marks\n");
+			}
+		}
+		if (seconds > 0) {
+			NSDate *deadline = [NSDate dateWithTimeIntervalSinceNow:(NSTimeInterval)seconds];
+
+			while ([deadline timeIntervalSinceNow] > 0.0) {
+				NSEvent *e = [app nextEventMatchingMask:NSAnyEventMask
+					untilDate:[NSDate dateWithTimeIntervalSinceNow:0.05]
+					inMode:nil dequeue:YES];
+
+				if (e != nil) {
+					[app sendEvent:e];
+				}
+				[app updateWindows];
+			}
+		} else {
+			[app run];
+		}
 	}
 	return 0;
 }

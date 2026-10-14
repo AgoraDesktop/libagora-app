@@ -63,6 +63,11 @@ target_link_libraries(appkit_menu_draw PRIVATE App)
 # rather than an assertion. It is what found the subview-placement defect in `NSView -displayRect:`.
 add_executable(appkit_controls_draw appkit_controls_draw.m)
 target_link_libraries(appkit_controls_draw PRIVATE App)
+# **THE DEMONSTRATION DEFAULTS TO THE TREE'S OWN THEME.** It is the thing to iterate on, so it points
+# `AGORA_CHROME_THEME` at `../themes` when a caller has not — the library's own default stays "no theme", because a
+# library must not go looking for other people's art. The directory is git-ignored and may be absent.
+target_compile_definitions(appkit_controls_draw PRIVATE
+  AGORA_CHROME_DEFAULT_THEME="${CMAKE_CURRENT_SOURCE_DIR}/../themes")
 
 add_executable(menu_view_ink menu_view_ink.m)
 target_link_libraries(menu_view_ink PRIVATE App)
