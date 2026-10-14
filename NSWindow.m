@@ -81,6 +81,12 @@
 /* THE SEAM'S DOORS AND THE STATE THEY KEEP, declared here for the same reason. */
 - (void)cg_handleSeamEvent:(const AGEvent *)event;
 - (void)cg_drawFrame;
+/* **WHAT THE COMPOSITOR'S FRAME CALLBACK ASKS FOR — AND WHY IT IS NOT JUST `-cg_drawFrame`.** The callback says
+ * the last frame was taken; it is an INVITATION to draw again, not an instruction. A window with nothing new to
+ * show must DECLINE, or the client draws, commits, is asked again, and drives the whole desktop in a busy loop:
+ * MEASURED at 517 composites a second, which is lag a person feels. This door declines when the window is not
+ * stale. */
+- (void)cg_frameCallback;
 - (BOOL)cg_mouseButtonDown;
 - (BOOL)cg_ensureWindow;
 /* **THE DOOR A STATUS ITEM COMES IN BY, and it is here rather than in `NSStatusItem.m` because the seam is this
@@ -328,7 +334,9 @@ static void fn_ag_frame(void *context, uint32_t time_ms)
 	NSWindow *w = context;
 
 	(void)time_ms;
-	[w cg_drawFrame];
+	/* NOT `-cg_drawFrame`: a frame callback is an invitation, and a window with nothing new to draw must
+	 * decline it or the desktop becomes a busy loop. See `-cg_frameCallback`. */
+	[w cg_frameCallback];
 }
 
 @implementation NSWindow
@@ -1268,6 +1276,10 @@ static CGFloat fn_clamp_axis(CGFloat v, CGFloat lo, CGFloat hi)
 	if (![self cg_ensureWindow]) {
 		return;
 	}
+	/* **MARKED STALE BEFORE IT IS SHOWN.** Showing is what asks for the first frame, and the compositor's frame
+	 * callback now DECLINES to draw a window that is not stale — so the show path has to say there IS something
+	 * to draw, or a freshly ordered-in window would never be painted at all. */
+	[self setNeedsDisplay:YES];
 	AGWindowShow(_agwindow);
 	_visible = YES;
 	/* A WINDOW THAT IS ON THE SCREEN IS ONE THE RUN LOOP MUST DRAIN, so it joins the registry here
@@ -2157,6 +2169,19 @@ static CGFloat fn_clamp_axis(CGFloat v, CGFloat lo, CGFloat hi)
 	_viewsNeedDisplay = NO;
 }
 
+/* **THE FRAME CALLBACK, WHICH DRAWS ONLY WHEN THERE IS SOMETHING TO DRAW.** The compositor saying "the last frame
+ * is taken" is an invitation, and this tier used to treat it as an instruction: every window redrew and committed
+ * on every callback, every commit asked for the next callback, and the whole desktop ran as fast as the output
+ * could be copied — MEASURED at 517 composites a second, which is the lag a person feels as a click that lands
+ * late. A window that is NOT stale has nothing to say, so it says nothing and the loop stops; it starts again the
+ * moment anything marks it stale and a draw is due. */
+- (void)cg_frameCallback
+{
+	if (_viewsNeedDisplay) {
+		[self cg_drawFrame];
+	}
+}
+
 /* `-display` IS THE COCOA DOOR and the frame handler is the compositor's, but both end in the same draw: a
  * caller asking a window to display and a compositor asking for a frame want the same pixels. */
 - (void)display
@@ -2562,6 +2587,7 @@ static NSWindow *fn_main_window(NSWindow *except)
 	/* **ORDERING IS THE APPLICATION'S ON THE MAC** — `-orderFront:` raises its own window — so on a compositor
 	 * that can be told, it is told. Where it cannot, this door shows the window and changes THIS OBJECT's state,
 	 * which is the deviation the header records. */
+	[self setNeedsDisplay:YES];
 	AGWindowShow(_agwindow);
 	AGWindowRaise(_agwindow);
 	_visible = YES;
@@ -2574,6 +2600,7 @@ static NSWindow *fn_main_window(NSWindow *except)
 		return;
 	}
 	/* NO RAISE: the stacking is the compositor's (see `-orderBack:`). */
+	[self setNeedsDisplay:YES];
 	AGWindowShow(_agwindow);
 	_visible = YES;
 	[[NSApplication sharedApplication] cg_addWindow:self];
@@ -3596,6 +3623,7 @@ NSString *NSWindowDidDeminiaturizeNotification = @"NSWindowDidDeminiaturizeNotif
 		return;
 	}
 	if (_agwindow != NULL) {
+		[self setNeedsDisplay:YES];
 		AGWindowShow(_agwindow);
 	}
 	_miniaturized = NO;

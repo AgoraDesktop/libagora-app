@@ -452,6 +452,11 @@ static double s_last_report;
 		if (e != nil) {
 			[self sendEvent:e];
 		}
+		/* **AND THE STALE WINDOWS ARE PAINTED, WHICH THE FRAME CALLBACK NO LONGER DOES FOR FREE.** A window's
+		 * frame callback now declines to draw unless the window is stale, so SOMETHING has to act on "stale" —
+		 * and this is the pass the AppKit gives it. Without this line a window marked for display outside a menu
+		 * session would wait for a frame callback that is no longer coming. */
+		[self updateWindows];
 		fn_announce(self, NSApplicationDidUpdateNotification, @selector(applicationDidUpdate:));
 		[pool release];
 	}
