@@ -127,6 +127,11 @@ the compositor is really gone.
   and its answer is the size USED, so a refusal is a delegate returning the size it already has; and the minimum
   size is honoured with the untouched edge still a constant while the clamp bites. MEASURED on the live session: a
   60-point drag on the right edge took the content from 420 to 480 and moved the left edge by zero.
+  **AND A RESIZE OWES A REPAINT WHERE A MOVE DOES NOT** — a move changes no surface, while a resize remakes the
+  backing store, so a window not marked stale has no buffer at its new size. MEASURED before that was fixed: a
+  window dragged by its edge DISAPPEARED for the whole drag — a mid-drag capture had the wallpaper where it had
+  been — and came back on the release, because the release was what marked it. The test now holds both halves of
+  that asymmetry: a resize marks the window stale and a move leaves it alone.
 - **`ctest`: 21 of 21 passed** (the keyboard and the seam, the AppKit and its input path, the controls and their
   metrics, what a drag costs, the resize by edge, the tracking engine, the text path, the chrome and what its
   buttons do, the chrome theme, the menus and activation).
