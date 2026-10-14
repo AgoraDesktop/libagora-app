@@ -470,11 +470,21 @@
 			[[NSBezierPath bezierPathWithOvalInRect:NSInsetRect(box, 4.0, 4.0)] fill];
 		}
 	} else {
-		NSBezierPath *square = [NSBezierPath bezierPathWithRect:box];
-		NSBezierPath *edge = [NSBezierPath bezierPathWithRect:NSInsetRect(box, 0.5, 0.5)];
+		/* **AND A SWITCH'S BOX IS ROUNDED LIKE EVERYTHING ELSE'S, AT THE PLATFORM'S ONE RADIUS.** It was a plain
+		 * rectangle, which made it the only control on the desktop whose corners were SQUARE — beside a push
+		 * button's bezel, a radio's ring and a slider's channel, all of which round. THE BORDER KEEPS ITS
+		 * HALF-POINT INSET AND DROPS THE RADIUS BY THE SAME HALF POINT, so the stroke stays CONCENTRIC with the
+		 * face it is drawn on: a radius left at four inside a path inset by half a point bulges away from the
+		 * face's own corner. */
+		NSBezierPath *tile = [NSBezierPath bezierPathWithRoundedRect:box
+								     xRadius:NS_CELL_BEZEL_RADIUS
+								      yRadius:NS_CELL_BEZEL_RADIUS];
+		NSBezierPath *edge = [NSBezierPath bezierPathWithRoundedRect:NSInsetRect(box, 0.5, 0.5)
+								     xRadius:NS_CELL_BEZEL_RADIUS - 0.5
+								      yRadius:NS_CELL_BEZEL_RADIUS - 0.5];
 
 		[fill setFill];
-		[square fill];
+		[tile fill];
 		[[NSColor controlDarkShadowColor] setStroke];
 		[edge setLineWidth:1.0];
 		[edge stroke];

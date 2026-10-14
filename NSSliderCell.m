@@ -39,7 +39,14 @@
 #define NS_SLIDER_KNOB_BREADTH		18.0
 #define NS_SLIDER_TRACK_THICKNESS	4.0
 #define NS_SLIDER_TRACK_INSET		6.0
-#define NS_SLIDER_TRACK_RADIUS		2.0	/* one definition: the track and the accent fill must round alike */
+/* **THE CHANNEL'S CORNERS ARE THE PLATFORM'S CORNERS, AND ITS OWN THICKNESS IS THE ONLY THING THAT CAPS THEM.** It
+ * is `NS_CELL_BEZEL_RADIUS` for the reason the checkbox's box is: a slider's channel and a button's bezel are the
+ * same kind of corner, and a platform whose ONE radius is four should not have a control quietly rounding at two.
+ * `NSBezierPath` clamps a corner PER AXIS to half the rectangle, so a channel four points thick keeps the full four
+ * along its length and takes two across — the end eases over four points instead of two, which is the most a
+ * channel this thin can round and still be the platform's radius. ONE DEFINITION, because the track and the accent
+ * fill that covers part of it must round ALIKE, or the fill's end shows through the track's own curve. */
+#define NS_SLIDER_TRACK_RADIUS		NS_CELL_BEZEL_RADIUS
 
 /* **AND THE SHAPE'S CONSTANTS. THE GRABBER IS A TEARDROP — ROUND AT THE TOP AND NARROW AT THE BOTTOM — AND THE
  * QUESTION THAT DECIDED THE REST OF THEM IS HOW THE SIDES MEET THE NARROW END.**
