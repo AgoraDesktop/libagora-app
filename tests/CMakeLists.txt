@@ -173,3 +173,13 @@ add_executable(window_chrome window_chrome.m)
 target_link_libraries(window_chrome PRIVATE App m)
 add_test(NAME appkit-window-chrome COMMAND window_chrome)
 set_tests_properties(appkit-window-chrome PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
+
+# **AND THE THEME'S OWN READER AND GEOMETRY.** The chrome's buttons can come from an XFWM theme's `.xpm` files
+# instead of the drawn marks, and this runs against `tests/fixtures/chrome` — Agora's OWN MIT fixture, sixteen
+# hand-written XPMs — so the test never depends on the GPL theme that prompted the work. `AGORA_CHROME_THEME` is
+# the door, and it is set here rather than in the test so the search path is exercised the way a program uses it.
+add_executable(chrome_theme chrome_theme.m)
+target_link_libraries(chrome_theme PRIVATE App m)
+add_test(NAME appkit-chrome-theme COMMAND chrome_theme)
+set_tests_properties(appkit-chrome-theme PROPERTIES
+  ENVIRONMENT "${_agora_app_test_env};AGORA_CHROME_THEME=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/chrome")

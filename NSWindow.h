@@ -312,6 +312,11 @@ typedef NSUInteger NSWindowSharingType;
 	 * makes the first walk a movement by definition. */
 	NSPoint _cg_trackingPoint;
 	BOOL _cg_hasTrackingPoint;
+	/* **AND WHICH CHROME BUTTON THE POINTER IS OVER, AND WHICH ONE A PRESS BEGAN ON, OR -1.** The chrome's four
+	 * controls are the WINDOW's — there is no view up there — so their two transient states live here, where the
+	 * drawing and the pointer both read them. */
+	NSInteger _cg_hoverChrome;
+	NSInteger _cg_pressedChrome;
 	NSInteger _cg_windowNumber; /* Apple's window number, assigned when the AGWindow is made; -1 before */
 	BOOL _cg_closeRequested; /* the compositor asked the window to close; acted on in the pump */
 	NSRect _frame;          /* COCOA's coordinates: bottom-left origin */

@@ -36,6 +36,7 @@
  * placement needs `NSScreen`, which is its own row. Each is absent rather than stubbed.
  */
 #include "AGWindowServer.h"
+#import "AGChromeTheme.h"	/* the chrome's control graphics, when an XFWM theme resolves */
 
 #include <math.h>	/* M_PI — the arcs a pill's caps are made of */
 
@@ -115,6 +116,9 @@
  * motion, a mouse event, and the pointer leaving the window. */
 - (void)cg_updateTrackingForPoint:(NSPoint)windowPoint;
 - (void)cg_clearTracking;
+/* **AND WHERE A CHROME BUTTON IS, in WINDOW coordinates.** The painter and the pointer ask the one function, so
+ * a hovered button cannot be a different rectangle from a drawn one. */
+- (NSInteger)cg_chromeButtonAtPoint:(NSPoint)windowPoint;
 @end
 
 /* The engine's doors into an area and into the event it builds: declared in every file that uses them and DEFINED by
@@ -173,6 +177,111 @@ static const CGFloat fn_PILL_WIDTH = 19.5;	/* the toolbar pill, HORIZONTAL: wide
  * strip. It is STILL A PILL because its radius is half its height and not a number of its own, which is the one
  * property the height was never allowed to change. */
 static const CGFloat fn_PILL_HEIGHT = 7.0;
+
+/* ============================================================================================ *
+ * THE CHROME'S THEME, AND WHY THE HEIGHT IS A FUNCTION NOW.                                     *
+ *                                                                                                *
+ * **A WINDOW'S CHROME IS EITHER THE THEME'S OR THIS FILE'S, AND THE HEIGHT DECIDES WHICH.** When   *
+ * an XFWM theme resolves (see `AGChromeTheme`) the strip takes the THEME'S height and its buttons  *
+ * are the theme's bitmaps at their own size — 1:1, no scaling — and when none does, everything     *
+ * below is the marks this file has always drawn at `fn_TITLE_BAR`. The frame-to-content arithmetic  *
+ * is a CLASS method with no window to ask, which is why the theme is a process-wide singleton: one  *
+ * answer for every window in the process, which is what a theme is.                                *
+ *                                                                                                *
+ * WHERE EACH BUTTON IS lives in ONE place, `fn_chrome_layout`, because the painter and the pointer  *
+ * must not be able to disagree about where a button is — a hovered button that is not the drawn one *
+ * is exactly the defect two copies of this arithmetic produces.                                     *
+ * ============================================================================================ */
+static CGFloat fn_title_bar_height(void)
+{
+	CGFloat themed = AGChromeThemeTitleBarHeight();
+
+	return (themed > 0.0) ? themed : fn_TITLE_BAR;
+}
+
+typedef struct {
+	NSRect rects[AGChromeButtonCount];	/* window coordinates: origin at the window's bottom-left */
+	BOOL present[AGChromeButtonCount];
+	CGFloat height;
+	CGFloat leftBlock;			/* how much width the left buttons take, from x = 0 */
+	CGFloat rightBlock;			/* and the menu's, from the right edge */
+} fn_chrome_layout_t;
+
+/* WHICH ABILITIES THE STYLE MASK ASKS FOR, which is Apple's rule and not the theme's: a titled-but-not-closable
+ * window has no close to offer, so it gets no X — or no bitmap either. */
+static BOOL fn_chrome_button_present(NSWindow *w, AGChromeButton button)
+{
+	NSUInteger mask = [w styleMask];
+
+	switch (button) {
+	case AGChromeButtonClose:    return (mask & NSClosableWindowMask) != 0;
+	case AGChromeButtonHide:     return (mask & NSMiniaturizableWindowMask) != 0;
+	case AGChromeButtonMaximize: return (mask & NSResizableWindowMask) != 0;
+	case AGChromeButtonMenu:     return (mask & NSTitledWindowMask) != 0;
+	default:                     return NO;
+	}
+}
+
+static void fn_chrome_layout(NSWindow *w, fn_chrome_layout_t *layout)
+{
+	NSRect content = [w contentRectForFrameRect:[w frame]];
+	AGChromeTheme *theme = [AGChromeTheme sharedTheme];
+	CGFloat width = content.size.width;
+	CGFloat top = content.size.height;	/* the content's top IS the strip's bottom, in window coordinates */
+	int i;
+
+	memset(layout, 0, sizeof *layout);
+	layout->height = fn_title_bar_height();
+	for (i = 0; i < AGChromeButtonCount; i++) {
+		layout->present[i] = fn_chrome_button_present(w, (AGChromeButton)i);
+	}
+
+	if (theme != NULL) {
+		NSSize button = [theme buttonSize];
+		CGFloat offset = [theme buttonOffset];
+		CGFloat spacing = [theme buttonSpacing];
+		CGFloat x = offset;
+		CGFloat y = floor(top + (layout->height - button.height) / 2.0);
+
+		layout->leftBlock = offset;
+		for (i = 0; i < AGChromeButtonCount - 1; i++) {	/* close, hide, maximize: the left block */
+			if (!layout->present[i]) {
+				continue;
+			}
+			layout->rects[i] = NSMakeRect(x, y, button.width, button.height);
+			x += button.width + spacing;
+			layout->leftBlock = x - spacing;
+		}
+		if (layout->present[AGChromeButtonMenu]) {
+			layout->rects[AGChromeButtonMenu] = NSMakeRect(width - offset - button.width, y,
+								       button.width, button.height);
+			layout->rightBlock = offset + button.width;
+		} else {
+			layout->rightBlock = offset;
+		}
+	} else {
+		CGFloat x = fn_CHROME_EDGE;
+		CGFloat y = floor(top + (layout->height - fn_SYMBOL) / 2.0);
+
+		layout->leftBlock = fn_CHROME_EDGE;
+		for (i = 0; i < AGChromeButtonCount - 1; i++) {
+			if (!layout->present[i]) {
+				continue;
+			}
+			layout->rects[i] = NSMakeRect(x, y, fn_SYMBOL, fn_SYMBOL);
+			x += fn_SYMBOL + fn_SYMBOL_GAP;
+			layout->leftBlock = x - fn_SYMBOL_GAP;
+		}
+		if (layout->present[AGChromeButtonMenu]) {
+			layout->rects[AGChromeButtonMenu] = NSMakeRect(width - fn_CHROME_EDGE - fn_PILL_WIDTH,
+								      floor(top + (layout->height - fn_PILL_HEIGHT) / 2.0),
+								      fn_PILL_WIDTH, fn_PILL_HEIGHT);
+			layout->rightBlock = fn_CHROME_EDGE + fn_PILL_WIDTH;
+		} else {
+			layout->rightBlock = fn_CHROME_EDGE;
+		}
+	}
+}
 
 /* ONE CONNECTION FOR THE PROCESS, made on first use and never dropped: a connection to the window server is a
  * resource a window does not own, and one per window would give two windows two event queues and two
@@ -410,9 +519,11 @@ static void fn_ag_frame(void *context, uint32_t time_ms)
 /* THE STYLE MASK'S CHROME, which is the frame-to-content arithmetic and its inverse. Both directions exist
  * because both are asked for, and they are written as one pair so a change to the title-bar height cannot
  * make them disagree. */
+/* **AND THE HEIGHT IS THE THEME'S WHEN ONE RESOLVES**, because 1:1 means the strip is as tall as the theme's own
+ * art; with no theme it is this file's constant, which is where it always was. */
 + (CGFloat)fn_chromeForStyleMask:(NSUInteger)styleMask
 {
-	return (styleMask & NSTitledWindowMask) ? fn_TITLE_BAR : 0.0;
+	return (styleMask & NSTitledWindowMask) ? fn_title_bar_height() : 0.0;
 }
 
 + (NSRect)contentRectForFrameRect:(NSRect)frameRect styleMask:(NSUInteger)styleMask
@@ -457,6 +568,9 @@ static void fn_ag_frame(void *context, uint32_t time_ms)
 	_contentAspectRatio = NSMakeSize(0.0, 0.0);
 	_alphaValue = 1.0;
 	_opaque = YES;
+	/* NO BUTTON IS UNDER THE POINTER AND NONE IS PRESSED, which -1 says: index 0 is a real button. */
+	_cg_hoverChrome = -1;
+	_cg_pressedChrome = -1;
 	/* THE BACKING TYPE IS KEPT, because Apple's `-backingType` reports what the window was MADE with — which
 	 * is the only thing that makes that door checkable rather than a constant. */
 	_backing = bufferingType;
@@ -586,7 +700,7 @@ static NSString *fn_title_that_fits(NSString *title, NSDictionary *attributes, C
  * the strip puts the baseline at the strip's bottom plus half the leftover, MINUS the descent. */
 static CGFloat fn_title_baseline(NSRect content, CGFloat ascent, CGFloat descent)
 {
-	return content.size.height + (fn_TITLE_BAR - (ascent - descent)) / 2.0 - descent;
+	return content.size.height + (fn_title_bar_height() - (ascent - descent)) / 2.0 - descent;
 }
 
 /* ============================================================================================ *
@@ -685,102 +799,115 @@ static void fn_draw_toolbar_pill(CGContextRef c, CGRect box)
 	CGContextDrawPath(c, kCGPathFill);
 }
 
+/* ONE IMAGE INTO ONE RECTANGLE. **NO FLIP IS NEEDED AND THAT IS THIS TREE'S OWN CONVENTION, MEASURED RATHER THAN
+ * ASSUMED**: `CGContextDrawImage`'s sampler reads the source row `(1 - v) * height` for a point at user-space `v`,
+ * so the TOP of the rectangle is the image's FIRST row — which is exactly the row a `CGImage`'s bytes start with,
+ * and exactly what an XPM's first pixel row is. The first version translated and scaled the CTM by hand, on the
+ * assumption every bottom-left context needs it, and drew every button upside down; `tests/chrome_theme.m` asks the
+ * top and the bottom corners precisely so that mistake cannot return. ANTIALIASING IS OFF because a theme's button
+ * is drawn at its OWN size (1:1) and resampling it would soften the pixels the theme's author placed. */
+static void fn_draw_image(CGContextRef c, NSRect rect, CGImageRef image)
+{
+	CGContextSaveGState(c);
+	CGContextSetShouldAntialias(c, false);
+	CGContextDrawImage(c, CGRectMake(rect.origin.x, rect.origin.y, rect.size.width, rect.size.height), image);
+	CGContextRestoreGState(c);
+}
+
+/* **THE STATE A BUTTON IS DRAWN IN, AND ITS PRECEDENCE IS THE POINTER'S.** A press outranks a hover, and both
+ * outrank the window's key state: the pointer's answer is the newer one, and a theme's pressed art exists to say
+ * "this is happening now". A window that is neither key nor under the pointer is the inactive state — the ADJUST
+ * half of the four every XFWM theme ships. */
+static AGChromeButtonState fn_chrome_state(NSWindow *w, NSInteger index)
+{
+	if (w->_cg_pressedChrome == index) {
+		return AGChromeButtonStatePressed;
+	}
+	if (w->_cg_hoverChrome == index) {
+		return AGChromeButtonStatePrelight;
+	}
+	return [w isKeyWindow] ? AGChromeButtonStateActive : AGChromeButtonStateInactive;
+}
+
 static void fn_draw_chrome(CGContextRef c, NSWindow *w, NSRect content)
 {
-	NSUInteger mask = [w styleMask];
-	CGFloat block = 3.0 * fn_SYMBOL + 2.0 * fn_SYMBOL_GAP;	/* the three symbols and the air between them */
-	/* **AND THE BOXES SIT ON WHOLE POINTS, WHICH IS WHAT MAKES AN ODD-WIDTH STROKE CRISP.** The centre of an 11-point
-	 * box starting at a whole point and the centre of one starting at a half point are both integral, and only ONE of
-	 * them puts a 3-point stroke on the pixel grid: a stroke is centred on its path, so a centre at a pixel BOUNDARY
-	 * covers half of one row, all of the next two, and half of the one after — MEASURED on the desktop, that is a
-	 * minus FOUR rows thick with both edges blended (`.::::` over `+########:` in the capture), which is the "fuzzy
-	 * and messy" this fixes. Snapping the origin puts the stroke's centre at 300.5, where three points cover exactly
-	 * three rows. It is the same fencepost the pill's height has, and it is resolved the same way: `floor`, because a
-	 * half-pixel box has no crisp centred answer. */
-	CGFloat y = floor(content.size.height + (fn_TITLE_BAR - fn_SYMBOL) / 2.0);
-	CGFloat x = fn_CHROME_EDGE;
+	fn_chrome_layout_t layout;
+	AGChromeTheme *theme = [AGChromeTheme sharedTheme];
+	CGFloat top = content.size.height;
 	int i;
 
-	/* THE STRIP FIRST, in the frame colour — the fill that had no author before. */
+	fn_chrome_layout(w, &layout);
+
+	/* THE STRIP FIRST, in the frame colour — the fill that had no author before. A theme's buttons carry their own
+	 * backgrounds; the strip between them is the window's, which is the one part of the bar a button set does not
+	 * describe. */
 	CGContextSetFillColorWithColor(c, [[NSColor windowFrameColor] CGColor]);
-	CGContextFillRect(c, CGRectMake(0.0, content.size.height, content.size.width, fn_TITLE_BAR));
+	CGContextFillRect(c, CGRectMake(0.0, top, content.size.width, layout.height));
 
-	/* **THE X, THE MINUS AND THE PLUS, EACH DRAWN ONLY IF THE STYLE MASK ASKS FOR IT** — close for the closable bit,
-	 * miniaturize for the miniaturizable one and zoom for the resizable one, in the order a window manager puts them.
-	 * THE MASK RULE IS APPLE'S, whose scripting reference defines the abilities as the buttons: "returns YES if the
-	 * receiver can be miniaturized (has a minimize button)", "is zoomable (has a zoom button)". The site inherited it
-	 * with the circles and it is kept, because it is about WHICH abilities exist rather than about how they are drawn:
-	 * a titled-but-not-closable window has no close to offer, so it gets no X. The x advances only for a symbol that
-	 * is actually drawn, so a window with one bit gets one symbol at the left edge.
-	 *
-	 * ONE INK FOR ALL THREE. The circles were red, yellow and green because they were three SENTENCES about state;
-	 * these are three WORDS in a title bar, and a title bar reads as one surface with one ink on it. `+windowFrameTextColor`
-	 * is the ink the title beside them is already drawn in, so the strip has one foreground and the symbols are part
-	 * of it rather than decorations that happen to sit there. */
-	/* **AND THE MARKS ARE ANTIALIASED, WHICH IS THE CONTEXT'S OWN DEFAULT AND IS NOW THE RIGHT ANSWER.** The last
-	 * round turned antialiasing OFF here, on the theory that blending was what made these look wrong. It was not:
-	 * the SHAPE was, and the evidence was in the same capture — a stroke's round cap covers about a tenth of its end
-	 * column where a rectangle's end face covers all of it, and no amount of aliasing fixes a shape that has no
-	 * square end to be crisp about. With rectangles the blend is uniform along an edge, which is what antialiasing is
-	 * FOR, so the override is gone and the default applies: the pill's caps and the window's TITLE keep the same
-	 * setting they always had. */
-	CGContextSetStrokeColorWithColor(c, [[NSColor cg_chromeInkColor] CGColor]);
-	CGContextSetLineWidth(c, fn_SYMBOL_STROKE);
-	CGContextSetLineCap(c, kCGLineCapRound);
-	CGContextSetLineJoin(c, kCGLineJoinRound);
-	for (i = 0; i < 3; i++) {
-		static const NSUInteger bits[3] = { NSClosableWindowMask, NSMiniaturizableWindowMask, NSResizableWindowMask };
+	if (theme != NULL) {
+		/* **THE THEME'S BUTTONS, AT THEIR OWN SIZE.** Each is asked for the state the pointer and the window make,
+		 * and a theme that is missing one file falls back to the drawn mark for THAT button rather than for the
+		 * whole bar — a half-themed window is still a window. */
+		for (i = 0; i < AGChromeButtonCount; i++) {
+			CGImageRef image;
 
-		if ((mask & bits[i]) == 0) {
-			continue;
+			if (!layout.present[i]) {
+				continue;
+			}
+			image = [theme imageForButton:(AGChromeButton)i state:fn_chrome_state(w, i)];
+			if (image != NULL) {
+				fn_draw_image(c, layout.rects[i], image);
+			} else if (i < AGChromeButtonCount - 1) {
+				fn_draw_symbol(c, layout.rects[i], i);
+			} else {
+				fn_draw_toolbar_pill(c, layout.rects[i]);
+			}
 		}
-		fn_draw_symbol(c, CGRectMake(x, y, fn_SYMBOL, fn_SYMBOL), i);
-		x += fn_SYMBOL + fn_SYMBOL_GAP;
+	} else {
+		/* THE MARKS THIS FILE HAS ALWAYS DRAWN, which is what a process with no theme gets. */
+		for (i = 0; i < AGChromeButtonCount - 1; i++) {
+			if (layout.present[i]) {
+				fn_draw_symbol(c, layout.rects[i], i);
+			}
+		}
+		if (layout.present[AGChromeButtonMenu]) {
+			fn_draw_toolbar_pill(c, layout.rects[AGChromeButtonMenu]);
+		}
 	}
 
-	/* **AND THE EDITED MARK IN THE CLOSE SYMBOL, WHICH IS WHERE THE ERA PUTS IT AND THE ONE PLACE THE REDESIGN FORCED
-	 * A JUDGEMENT.** `-isDocumentEdited` is a real door with a real reader (`NSWindowController`), and the convention
-	 * it comes from is a dot inside the close button. A circle has a middle to put a dot in; an X's middle is where its
-	 * two strokes CROSS, which is already ink — so the dot goes there and the pair reads as a marked X rather than as a
-	 * marked circle. That is a reading, not a measurement: it is the closest thing this shape has to the place the
-	 * convention names, and it is called out here so changing it is a decision rather than a repair. */
-	if ([w isDocumentEdited] && (mask & NSClosableWindowMask) != 0) {
-		CGFloat dot = fn_SYMBOL / 4.0;
-		CGFloat cx = fn_CHROME_EDGE + fn_SYMBOL / 2.0;
-		CGFloat cy = y + fn_SYMBOL / 2.0;
+	/* **AND THE EDITED MARK IN THE CLOSE BUTTON**, centred on whatever the close control is: a dot in the middle of
+	 * a drawn X, and a dot in the middle of the theme's close button, which is where the convention puts it and the
+	 * one thing a theme's art cannot supply. */
+	if ([w isDocumentEdited] && layout.present[AGChromeButtonClose]) {
+		NSRect r = layout.rects[AGChromeButtonClose];
+		CGFloat dot = r.size.width / 4.0;
 
 		CGContextSetFillColorWithColor(c, [[NSColor cg_chromeInkColor] CGColor]);
-		CGContextFillEllipseInRect(c, CGRectMake(cx - dot / 2.0, cy - dot / 2.0, dot, dot));
+		CGContextFillEllipseInRect(c, CGRectMake(NSMidX(r) - dot / 2.0, NSMidY(r) - dot / 2.0, dot, dot));
 	}
 
-	/* **AND THE PILL AT THE FAR END, WHICH IS WHY THE TITLE IS CENTRED RATHER THAN STRETCHED.** The strip has a block
-	 * at each end now — three symbols at the left, one pill at the right — so a title drawn from the left after them
-	 * would sit against one end and wander as its length changed. Centring is what makes the TITLE the middle of the
-	 * bar whatever is at either side of it, and the two blocks are what the centre has to clear. */
-	/* **AND ITS TOP EDGE IS SNAPPED TO A WHOLE POINT, WHICH AN ODD HEIGHT IN AN EVEN STRIP MAKES NECESSARY.** 22 less 7
-	 * is 15, so a centred pill would start at a half pixel and its top and bottom rows would each be half covered —
-	 * MEASURED, the top edge that the whole "no border" claim rests on read as a blend rather than as the ink. A
-	 * fencepost has no CENTRED answer here; it has a crisp one, and crisp is the one that shows. */
-	fn_draw_toolbar_pill(c, CGRectMake(content.size.width - fn_CHROME_EDGE - fn_PILL_WIDTH,
-					   floor(content.size.height + (fn_TITLE_BAR - fn_PILL_HEIGHT) / 2.0),
-					   fn_PILL_WIDTH, fn_PILL_HEIGHT));
-
-	if ((mask & NSTitledWindowMask) != 0) {
+	/* THE TITLE, CENTRED BETWEEN THE TWO BLOCKS — whatever those blocks are, the drawn marks or the theme's
+	 * buttons, which is why their widths come from the layout and not from the constants. */
+	if (([w styleMask] & NSTitledWindowMask) != 0) {
 		NSDictionary *attributes = fn_title_attributes();
 		NSFont *font = attributes == nil ? nil : [attributes objectForKey:NSFontAttributeName];
-		/* WHAT THE TITLE MAY USE IS WHAT THE TWO BLOCKS LEAVE, which is the strip less both ends — and a title that
-		 * will not fit is cut rather than allowed to run under a symbol. The measurement and the drawing read the same
-		 * dictionary for the reason `-fn_title_attributes` states. */
-		CGFloat available = content.size.width - 2.0 * fn_CHROME_EDGE - block - fn_PILL_WIDTH - 2.0 * fn_CHROME_EDGE;
-		NSString *title = fn_title_that_fits([w title], attributes, available);
+		CGFloat bandLeft = layout.leftBlock;
+		CGFloat bandRight = content.size.width - layout.rightBlock;
+		CGFloat available = bandRight - bandLeft;
+		NSString *title;
 
+		if (available < 0.0) {
+			available = 0.0;
+		}
+		title = fn_title_that_fits([w title], attributes, available);
 		if (title != nil) {
 			CGFloat width = [title sizeWithAttributes:attributes].width;
+			CGFloat centre = content.size.width / 2.0;
 			NSGraphicsContext *g = [NSGraphicsContext graphicsContextWithCGContext:c flipped:NO];
 			NSGraphicsContext *prev = [[NSGraphicsContext currentContext] retain];
 
 			[NSGraphicsContext setCurrentContext:g];
-			[title drawAtPoint:NSMakePoint((content.size.width - width) / 2.0,
+			[title drawAtPoint:NSMakePoint(centre - width / 2.0,
 						       fn_title_baseline(content, [font ascender], [font descender]))
 			     withAttributes:attributes];
 			[NSGraphicsContext setCurrentContext:prev];
@@ -1783,6 +1910,24 @@ static CGFloat fn_clamp_axis(CGFloat v, CGFloat lo, CGFloat hi)
 		return;
 	}
 	if (mouse) {
+		/* **A PRESS THAT LANDS ON THE CHROME IS THE WINDOW'S, NOT A VIEW'S.** There is no view in the title bar, so
+		 * the hit test below would hand the click to the content view — which is where a title-bar click used to go.
+		 * A chrome button consumes it instead: the press is remembered so the button can draw PRESSED, and the matching
+		 * release clears it. THE ACTION EACH BUTTON PERFORMS IS NOT WIRED HERE; that is a window manager's (see the
+		 * README), so what this buys is the state the theme's pressed art exists for. */
+		if ([theEvent type] == NSLeftMouseDown) {
+			NSInteger hit = [self cg_chromeButtonAtPoint:[theEvent locationInWindow]];
+
+			if (hit >= 0) {
+				_cg_pressedChrome = hit;
+				[self setNeedsDisplay:YES];
+				return;
+			}
+		} else if ([theEvent type] == NSLeftMouseUp && _cg_pressedChrome >= 0) {
+			_cg_pressedChrome = -1;
+			[self setNeedsDisplay:YES];
+			return;
+		}
 		/* **THE VIEW UNDER THE POINTER, WHICH IS WHAT `-hitTest:` IS FOR, AND WHAT THIS DOOR DID NOT DO.**
 		 * Every mouse event went to the FIRST RESPONDER, so a click on a control inside a subview never
 		 * reached the subview unless the subview happened to be the first responder — a control you could
@@ -1946,6 +2091,23 @@ static CGFloat fn_clamp_axis(CGFloat v, CGFloat lo, CGFloat hi)
 	return e;
 }
 
+/* **WHERE A CHROME BUTTON IS, WHICH IS THE SAME ANSWER THE PAINTER USES.** The layout is recomputed rather than
+ * cached so that a button's rectangle follows its window's frame without anybody remembering to invalidate it —
+ * a title bar that resized and kept a stale hit rect is the defect two copies of this arithmetic would produce. */
+- (NSInteger)cg_chromeButtonAtPoint:(NSPoint)windowPoint
+{
+	fn_chrome_layout_t layout;
+	int i;
+
+	fn_chrome_layout(self, &layout);
+	for (i = 0; i < AGChromeButtonCount; i++) {
+		if (layout.present[i] && NSPointInRect(windowPoint, layout.rects[i])) {
+			return i;
+		}
+	}
+	return -1;
+}
+
 - (void)cg_updateTrackingForPoint:(NSPoint)windowPoint
 {
 	NSMutableArray *hits = [[NSMutableArray alloc] init];
@@ -1973,6 +2135,17 @@ static CGFloat fn_clamp_axis(CGFloat v, CGFloat lo, CGFloat hi)
 				[owner cursorUpdate:[self cg_eventForArea:area type:NSMouseEntered]];
 			}
 			break;
+		}
+	}
+	/* **AND THE CHROME'S OWN BUTTONS, WHICH ARE NOT VIEWS AND SO HAVE NO TRACKING AREA.** The pointer's position
+	 * is all this needs: which button contains it decides the prelight, and a CHANGE of answer is the only thing
+	 * that asks for a redraw — a re-evaluation that answers the same button must not repaint the bar. */
+	{
+		NSInteger hover = [self cg_chromeButtonAtPoint:windowPoint];
+
+		if (hover != _cg_hoverChrome) {
+			_cg_hoverChrome = hover;
+			[self setNeedsDisplay:YES];
 		}
 	}
 	[hits release];
@@ -2408,8 +2581,23 @@ const CGFloat NSScreenSaverWindowLevel = 1000.0;
 	 * tree has not named; that is the owed part, stated. It is deliberately conservative in the meantime: a window
 	 * whose mask draws no close button still gets the whole block's worth of room, which is room it does not need
 	 * rather than a title it cannot read. */
-	CGFloat block = 3.0 * fn_SYMBOL + 2.0 * fn_SYMBOL_GAP;
-	CGFloat chrome = (aStyle == 0) ? 0.0 : (2.0 * fn_CHROME_EDGE + block + fn_PILL_WIDTH);
+	AGChromeTheme *theme = [AGChromeTheme sharedTheme];
+	CGFloat chrome;
+
+	if (aStyle == 0) {
+		chrome = 0.0;
+	} else if (theme != NULL) {
+		/* **THE THEME'S OWN WIDTH, so a window cannot be narrower than four of its buttons plus the edges and the
+		 * air between them — the same numbers `fn_chrome_layout` places them with, read here as a total.** The left
+		 * block is the other three; the right is the menu button. */
+		NSSize button = [theme buttonSize];
+
+		chrome = 2.0 * [theme buttonOffset] + 4.0 * button.width + 3.0 * [theme buttonSpacing];
+	} else {
+		CGFloat block = 3.0 * fn_SYMBOL + 2.0 * fn_SYMBOL_GAP;
+
+		chrome = 2.0 * fn_CHROME_EDGE + block + fn_PILL_WIDTH;
+	}
 	CGFloat title = 0.0;
 
 	/* **THE MEASUREMENT IS REAL NOW, AND IT WAS AN ESTIMATE**: this used to multiply the title's LENGTH by seven
@@ -3685,7 +3873,7 @@ NSString *NSWindowDidDeminiaturizeNotification = @"NSWindowDidDeminiaturizeNotif
 - (NSPoint)cascadeTopLeftFromPoint:(NSPoint)topLeft
 {
 	NSRect visible = [[NSScreen mainScreen] visibleFrame];
-	NSPoint next = NSMakePoint(topLeft.x + fn_TITLE_BAR, topLeft.y - fn_TITLE_BAR);
+	NSPoint next = NSMakePoint(topLeft.x + fn_title_bar_height(), topLeft.y - fn_title_bar_height());
 
 	[self setFrameTopLeftPoint:topLeft];
 	/* THE ANSWER IS WHERE THE NEXT WINDOW GOES, and the caller feeds it straight back in. IT WRAPS AT THE BOTTOM
