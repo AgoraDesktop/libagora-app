@@ -8,7 +8,11 @@ directory (`../README.md`). `libagora-app` is the top of its stack: above it the
 
 ## Status
 
-**The AppKit is imported and its windows run on Agora's window server. The X11 seam is gone.**
+**The AppKit is imported and its windows run on Agora's window server. The X11 seam is gone.** Above the
+window and view classes there is now a cell and control layer (buttons, switches and sliders), a tracking-area
+engine, one line of editable text with the standard key bindings, a title bar the client DRAWS itself, and the
+menu subsystem — validation, a selection chip, and a pointer grab that lets a popup be dismissed by clicking
+away.
 
 The classes here come from the Fiwix AppKit (same author, same licence — see `PROVENANCE.md`), and they
 talked to an X server: `NSWindow.m` called `XOpenDisplay`, `XCreateSimpleWindow`, `XMapWindow`, `XPutImage`
@@ -34,6 +38,15 @@ tests/
   keyboard.c                    the keymap translation, with no compositor anywhere
   appkit_window.m               THE APPkit: a real NSWindow with a real NSView
   appkit_events.m               the INPUT PATH: the seam's event, to the view that should get it
+  control_ink.m                 the CONTROL layer: a view that draws its cell, and a button's face
+  control_metrics.m             and the METRICS: a button's height and a line of text's
+  slider_ink.m                  a control whose VALUE is a POSITION: the knob and its inverse
+  tracking_area.m               an AREA's region, owner and SCOPE — and a control's own hover area
+  text_input.m                  the first slice of the text system, driven a keystroke at a time
+  window_chrome.m               the DRAWN chrome, offscreen: the symbols, the centred title and the pill
+  menu_validation.m             validation and state, which the view tests do not reach
+  appkit_activation.m           only the ACTIVE application's menu bar shows
+  appkit_controls_draw.m        a window full of controls, for a person to look at
   run-*-headless.sh             ctest: a compositor with a virtual monitor (no desktop input involved)
   run-*-nested.sh, inspect.py   the PIXEL tests, and they are OPT-IN: `gnome-shell --nested` is a whole
                                 nested session and it grabs the HOST's pointer while it lives
@@ -67,7 +80,28 @@ the compositor is really gone.
   and that a view which does not handle an event BUBBLES it up the responder chain.
 - **The seam alone** (`ctest`): exactly 60 of 60 frames headless, and the keymap translation checked against
   a pinned `us` keymap.
-- **`ctest`: 3 of 3 passed** (keyboard, window-headless, appkit-window-headless).
+- **The controls** (`ctest`, all offscreen): a button draws its bezel and title and sends its action; a switch
+  draws an indicator and a radio a different one; a slider's `-knobRect:flipped:` and its inverse agree at the
+  knob's centre and clamp past either end; and a push button's height is a bezel METRIC rather than a property
+  of its title.
+- **The tracking engine** (`ctest`): the same rectangle, the same owner and the same pointer produce an ENTER
+  for `NSTrackingActiveAlways` and NOTHING for the default `NSTrackingActiveInKeyWindow` in a window that is not
+  key — the scope word that keeps a background window's controls dark; `-mouseMoved:` fires when the point moves
+  and not when it is repeated; `[event trackingArea]` names the area that fired; and a control entering a window
+  installs a hover area.
+- **The text path** (`ctest`): a key is built as an `NSEvent`, `-interpretKeyEvents:` turns it into a command,
+  and the command edits the string — typing, both Backspace spellings, movement, Shift-extension, and the
+  notification and its delegate both firing for one edit.
+- **The chrome** (`ctest`, offscreen): the title bar's symbols are SHAPES in pixels — ink on both diagonals of
+  the X, a thick stroke across the minus, and a pill rounded at both caps — the title is centred and bold, and
+  each symbol appears only for the style-mask bit that asks for it.
+- **The menu subsystem** (`ctest`): a target's `-validateMenuItem:` decides enablement and MAY CHANGE the item
+  while it answers, an item that is ON draws a checkmark, and a disabled title is drawn dimmed.
+- **Activation** (`ctest`, against Agora's own server): the menu bar window is shown while the compositor says
+  this client has the keyboard, hidden when it does not, and shown again — a window ordered out is not
+  destroyed.
+- **`ctest`: 17 of 17 passed** (the keyboard and the seam, the AppKit and its input path, the controls and their
+  metrics, the tracking engine, the text path, the chrome, the menus and activation).
 
 ### What a Wayland client does not get, and where each is recorded
 
@@ -100,12 +134,32 @@ Both fixes were falsified before they were kept: removing the chain fails the bu
 hit test fails the "click lands on the subview" check — which the first version of the test did NOT catch,
 because it had made the clicked subview the first responder.
 
+### And three things the controls, the text and the menus found
+
+- **The first responder was assigned, never asked.** `-setContentView:` wrote `_firstResponder` straight and
+  `-makeFirstResponder:` never called `-acceptsFirstResponder`, `-resignFirstResponder` or
+  `-becomeFirstResponder`. The visible consequence was a text view with NO CARET: an editor opens its session in
+  `-becomeFirstResponder`, and nothing in the tier ever called it.
+- **A shown window was not visible.** `-orderOut:` sent a hide and the seam's show door never sent the opposite,
+  so a window hidden once could never be shown again — the server's own log read
+  `surface: mapped=1 visible=0 level=0 buffer=1` while the client drew into it. And the frame callback was
+  treated as an instruction rather than an invitation, so every window redrew on every callback and the desktop
+  ran at **517 composites a second**; a window with nothing new now declines, and `-updateWindows` is what acts
+  on "stale" outside a session.
+- **An NSTrackingArea's SCOPE is what a background window needed.** Before the option word, the window decided
+  the crossing for the deepest view of whatever window the pointer was over, so a control in a window that was
+  not key prelighted anyway. The area's own `Active…` bits are the fix, and the test pins both answers.
+
 ### Still absent, and why
 
-The sheets, the toolbar, the drawer, the frame-autosave strings, the script-command doors, the cursor-rect
-invalidation and the child-window list all need subsystems this stage has not reached; the window's
-minimise/close BUTTONS are a window manager's (Kestrel is parked). Each is absent rather than stubbed, and
-the refusals name themselves.
+The sheets, the drawer, the frame-autosave strings, the script-command doors, the cursor-rect invalidation and
+the child-window list all need subsystems this stage has not reached; the window's minimise/close BEHAVIOUR is a
+window manager's (Kestrel is parked), though the chrome now DRAWS a title bar — an X, a minus, a plus and a
+toolbar pill. The pill is drawn and does nothing, because there is no toolbar for it to toggle yet, and the
+three symbols are not yet buttons; each is stated where it stands. The input-method half of the text system is
+still absent (`-interpretKeyEvents:` does the direct mapping and says so), and the multi-line text view, the
+word-granularity movement commands and the field editor are named rather than guessed. Each absence is stated
+rather than stubbed, and the refusals name themselves.
 
 ## Build
 
