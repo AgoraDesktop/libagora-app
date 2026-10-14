@@ -122,6 +122,10 @@ the compositor is really gone.
 - **`ctest`: 20 of 20 passed** (the keyboard and the seam, the AppKit and its input path, the controls and their
   metrics, what a drag costs, the tracking engine, the text path, the chrome and what its buttons do, the chrome
   theme, the menus and activation).
+- **And the desktop's own text is SUB-PIXEL ANTIALIASED**, which is the AppKit's half of a renderer change in
+  CoreGraphics: a window's surface is OPAQUE (`kCGImageAlphaNoneSkipFirst`), and the destination's opacity is
+  exactly what decides whether a glyph is rasterised in colour. MEASURED on the live session: the window title's
+  twenty-six ink pixels all carry a per-channel split and the checkbox's label carries it in 586 of 613.
 
 ### What a Wayland client does not get, and where each is recorded
 
