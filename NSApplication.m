@@ -104,6 +104,8 @@
  * the last is applied, so the window goes to where the POINTER is instead of walking the points it passed over. */
 @interface NSWindow (APPKITPendingDrag)
 - (void)cg_applyPendingDrag;
+/* AND THE RESIZE'S AIM, WHICH IS APPLIED IN THE SAME PASS FOR THE SAME REASON. */
+- (void)cg_applyPendingResize;
 @end
 
 
@@ -1355,6 +1357,9 @@ static const struct {
 		 * pointer (see `NSWindow -cg_applyPendingDrag`), and the window is then painted at its new place by the
 		 * display pass below. One move and one `set_frame` per frame, never one per motion event. */
 		[w cg_applyPendingDrag];
+		/* AND A RESIZE'S AIM, WHICH IS THE SAME KIND OF DEFERRAL: one `set_frame` per pass, at the latest
+		 * position the hand reached, with the size the delegate last agreed to. */
+		[w cg_applyPendingResize];
 		[w displayIfNeeded];
 	}
 }

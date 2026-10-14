@@ -198,6 +198,19 @@ add_test(NAME appkit-control-drag
 set_tests_properties(appkit-control-drag PROPERTIES SKIP_RETURN_CODE 77
   ENVIRONMENT "${_agora_app_test_env}")
 
+# **AND THE FRAME'S OWN EDGES, WHICH ARE THE WINDOW'S OTHER HANDLE.** A press on one drags that edge and leaves the
+# opposite one exactly where it was; the middle of the bar still moves the window; and a window that may not be
+# resized does not. Driven through the seam like the events test, with the pass made by hand for the reason that
+# test's does it — a resize is applied once per pass, and the pass belongs to a run loop this test is not inside.
+add_executable(window_resize window_resize.m)
+target_link_libraries(window_resize PRIVATE App)
+
+add_test(NAME appkit-window-resize
+  COMMAND timeout 60 "${CMAKE_CURRENT_SOURCE_DIR}/run-appkit-headless.sh" "$<TARGET_FILE:window_resize>" 2
+	  "all checks passed" )
+set_tests_properties(appkit-window-resize PROPERTIES SKIP_RETURN_CODE 77
+  ENVIRONMENT "${_agora_app_test_env}")
+
 # AND THE CHROME: Agora's title bar is an X, a minus and a plus drawn in one ink, a centred bold title, and a pill
 # at the far end — so what is checked is the SHAPES, which is a question about pixels and not about intent. The
 # client draws its own chrome, so this needs no compositor: `-cg_drawChromeInContext:` takes a bitmap rep's context.

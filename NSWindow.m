@@ -120,6 +120,11 @@
  * the pointer, so applying every motion inside a frame would walk it along the sampled PATH — a fast flick's
  * intermediate points — instead of straight to where the hand is. */
 - (void)cg_applyPendingDrag;
+/* **AND THE RESIZE'S OWN, MADE ONCE PER PASS FOR THE SAME REASON.** A drag that resizes is a drag like any other:
+ * the hand's intermediate points are not frames, and the pass applies the latest one. */
+- (void)cg_applyPendingResize;
+/* AND THE FRAME A RESIZE IS AIMING AT, FROM THE POINTER'S OWN POSITION — which is where the delegate is asked. */
+- (NSRect)cg_frameForResizeToPoint:(NSPoint)globalPoint;
 /* **AND WHERE A CHROME BUTTON IS, in WINDOW coordinates.** The painter and the pointer ask the one function, so
  * a hovered button cannot be a different rectangle from a drawn one. */
 - (NSInteger)cg_chromeButtonAtPoint:(NSPoint)windowPoint;
@@ -641,6 +646,8 @@ static void fn_ag_frame(void *context, uint32_t time_ms)
 	/* NO BUTTON IS UNDER THE POINTER AND NONE IS PRESSED, which -1 says: index 0 is a real button. */
 	_cg_hoverChrome = -1;
 	_cg_pressedChrome = -1;
+	_cg_resizeEdges = 0;
+	_cg_resizePending = NO;
 	/* THE BACKING TYPE IS KEPT, because Apple's `-backingType` reports what the window was MADE with — which
 	 * is the only thing that makes that door checkable rather than a constant. */
 	_backing = bufferingType;
@@ -890,6 +897,112 @@ static BOOL fn_pointInChrome(NSWindow *w, NSPoint p)
 	}
 	return p.x >= 0.0 && p.x < content.size.width
 		&& p.y >= content.size.height && p.y < content.size.height + layout.height;
+}
+
+/* ============================================================================================ *
+ * THE FRAME'S OWN EDGES, WHICH ARE THE WINDOW'S OTHER HANDLE.                                   *
+ *                                                                                                *
+ * **A WINDOW THAT CAN BE MOVED BY ITS CHROME AND NOT RESIZED IS HALF A WINDOW**, and this is      *
+ * the half that has to say WHERE the edges are rather than what to do with them. Four bands      *
+ * inside the frame, five points wide, and the CORNERS get a square each: a hand aiming at a       *
+ * diagonal should not have to be inside a five-point sliver on two axes at once.                  *
+ *                                                                                                *
+ * **TWO CONFLICTS WITH THE CHROME, AND BOTH WERE FOUND BY A TEST RATHER THAN REASONED ABOUT.**      *
+ *                                                                                                *
+ * A BUTTON ON THE EDGE KEEPS ITS PIXELS. A theme may put its buttons anywhere — the fixture's     *
+ * are 6x8 in an 8-point strip, so the top band would lie over ALL of them — and a close button    *
+ * that becomes a resize handle is worse than a top edge that is a few points shorter. So the      *
+ * buttons are asked first, and the band is the window's everywhere they are not.                   *
+ *                                                                                                *
+ * AND THE TOP BAND NEVER TAKES MORE THAN A THIRD OF THE CHROME. A bar's height is the THEME's,    *
+ * and a five-point band is a fifth of a 26-point bar and two thirds of an 8-point one — MEASURED,  *
+ * the fixture's title bar became un-draggable in its middle, which is the window's oldest         *
+ * gesture. Capping the band at a third leaves the majority of any bar as the handle it has        *
+ * always been.                                                                                     *
+ * ============================================================================================ */
+#define FN_RESIZE_BAND 5.0	/* the band along each edge */
+#define FN_RESIZE_CORNER 12.0	/* the square at each corner, where two bands would have to meet */
+
+enum {
+	FN_RESIZE_LEFT = 1,
+	FN_RESIZE_RIGHT = 2,
+	FN_RESIZE_BOTTOM = 4,
+	FN_RESIZE_TOP = 8
+};
+
+static int fn_resizeEdges(NSWindow *w, NSPoint p)
+{
+	NSRect content = [w contentRectForFrameRect:[w frame]];
+	fn_chrome_layout_t layout;
+	CGFloat width, height, topBand;
+	BOOL left, right, bottom, top;
+	int edges = 0;
+
+	/* A WINDOW THAT MAY NOT BE RESIZED HAS NO EDGE TO TAKE, which is the STYLE MASK's question and not the
+	 * theme's — the same rule `fn_chrome_button_present` follows for the buttons. */
+	if (([w styleMask] & NSResizableWindowMask) == 0) {
+		return 0;
+	}
+	/* AND A BUTTON KEEPS ITS PIXELS, so the band is the window's only where no control is drawn on it. */
+	if ([w cg_chromeButtonAtPoint:p] >= 0) {
+		return 0;
+	}
+	fn_chrome_layout(w, &layout);
+	width = content.size.width;
+	height = content.size.height + layout.height;	/* the FRAME's own height in these coordinates */
+	if (p.x < 0.0 || p.y < 0.0 || p.x >= width || p.y >= height) {
+		return 0;
+	}
+	/* THE TOP BAND IS CAPPED AT A THIRD OF THE CHROME, because that strip's height is the theme's and a bar must
+	 * keep most of itself as the handle it is. */
+	topBand = FN_RESIZE_BAND;
+	if (layout.height > 0.0 && topBand > layout.height / 3.0) {
+		topBand = layout.height / 3.0;
+	}
+	left = (p.x < FN_RESIZE_BAND);
+	right = (p.x >= width - FN_RESIZE_BAND);
+	bottom = (p.y < FN_RESIZE_BAND);
+	top = (p.y >= height - topBand);
+	if (p.x < FN_RESIZE_CORNER && p.y < FN_RESIZE_CORNER) {
+		left = bottom = YES;
+	} else if (p.x < FN_RESIZE_CORNER && p.y >= height - FN_RESIZE_CORNER) {
+		left = top = YES;
+	} else if (p.x >= width - FN_RESIZE_CORNER && p.y < FN_RESIZE_CORNER) {
+		right = bottom = YES;
+	} else if (p.x >= width - FN_RESIZE_CORNER && p.y >= height - FN_RESIZE_CORNER) {
+		right = top = YES;
+	}
+	if (left) {
+		edges |= FN_RESIZE_LEFT;
+	}
+	if (right) {
+		edges |= FN_RESIZE_RIGHT;
+	}
+	if (bottom) {
+		edges |= FN_RESIZE_BOTTOM;
+	}
+	if (top) {
+		edges |= FN_RESIZE_TOP;
+	}
+	return edges;
+}
+
+/* THE CURSOR THAT SAYS WHICH WAY AN EDGE GOES, or nil where there is no edge. A CORNER ANSWERS NIL, and that is
+ * the era's own limit rather than this file's: the cursor set has a left-right and an up-down arrow and NOTHING
+ * diagonal, and a corner shown as one of the two would be claiming a direction it does not have. */
+static NSCursor *fn_resizeCursor(NSWindow *w, NSPoint p)
+{
+	int edges = fn_resizeEdges(w, p);
+	BOOL horizontal = (edges & (FN_RESIZE_LEFT | FN_RESIZE_RIGHT)) != 0;
+	BOOL vertical = (edges & (FN_RESIZE_TOP | FN_RESIZE_BOTTOM)) != 0;
+
+	if (horizontal && !vertical) {
+		return [NSCursor resizeLeftRightCursor];
+	}
+	if (vertical && !horizontal) {
+		return [NSCursor resizeUpDownCursor];
+	}
+	return nil;
 }
 
 static void fn_draw_image(CGContextRef c, NSRect rect, CGImageRef image)
@@ -2072,6 +2185,7 @@ static CGFloat fn_clamp_axis(CGFloat v, CGFloat lo, CGFloat hi)
 		if ([theEvent type] == NSLeftMouseDown) {
 			NSPoint p = [theEvent locationInWindow];
 			NSInteger hit = [self cg_chromeButtonAtPoint:p];
+			int edges = fn_resizeEdges(self, p);
 
 			/* **A NEW PRESS FORGETS WHAT THE LAST ONE WAS DOING.** One press means one thing, and it is decided
 			 * entirely below — so a release that never arrived (a compositor that lost it, a hand that left the
@@ -2079,6 +2193,26 @@ static CGFloat fn_clamp_axis(CGFloat v, CGFloat lo, CGFloat hi)
 			 * button's. */
 			_cg_pressedChrome = -1;
 			_cg_draggingChrome = NO;
+			_cg_resizeEdges = 0;
+			_cg_resizePending = NO;
+			/* **AN EDGE IS THE FIRST THING ASKED, BECAUSE IT IS THE WINDOW'S OWN BORDER** — see the note on
+			 * `fn_resizeEdges` for why the band outranks the buttons it overlaps. */
+			if (edges != 0) {
+				_cg_resizeEdges = edges;
+				_cg_resizeStartFrame = _frame;
+				/* **THE GRAB IS KEPT IN THE FRAME'S OWN SPACE, WHICH IS NOT THE EVENT'S.** An event's point is
+				 * relative to the window; the frame a resize is computed from is absolute; and the two must not be
+				 * mixed, because every offset below is a distance from an EDGE — MEASURED, adding a relative grab
+				 * point to an absolute right edge gave a 62-point inset for a two-point one and a 40-point drag
+				 * grew the window by 100. */
+				_cg_resizeGrab = NSMakePoint(_frame.origin.x + p.x, _frame.origin.y + p.y);
+				_cg_resizeUsesGlobal = [theEvent cg_hasGlobalPoint];
+				/* THE POINTER IS TAKEN FOR THE DURATION, exactly as a move's is and for the same measured reason:
+				 * a hand that outruns the window would otherwise put the pointer on the desktop, and the motion
+				 * and the release would simply stop arriving. */
+				[self cg_setPointerGrab:YES];
+				return;
+			}
 			if (hit >= 0) {
 				_cg_pressedChrome = hit;
 				/* **AND THE POINTER IS ON THE BUTTON BY DEFINITION — `hit` IS the hit test's answer for where the
@@ -2116,6 +2250,26 @@ static CGFloat fn_clamp_axis(CGFloat v, CGFloat lo, CGFloat hi)
 				[self cg_setPointerGrab:YES];
 				return;
 			}
+		} else if ([theEvent type] == NSLeftMouseDragged && _cg_resizeEdges != 0) {
+			/* **THE POINTER'S ABSOLUTE POSITION, WHICH IS WHAT A RESIZE IS MEASURED AGAINST.** The relative
+			 * fallback reconstructs it from this window's own frame and the pointer's place in it — the same pair
+			 * the move's fallback uses, and for the same reason: an edge is where the POINTER is, and a window that
+			 * followed a delta instead would drift from the hand by every motion the compositor batched. */
+			NSPoint g;
+
+			if (_cg_resizeUsesGlobal && [theEvent cg_hasGlobalPoint]) {
+				g = [theEvent cg_globalPoint];
+			} else {
+				NSPoint p = [theEvent locationInWindow];
+
+				g.x = _frame.origin.x + p.x;
+				g.y = _frame.origin.y + p.y;
+			}
+			/* THE RESIZE IS REMEMBERED, NOT MADE — one `set_frame` and one repaint per pass rather than per
+			 * motion, which is the rule the move already follows. */
+			_cg_resizePendingFrame = [self cg_frameForResizeToPoint:g];
+			_cg_resizePending = YES;
+			return;
 		} else if ([theEvent type] == NSLeftMouseDragged && _cg_draggingChrome) {
 			/* **THE ABSOLUTE POSITION WHEN THE COMPOSITOR SENT ONE, AND THE RELATIVE ONE ONLY AS A FALLBACK.** The
 			 * relative arithmetic is correct while this client's frame and the compositor's surface agree, and WRONG
@@ -2151,13 +2305,17 @@ static CGFloat fn_clamp_axis(CGFloat v, CGFloat lo, CGFloat hi)
 			 * `_cg_hoverChrome` says whether the pointer came back. */
 			[self cg_updateTrackingForPoint:[theEvent locationInWindow]];
 			return;
-		} else if ([theEvent type] == NSLeftMouseUp && (_cg_pressedChrome >= 0 || _cg_draggingChrome)) {
+		} else if ([theEvent type] == NSLeftMouseUp &&
+			   (_cg_pressedChrome >= 0 || _cg_draggingChrome || _cg_resizeEdges != 0)) {
 			NSInteger pressed = _cg_pressedChrome;
 			BOOL releaseIsOnIt = NO;
 
 			if (_cg_draggingChrome) {
 				[self cg_applyPendingDrag];	/* the drag's LAST move is not lost to a pass boundary */
 				[self cg_setPointerGrab:NO];	/* the drag is over; the pointer is the compositor's again */
+			} else if (_cg_resizeEdges != 0) {
+				[self cg_applyPendingResize];	/* and a resize's last aim is not lost either */
+				[self cg_setPointerGrab:NO];
 			} else if (pressed >= 0) {
 				NSPoint p = [theEvent locationInWindow];
 
@@ -2173,6 +2331,8 @@ static CGFloat fn_clamp_axis(CGFloat v, CGFloat lo, CGFloat hi)
 			_cg_pressedChrome = -1;
 			_cg_draggingChrome = NO;
 			_cg_dragUsesGlobal = NO;
+			_cg_resizeEdges = 0;
+			_cg_resizeUsesGlobal = NO;
 			[self setNeedsDisplay:YES];
 			/* **AND THE ACTION GOES LAST, BECAUSE ONE OF THEM DESTROYS THE WINDOW.** `-performClose:` ends in
 			 * `-close`, which destroys the surface and takes this window off the application's list — so every line
@@ -2618,6 +2778,102 @@ static CGFloat fn_clamp_axis(CGFloat v, CGFloat lo, CGFloat hi)
 		_cg_dragPending = NO;
 		[self setFrameOrigin:origin];
 	}
+}
+
+/* **AND THE RESIZE'S AIM, MADE ONCE PER PASS LIKE THE MOVE'S.** The hand's intermediate positions are not frames
+ * either, and one `set_frame` per pass is what keeps a fast diagonal drag from sending the compositor a stream of
+ * sizes nobody sees. */
+- (void)cg_applyPendingResize
+{
+	if (_cg_resizePending) {
+		NSRect want = _cg_resizePendingFrame;
+		NSRect start = _cg_resizeStartFrame;
+		BOOL left = (_cg_resizeEdges & FN_RESIZE_LEFT) != 0;
+		BOOL bottom = (_cg_resizeEdges & FN_RESIZE_BOTTOM) != 0;
+
+		_cg_resizePending = NO;
+		[self setFrame:want display:YES];
+		/* **AND THE EDGE THE HAND DID NOT TAKE IS PUT BACK WHERE IT WAS.** `-setFrame:` clamps the size to the
+		 * minimum and maximum sizes, and a clamp that bites on a drag of the LEFT or the BOTTOM edge would move the
+		 * RIGHT or the TOP one — the edge the hand never touched. The origin is corrected from the size that was
+		 * actually achieved, which is the only place the clamped answer exists. */
+		if (left || bottom) {
+			NSRect got = _frame;
+
+			if (left) {
+				got.origin.x = NSMaxX(start) - got.size.width;
+			}
+			if (bottom) {
+				got.origin.y = NSMaxY(start) - got.size.height;
+			}
+			if (got.origin.x != _frame.origin.x || got.origin.y != _frame.origin.y) {
+				[self setFrameOrigin:got.origin];
+			}
+		}
+	}
+}
+
+/* **WHERE A RESIZE IS AIMING, FROM THE POINTER'S OWN POSITION — AND THIS IS WHERE THE DELEGATE IS ASKED.**
+ * `-setFrame:` deliberately does NOT send `-windowWillResize:toSize:` (its own comment says why: a programmatic
+ * frame set is not a drag), so the drag is the door that must, and Apple's contract is that the answer is the size
+ * to USE rather than a permission — a delegate that wants to refuse returns the size the window already has.
+ *
+ * EACH EDGE THE HAND TOOK MOVES AND THE ONE OPPOSITE IT DOES NOT, which is why the two origin terms are computed
+ * from the STARTING frame's far edge rather than from the frame as it goes: an edge that is not being dragged must
+ * be a CONSTANT, not a value that drifts with each motion. */
+- (NSRect)cg_frameForResizeToPoint:(NSPoint)p
+{
+	NSRect start = _cg_resizeStartFrame;
+	NSRect frame = start;
+	CGFloat right = NSMaxX(start);
+	CGFloat top = NSMaxY(start);
+	CGFloat fromLeft = _cg_resizeGrab.x - start.origin.x;
+	CGFloat fromRight = right - _cg_resizeGrab.x;
+	CGFloat fromBottom = _cg_resizeGrab.y - start.origin.y;
+	CGFloat fromTop = top - _cg_resizeGrab.y;
+	NSSize proposed;
+
+	if (_cg_resizeEdges & FN_RESIZE_LEFT) {
+		frame.origin.x = p.x - fromLeft;	/* the hand keeps the hold it took, so the edge does not jump */
+		frame.size.width = right - frame.origin.x;
+	}
+	if (_cg_resizeEdges & FN_RESIZE_RIGHT) {
+		frame.size.width = (p.x + fromRight) - frame.origin.x;
+	}
+	if (_cg_resizeEdges & FN_RESIZE_BOTTOM) {
+		frame.origin.y = p.y - fromBottom;
+		frame.size.height = top - frame.origin.y;
+	}
+	if (_cg_resizeEdges & FN_RESIZE_TOP) {
+		frame.size.height = (p.y + fromTop) - frame.origin.y;
+	}
+	/* A WINDOW WHOSE EDGE IS DRAGGED PAST ITS OPPOSITE ONE HAS NO SIZE, and a frame of zero is not a window: the
+	 * backing store would be empty and the compositor would be handed a surface with no area. One point is the
+	 * floor here and `-setFrame:`'s own minimum may raise it; this is the geometry that must never be degenerate. */
+	if (frame.size.width < 1.0) {
+		frame.size.width = 1.0;
+	}
+	if (frame.size.height < 1.0) {
+		frame.size.height = 1.0;
+	}
+	proposed = frame.size;
+	if (_delegate != nil && [_delegate respondsToSelector:@selector(windowWillResize:toSize:)]) {
+		proposed = [(id <NSWindowDelegate>)_delegate windowWillResize:self toSize:proposed];
+	}
+	if (proposed.width < 1.0) {
+		proposed.width = 1.0;
+	}
+	if (proposed.height < 1.0) {
+		proposed.height = 1.0;
+	}
+	if (_cg_resizeEdges & FN_RESIZE_LEFT) {
+		frame.origin.x = right - proposed.width;
+	}
+	if (_cg_resizeEdges & FN_RESIZE_BOTTOM) {
+		frame.origin.y = top - proposed.height;
+	}
+	frame.size = proposed;
+	return frame;
 }
 
 /* DRAW AND PRESENT. The content view is drawn through an `NSGraphicsContext` over this window's own backing
@@ -4238,8 +4494,17 @@ static void fn_discard_cursor_rects(NSView *v)
  * a window that has no opinion at the point. */
 - (NSCursor *)cg_cursorForContentPoint:(NSPoint)p
 {
+	NSCursor *edge;
+
 	if (!_cursorRectsEnabled || _contentView == nil) {
 		return nil;
+	}
+	/* **AND THE FRAME'S OWN EDGES ARE ASKED FIRST, BECAUSE THEY ARE THE WINDOW'S AND NOT A VIEW'S.** A view
+	 * answers for the ground it covers; an edge is the window's own border, and a control that happens to reach it
+	 * does not get to claim it — the same precedence the press takes one door over. */
+	edge = fn_resizeCursor(self, p);
+	if (edge != nil) {
+		return edge;
 	}
 	[self cg_rebuildCursorRectsIfNeeded];
 	return [_contentView cg_cursorAtPoint:p];

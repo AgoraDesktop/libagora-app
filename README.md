@@ -119,9 +119,17 @@ the compositor is really gone.
   second: the client's CPU for the drag fell from 1.24 s (82 % of a core) to 0.73 s (48 %), and the value the drag
   ENDED at moved from 69.5 — seventeen points short of where the pointer stopped, because a client that cannot
   keep up loses motions — to 87.0, which is exactly where it was let go.
-- **`ctest`: 20 of 20 passed** (the keyboard and the seam, the AppKit and its input path, the controls and their
-  metrics, what a drag costs, the tracking engine, the text path, the chrome and what its buttons do, the chrome
-  theme, the menus and activation).
+- **What a drag on a window's EDGE costs, and where it lands** (`ctest`, a real run loop): a press on one of the
+  frame's four bands resizes the window and leaves the edge OPPOSITE it exactly where it was — the assertion a
+  plausible implementation gets wrong, because a size and an origin are two numbers and the hand is holding one of
+  them. A corner takes both axes; the middle of the bar still MOVES the window rather than resizing it; a window
+  whose style mask does not allow resizing does not move; the delegate is asked through `-windowWillResize:toSize:`
+  and its answer is the size USED, so a refusal is a delegate returning the size it already has; and the minimum
+  size is honoured with the untouched edge still a constant while the clamp bites. MEASURED on the live session: a
+  60-point drag on the right edge took the content from 420 to 480 and moved the left edge by zero.
+- **`ctest`: 21 of 21 passed** (the keyboard and the seam, the AppKit and its input path, the controls and their
+  metrics, what a drag costs, the resize by edge, the tracking engine, the text path, the chrome and what its
+  buttons do, the chrome theme, the menus and activation).
 - **And the desktop's own text is SUB-PIXEL ANTIALIASED**, which is the AppKit's half of a renderer change in
   CoreGraphics: a window's surface is OPAQUE (`kCGImageAlphaNoneSkipFirst`), and the destination's opacity is
   exactly what decides whether a glyph is rasterised in colour. MEASURED on the live session: the window title's

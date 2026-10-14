@@ -101,6 +101,7 @@ static NSBitmapImageRep *draw_chrome(NSWindow *w)
  * inside a frame would walk the window along the sampled path; the pass takes the latest. */
 @interface NSWindow (APPKITPendingDragTest)
 - (void)cg_applyPendingDrag;
+- (void)cg_applyPendingResize;
 @end
 
 /* THE FIXTURE'S GEOMETRY, READ FROM THE THEME rather than written down twice: a 6x8 button, offset 2, spacing 1. */
@@ -229,6 +230,38 @@ int main(void)
 				check(is_rgb(at_win(rep, close_x() + s_buttonW / 2, y), 1.0, 1.0, 0.0),
 				      "a PRESS on the close button draws its PRESSED art");
 				[rep release];
+			}
+
+			/* 6b. **AND A BUTTON ON THE FRAME'S OWN EDGE KEEPS ITS PIXELS.** The fixture's buttons FILL their
+			 * strip — they are as tall as the bar — so their topmost rows are inside the edge band a resize is
+			 * taken from, and a press there must go to the BUTTON: a close button that becomes a resize handle is
+			 * worse than a top edge a couple of points shorter. MEASURED by dragging from the button's top row,
+			 * which would resize the window if the band won, and releasing OFF the button so the press cancels. */
+			{
+				NSRect before = [w frame];
+				NSEvent *down = [NSEvent mouseEventWithType:NSLeftMouseDown
+					location:NSMakePoint((CGFloat)(close_x() + s_buttonW / 2),
+							     (CGFloat)(CH + s_buttonH - 1))
+					modifierFlags:0 timestamp:0.04 windowNumber:[w windowNumber] context:nil
+					eventNumber:0 clickCount:1 pressure:0.0f];
+				NSEvent *move = [NSEvent mouseEventWithType:NSLeftMouseDragged
+					location:NSMakePoint((CGFloat)(close_x() + s_buttonW / 2 + 40),
+							     (CGFloat)(CH + s_buttonH - 1))
+					modifierFlags:0 timestamp:0.05 windowNumber:[w windowNumber] context:nil
+					eventNumber:0 clickCount:1 pressure:0.0f];
+				NSEvent *up = [NSEvent mouseEventWithType:NSLeftMouseUp
+					location:NSMakePoint((CGFloat)(close_x() + s_buttonW / 2 + 40),
+							     (CGFloat)(CH - 20))
+					modifierFlags:0 timestamp:0.06 windowNumber:[w windowNumber] context:nil
+					eventNumber:0 clickCount:1 pressure:0.0f];
+
+				[w sendEvent:down];
+				[w sendEvent:move];
+				[w cg_applyPendingResize];	/* the pass would do this */
+				[w sendEvent:up];
+				check([w frame].size.width == before.size.width
+				      && [w frame].size.height == before.size.height,
+				      "a drag from a BUTTON's top row does not resize the window");
 			}
 
 			/* 7. **A ROW IS A ROW: THE `None` PIXEL IS AT THE TOP.** The fixture's first pixel is transparent, and

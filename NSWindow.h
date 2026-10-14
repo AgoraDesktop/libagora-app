@@ -334,6 +334,16 @@ typedef NSUInteger NSWindowSharingType;
 	 * fast flick — instead of straight to where the pointer is. The MOVE is made once, at the LATEST one. */
 	NSPoint _cg_dragPendingOrigin;
 	BOOL _cg_dragPending;
+	/* **AND THE SAME THREE QUESTIONS FOR A RESIZE, BECAUSE IT IS THE SAME KIND OF GESTURE.** WHICH of the frame's
+	 * four edges the hand took, the frame it took them FROM — so that the edge OPPOSITE each one stays exactly where
+	 * it was — and where along each axis the hand took hold, which is what keeps the edge under the pointer instead
+	 * of jumping to it. The target is kept for the end of the pass for the same reason the move's is. */
+	int _cg_resizeEdges;
+	NSRect _cg_resizeStartFrame;
+	NSPoint _cg_resizeGrab;
+	BOOL _cg_resizeUsesGlobal;
+	NSRect _cg_resizePendingFrame;
+	BOOL _cg_resizePending;
 	NSInteger _cg_windowNumber; /* Apple's window number, assigned when the AGWindow is made; -1 before */
 	BOOL _cg_closeRequested; /* the compositor asked the window to close; acted on in the pump */
 	NSRect _frame;          /* COCOA's coordinates: bottom-left origin */
