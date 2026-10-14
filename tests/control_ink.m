@@ -646,7 +646,7 @@ int main(void)
 			 * stroked on its own edge, so the probe reads the OUTERMOST pixel column of the box — bitmap x 1, with the
 			 * box starting at the cell's one-point inset — on the row through its centre, which for a 40-point-tall cell
 			 * is 19. Before the stroke was inset, that pixel held an even blend of the border and what was behind it
-			 * (MEASURED 0.68 where the border is 0.40), and this check is what says so. */
+			 * (MEASURED 0.68 under the old 0.40 border; the border is 0.55 now), and this check is what says so. */
 			[button setButtonType:NSSwitchButton];
 			[button setAttributedTitle:nil];
 			[button setTitle:@"Box"];

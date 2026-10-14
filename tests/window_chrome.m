@@ -356,8 +356,12 @@ int main(void)
 				}
 				check(top > 0 && is_colour(at(rep, left + 9, top - 1), [NSColor windowFrameColor], 0.02),
 				      "with STRIP directly above its top edge, so there is no border row there");
-				check(!is_colour(at(rep, left + 9, top), [NSColor controlDarkShadowColor], 0.06)
-				      && !is_colour(at(rep, left + 9, top), [NSColor controlColor], 0.06),
+				/* **AND THE TOLERANCE IS THE INK'S OWN, BECAUSE THE BORDER IS NO LONGER FAR FROM IT.** The border
+				 * was lightened to `+controlDarkShadowColor`'s 0.55 against the chrome ink's 0.50, so a 0.06
+				 * tolerance cannot tell them apart — it would call the pill's own edge "the border". The pixel
+				 * here is the ink exactly, so 0.02 says what the 0.06 said when the two were 0.10 apart. */
+				check(!is_colour(at(rep, left + 9, top), [NSColor controlDarkShadowColor], 0.02)
+				      && !is_colour(at(rep, left + 9, top), [NSColor controlColor], 0.02),
 				      "and that edge is neither the border nor the face the pill used to be drawn with");
 				/* **AND THE CORNER IS ASKED AS "NOT THE INK" RATHER THAN "IS THE STRIP".** The point below is inside the
 				 * shape's bounding box but outside its rounded corner, so a SQUARE pill would ink it and a rounded one

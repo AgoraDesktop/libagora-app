@@ -536,7 +536,12 @@ int main(void)
 				for (x = tx - 2; x <= tx + 2; x++) {
 					NSColor *c = [rep colorAtX:x y:row_of_drawing_y_in(y, 48)];
 
-					if (c != nil && [c redComponent] < 0.72) {
+					/* **THE THRESHOLD IS ABOVE THE TICK'S OWN COLOUR, WHICH IS DRAWN AS A ONE-PIXEL COLUMN THAT
+					 * STRADDLES TWO OF THEM.** The ticks are `+controlDarkShadowColor` — 0.55 since it was
+					 * lightened — and a 0.55 line at a half-pixel x blends to about 0.78 against the white it is
+					 * drawn on, so "is there ink here" has to be above that and below the background. It was 0.72,
+					 * which read the OLD 0.40's blend (about 0.70) and stopped reading the new one. */
+					if (c != nil && [c redComponent] < 0.85) {
 						found = 1;
 						break;
 					}

@@ -793,10 +793,14 @@ static void fn_cmyk_of(NSColor *self, CGFloat cmyk[4])
 	return fn_singleton(&s, 0.60, 0.60, 0.60, 1.0);
 }
 
+/* **THE BORDER'S GREY, AND IT IS DELIBERATELY LIGHT.** This is the ink a bezel, a checkbox's box, a field's edge and
+ * a slider's track are STROKED or filled with — the outline that says where a control's surface ENDS — and at 0.40 it
+ * read as a hard line drawn ON the face rather than as the edge OF it. 0.55 keeps it visible against the 0.95 control
+ * face and against a white field, while letting the SHAPE do the separating, which is what a border is for. */
 + (NSColor *)controlDarkShadowColor
 {
 	static NSColor *s;
-	return fn_singleton(&s, 0.40, 0.40, 0.40, 1.0);
+	return fn_singleton(&s, 0.55, 0.55, 0.55, 1.0);
 }
 
 + (NSColor *)controlHighlightColor

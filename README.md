@@ -193,7 +193,7 @@ under it is that sum minus the grab — one subtraction, with no accumulated del
 whether it happens; a borderless window has no chrome and so no handle.
 
 **AND ONE DARK GREY POINT DIVIDES THE CHROME FROM THE CONTENT.** A title bar and a content view are two surfaces,
-and with nothing between them the boundary is wherever the reader guesses it is — so one 0.32-grey row runs the
+and with nothing between them the boundary is wherever the reader guesses it is — so one 0.45-grey row runs the
 full width across the top of the CONTENT (the chrome's bottom edge as a person reads the window), drawn last so a
 theme's buttons cannot paint over it. It is GRAY rather than black on the ground `+controlDarkShadowColor` stands
 on: a black line reads as something drawn ON the window, where a dark grey reads as the shadow of the surface

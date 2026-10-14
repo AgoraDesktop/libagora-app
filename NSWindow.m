@@ -193,10 +193,11 @@ static const CGFloat fn_PILL_HEIGHT = 7.0;
 /* **AND THE HAIRLINE BETWEEN THE CHROME AND THE CONTENT.** A title bar and a content view are two surfaces, and
  * with nothing between them the boundary is wherever the reader happens to guess it is — so one dark grey point
  * runs the full width at the top of the CONTENT, which is the chrome's bottom edge as a person reads the window.
- * IT IS DRAWN LAST, so a theme's buttons — which fill the strip's height — cannot paint over it, and it is a DARK
- * GREY rather than black for the ground `+controlDarkShadowColor` exists on: a black line reads as something
- * DRAWN onto the window, where a dark grey reads as the shadow of the surface above it. */
-static const CGFloat fn_CHROME_HAIRLINE = 0.32;
+ * IT IS DRAWN LAST, so a theme's buttons — which fill the strip's height — cannot paint over it, and it is a MID
+ * GREY rather than black, on the same ground `+controlDarkShadowColor` stands on: a black line reads as something
+ * DRAWN onto the window, where a grey reads as the edge OF it. 0.45 rather than the 0.32 it began at, because at
+ * that weight the line was doing the separating on its own where the two surfaces either side already do it. */
+static const CGFloat fn_CHROME_HAIRLINE = 0.45;
 
 /* ============================================================================================ *
  * THE CHROME'S THEME, AND WHY THE HEIGHT IS A FUNCTION NOW.                                     *

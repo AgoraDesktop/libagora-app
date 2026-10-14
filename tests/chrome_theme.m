@@ -254,11 +254,11 @@ int main(void)
 			{
 				NSBitmapImageRep *rep = draw_chrome(w);
 
-				check(is_rgb(at_win(rep, 5, CH - 1), 0.32, 0.32, 0.32)
-				      && is_rgb(at_win(rep, 50, CH - 1), 0.32, 0.32, 0.32)
-				      && is_rgb(at_win(rep, CW - 5, CH - 1), 0.32, 0.32, 0.32),
-				      "a dark grey HAIRLINE runs the full width between the chrome and the content");
-				check(!is_rgb(at_win(rep, 50, CH - 2), 0.32, 0.32, 0.32),
+				check(is_rgb(at_win(rep, 5, CH - 1), 0.45, 0.45, 0.45)
+				      && is_rgb(at_win(rep, 50, CH - 1), 0.45, 0.45, 0.45)
+				      && is_rgb(at_win(rep, CW - 5, CH - 1), 0.45, 0.45, 0.45),
+				      "a grey HAIRLINE runs the full width between the chrome and the content");
+				check(!is_rgb(at_win(rep, 50, CH - 2), 0.45, 0.45, 0.45),
 				      "and it is one point, not a band");
 				[rep release];
 			}
