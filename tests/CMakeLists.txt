@@ -134,6 +134,14 @@ target_link_libraries(clip_view PRIVATE App m)
 add_test(NAME appkit-clip-view COMMAND clip_view)
 set_tests_properties(appkit-clip-view PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
 
+# **AND THE BAR THAT GOES WITH IT.** A scroller is two inverse arithmetics — the value pair into a knob, and a point
+# into a part — plus the drag that turns a point back into a value. Offscreen, and it needs neither a scroll view nor
+# a document: it is a control that reports where it was pressed, and the scroll view that owns it does the scrolling.
+add_executable(scroller scroller.m)
+target_link_libraries(scroller PRIVATE App m)
+add_test(NAME appkit-scroller COMMAND scroller)
+set_tests_properties(appkit-scroller PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
+
 # **AND THE DISPLAY PATH.** The ink tests are all offscreen; this one puts a menu's window on a headless
 # compositor and reads the COMPOSITOR'S OWN FRAMEBUFFER back, which is the only place the present can be seen.
 # It skips when there is no window server, so a component's tests still do not need a sibling's build.

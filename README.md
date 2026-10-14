@@ -44,6 +44,7 @@ tests/
   tracking_area.m               an AREA's region, owner and SCOPE — and a control's own hover area
   text_input.m                  the first slice of the text system, driven a keystroke at a time
   clip_view.m                   the INSIDE of a scroll view: the arithmetic, and the wire that re-runs it
+  scroller.m                    and its BAR: a fraction into a knob, a point into a part, a drag back into a value
   window_chrome.m               the DRAWN chrome, offscreen: the symbols, the centred title and the pill
   menu_validation.m             validation and state, which the view tests do not reach
   appkit_activation.m           only the ACTIVE application's menu bar shows
@@ -148,9 +149,17 @@ the compositor is really gone.
   frame and bounds notifications, so a document that SHRANK did not pull the visible area back with it — the header
   promised it and the class did not do it. `-setDocumentView:` now observes the document (and stops observing the one
   it replaces), and `tests/clip_view.m` drives that through `-setFrame:` rather than by calling the handler.
-- **`ctest`: 22 of 22 passed** (the keyboard and the seam, the AppKit and its input path, the controls and their
-  metrics, what a drag costs, the resize by edge, the tracking engine, the text path, the clip view, the chrome and
-  what its buttons do, the chrome theme, the menus and activation).
+- **And the bar that goes with it** (`ctest`, offscreen): `NSScroller` is two INVERSE arithmetics — the value pair
+  (`-floatValue` in [0, 1] and `-knobProportion`) into a knob, and a point back into a PART — plus the drag between
+  them. MEASURED: a 15-point regular metric (11 small and mini), a 15x100 frame with a half-track knob splits into a
+  slot at y=15..85 and a 35-point knob at the top; a press on the knob remembers the grab 7.5 points into it, so a
+  10-point drag moves the value by 10/35 of the travel rather than to the pointer; both ends clamp; a one-percent
+  proportion still draws a knob as long as the control is THICK, because a knob too small to grab is not a knob; and
+  `-NSScrollerArrowsNone` is a GEOMETRY change (the line parts vanish and the slot becomes the whole frame) and not
+  an ink one.
+- **`ctest`: 23 of 23 passed** (the keyboard and the seam, the AppKit and its input path, the controls and their
+  metrics, what a drag costs, the resize by edge, the tracking engine, the text path, the clip view and the scroller,
+  the chrome and what its buttons do, the chrome theme, the menus and activation).
 - **And the desktop's own text is SUB-PIXEL ANTIALIASED**, which is the AppKit's half of a renderer change in
   CoreGraphics: a window's surface is OPAQUE (`kCGImageAlphaNoneSkipFirst`), and the destination's opacity is
   exactly what decides whether a glyph is rasterised in colour. MEASURED on the live session: the window title's
