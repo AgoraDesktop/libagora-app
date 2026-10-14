@@ -829,6 +829,57 @@ static AGChromeButtonState fn_chrome_state(NSWindow *w, NSInteger index)
 	return [w isKeyWindow] ? AGChromeButtonStateActive : AGChromeButtonStateInactive;
 }
 
+/* **THE TITLE BAR AS THE THEME DRAWS IT: A CORNER AT EACH END, TITLE PIECES BETWEEN, THE BUTTONS ON TOP.** XFWM
+ * composes a bar this way, and those piece files are the ground a theme's buttons were drawn against — so a chrome
+ * that read only the buttons would put them on this tier's flat grey and leave the rest of the bar plain. The
+ * pieces are tiled in XFWM's order (1…5, cycled) and the corners are drawn LAST so they cover the tiling's ends; a
+ * theme with only SOME of them keeps the frame colour as the ground, which is what the fill underneath is for. */
+static void fn_draw_themed_title_bar(CGContextRef c, AGChromeTheme *theme, NSRect content, BOOL active,
+				     CGFloat height)
+{
+	CGFloat top = content.size.height;
+	CGFloat width = content.size.width;
+	CGFloat x;
+	int i;
+
+	CGContextSetFillColorWithColor(c, [[NSColor windowFrameColor] CGColor]);
+	CGContextFillRect(c, CGRectMake(0.0, top, width, height));
+
+	for (x = 0.0, i = 0; x < width && i < 4096; i++) {
+		AGChromeFramePiece which = (AGChromeFramePiece)(AGChromeFrameTitle1 + (i % 5));
+		CGImageRef piece = [theme framePiece:which active:active];
+		CGFloat pw;
+
+		if (piece == NULL) {
+			piece = [theme framePiece:AGChromeFrameTitle1 active:active];
+			if (piece == NULL) {
+				break;
+			}
+		}
+		pw = (CGFloat)CGImageGetWidth(piece);
+		if (pw <= 0.0) {
+			break;
+		}
+		fn_draw_image(c, NSMakeRect(x, top, pw, height), piece);
+		x += pw;
+	}
+	{
+		CGImageRef tl = [theme framePiece:AGChromeFrameTopLeft active:active];
+		CGImageRef tr = [theme framePiece:AGChromeFrameTopRight active:active];
+
+		if (tl != NULL) {
+			CGFloat w = (CGFloat)CGImageGetWidth(tl);
+
+			fn_draw_image(c, NSMakeRect(0.0, top, w, height), tl);
+		}
+		if (tr != NULL) {
+			CGFloat w = (CGFloat)CGImageGetWidth(tr);
+
+			fn_draw_image(c, NSMakeRect(width - w, top, w, height), tr);
+		}
+	}
+}
+
 static void fn_draw_chrome(CGContextRef c, NSWindow *w, NSRect content)
 {
 	fn_chrome_layout_t layout;
@@ -838,13 +889,10 @@ static void fn_draw_chrome(CGContextRef c, NSWindow *w, NSRect content)
 
 	fn_chrome_layout(w, &layout);
 
-	/* THE STRIP FIRST, in the frame colour — the fill that had no author before. A theme's buttons carry their own
-	 * backgrounds; the strip between them is the window's, which is the one part of the bar a button set does not
-	 * describe. */
-	CGContextSetFillColorWithColor(c, [[NSColor windowFrameColor] CGColor]);
-	CGContextFillRect(c, CGRectMake(0.0, top, content.size.width, layout.height));
-
 	if (theme != NULL) {
+		/* **THE THEME'S OWN TITLE BAR FIRST, THEN ITS BUTTONS ON TOP.** A bar is a corner at each end and a strip of
+		 * title pieces between them; the buttons and the title text sit on THAT, not on a flat fill. */
+		fn_draw_themed_title_bar(c, theme, content, [w isKeyWindow], layout.height);
 		/* **THE THEME'S BUTTONS, AT THEIR OWN SIZE.** Each is asked for the state the pointer and the window make,
 		 * and a theme that is missing one file falls back to the drawn mark for THAT button rather than for the
 		 * whole bar — a half-themed window is still a window. */
@@ -865,6 +913,8 @@ static void fn_draw_chrome(CGContextRef c, NSWindow *w, NSRect content)
 		}
 	} else {
 		/* THE MARKS THIS FILE HAS ALWAYS DRAWN, which is what a process with no theme gets. */
+		CGContextSetFillColorWithColor(c, [[NSColor windowFrameColor] CGColor]);
+		CGContextFillRect(c, CGRectMake(0.0, top, content.size.width, layout.height));
 		for (i = 0; i < AGChromeButtonCount - 1; i++) {
 			if (layout.present[i]) {
 				fn_draw_symbol(c, layout.rects[i], i);

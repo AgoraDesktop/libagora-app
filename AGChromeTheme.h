@@ -51,6 +51,22 @@ typedef NS_ENUM(NSInteger, AGChromeButtonState) {
 	AGChromeButtonStateCount = 4
 };
 
+/* **THE PIECES A THEME DRAWS THE TITLE BAR ITSELF FROM, WHICH ARE THE PART THAT IS NOT A BUTTON.** XFWM composes
+ * the bar from a CORNER at each end, a strip of TITLE pieces between them (`title-1` … `title-5`, cycled), and
+ * the buttons on top — so reading only the button files leaves the theme's own bar background unread and the
+ * buttons sit on this tier's flat grey instead of on the surface they were drawn for. There is no POINTER state
+ * here: a bar does not prelight, so a piece is active or inactive and nothing else. */
+typedef NS_ENUM(NSInteger, AGChromeFramePiece) {
+	AGChromeFrameTopLeft = 0,
+	AGChromeFrameTopRight = 1,
+	AGChromeFrameTitle1 = 2,
+	AGChromeFrameTitle2 = 3,
+	AGChromeFrameTitle3 = 4,
+	AGChromeFrameTitle4 = 5,
+	AGChromeFrameTitle5 = 6,
+	AGChromeFramePieceCount = 7
+};
+
 @interface AGChromeTheme : NSObject
 {
 	NSString *_directory;			/* RETAINED: the directory the `.xpm` files are read from */
@@ -62,6 +78,9 @@ typedef NS_ENUM(NSInteger, AGChromeButtonState) {
 	 * RETURNED BORROWED — a caller draws it and must not release it. */
 	CGImageRef _images[AGChromeButtonCount][AGChromeButtonStateCount];
 	BOOL _probed[AGChromeButtonCount][AGChromeButtonStateCount];
+	/* THE TITLE BAR'S OWN PIECES, cached the same way: one image per piece and per ACTIVE/INACTIVE. */
+	CGImageRef _frameImages[AGChromeFramePieceCount][2];
+	BOOL _frameProbed[AGChromeFramePieceCount][2];
 }
 
 /* NIL WHEN NO THEME RESOLVES, which is the ordinary case and not a failure. */
@@ -77,6 +96,10 @@ typedef NS_ENUM(NSInteger, AGChromeButtonState) {
  * `prelight`, either to `active`/`inactive` — so a theme with two graphics per button still draws four states.
  * NULL when the button has no image at all, which is the caller's cue to draw its own mark. */
 - (nullable CGImageRef)imageForButton:(AGChromeButton)button state:(AGChromeButtonState)state;
+
+/* BORROWED, AND CACHED, like the buttons. NULL when the theme has no such piece, which is the caller's cue to
+ * leave that part of the bar in the frame colour it would otherwise have. */
+- (nullable CGImageRef)framePiece:(AGChromeFramePiece)piece active:(BOOL)active;
 
 @end
 

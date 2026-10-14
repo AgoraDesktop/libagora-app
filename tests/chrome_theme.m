@@ -166,6 +166,15 @@ int main(void)
 				      "a window that is NOT key draws the theme's INACTIVE close button");
 				check(is_rgb(at_win(rep, menu_x() + s_buttonW / 2, y), 0.5, 0.5, 0.5),
 				      "and the menu button is at the RIGHT edge, in its inactive colour");
+				/* **AND THE BAR ITSELF IS THE THEME'S, NOT A FLAT FILL.** The corners are `top-left`/`top-right` and
+				 * the middle is `title-1`…`title-5` tiled, so these three name a piece each: a chrome that read only
+				 * the buttons would leave all three at the frame colour. */
+				check(is_rgb(at_win(rep, 0, y), 0x0A / 255.0, 0x0A / 255.0, 0x0A / 255.0),
+				      "the theme's INACTIVE top-left corner is drawn at the left edge");
+				check(is_rgb(at_win(rep, CW - 1, y), 0x10 / 255.0, 0x10 / 255.0, 0x10 / 255.0),
+				      "its inactive top-right corner at the right edge");
+				check(is_rgb(at_win(rep, 85, y), 0x20 / 255.0, 0x20 / 255.0, 0x20 / 255.0),
+				      "and its title pieces TILED between them");
 				[rep release];
 			}
 
@@ -178,6 +187,8 @@ int main(void)
 				rep = draw_chrome(w);
 				check([w isKeyWindow] && is_rgb(at_win(rep, close_x() + s_buttonW / 2, y), 1.0, 0.0, 0.0),
 				      "a KEY window draws the ACTIVE close button");
+				check(is_rgb(at_win(rep, 0, y), 0x11 / 255.0, 0x22 / 255.0, 0x33 / 255.0),
+				      "and its title bar's corners are the ACTIVE pieces");
 				[rep release];
 			}
 
@@ -216,13 +227,9 @@ int main(void)
 				NSColor *top = at_win(rep, close_x(), CH + s_buttonH - 1);
 				NSColor *bottom = at_win(rep, close_x(), CH);
 
-				check(is_rgb(top, [NSColor windowFrameColor].redComponent,
-					     [NSColor windowFrameColor].greenComponent,
-					     [NSColor windowFrameColor].blueComponent),
-				      "the transparent top-left pixel of a button shows the STRIP through it");
-				check(!is_rgb(bottom, [NSColor windowFrameColor].redComponent,
-					      [NSColor windowFrameColor].greenComponent,
-					      [NSColor windowFrameColor].blueComponent),
+				check(is_rgb(top, 0x11 / 255.0, 0x22 / 255.0, 0x33 / 255.0),
+				      "the transparent top-left pixel of a button shows the theme's TITLE BAR through it");
+				check(!is_rgb(bottom, 0x11 / 255.0, 0x22 / 255.0, 0x33 / 255.0),
 				      "and the bottom-left pixel is the button's own colour — the image is not upside down");
 				[rep release];
 			}

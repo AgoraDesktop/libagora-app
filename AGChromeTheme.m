@@ -23,6 +23,11 @@
 static const char *const fn_button_names[AGChromeButtonCount] = { "close", "hide", "maximize", "menu" };
 static const char *const fn_state_names[AGChromeButtonStateCount] = { "active", "inactive", "prelight", "pressed" };
 
+/* THE FRAME PIECES' FILE NAMES, WHICH ARE `AGChromeFramePiece` SPELLED OUT — the same shape as the buttons'. */
+static const char *const fn_frame_names[AGChromeFramePieceCount] = {
+	"top-left", "top-right", "title-1", "title-2", "title-3", "title-4", "title-5"
+};
+
 static AGChromeTheme *s_shared = nil;
 static BOOL s_resolved = NO;
 
@@ -368,14 +373,40 @@ static BOOL fn_probe_height(NSString *directory, NSString *base, CGFloat *outHei
 	return NULL;
 }
 
+- (CGImageRef)framePiece:(AGChromeFramePiece)piece active:(BOOL)active
+{
+	int s = active ? 0 : 1;
+
+	if (piece < 0 || piece >= AGChromeFramePieceCount) {
+		return NULL;
+	}
+	/* PROBED ONCE EITHER WAY, so a theme with no title pieces does not look for them every frame. */
+	if (!_frameProbed[piece][s]) {
+		NSString *base = [NSString stringWithFormat:@"%s-%s", fn_frame_names[piece],
+				  active ? "active" : "inactive"];
+
+		_frameProbed[piece][s] = YES;
+		_frameImages[piece][s] = fn_load_named(_directory, base);
+	}
+	return _frameImages[piece][s];	/* BORROWED: the cache owns it */
+}
+
 - (void)dealloc
 {
 	int button, state;
+	int piece, half;
 
 	for (button = 0; button < AGChromeButtonCount; button++) {
 		for (state = 0; state < AGChromeButtonStateCount; state++) {
 			if (_images[button][state] != NULL) {
 				CGImageRelease(_images[button][state]);
+			}
+		}
+	}
+	for (piece = 0; piece < AGChromeFramePieceCount; piece++) {
+		for (half = 0; half < 2; half++) {
+			if (_frameImages[piece][half] != NULL) {
+				CGImageRelease(_frameImages[piece][half]);
 			}
 		}
 	}
