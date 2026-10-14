@@ -2503,17 +2503,24 @@ static CGFloat fn_clamp_axis(CGFloat v, CGFloat lo, CGFloat hi)
 		_pixels = NULL;
 	}
 	/* THE FORMAT IS THE SEAM'S OWN, AND IT IS THE SAME PATTERN FOR THE SAME REASON: the seam's frame buffer is
-	 * `XRGB8888`, which on a little-endian machine stores a pixel as B, G, R, X in memory — exactly
-	 * `PremultipliedFirst | 32Little`, the pair the drawing-handler canvas in NSImage uses too. So the copy in
+	 * `XRGB8888`, which on a little-endian machine stores a pixel as B, G, R, X in memory. So the copy in
 	 * `-display` is a memcpy and not a conversion, and getting the pattern wrong would be a red/blue swap, which
-	 * is why the probe checks a colour rather than a byte. */
+	 * is why the probe checks a colour rather than a byte.
+	 *
+	 * **AND IT IS THE `X` SPELLING RATHER THAN THE ALPHA ONE, BECAUSE A WINDOW IS OPAQUE.** `NoneSkipFirst` is
+	 * the same word with the fourth byte NOT WRITTEN — which is what the seam already says that byte is — and
+	 * the difference is not cosmetic: an alpha channel is exactly what STOPS a context from rendering smoothed
+	 * text (`cg_font_smoothing` in CoreGraphics), so a window surface that carried one would draw every label on
+	 * the desktop in grey coverage while the renderer underneath could have done better. A window's frame has no
+	 * transparency to represent — its shadow is the SERVER's, around the frame and not in it — so this is the
+	 * honest format for it as well as the one that makes the text look right. */
 	_pixels = calloc((size_t)w * (size_t)h * 4u, 1);
 	if (_pixels == NULL) {
 		return NO;
 	}
 	cs = CGColorSpaceCreateDeviceRGB();
 	_surface = CGBitmapContextCreate(_pixels, (size_t)w, (size_t)h, 8, (size_t)w * 4u, cs,
-					 (uint32_t)(kCGImageAlphaPremultipliedFirst | kCGBitmapByteOrder32Little));
+					 (uint32_t)(kCGImageAlphaNoneSkipFirst | kCGBitmapByteOrder32Little));
 	CGColorSpaceRelease(cs);
 	if (_surface == NULL) {
 		free(_pixels);

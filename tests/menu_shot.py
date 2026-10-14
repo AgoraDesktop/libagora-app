@@ -47,15 +47,21 @@ def main():
     # THE TOP EDGE FIRST: one row below the bar, the columns that are the panel's brightest shade.
     top_row = BAR_ROWS
     top_cols = [x for x in range(w) if is_panel_top(*px[x, top_row])]
-    # **AND THE BOTTOM BY WALKING DOWN THE MIDDLE OF IT.** The panel is a ramp and the wallpaper is not neutral, so
-    # the panel's own rows are exactly the run of neutral pixels below its top — which is what makes the height a
-    # measurement of the panel rather than of wherever its ink happens to be.
+    # **AND THE BOTTOM BY WALKING DOWN A COLUMN OF THE PANEL'S OWN PADDING.** The panel's rows are exactly the run
+    # of the panel's colour below its top — which is what makes the height a measurement of the PANEL rather than of
+    # wherever its ink happens to be.
+    #
+    # **IT IS A PADDING COLUMN AND NOT THE MIDDLE, AND THAT CHANGED WHEN THE TEXT DID.** The walk went down the
+    # middle while the text was GREY, because grey ink is still neutral and the only thing that stopped it was the
+    # wallpaper. FONT SMOOTHING MADE THE INK COLOURED — three samples to the pixel is what the extra resolution IS —
+    # so a column through a letter now reads a channel split of up to 140 and a "neutral" test stops nine rows in.
+    # The panel's own padding is 2 points wide and no row's ink reaches it: MEASURED, the columns at x=217..220 are
+    # the panel's colour for all 48 rows while x=221 onwards meet the first letterhead.
     panel = []
     if top_cols:
-        midx = (min(top_cols) + max(top_cols)) // 2
+        padx = min(top_cols) + 1
         for y in range(top_row, h):
-            r, g, b = px[midx, y]
-            if not (abs(r - g) < 4 and abs(g - b) < 4):
+            if px[padx, y] != PANEL:
                 break
             panel.extend((x, y) for x in range(min(top_cols), max(top_cols) + 1))
 
