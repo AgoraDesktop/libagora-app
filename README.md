@@ -132,6 +132,13 @@ the compositor is really gone.
   window dragged by its edge DISAPPEARED for the whole drag — a mid-drag capture had the wallpaper where it had
   been — and came back on the release, because the release was what marked it. The test now holds both halves of
   that asymmetry: a resize marks the window stale and a move leaves it alone.
+  **AND THE OUTGOING BUFFER OUTLIVES THE ATTACH THAT REPLACES IT.** A surface's current buffer is the last one
+  ATTACHED — a `wl_buffer`'s release means the compositor has finished drawing with it, NOT that the surface has
+  stopped showing it — so a resize that freed the buffer it was replacing left the surface with none, and a surface
+  with no buffer is not composited and not even hit-tested. MEASURED, with a capture at every step of a drag: 21 of
+  25 captures had no window in them at all; after the seam keeps the outgoing buffer until the new one is attached,
+  0 of 25. `tests/window.c` holds the half a headless test can: a deferred resize must finish, so a frame is asked
+  for at the new size and the stride it arrives with is the size that was given.
 - **`ctest`: 21 of 21 passed** (the keyboard and the seam, the AppKit and its input path, the controls and their
   metrics, what a drag costs, the resize by edge, the tracking engine, the text path, the chrome and what its
   buttons do, the chrome theme, the menus and activation).
