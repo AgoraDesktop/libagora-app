@@ -111,7 +111,28 @@
 
 /* ONE TITLE, ITS ITEMS, AND WHOSE ACTION THEY CARRY. Written as a helper because the bar below makes four of them and
  * the repetition is the shape of a menu rather than a decision. */
-static NSMenuItem *add_menu(NSMenu *bar, NSString *title, NSArray *itemTitles, id target, SEL action)
+/* **A KEY EQUIVALENT, WITH THE MODIFIER MASK THE MATCHER WANTS.** `-performKeyEquivalent:` compares an event's
+ * `-charactersIgnoringModifiers` — which the seam produces WITH Shift applied, so a shifted key arrives as an
+ * UPPERCASE letter — against the item's key equivalent, and it compares the MASK EXACTLY. So an uppercase key takes
+ * both bits and a lowercase one Command alone, which is what makes Cmd-Z undo and Shift-Cmd-Z redo rather than two
+ * spellings of one shortcut. THE MASK IS SET EXPLICITLY rather than left to a default: a fresh item in this tier
+ * carries NO modifier at all, and a shortcut nobody meant to type is not a shortcut. */
+static void fn_set_key(NSMenuItem *item, NSString *key)
+{
+	NSUInteger mask = NSCommandKeyMask;
+
+	if ([key length] == 1) {
+		unichar c = [key characterAtIndex:0];
+
+		if (c >= 'A' && c <= 'Z') {
+			mask |= NSShiftKeyMask;
+		}
+	}
+	[item setKeyEquivalent:key];
+	[item setKeyEquivalentModifierMask:mask];
+}
+
+static NSMenuItem *add_menu(NSMenu *bar, NSString *title, NSArray *itemTitles, NSArray *keys, id target, SEL action)
 {
 	NSMenuItem *titleItem = [[NSMenuItem alloc] initWithTitle:title action:NULL keyEquivalent:@""];
 	NSMenu *contents = [[NSMenu alloc] initWithTitle:title];
@@ -121,6 +142,12 @@ static NSMenuItem *add_menu(NSMenu *bar, NSString *title, NSArray *itemTitles, i
 		NSString *name = [itemTitles objectAtIndex:i];
 		NSMenuItem *entry = [[NSMenuItem alloc] initWithTitle:name action:action keyEquivalent:@""];
 
+		/* THE KEYS ARE A PARALLEL ARRAY rather than part of the title, because a key equivalent is an ITEM's and
+		 * not a menu's: two items in one menu may carry different modifiers (undo and redo), so the pair travels
+		 * with the item. */
+		if (i < [keys count]) {
+			fn_set_key(entry, [keys objectAtIndex:i]);
+		}
 		[entry setTarget:target];
 		[contents addItem:entry];
 		[entry release];
@@ -260,13 +287,17 @@ int main(int argc, char **argv)
 		controller->checkbox = check;
 		controller->readout = readout;
 		controller->slider = slider;
-		add_menu(bar, @"File", [NSArray arrayWithObjects:@"New", @"Open", @"Close", nil], controller,
-			 @selector(noop:));
-		add_menu(bar, @"Edit", [NSArray arrayWithObjects:@"Undo", @"Redo", nil], controller,
-			 @selector(noop:));
-		add_menu(bar, @"View", [NSArray arrayWithObjects:@"Show Grid", @"Show Ruler", nil], controller,
-			 @selector(toggleCheckbox:));
-		add_menu(bar, @"Help", [NSArray arrayWithObjects:@"Agora Help", nil], controller, @selector(noop:));
+		/* **AND EVERY ITEM WORTH TYPING CARRIES ITS SHORTCUT**, the Mac's own spellings: Cmd-N/O/W to make, open and
+		 * close, Cmd-Z and Shift-Cmd-Z to undo and redo, Cmd-G/R for the two View toggles. HELP HAS NONE — a Help
+		 * menu's own shortcut is a search field this tier has not got, and a made-up key would be one nobody typed. */
+		add_menu(bar, @"File", [NSArray arrayWithObjects:@"New", @"Open", @"Close", nil],
+			 [NSArray arrayWithObjects:@"n", @"o", @"w", nil], controller, @selector(noop:));
+		add_menu(bar, @"Edit", [NSArray arrayWithObjects:@"Undo", @"Redo", nil],
+			 [NSArray arrayWithObjects:@"z", @"Z", nil], controller, @selector(noop:));
+		add_menu(bar, @"View", [NSArray arrayWithObjects:@"Show Grid", @"Show Ruler", nil],
+			 [NSArray arrayWithObjects:@"g", @"r", nil], controller, @selector(toggleCheckbox:));
+		add_menu(bar, @"Help", [NSArray arrayWithObjects:@"Agora Help", nil],
+			 [NSArray arrayWithObjects:@"", nil], controller, @selector(noop:));
 		[app setMainMenu:bar];
 
 		/* **AND IT IS MADE KEY, WHICH IS WHAT A FRONTMOST WINDOW IS.** A theme's four states are the point of
