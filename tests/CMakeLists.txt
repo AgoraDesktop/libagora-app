@@ -63,6 +63,34 @@ add_executable(menu_view_ink menu_view_ink.m)
 target_link_libraries(menu_view_ink PRIVATE App)
 add_test(NAME appkit-menu-view-ink COMMAND menu_view_ink)
 
+# **THE CONTROL LAYER: A VIEW THAT DELEGATES ITS FACE TO A CELL.** Offscreen, and the claim is the INK — a button's
+# bezel and title, a switch's indicator, the value doors forwarding, and `-performClick:` reaching the target.
+add_executable(control_ink control_ink.m)
+target_link_libraries(control_ink PRIVATE App)
+add_test(NAME appkit-control-ink COMMAND control_ink)
+set_tests_properties(appkit-control-ink PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
+
+# THE NEXT CONTROL: a slider is the first whose VALUE is a position rather than a state, so its probe is the one that
+# has to measure the geometry's two directions and not just the ink.
+add_executable(slider_ink slider_ink.m)
+target_link_libraries(slider_ink PRIVATE App m)
+add_test(NAME appkit-slider-ink COMMAND slider_ink)
+set_tests_properties(appkit-slider-ink PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
+
+# AND THE TRACKING AREA: the class that replaced the window's blanket enter/exit synthesis, and whose SCOPE word is
+# what keeps a background window's controls from lighting up.
+add_executable(tracking_area tracking_area.m)
+target_link_libraries(tracking_area PRIVATE App m)
+add_test(NAME appkit-tracking-area COMMAND tracking_area)
+set_tests_properties(appkit-tracking-area PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
+
+# AND THE METRICS: a push button's height is a control METRIC and a line of text is a plausible height. Both halves
+# are one defect chain, so they are one probe — see the file's own header for why the order matters.
+add_executable(control_metrics control_metrics.m)
+target_link_libraries(control_metrics PRIVATE App m)
+add_test(NAME appkit-control-metrics COMMAND control_metrics)
+set_tests_properties(appkit-control-metrics PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
+
 # **AND THE DISPLAY PATH.** The ink tests are all offscreen; this one puts a menu's window on a headless
 # compositor and reads the COMPOSITOR'S OWN FRAMEBUFFER back, which is the only place the present can be seen.
 # It skips when there is no window server, so a component's tests still do not need a sibling's build.
