@@ -22,7 +22,11 @@
  * these are its shapes at the 15-point width this tree builds scrollers at. ONE radius covers the knob and the two
  * buttons — the sample's knob has flat sides and rounds only in its last three points — and THE GROOVE IS NOT ROUNDED
  * AT ALL: it is the recess the knob runs in, and a rounded recess reads as one more raised thing. */
-#define NS_SCROLLER_ARROW_INSET		4.0	/* how far an arrow is held off its own button, per side */
+/* **THE ARROW'S TWO NUMBERS, AS FRACTIONS OF ITS BUTTON.** The sample draws an arrow 6 points across and 4 tall on a
+ * 17-point bar, so these are 6/17 and half of it — and the shape is WIDER THAN IT IS TALL, which is a thing a PATH
+ * can carry and a staircase could not. */
+#define NS_SCROLLER_ARROW_HALF		0.176	/* of the button's short side: half of 6/17 across */
+#define NS_SCROLLER_ARROW_HEIGHT	0.235	/* of it: 4/17, apex to base */
 #define NS_SCROLLER_BAR_RADIUS		3.0	/* ONE radius, used three times: the knob and both buttons */
 #define NS_SCROLLER_GRIP_RADIUS		2.0	/* the knob's dimples — three of them, down its centre */
 #define NS_SCROLLER_GRIP_SPACING	8.0	/* centre to centre, which is what makes them read as a grip */
@@ -423,8 +427,8 @@
 /* **EVERY PIECE OF THIS BAR IS A RECTANGLE, ROUNDED OR SQUARE, AND THE GRIP IS THREE RINGS.** The sample is a
  * bitmap exported from Affinity Designer, so its edges are the EXPORT's rather than the design's and cannot be asked
  * how sharp anything should be; what it settles is the SHAPE LANGUAGE — a rounded knob and rounded arrow buttons, a
- * SQUARE groove for them to sit in, and three rings down the knob's centre. THE ARROW IS THE ONE PIECE STILL DRAWN A
- * POINT AT A TIME, and the note in `-drawArrow:` is where that is argued. */
+ * SQUARE groove for them to sit in, and three rings down the knob's centre. EVERY PIECE OF IT IS A SHAPE, the arrow
+ * included — and the arrow is the one place antialiasing is turned OFF, which `-drawArrow:` argues. */
 static void fn_draw_grip(NSRect knob, BOOL horizontal)
 {
 	CGFloat radius = NS_SCROLLER_GRIP_RADIUS;
@@ -459,47 +463,6 @@ static void fn_draw_grip(NSRect knob, BOOL horizontal)
 	}
 }
 
-/* **AN ARROW IS RASTERIZED A POINT AT A TIME, WHICH IS TEMPORARY AND IS SAID SO WHERE IT MATTERS.** The tree's path
- * filler cannot draw a triangle: MEASURED on a probe, a 60x40 triangle comes out 30 points across its base and a 6x4
- * one comes out a 3x2 bar, and how wrong it is depends on which way the point faces — so a path glyph is the wrong
- * SHAPE, differently wrong at each end of the bar. WHOLE-POINT ROWS have no such freedom: the arrow is CRISP, it is
- * SYMMETRIC about its axis by construction, and the up one is exactly the down one turned over. THE COST IS THAT IT
- * CANNOT RESCALE, since the box comes from the width it is handed rather than the shape being re-solved — which is
- * the whole reason a path was tried. See `cg_sweep` in libagora-drawing's CGContext.c. */
-static void fn_fill_arrow_rows(CGContextRef c, int centre_x, int top, int box, BOOL points_up)
-{
-	int row;
-
-	for (row = 0; row < box; row++) {
-		/* THE WIDTH STEPS BY WHOLE POINTS, so the sides are a staircase and not a blur; the `box / 2` half-steps
-		 * keep it centred, which is what makes the apex a SINGLE point rather than a two-point flat. */
-		int step = points_up ? row : (box - 1 - row);
-		int wide = 1 + 2 * ((step * (box / 2)) / (box > 1 ? box - 1 : 1));
-
-		if (wide > box) {
-			wide = box;
-		}
-		CGContextFillRect(c, CGRectMake((CGFloat)(centre_x - wide / 2), (CGFloat)(top + row),
-						(CGFloat)wide, 1.0));
-	}
-}
-
-static void fn_fill_arrow_cols(CGContextRef c, int centre_y, int left, int box, BOOL points_left)
-{
-	int col;
-
-	for (col = 0; col < box; col++) {
-		int step = points_left ? col : (box - 1 - col);
-		int high = 1 + 2 * ((step * (box / 2)) / (box > 1 ? box - 1 : 1));
-
-		if (high > box) {
-			high = box;
-		}
-		CGContextFillRect(c, CGRectMake((CGFloat)(left + col), (CGFloat)(centre_y - high / 2),
-						1.0, (CGFloat)high));
-	}
-}
-
 /* ONE ARROW, POINTING THE WAY ITS PART SCROLLS. The decrement arrow points to the smaller values — up in a vertical
  * scroller, left in a horizontal one — which in a flipped view is the smaller y or x, so no flip arithmetic is
  * needed here: the coordinates are already the reader's. */
@@ -510,9 +473,12 @@ static void fn_fill_arrow_cols(CGContextRef c, int centre_y, int left, int box, 
 	BOOL decrement = (whichArrow == NSScrollerDecrementArrow);
 	BOOL horizontal = [self fn_horizontalInFrame:[self cg_frame]];
 	NSBezierPath *button;
-	int side;
-	int box;
-	int inset;
+	NSBezierPath *p;
+	CGFloat side;
+	CGFloat half;
+	CGFloat height;
+	CGFloat cx;
+	CGFloat cy;
 
 	if (r.size.width <= 0.0 || r.size.height <= 0.0) {
 		return;
@@ -534,40 +500,62 @@ static void fn_fill_arrow_cols(CGContextRef c, int centre_y, int left, int box, 
 	[button setLineWidth:1.0];
 	[button stroke];
 
-	/* **THE GLYPH IS WHOLE POINTS, AND THE BOX IS DERIVED FROM THE BUTTON RATHER THAN THE SHAPE.** The inset holds the
-	 * arrow off its button's edge; the box that is left is the square the staircase is built in, and a button too small
-	 * for one opens the inset to a single point before giving up — a scroller at an absurd size is a degenerate case
-	 * and not a crash. THE INK IS BLACK AND DOES NOT CHANGE WITH THE PRESS: the press is already said by the button's
-	 * face darkening above, and a glyph that also dimmed would be two answers to one question. */
-	side = (int)(NSWidth(r) < NSHeight(r) ? NSWidth(r) : NSHeight(r));
-	inset = (int)NS_SCROLLER_ARROW_INSET;
-	box = side - 2 * inset;
-	if (box < 3) {
-		inset = 1;
-		box = side - 2;
-	}
-	if (box < 1) {
+	/* **THE GLYPH IS A PATH, AND THE SHAPE IS THE SAMPLE'S RATHER THAN A BOX.** It is a triangle WIDER THAN IT IS
+	 * TALL — 6 points across and 4 tall on the sample's 17-point bar — and a path is what that needs: a staircase has
+	 * to choose its steps out of the width it is handed, where a path is re-solved at whatever size it is asked for.
+	 * That is what gives the 11-point small-control-size bar an arrow of its own instead of a shrunken 15-point one.
+	 *
+	 * IT WAS RASTERIZED FOR AS LONG AS `cg_sweep` FILLED A TRAPEZOID'S TOP EDGE AT THE WIDTH OF ITS BAND'S MIDDLE,
+	 * which drew every triangle wrong at every size — a 16-point base came out with a missing apex. That is fixed in
+	 * libagora-drawing, so the shape is back.
+	 *
+	 * **AND IT IS FILLED WITH ANTIALIASING OFF, WHICH IS THE ONE THING THE RASTERIZATION WAS ALSO BUYING.** A triangle
+	 * this small is almost entirely edge, so a blended fill reads as GREY rather than as ink — "mushy" was the word for
+	 * it. Turning it off leaves the seam where the filler puts it, and the filler is right now: the arrow is HARD-edged
+	 * without being a staircase. The state is saved and restored rather than left off, because the button behind it and
+	 * the knob after it are curves that want the antialiasing this does not.
+	 *
+	 * THE INK IS BLACK AND DOES NOT CHANGE WITH THE PRESS: the press is already said by the button's face darkening
+	 * above, and a glyph that also dimmed would be two answers to one question. */
+	side = (NSWidth(r) < NSHeight(r)) ? NSWidth(r) : NSHeight(r);
+	half = side * NS_SCROLLER_ARROW_HALF;
+	height = side * NS_SCROLLER_ARROW_HEIGHT;
+	if (half < 1.0 || height < 1.0) {
 		return;
 	}
+	/* HALF-POINT CENTRES, so the apex is ONE point rather than a two-point flat. */
+	cx = floor(NSMidX(r)) + 0.5;
+	cy = floor(NSMidY(r)) + 0.5;
+	p = [NSBezierPath bezierPath];
+	if (!horizontal) {
+		CGFloat apex = decrement ? (cy - height / 2.0) : (cy + height / 2.0);
+		CGFloat base = decrement ? (cy + height / 2.0) : (cy - height / 2.0);
+
+		[p moveToPoint:NSMakePoint(cx, apex)];
+		[p lineToPoint:NSMakePoint(cx + half, base)];
+		[p lineToPoint:NSMakePoint(cx - half, base)];
+	} else {
+		CGFloat apex = decrement ? (cx - height / 2.0) : (cx + height / 2.0);
+		CGFloat base = decrement ? (cx + height / 2.0) : (cx - height / 2.0);
+
+		[p moveToPoint:NSMakePoint(apex, cy)];
+		[p lineToPoint:NSMakePoint(base, cy + half)];
+		[p lineToPoint:NSMakePoint(base, cy - half)];
+	}
+	[p closePath];
 	{
 		CGContextRef c = [[NSGraphicsContext currentContext] CGContext];
 
 		if (c == NULL) {
 			return;
 		}
-		CGContextSetFillColorWithColor(c, [[NSColor blackColor] CGColor]);
-		if (!horizontal) {
-			int top = (int)NSMinY(r) + ((int)NSHeight(r) - box) / 2;
-
-			fn_fill_arrow_rows(c, (int)NSMidX(r), top, box, decrement);
-		} else {
-			int left = (int)NSMinX(r) + ((int)NSWidth(r) - box) / 2;
-
-			fn_fill_arrow_cols(c, (int)NSMidY(r), left, box, decrement);
-		}
+		CGContextSaveGState(c);
+		CGContextSetShouldAntialias(c, false);
+		[[NSColor blackColor] setFill];
+		[p fill];
+		CGContextRestoreGState(c);
 	}
 }
-
 - (void)drawKnob
 {
 	NSRect r = [self rectForPart:NSScrollerKnob];

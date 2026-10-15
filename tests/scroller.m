@@ -260,20 +260,20 @@ int main(void)
 			[rep release];
 		}
 
-		/* 10b. **AND THE ARROW IS CRISP *AND* THE TWO ARE EXACT MIRRORS, WHICH IS WHY IT IS RASTERIZED.** The face
-		 * draws its arrow a point at a time in whole-point rows, and this is the case that says why: the tree's path
-		 * filler cannot draw a triangle. MEASURED on a probe, a 60x40 triangle comes out 30 points across its base and a
-		 * 6x4 one comes out a 3x2 bar, and how wrong it is depends on which way the point faces — so a path glyph is the
-		 * wrong SHAPE, differently wrong at each end of one bar. Rasterized rows have no such freedom, and the two claims
-		 * below are the ones a person can see: the arrows cover the SAME number of points, and there is NO half-covered
-		 * point anywhere in either.
+		/* 10b. **AND THE ARROW IS CRISP *AND* THE TWO ARE EXACT MIRRORS, WHICH A PATH CAN BE WHEN IT IS FILLED HARD.**
+		 * The glyph is a PATH — a triangle six points across and four tall, which is the sample's proportion and is WIDER
+		 * THAN IT IS TALL — and it is filled with ANTIALIASING OFF. That is the pair of things being held here.
 		 *
-		 * IT IS TEMPORARY AND THE CELL SAYS SO. A staircase cannot follow the shape across the two scroller widths this
-		 * tree builds, which is what a path would buy — so when `cg_sweep` in libagora-drawing/CGContext.c pairs a
-		 * triangle's edges correctly, the glyph goes back to a path and this case goes back to allowing its edges to be
-		 * blended. THE MEASUREMENT IS THE GLYPH'S OWN BOX, not the whole button: the button is a rounded rectangle whose
-		 * corners are curves and the knob's 1-point stroke antialiases into y=14, so neither is the arrow — counting them
-		 * in would make the two windows differ by the button's corners rather than by the glyph. */
+		 * IT WAS RASTERIZED A POINT AT A TIME FOR AS LONG AS THE FILL COULD NOT DRAW A TRIANGLE AT ALL: MEASURED then, a
+		 * 60x40 triangle came out 30 points across its base and a 6x4 one came out a 3x2 bar, differently wrong at each
+		 * end of one bar. That is fixed in libagora-drawing (`cg_sweep` filled every trapezoid's top edge at the width of
+		 * its band's MIDDLE), so the shape is back, and the two claims below are the ones a person can still see: the
+		 * arrows cover the SAME number of points, and there is NO half-covered point anywhere in either — which is what
+		 * turning antialiasing off buys, and what a blended triangle this small cannot give, since it is almost all edge.
+		 *
+		 * THE MEASUREMENT IS THE GLYPH'S OWN BOX, not the whole button: the button is a rounded rectangle whose corners
+		 * are curves and the knob's 1-point stroke antialiases into y=14, so neither is the arrow — counting them in would
+		 * make the two windows differ by the button's corners rather than by the glyph. */
 		{
 			NSBitmapImageRep *rep = [[NSBitmapImageRep alloc] initWithBitmapDataPlanes:NULL pixelsWide:15
 				pixelsHigh:100 bitsPerSample:8 samplesPerPixel:4 hasAlpha:YES isPlanar:NO
