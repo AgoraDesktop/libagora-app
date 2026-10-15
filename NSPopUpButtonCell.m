@@ -44,14 +44,12 @@
  * opens one way and a pop-up chooses both. The label on each row of that gallery names the control drawn there, which
  * is what settles it.
  *
- * THE SAMPLE'S NUMBERS: its field is 26 points tall, its chip 20 x 20 inset five points from the field's right border,
- * each triangle 10 points across and 5 tall, and 2 points between them. Said as fractions of the FIELD's height,
- * because a pop-up's chip belongs to the field it is drawn in and a small control's field is shorter: */
-#define NS_POPUP_CHIP_FRACTION		0.769	/* 20/26 of the field's height, and square */
-#define NS_POPUP_CHIP_INSET_FRACTION	0.192	/* 5/26, from the field's right border to the chip's */
-#define NS_POPUP_CHEVRON_WIDTH_FRACTION	0.500	/* of the chip, across */
-#define NS_POPUP_CHEVRON_HEIGHT_FRACTION 0.250	/* of the chip, apex to base */
-#define NS_POPUP_CHEVRON_GAP_FRACTION	0.100	/* of the chip, between the two triangles */
+ * **AND THE FIELD, THE CHIP AND THE TRIANGLES ARE NOT THIS FILE'S NUMBERS TO KEEP.** A combo box is the same field
+ * with the same chip and ONE triangle instead of two, so the five measures live in `NSCell.h` beside the bezel's —
+ * `NS_CELL_CHIP_FRACTION`, its `_INSET_`, and the mark's `_WIDTH_`, `_HEIGHT_` and `_GAP_` — for the reason that block
+ * gives: two files keeping their own copy of a shared shape is how the two come to differ, and the difference is
+ * invisible until somebody puts them side by side. What is left HERE is the pair, which is this control's own sign.
+ */
 
 @implementation NSPopUpButtonCell
 
@@ -467,18 +465,18 @@ static NSInteger fn_popup_index(NSInteger menu_index)
  * it and the border — is added here in the SAME fractions the drawing uses, so the measurement and the ink cannot
  * drift apart.
  *
- * **AND `NS_CELL_CONTENT_GAP` IS ADDED BECAUSE THE TITLE NOW BEGINS THERE.** Room for the words without room for the
- * margin in front of them is a field whose title is clipped by exactly the margin: `-drawInteriorWithFrame:` starts
- * the ink at the gap and stops it at the chip, so the room the words get is `width - zone - gap`, and a frame that
- * paid for the words and the zone alone leaves them short by the gap. The test's own numbers make it plain rather than
- * asserted — the words are measured at 4 points less than the same words on a plain button, and the clip takes their
- * last four points. */
+ * **AND THE TITLE'S MARGIN IS ALREADY IN THE BASE'S ANSWER, WHICH THIS DOOR GOT WRONG ONCE.** It used to add
+ * `NS_CELL_CONTENT_GAP` here as well, on the reading that the base paid for the words and nothing else. IT DOES NOT:
+ * MEASURED, a cell with the same title measures 91.67 points bare and 95.67 bordered, so `NSCell`'s own measurement
+ * pays the margin for a bordered cell — and paying it twice made this control FOUR POINTS WIDER than its own title
+ * needs, which is a frame with a band of nothing at its right end that no title can ever reach. The margin belongs to
+ * the DRAWING, which is where it was added: the ink starts at it and stops at the chip, and both of those are already
+ * in the width the base hands over. */
 - (NSSize)cellSizeForBounds:(NSRect)aRect
 {
 	NSSize size = [super cellSizeForBounds:aRect];
 
-	size.width += size.height * (NS_POPUP_CHIP_FRACTION + NS_POPUP_CHIP_INSET_FRACTION);
-	size.width += NS_CELL_CONTENT_GAP;
+	size.width += size.height * (NS_CELL_CHIP_FRACTION + NS_CELL_CHIP_INSET_FRACTION);
 	return size;
 }
 
@@ -547,8 +545,8 @@ static NSInteger fn_popup_index(NSInteger menu_index)
 - (NSRect)cg_chipRectInFrame:(NSRect)cellFrame
 {
 	CGFloat h = NSHeight(cellFrame);
-	CGFloat side = h * NS_POPUP_CHIP_FRACTION;
-	CGFloat inset = h * NS_POPUP_CHIP_INSET_FRACTION;
+	CGFloat side = h * NS_CELL_CHIP_FRACTION;
+	CGFloat inset = h * NS_CELL_CHIP_INSET_FRACTION;
 	CGFloat x = NSMaxX(cellFrame) - inset - side;
 	CGFloat y = (_arrowPosition == NSPopUpArrowAtCenter)
 			    ? NSMidY(cellFrame) - side / 2.0
@@ -625,9 +623,9 @@ static NSInteger fn_popup_index(NSInteger menu_index)
 	NSRect chip = [self cg_chipRectInFrame:cellFrame];
 	NSBezierPath *face = [NSBezierPath bezierPathWithRoundedRect:chip xRadius:NS_CELL_BEZEL_RADIUS
 							     yRadius:NS_CELL_BEZEL_RADIUS];
-	CGFloat w = NSWidth(chip) * NS_POPUP_CHEVRON_WIDTH_FRACTION;
-	CGFloat h = NSHeight(chip) * NS_POPUP_CHEVRON_HEIGHT_FRACTION;
-	CGFloat gap = NSHeight(chip) * NS_POPUP_CHEVRON_GAP_FRACTION;
+	CGFloat w = NSWidth(chip) * NS_CELL_CHIP_MARK_WIDTH_FRACTION;
+	CGFloat h = NSHeight(chip) * NS_CELL_CHIP_MARK_HEIGHT_FRACTION;
+	CGFloat gap = NSHeight(chip) * NS_CELL_CHIP_MARK_GAP_FRACTION;
 	CGFloat cx = floor(NSMidX(chip)) + 0.5;
 	CGFloat cy = floor(NSMidY(chip)) + 0.5;
 	CGContextRef c = [[NSGraphicsContext currentContext] CGContext];

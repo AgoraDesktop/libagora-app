@@ -201,6 +201,24 @@ typedef NSUInteger NSControlSize;
  * ============================================================================================ */
 #define NS_CELL_CONTENT_GAP 4.0
 
+/* ============================================================================================ *
+ * AND THE FIELD-WITH-A-CHIP'S FIVE NUMBERS, WHICH TWO CONTROLS DRAW AND ONE OF THEM DOUBLES.       *
+ *                                                                                                *
+ * A pop-up button and a combo box are the SAME field with the SAME chip at its right end; what     *
+ * differs between them is how many triangles are knocked out of that chip. THE SAMPLE'S NUMBERS:   *
+ * its field is 26 points tall, its chip 20 x 20 inset five points from the field's right border,   *
+ * each triangle 10 points across and 5 tall, and 2 points between them. Said as FRACTIONS OF THE   *
+ * FIELD'S HEIGHT rather than in points, because the chip belongs to the field it is drawn in and a *
+ * small control's field is shorter — the same reason the bezel's radius is a constant and a        *
+ * button's height is not.                                                                          *
+ * ============================================================================================ */
+#define NS_CELL_CHIP_FRACTION            0.769 /* 20/26 of the field's height, and square */
+#define NS_CELL_CHIP_INSET_FRACTION      0.192 /* 5/26, from the field's right border to the chip's */
+#define NS_CELL_CHIP_MARK_WIDTH_FRACTION 0.500 /* of the chip, across */
+#define NS_CELL_CHIP_MARK_HEIGHT_FRACTION 0.250 /* of the chip, apex to base */
+#define NS_CELL_CHIP_MARK_GAP_FRACTION   0.100 /* of the chip, between a doubled pair */
+
+
 
 
 @interface NSCell : NSObject

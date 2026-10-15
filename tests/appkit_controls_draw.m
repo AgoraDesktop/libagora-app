@@ -27,7 +27,8 @@
 #import <AppKit/AGChromeTheme.h>	/* the chrome's theme, which this demonstration loads by DEFAULT */
 #import <AppKit/NSEvent.h>
 #import <AppKit/NSScrollView.h>
-#import <AppKit/NSPopUpButton.h>	/* the scroll panel, which is where the scrolling slice can be PLAYED with */
+#import <AppKit/NSPopUpButton.h>
+#import <AppKit/NSComboBox.h>	/* the other field with a chip, and the one-triangle mark that tells them apart */
 #import <AppKit/NSClipView.h>
 #import <AppKit/NSColor.h>
 #import <AppKit/NSBezierPath.h>
@@ -296,6 +297,7 @@ int main(int argc, char **argv)
 		/* AND A SCROLL PANEL, which is the one thing in this window that shows the scrolling slice. */
 		NSScrollView *scroll;
 		NSPopUpButton *popup;
+		NSComboBox *combo;
 		NSMenu *choices;
 		AGScrollDoc *doc;
 
@@ -405,6 +407,20 @@ int main(int argc, char **argv)
 		[popup setTarget:controller];
 		[popup setAction:@selector(choiceMade:)];
 		[content addSubview:popup];
+		/* **AND THE COMBO BOX GOES BESIDE IT, WHICH IS WHERE THE SAMPLE PUTS THE PAIR.** The gallery draws these two on
+		 * adjacent rows and this window puts them on ONE, because the whole difference between them is one mark and a
+		 * person should be able to see both chips without moving their eye: the pop-up's carries two triangles knocked
+		 * out of it and this one carries a single down arrow. It is given a title of its own rather than the pop-up's, so
+		 * that the two are told apart by their words as well as by their arrows, and it is fitted the same way — after
+		 * its list exists.
+		 *
+		 * AND IT IS NOT A LIVE CONTROL YET: the list this chip promises does not open, and nothing here pretends it
+		 * does. What it demonstrates is the INK, which is what the sample's gallery specifies. */
+		combo = [[NSComboBox alloc] initWithFrame:NSMakeRect(180, 268, 0, 0)];
+		[combo addItemsWithObjectValues:[NSArray arrayWithObjects:@"NSComboBox", @"and its list", nil]];
+		[combo selectItemAtIndex:0];
+		[combo sizeToFit];
+		[content addSubview:combo];
 		[content addSubview:push];
 		[content addSubview:alt];
 		[content addSubview:check];

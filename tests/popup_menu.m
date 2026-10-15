@@ -370,21 +370,19 @@ int main(void)
 			withArrow = [popupCell cellSizeForBounds:probe];
 			without = [plainCell cellSizeForBounds:probe];
 			zone = withArrow.height * (0.769 + 0.192);
-			want = zone + NS_CELL_CONTENT_GAP;
+			want = zone;
 			printf("  (note: the same title measures %.1f wide on a pop-up and %.1f on a plain button; the zone "
-			       "%.1f plus the margin %.1f is %.1f)\n", (double)withArrow.width, (double)without.width,
-			       (double)zone, (double)NS_CELL_CONTENT_GAP, (double)want);
+			       "the chip takes is %.1f, and that is the whole of the difference)\n",
+			       (double)withArrow.width, (double)without.width, (double)zone);
 			check(withArrow.width > without.width,
 			      "a pop-up button measures WIDER than a plain button with the same title");
 			check(fabs((withArrow.width - without.width) - want) < 0.51,
-			      "and the difference IS the arrow's zone PLUS the margin its title begins at");
-			check(fabs((withArrow.width - without.width) - zone) >= 0.51 * NS_CELL_CONTENT_GAP,
-			      "which is strictly more than the zone alone — the margin is not being taken out of the words");
-			/* **AND THIS IS THE CLAIM ABOVE STATED AS THE THING IT IS ABOUT.** The drawing starts the ink at the gap
-			 * and stops it at the chip, so the room the words actually get is `width - zone - gap`; asserting that
-			 * against the plain button's own measurement says the margin was ADDED rather than subtracted from the
-			 * title. Drop the addition and this number falls four points short, which is the clip. */
-			check(fabs((withArrow.width - zone - NS_CELL_CONTENT_GAP) - without.width) < 0.51,
+			      "and the difference IS the arrow's zone — the title's own margin is NOT added here");
+			/* **AND THIS IS THE CLAIM ABOVE STATED AS THE THING IT IS ABOUT.** The drawing starts the ink at
+			 * `NS_CELL_CONTENT_GAP` and stops it at the chip, so the room the words get is `width - zone`; asserting
+			 * that against the plain button's own measurement says the margin in front of the words is PAID FOR —
+			 * once, by the base, which is where a bordered cell's margin comes from. */
+			check(fabs((withArrow.width - zone) - without.width) < 0.51,
 			      "and the room left for the words is exactly what a plain button gives them");
 			check(withArrow.height == without.height,
 			      "and the arrow does not make the button any TALLER");

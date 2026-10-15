@@ -168,6 +168,15 @@ target_link_libraries(popup_menu PRIVATE App)
 add_test(NAME appkit-popup-menu COMMAND popup_menu)
 set_tests_properties(appkit-popup-menu PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
 
+# **AND THE OTHER FIELD WITH A CHIP IN IT**, which the sample draws on the row below the pop-up's. This probe's subject
+# is a COUNT: a pop-up's chip carries two triangles knocked out of it and a combo box's carries one, so the column
+# down the chip's middle is walked and its runs of white are counted. It also draws BOTH cells into the same geometry
+# and compares where their chips land, which is what makes "one field, one chip" a claim rather than a comment.
+add_executable(combo_box combo_box.m)
+target_link_libraries(combo_box PRIVATE App)
+add_test(NAME appkit-combo-box COMMAND combo_box)
+set_tests_properties(appkit-combo-box PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
+
 # **AND THE DISPLAY PATH.** The ink tests are all offscreen; this one puts a menu's window on a headless
 # compositor and reads the COMPOSITOR'S OWN FRAMEBUFFER back, which is the only place the present can be seen.
 # It skips when there is no window server, so a component's tests still do not need a sibling's build.
