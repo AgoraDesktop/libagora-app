@@ -685,6 +685,15 @@ static NSSize fn_button_image_size(NSSize image, NSSize box, NSImageScaling scal
 	}
 }
 
+/* **AND THE INK IS A DOOR RATHER THAN AN EXPRESSION, because a subclass draws beside the title.** A pop-up button's
+ * arrow is the first caller: it has to be the same colour as the words next to it, and the rule that decides that is
+ * `-fn_wearsAccent` plus the enabled flag — three answers to one question that must not be spelled twice. */
+- (id)cg_inkColor
+{
+	return !_enabled ? [NSColor disabledControlTextColor]
+			 : ([self fn_wearsAccent] ? [NSColor whiteColor] : [NSColor controlTextColor]);
+}
+
 - (void)drawInteriorWithFrame:(NSRect)cellFrame inView:(id)controlView
 {
 	NSRect content = [self fn_isIndicatorButton] ? [self titleRectForBounds:cellFrame]
@@ -696,8 +705,7 @@ static NSSize fn_button_image_size(NSSize image, NSSize box, NSImageScaling scal
 	 * black-on-violet, which is legible and still reads as though nothing had happened to it. A DISABLED button keeps
 	 * the era's dimmed grey, and that is a third state rather than a shade of these two: it is the only one whose ink
 	 * is chosen for being QUIET. */
-	NSColor *ink = !_enabled ? [NSColor disabledControlTextColor]
-				 : ([self fn_wearsAccent] ? [NSColor whiteColor] : [NSColor controlTextColor]);
+	NSColor *ink = [self cg_inkColor];
 	BOOL useAlternate = NO;
 	NSAttributedString *attributed;
 	NSString *title;

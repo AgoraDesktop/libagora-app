@@ -26,7 +26,8 @@
 #import <AppKit/NSMenuItem.h>
 #import <AppKit/AGChromeTheme.h>	/* the chrome's theme, which this demonstration loads by DEFAULT */
 #import <AppKit/NSEvent.h>
-#import <AppKit/NSScrollView.h>	/* the scroll panel, which is where the scrolling slice can be PLAYED with */
+#import <AppKit/NSScrollView.h>
+#import <AppKit/NSPopUpButton.h>	/* the scroll panel, which is where the scrolling slice can be PLAYED with */
 #import <AppKit/NSClipView.h>
 #import <AppKit/NSColor.h>
 #import <AppKit/NSBezierPath.h>
@@ -59,6 +60,7 @@
 - (void)toggleCheckbox:(id)sender;
 - (void)sliderMoved:(id)sender;
 - (void)noop:(id)sender;
+- (void)choiceMade:(id)sender;
 @end
 
 @implementation AGControlsController
@@ -112,6 +114,17 @@
 - (void)noop:(id)sender
 {
 	fprintf(stderr, "controls: menu item chosen: %s\n", [[(NSMenuItem *)sender title] UTF8String]);
+}
+
+/* **A POP-UP BUTTON'S ACTION, AND IT READS THE SENDER THE WAY THE SLIDER'S DOES.** The sender is the BUTTON — not the
+ * menu item that was picked — which is the whole point of the two classes: a caller who wants the row can ask the
+ * button for it, and a caller who wants to know WHICH BUTTON can tell one from another. Printed rather than drawn,
+ * so a live choice can be READ from outside the process, exactly as the slider's value is. */
+- (void)choiceMade:(id)sender
+{
+	fprintf(stderr, "controls: popup chose \"%s\" at index %ld\n",
+		[[(NSPopUpButton *)sender titleOfSelectedItem] UTF8String],
+		(long)[(NSPopUpButton *)sender indexOfSelectedItem]);
 }
 
 @end
@@ -282,6 +295,8 @@ int main(int argc, char **argv)
 		NSText *field;
 		/* AND A SCROLL PANEL, which is the one thing in this window that shows the scrolling slice. */
 		NSScrollView *scroll;
+		NSPopUpButton *popup;
+		NSMenu *choices;
 		AGScrollDoc *doc;
 
 		[app finishLaunching];
@@ -366,6 +381,24 @@ int main(int argc, char **argv)
 		[scroll setHasVerticalScroller:YES];
 		[scroll setHasHorizontalScroller:YES];
 		[scroll setDocumentView:doc];
+		/* **AND THE POP-UP BUTTON, WHICH IS THE ONE CONTROL HERE THAT JOINS TWO SUBSYSTEMS.** It is a button whose
+		 * press raises a MENU, so the thing to play with is not its face but the CHAIN: press it, choose a row, and
+		 * the title on the bezel changes while the line on stderr says which row and what index — the same two facts
+		 * a caller's action is handed. It goes above the push buttons because it is the NEWEST face and the room
+		 * there is otherwise empty.
+		 *
+		 * THE SECOND ITEM IS THE ONE SELECTED, so the window opens with the button naming a row rather than wearing
+		 * an empty title — a popup whose title is blank looks like a button that failed to load. */
+		popup = [[NSPopUpButton alloc] initWithFrame:NSMakeRect(30, 268, 170, 23) pullsDown:NO];
+		choices = [[NSMenu alloc] initWithTitle:@"Choices"];
+		[choices addItemWithTitle:@"First choice" action:NULL keyEquivalent:@""];
+		[choices addItemWithTitle:@"Second choice" action:NULL keyEquivalent:@""];
+		[choices addItemWithTitle:@"Third choice" action:NULL keyEquivalent:@""];
+		[popup setMenu:choices];
+		[popup selectItemAtIndex:1];
+		[popup setTarget:controller];
+		[popup setAction:@selector(choiceMade:)];
+		[content addSubview:popup];
 		[content addSubview:push];
 		[content addSubview:alt];
 		[content addSubview:check];

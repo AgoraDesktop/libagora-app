@@ -159,6 +159,15 @@ target_link_libraries(view_offset PRIVATE App m)
 add_test(NAME appkit-view-offset COMMAND view_offset)
 set_tests_properties(appkit-view-offset PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
 
+# **AND THE CONTROL THAT JOINS TWO SUBSYSTEMS: A BUTTON THAT RAISES A MENU.** The probe is the CHAIN — the wiring
+# `-setMenu:` does, a pick through the menu's own dispatch, the selection and the title that follow it — plus the
+# arrow's ink and where the two `-arrowPosition` values put it. NO EVENT LOOP IS NEEDED, because every link in that
+# chain is a call the probe can make itself: that is what makes a menu testable offscreen.
+add_executable(popup_menu popup_menu.m)
+target_link_libraries(popup_menu PRIVATE App)
+add_test(NAME appkit-popup-menu COMMAND popup_menu)
+set_tests_properties(appkit-popup-menu PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
+
 # **AND THE DISPLAY PATH.** The ink tests are all offscreen; this one puts a menu's window on a headless
 # compositor and reads the COMPOSITOR'S OWN FRAMEBUFFER back, which is the only place the present can be seen.
 # It skips when there is no window server, so a component's tests still do not need a sibling's build.
