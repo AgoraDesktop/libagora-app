@@ -129,6 +129,23 @@ NS_ASSUME_NONNULL_BEGIN
  * field, and it is written rather than inherited because the two cells share no ancestor that measures a chip. */
 - (NSSize)cellSizeForBounds:(NSRect)aRect;
 
+/* **AND THE CHIP'S RECT IS PUBLIC BECAUSE A CONTROL HAS TO KNOW WHERE THE CHIP IS.** The press is split between the
+ * two things this control does — the chip opens the list and the text begins an edit — and only the CELL knows where
+ * the chip is, because the chip's size is a fraction of the field's height. */
+- (NSRect)cg_chipRectInFrame:(NSRect)cellFrame;
+
+/* ---- THE LIST ---------------------------------------------------------------------------------------- */
+
+/* **AND THIS IS THE DOOR A PRESS ON THE CHIP COMES THROUGH.** It builds the rows from the list this cell holds, anchors
+ * them under the chip and runs the session — see the implementation for why the session is `NSMenu`'s rather than a
+ * list window's own, which is the departure this control carries. */
+- (void)cg_attachListWithFrame:(NSRect)cellFrame inView:(nullable id)controlView;
+
+/* **AND THE PICK COMES BACK THROUGH THE ITEM'S OWN TARGET/ACTION**, which is why every row this cell builds is pointed
+ * at this message with its index as the receiver's tag. Public because the probe that proves the wiring has to be able
+ * to send what the list sends. */
+- (void)itemSelected:(nullable id)sender;
+
 @end
 
 NS_ASSUME_NONNULL_END

@@ -19,6 +19,8 @@
  * SAMPLE — every control here is slightly darker than the surface under it — and the check says so by name.
  */
 #import <AppKit/NSComboBoxCell.h>
+#import <AppKit/NSMenu.h>
+#import <AppKit/NSMenuItem.h>
 #import <AppKit/NSActionCell.h>
 #import <AppKit/NSPopUpButtonCell.h>
 #import <AppKit/NSBitmapImageRep.h>
@@ -78,6 +80,24 @@ static NSBitmapImageRep *draw_cell(NSObject *cell, int W, int H, NSView *view)
 	[(id)cell drawWithFrame:NSMakeRect(0.0, 0.0, (CGFloat)W, (CGFloat)H) inView:view];
 	return rep;
 }
+
+/* **A WATCHER, BECAUSE A PICK IS TWO THINGS AND ONLY ONE OF THEM IS INSIDE THE CELL.** The selection moves in the
+ * control; the ACTION goes to the control's target, and a probe that only read the cell's index would pass on a
+ * control whose action never fired. */
+@interface Watcher : NSObject
+{
+@public
+	int fired;
+}
+@end
+
+@implementation Watcher
+- (void)picked:(id)sender
+{
+	(void)sender;
+	fired++;
+}
+@end
 
 int main(void)
 {
@@ -294,6 +314,54 @@ int main(void)
 		check(fabs(after.width - 117.78) < 1.0,
 		      "and it measures the same as a cell that was made with that string, so the two paths agree");
 		[late release];
+	}
+
+	/* 7. **AND A ROW CHOSEN FROM THE LIST COMES BACK AS THE SELECTION AND AS THE ACTION.** The list is built from the
+	 * cell's own objects and every row is pointed at the cell with its index as the tag — so sending what a row sends
+	 * is the whole of what a pick does, which is what makes it testable without a session or a display. */
+	{
+		Watcher *watcher = [[Watcher alloc] init];
+		NSMenuItem *row = [[NSMenuItem alloc] initWithTitle:@"and its list" action:NULL keyEquivalent:@""];
+
+		/* THE LIST HAS TO EXIST FOR A ROW TO BE PICKED FROM IT. The first draft of this check sent a tag of 1 to a cell
+		 * whose list was EMPTY — the cell had only ever been given a string — so the pick correctly cleared the
+		 * selection and the probe reported the code as broken. Two rows, as a combo box would have. */
+		[combo addItemWithObjectValue:@"NSComboBox"];
+		[combo addItemWithObjectValue:@"and its list"];
+		[combo setTarget:watcher];
+		[combo setAction:@selector(picked:)];
+		[combo selectItemAtIndex:0];
+		[combo cg_setMouseInside:NO];
+
+		[row setTarget:combo];
+		[row setAction:@selector(itemSelected:)];
+		[row setTag:1];
+		[combo itemSelected:row];
+		printf("  (note: after picking row 1 the box holds \"%s\" at index %ld, and the action fired %d time(s))\n",
+		       [[combo stringValue] UTF8String], (long)[combo indexOfSelectedItem], watcher->fired);
+		check([[combo stringValue] isEqualToString:@"and its list"],
+		      "a picked row becomes the box's string, which is what the field shows");
+		check([combo indexOfSelectedItem] == 1, "and its index becomes the selection");
+		check(watcher->fired == 1, "and the control's own action fires, ONCE, with the control as the sender");
+		[row release];
+		[watcher release];
+	}
+
+	/* 8. **AND THE CHIP IS A PLACE THE PRESS CAN BE TOLD FROM THE TEXT.** The press is split by this rect, so a chip
+	 * that could not be located would be a press that could not be routed — which is what "clicking the arrow does
+	 * nothing" was. */
+	{
+		NSRect chip = [combo cg_chipRectInFrame:NSMakeRect(0.0, 0.0, (CGFloat)W, (CGFloat)H)];
+		NSRect field = NSMakeRect(0.0, 0.0, (CGFloat)W, (CGFloat)H);
+
+		printf("  (note: the chip is x=%.1f..%.1f of a %d-point field)\n",
+		       (double)NSMinX(chip), (double)NSMaxX(chip), W);
+		check(NSMinX(chip) > 0.0 && NSMaxX(chip) <= NSMaxX(field),
+		      "the chip is INSIDE the field and at its right end, where a press can find it");
+		check(!NSPointInRect(NSMakePoint(NSMinX(field) + 5.0, NSMidY(field)), chip),
+		      "and a press near the left edge is NOT in it, so it begins an edit instead");
+		check(NSPointInRect(NSMakePoint(NSMidX(chip), NSMidY(chip)), chip),
+		      "while a press on the chip is, so it opens the list");
 	}
 
 	[combo release];

@@ -11,6 +11,10 @@
 #import <AppKit/NSBezierPath.h>
 #import <AppKit/NSStringDrawing.h>
 #import <AppKit/NSView.h>
+#import <AppKit/NSMenu.h>
+#import <AppKit/NSMenuItem.h>
+#import <AppKit/NSApplication.h>
+#import <AppKit/NSWindow.h>
 #import <Foundation/NSGeometry.h>
 
 /* **A COMBO BOX IS A FIELD WITH A CHIP IN IT, AND THE CHIP IS THE POP-UP'S CHIP.** The five measures — the chip's
@@ -207,17 +211,12 @@
 
 /* ---- THE INK -------------------------------------------------------------------------------------- */
 
-/* **AND IT IS THE POP-UP'S RULE WITH THE LIST IN PLACE OF THE PRESS.** A disabled box wears the era's dimmed grey; a
- * box whose list is open wears white, because its field has taken the accent; and a box at rest or under the pointer
- * wears `+controlTextColor`. The pop-up asks whether its FACE is pushed and this one asks whether it is HIGHLIGHTED,
- * which is the same question for each control: a pop-up's press raises its menu and a combo box's press opens its
- * list, and the accent is on the field while either is true. See the header for why the rule is spelled twice. */
-- (id)cg_inkColor
-{
-	return !_enabled ? [NSColor disabledControlTextColor]
-			 : ([self isHighlighted] ? [NSColor whiteColor] : [NSColor controlTextColor]);
-}
-
+/* **AND THE INK IS THE BASE'S TOO, WHICH FOLLOWS FROM THE FACE.** This class used to answer WHITE while its list was
+ * open, because the face answered the accent then and white is what clears it. The face does not take the accent any
+ * more — a combo box is a field, and a field is white in every state — so an ink that still turned white would be white
+ * on white, which is the one defect this pairing exists to prevent. Both doors are gone together, which is the point:
+ * the fill and the ink were one decision, and the decision now is the field's.
+ */
 /* ---- THE FACE ------------------------------------------------------------------------------------- */
 
 /* **AND THE FIELD WEARS THE SAME FOUR FACES THE POP-UP BESIDE IT DOES, IN THE SAME ORDER — WHICH IS ALL THIS CLASS
@@ -326,6 +325,72 @@
 	[mark closePath];
 	[mark fill];
 	CGContextRestoreGState(c);
+}
+
+/* ---- THE LIST, WHICH IS WHAT THE CHIP IS FOR ------------------------------------------------------- */
+
+/* **AND THE CHIP OPENS THE LIST, WHICH IS THE ONE THING THE CHIP IS FOR.** MEASURED on the demonstration: clicking it
+ * did nothing at all, because the chip's ink was drawn and the list behind it was never built — the row this control's
+ * header has recorded since the first slice.
+ *
+ * **THE LIST IS DRAWN AS A MENU, AND THAT IS A DEPARTURE WORTH NAMING.** Apple's combo box opens a borderless LIST
+ * WINDOW of its own; this tier opens the session `NSMenu` already has — the same one the pop-up beside it raises — and
+ * builds the rows from `-_objectValues` on the way in. What that buys is a real session that starts, tracks, is
+ * dismissed and sends a pick, none of which had to be written again; what it costs is that the rows wear a menu's ink
+ * rather than a list's. The rows and the pick are the combo box's; the SKIN is borrowed, and a list window of its own
+ * is the row that opens when the ink matters.
+ *
+ * THE ANCHOR IS THE CHIP'S BOTTOM-LEFT CORNER in the space a window frame lives in, which is the same three-space
+ * arithmetic the pop-up's door records — the cell's frame in the view's coordinates, the view's with a nil view into
+ * the window's, and the window's own origin where the list's window will be placed. */
+- (void)cg_attachListWithFrame:(NSRect)cellFrame inView:(id)controlView
+{
+	NSWindow *window = [controlView respondsToSelector:@selector(window)] ? [controlView window] : nil;
+	NSMenu *list;
+	NSRect chip = [self cg_chipRectInFrame:cellFrame];
+	NSPoint where;
+	NSUInteger i;
+
+	if ([_objectValues count] == 0) {
+		fprintf(stderr, "APPKIT-REFUSE: -cg_attachListWithFrame:inView: needs a list with rows — a combo box with "
+				"nothing to choose from is not a combo box\n");
+		return;
+	}
+	list = [[NSMenu alloc] initWithTitle:@"List"];
+	for (i = 0; i < [_objectValues count]; i++) {
+		/* **THE TAG IS THE INDEX, WHICH IS HOW THE PICK FINDS ITS WAY BACK.** A menu item's tag is a number a caller
+		 * may use for anything, and what this control has to remember about a row is WHERE IT IS — the same fact
+		 * `-indexOfItem:` recovers for the pop-up, kept directly because a combo box's rows are plain objects and there
+		 * is no menu to ask. */
+		NSMenuItem *item = [list addItemWithTitle:[[_objectValues objectAtIndex:i] description]
+						   action:NULL keyEquivalent:@""];
+
+		[item setTarget:self];
+		[item setAction:@selector(itemSelected:)];
+		[item setTag:(NSInteger)i];
+	}
+	if (window != nil) {
+		NSRect frame = [window frame];
+		NSPoint corner = [controlView convertPoint:NSMakePoint(NSMinX(chip), NSMinY(chip)) toView:nil];
+
+		where = NSMakePoint(frame.origin.x + corner.x, frame.origin.y + corner.y);
+	} else {
+		where = NSMakePoint(NSMinX(chip), NSMinY(chip));
+	}
+	[list popUpMenuPositioningItem:nil atLocation:where inView:controlView];
+	[list release];
+}
+
+/* **AND THE PICK IS THE SAME TWO THINGS THE POP-UP'S IS.** The row's index becomes the selection — which writes the
+ * box's string, so the field shows what was chosen — and then the CELL's own action goes to the CELL's own target, with
+ * the control as the sender, because that is what a caller who set a target is waiting for. */
+- (void)itemSelected:(id)sender
+{
+	[self selectItemAtIndex:[sender tag]];
+	[[NSApplication sharedApplication] sendAction:[self action] to:[self target] from:[self controlView]];
+	if ([self controlView] != nil) {
+		[[self controlView] setNeedsDisplay:YES];
+	}
 }
 
 /* ---- WHAT IT MEASURES ------------------------------------------------------------------------------ */

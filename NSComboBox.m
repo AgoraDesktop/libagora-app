@@ -39,24 +39,36 @@
 	return self;
 }
 
-/* **THE PRESS IS THE CONTROL'S ONE PIECE OF BEHAVIOUR, AND IT OPENS AN EDIT.** A cell can set an editor up but it has
- * no window to find one in and no view to put it in — those are the two things a view contributes — so the press is
- * where the control hands the cell what it cannot get itself. THE EDITOR IS THE WINDOW'S: one per window, lent to
- * whichever field is being typed into, which is what `NSWindow -fieldEditor:forObject:` is for and why this is three
- * lines rather than a text view of the control's own.
+/* **THE PRESS HAS TWO ANSWERS, AND WHICH ONE DEPENDS ON WHERE IT LANDED.** A combo box is two things in one frame: a
+ * FIELD the value is typed into and a CHIP that opens the list of values. So a press on the chip opens the list and a
+ * press anywhere else begins an edit — MEASURED, before this split, clicking the chip did nothing at all, because the
+ * chip's ink was drawn and the list behind it had never been built.
+ *
+ * THE CHIP'S RECT COMES FROM THE CELL, because only the cell knows where it is: its side is a fraction of the field's
+ * height, which is a measurement rather than a constant. The point is carried into the control's own space first —
+ * `-convertPoint:fromView:nil` — because an event's location is in the WINDOW's.
  *
  * AND IT DOES NOT CALL `-super`. `NSControl`'s tracking loop highlights the cell, follows the pointer and sends the
- * action on the release — which is a push button's gesture. A field's gesture is a session that outlives the press, so
- * running both would start an edit from inside a loop still waiting for a release it will never own. */
+ * action on the release — which is a push button's gesture. Neither of this control's answers is that gesture: one is a
+ * session that outlives the press and the other is an edit that does. */
 - (void)mouseDown:(NSEvent *)event
 {
 	NSComboBoxCell *cell = (NSComboBoxCell *)[self cell];
-	NSText *editor = (NSText *)[[self window] fieldEditor:YES forObject:self];
+	NSRect bounds = [self bounds];
+	NSPoint where = [self convertPoint:[event locationInWindow] fromView:nil];
 
-	if (editor == nil) {
+	if (NSPointInRect(where, [cell cg_chipRectInFrame:bounds])) {
+		[cell cg_attachListWithFrame:bounds inView:self];
 		return;
 	}
-	[cell editWithFrame:[self bounds] inView:self editor:editor delegate:nil event:event];
+	{
+		NSText *editor = (NSText *)[[self window] fieldEditor:YES forObject:self];
+
+		if (editor == nil) {
+			return;
+		}
+		[cell editWithFrame:bounds inView:self editor:editor delegate:nil event:event];
+	}
 	[self setNeedsDisplay:YES];
 }
 
