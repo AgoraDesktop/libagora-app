@@ -451,7 +451,7 @@
 	/* **THE BOX IS FILLED WHOLE AND STROKED HALF A POINT IN, WHICH IS THE DIFFERENCE BETWEEN A DARK GREY BORDER AND A
 	 * WASHED-OUT ONE.** A stroke is centred on its path, so a one-point border drawn AT the box's edge spends half its
 	 * ink on either side of it — and MEASURED on the desktop that is what the indicator's border WAS: the stroke's band
-	 * fell across two pixel columns and blended to 173 where `controlDarkShadowColor` is 102, so a checkbox's border was
+	 * fell across two pixel columns and blended to 173 where the colour it named was 102, so a checkbox's border was
 	 * half the colour it asked for and read as a light grey next to a push button's. Insetting the PATH by half the
 	 * stroke puts the whole border on one side of the edge, on one pixel column, at the colour it names — the same fix,
 	 * for the same reason, the face's takes one method up. The FILL keeps the full box: only the edge moves inward, so

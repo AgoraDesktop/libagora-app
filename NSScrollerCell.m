@@ -447,7 +447,7 @@ static void fn_draw_grip(NSRect knob, BOOL horizontal)
 	/* **THREE RINGS, WHICH IS THE WHOLE GRIP.** The sample's dimple is HOLLOW — its darkest value is 188 and its middle
 	 * is 255 — so what shows through the centre of each is the knob's OWN white rather than a fifth grey. A filled dot
 	 * would be the simpler mark and would lose exactly the thing the sample is drawing. */
-	[[NSColor cg_scrollerKnobEdgeColor] setStroke];
+	[[NSColor controlDarkShadowColor] setStroke];
 	for (i = -1; i <= 1; i++) {
 		NSBezierPath *ring;
 		NSRect dot;
@@ -496,7 +496,7 @@ static void fn_draw_grip(NSRect knob, BOOL horizontal)
 	/* **AND IT IS STROKED, BECAUSE ITS FACE IS THE FRAME'S OWN WHITE.** An unoutlined rounded corner on a white
 	 * ground is a corner nobody can see, so the button states its shape the way the knob does. */
 	[button fill];
-	[[NSColor cg_scrollerKnobEdgeColor] setStroke];
+	[[NSColor controlDarkShadowColor] setStroke];
 	[button setLineWidth:1.0];
 	[button stroke];
 
@@ -574,10 +574,16 @@ static void fn_draw_grip(NSRect knob, BOOL horizontal)
 	 * become a different object rather than that it is being moved. */
 	if (![self isEnabled]) {
 		[[NSColor controlBackgroundColor] setFill];
-		[[NSColor controlDarkShadowColor] setStroke];
+		/* **AND A DISABLED KNOB'S OUTLINE IS NOW A STEP THIS FILE HAS TO ASK FOR BY NAME.** It was
+		 * `+controlDarkShadowColor`, which was the darker of the pair; that colour is now 0.737 — the sample's border
+		 * grey, and the same grey an ENABLED knob's outline takes — so leaving this line alone would have made a
+		 * disabled scroller EXACTLY the enabled one, which is the sort of thing a palette change does quietly.
+		 * `+controlShadowColor`'s 0.60 is the next grey down, so the RELATIONSHIP is the one it always was: a knob
+		 * that has stopped claiming to be grabbable says so with a heavier edge. */
+		[[NSColor controlShadowColor] setStroke];
 	} else {
 		[[NSColor controlBackgroundColor] setFill];
-		[[NSColor cg_scrollerKnobEdgeColor] setStroke];
+		[[NSColor controlDarkShadowColor] setStroke];
 	}
 	[p fill];
 	[p stroke];

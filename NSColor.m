@@ -787,19 +787,14 @@ static void fn_cmyk_of(NSColor *self, CGFloat cmyk[4])
 	return fn_singleton(&s, 0.50, 0.50, 0.50, 1.0);
 }
 
-/* **THE GROOVE AND THE KNOB'S EDGE, AND BOTH ARE SAMPLED RATHER THAN CHOSEN.** The header carries why a scroller needs
- * these two doors at all; the numbers are `Argentum Mockup.png`'s own — 217 for the track the knob runs in and 188
- * for its outline, which is the same value as the darkest point inside one of the knob's dimples. */
+/* **THE GROOVE, WHICH IS SAMPLED RATHER THAN CHOSEN.** The header carries why a scroller needs a door of its own at
+ * all; the number is `Argentum Mockup.png`'s own — 217 for the track the knob runs in. THE KNOB'S EDGE IS NOT HERE:
+ * it measured 188, which is `+controlDarkShadowColor`'s value, and one grey with two names is exactly the drift this
+ * file's comments are about. */
 + (NSColor *)cg_scrollerTrackColor
 {
 	static NSColor *s;
 	return fn_singleton(&s, 0.85, 0.85, 0.85, 1.0);
-}
-
-+ (NSColor *)cg_scrollerKnobEdgeColor
-{
-	static NSColor *s;
-	return fn_singleton(&s, 0.737, 0.737, 0.737, 1.0);
 }
 
 + (NSColor *)controlShadowColor
@@ -808,14 +803,23 @@ static void fn_cmyk_of(NSColor *self, CGFloat cmyk[4])
 	return fn_singleton(&s, 0.60, 0.60, 0.60, 1.0);
 }
 
-/* **THE BORDER'S GREY, AND IT IS DELIBERATELY LIGHT.** This is the ink a bezel, a checkbox's box, a field's edge and
- * a slider's track are STROKED or filled with — the outline that says where a control's surface ENDS — and at 0.40 it
- * read as a hard line drawn ON the face rather than as the edge OF it. 0.55 keeps it visible against the 0.95 control
- * face and against a white field, while letting the SHAPE do the separating, which is what a border is for. */
+/* **THE BORDER'S GREY, AND ITS VALUE IS THE SAMPLE'S RATHER THAN A STEP THIS FILE PICKED.** This is the ink a bezel, a
+ * checkbox's box, a field's edge and a slider's track are STROKED or filled with — the outline that says where a
+ * control's surface ENDS.
+ *
+ * IT WAS 0.55, AND THE ARGUMENT FOR THAT WAS THE RIGHT ONE ARGUED ON THE WRONG EVIDENCE. 0.40 had read as a hard line
+ * drawn ON the face rather than as the edge OF it, so the value came up until it did not — which is a judgement, and a
+ * judgement is the thing `Argentum Mockup.png` exists to end. The sample answers with a NUMBER, and it answers the
+ * same number everywhere the question can be asked: the border of its `NSPopUpButton`'s field (x=919, x=1069 and
+ * y=398 of that row, one point each) and the outline of its scroller's knob both measure `#BCBCBC` — 188, 0.737.
+ *
+ * AND IT LANDS ON A VALUE THIS FILE WAS ALREADY CARRYING UNDER ANOTHER NAME. `+cg_scrollerKnobEdgeColor` was measured
+ * off the same sample at the same 0.737, so that door is GONE: a knob's outline and a field's border are one grey, and
+ * the scroller has one fewer name for one more thing, which is the trade this file spends its comments arguing for. */
 + (NSColor *)controlDarkShadowColor
 {
 	static NSColor *s;
-	return fn_singleton(&s, 0.55, 0.55, 0.55, 1.0);
+	return fn_singleton(&s, 0.737, 0.737, 0.737, 1.0);
 }
 
 + (NSColor *)controlHighlightColor

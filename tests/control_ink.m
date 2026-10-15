@@ -75,7 +75,14 @@ static NSBitmapImageRep *new_rep(void)
 		colorSpaceName:NSCalibratedRGBColorSpace bytesPerRow:W * 4 bitsPerPixel:32];
 }
 
-/* INK ANYWHERE IN A BOX: a pixel that is not the white the test filled with. */
+/* **INK ANYWHERE IN A BOX, WHICH IS A CONTROL'S OUTLINE RATHER THAN ITS SURFACE.** The threshold sits ABOVE
+ * `+controlDarkShadowColor` and BELOW every face a control wears — the disabled face is the darkest of those at 0.86
+ * — so what this counts is the border without counting the surface it encloses.
+ *
+ * MEASURED, AND IT IS THE THING THAT GOES WRONG WITH A THRESHOLD LIKE THIS: it was 0.72, which was above the 0.55
+ * this tree used to give that colour and is now BELOW the sample's 0.737 — so `-drawRect:` on a button came out with
+ * no ink at all and the case read as a button that had stopped drawing. The value moved with the colour; what the
+ * threshold is anchored TO is the pair of them, which is what its comment now says. */
 static int ink_in(NSBitmapImageRep *rep, int x0, int y0, int x1, int y1)
 {
 	int x, y, n = 0;
@@ -84,7 +91,7 @@ static int ink_in(NSBitmapImageRep *rep, int x0, int y0, int x1, int y1)
 		for (x = x0; x < x1; x++) {
 			NSColor *c = [rep colorAtX:x y:y];
 
-			if (c != nil && [c redComponent] < 0.72) {
+			if (c != nil && [c redComponent] < 0.80) {
 				n++;
 			}
 		}
@@ -592,8 +599,13 @@ int main(void)
 			      "an ENABLED button's face sits just ABOVE the window's grey — raised, not sunken");
 			check(dead < bg, "a DISABLED button's face sits BELOW it");
 			check(deadInk < dead, "and its title is a darker grey than its own face");
-			check(border > 0.15 && border < 0.60,
-			      "the border is a DARK GREY — not black, and not light enough to be lost against either face");
+			/* **AND THE UPPER BOUND IS THE DARKEST FACE RATHER THAN A NUMBER OF ITS OWN.** It was 0.60, which read
+			 * the 0.55 this tree had chosen; the sample's answer is 0.737, and what the claim is really about is that
+			 * the border is darker than EVERY face it is drawn against — the disabled one is the lightest of those at
+			 * 0.86 — without being black. Stated against that face, the check survives the next value instead of
+			 * having to be re-tuned by hand the way this one just was. */
+			check(border > 0.15 && border < dead - 0.05,
+			      "the border is a DARK GREY — not black, and darker than every face it is drawn against");
 
 			[button setButtonType:NSMomentaryLightButton];
 			[button setEnabled:YES];

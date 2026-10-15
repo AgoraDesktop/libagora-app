@@ -298,19 +298,21 @@ extern NSString *NSSystemColorsDidChangeNotification;
  * 0.70 on the way past, which was too light for this strip. 0.50 is a DARK grey on a light one — a full step below
  * `+controlShadowColor`'s 0.60 — and still nothing like black. */
 + (NSColor *)cg_chromeInkColor;
-/* **AND THE TWO GREYS A SCROLLER IS MADE OF, WHICH ARE THE ONE PLACE THIS TREE INVERTS ITS OWN RULE.** Everywhere
+/* **AND THE GROOVE A SCROLLER'S KNOB RUNS IN, WHICH IS THE ONE PLACE THIS TREE INVERTS ITS OWN RULE.** Everywhere
  * else a raised thing is lighter than the window it sits on — that is the whole of `+controlColor`'s 0.95. A
- * SCROLLER'S GROUND IS NOT THE WINDOW, THOUGH: it is the GROOVE it runs in, so the knob takes the white and the
- * groove takes a grey BELOW both window faces, while the bar's two ends are buttons again. `Argentum Mockup.png`
- * draws all of it as custom ink rather than as a toolkit's widget, so these two numbers ARE the design rather than a
- * reading of one: the groove is 0.85 — 217, the sample's track, x=764..780 — and the knob's edge is 0.737, which is
- * the sample's 188 and is ALSO the colour of the three dimples down the knob's centre.
+ * SCROLLER'S GROUND IS NOT THE WINDOW, THOUGH: it is the GROOVE, so the knob takes the white and the groove takes a
+ * grey BELOW both window faces, while the bar's two ends are buttons again. `Argentum Mockup.png` draws all of it as
+ * custom ink rather than as a toolkit's widget, so the number IS the design rather than a reading of one: the groove
+ * is 0.85 — 217, the sample's track, x=764..780.
  *
- * They are named `cg_` because no era colour covers a groove: `+controlShadowColor`'s 0.60 is a BORDER's grey and at
- * this size reads as a hard line drawn on the face, and `+cg_disabledControlFaceColor`'s 0.86 is a FACE, which is
- * busy saying "not available" — the wrong thing for the ground of a scroller to say. */
+ * IT IS NAMED `cg_` BECAUSE NO ERA COLOUR COVERS A GROOVE: `+controlShadowColor`'s 0.60 is a BORDER's grey and at this
+ * size reads as a hard line drawn on the face, and `+cg_disabledControlFaceColor`'s 0.86 is a FACE, which is busy
+ * saying "not available" — the wrong thing for the ground of a scroller to say.
+ *
+ * **AND THE KNOB'S EDGE TURNED OUT NOT TO NEED A DOOR OF ITS OWN: IT IS `+controlDarkShadowColor`.** The sample
+ * measures 188 there too, and 188 is that colour's value — so a knob's outline, its three dimples and every border in
+ * the tier are one grey, and the name this header briefly carried for it is gone rather than kept as a synonym. */
 + (NSColor *)cg_scrollerTrackColor;
-+ (NSColor *)cg_scrollerKnobEdgeColor;
 
 /* ============================================================================================ *
  * THE ERA'S REMAINING ROWS, AND WHAT EACH ONE'S ANSWER IS. TWO KINDS, and the difference is     *

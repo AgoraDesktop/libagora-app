@@ -550,11 +550,13 @@ int main(void)
 					NSColor *c = [rep colorAtX:x y:row_of_drawing_y_in(y, 48)];
 
 					/* **THE THRESHOLD IS ABOVE THE TICK'S OWN COLOUR, WHICH IS DRAWN AS A ONE-PIXEL COLUMN THAT
-					 * STRADDLES TWO OF THEM.** The ticks are `+controlDarkShadowColor` — 0.55 since it was
-					 * lightened — and a 0.55 line at a half-pixel x blends to about 0.78 against the white it is
-					 * drawn on, so "is there ink here" has to be above that and below the background. It was 0.72,
-					 * which read the OLD 0.40's blend (about 0.70) and stopped reading the new one. */
-					if (c != nil && [c redComponent] < 0.85) {
+					 * STRADDLES TWO OF THEM.** The ticks are `+controlDarkShadowColor` — 0.737 since the sample's
+					 * value replaced the 0.55 this tree had chosen — and a 0.737 line at a half-pixel x blends to
+					 * about 0.87 against the white it is drawn on, so "is there ink here" has to be above that and
+					 * below the background. It has moved twice for the same reason: 0.72 read the old 0.40's blend
+					 * (about 0.70), 0.85 read the 0.55's (about 0.78), and the LIGHTER the colour the thinner this
+					 * margin gets — which is the price of the sample's answer and worth knowing about it. */
+					if (c != nil && [c redComponent] < 0.90) {
 						found = 1;
 						break;
 					}
