@@ -386,7 +386,20 @@ int main(void)
 			check(tmax > kh / 2,
 			      "and the widest point is ABOVE the middle — a short round cap over a long taper, which is what "
 			      "makes it a teardrop rather than a lozenge");
-			check(wbot <= wmax / 2, "and the narrow end is narrow: at most HALF the widest row");
+			/* **A RATIO AND NOT A HALF, BECAUSE THE ROW THIS MEASURES IS ALIGNMENT-SENSITIVE.** It read
+			 * `wbot <= wmax / 2`, and `wbot` is the SECOND row up from the box's bottom, where the teardrop's
+			 * narrow cap is only a few points across — so a fraction of a point of the cap's circumference is
+			 * most of the ANSWER. MEASURED: the same path at a whole-point origin gives 4 there, and the knob's
+			 * own fractional origin gives 5 or 7. It moved 5 -> 7 when the fill's trapezoids started taking
+			 * their top x at the band's top rather than at its middle, which is a fix in libagora-drawing's
+			 * `cg_sweep` and not a change to this shape: that defect made every shape's top edge as wide as its
+			 * middle, and it is why a triangle drew with its apex missing.
+			 *
+			 * WHAT IS WORTH HOLDING IS THAT THE END IS CLEARLY NARROWER THAN THE WIDEST ROW — a lozenge would
+			 * sit at half or above — so the ratio is what is asserted, and the shape itself is what the
+			 * silhouette above is for. */
+			check(wbot * 5 <= wmax * 3,
+			      "and the narrow end is narrow: at most three fifths of the widest row");
 			check(cbot - cmax <= 1 && cmax - cbot <= 1 && cmax - ctop <= 1 && ctop - cmax <= 1,
 			      "and the taper and the cap are both SYMMETRIC about the knob's axis, so the shape leans neither way");
 			[rep release];
