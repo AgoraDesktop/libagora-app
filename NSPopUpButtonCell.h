@@ -146,6 +146,13 @@ typedef enum {
  * live — and what this class adds over it is the ARROW and the room it takes from the title. */
 - (void)drawInteriorWithFrame:(NSRect)cellFrame inView:(nullable id)controlView;
 
+/* **AND WHAT THE BUTTON MEASURES, WHICH IS THE OTHER HALF OF THE SAME THING.** `NSButtonCell` sizes itself to its
+ * title and knows nothing about a pop-up arrow, so `-sizeToFit` on one of these handed back a frame exactly wide
+ * enough for the words and the arrow was then drawn ON TOP of the last letter. The sample's own button is 47 points
+ * wide for a 15-point glyph — it hugs its contents AND its arrow — and this is the door that makes that true here.
+ * The zone added is the same fraction the arrow is drawn in, so the measurement and the ink cannot drift apart. */
+- (NSSize)cellSizeForBounds:(NSRect)aRect;
+
 /* **THE PICK, WHICH IS THE ONE MESSAGE EVERY ITEM IN THE MENU IS POINTED AT.** The menu sends it with the item as
  * the argument, and what it does is the whole of this class's behaviour: move the selection, put the item's title on
  * the button, and forward the CELL's own action to the CELL's own target so the caller hears about it. It is public

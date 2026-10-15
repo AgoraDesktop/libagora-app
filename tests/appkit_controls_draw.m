@@ -389,13 +389,19 @@ int main(int argc, char **argv)
 		 *
 		 * THE SECOND ITEM IS THE ONE SELECTED, so the window opens with the button naming a row rather than wearing
 		 * an empty title — a popup whose title is blank looks like a button that failed to load. */
-		popup = [[NSPopUpButton alloc] initWithFrame:NSMakeRect(30, 268, 170, 23) pullsDown:NO];
+		popup = [[NSPopUpButton alloc] initWithFrame:NSMakeRect(30, 268, 0, 0) pullsDown:NO];
 		choices = [[NSMenu alloc] initWithTitle:@"Choices"];
 		[choices addItemWithTitle:@"First choice" action:NULL keyEquivalent:@""];
 		[choices addItemWithTitle:@"Second choice" action:NULL keyEquivalent:@""];
 		[choices addItemWithTitle:@"Third choice" action:NULL keyEquivalent:@""];
 		[popup setMenu:choices];
 		[popup selectItemAtIndex:1];
+		/* **AND IT IS SIZED AFTER ITS MENU EXISTS, WHICH IS THE WHOLE POINT OF THE DOOR BELOW.** `-sizeToFit` asks
+		 * the cell to measure itself, and a pop-up button's measurement is its TITLE PLUS ITS ARROW — so a button
+		 * fitted before its menu is set is a button fitted to an empty title, and one fitted with the wrong order is
+		 * one whose arrow lands on its last letter. It is fitted here, once, with everything in place; the sample's
+		 * own button hugs its contents at both ends and this is what makes that true of this one. */
+		[popup sizeToFit];
 		[popup setTarget:controller];
 		[popup setAction:@selector(choiceMade:)];
 		[content addSubview:popup];
@@ -446,6 +452,12 @@ int main(int argc, char **argv)
 			[w frame].origin.x, [w frame].origin.y, [w frame].size.width, [w frame].size.height,
 			[content frame].size.width, [content frame].size.height,
 			[slider frame].origin.x, [slider frame].origin.y);
+		/* **AND THE POP-UP BUTTON'S, WHICH IS THE ONE FRAME HERE THE CELL COMPUTED RATHER THAN THE CALLER.** It is
+		 * fitted to its title plus its arrow, so its width is `-cellSizeForBounds:`'s answer and printing it is how
+		 * a reader checks the measurement against the button they can see. */
+		fprintf(stderr, "controls: popup frame = %.0f,%.0f %.0fx%.0f  bounds = %.0fx%.0f\n",
+			[popup frame].origin.x, [popup frame].origin.y, [popup frame].size.width, [popup frame].size.height,
+			[popup bounds].size.width, [popup bounds].size.height);
 		/* AND WHO HAS THE KEYBOARD, which is what decides whether a keystroke reaches the text view at all: a window
 		 * sends KEY events to its FIRST RESPONDER, so a field that is not the first responder is one nobody can type
 		 * into — and printing this is cheaper than guessing when it is not. */

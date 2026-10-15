@@ -27,15 +27,24 @@
 #import <AppKit/NSWindow.h>
 #import <Foundation/NSGeometry.h>
 
-/* **THE ARROW'S THREE NUMBERS, AND THEY ARE THE SCRATCH ONE'S, NOT THE SAMPLE'S.** `Argentum Mockup.png` draws its
- * gear button with a `▼` about as wide as the glyph beside it, on a button the same height as any other; these are
- * what that comes to at this tier's 23-point bezel, and the MARGIN is the room between the arrow and the bezel's
- * right edge — which is also the room the title gives up when the arrow is at the centre. */
-#define NS_POPUP_ARROW_WIDTH	7.0
-#define NS_POPUP_ARROW_HEIGHT	4.0
-#define NS_POPUP_ARROW_MARGIN	6.0
-/* AND HOW FAR THE ARROW SITS OFF THE BOTTOM when it is a BOTTOM arrow, which is the same air the bezel keeps. */
-#define NS_POPUP_ARROW_LIFT	4.0
+/* **THE ARROW'S NUMBERS, MEASURED OFF THE SAMPLE RATHER THAN CHOSEN, AND SAID AS FRACTIONS OF THE BUTTON'S
+ * HEIGHT.** `Argentum Mockup.png` draws its pop-up button 47 points wide and 24 tall — the gear one in the widget
+ * gallery — and its parts run PAD 8, GLYPH 15, GAP 9, ARROW 9, PAD 8. So the arrow is NINE points across and SIX
+ * tall, its right edge is EIGHT points in from the button's, and THE TWO PADS ARE EQUAL: the arrow is in the
+ * CONTENTS' group, on the same centre line, and not a mark hung in a corner. The first version of this file read
+ * the same sample as "a button with a down arrow" and drew a 7x4 speck pinned to the bottom-right, which is the
+ * thing the sample is not.
+ *
+ * FRACTIONS RATHER THAN POINTS, because an arrow belongs to the button it is drawn in: a small control's bezel is
+ * shorter, and a fixed arrow would be a heavier mark on a lighter button. The scroller's arrow is measured the
+ * same way for the same reason. */
+#define NS_POPUP_ARROW_WIDTH_FRACTION	0.375	/* 9/24 of the button's height, across */
+#define NS_POPUP_ARROW_HEIGHT_FRACTION	0.250	/* 6/24, apex to base */
+#define NS_POPUP_ARROW_MARGIN_FRACTION	0.333	/* 8/24, from the button's right edge to the arrow's */
+/* **AND THE AIR UNDER A BOTTOM ARROW, WHICH THE SAMPLE DOES NOT SETTLE.** Nothing in it draws the corner
+ * arrangement at all, so this is this tier's reading of Apple's other position: the arrow sits clear of the bezel
+ * by about a third of its own height, which is the same air the bezel keeps around its title. */
+#define NS_POPUP_ARROW_LIFT_FRACTION	0.08
 
 @implementation NSPopUpButtonCell
 
@@ -51,7 +60,11 @@
 		 * would flip to. Nothing here acts on it yet — `NSMenu` places the session itself — and it is declared,
 		 * stored and answered because a caller that reads it back expects what it set. */
 		_preferredEdge = NSMaxYEdge;
-		_arrowPosition = NSPopUpArrowAtBottom;
+		/* **AND THE DEFAULT IS THE SAMPLE'S ARRANGEMENT, WHICH IS A DIVERGENCE FROM APPLE'S.** Apple documents
+		 * `NSPopUpArrowAtBottom` as the default and that is the corner arrangement; `Argentum Mockup.png` draws
+		 * the other one — the arrow on the contents' centre line — and the design is what this tier draws. A
+		 * caller who wants Apple's corner asks for it, which is what the property is for. */
+		_arrowPosition = NSPopUpArrowAtCenter;
 	}
 	return self;
 }
@@ -440,6 +453,21 @@ static NSInteger fn_popup_index(NSInteger menu_index)
 	}
 }
 
+/* **AND THE ARROW'S ROOM IS PART OF WHAT THIS CELL MEASURES, WHICH IS THE HALF OF THE SAMPLE'S BUTTON THAT WAS
+ * MISSING.** `NSButtonCell` sizes itself to its title and knows nothing about a pop-up arrow, so `-sizeToFit` on a
+ * pop-up button handed back a frame exactly wide enough for the words — and the arrow drawn into it landed ON the
+ * last letter. The sample's button is 47 points wide for a 15-point glyph: it HUGS its contents AND its arrow, and
+ * an equal pad at each end is what that comes to. So the zone the arrow is drawn in is added to the width here,
+ * and the same fraction the drawing uses is the one measured here, which is what keeps the two from drifting. */
+- (NSSize)cellSizeForBounds:(NSRect)aRect
+{
+	NSSize size = [super cellSizeForBounds:aRect];
+	CGFloat zone = size.height * (NS_POPUP_ARROW_MARGIN_FRACTION + NS_POPUP_ARROW_WIDTH_FRACTION);
+
+	size.width += zone;
+	return size;
+}
+
 /* ---- THE INK ------------------------------------------------------------------------------------- */
 
 /* **THE TWO ARROW POSITIONS DIFFER IN EXACTLY ONE THING: WHAT THE TITLE GIVES UP.** An arrow AT THE CENTRE is a
@@ -452,7 +480,8 @@ static NSInteger fn_popup_index(NSInteger menu_index)
 	NSRect content = cellFrame;
 
 	if (_arrowPosition == NSPopUpArrowAtCenter) {
-		CGFloat zone = NS_POPUP_ARROW_MARGIN + NS_POPUP_ARROW_WIDTH;
+		CGFloat zone = NSHeight(cellFrame) *
+			       (NS_POPUP_ARROW_MARGIN_FRACTION + NS_POPUP_ARROW_WIDTH_FRACTION);
 
 		content.size.width -= zone;
 		if (content.size.width < 0.0) {
@@ -465,12 +494,16 @@ static NSInteger fn_popup_index(NSInteger menu_index)
 
 - (void)cg_drawArrowInFrame:(NSRect)cellFrame
 {
-	CGFloat w = NS_POPUP_ARROW_WIDTH;
-	CGFloat h = NS_POPUP_ARROW_HEIGHT;
-	CGFloat cx = NSMaxX(cellFrame) - NS_POPUP_ARROW_MARGIN - w / 2.0;
+	/* **EVERY NUMBER HERE COMES OFF THE BUTTON'S OWN HEIGHT**, which is the thing the sample's proportions were
+	 * measured against — see the fractions above. */
+	CGFloat h = NSHeight(cellFrame);
+	CGFloat w = h * NS_POPUP_ARROW_WIDTH_FRACTION;
+	CGFloat arrowH = h * NS_POPUP_ARROW_HEIGHT_FRACTION;
+	CGFloat margin = h * NS_POPUP_ARROW_MARGIN_FRACTION;
+	CGFloat cx = NSMaxX(cellFrame) - margin - w / 2.0;
 	CGFloat cy = (_arrowPosition == NSPopUpArrowAtCenter)
 			     ? NSMidY(cellFrame)
-			     : NSMinY(cellFrame) + NS_POPUP_ARROW_LIFT + h / 2.0;
+			     : NSMinY(cellFrame) + h * NS_POPUP_ARROW_LIFT_FRACTION + arrowH / 2.0;
 	NSBezierPath *p;
 	CGContextRef c;
 
@@ -479,9 +512,9 @@ static NSInteger fn_popup_index(NSInteger menu_index)
 	cx = floor(cx) + 0.5;
 	cy = floor(cy) + 0.5;
 	p = [NSBezierPath bezierPath];
-	[p moveToPoint:NSMakePoint(cx - w / 2.0, cy + h / 2.0)];
-	[p lineToPoint:NSMakePoint(cx + w / 2.0, cy + h / 2.0)];
-	[p lineToPoint:NSMakePoint(cx, cy - h / 2.0)];
+	[p moveToPoint:NSMakePoint(cx - w / 2.0, cy + arrowH / 2.0)];
+	[p lineToPoint:NSMakePoint(cx + w / 2.0, cy + arrowH / 2.0)];
+	[p lineToPoint:NSMakePoint(cx, cy - arrowH / 2.0)];
 	[p closePath];
 	/* **AND IT IS FILLED WITH ANTIALIASING OFF, LIKE THE SCROLLER'S ARROWS AND FOR THE SAME REASON.** A triangle this
 	 * small is almost entirely edge, so a blended fill reads as GREY rather than as ink. The ink itself is the CELL's

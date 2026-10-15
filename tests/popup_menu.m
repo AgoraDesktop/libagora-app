@@ -233,9 +233,12 @@ int main(void)
 			NSRect frame = NSMakeRect(0.0, 0.0, W, H);
 			double centreAtBottom, centreAtCentre;
 			int x, y, arrowInk = 0, titleInk = 0;
-			/* THE ARROW'S ZONE AT THE RIGHT, which is what the cell reserves: 6 points of margin and a 7-point
-			 * arrow. The band below is that zone, and everything left of it is where the title is. */
-			int zoneLeft = W - 13;
+			/* **THE ARROW'S ZONE AT THE RIGHT, IN THE SAME FRACTIONS THE CELL DRAWS IT IN** — so this band is
+			 * computed rather than written down, and a change to the cell's numbers moves the band with it
+			 * instead of quietly leaving the arrow outside it. See the constants in `NSPopUpButtonCell.m`: the
+			 * sample's margin is 8/24 of the button's height and its arrow is 9/24 across. */
+			CGFloat zone = (CGFloat)H * (0.333 + 0.375);
+			int zoneLeft = W - (int)ceil(zone) - 1;
 
 			[cell setBordered:YES];
 			[cell setBezeled:YES];
@@ -260,8 +263,8 @@ int main(void)
 					}
 				}
 			}
-			printf("  (note: %d dark points right of x=%d — the arrow's zone — and %d to its left)\n",
-			       arrowInk, zoneLeft, titleInk);
+			printf("  (note: %d dark points right of x=%d — the arrow's zone, %.1f wide — and %d to its left)\n",
+			       arrowInk, zoneLeft, (double)zone, titleInk);
 			check(arrowInk > 0, "the ARROW is drawn, in the right-hand zone");
 			check(titleInk > 0, "and the title is drawn to its left");
 
@@ -280,6 +283,38 @@ int main(void)
 			[rep release];
 			[cell release];
 			[view release];
+		}
+
+		/* 8. **AND THE ARROW IS PART OF WHAT A POP-UP BUTTON MEASURES, WHICH A PLAIN BUTTON'S MEASUREMENT DOES
+		 * NOT KNOW ABOUT.** `NSButtonCell` sizes itself to its title; the sample's own button hugs its contents at
+		 * BOTH ends — pad 8, glyph 15, gap 9, arrow 9, pad 8 — so a pop-up's measurement has to carry the arrow's
+		 * zone as well. Without this, `-sizeToFit` hands back a frame exactly wide enough for the words and the
+		 * arrow is then drawn ON the last letter, which is what the demonstration did before it was fitted in the
+		 * right order. */
+		{
+			NSPopUpButtonCell *popupCell = [[NSPopUpButtonCell alloc] initTextCell:@"Second choice"];
+			NSButtonCell *plainCell = [[NSButtonCell alloc] initTextCell:@"Second choice"];
+			NSRect probe = NSMakeRect(0.0, 0.0, 1000.0, 23.0);
+			NSSize withArrow, without;
+			CGFloat want;
+
+			[popupCell setBordered:YES];
+			[popupCell setBezeled:YES];
+			[plainCell setBordered:YES];
+			[plainCell setBezeled:YES];
+			withArrow = [popupCell cellSizeForBounds:probe];
+			without = [plainCell cellSizeForBounds:probe];
+			want = withArrow.height * (0.333 + 0.375);
+			printf("  (note: the same title measures %.1f wide on a pop-up and %.1f on a plain button; the zone "
+			       "is %.1f)\n", (double)withArrow.width, (double)without.width, (double)want);
+			check(withArrow.width > without.width,
+			      "a pop-up button measures WIDER than a plain button with the same title");
+			check(fabs((withArrow.width - without.width) - want) < 0.51,
+			      "and the difference IS the arrow's zone, to within half a point");
+			check(withArrow.height == without.height,
+			      "and the arrow does not make the button any TALLER");
+			[popupCell release];
+			[plainCell release];
 		}
 
 		/* **AND REACHING THIS POINT IS ITSELF A CHECK, WHICH IS WHY THE RELEASES ABOVE ARE NOT INCIDENTAL.** Every menu
