@@ -4,21 +4,20 @@
  * Copyright © 2026 Kyle J. Cardoza. MIT licensed — see LICENSE.
  * SPDX-License-Identifier: MIT
  *
- * **A COMBO BOX'S LIST IS NOT A MENU, AND THIS IS THE PART OF THAT WHICH THIS TIER CAN HONESTLY SEPARATE.** The two
- * disagree about two things and only one of them is cheap:
+ * **A COMBO BOX'S LIST IS NOT A MENU, AND THE TWO THINGS THEY DISAGREE ABOUT ARE BOTH ANSWERED HERE.**
  *
- *   * WHAT A ROW LOOKS LIKE — a menu's rows carry a check-mark gutter and a shortcut column, and their highlight is a
- *     chip INSET inside the row, because that inset-and-round is most of what makes a Mac menu read as a menu. A list's
- *     row is plain text with a full-width fill for the row you are on. THIS CLASS DOES NOT CHANGE ANY OF THAT YET, and
- *     the skin is still owed rather than quietly declared done.
- *   * WHICH ROW IS MARKED — and this is the one a person notices, because a combo box opens its list to answer "which
- *     one am I on" and a menu marks only the row the POINTER is on. So the held row wears the mark.
+ *   * WHICH ROW IS MARKED — a menu marks only the row the POINTER is on, and a combo box opens its list to answer
+ *     "which one am I on", so the held row wears the mark too. `-cg_isItemMarked:` is that answer.
+ *   * WHAT A ROW LOOKS LIKE — a menu's row carries a check-mark gutter and a shortcut column, and its highlight is a
+ *     chip INSET inside the row, because that inset-and-round is most of what makes a Mac menu read as a menu. A
+ *     list's row is plain text with a full-width fill. `-cg_makeItemCell` names the cell those rows are drawn by and
+ *     `-cg_markRectForRow:` says how far the fill reaches; `AGComboListCell` is the cell.
  *
- * **AND THE MARK IS THE SAME CHIP THE POINTER WEARS.** That is deliberate: the highlight of this session is painted by
- * `NSMenuView -drawRect:` — the chip's shape, its colour and its inset all live there — and a subclass that invented a
- * second kind of highlight would be a session drawing two vocabularies for one question. The row under the pointer and
- * the row the box holds differ in WHY they are marked, not in what a mark looks like, so they look the same; the SKIN
- * question above is where a full-width fill would arrive, and it would arrive for both.
+ * **AND THE MARK IS THE SAME ACCENT THE POINTER WEARS, WHICH THE SHAPE CHANGE DOES NOT TOUCH.** The highlight of this
+ * session is painted by `NSMenuView -drawRect:` — its colour, its inset and its radius all live there — so a subclass
+ * that invented a second kind of highlight would be a session drawing two vocabularies for one question. The row under
+ * the pointer and the row the box holds differ in WHY they are marked, not in what a mark looks like: both are the
+ * accent, and here both are the whole row.
  *
  * THE SESSION IS `NSMenu`'s AND IS NOT DUPLICATED. One traversal loop, one tracking window, one dismissal, one pick —
  * this tier has learned repeatedly that a second copy of a mechanism is how two of them come to disagree, and a combo

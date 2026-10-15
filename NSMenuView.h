@@ -63,6 +63,25 @@ extern const CGFloat NSMenuPanelPadding;
  * THE DEFAULT IS NO, so every menu in the tier is unaffected by the door existing. */
 - (BOOL)cg_isItemMarked:(nullable NSMenuItem *)item;
 
+/* **AND THE MARK'S SHAPE IS THE VIEW'S TOO, BECAUSE A CHIP IS A MENU'S AND A FILL IS A LIST'S.** Every mark this
+ * session draws is the menu's chip: inset a few points inside the row, rounded, the accent. A LIST wants the same
+ * accent on the whole row instead — that is most of what "a row" rather than "a menu item" looks like — and the
+ * question belongs beside `-cg_isItemMarked:` for the same reason: the view owns the painting, so a subclass that
+ * disagrees about a row says so here rather than redrawing the panel. The default is the menu's own inset. */
+- (NSRect)cg_markRectForRow:(NSRect)row;
+
+/* **AND WHICH CELL DRAWS A ROW, ASKED RATHER THAN NAMED.** `-cellForItemAtIndex:` made an `NSMenuItemCell` at the one
+ * place cells are made, so a caller with a different idea about a row — a LIST, whose rows have no check-mark gutter
+ * and no shortcut column — had no way to say so. This is the same correction `NSMenu -cg_setMenuViewClass:` makes one
+ * level up: a class named at its construction site is a class nobody can replace.
+ *
+ * **AND IT RETURNS A CELL THE CALLER OWNS — WHICH IS WHY IT IS CALLED `new`.** `-cellForItemAtIndex:` releases what
+ * this hands back once the row's cache has retained it, so a door that returned an autoreleased cell would be
+ * over-released the moment it was used: MEASURED, that is a SEGFAULT in the first probe that drew a list. The Cocoa
+ * naming rule — a method whose name begins with `new` returns a +1 object — is the whole of the documentation this
+ * needs, and a subclass that overrides it owes the same. */
+- (NSMenuItemCell *)cg_newItemCell;
+
 /* THE CELL FOR A ROW, MADE ON FIRST ASK and kept, because a cell carries measured widths and a menu that
  * re-measured every item on every pass would measure the same strings forever. */
 - (NSMenuItemCell *)cellForItemAtIndex:(NSInteger)index;

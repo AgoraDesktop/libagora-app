@@ -122,6 +122,20 @@ static void apk_fill_vertical_gradient(NSRect rect, CGFloat radius,
 	return _shownMenu;
 }
 
+- (NSMenuItemCell *)cg_newItemCell
+{
+	/* +1: the caller retains it in the row cache and then releases it. See the header. */
+	return [[NSMenuItemCell alloc] initTextCell:@""];
+}
+
+- (NSRect)cg_markRectForRow:(NSRect)row
+{
+	/* THE MENU'S OWN CHIP, WHICH IS WHAT THIS VIEW HAS ALWAYS DRAWN: inset inside the row, so that the row still reads
+	 * as a row and the chip as a chip. A list answers the row itself. */
+	return _horizontal ? NSInsetRect(row, 1.0, 2.0)
+			   : NSInsetRect(row, APPKIT_MENU_HIGHLIGHT_INSET, APPKIT_MENU_HIGHLIGHT_INSET);
+}
+
 - (NSMenuItemCell *)cellForItemAtIndex:(NSInteger)index
 {
 	NSMenuItem *item = [_shownMenu itemAtIndex:index];
@@ -135,7 +149,7 @@ static void apk_fill_vertical_gradient(NSRect rect, CGFloat radius,
 	}
 	cell = [_cells objectAtIndex:(NSUInteger)index];
 	if ((id)cell == [NSNull null]) {
-		cell = [[NSMenuItemCell alloc] initTextCell:@""];
+		cell = [self cg_newItemCell];
 		[cell setMenuItem:item];
 		/* **A BAR'S FIRST ITEM IS THE APPLICATION MENU, AND THE HIG SETS IT IN BOLD.** That is the whole of why
 		 * this view is the one that decides: the first item of a HORIZONTAL menu is the application's own — put
@@ -515,9 +529,7 @@ static void apk_fill_vertical_gradient(NSRect rect, CGFloat radius,
 			/* **A CHIP INSET INSIDE THE ROW, NOT THE WHOLE ROW.** That inset-and-round is most of what makes a
 			 * Mac menu read as a menu; a full-width band of colour is what a Windows menu does. The bar's chip is
 			 * inset the same way, a little more vertically, so it does not touch the strip's edges. */
-			NSRect chip = _horizontal ? NSInsetRect(row, 1.0, 2.0)
-						  : NSInsetRect(row, APPKIT_MENU_HIGHLIGHT_INSET,
-								APPKIT_MENU_HIGHLIGHT_INSET);
+			NSRect chip = [self cg_markRectForRow:row];
 
 			NSColor *accent = [NSColor cg_accentColor];
 

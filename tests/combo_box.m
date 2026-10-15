@@ -21,6 +21,7 @@
 #import <AppKit/NSComboBoxCell.h>
 #import <AppKit/NSComboBox.h>
 #import <AppKit/AGComboListView.h>
+#import <AppKit/AGComboListCell.h>
 #import <AppKit/NSMenuView.h>
 #import <AppKit/NSWindow.h>
 #import <AppKit/NSView.h>
@@ -481,6 +482,52 @@ int main(void)
 		check([list cg_menuViewClass] == [NSMenuView class] &&
 		      [[NSMenu alloc] init] != nil,
 		      "and a menu that was never told uses the default view, which is what every menu is");
+		[listView release];
+		[plainView release];
+	}
+
+	/* 12. **AND A LIST'S ROW HAS NO GUTTER, NO SHORTCUT COLUMN, AND A MARK THAT FILLS IT.** A menu's row is laid out in
+	 * four strips and a list's in one, and both facts are ARITHMETIC — which column the title gets and how far the mark
+	 * reaches — so neither needs a display to check. MEASURED before this: a list's rows were laid out as though the two
+	 * columns it does not draw were there, so a list of short words was as wide as a menu of shortcut-bearing items, and
+	 * the row it held wore a chip inset inside it rather than being filled. */
+	{
+		NSMenu *list = [combo cg_buildListMenu];
+		AGComboListView *listView = [[AGComboListView alloc] initWithFrame:NSMakeRect(0.0, 0.0, 120.0, 44.0)];
+		NSMenuView *plainView = [[NSMenuView alloc] initWithFrame:NSMakeRect(0.0, 0.0, 120.0, 44.0)];
+		NSMenuItemCell *listCell;
+		NSMenuItemCell *menuCell;
+		NSRect row = NSMakeRect(0.0, 0.0, 120.0, 22.0);
+
+		[listView setMenu:list];
+		[plainView setMenu:list];
+		listCell = [listView cellForItemAtIndex:0];
+		menuCell = [plainView cellForItemAtIndex:0];
+		/* **AND THE CONTRAST WITH A MENU CANNOT BE SHOWN HERE, WHICH IS WORTH WRITING DOWN RATHER THAN FAKING.** A menu's
+		 * column widths come from measuring TEXT, and this build has no font registry offscreen — MEASURED twice: with a
+		 * shortcut set on the row the menu cell still answered 120 of 120, because the width it would have subtracted was
+		 * zero. So the check below is the LIST's claim, which is unconditional because the override returns the row rather
+		 * than computing one — and the menu's half of the comparison waits for a display. */
+		[[list itemAtIndex:0] setKeyEquivalent:@"k"];
+		[listCell calcSize];
+		printf("  (note: with a shortcut on row 0, a list row's title column is %.0f of a %.0f row; the menu's is %.0f, "
+		       "which is zero-column arithmetic for want of a font offscreen)\n",
+		       (double)NSWidth([listCell titleRectForBounds:row]), (double)NSWidth(row),
+		       (double)NSWidth([menuCell titleRectForBounds:row]));
+		check([listCell isKindOfClass:[AGComboListCell class]],
+		      "the combo box's list makes a LIST's cell, asked for rather than named");
+		check(![menuCell isKindOfClass:[AGComboListCell class]],
+		      "and a plain menu view still makes the menu's, so no menu in the tier changed its rows");
+		check(NSEqualRects([listCell titleRectForBounds:row], row),
+		      "a list row's title column IS the whole row, shortcut or no shortcut — the columns it has not got are "
+		      "not measured, because the door returns the row rather than computing one");
+		check(NSEqualRects([listView cg_markRectForRow:row], row),
+		      "and its mark is the whole row, which is what a full-width fill is");
+		check(!NSEqualRects([plainView cg_markRectForRow:row], row),
+		      "while a menu's mark stays the chip inset inside its row");
+		/* AND THE CELL DOOR IS A +1 DOOR, so a probe that called it and dropped the result would leak one — the two
+		 * class checks above already say which cell each view makes, and they go through `-cellForItemAtIndex:`,
+		 * which is the door that owns the cell. */
 		[listView release];
 		[plainView release];
 	}

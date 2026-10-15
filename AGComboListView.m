@@ -5,6 +5,7 @@
  * SPDX-License-Identifier: MIT
  */
 #import "AGComboListView.h"
+#import "AGComboListCell.h"
 #import <AppKit/NSMenuItem.h>
 #import <AppKit/NSCell.h>	/* NSOnState, the item state this mark reads */
 
@@ -23,6 +24,25 @@
 - (BOOL)cg_isItemMarked:(NSMenuItem *)item
 {
 	return item != nil && [item state] == NSOnState;
+}
+
+/* **AND THE MARK IS THE WHOLE ROW RATHER THAN A CHIP INSIDE IT.** This is the one thing a list's row does that a
+ * menu's does not, and it is a question about PAINTING, so it is answered here with the other mark question rather
+ * than by the cell: the chip's colour and its radius live in the view's `-drawRect:`, and a cell has no say in them.
+ * The row needs no inset — the rows already sit inside the panel's own padding — so the answer is the row itself. */
+- (NSRect)cg_markRectForRow:(NSRect)row
+{
+	return row;
+}
+
+/* **AND THE ROWS ARE THIS LIST'S CELL, WHICH IS WHERE A LIST'S ROW DIFFERS FROM A MENU'S.** See `AGComboListCell` for
+ * the three doors it answers; what matters here is that the class is ASKED FOR rather than named — a class named at
+ * its construction site is a class nobody can replace, which is the same correction `NSMenu -cg_setMenuViewClass:`
+ * makes one level up. AND IT IS A +1 DOOR, like the one it overrides — see that door's note for what an autoreleased
+ * cell cost the first time a list was drawn. */
+- (NSMenuItemCell *)cg_newItemCell
+{
+	return [[AGComboListCell alloc] initTextCell:@""];
 }
 
 @end
