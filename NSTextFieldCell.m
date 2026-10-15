@@ -27,14 +27,10 @@
 		 * control face a button wears. A field is a hole in the surface that holds something; a button is a thing
 		 * standing on it. */
 		_drawsBackground = YES;
-		/* **AND THE STRING A CELL IS MADE WITH BECOMES ITS `-stringValue`, WHICH THE BASE'S INITIALISER DOES NOT DO.**
-		 * `NSCell -initTextCell:` stores what it was given in `-_title`, and `NSCell -stringValue` reads
-		 * `-_objectValue` — two doors onto what a caller thinks is one thing, and THIS class draws the second of them,
-		 * because it is the one a formatter reaches. MEASURED: a field cell made with `-initTextCell:@"NSComboBox"`
-		 * drew NOTHING until this line existed, and the probe that caught it is the one that walks the field looking
-		 * for the title's ink. Reconciling the two doors is not this slice's — a button's title legitimately lives in
-		 * `-_title` and a formatter legitimately looks at `-_objectValue` — so the field cell puts the string where a
-		 * FIELD reads it and the split is named here rather than papered over. */
+		/* **AND THE STRING A CELL IS MADE WITH BECOMES ITS VALUE, WHICH THE BASE'S INITIALISER DOES NOT DO.** `NSCell
+		 * -initTextCell:` stores what it was given in `-_title`; a FIELD draws and measures `-_objectValue`, so a cell
+		 * made with a string would otherwise draw with a value it does not have. `-setStringValue:` writes both doors
+		 * and says why — see its own note, which is where the measurement half of the same fact is recorded. */
 		[self setStringValue:stringValue];
 	}
 	return self;
@@ -54,7 +50,16 @@
  * writes the value and reads the text, and there is exactly one place a cell's contents live. See the header. */
 - (void)setStringValue:(NSString *)aString
 {
+	/* **AND IT WRITES THE BASE'S OTHER DOOR AS WELL, WHICH IS A MEASURED REQUIREMENT RATHER THAN BELT AND BRACES.**
+	 * `NSCell` keeps the text of a cell in TWO places — `-_title` and `-_objectValue` — and the two are read by
+	 * different doors: `-stringValue` reads the value (which is what a formatter reaches and what a field draws), and
+	 * `-cellSizeForBounds:` measures the TITLE. MEASURED, before this line: a combo box built by its CONTROL, which
+	 * makes its cell with an empty string and sets the text later, measured 19.61 points wide and drew a clipped "N" —
+	 * because the measurement was looking at a title nobody had ever set. A field cell that wrote one door and not the
+	 * other would be a field that shows its value and cannot measure it, so both are written here and the divergence
+	 * between them is named where it bites. */
 	[self setObjectValue:aString];
+	[self setTitle:(aString != nil ? aString : @"")];
 }
 
 - (NSString *)stringValue

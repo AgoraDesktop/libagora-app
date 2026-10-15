@@ -225,6 +225,33 @@ int main(void)
 		[plain release];
 	}
 
+	/* 6. **AND A STRING THAT ARRIVES AFTER THE CELL IS MADE IS MEASURED TOO, WHICH IS THE BUG THIS PROBE EXISTS FOR.**
+	 * A control makes its cell with an EMPTY string and sets the text later — that is what `-selectItemAtIndex:` and
+	 * every keystroke do — and `NSCell` keeps a cell's text in two places, of which `-cellSizeForBounds:` reads one and
+	 * `-stringValue` the other. MEASURED before the fix: this cell measured 19.61 points with a two-word string in it,
+	 * drew a clipped "N", and the demo's combo box was a stub 20 points wide. A probe that only ever made cells WITH
+	 * their strings — which is how the four checks above are written, and how a careless test would stop — could not
+	 * have seen it. */
+	{
+		NSRect probe = NSMakeRect(0.0, 0.0, 1000.0, (CGFloat)H);
+		NSComboBoxCell *late = [[NSComboBoxCell alloc] initTextCell:@""];
+		NSSize before;
+		NSSize after;
+
+		[late setBordered:YES];
+		[late setBezeled:YES];
+		before = [late cellSizeForBounds:probe];
+		[late setStringValue:@"NSComboBox"];
+		after = [late cellSizeForBounds:probe];
+		printf("  (note: a cell made empty measures %.2f, and %.2f once the string arrives)\n",
+		       (double)before.width, (double)after.width);
+		check(after.width > before.width + 50.0,
+		      "a string that arrives AFTER the cell is made is measured too — the control-built path");
+		check(fabs(after.width - 117.78) < 1.0,
+		      "and it measures the same as a cell that was made with that string, so the two paths agree");
+		[late release];
+	}
+
 	[combo release];
 	[popup release];
 	[view release];
