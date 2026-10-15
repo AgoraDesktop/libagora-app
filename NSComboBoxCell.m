@@ -226,25 +226,17 @@
  * they are given to is inherited. `+controlColor` at rest, `+cg_prelightControlFaceColor` under the pointer,
  * `+cg_accentColor` while the list is open, and `+cg_disabledControlFaceColor` when it is disabled — the beats are the
  * pop-up's, and the WORDS move with the accent for the reason the ink door gives. */
-- (NSColor *)cg_fieldFillColor
-{
-	/* **AND THE FIELD IS WHITE, WHICH IS THE SAMPLE'S OWN ANSWER AND THE ONE THE TIER'S TEXT FIELD GIVES.** The
-	 * sample draws this control's field `#FFFFFF` on its `#F9F9F9` window — the same white the pop-up's is drawn in —
-	 * and the pop-up is the one that DEPARTED from that, taking a button's control grey because the sample draws the
-	 * pair as two fields and this tier reads a pop-up as a control. A COMBO BOX IS NOT A CONTROL THAT WAS PRESSED: a
-	 * value is TYPED into it, so its surface is the one a value is written on, which is `NSTextFieldCell`'s own answer
-	 * and is inherited here rather than restated. What this override still owns is the two LIVE states — the pointer
-	 * darkening the field and the accent while the list is open — because those are a control's and a plain field has
-	 * none. */
-	if ([self isHighlighted]) {
-		return [NSColor cg_accentColor];
-	}
-	if ([self cg_mouseIsInside]) {
-		return [NSColor cg_prelightControlFaceColor];
-	}
-	return [super cg_fieldFillColor];
-}
-
+/* **AND THE FIELD'S FACE IS THE FIELD'S FACE, IN EVERY STATE — WHICH IS WHAT "LIKE THE NORMAL TEXT FIELD" MEANS.**
+ * There is NO override here any more, and its absence is the point: this class used to answer the accent while its list
+ * was open and the prelight grey under the pointer, copying the POP-UP's behaviour because the sample draws the two
+ * controls as a pair. A POP-UP IS A CONTROL — pressing it opens a menu — and a COMBO BOX IS A FIELD: a value is typed
+ * into it, and a field does not change colour because a person is near it or typing in it. MEASURED, that grey was
+ * also what the edit session painted, so it was visible as a box inside a white field the moment anybody clicked.
+ *
+ * WHAT IS GIVEN UP IS REAL AND IS NAMED HERE: the combo box no longer says "my list is open" by taking the accent. If
+ * that signal is wanted back it is one method returning `+cg_accentColor` when `-isHighlighted`, and the LIST it belongs
+ * to — which does not open yet — is the thing that should carry it.
+ */
 /* **AND THE ROOM THE WORDS GET IS THE FIELD'S LESS THE CHIP'S, WHICH IS THIS CLASS'S ONE MEASUREMENT OF THEM.** The
  * base insets the text by `NS_CELL_CONTENT_GAP`; a combo box's chip owns the right end of the field, so the rect stops
  * where the chip begins. IT IS OVERRIDDEN HERE RATHER THAN CLIPPED IN THE DRAWING because the same rect is what an

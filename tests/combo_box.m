@@ -107,6 +107,22 @@ int main(void)
 	 * differing here is the pair behaving as the two different things they are. */
 	check(fabs([[rep colorAtX:W / 2 y:H - 1 - (H - 2)] redComponent] - [[NSColor controlBackgroundColor] redComponent]) < 0.01,
 	      "the field's face is WHITE — the surface a value is typed on, like the text field beside it");
+	/* **AND IT IS STILL WHITE UNDER THE POINTER AND WHILE A SESSION IS RUNNING.** This is the claim the grey box in the
+	 * demonstration came from: the face used to answer the prelight grey when the pointer was inside — which, when a
+	 * person CLICKS INTO THE FIELD, is always — and the edit session painted that same answer as its own background. A
+	 * field does not change colour because somebody is near it or typing in it. */
+	[combo cg_setMouseInside:YES];
+	[rep release];
+	rep = draw_cell(combo, W, H, view);
+	check(fabs([[rep colorAtX:W / 2 y:H - 1 - (H - 2)] redComponent] - [[NSColor controlBackgroundColor] redComponent]) < 0.01,
+	      "and STILL white with the pointer inside it — a field does not change colour under a person");
+	[combo setHighlighted:YES];
+	[rep release];
+	rep = draw_cell(combo, W, H, view);
+	check(fabs([[rep colorAtX:W / 2 y:H - 1 - (H - 2)] redComponent] - [[NSColor controlBackgroundColor] redComponent]) < 0.01,
+	      "and still white while it is being used — the accent belongs to the list, not to the field");
+	[combo setHighlighted:NO];
+	[combo cg_setMouseInside:NO];
 	/* **AND THE BORDER IS THE FIRST THING UNDER THE WHITE GROUND AT THE FIELD'S TOP EDGE.** Sampling a remembered row
 	 * would be a claim about the FRAME rather than about the ink; walking down the column until the ground stops is a
 	 * claim about where the border actually is, which is what the check is for. */

@@ -249,12 +249,17 @@
 	_cg_textEditing = YES;
 	[textObj setFrame:room];
 	[textObj setFieldEditor:YES];
-	/* **AND THE EDITOR PAINTS THE FIELD'S OWN FILL, WHICH IS WHAT LETS THE CELL STOP DRAWING ITS STRING.** An editor
-	 * that painted nothing would show the string underneath it — the overlay this was — and one that painted a colour
-	 * of its own would cover the accent a combo box's field takes while its list is open and leave dark ink on it. So
-	 * the fill comes from the same door the cell's own face comes from, and the two cannot disagree. */
-	[textObj setDrawsBackground:YES];
-	[textObj setBackgroundColor:[self cg_fieldFillColor]];
+	/* **AND THE EDITOR PAINTS NOTHING AT ALL, WHICH IS THE ONLY ANSWER THAT CANNOT GO WRONG.** An earlier version of
+	 * this line set `-drawsBackground:` YES and handed the editor `-cg_fieldFillColor` — on the theory that one fill
+	 * asked for twice would agree with itself. IT DOES NOT AGREE, because the answer DEPENDS ON THE POINTER: the moment
+	 * a person clicks into the field the pointer is inside it, so the door answered the PRELIGHT GREY rather than the
+	 * field's white, and the editor painted a grey rectangle inside a white field. MEASURED on the demonstration: that
+	 * grey box is exactly the editor's own background — inset from the border, stopping at the chip.
+	 *
+	 * THE CELL ALREADY DRAWS THE FACE and always did; what it stops drawing during a session is its STRING (see
+	 * `-drawInteriorWithFrame:`), and that alone is what removes the double text. An editor that draws no background is
+	 * text ON a field rather than a second field, which is what a field editor is. */
+	[textObj setDrawsBackground:NO];
 	[textObj setEditable:YES];
 	[textObj setSelectable:YES];
 	if ([self font] != nil) {

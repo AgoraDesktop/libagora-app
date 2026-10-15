@@ -84,6 +84,12 @@ int main(void)
 	      && fabs(NSWidth([editor frame]) - NSWidth([cell drawingRectForBounds:frame])) < 0.01,
 	      "and its frame IS the cell's text rect, so an editor and a drawn string agree about where the words live");
 	check([editor isFieldEditor], "and the editor knows it is one, which is what a window's own editor is");
+	/* **AND IT DRAWS NO BACKGROUND OF ITS OWN, WHICH IS THE GREY BOX THAT WAS SEEN IN THE DEMONSTRATION.** An editor
+	 * that paints a fill paints a rectangle the size of this text rect — inset from the border, stopping at a chip — and
+	 * the colour it was handed DEPENDED ON THE POINTER, so clicking into a white field produced a grey box inside it.
+	 * The cell draws the face and the editor draws the words; nothing draws both. */
+	check(![editor drawsBackground],
+	      "the editor paints NO fill — the cell's face is the only fill, so an editor cannot box it in");
 
 	/* 3. **TYPING EDITS THE STRING THROUGH THE ONE PRIMITIVE EVERY KEYSTROKE USES.** */
 	[editor setSelectedRange:NSMakeRange(0, 5)];
