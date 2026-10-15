@@ -62,6 +62,15 @@ NSString *NSMenuWillSendActionNotification = @"NSMenuWillSendActionNotification"
 NSString *NSMenuDidBeginTrackingNotification = @"NSMenuDidBeginTrackingNotification";
 NSString *NSMenuDidEndTrackingNotification = @"NSMenuDidEndTrackingNotification";
 
+/* **AND ONE DOOR ON THIS CLASS ITSELF, DECLARED HERE FOR THE REASON THE TWO ABOVE ARE.** `-dealloc` runs a good
+ * hundred lines before the item management it needs is defined, and what it needs is the SAME detaching
+ * `-removeItemAtIndex:` does MINUS the announcement — so the two share a helper rather than each carrying its own copy
+ * of the rules about `-menu`, `-parentItem` and a submenu's `-supermenu`, which is the kind of pair that drifts. */
+@interface NSMenu (APPKITMenuQuietDetach)
+- (nullable NSMenuItem *)cg_detachItemAtIndex:(NSInteger)index;
+- (void)cg_detachAllItems;
+@end
+
 @implementation NSMenu
 
 - (instancetype)init
@@ -94,10 +103,14 @@ NSString *NSMenuDidEndTrackingNotification = @"NSMenuDidEndTrackingNotification"
 
 - (void)dealloc
 {
-	/* THE ITEMS ARE RELEASED ONE AT A TIME, DETACHED FIRST, which is the same work `-removeAllItems` does and
-	 * has to happen here too: an item that outlives its menu (a caller kept a reference) must not go on
-	 * believing it is in one. */
-	[self removeAllItems];
+	/* **THE ITEMS GO QUIETLY, AND `-removeAllItems` IS THE WRONG DOOR HERE FOR A REASON THAT COSTS A CRASH.** That
+	 * door ANNOUNCES `NSMenuDidRemoveItemNotification`, and an `NSNotification` RETAINS its object — so posting one
+	 * from inside this method names the menu that is being deallocated and lifts its retain count back off zero. The
+	 * object is RESURRECTED mid-teardown, its ivars are freed underneath the notification that holds it, and the pool
+	 * that later drains that notification releases a menu that has already gone: MEASURED, a second `-dealloc` on
+	 * freed memory and a SIGSEGV whose receiver's `isa` is heap garbage. So the DETACHING is shared with
+	 * `-removeItemAtIndex:` and the ANNOUNCING is not — nobody observes a menu that is on its way out. */
+	[self cg_detachAllItems];
 	[_items release];
 	[_title release];
 	/* AND THE TRACKING VIEW, which an open session releases when it ends; a menu deallocated mid-session (or one
@@ -190,22 +203,44 @@ NSString *NSMenuDidEndTrackingNotification = @"NSMenuDidEndTrackingNotification"
 				 atIndex:(NSInteger)[_items count]];
 }
 
-- (void)removeItemAtIndex:(NSInteger)index
+/* **THE DETACHING ITSELF, WHICH BOTH CALLERS NEED AND ONLY ONE OF THEM MAY ANNOUNCE.** Answers the item RETAINED, or
+ * nil when there is no such row — the caller owns that reference, which is why this hands one back rather than
+ * releasing it here.
+ *
+ * DETACHED BEFORE IT LEAVES, so a caller holding the item cannot ask it about a menu that no longer holds it — and so
+ * its own submenu, if it has one, stops pointing at a tree it is no longer in. */
+- (NSMenuItem *)cg_detachItemAtIndex:(NSInteger)index
 {
 	NSMenuItem *item;
 
 	if (index < 0 || index >= (NSInteger)[_items count]) {
-		return;
+		return nil;
 	}
 	item = [[_items objectAtIndex:(NSUInteger)index] retain];
-	/* DETACHED BEFORE IT LEAVES, so a caller holding the item cannot ask it about a menu that no longer holds
-	 * it — and so its own submenu, if it has one, stops pointing at a tree it is no longer in. */
 	[item setMenu:nil];
 	[item setParentItem:nil];
 	if ([item submenu] != nil) {
 		[[item submenu] setSupermenu:nil];
 	}
 	[_items removeObjectAtIndex:(NSUInteger)index];
+	return item;
+}
+
+/* AND THE WHOLE MENU AT ONCE, for the one caller that must not announce: `-dealloc`. */
+- (void)cg_detachAllItems
+{
+	while ([_items count] > 0) {
+		[[self cg_detachItemAtIndex:0] release];
+	}
+}
+
+- (void)removeItemAtIndex:(NSInteger)index
+{
+	NSMenuItem *item = [self cg_detachItemAtIndex:index];
+
+	if (item == nil) {
+		return;
+	}
 	[item release];
 	[[NSNotificationCenter defaultCenter] postNotificationName:NSMenuDidRemoveItemNotification object:self];
 }
