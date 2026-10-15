@@ -482,10 +482,10 @@ static NSInteger fn_popup_index(NSInteger menu_index)
  * field's, `NSButtonCell`'s bezel is not drawn at all, and the path is inset by half the stroke for the reason both
  * of them do it — a stroke is centred on its path and the drawing layer clips a view to its bounds.
  *
- * **AND A FIELD DOES NOT CHANGE ITS FACE WHEN IT IS PRESSED, WHICH IS A CHOICE THE SAMPLE LEAVES OPEN.** It draws no
- * pressed pop-up, so this tier's reading is the text field's: a field's face is its face whatever is happening to it,
- * and the session this control raises is its own and sufficient feedback. A DISABLED one is white too, for the same
- * reason — nothing else in this tier greys a field out, and a pop-up that did would be the only one that does. */
+ * **AND THE SAMPLE DRAWS NO PRELIT OR PRESSED POP-UP AT ALL, SO THE STATES COME FROM THE CONTROL IT IS BUILT ON.** A
+ * pop-up IS a button in this tier — `NSPopUpButtonCell` is an `NSButtonCell` and the press is a press — so its face
+ * answers the pointer and the session the way every other button's does, and the field's own white is what it wears
+ * when there is nothing to say. See the fill below for the three states and why the ink has to move with them. */
 - (void)drawWithFrame:(NSRect)cellFrame inView:(id)controlView
 {
 	NSRect faceRect = NSInsetRect(cellFrame, NS_CELL_BEZEL_WIDTH / 2.0, NS_CELL_BEZEL_WIDTH / 2.0);
@@ -493,7 +493,27 @@ static NSInteger fn_popup_index(NSInteger menu_index)
 							      xRadius:NS_CELL_BEZEL_RADIUS
 							      yRadius:NS_CELL_BEZEL_RADIUS];
 
-	[[NSColor controlBackgroundColor] setFill];
+	/* **AND THE FIELD WEARS THE SAME THREE STATES A BUTTON'S BEZEL DOES.** White at rest — which is what makes it read
+	 * as a text field — then `+cg_accentPrelightColor` under the pointer and `+cg_accentColor` in full while its menu
+	 * is up, exactly the pair `NSButtonCell` fills its own face with. THE WORDS GO WHITE ON THAT FACE, which is the
+	 * button's ink rule and stays this cell's, and THE TWO HAVE TO MOVE TOGETHER: a white title that inverted while
+	 * the field stayed white is precisely what "the text is inverting when prelit" was.
+	 *
+	 * A DISABLED ONE TAKES THE DISABLED FACE, as a button's does, rather than staying white — the state is the same
+	 * state and the surface it is said on is the same surface.
+	 *
+	 * AND THE CHIP NEEDS NO CARE OF ITS OWN: its fill IS the accent and its chevrons are white, so on an accent face
+	 * the chip dissolves and the two arrows are left standing on the field. That is what the control looks like while
+	 * it is being used, and it comes out of the two colours rather than out of a second set of them. */
+	if (!_enabled) {
+		[[NSColor cg_disabledControlFaceColor] setFill];
+	} else if ([self isHighlighted]) {
+		[[NSColor cg_accentColor] setFill];
+	} else if ([self cg_mouseIsInside]) {
+		[[NSColor cg_accentPrelightColor] setFill];
+	} else {
+		[[NSColor controlBackgroundColor] setFill];
+	}
 	[bezel fill];
 	[[NSColor controlDarkShadowColor] setStroke];
 	[bezel setLineWidth:NS_CELL_BEZEL_WIDTH];
@@ -528,7 +548,8 @@ static NSInteger fn_popup_index(NSInteger menu_index)
  *
  * AN ATTRIBUTED TITLE WINS OVER THE PLAIN ONE, which is the cell's own documented answer, and the font and the colour
  * come from the two doors the button's own drawing uses — `-font` and `-cg_inkColor` — so a pop-up's words and a
- * button's cannot come out differently. */
+ * button's cannot come out differently. That matters more here than it looks: `-cg_inkColor` is what turns a title
+ * WHITE while the accent is on the face, so the face and the words have to be reading the same two states. */
 - (void)drawInteriorWithFrame:(NSRect)cellFrame inView:(id)controlView
 {
 	NSAttributedString *attributed = [self attributedTitle];

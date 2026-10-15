@@ -183,11 +183,11 @@ typedef enum {
 - (void)drawWithFrame:(NSRect)cellFrame inView:(nullable id)controlView;
 - (void)drawInteriorWithFrame:(NSRect)cellFrame inView:(nullable id)controlView;
 /* **THE INK A BUTTON'S CONTENTS ARE DRAWN IN, WHICH IS ONE QUESTION WITH TWO READERS.** The interior asks it for the
- * title and the image; a SUBCLASS that draws a mark of its own BESIDE them — a pop-up button's arrow — has to ask the
- * same question rather than keeping a second copy of the rule, because two copies of "what colour is this button's
- * ink" are two answers that come to differ. It is typed `id` where Apple would say `NSColor` for the reason every
- * cross-class door in this family is: this header does not include `NSColor.h`, and a file that includes a BUTTON
- * CELL should not have to carry a colour inventory to ask what colour it draws in. */
+ * title and the image; a SUBCLASS whose face takes the same states asks it too rather than keeping a second copy of
+ * the rule — `NSPopUpButtonCell` draws its own title, and a title that inverted while its face did not is exactly what
+ * a second copy of this would cost. It is typed `id` where Apple would say `NSColor` for the reason every cross-class
+ * door in this family is: this header does not include `NSColor.h`, and a file that includes a BUTTON CELL should not
+ * have to carry a colour inventory to ask what colour it draws in. */
 - (id)cg_inkColor;
 - (NSRect)titleRectForBounds:(NSRect)theRect;
 - (NSRect)imageRectForBounds:(NSRect)theRect;

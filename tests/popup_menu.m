@@ -375,6 +375,69 @@ int main(void)
 			[plainCell release];
 		}
 
+		/* 9. **AND THE PRELIGHT MOVES THE FACE AND THE WORDS TOGETHER, WHICH IS WHAT A BUTTON DOES.** A pop-up is an
+		 * `NSButtonCell` and its press is a press, so it answers the pointer the way every other button does: the field
+		 * takes `+cg_accentPrelightColor` and its title goes WHITE on it.
+		 *
+		 * **THE PAIR IS THE CLAIM AND EITHER HALF ALONE IS A DEFECT.** A title that inverts while the field stays white
+		 * is WHITE ON WHITE — which is what "the text is inverting when prelit" was — and a field that takes the accent
+		 * while its words stay black is black on periwinkle. So both are measured in one drawing, with the pointer out
+		 * and then in, which is the only way a probe can tell those two failures from the control working. */
+		{
+			const int W = 140, H = 23;
+			NSView *view = [[NSView alloc] initWithFrame:NSMakeRect(0.0, 0.0, W, H)];
+			NSPopUpButtonCell *cell = [[NSPopUpButtonCell alloc] initTextCell:@"Value"];
+			NSRect frame = NSMakeRect(0.0, 0.0, W, H);
+			NSBitmapImageRep *rep = [[NSBitmapImageRep alloc] initWithBitmapDataPlanes:NULL pixelsWide:W pixelsHigh:H
+				bitsPerSample:8 samplesPerPixel:4 hasAlpha:YES isPlanar:NO
+				colorSpaceName:NSCalibratedRGBColorSpace bytesPerRow:W * 4 bitsPerPixel:32];
+			int outInk = 0, inInk = 0, x, y;
+			NSColor *outFace, *inFace;
+
+			[cell setBordered:YES];
+			[cell setBezeled:YES];
+			[NSGraphicsContext setCurrentContext:[NSGraphicsContext graphicsContextWithBitmapImageRep:rep]];
+
+			/* AT REST: the ground is the disabled face so a white FIELD is tellable from the surface under it. */
+			[[NSColor cg_disabledControlFaceColor] setFill];
+			[[NSBezierPath bezierPathWithRect:frame] fill];
+			[cell drawWithFrame:frame inView:view];
+			outFace = [rep colorAtX:W / 2 y:H - 1 - (H - 2)];
+			for (y = 0; y < H; y++) {
+				for (x = 0; x < 70; x++) {
+					if ([[rep colorAtX:x y:y] redComponent] < 0.5) {
+						outInk++;
+					}
+				}
+			}
+			/* **AND UNDER THE POINTER, WHICH IS A STATE THE PROBE CAN DRIVE**: `-cg_setMouseInside:` is the door the
+			 * control's own `-mouseEntered:` sets, so this is the same bit the window turns on for a real pointer. */
+			[cell cg_setMouseInside:YES];
+			[[NSColor cg_disabledControlFaceColor] setFill];
+			[[NSBezierPath bezierPathWithRect:frame] fill];
+			[cell drawWithFrame:frame inView:view];
+			inFace = [rep colorAtX:W / 2 y:H - 1 - (H - 2)];
+			for (y = 0; y < H; y++) {
+				for (x = 0; x < 70; x++) {
+					if ([[rep colorAtX:x y:y] redComponent] < 0.5) {
+						inInk++;
+					}
+				}
+			}
+			printf("  (note: at rest the face is %.2f/%.2f/%.2f with %d dark points; under the pointer %.2f/%.2f/%.2f "
+			       "with %d)\n", [outFace redComponent], [outFace greenComponent], [outFace blueComponent], outInk,
+			       [inFace redComponent], [inFace greenComponent], [inFace blueComponent], inInk);
+			check(outFace != nil && [outFace redComponent] > 0.97, "at rest the field is WHITE");
+			check(outInk > 0, "and its title is DARK on it");
+			check(inFace != nil && [inFace blueComponent] > 0.90 && [inFace redComponent] < 0.90,
+			      "under the pointer the FACE takes the accent");
+			check(inInk == 0,
+			      "and the title has gone WHITE with it — the two move together, which is what a button does");
+			[rep release];
+			[cell release];
+			[view release];
+		}
+
 		/* **AND REACHING THIS POINT IS ITSELF A CHECK, WHICH IS WHY THE RELEASES ABOVE ARE NOT INCIDENTAL.** Every menu
 		 * this probe builds is RELEASED, and a release detaches the items — which POSTS `NSMenuDidRemoveItemNotification`
 		 * once per row. Doing that from `-dealloc` named the menu being torn down, and an `NSNotification` RETAINS its
