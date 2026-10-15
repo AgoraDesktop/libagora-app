@@ -337,8 +337,9 @@ int main(void)
 			check(borderMid < 0.80, "and it is BORDERED, in the border's own grey");
 			check(accent > 100, "the CHIP is drawn, in the platform's accent");
 			check(runs == 2, "and the column down its middle crosses TWO white runs — the double chevron, not one arrow");
-			check(leftmostInk >= 0 && leftmostInk <= 6,
-			      "and the title begins at the FIELD's own inset, which is left-aligned and not centred");
+			check(leftmostInk >= (int)NS_CELL_CONTENT_GAP && leftmostInk <= (int)NS_CELL_CONTENT_GAP + 3,
+			      "and the title begins at the control's own MARGIN — `NS_CELL_CONTENT_GAP`, the same one a "
+			      "checkbox leaves between its box and its label — rather than at the field's edge");
 			[rep release];
 			[cell release];
 			[view release];
@@ -349,13 +350,18 @@ int main(void)
 		 * BOTH ends — pad 8, glyph 15, gap 9, arrow 9, pad 8 — so a pop-up's measurement has to carry the arrow's
 		 * zone as well. Without this, `-sizeToFit` hands back a frame exactly wide enough for the words and the
 		 * arrow is then drawn ON the last letter, which is what the demonstration did before it was fitted in the
-		 * right order. */
+		 * right order.
+		 *
+		 * **AND IT CARRIES THE TITLE'S OWN MARGIN TOO, WHICH IS THE SAME DEFECT ONE POINT FURTHER LEFT.** The words
+		 * now begin `NS_CELL_CONTENT_GAP` in from the frame's edge, so a measurement that paid for the words alone
+		 * would be short by exactly that gap and the drawing — which stops the ink at the chip — would clip their
+		 * last four points. Both are in `want` below, which is why it is the zone PLUS the gap. */
 		{
 			NSPopUpButtonCell *popupCell = [[NSPopUpButtonCell alloc] initTextCell:@"Second choice"];
 			NSButtonCell *plainCell = [[NSButtonCell alloc] initTextCell:@"Second choice"];
 			NSRect probe = NSMakeRect(0.0, 0.0, 1000.0, 23.0);
 			NSSize withArrow, without;
-			CGFloat want;
+			CGFloat zone, want;
 
 			[popupCell setBordered:YES];
 			[popupCell setBezeled:YES];
@@ -363,13 +369,23 @@ int main(void)
 			[plainCell setBezeled:YES];
 			withArrow = [popupCell cellSizeForBounds:probe];
 			without = [plainCell cellSizeForBounds:probe];
-			want = withArrow.height * (0.769 + 0.192);
+			zone = withArrow.height * (0.769 + 0.192);
+			want = zone + NS_CELL_CONTENT_GAP;
 			printf("  (note: the same title measures %.1f wide on a pop-up and %.1f on a plain button; the zone "
-			       "is %.1f)\n", (double)withArrow.width, (double)without.width, (double)want);
+			       "%.1f plus the margin %.1f is %.1f)\n", (double)withArrow.width, (double)without.width,
+			       (double)zone, (double)NS_CELL_CONTENT_GAP, (double)want);
 			check(withArrow.width > without.width,
 			      "a pop-up button measures WIDER than a plain button with the same title");
 			check(fabs((withArrow.width - without.width) - want) < 0.51,
-			      "and the difference IS the arrow's zone, to within half a point");
+			      "and the difference IS the arrow's zone PLUS the margin its title begins at");
+			check(fabs((withArrow.width - without.width) - zone) >= 0.51 * NS_CELL_CONTENT_GAP,
+			      "which is strictly more than the zone alone — the margin is not being taken out of the words");
+			/* **AND THIS IS THE CLAIM ABOVE STATED AS THE THING IT IS ABOUT.** The drawing starts the ink at the gap
+			 * and stops it at the chip, so the room the words actually get is `width - zone - gap`; asserting that
+			 * against the plain button's own measurement says the margin was ADDED rather than subtracted from the
+			 * title. Drop the addition and this number falls four points short, which is the clip. */
+			check(fabs((withArrow.width - zone - NS_CELL_CONTENT_GAP) - without.width) < 0.51,
+			      "and the room left for the words is exactly what a plain button gives them");
 			check(withArrow.height == without.height,
 			      "and the arrow does not make the button any TALLER");
 			[popupCell release];

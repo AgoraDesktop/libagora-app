@@ -187,6 +187,22 @@ typedef NSUInteger NSControlSize;
 #define NS_CELL_BEZEL_RADIUS 4.0
 #define NS_CELL_BEZEL_WIDTH  1.0
 
+/* ============================================================================================ *
+ * AND THE AIR A CONTROL LEAVES BETWEEN ITS EDGE AND ITS WORDS, FOR THE SAME REASON.                *
+ *                                                                                                *
+ * A checkbox's label begins one gap after its box and a pop-up's title begins one gap after the    *
+ * field's left edge — four points either way, under two different neighbours. They were 4.0 and    *
+ * 2.0 until the two controls were put side by side, which is the drift this block exists to stop:  *
+ * `NSButtonCell` called it `NS_BUTTON_INDICATOR_GAP`, `NSPopUpButtonCell` called it                *
+ * `NS_POPUP_TITLE_INSET`, and neither file could see the other's number.                           *
+ *                                                                                                *
+ * IT IS A GAP RATHER THAN AN INSET because it is measured from something already drawn — a box, or *
+ * a field's border — and not from the frame.                                                       *
+ * ============================================================================================ */
+#define NS_CELL_CONTENT_GAP 4.0
+
+
+
 @interface NSCell : NSObject
 {
 	/* APPLE'S OWN LAYOUT IS A BITFIELD STRUCT (`struct __CFlags`), and this tier's is plain ivars: the layout is

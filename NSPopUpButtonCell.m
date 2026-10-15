@@ -52,11 +52,6 @@
 #define NS_POPUP_CHEVRON_WIDTH_FRACTION	0.500	/* of the chip, across */
 #define NS_POPUP_CHEVRON_HEIGHT_FRACTION 0.250	/* of the chip, apex to base */
 #define NS_POPUP_CHEVRON_GAP_FRACTION	0.100	/* of the chip, between the two triangles */
-/* **AND THE TITLE'S INSET IS THE FIELD'S, WHICH IS WHY IT IS TWO POINTS RATHER THAN EIGHT.** A pop-up wears a field's
- * face, so its words have to BEGIN where a text field's words begin — the same argument `NSText` makes about the
- * border, and the sample agrees with both: its label starts two points inside the border. `NSText`'s own inset is
- * private to that file, so this is the number restated rather than shared, and the pair has to be kept in step. */
-#define NS_POPUP_TITLE_INSET		2.0
 
 @implementation NSPopUpButtonCell
 
@@ -465,16 +460,25 @@ static NSInteger fn_popup_index(NSInteger menu_index)
 	}
 }
 
-/* **AND THE CHIP'S ROOM IS PART OF WHAT THIS CELL MEASURES.** `NSButtonCell` sizes itself to its title and knows
- * nothing about a pop-up's chip, so `-sizeToFit` handed back a frame exactly wide enough for the words and the chip
- * was drawn ON the last letter. The sample's field is 151 points wide for a 125-point label: it hugs its contents at
- * the left and the chip's zone at the right. That zone — the chip and the inset between it and the border — is added
- * here in the SAME fractions the drawing uses, so the measurement and the ink cannot drift apart. */
+/* **AND THE CHIP'S ROOM IS PART OF WHAT THIS CELL MEASURES, AND SO IS THE TITLE'S OWN MARGIN.** `NSButtonCell` sizes
+ * itself to its title and knows nothing about a pop-up's chip, so `-sizeToFit` handed back a frame exactly wide enough
+ * for the words and the chip was drawn ON the last letter. The sample's field is 151 points wide for a 125-point
+ * label: it hugs its contents at the left and the chip's zone at the right. That zone — the chip and the inset between
+ * it and the border — is added here in the SAME fractions the drawing uses, so the measurement and the ink cannot
+ * drift apart.
+ *
+ * **AND `NS_CELL_CONTENT_GAP` IS ADDED BECAUSE THE TITLE NOW BEGINS THERE.** Room for the words without room for the
+ * margin in front of them is a field whose title is clipped by exactly the margin: `-drawInteriorWithFrame:` starts
+ * the ink at the gap and stops it at the chip, so the room the words get is `width - zone - gap`, and a frame that
+ * paid for the words and the zone alone leaves them short by the gap. The test's own numbers make it plain rather than
+ * asserted — the words are measured at 4 points less than the same words on a plain button, and the clip takes their
+ * last four points. */
 - (NSSize)cellSizeForBounds:(NSRect)aRect
 {
 	NSSize size = [super cellSizeForBounds:aRect];
 
 	size.width += size.height * (NS_POPUP_CHIP_FRACTION + NS_POPUP_CHIP_INSET_FRACTION);
+	size.width += NS_CELL_CONTENT_GAP;
 	return size;
 }
 
@@ -560,6 +564,12 @@ static NSInteger fn_popup_index(NSInteger menu_index)
  * field, and the drawing is CLIPPED to the room between the inset and the chip, so a title longer than its frame
  * stops at the chip rather than running under it — which is what a field does at its far end.
  *
+ * **AND THE INSET IS `NS_CELL_CONTENT_GAP` — THE MARGIN A CHECKBOX PUTS BETWEEN ITS BOX AND ITS LABEL.** It used to be
+ * two points, which is where the SAMPLE's label starts inside its border; four is where this TIER's controls start
+ * their words, and a pop-up sitting above a checkbox in the same window is the place where two answers to "how far
+ * in do the words begin" are visible at once. The field still reads as a field because of its SHAPE — one border,
+ * radius four — and not because its first letter is two points rather than four from the edge.
+ *
  * AN ATTRIBUTED TITLE WINS OVER THE PLAIN ONE, which is the cell's own documented answer, and the font and the colour
  * come from the two doors the button's own drawing uses — `-font` and `-cg_inkColor` — so a pop-up's words and a
  * button's cannot come out differently. That matters more here than it looks: `-cg_inkColor` is what turns a title
@@ -570,7 +580,7 @@ static NSInteger fn_popup_index(NSInteger menu_index)
 	NSString *title = [self title];
 	NSFont *font = (NSFont *)[self font];
 	NSDictionary *attributes;
-	CGFloat x = NSMinX(cellFrame) + NS_POPUP_TITLE_INSET;
+	CGFloat x = NSMinX(cellFrame) + NS_CELL_CONTENT_GAP;
 	CGFloat limit = NSMinX([self cg_chipRectInFrame:cellFrame]);
 	NSSize tsize = NSZeroSize;
 	NSRect room;

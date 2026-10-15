@@ -405,13 +405,13 @@
 
 /* THE INDICATOR'S OWN MEASURES: the air between the frame's left edge and the box, a fourteen-point box, a checkmark
  * drawn inside it, and the air between the box and the title. ONE PLACE, because the face, the title rect AND the
- * measurement all have to agree about where the box ends — and the margin a person sees is `NS_BUTTON_INDICATOR_GAP`,
- * which is why the label's left edge is spelled as the INSET plus the SIDE plus the GAP rather than as a fourth
- * number that would drift from these three. */
+ * measurement all have to agree about where the box ends — and the margin a person sees is `NS_CELL_CONTENT_GAP`,
+ * which is shared with the pop-up's title rather than owned here, because it is the SAME margin: the two controls put
+ * the same four points between their edge and their words. The label's left edge is spelled as the INSET plus the
+ * SIDE plus that GAP rather than as a fourth number that would drift from these three. */
 #define NS_BUTTON_INDICATOR_INSET 1.0
 #define NS_BUTTON_INDICATOR_SIDE  14.0
-#define NS_BUTTON_INDICATOR_GAP   4.0
-#define NS_BUTTON_TITLE_LEAD      (NS_BUTTON_INDICATOR_INSET + NS_BUTTON_INDICATOR_SIDE + NS_BUTTON_INDICATOR_GAP)
+#define NS_BUTTON_TITLE_LEAD      (NS_BUTTON_INDICATOR_INSET + NS_BUTTON_INDICATOR_SIDE + NS_CELL_CONTENT_GAP)
 
 /* **THE INDICATOR'S OWN FILL, WHICH IS THE GREY SCALE'S TWO LIVE STATES.** A checkbox's square and a radio's circle
  * are the parts of those buttons that ANSWER the pointer — the label does not move — so they take the SAME two faces a
