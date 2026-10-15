@@ -17,10 +17,15 @@
 #import <AppKit/NSView.h>
 #import <Foundation/NSGeometry.h>
 
-/* THE TWO NUMBERS OF THE FACE. The arrow's inset is how far the triangle is held off its button; the knob's corner
- * radius is the platform's bezel radius for a small control, named here rather than reached for. */
-#define NS_SCROLLER_ARROW_INSET 4.0
-#define NS_SCROLLER_KNOB_RADIUS 2.0
+/* **ARGENTUM'S NUMBERS FOR THE FACE, MEASURED FROM `Argentum Mockup.png` — WHICH IS A BITMAP EXPORTED FROM AFFINITY
+ * DESIGNER, so its SHAPES are the design and its blended edges are not.** The mockup's scroller is 17 points thick;
+ * these are its shapes at the 15-point width this tree builds scrollers at. ONE radius covers the knob and the two
+ * buttons — the sample's knob has flat sides and rounds only in its last three points — and THE GROOVE IS NOT ROUNDED
+ * AT ALL: it is the recess the knob runs in, and a rounded recess reads as one more raised thing. */
+#define NS_SCROLLER_ARROW_INSET		4.0	/* how far an arrow is held off its own button, per side */
+#define NS_SCROLLER_BAR_RADIUS		3.0	/* ONE radius, used three times: the knob and both buttons */
+#define NS_SCROLLER_GRIP_RADIUS		2.0	/* the knob's dimples — three of them, down its centre */
+#define NS_SCROLLER_GRIP_SPACING	8.0	/* centre to centre, which is what makes them read as a grip */
 
 /* **A HELD PAGE REPEATS, AND THESE TWO NUMBERS ARE THE FEEL OF IT.** The first repeat waits out a hand that meant ONE
  * page; after that the steps come fast enough to read as motion. Both belong to the CELL rather than to the tracking
@@ -415,13 +420,52 @@
 
 /* ---- THE INK -------------------------------------------------------------------------------------------- */
 
-/* **AN ARROW IS RASTERIZED A POINT AT A TIME, AND THAT IS THE WHOLE FIX.** A seven-point triangle filled as an
- * ANTI-ALIASED PATH comes out a grey smudge — MEASURED on the live window: the two arrows did not even match each
- * other, the top one five points wide at its base and the bottom three, because a fractional vertex lands
- * differently on the pixel grid depending on which way the point faces. WHOLE-POINT ROWS have no such freedom: the
- * arrow is CRISP, it is SYMMETRIC about its axis by construction, and the up one is exactly the down one turned
- * over. A scroll button is small enough that every edge is half the drawing, which is the size at which a path
- * stops being a shape and starts being a blur. */
+/* **EVERY PIECE OF THIS BAR IS A RECTANGLE, ROUNDED OR SQUARE, AND THE GRIP IS THREE RINGS.** The sample is a
+ * bitmap exported from Affinity Designer, so its edges are the EXPORT's rather than the design's and cannot be asked
+ * how sharp anything should be; what it settles is the SHAPE LANGUAGE — a rounded knob and rounded arrow buttons, a
+ * SQUARE groove for them to sit in, and three rings down the knob's centre. THE ARROW IS THE ONE PIECE STILL DRAWN A
+ * POINT AT A TIME, and the note in `-drawArrow:` is where that is argued. */
+static void fn_draw_grip(NSRect knob, BOOL horizontal)
+{
+	CGFloat radius = NS_SCROLLER_GRIP_RADIUS;
+	CGFloat spacing = NS_SCROLLER_GRIP_SPACING;
+	CGFloat length = horizontal ? NSWidth(knob) : NSHeight(knob);
+	CGFloat cx;
+	CGFloat cy;
+	int i;
+
+	/* NOTHING TO HOLD: a knob with no room for the three would be all grip and no knob. */
+	if (length < 2.0 * spacing + 4.0 * radius) {
+		return;
+	}
+	cx = floor(NSMidX(knob)) + 0.5;
+	cy = floor(NSMidY(knob)) + 0.5;
+	/* **THREE RINGS, WHICH IS THE WHOLE GRIP.** The sample's dimple is HOLLOW — its darkest value is 188 and its middle
+	 * is 255 — so what shows through the centre of each is the knob's OWN white rather than a fifth grey. A filled dot
+	 * would be the simpler mark and would lose exactly the thing the sample is drawing. */
+	[[NSColor cg_scrollerKnobEdgeColor] setStroke];
+	for (i = -1; i <= 1; i++) {
+		NSBezierPath *ring;
+		NSRect dot;
+
+		if (horizontal) {
+			dot = NSMakeRect(cx + i * spacing - radius, cy - radius, 2.0 * radius, 2.0 * radius);
+		} else {
+			dot = NSMakeRect(cx - radius, cy + i * spacing - radius, 2.0 * radius, 2.0 * radius);
+		}
+		ring = [NSBezierPath bezierPathWithOvalInRect:dot];
+		[ring setLineWidth:1.0];
+		[ring stroke];
+	}
+}
+
+/* **AN ARROW IS RASTERIZED A POINT AT A TIME, WHICH IS TEMPORARY AND IS SAID SO WHERE IT MATTERS.** The tree's path
+ * filler cannot draw a triangle: MEASURED on a probe, a 60x40 triangle comes out 30 points across its base and a 6x4
+ * one comes out a 3x2 bar, and how wrong it is depends on which way the point faces — so a path glyph is the wrong
+ * SHAPE, differently wrong at each end of the bar. WHOLE-POINT ROWS have no such freedom: the arrow is CRISP, it is
+ * SYMMETRIC about its axis by construction, and the up one is exactly the down one turned over. THE COST IS THAT IT
+ * CANNOT RESCALE, since the box comes from the width it is handed rather than the shape being re-solved — which is
+ * the whole reason a path was tried. See `cg_sweep` in libagora-drawing's CGContext.c. */
 static void fn_fill_arrow_rows(CGContextRef c, int centre_x, int top, int box, BOOL points_up)
 {
 	int row;
@@ -463,15 +507,38 @@ static void fn_fill_arrow_cols(CGContextRef c, int centre_y, int left, int box, 
 {
 	NSRect r = [self rectForPart:(whichArrow == NSScrollerDecrementArrow) ? NSScrollerDecrementLine
 									     : NSScrollerIncrementLine];
-	CGContextRef c = [[NSGraphicsContext currentContext] CGContext];
 	BOOL decrement = (whichArrow == NSScrollerDecrementArrow);
+	BOOL horizontal = [self fn_horizontalInFrame:[self cg_frame]];
+	NSBezierPath *button;
 	int side;
 	int box;
 	int inset;
 
-	if (c == NULL || r.size.width <= 0.0 || r.size.height <= 0.0) {
+	if (r.size.width <= 0.0 || r.size.height <= 0.0) {
 		return;
 	}
+	/* **THE BUTTON'S FACE, AND IT IS THE ONE THING A PRESS MOVES.** The sample's ink for an arrow is pure black — there
+	 * is nothing darker for a press to go to — so the press has to be said by the GROUND, which is also the order the
+	 * two are painted in: the face first, the glyph on top of it. */
+	button = [NSBezierPath bezierPathWithRoundedRect:r xRadius:NS_SCROLLER_BAR_RADIUS
+						 yRadius:NS_SCROLLER_BAR_RADIUS];
+	if (flag && [self isEnabled]) {
+		[[NSColor controlShadowColor] setFill];
+	} else {
+		[[NSColor controlBackgroundColor] setFill];
+	}
+	/* **AND IT IS STROKED, BECAUSE ITS FACE IS THE FRAME'S OWN WHITE.** An unoutlined rounded corner on a white
+	 * ground is a corner nobody can see, so the button states its shape the way the knob does. */
+	[button fill];
+	[[NSColor cg_scrollerKnobEdgeColor] setStroke];
+	[button setLineWidth:1.0];
+	[button stroke];
+
+	/* **THE GLYPH IS WHOLE POINTS, AND THE BOX IS DERIVED FROM THE BUTTON RATHER THAN THE SHAPE.** The inset holds the
+	 * arrow off its button's edge; the box that is left is the square the staircase is built in, and a button too small
+	 * for one opens the inset to a single point before giving up — a scroller at an absurd size is a degenerate case
+	 * and not a crash. THE INK IS BLACK AND DOES NOT CHANGE WITH THE PRESS: the press is already said by the button's
+	 * face darkening above, and a glyph that also dimmed would be two answers to one question. */
 	side = (int)(NSWidth(r) < NSHeight(r) ? NSWidth(r) : NSHeight(r));
 	inset = (int)NS_SCROLLER_ARROW_INSET;
 	box = side - 2 * inset;
@@ -482,19 +549,22 @@ static void fn_fill_arrow_cols(CGContextRef c, int centre_y, int left, int box, 
 	if (box < 1) {
 		return;
 	}
-	if (flag && [self isEnabled]) {
-		CGContextSetFillColorWithColor(c, [[NSColor controlDarkShadowColor] CGColor]);
-	} else {
-		CGContextSetFillColorWithColor(c, [[NSColor controlShadowColor] CGColor]);
-	}
-	if (![self fn_horizontalInFrame:[self cg_frame]]) {
-		int top = (int)NSMinY(r) + ((int)NSHeight(r) - box) / 2;
+	{
+		CGContextRef c = [[NSGraphicsContext currentContext] CGContext];
 
-		fn_fill_arrow_rows(c, (int)NSMidX(r), top, box, decrement);
-	} else {
-		int left = (int)NSMinX(r) + ((int)NSWidth(r) - box) / 2;
+		if (c == NULL) {
+			return;
+		}
+		CGContextSetFillColorWithColor(c, [[NSColor blackColor] CGColor]);
+		if (!horizontal) {
+			int top = (int)NSMinY(r) + ((int)NSHeight(r) - box) / 2;
 
-		fn_fill_arrow_cols(c, (int)NSMidY(r), left, box, decrement);
+			fn_fill_arrow_rows(c, (int)NSMidX(r), top, box, decrement);
+		} else {
+			int left = (int)NSMinX(r) + ((int)NSWidth(r) - box) / 2;
+
+			fn_fill_arrow_cols(c, (int)NSMidY(r), left, box, decrement);
+		}
 	}
 }
 
@@ -506,24 +576,24 @@ static void fn_fill_arrow_cols(CGContextRef c, int centre_y, int left, int box, 
 	if (r.size.width <= 0.0 || r.size.height <= 0.0) {
 		return;
 	}
-	p = [NSBezierPath bezierPathWithRoundedRect:r xRadius:NS_SCROLLER_KNOB_RADIUS
-					    yRadius:NS_SCROLLER_KNOB_RADIUS];
-	/* A DISABLED SCROLLER STILL DRAWS ITS KNOB, in the background colour rather than the face — the position is
-	 * still worth showing, it simply stops claiming to be grabbable. A PRESSED one wears the dark shadow. */
+	p = [NSBezierPath bezierPathWithRoundedRect:r xRadius:NS_SCROLLER_BAR_RADIUS
+					    yRadius:NS_SCROLLER_BAR_RADIUS];
+	/* **THE KNOB IS THE BRIGHTEST THING ON THE BAR, AND THAT IS THE SAMPLE'S ONE INVERSION OF THE USUAL ARRANGEMENT.**
+	 * Everywhere else a raised thing is lighter than the window under it; here the ground is the GROOVE, so the knob
+	 * takes the white and the groove takes the grey. A DISABLED SCROLLER STILL DRAWS ITS KNOB — the position is still
+	 * worth showing, it simply stops claiming to be grabbable. **AND A DRAGGED KNOB KEEPS ITS FILL.** The handle is
+	 * already the thing the hand is holding and the pointer is the feedback; recolouring it as well says the knob has
+	 * become a different object rather than that it is being moved. */
 	if (![self isEnabled]) {
 		[[NSColor controlBackgroundColor] setFill];
-		[p fill];
 		[[NSColor controlDarkShadowColor] setStroke];
-	} else if ([self isHighlighted]) {
-		[[NSColor controlDarkShadowColor] setFill];
-		[p fill];
-		[[NSColor controlShadowColor] setStroke];
 	} else {
-		[[NSColor controlColor] setFill];
-		[p fill];
-		[[NSColor controlShadowColor] setStroke];
+		[[NSColor controlBackgroundColor] setFill];
+		[[NSColor cg_scrollerKnobEdgeColor] setStroke];
 	}
+	[p fill];
 	[p stroke];
+	fn_draw_grip(r, [self fn_horizontalInFrame:[self cg_frame]]);
 }
 
 - (void)drawKnobSlotInRect:(NSRect)slotRect highlight:(BOOL)flag
@@ -533,8 +603,10 @@ static void fn_fill_arrow_cols(CGContextRef c, int centre_y, int left, int box, 
 		return;
 	}
 	/* **THE SLOT IS THE RECESS, SO IT IS DRAWN FIRST AND UNDER EVERYTHING.** The arrows are then drawn on top of it,
-	 * and the knob last of all — which is the order a raised knob over a hollow groove reads as. */
-	[[NSColor controlBackgroundColor] setFill];
+	 * and the knob last of all — which is the order a raised knob over a hollow groove reads as. **AND IT IS A SQUARE
+	 * RECTANGLE**, the one piece of this bar that is: the knob and the two buttons are rounded because they are things
+	 * the pointer can take hold of, and the groove is the hole they sit in. */
+	[[NSColor cg_scrollerTrackColor] setFill];
 	[[NSBezierPath bezierPathWithRect:slotRect] fill];
 	if (_arrowsPosition != NSScrollerArrowsNone) {
 		[self drawArrow:NSScrollerDecrementArrow highlight:NO];
@@ -545,10 +617,10 @@ static void fn_fill_arrow_cols(CGContextRef c, int centre_y, int left, int box, 
 - (void)drawWithFrame:(NSRect)cellFrame inView:(NSView *)controlView
 {
 	(void)controlView;
-	/* **THE SLOT IS FILLED OVER THE WHOLE FRAME, NOT JUST THE GROOVE.** With arrows present the groove is the middle
-	 * of the frame and the arrows sit at the ends; with them absent the groove IS the frame. Filling the slot's own
-	 * rectangle and then drawing the arrows leaves the arrow buttons as part of the slot's ground rather than as
-	 * bare background, which is what keeps the three pieces reading as one control. */
+	/* **THE FRAME IS THE ARROW BUTTONS' FACE, AND THE GROOVE IS PAINTED OVER IT.** The whole frame takes the buttons'
+	 * white first, so the two ends and the bar read as ONE control; `-drawKnobSlotInRect:` then lays the groove into the
+	 * middle of it, and each arrow repaints its own button on top of that — which is also what lets a press darken just
+	 * the one button it landed on. */
 	_lastFrame = cellFrame;
 	[[NSColor controlBackgroundColor] setFill];
 	[[NSBezierPath bezierPathWithRect:cellFrame] fill];

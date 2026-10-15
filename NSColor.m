@@ -787,6 +787,21 @@ static void fn_cmyk_of(NSColor *self, CGFloat cmyk[4])
 	return fn_singleton(&s, 0.50, 0.50, 0.50, 1.0);
 }
 
+/* **THE GROOVE AND THE KNOB'S EDGE, AND BOTH ARE SAMPLED RATHER THAN CHOSEN.** The header carries why a scroller needs
+ * these two doors at all; the numbers are `Argentum Mockup.png`'s own — 217 for the track the knob runs in and 188
+ * for its outline, which is the same value as the darkest point inside one of the knob's dimples. */
++ (NSColor *)cg_scrollerTrackColor
+{
+	static NSColor *s;
+	return fn_singleton(&s, 0.85, 0.85, 0.85, 1.0);
+}
+
++ (NSColor *)cg_scrollerKnobEdgeColor
+{
+	static NSColor *s;
+	return fn_singleton(&s, 0.737, 0.737, 0.737, 1.0);
+}
+
 + (NSColor *)controlShadowColor
 {
 	static NSColor *s;

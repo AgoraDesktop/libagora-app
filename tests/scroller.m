@@ -260,12 +260,20 @@ int main(void)
 			[rep release];
 		}
 
-		/* 10b. **AND THE ARROWS ARE CRISP AND EACH OTHER'S MIRROR.** A path fill at this size anti-aliased into a
-		 * smudge, AND THE TWO DID NOT EVEN MATCH: MEASURED on the live window, the top arrow's base came out five
-		 * points wide and the bottom's three, because a fractional vertex lands on the pixel grid differently
-		 * depending on which way the point faces. The face is rasterized a point at a time now, so the two claims
-		 * below are the ones a person can see: the arrows cover the SAME number of points, and there is NO
-		 * half-covered point between the arrow's grey and the ground it sits on. */
+		/* 10b. **AND THE ARROW IS CRISP *AND* THE TWO ARE EXACT MIRRORS, WHICH IS WHY IT IS RASTERIZED.** The face
+		 * draws its arrow a point at a time in whole-point rows, and this is the case that says why: the tree's path
+		 * filler cannot draw a triangle. MEASURED on a probe, a 60x40 triangle comes out 30 points across its base and a
+		 * 6x4 one comes out a 3x2 bar, and how wrong it is depends on which way the point faces — so a path glyph is the
+		 * wrong SHAPE, differently wrong at each end of one bar. Rasterized rows have no such freedom, and the two claims
+		 * below are the ones a person can see: the arrows cover the SAME number of points, and there is NO half-covered
+		 * point anywhere in either.
+		 *
+		 * IT IS TEMPORARY AND THE CELL SAYS SO. A staircase cannot follow the shape across the two scroller widths this
+		 * tree builds, which is what a path would buy — so when `cg_sweep` in libagora-drawing/CGContext.c pairs a
+		 * triangle's edges correctly, the glyph goes back to a path and this case goes back to allowing its edges to be
+		 * blended. THE MEASUREMENT IS THE GLYPH'S OWN BOX, not the whole button: the button is a rounded rectangle whose
+		 * corners are curves and the knob's 1-point stroke antialiases into y=14, so neither is the arrow — counting them
+		 * in would make the two windows differ by the button's corners rather than by the glyph. */
 		{
 			NSBitmapImageRep *rep = [[NSBitmapImageRep alloc] initWithBitmapDataPlanes:NULL pixelsWide:15
 				pixelsHigh:100 bitsPerSample:8 samplesPerPixel:4 hasAlpha:YES isPlanar:NO
@@ -283,30 +291,33 @@ int main(void)
 			[s drawRect:NSMakeRect(0.0, 0.0, 15.0, 100.0)];
 			/* **THE ARROW'S OWN ROWS, AND NOT THE KNOB'S.** The knob's top edge is at y=15 and its 1-point STROKE is
 			 * anti-aliased into y=14 — which is correct for a curve and is not the arrow. The arrow's box is centred in
-			 * its 15-point button, so the rows below are its own: 4..10 at the top, 89..95 at the bottom. */
+			 * its 15-point button, so the rows below are its own: 5..9 at the top, 90..94 at the bottom. THE GROOVE IS
+			 * EXCLUDED FOR A SECOND REASON — at 0.85 it falls inside the "half-covered" band below, so a groove row
+			 * inside these windows would be counted as an anti-aliased arrow edge. */
 			for (y = 0; y < 100; y++) {
 				int drawing_y = 99 - y;	/* the bitmap counts rows from the top, the drawing from its own origin */
-				BOOL in_top = (drawing_y >= 0 && drawing_y <= 13);
-				BOOL in_bottom = (drawing_y >= 87 && drawing_y < 100);
+				/* THE GLYPH'S OWN ROWS, AND THEY ARE EACH OTHER'S MIRROR: 100 - 1 - 10 = 89, 100 - 1 - 4 = 95. */
+				BOOL in_top = (drawing_y >= 4 && drawing_y <= 10);
+				BOOL in_bottom = (drawing_y >= 89 && drawing_y <= 95);
 
 				if (!in_top && !in_bottom) {
 					continue;
 				}
-				for (x = 0; x < 15; x++) {
+				for (x = 3; x <= 11; x++) {
 					double v = [[rep colorAtX:x y:y] redComponent];
 
-					if (v < 0.8) {		/* the arrow's own grey */
+					if (v < 0.8) {		/* the arrow's own ink */
 						if (in_top) {
 							top_ink++;
 						} else {
 							bottom_ink++;
 						}
-					} else if (v < 0.97) {	/* neither the grey nor the ground: a half-covered point */
+					} else if (v < 0.97) {	/* neither ink nor ground: a half-covered point */
 						partial++;
 					}
 				}
 			}
-			printf("  (note: the two arrows cover %d and %d points, and %d point(s) are half-covered)\n",
+			printf("  (note: the two arrows cover %d and %d points; %d half-covered inside the glyph)\n",
 			       top_ink, bottom_ink, partial);
 			check(top_ink > 0 && top_ink == bottom_ink,
 			      "the decrement and increment arrows are each other's MIRROR — the same points, turned over");
