@@ -119,13 +119,26 @@ int main(void)
 			[button setTitle:@"OK"];
 			[fitted setTitle:@"OK"];
 			[fitted sizeToFit];
-			printf("  (note: zero-frame button %.1f x %.1f; sizeToFit %.1f x %.1f)\n",
+			printf("  (note: zero-frame button %.1f x %.1f; sizeToFit frame %.1f x %.1f bounds %.1f x %.1f)\n",
 			       [button frame].size.width, [button frame].size.height,
-			       [fitted frame].size.width, [fitted frame].size.height);
+			       [fitted frame].size.width, [fitted frame].size.height,
+			       [fitted bounds].size.width, [fitted bounds].size.height);
 			check([button frame].size.height == WANT_BEZEL_HEIGHT,
 			      "a button made with a ZERO frame lands on the standard height");
 			check([fitted frame].size.height == WANT_BEZEL_HEIGHT,
 			      "and so does `-sizeToFit` on a button that was given a frame");
+			/* **AND THE BOUNDS ARE THE HALF THIS CASE DID NOT ASK ABOUT, WHICH IS HOW THE BUG GOT THROUGH IT.**
+			 * `-sizeToFit` goes through `NSView -setFrameSize:`, and that door changed the FRAME alone: `-setFrame:`
+			 * states the rule where it does the same work — "the size is shared and the origins are not" — and this
+			 * one left `_bounds` at whatever size the view was born with. The frame above was therefore RIGHT while
+			 * the view was 0x0 to everything that reads its bounds, and `-visibleRect` intersects those: MEASURED on
+			 * a live window, a pop-up button fitted this way reported frame 118x23, BOUNDS 0x0, visibleRect 0x0, and
+			 * was never drawn — while a button given the same frame in `-initWithFrame:` drew normally. */
+			check([fitted bounds].size.height == WANT_BEZEL_HEIGHT &&
+			      [fitted bounds].size.width == [fitted frame].size.width,
+			      "and the BOUNDS moved with the frame");
+			check([fitted visibleRect].size.width > 0.0 && [fitted visibleRect].size.height > 0.0,
+			      "so the view is not INVISIBLE to the display path");
 			[button release];
 			[fitted release];
 		}

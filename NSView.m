@@ -1846,6 +1846,15 @@ const CGFloat NSFullScreenModeWindowLevel = 100.0;
 	NSSize old = _frame.size;
 
 	_frame.size = newSize;
+	/* **AND THE BOUNDS MOVE WITH IT, WHICH IS THE HALF OF THE RULE THIS DOOR WAS MISSING.** `-setFrame:` states it
+	 * where it does the same work — "THE SIZE IS SHARED AND THE ORIGINS ARE NOT" — and this door changed the FRAME
+	 * alone, leaving `_bounds` at whatever size the view was born with. NOTHING NOTICES UNTIL SOMETHING ASKS THE
+	 * VIEW HOW BIG IT IS: `-visibleRect` intersects the BOUNDS with its ancestors', and the display walk goes
+	 * through that, so a view resized this way is 0x0 as far as drawing is concerned. MEASURED: `[popup
+	 * sizeToFit]`, which is this door through `NSControl -sizeToFit`, left a control reporting frame 118x23 and
+	 * BOUNDS 0x0 — visibleRect 0x0, never drawn — while an identical control given the same frame in
+	 * `-initWithFrame:` drew normally. */
+	_bounds.size = newSize;
 	[self setNeedsDisplay:YES];
 	/* A FRAME CHANGE IS THE ONLY THING THAT REARRANGES SUBVIEWS, which is why the hook is called here and
 	 * nowhere else. */
