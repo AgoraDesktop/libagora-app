@@ -142,8 +142,15 @@ typedef enum {
 - (void)attachPopUpWithFrame:(NSRect)cellFrame inView:(nullable id)controlView;
 - (void)dismissPopUp;
 
-/* AND THE INK. The face is `NSButtonCell`'s — a rounded bezel, filled and stroked, wearing the accent while it is
- * live — and what this class adds over it is the ARROW and the room it takes from the title. */
+/* **AND THE FACE IS A FIELD'S RATHER THAN A BUTTON'S, WHICH IS WHY THIS OVERRIDE EXISTS.** `NSButtonCell` draws a
+ * raised bezel — a thing you press — and `Argentum Mockup.png` draws a pop-up button as a TEXT FIELD: white, one
+ * point, radius four. So the face is `NSText`'s ink through the same `NS_CELL_BEZEL_*` constants, and the bezel
+ * `NSButtonCell` would have drawn is not drawn at all. */
+- (void)drawWithFrame:(NSRect)cellFrame inView:(nullable id)controlView;
+
+/* AND THE CONTENTS, WHICH ARE A LEFT-ALIGNED TITLE AND THE CHIP. `NSButtonCell` centres what it draws — a button's
+ * title and picture sit in the middle of its face — and a field's text begins at its inset, so the title is drawn
+ * here rather than forwarded. */
 - (void)drawInteriorWithFrame:(NSRect)cellFrame inView:(nullable id)controlView;
 
 /* **AND WHAT THE BUTTON MEASURES, WHICH IS THE OTHER HALF OF THE SAME THING.** `NSButtonCell` sizes itself to its

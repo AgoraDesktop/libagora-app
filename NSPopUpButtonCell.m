@@ -22,29 +22,36 @@
 #import <AppKit/NSApplication.h>
 #import <AppKit/NSBezierPath.h>
 #import <AppKit/NSColor.h>
+#import <AppKit/NSFont.h>
+#import <AppKit/NSStringDrawing.h>
 #import <AppKit/NSGraphicsContext.h>
 #import <AppKit/NSView.h>
 #import <AppKit/NSWindow.h>
 #import <Foundation/NSGeometry.h>
 
-/* **THE ARROW'S NUMBERS, MEASURED OFF THE SAMPLE RATHER THAN CHOSEN, AND SAID AS FRACTIONS OF THE BUTTON'S
- * HEIGHT.** `Argentum Mockup.png` draws its pop-up button 47 points wide and 24 tall — the gear one in the widget
- * gallery — and its parts run PAD 8, GLYPH 15, GAP 9, ARROW 9, PAD 8. So the arrow is NINE points across and SIX
- * tall, its right edge is EIGHT points in from the button's, and THE TWO PADS ARE EQUAL: the arrow is in the
- * CONTENTS' group, on the same centre line, and not a mark hung in a corner. The first version of this file read
- * the same sample as "a button with a down arrow" and drew a 7x4 speck pinned to the bottom-right, which is the
- * thing the sample is not.
+/* **A POP-UP BUTTON IS A FIELD WITH A CHIP IN IT, AND THAT IS THE WHOLE OF WHAT THE SAMPLE DRAWS.** Not a raised
+ * bezel with an arrow beside the words: `Argentum Mockup.png` draws its `NSPopUpButton` as a WHITE RECTANGLE with a
+ * one-point border — which is what makes it read as a text field — holding an ACCENT-FILLED CHIP at its right end, and
+ * inside that chip TWO TRIANGLES, one pointing up and one down, knocked out of it in white.
  *
- * FRACTIONS RATHER THAN POINTS, because an arrow belongs to the button it is drawn in: a small control's bezel is
- * shorter, and a fixed arrow would be a heavier mark on a lighter button. The scroller's arrow is measured the
- * same way for the same reason. */
-#define NS_POPUP_ARROW_WIDTH_FRACTION	0.375	/* 9/24 of the button's height, across */
-#define NS_POPUP_ARROW_HEIGHT_FRACTION	0.250	/* 6/24, apex to base */
-#define NS_POPUP_ARROW_MARGIN_FRACTION	0.333	/* 8/24, from the button's right edge to the arrow's */
-/* **AND THE AIR UNDER A BOTTOM ARROW, WHICH THE SAMPLE DOES NOT SETTLE.** Nothing in it draws the corner
- * arrangement at all, so this is this tier's reading of Apple's other position: the arrow sits clear of the bezel
- * by about a third of its own height, which is the same air the bezel keeps around its title. */
-#define NS_POPUP_ARROW_LIFT_FRACTION	0.08
+ * **AND THE PAIR BESIDE IT IS WHAT MAKES THE SECOND TRIANGLE MEAN SOMETHING.** The sample's `NSComboBox` is the same
+ * field with ONE triangle, down; so a doubled arrow is this control's own sign rather than decoration — a combo box
+ * opens one way and a pop-up chooses both. The label on each row of that gallery names the control drawn there, which
+ * is what settles it.
+ *
+ * THE SAMPLE'S NUMBERS: its field is 26 points tall, its chip 20 x 20 inset five points from the field's right border,
+ * each triangle 10 points across and 5 tall, and 2 points between them. Said as fractions of the FIELD's height,
+ * because a pop-up's chip belongs to the field it is drawn in and a small control's field is shorter: */
+#define NS_POPUP_CHIP_FRACTION		0.769	/* 20/26 of the field's height, and square */
+#define NS_POPUP_CHIP_INSET_FRACTION	0.192	/* 5/26, from the field's right border to the chip's */
+#define NS_POPUP_CHEVRON_WIDTH_FRACTION	0.500	/* of the chip, across */
+#define NS_POPUP_CHEVRON_HEIGHT_FRACTION 0.250	/* of the chip, apex to base */
+#define NS_POPUP_CHEVRON_GAP_FRACTION	0.100	/* of the chip, between the two triangles */
+/* **AND THE TITLE'S INSET IS THE FIELD'S, WHICH IS WHY IT IS TWO POINTS RATHER THAN EIGHT.** A pop-up wears a field's
+ * face, so its words have to BEGIN where a text field's words begin — the same argument `NSText` makes about the
+ * border, and the sample agrees with both: its label starts two points inside the border. `NSText`'s own inset is
+ * private to that file, so this is the number restated rather than shared, and the pair has to be kept in step. */
+#define NS_POPUP_TITLE_INSET		2.0
 
 @implementation NSPopUpButtonCell
 
@@ -453,84 +460,164 @@ static NSInteger fn_popup_index(NSInteger menu_index)
 	}
 }
 
-/* **AND THE ARROW'S ROOM IS PART OF WHAT THIS CELL MEASURES, WHICH IS THE HALF OF THE SAMPLE'S BUTTON THAT WAS
- * MISSING.** `NSButtonCell` sizes itself to its title and knows nothing about a pop-up arrow, so `-sizeToFit` on a
- * pop-up button handed back a frame exactly wide enough for the words — and the arrow drawn into it landed ON the
- * last letter. The sample's button is 47 points wide for a 15-point glyph: it HUGS its contents AND its arrow, and
- * an equal pad at each end is what that comes to. So the zone the arrow is drawn in is added to the width here,
- * and the same fraction the drawing uses is the one measured here, which is what keeps the two from drifting. */
+/* **AND THE CHIP'S ROOM IS PART OF WHAT THIS CELL MEASURES.** `NSButtonCell` sizes itself to its title and knows
+ * nothing about a pop-up's chip, so `-sizeToFit` handed back a frame exactly wide enough for the words and the chip
+ * was drawn ON the last letter. The sample's field is 151 points wide for a 125-point label: it hugs its contents at
+ * the left and the chip's zone at the right. That zone — the chip and the inset between it and the border — is added
+ * here in the SAME fractions the drawing uses, so the measurement and the ink cannot drift apart. */
 - (NSSize)cellSizeForBounds:(NSRect)aRect
 {
 	NSSize size = [super cellSizeForBounds:aRect];
-	CGFloat zone = size.height * (NS_POPUP_ARROW_MARGIN_FRACTION + NS_POPUP_ARROW_WIDTH_FRACTION);
 
-	size.width += zone;
+	size.width += size.height * (NS_POPUP_CHIP_FRACTION + NS_POPUP_CHIP_INSET_FRACTION);
 	return size;
 }
 
 /* ---- THE INK ------------------------------------------------------------------------------------- */
 
-/* **THE TWO ARROW POSITIONS DIFFER IN EXACTLY ONE THING: WHAT THE TITLE GIVES UP.** An arrow AT THE CENTRE is a
- * column on the right that the contents have to keep out of, so the interior is drawn into a frame narrowed by the
- * arrow's own zone. An arrow AT THE BOTTOM is in the corner the contents were never going to reach, so the interior
- * is drawn into the WHOLE frame and its title stays centred on the button — which is the difference the mockup's two
- * popups show, and the only one there is. */
-- (void)drawInteriorWithFrame:(NSRect)cellFrame inView:(id)controlView
+/* **A POP-UP WEARS A FIELD'S FACE, AND DRAWING IT IS WHAT THIS OVERRIDE IS FOR.** `NSButtonCell` draws a raised bezel
+ * — `+controlColor`, a thing you press — and the sample draws this control as a TEXT FIELD: white, one point, radius
+ * four. `NSText` draws that face already, and its comment is the reason to take the SAME constants rather than
+ * look-alikes: a field and the control beside it are noticed when their borders are a shade apart. So the face is the
+ * field's, `NSButtonCell`'s bezel is not drawn at all, and the path is inset by half the stroke for the reason both
+ * of them do it — a stroke is centred on its path and the drawing layer clips a view to its bounds.
+ *
+ * **AND A FIELD DOES NOT CHANGE ITS FACE WHEN IT IS PRESSED, WHICH IS A CHOICE THE SAMPLE LEAVES OPEN.** It draws no
+ * pressed pop-up, so this tier's reading is the text field's: a field's face is its face whatever is happening to it,
+ * and the session this control raises is its own and sufficient feedback. A DISABLED one is white too, for the same
+ * reason — nothing else in this tier greys a field out, and a pop-up that did would be the only one that does. */
+- (void)drawWithFrame:(NSRect)cellFrame inView:(id)controlView
 {
-	NSRect content = cellFrame;
+	NSRect faceRect = NSInsetRect(cellFrame, NS_CELL_BEZEL_WIDTH / 2.0, NS_CELL_BEZEL_WIDTH / 2.0);
+	NSBezierPath *bezel = [NSBezierPath bezierPathWithRoundedRect:faceRect
+							      xRadius:NS_CELL_BEZEL_RADIUS
+							      yRadius:NS_CELL_BEZEL_RADIUS];
 
-	if (_arrowPosition == NSPopUpArrowAtCenter) {
-		CGFloat zone = NSHeight(cellFrame) *
-			       (NS_POPUP_ARROW_MARGIN_FRACTION + NS_POPUP_ARROW_WIDTH_FRACTION);
-
-		content.size.width -= zone;
-		if (content.size.width < 0.0) {
-			content.size.width = 0.0;
-		}
-	}
-	[super drawInteriorWithFrame:content inView:controlView];
-	[self cg_drawArrowInFrame:cellFrame];
+	[[NSColor controlBackgroundColor] setFill];
+	[bezel fill];
+	[[NSColor controlDarkShadowColor] setStroke];
+	[bezel setLineWidth:NS_CELL_BEZEL_WIDTH];
+	[bezel stroke];
+	[self drawInteriorWithFrame:cellFrame inView:controlView];
 }
 
-- (void)cg_drawArrowInFrame:(NSRect)cellFrame
+/* **THE CHIP'S RECT, WHICH IS WHERE THE DRAWING AND THE TITLE'S ROOM ARE BOTH MEASURED FROM.** At the sample's
+ * position it is a square at the field's right end on the field's centre line; at Apple's other one —
+ * `NSPopUpArrowAtBottom` — it sits in the bottom-right corner instead, which is the whole of the difference between
+ * the two positions. Its corner radius is `NS_CELL_BEZEL_RADIUS`, the same four points the field's own corners take,
+ * because one control with two radii is the sort of thing a person sees without being able to name. */
+- (NSRect)cg_chipRectInFrame:(NSRect)cellFrame
 {
-	/* **EVERY NUMBER HERE COMES OFF THE BUTTON'S OWN HEIGHT**, which is the thing the sample's proportions were
-	 * measured against — see the fractions above. */
 	CGFloat h = NSHeight(cellFrame);
-	CGFloat w = h * NS_POPUP_ARROW_WIDTH_FRACTION;
-	CGFloat arrowH = h * NS_POPUP_ARROW_HEIGHT_FRACTION;
-	CGFloat margin = h * NS_POPUP_ARROW_MARGIN_FRACTION;
-	CGFloat cx = NSMaxX(cellFrame) - margin - w / 2.0;
-	CGFloat cy = (_arrowPosition == NSPopUpArrowAtCenter)
-			     ? NSMidY(cellFrame)
-			     : NSMinY(cellFrame) + h * NS_POPUP_ARROW_LIFT_FRACTION + arrowH / 2.0;
-	NSBezierPath *p;
-	CGContextRef c;
+	CGFloat side = h * NS_POPUP_CHIP_FRACTION;
+	CGFloat inset = h * NS_POPUP_CHIP_INSET_FRACTION;
+	CGFloat x = NSMaxX(cellFrame) - inset - side;
+	CGFloat y = (_arrowPosition == NSPopUpArrowAtCenter)
+			    ? NSMidY(cellFrame) - side / 2.0
+			    : NSMinY(cellFrame) + inset;
 
-	/* HALF-POINT CENTRES, so the apex is ONE point rather than a two-point flat — the scroller's own rule, for the
-	 * same reason and at the same size. */
-	cx = floor(cx) + 0.5;
-	cy = floor(cy) + 0.5;
-	p = [NSBezierPath bezierPath];
-	[p moveToPoint:NSMakePoint(cx - w / 2.0, cy + arrowH / 2.0)];
-	[p lineToPoint:NSMakePoint(cx + w / 2.0, cy + arrowH / 2.0)];
-	[p lineToPoint:NSMakePoint(cx, cy - arrowH / 2.0)];
-	[p closePath];
-	/* **AND IT IS FILLED WITH ANTIALIASING OFF, LIKE THE SCROLLER'S ARROWS AND FOR THE SAME REASON.** A triangle this
-	 * small is almost entirely edge, so a blended fill reads as GREY rather than as ink. The ink itself is the CELL's
-	 * answer — `-cg_inkColor`, which is the same door the title and the image are drawn through — so an arrow cannot
-	 * disagree with the words beside it about what colour this button's contents are. */
-	c = [[NSGraphicsContext currentContext] CGContext];
-	if (c != NULL) {
-		CGContextSaveGState(c);
-		CGContextSetShouldAntialias(c, false);
-		[[self cg_inkColor] setFill];
-		[p fill];
-		CGContextRestoreGState(c);
-	} else {
-		[[self cg_inkColor] setFill];
+	return NSMakeRect(x, y, side, side);
+}
+
+/* **AND THE TITLE IS LEFT-ALIGNED, WHICH IS THE ONE THING `NSButtonCell` CANNOT DO FOR THIS CONTROL.** Its
+ * `-drawInteriorWithFrame:` CENTRES what it draws — a button's title and picture sit in the middle of its face — and
+ * the sample's label begins at the field's inset instead, because that is where a field's text begins. So the title
+ * is drawn here rather than forwarded: the rect is the string's OWN height, placed at the inset and centred on the
+ * field, and the drawing is CLIPPED to the room between the inset and the chip, so a title longer than its frame
+ * stops at the chip rather than running under it — which is what a field does at its far end.
+ *
+ * AN ATTRIBUTED TITLE WINS OVER THE PLAIN ONE, which is the cell's own documented answer, and the font and the colour
+ * come from the two doors the button's own drawing uses — `-font` and `-cg_inkColor` — so a pop-up's words and a
+ * button's cannot come out differently. */
+- (void)drawInteriorWithFrame:(NSRect)cellFrame inView:(id)controlView
+{
+	NSAttributedString *attributed = [self attributedTitle];
+	NSString *title = [self title];
+	NSFont *font = (NSFont *)[self font];
+	NSDictionary *attributes;
+	CGFloat x = NSMinX(cellFrame) + NS_POPUP_TITLE_INSET;
+	CGFloat limit = NSMinX([self cg_chipRectInFrame:cellFrame]);
+	NSSize tsize = NSZeroSize;
+	NSRect room;
+
+	(void)controlView;
+	if (font == nil) {
+		font = [NSFont systemFontOfSize:[NSFont systemFontSize]];
+	}
+	attributes = [NSDictionary dictionaryWithObjectsAndKeys:font, NSFontAttributeName,
+		      [self cg_inkColor], NSForegroundColorAttributeName, nil];
+	if (attributed != nil) {
+		tsize = [attributed size];
+	} else if (title != nil && [title length] > 0) {
+		tsize = [title sizeWithAttributes:attributes];
+	}
+	/* NOTHING TO SAY: a pop-up whose title is empty is its field and its chip, which is a real state and the one a
+	 * caller who sets a menu and no title gets. */
+	if (tsize.width > 0.0 && tsize.height > 0.0 && (limit - x) > 0.0) {
+		room = NSMakeRect(x, NSMidY(cellFrame) - tsize.height / 2.0, limit - x, tsize.height);
+		[NSGraphicsContext saveGraphicsState];
+		[[NSBezierPath bezierPathWithRect:room] setClip];
+		if (attributed != nil) {
+			[attributed drawInRect:room];
+		} else {
+			[title drawInRect:room withAttributes:attributes];
+		}
+		[NSGraphicsContext restoreGraphicsState];
+	}
+	[self cg_drawChipInFrame:cellFrame];
+}
+
+/* **THE CHIP, AND THE TWO CHEVRONS KNOCKED OUT OF IT.** A filled rounded square in the platform's accent with the
+ * triangles drawn IN THE FIELD'S WHITE — that is the sample's construction, and it is why the arrows are white rather
+ * than dark: they are not marks ON the chip, they are holes in it. The accent is `+cg_accentColor`, the same value
+ * the menu's selection chip and a pressed button wear, because a highlight is one statement wherever it is made.
+ *
+ * THE TRIANGLES ARE FILLED WITH ANTIALIASING OFF, like every other triangle this tier draws and for the reason the
+ * scroller's carries: a shape this small is almost entirely edge, and a blended fill reads as grey rather than as
+ * white. THE CHIP ITSELF IS NOT — it is a curve, and a curve wants the antialiasing this does not. */
+- (void)cg_drawChipInFrame:(NSRect)cellFrame
+{
+	NSRect chip = [self cg_chipRectInFrame:cellFrame];
+	NSBezierPath *face = [NSBezierPath bezierPathWithRoundedRect:chip xRadius:NS_CELL_BEZEL_RADIUS
+							     yRadius:NS_CELL_BEZEL_RADIUS];
+	CGFloat w = NSWidth(chip) * NS_POPUP_CHEVRON_WIDTH_FRACTION;
+	CGFloat h = NSHeight(chip) * NS_POPUP_CHEVRON_HEIGHT_FRACTION;
+	CGFloat gap = NSHeight(chip) * NS_POPUP_CHEVRON_GAP_FRACTION;
+	CGFloat cx = floor(NSMidX(chip)) + 0.5;
+	CGFloat cy = floor(NSMidY(chip)) + 0.5;
+	CGContextRef c = [[NSGraphicsContext currentContext] CGContext];
+	int i;
+
+	[[NSColor cg_accentColor] setFill];
+	[face fill];
+	if (c == NULL) {
+		return;
+	}
+	CGContextSaveGState(c);
+	CGContextSetShouldAntialias(c, false);
+	[[NSColor controlBackgroundColor] setFill];
+	/* TWO TRIANGLES, THE UPPER POINTING UP AND THE LOWER DOWN, with the gap the sample leaves between them. Each is
+	 * placed off the chip's own centre line so the PAIR is what ends up centred, which is what keeps them from
+	 * drifting when the chip is not the sample's twenty points. */
+	for (i = 0; i < 2; i++) {
+		BOOL up = (i == 0);
+		CGFloat lo = up ? (cy + gap / 2.0) : (cy - gap / 2.0 - h);
+		CGFloat hi = lo + h;
+		NSBezierPath *p = [NSBezierPath bezierPath];
+
+		if (up) {
+			[p moveToPoint:NSMakePoint(cx, hi)];
+			[p lineToPoint:NSMakePoint(cx + w / 2.0, lo)];
+			[p lineToPoint:NSMakePoint(cx - w / 2.0, lo)];
+		} else {
+			[p moveToPoint:NSMakePoint(cx, lo)];
+			[p lineToPoint:NSMakePoint(cx + w / 2.0, hi)];
+			[p lineToPoint:NSMakePoint(cx - w / 2.0, hi)];
+		}
+		[p closePath];
 		[p fill];
 	}
+	CGContextRestoreGState(c);
 }
 
 @end

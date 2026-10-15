@@ -33,6 +33,17 @@
 
 static int s_failed;
 
+/* **WHICH PIXELS ARE THE ACCENT, AND WHY RED CANNOT ANSWER IT.** The chip is `+cg_accentColor` — 164, 154, 255 — and
+ * the border around the field is `+controlDarkShadowColor` — 188 in all three channels. In RED those are 0.64 and
+ * 0.74, close enough that a threshold has to pick one and loses the other: MEASURED on this probe's first run, the
+ * field's own BORDERS were counted as accent and the chip's extent came out as the whole field, which left the white
+ * face above and below it to be counted as two more chevrons. IN BLUE they are 1.00 and 0.74 — the accent is the only
+ * periwinkle in the picture, so blue is the channel that names it. */
+static int is_accent(NSColor *c)
+{
+	return c != nil && [c blueComponent] > 0.90 && [c redComponent] < 0.90;
+}
+
 static void check(int ok, const char *name)
 {
 	printf("  %s   %s\n", ok ? "ok  " : "FAIL", name);
@@ -222,64 +233,111 @@ int main(void)
 			[m release];
 		}
 
-		/* 7. **AND THE INK: THE ARROW, AND WHERE THE TWO POSITIONS PUT IT.** The title is centred in the room left
-		 * over, so an arrow at the CENTRE takes a column the contents keep out of and an arrow at the BOTTOM sits in
-		 * the corner they never reach — which is the only difference between the two, and is measurable. */
+		/* 7. **AND THE INK: A FIELD WITH A CHIP IN IT, AND TWO CHEVRONS IN THE CHIP.** This case used to measure how much
+		 * DARK ink sat in a column at the right-hand end, which is what a bare arrow drawn on a button's face looks like.
+		 * The sample draws something else — a white field, and an accent-filled chip with the triangles knocked out of it
+		 * in WHITE — so the same threshold would find nothing at all in the right place, and the assertions have to be
+		 * about the SHAPE rather than about a count of dark points.
+		 *
+		 * THE TWO THAT MATTER: the chip is ACCENT, and the column down its middle crosses TWO WHITE RUNS. A single
+		 * triangle gives one run and a solid chip gives none, so "two" is the whole of what makes this control's sign the
+		 * pop-up's rather than the combo box's beside it in the sample.
+		 *
+		 * AND THE GROUND IS NOT WHITE, WHICH IS NOT A DETAIL: the field's face IS white, and a white face on a white
+		 * ground is a face this probe cannot see. `+cg_disabledControlFaceColor` is the ground instead, so all three
+		 * things in play — the 0.86 ground, the 1.00 face and the 0.737 border — are tellable apart. */
 		{
 			const int W = 140, H = 23;
 			NSView *view = [[NSView alloc] initWithFrame:NSMakeRect(0.0, 0.0, W, H)];
 			NSBitmapImageRep *rep;
 			NSPopUpButtonCell *cell = [[NSPopUpButtonCell alloc] initTextCell:@"Value"];
 			NSRect frame = NSMakeRect(0.0, 0.0, W, H);
-			double centreAtBottom, centreAtCentre;
-			int x, y, arrowInk = 0, titleInk = 0;
-			/* **THE ARROW'S ZONE AT THE RIGHT, IN THE SAME FRACTIONS THE CELL DRAWS IT IN** — so this band is
-			 * computed rather than written down, and a change to the cell's numbers moves the band with it
-			 * instead of quietly leaving the arrow outside it. See the constants in `NSPopUpButtonCell.m`: the
-			 * sample's margin is 8/24 of the button's height and its arrow is 9/24 across. */
-			CGFloat zone = (CGFloat)H * (0.333 + 0.375);
-			int zoneLeft = W - (int)ceil(zone) - 1;
+			/* **THE ZONE IS COMPUTED FROM THE SAME FRACTIONS THE CELL DRAWS WITH** — the chip and its inset, 20/26 and
+			 * 5/26 of the field's height — so a change to the cell's numbers moves this band with it instead of quietly
+			 * leaving the chip outside it. */
+			CGFloat zone = (CGFloat)H * (0.769 + 0.192);
+			int zoneLeft = W - (int)ceil(zone);
+			int x, y, accent = 0, runs = 0, leftmostInk = -1;
+			double faceMid = 0.0, borderMid = 1.0, chipMid = 0.0;
+			BOOL inWhite = NO;
+			int chipCentreX = 0;
 
 			[cell setBordered:YES];
 			[cell setBezeled:YES];
-			[cell setArrowPosition:NSPopUpArrowAtBottom];
+			[cell setArrowPosition:NSPopUpArrowAtCenter];
 			rep = [[NSBitmapImageRep alloc] initWithBitmapDataPlanes:NULL pixelsWide:W pixelsHigh:H
 				bitsPerSample:8 samplesPerPixel:4 hasAlpha:YES isPlanar:NO
 				colorSpaceName:NSCalibratedRGBColorSpace bytesPerRow:W * 4 bitsPerPixel:32];
 			[NSGraphicsContext setCurrentContext:[NSGraphicsContext graphicsContextWithBitmapImageRep:rep]];
-			[[NSColor whiteColor] setFill];
+			[[NSColor cg_disabledControlFaceColor] setFill];
 			[[NSBezierPath bezierPathWithRect:frame] fill];
 			[cell drawWithFrame:frame inView:view];
-			for (y = 0; y < H; y++) {
-				for (x = 0; x < W; x++) {
-					NSColor *c = [rep colorAtX:x y:y];
 
-					if (c != nil && [c redComponent] < 0.5) {
-						if (x >= zoneLeft) {
-							arrowInk++;
-						} else {
-							titleInk++;
-						}
+			/* the field's face, half way along; the ground it is drawn on was 0.86 and this has to be lighter than it */
+			faceMid = [[rep colorAtX:W / 2 y:H - 1 - (H / 2)] redComponent];
+			/* and its border, sampled DOWN the left edge of the field */
+			for (y = 4; y < H - 4; y++) {
+				double v = [[rep colorAtX:0 y:H - 1 - y] redComponent];
+
+				if (v < borderMid) {
+					borderMid = v;
+				}
+			}
+			/* **THE CHIP IS COUNTED OVER ITS WHOLE ZONE AND THE RUNS ONLY BETWEEN ITS OWN ENDS.** The column down its
+			 * middle starts on the FIELD's white face above the chip and ends on it below, so counting white runs over the
+			 * whole column finds four of them — two from the face — and a solid chip would pass the same test. The chip's
+			 * own extent is what bounds the question, and it is found the only way it can be: the accent pixels. */
+			chipCentreX = zoneLeft + (int)ceil(zone) / 2;
+			for (y = 0; y < H; y++) {
+				for (x = zoneLeft; x < W; x++) {
+					if (is_accent([rep colorAtX:x y:H - 1 - y])) {
+						accent++;
 					}
 				}
 			}
-			printf("  (note: %d dark points right of x=%d — the arrow's zone, %.1f wide — and %d to its left)\n",
-			       arrowInk, zoneLeft, (double)zone, titleInk);
-			check(arrowInk > 0, "the ARROW is drawn, in the right-hand zone");
-			check(titleInk > 0, "and the title is drawn to its left");
+			{
+				int first = -1, last = -1;
 
-			centreAtBottom = ink_centre_fraction(rep, zoneLeft, W - 1, H - 1, 0);
+				for (y = 0; y < H; y++) {
+					if (is_accent([rep colorAtX:chipCentreX y:H - 1 - y])) {
+						if (first < 0) {
+							first = y;
+						}
+						last = y;
+					}
+				}
+				for (y = first; first >= 0 && y <= last; y++) {
+					double v = [[rep colorAtX:chipCentreX y:H - 1 - y] redComponent];
+					BOOL white = (v >= 0.95);
 
-			[cell setArrowPosition:NSPopUpArrowAtCenter];
-			[[NSColor whiteColor] setFill];
-			[[NSBezierPath bezierPathWithRect:frame] fill];
-			[cell drawWithFrame:frame inView:view];
-			centreAtCentre = ink_centre_fraction(rep, zoneLeft, W - 1, H - 1, 0);
-			printf("  (note: the arrow's ink sits at %.2f of the height when AtBottom and %.2f when AtCenter)\n",
-			       centreAtBottom, centreAtCentre);
-			check(centreAtBottom >= 0.0 && centreAtCentre >= 0.0, "the arrow is in the zone at both positions");
-			check(centreAtCentre > centreAtBottom + 0.1,
-			      "and AtCenter puts it HIGHER than AtBottom — which is the whole difference between them");
+					if (white && !inWhite) {
+						runs++;
+					}
+					inWhite = white;
+				}
+			}
+			chipMid = [[rep colorAtX:chipCentreX y:H - 1 - (H / 2)] redComponent];
+			/* and the leftmost DARK ink in the field, which is where a left-aligned title begins */
+			for (x = 0; x < zoneLeft && leftmostInk < 0; x++) {
+				for (y = 0; y < H; y++) {
+					NSColor *c = [rep colorAtX:x y:H - 1 - y];
+
+					if (c != nil && [c redComponent] < 0.5) {
+						leftmostInk = x;
+						break;
+					}
+				}
+			}
+			printf("  (note: face %.2f on a %.2f ground, border %.2f, chip %.2f, %d accent points, %d white run(s), "
+			       "title ink from x=%d of %d)\n",
+			       faceMid, [[NSColor cg_disabledControlFaceColor] redComponent], borderMid, chipMid,
+			       accent, runs, leftmostInk, zoneLeft);
+			check(faceMid > 0.97, "the face is WHITE — a field's, not a button's");
+			check(borderMid < 0.80, "and it is BORDERED, in the border's own grey");
+			check(accent > 100, "the CHIP is drawn, in the platform's accent");
+			check(runs == 2, "and the column down its middle crosses TWO white runs — the double chevron, not one arrow");
+			check(leftmostInk >= 0 && leftmostInk <= 6,
+			      "and the title begins at the FIELD's own inset, which is left-aligned and not centred");
 			[rep release];
 			[cell release];
 			[view release];
@@ -304,7 +362,7 @@ int main(void)
 			[plainCell setBezeled:YES];
 			withArrow = [popupCell cellSizeForBounds:probe];
 			without = [plainCell cellSizeForBounds:probe];
-			want = withArrow.height * (0.333 + 0.375);
+			want = withArrow.height * (0.769 + 0.192);
 			printf("  (note: the same title measures %.1f wide on a pop-up and %.1f on a plain button; the zone "
 			       "is %.1f)\n", (double)withArrow.width, (double)without.width, (double)want);
 			check(withArrow.width > without.width,
