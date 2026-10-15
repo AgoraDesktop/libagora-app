@@ -690,6 +690,7 @@ static void fn_ag_frame(void *context, uint32_t time_ms)
 	[_miniwindowImage release];
 	[_cg_registeredDraggedTypes release];
 	[_keyViewLoop release];
+	[_fieldEditor release];
 	[super dealloc];
 }
 
@@ -3881,11 +3882,27 @@ static NSUInteger fn_edge_index(NSRectEdge edge)
 	return nil;
 }
 
-- (nullable id)fieldEditor:(BOOL)createFlag forObject:(id)anObject
+/* **AND IT IS ONE EDITOR PER WINDOW, MADE ON DEMAND AND LENT OUT.** Apple's rule, and the reason a cell asks the
+ * window rather than making its own: a form with twenty fields has ONE editor that moves between them, so the memory a
+ * text-editing surface needs is paid once rather than twenty times. `createFlag` is what makes the door usable for
+ * asking without making — a caller that only wants to know whether a session is running passes NO and gets nil until
+ * one is.
+ *
+ * THE EDITOR IS NOT IN THE VIEW TREE YET, and it must not be: a field editor that sat in a window would be a text view
+ * showing at some position nobody chose. `-selectWithFrame:inView:editor:delegate:start:length:` puts it in the view it
+ * is editing, at the field's own rect, and takes it out again when the session ends. */
+- (id)fieldEditor:(BOOL)createFlag forObject:(id)anObject
 {
-	(void)createFlag; (void)anObject;
-	fn_refuse_window("-fieldEditor:forObject:", "the text system: this tier has no NSText");
-	return nil;
+	(void)anObject;
+	if (_fieldEditor == nil && createFlag) {
+		NSText *editor = [[NSText alloc] initWithFrame:NSMakeRect(0.0, 0.0, 0.0, 0.0)];
+
+		[editor setFieldEditor:YES];
+		[editor setEditable:YES];
+		[editor setSelectable:YES];
+		_fieldEditor = editor;
+	}
+	return _fieldEditor;
 }
 
 /* ---- AND THE FOUR THAT ARE NOT REFUSALS ------------------------------------------------------------------ */

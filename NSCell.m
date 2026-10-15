@@ -30,7 +30,6 @@
  * insets its drawing rect by `NS_CELL_BORDER_INSET`, and the content inside takes `NS_CELL_CONTENT_PADDING` of air.
  * ONE PLACE, so a subclass that wants different arithmetic OVERRIDES A DOOR rather than chasing a constant. They are
  * at the top because `-cellSizeForBounds:` measures with them and a macro is not visible below its own #define. */
-#define NS_CELL_BORDER_INSET   2.0
 #define NS_CELL_CONTENT_PADDING 3.0
 /* AND THE ONE IMPORT THIS FILE'S LAST DOOR NEEDED — `NSCursor`, for the cursor a text cell declares over itself. It
  * stands here rather than beside the door for the reason §A10aw measured: a header that declares its own types would

@@ -17,29 +17,26 @@
  * opens ONE list and leaves the choosing to a person who may also type. The doubled arrow therefore belongs to the
  * pop-up and the single one to this control, and each control's header says so where its own ink is drawn.
  *
- * **THE ONE THING THAT SHAPES THIS FILE IS A CLASS THIS TIER DOES NOT HAVE.** In Apple's AppKit an `NSComboBoxCell`
- * is an `NSTextFieldCell`, and THAT is where its editing comes from: the base class holds the string, the selection
- * and the field editor's protocol, and the combo box adds a list and a chip to them. This tier has neither
- * `NSTextFieldCell` nor `NSTextField` — its `NSText` is a VIEW that holds a string and edits its own single line (see
- * that header for why the tier stopped there) — so there is no field CELL for this one to derive from, and the
- * nearest base that exists is `NSActionCell`: the same base, two steps up Apple's own chain.
+ * **AND IT IS NOW AN `NSTextFieldCell`, WHICH IS THE CLASS THAT CLOSED THE ROW THIS HEADER USED TO RECORD.** This
+ * cell began at `NSActionCell` because the tier had no field cell: the field's face was drawn here by hand, the string
+ * was not held at all, and the header said in as many words that a person could not type into the control. Apple's own
+ * `NSComboBoxCell` is an `NSTextFieldCell` — that is where a combo box's string, its selection and its edit session
+ * come from — and now so is this one.
  *
- * **AND THAT IS WHY EDITING IS THE ROW THIS SLICE LEAVES OPEN, WHICH IS STATED HERE RATHER THAN LEFT TO BE FOUND.**
- * A person cannot type into this control yet. What this cell does is DRAW ITS FIELD, hold a LIST of objects and a
- * SELECTION, and answer what is chosen — which is the whole of what the sample's gallery shows, since a gallery row
- * is a still picture of a closed control. Making it editable means giving the cell a string, a selection and a
- * keyboard path, and that is the slice that `NSTextFieldCell` would have handed over for free. `-isEditable` and its
- * setter are ANSWERED AND STORED AND OBEY NOTHING, in the shape `NSText`'s own `-isRichText` records for a flag whose
- * machinery is not here yet.
+ * **SO WHAT IS LEFT HERE IS WHAT IS ACTUALLY A COMBO BOX'S OWN.** A LIST of objects and a selection over them; the
+ * CHIP and its single down triangle; the fill a control's field takes as the pointer and the session move over it; and
+ * one measurement that is genuinely this control's rather than a field's — the rect the words get stops where the chip
+ * begins, which is what keeps a typed string out from under it. The face, the border, the margin, the string and the
+ * three doors of an edit are all inherited and are not restated below.
  */
 #ifndef APPKIT_NSCOMBOBOXCELL_H
 #define APPKIT_NSCOMBOBOXCELL_H
 
-#import <AppKit/NSActionCell.h>
+#import <AppKit/NSTextFieldCell.h>
 
 NS_ASSUME_NONNULL_BEGIN
 
-@interface NSComboBoxCell : NSActionCell
+@interface NSComboBoxCell : NSTextFieldCell
 {
 	/* **THE LIST IS THE OBJECTS THEMSELVES, IN APPLE'S OWN VOCABULARY.** A combo box's rows are typed `id` — the
 	 * docs' name for the door is `-addItemWithObjectValue:` — because a combo box may hold something other than a
@@ -109,21 +106,23 @@ NS_ASSUME_NONNULL_BEGIN
 
 /* ---- THE INK ---------------------------------------------------------------------------------------- */
 
-/* **THE INK THAT CLEARS THIS CELL'S FACE, IN THE SAME THREE ANSWERS THE POP-UP GIVES.** A disabled box wears the
- * era's dimmed grey, a box whose face has taken the accent wears white, and a box at rest or under the pointer wears
- * `+controlTextColor`. It is declared here because a subclass that draws beside a title needs the same answer the
- * title got — `NSPopUpButtonCell`'s own arrow is that first caller — and it is REACHED rather than shared because the
- * two cells have no common ancestor that knows what a face is: `NSButtonCell` declares its own, and this class is not
- * a button. The rule is three lines and is spelled twice; hoisting it to a base the two agree on is a tidy-up worth
- * making when a THIRD cell needs it, and not before. */
+/* **THE INK THAT CLEARS THIS CELL'S FACE, WHICH IS THE ONE THING ABOUT THE FACE THIS CLASS CHANGES.** The base's rule
+ * is three answers — a colour a caller set, the era's dimmed grey when disabled, the control's text colour otherwise —
+ * and a combo box's field can take the ACCENT, which is a fourth: white. Overriding the INK rather than the drawing is
+ * what makes the string and the chip agree, because `NSTextFieldCell -drawInteriorWithFrame:` inks the words through
+ * this door and `-cg_drawChipInFrame:` inks the triangle white for the same reason. */
 - (nullable id)cg_inkColor;
 
-/* **AND THE FACE IS A FIELD'S RATHER THAN A BEZEL'S, EXACTLY AS THE POP-UP'S IS.** `NSActionCell` draws nothing at
- * all, so what this override contributes is the field: the same `NS_CELL_BEZEL_*` constants, the same four states,
- * and the same greys as the control beside it. A combo box and a pop-up drawn from two sets of numbers would be the
- * pair the sample draws together disagreeing about their own border. */
-- (void)drawWithFrame:(NSRect)cellFrame inView:(nullable id)controlView;
+/* **AND THE FACE IS INHERITED; ONLY ITS FILL IS THIS CONTROL'S.** The border, the radius and the margin come from
+ * `NSTextFieldCell`, so a combo box and the field beside it cannot disagree about where their border is — and a
+ * control's field answers the pointer and the session, which is the one thing a fill has to say. */
+- (nullable NSColor *)cg_fieldFillColor;
 - (void)drawInteriorWithFrame:(NSRect)cellFrame inView:(nullable id)controlView;
+
+/* **AND THE RECT THE WORDS GET STOPS WHERE THE CHIP BEGINS.** Overridden rather than clipped because an edit session
+ * is handed this same rect: a clip would stop the DRAWING of a long string at the chip while letting the EDITOR draw
+ * over it, which is a field that behaves one way at rest and another while being typed into. */
+- (NSRect)drawingRectForBounds:(NSRect)theRect;
 
 /* **AND WHAT THE BOX MEASURES, WHICH IS THE CHIP'S ZONE PLUS THE MARGIN ITS OWN TITLE BEGINS AT.** The pop-up's
  * version of this door explains both halves; this one is the same arithmetic because the two controls are the same

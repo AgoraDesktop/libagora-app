@@ -16,6 +16,9 @@
 #import <AppKit/NSComboBox.h>
 #import <AppKit/NSComboBoxCell.h>
 #import <AppKit/NSView.h>
+#import <AppKit/NSWindow.h>
+#import <AppKit/NSText.h>
+#import <AppKit/NSEvent.h>
 
 @implementation NSComboBox
 
@@ -34,6 +37,27 @@
 		}
 	}
 	return self;
+}
+
+/* **THE PRESS IS THE CONTROL'S ONE PIECE OF BEHAVIOUR, AND IT OPENS AN EDIT.** A cell can set an editor up but it has
+ * no window to find one in and no view to put it in — those are the two things a view contributes — so the press is
+ * where the control hands the cell what it cannot get itself. THE EDITOR IS THE WINDOW'S: one per window, lent to
+ * whichever field is being typed into, which is what `NSWindow -fieldEditor:forObject:` is for and why this is three
+ * lines rather than a text view of the control's own.
+ *
+ * AND IT DOES NOT CALL `-super`. `NSControl`'s tracking loop highlights the cell, follows the pointer and sends the
+ * action on the release — which is a push button's gesture. A field's gesture is a session that outlives the press, so
+ * running both would start an edit from inside a loop still waiting for a release it will never own. */
+- (void)mouseDown:(NSEvent *)event
+{
+	NSComboBoxCell *cell = (NSComboBoxCell *)[self cell];
+	NSText *editor = (NSText *)[[self window] fieldEditor:YES forObject:self];
+
+	if (editor == nil) {
+		return;
+	}
+	[cell editWithFrame:[self bounds] inView:self editor:editor delegate:nil event:event];
+	[self setNeedsDisplay:YES];
 }
 
 /* ---- THE LIST ------------------------------------------------------------------------------------- */
@@ -118,14 +142,18 @@
 	return [(NSComboBoxCell *)[self cell] objectValueOfSelectedItem];
 }
 
+/* **AND THE BOX'S "TITLE" IS ITS STRING, WHICH IS THE SAME DOOR UNDER THE NAME A CALLER EXPECTS.** Apple gives
+ * `NSComboBox` a `-stringValue` because that is what a field has; this tier's header names `-title` as well because the
+ * gallery and the tests speak of a control's title, and both end at the cell's own text so there is one value rather
+ * than two. */
 - (NSString *)title
 {
-	return [[self cell] title];
+	return [[self cell] stringValue];
 }
 
 - (void)setTitle:(NSString *)aTitle
 {
-	[(NSComboBoxCell *)[self cell] setTitle:aTitle];
+	[(NSComboBoxCell *)[self cell] setStringValue:aTitle];
 	[self setNeedsDisplay:YES];
 }
 

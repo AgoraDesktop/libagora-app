@@ -177,6 +177,14 @@ target_link_libraries(combo_box PRIVATE App)
 add_test(NAME appkit-combo-box COMMAND combo_box)
 set_tests_properties(appkit-combo-box PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
 
+# **AND THE EDIT SESSION ITSELF.** A window lends an editor, a cell begins a session with it, a string is EDITED through
+# the primitive a keystroke uses, and the cell takes it back — the round trip that makes a field a field, driven
+# offscreen with no event loop.
+add_executable(text_field_cell text_field_cell.m)
+target_link_libraries(text_field_cell PRIVATE App)
+add_test(NAME appkit-text-field-cell COMMAND text_field_cell)
+set_tests_properties(appkit-text-field-cell PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
+
 # **AND THE DISPLAY PATH.** The ink tests are all offscreen; this one puts a menu's window on a headless
 # compositor and reads the COMPOSITOR'S OWN FRAMEBUFFER back, which is the only place the present can be seen.
 # It skips when there is no window server, so a component's tests still do not need a sibling's build.

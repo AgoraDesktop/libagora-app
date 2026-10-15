@@ -92,7 +92,7 @@
 	/* NOTHING IS CHOSEN AND THE BOX HAS NOTHING TO SAY: the title goes with the list, because a box that kept the
 	 * words of a row that no longer exists would be showing a value it no longer holds. */
 	_selectedIndex = -1;
-	[self setTitle:@""];
+	[self setStringValue:@""];
 }
 
 - (void)removeItemAtIndex:(NSInteger)index
@@ -103,7 +103,7 @@
 	[_objectValues removeObjectAtIndex:(NSUInteger)index];
 	if (index == _selectedIndex) {
 		_selectedIndex = -1;
-		[self setTitle:@""];
+		[self setStringValue:@""];
 	} else if (index < _selectedIndex) {
 		_selectedIndex--;
 	}
@@ -156,11 +156,11 @@
 
 	if (object == nil) {
 		_selectedIndex = -1;
-		[self setTitle:@""];
+		[self setStringValue:@""];
 		return;
 	}
 	_selectedIndex = index;
-	[self setTitle:[object description]];
+	[self setStringValue:[object description]];
 }
 
 - (void)selectItemWithObjectValue:(id)object
@@ -220,82 +220,51 @@
 
 /* ---- THE FACE ------------------------------------------------------------------------------------- */
 
-- (void)drawWithFrame:(NSRect)cellFrame inView:(id)controlView
+/* **AND THE FIELD WEARS THE SAME FOUR FACES THE POP-UP BESIDE IT DOES, IN THE SAME ORDER — WHICH IS ALL THIS CLASS
+ * HAS TO SAY ABOUT A FACE NOW.** `NSTextFieldCell` owns the border, the radius and the margin; what a CONTROL's field
+ * adds is that its fill answers the pointer and the session, so the four answers are given here by NAME and the drawing
+ * they are given to is inherited. `+controlColor` at rest, `+cg_prelightControlFaceColor` under the pointer,
+ * `+cg_accentColor` while the list is open, and `+cg_disabledControlFaceColor` when it is disabled — the beats are the
+ * pop-up's, and the WORDS move with the accent for the reason the ink door gives. */
+- (NSColor *)cg_fieldFillColor
 {
-	NSRect faceRect = NSInsetRect(cellFrame, NS_CELL_BEZEL_WIDTH / 2.0, NS_CELL_BEZEL_WIDTH / 2.0);
-	NSBezierPath *bezel = [NSBezierPath bezierPathWithRoundedRect:faceRect
-							      xRadius:NS_CELL_BEZEL_RADIUS
-							      yRadius:NS_CELL_BEZEL_RADIUS];
-
-	/* **AND THE FIELD WEARS THE SAME FOUR FACES THE POP-UP BESIDE IT DOES, IN THE SAME ORDER.** `+controlColor` at
-	 * rest, `+cg_prelightControlFaceColor` under the pointer, `+cg_accentColor` while the list is open, and
-	 * `+cg_disabledControlFaceColor` when it is disabled — the beats are the pop-up's, and the WORDS move with the
-	 * accent for the reason the ink door gives: a white title on a face that did not follow is the defect that rule
-	 * exists to prevent. */
-	if (!_enabled) {
-		[[NSColor cg_disabledControlFaceColor] setFill];
-	} else if ([self isHighlighted]) {
-		[[NSColor cg_accentColor] setFill];
-	} else if ([self cg_mouseIsInside]) {
-		[[NSColor cg_prelightControlFaceColor] setFill];
-	} else {
-		[[NSColor controlColor] setFill];
+	if (![self isEnabled]) {
+		return [NSColor cg_disabledControlFaceColor];
 	}
-	[bezel fill];
-	/* THE BORDER IS THE SAMPLE'S GREY rather than the face's — `+controlDarkShadowColor`, the value a bezel, a
-	 * checkbox's box, a field's edge and a scroller's knob are ALL outlined in. */
-	[[NSColor controlDarkShadowColor] setStroke];
-	[bezel setLineWidth:NS_CELL_BEZEL_WIDTH];
-	[bezel stroke];
-
-	[self drawInteriorWithFrame:cellFrame inView:controlView];
+	if ([self isHighlighted]) {
+		return [NSColor cg_accentColor];
+	}
+	if ([self cg_mouseIsInside]) {
+		return [NSColor cg_prelightControlFaceColor];
+	}
+	return [NSColor controlColor];
 }
 
-/* **AND THE TITLE IS LEFT-ALIGNED, WHICH `NSActionCell` CANNOT DO FOR IT BECAUSE IT DRAWS NOTHING AT ALL.** A field's
- * words begin at a margin rather than in the middle of the box, so the rect is the string's OWN height, placed at
- * `NS_CELL_CONTENT_GAP` and centred on the field vertically, and the drawing is CLIPPED to the room between that
- * margin and the chip — so a title longer than its box stops at the chip rather than running under it, which is what
- * a field does at its far end.
- *
- * **AND THERE IS NO ATTRIBUTED TITLE TO PREFER, WHICH IS A ROW THIS SLICE LEAVES OPEN RATHER THAN A SLIP.**
- * `NSPopUpButtonCell` checks for one first because `NSButtonCell` carries an `-attributedTitle` — the cell layer's
- * attributed title is the BUTTON cell's, not the base's — and a combo box's base here is `NSActionCell`, which
- * carries none. So the words drawn are the plain `-title`, and an attributed string for this control is the same
- * missing field cell the header records: the class that would hold the string, attributed or not. The font and the
- * colour still come from `-font` and `-cg_inkColor`, so a combo box's words and the pop-up's cannot come out
- * differently. */
+/* **AND THE ROOM THE WORDS GET IS THE FIELD'S LESS THE CHIP'S, WHICH IS THIS CLASS'S ONE MEASUREMENT OF THEM.** The
+ * base insets the text by `NS_CELL_CONTENT_GAP`; a combo box's chip owns the right end of the field, so the rect stops
+ * where the chip begins. IT IS OVERRIDDEN HERE RATHER THAN CLIPPED IN THE DRAWING because the same rect is what an
+ * EDIT SESSION is handed — `NSTextFieldCell -selectWithFrame:...` puts the editor at `-drawingRectForBounds:` — so one
+ * answer keeps a typed string from running under the chip, and a clip in the drawing alone would leave the editor
+ * drawing over it. One rect, two callers. */
+- (NSRect)drawingRectForBounds:(NSRect)theRect
+{
+	NSRect r = [super drawingRectForBounds:theRect];
+	CGFloat limit = NSMinX([self cg_chipRectInFrame:theRect]);
+
+	if (limit > NSMinX(r)) {
+		r.size.width = limit - NSMinX(r);
+	}
+	return r;
+}
+
+/* **AND THE WORDS ARE THE BASE'S, WITH THE CHIP PUT ON AFTER THEM.** `NSTextFieldCell` draws the string left-aligned
+ * at the text rect in the ink `-cg_inkColor` answers — which is why this class overrides THAT door and not the
+ * drawing — so a combo box's title is drawn by the same code the field cell uses and cannot come out differently from
+ * another field's. What is this class's own is the chip, and it goes on top because it is drawn over the field's
+ * right end rather than beside the text. */
 - (void)drawInteriorWithFrame:(NSRect)cellFrame inView:(id)controlView
 {
-	NSAttributedString *attributed = nil;
-	NSString *title = [self title];
-	NSFont *font = (NSFont *)[self font];
-	NSDictionary *attributes;
-	CGFloat x = NSMinX(cellFrame) + NS_CELL_CONTENT_GAP;
-	CGFloat limit = NSMinX([self cg_chipRectInFrame:cellFrame]);
-	NSSize tsize = NSZeroSize;
-	NSRect room;
-
-	(void)controlView;
-	(void)attributed;
-	if (font == nil) {
-		font = [NSFont systemFontOfSize:[NSFont systemFontSize]];
-	}
-	attributes = [NSDictionary dictionaryWithObjectsAndKeys:font, NSFontAttributeName,
-		      [self cg_inkColor], NSForegroundColorAttributeName, nil];
-	if (attributed != nil) {
-		tsize = [attributed size];
-	} else if (title != nil && [title length] > 0) {
-		tsize = [title sizeWithAttributes:attributes];
-	}
-	/* NOTHING TO SAY: a combo box with no selection and nothing typed is its field and its chip, which is a real
-	 * state — it is what a box starts as — and not one worth drawing an empty rect for. */
-	if (tsize.width > 0.0 && tsize.height > 0.0 && (limit - x) > 0.0) {
-		room = NSMakeRect(x, NSMidY(cellFrame) - tsize.height / 2.0, limit - x, tsize.height);
-		[NSGraphicsContext saveGraphicsState];
-		[[NSBezierPath bezierPathWithRect:room] setClip];
-		[title drawInRect:room withAttributes:attributes];
-		[NSGraphicsContext restoreGraphicsState];
-	}
+	[super drawInteriorWithFrame:cellFrame inView:controlView];
 	[self cg_drawChipInFrame:cellFrame];
 }
 

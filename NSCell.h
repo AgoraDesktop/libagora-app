@@ -201,6 +201,11 @@ typedef NSUInteger NSControlSize;
  * ============================================================================================ */
 #define NS_CELL_CONTENT_GAP 4.0
 
+/* **AND THE AIR A BORDER TAKES, WHICH `NSCell` INSETS ITS DRAWING RECT BY.** It lived in `NSCell.m` until a second
+ * class needed it: a field measures its text from its own edge, and `NS_CELL_BORDER_INSET` is what the base has
+ * already taken before a subclass's rect begins. Two points, and one name. */
+#define NS_CELL_BORDER_INSET   2.0
+
 /* ============================================================================================ *
  * AND THE FIELD-WITH-A-CHIP'S FIVE NUMBERS, WHICH TWO CONTROLS DRAW AND ONE OF THEM DOUBLES.       *
  *                                                                                                *

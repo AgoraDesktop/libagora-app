@@ -235,6 +235,11 @@ typedef NSUInteger NSWindowSharingType;
 	 * which is what an ivar gives for free and what Apple documents. */
 	BOOL _hidesOnDeactivate;
 	BOOL _cg_refusesHide;
+	/* **THE ONE FIELD EDITOR A WINDOW LENDS.** Apple has exactly one per window and this tier now does too: it is
+	 * made on the first `-fieldEditor:forObject:` that asks for it, kept here, and lent to whichever field is being
+	 * typed into — which is why a cell's edit session asks the WINDOW for an editor rather than making one. RETAINED,
+	 * because the window owns it and nothing else does. */
+	id _fieldEditor;
 	BOOL _ignoresMouseEvents;
 	/* **THE CONTENT BORDER, ONE VALUE PER EDGE** — indexed by `NSRectEdge`, which this tree's geometry declares as
 	 * NSRectEdgeMinX/MinY/MaxX/MaxY in that order. Apple's automatic thickness is computed from the toolbar and
@@ -498,11 +503,13 @@ typedef NSUInteger NSWindowSharingType;
  * the content view is the ROOT of the view tree, and the pump is what turns X's events into      *
  * `NSEvent`s and hands them to the chain.                                                        *
  *                                                                                                *
- * `-fieldEditor:forObject:` IS NOT HERE and its row stays open: a field editor IS an `NSText`    *
- * (in practice an `NSTextView`), and the text system is stage F. Writing a forward `@class         *
- * NSText;` to satisfy the signature would flip the ledger's `class NSText` row to shipped and      *
- * claim a class this tree does not have — the ground NSImage's `-initWithIconRef:` and NSColor's   *
- * two colour-space doors already stand on.                                                        *
+ * **`-fieldEditor:forObject:` WAS REFUSED HERE AND IS NOT ANY MORE, AND THE REASON IT GAVE HAD EXPIRED.**  *
+ * The refusal's ground was "a field editor IS an `NSText`, and the text system is stage F" — written  *
+ * when this tree had no `NSText` at all. `NSText` has existed since the text slice and has the whole    *
+ * editing path with it (it takes the keyboard, it interprets key events, it posts its begin and end      *
+ * notifications), so the ground the refusal stood on is gone and the door is a door. A window lends     *
+ * ONE editor to whichever field is being typed into; the cell is told to begin a session with it and    *
+ * is the thing it reports back to, because the string belongs to the cell.                              *
  * ============================================================================================ */
 
 /* THE CONTENT VIEW, WHICH IS THE VIEW TREE'S ROOT. Setting one RETAINS it and lays it out in the
@@ -788,7 +795,7 @@ typedef NSUInteger NSWindowSharingType;
 - (nullable id)handleCloseScriptCommand:(nullable id)command;	/* needs the SCRIPTING suite: no NSScriptCommand */
 - (nullable id)handleSaveScriptCommand:(nullable id)command;
 - (nullable id)handlePrintScriptCommand:(nullable id)command;
-- (nullable id)fieldEditor:(BOOL)createFlag forObject:(nullable id)anObject;	/* needs the TEXT SYSTEM: no NSText */
+- (nullable id)fieldEditor:(BOOL)createFlag forObject:(nullable id)anObject;
 
 /* **AND THE FOUR THAT ARE NOT REFUSALS, WHICH IS WHY THEY ARE SEPARATED FROM THE LIST ABOVE.**
 
