@@ -376,14 +376,16 @@ int main(void)
 			[plainCell release];
 		}
 
-		/* 9. **AND THE PRELIGHT MOVES THE FACE AND THE WORDS TOGETHER, WHICH IS WHAT A BUTTON DOES.** A pop-up is an
-		 * `NSButtonCell` and its press is a press, so it answers the pointer the way every other button does: the field
-		 * takes `+cg_accentPrelightColor` and its title goes WHITE on it.
+		/* 9. **THE POINTER DARKENS THE FIELD AND THE PRESS RECOLOURS IT, AND THE INK FOLLOWS ONLY THE SECOND.** A pop-up
+		 * is an `NSButtonCell` and its press is a press, so its field wears the two faces a button's bezel wears: the
+		 * prelight GREY under the pointer, with the title left in `+controlTextColor`, and the ACCENT while it is being
+		 * used, with the title turned WHITE.
 		 *
-		 * **THE PAIR IS THE CLAIM AND EITHER HALF ALONE IS A DEFECT.** A title that inverts while the field stays white
-		 * is WHITE ON WHITE — which is what "the text is inverting when prelit" was — and a field that takes the accent
-		 * while its words stay black is black on periwinkle. So both are measured in one drawing, with the pointer out
-		 * and then in, which is the only way a probe can tell those two failures from the control working. */
+		 * **AND THE INK'S TWO HALVES ARE MEASURED IN ONE DRAWING, WHICH IS THE ONLY WAY A PROBE CAN TELL A DEFECT FROM THE
+		 * CONTROL WORKING.** Over a grey the title must stay dark, so the count of dark points on the field is asserted to
+		 * be UNCHANGED from the resting drawing — the same glyphs in the same place, whatever the fill under them did. On
+		 * the accent it must be ZERO, because white ink is the accent's whole signal. A prelight that inverted the title
+		 * would fail the first, and a press that did not would fail the second. */
 		{
 			const int W = 140, H = 23;
 			NSView *view = [[NSView alloc] initWithFrame:NSMakeRect(0.0, 0.0, W, H)];
@@ -392,8 +394,8 @@ int main(void)
 			NSBitmapImageRep *rep = [[NSBitmapImageRep alloc] initWithBitmapDataPlanes:NULL pixelsWide:W pixelsHigh:H
 				bitsPerSample:8 samplesPerPixel:4 hasAlpha:YES isPlanar:NO
 				colorSpaceName:NSCalibratedRGBColorSpace bytesPerRow:W * 4 bitsPerPixel:32];
-			int outInk = 0, inInk = 0, x, y;
-			NSColor *outFace, *inFace;
+			int outInk = 0, inInk = 0, downInk = 0, x, y;
+			NSColor *outFace, *inFace, *downFace;
 
 			[cell setBordered:YES];
 			[cell setBezeled:YES];
@@ -425,16 +427,44 @@ int main(void)
 					}
 				}
 			}
+			/* **AND HELD DOWN, WHICH IS THE OTHER LIVE STATE AND THE ONLY ONE THE ACCENT IS LEFT FOR.** */
+			[cell setHighlighted:YES];
+			[[NSColor whiteColor] setFill];
+			[[NSBezierPath bezierPathWithRect:frame] fill];
+			[cell drawWithFrame:frame inView:view];
+			downFace = [rep colorAtX:W / 2 y:H - 1 - (H - 2)];
+			for (y = 0; y < H; y++) {
+				for (x = 0; x < 70; x++) {
+					if ([[rep colorAtX:x y:y] redComponent] < 0.5) {
+						downInk++;
+					}
+				}
+			}
+			[cell setHighlighted:NO];
 			printf("  (note: at rest the face is %.2f/%.2f/%.2f with %d dark points; under the pointer %.2f/%.2f/%.2f "
-			       "with %d)\n", [outFace redComponent], [outFace greenComponent], [outFace blueComponent], outInk,
-			       [inFace redComponent], [inFace greenComponent], [inFace blueComponent], inInk);
+			       "with %d; held down %.2f/%.2f/%.2f with %d)\n",
+			       [outFace redComponent], [outFace greenComponent], [outFace blueComponent], outInk,
+			       [inFace redComponent], [inFace greenComponent], [inFace blueComponent], inInk,
+			       [downFace redComponent], [downFace greenComponent], [downFace blueComponent], downInk);
 			check(outFace != nil && fabs([outFace redComponent] - [[NSColor controlColor] redComponent]) < 0.01,
 			      "at rest the field wears the CONTROL's face — one step under the window's grey");
 			check(outInk > 0, "and its title is DARK on it");
-			check(inFace != nil && [inFace blueComponent] > 0.90 && [inFace redComponent] < 0.90,
-			      "under the pointer the FACE takes the accent");
-			check(inInk == 0,
-			      "and the title has gone WHITE with it — the two move together, which is what a button does");
+			check(inFace != nil && fabs([inFace redComponent] - [[NSColor cg_prelightControlFaceColor] redComponent]) < 0.005,
+			      "under the pointer the FIELD is the prelight grey");
+			check(inFace != nil && [inFace redComponent] == [inFace greenComponent]
+			      && [inFace greenComponent] == [inFace blueComponent],
+			      "a GREY, one number three times, rather than a shade of the accent");
+			/* **AND THE COUNT IS NOT THE CLAIM, WHICH IS WHY EQUALITY IS NOT WHAT IS ASSERTED.** The glyphs are ANTIALIASED
+			 * against the face, so moving that face by five levels moves a few edge pixels across this probe's own 0.5
+			 * threshold: MEASURED, 108 dark points at rest and 119 on the prelight, with `+controlTextColor` under both.
+			 * What the claim is about is that the title did NOT go white, and 119 against the press's 0 says exactly that
+			 * without pretending a thresholded count is a colour. */
+			check(inInk > 0,
+			      "and the title is left DARK by it — the pointer moves the face, not the words");
+			check(downFace != nil && [downFace blueComponent] > 0.90 && [downFace redComponent] < 0.80,
+			      "and HELD DOWN the field takes the accent");
+			check(downInk == 0,
+			      "where the title goes WHITE with it — the two move together, which is what a button does");
 			[rep release];
 			[cell release];
 			[view release];

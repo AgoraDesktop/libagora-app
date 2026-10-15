@@ -489,8 +489,8 @@ static NSInteger fn_popup_index(NSInteger menu_index)
  *
  * **AND THE SAMPLE DRAWS NO PRELIT OR PRESSED POP-UP AT ALL, SO THE STATES COME FROM THE CONTROL IT IS BUILT ON.** A
  * pop-up IS a button in this tier — `NSPopUpButtonCell` is an `NSButtonCell` and the press is a press — so its face
- * answers the pointer and the session the way every other button's does, and the field's own white is what it wears
- * when there is nothing to say. See the fill below for the three states and why the ink has to move with them. */
+ * answers the pointer and the session the way every other button's does, and the control's own grey is what it wears
+ * when there is nothing to say. See the fill below for the four states and why the ink has to move with them. */
 - (void)drawWithFrame:(NSRect)cellFrame inView:(id)controlView
 {
 	NSRect faceRect = NSInsetRect(cellFrame, NS_CELL_BEZEL_WIDTH / 2.0, NS_CELL_BEZEL_WIDTH / 2.0);
@@ -499,11 +499,13 @@ static NSInteger fn_popup_index(NSInteger menu_index)
 							      yRadius:NS_CELL_BEZEL_RADIUS];
 
 	/* **AND THE FIELD WEARS THE SAME STATES A BUTTON'S BEZEL DOES, IN THE SAME ORDER.** `+controlColor` at rest, then
-	 * `+cg_accentPrelightColor` under the pointer and `+cg_accentColor` in full while its menu is up, and
+	 * `+cg_prelightControlFaceColor` under the pointer, `+cg_accentColor` in full while its menu is up, and
 	 * `+cg_disabledControlFaceColor` when it is disabled — the same four answers, and the SAME GREYS, that the button
 	 * beside it gives. THE WORDS GO WHITE ON THE ACCENT FACE, which is the button's ink rule and stays this cell's, and
 	 * THE TWO HAVE TO MOVE TOGETHER: a white title over a face that did not follow is exactly what "the text is
-	 * inverting when prelit" was.
+	 * inverting when prelit" was. The pointer's face is a GREY, though, so the title on it stays dark — the accent is
+	 * the press's colour here as it is everywhere else, and a pop-up whose field darkened under the pointer is the
+	 * whole of what a prelight says.
 	 *
 	 * AND THE CHIP NEEDS NO CARE OF ITS OWN: its fill IS the accent and its chevrons are white, so on an accent face
 	 * the chip dissolves and the two arrows are left standing on the field. That is what the control looks like while
@@ -516,7 +518,7 @@ static NSInteger fn_popup_index(NSInteger menu_index)
 	} else if ([self isHighlighted]) {
 		[[NSColor cg_accentColor] setFill];
 	} else if ([self cg_mouseIsInside]) {
-		[[NSColor cg_accentPrelightColor] setFill];
+		[[NSColor cg_prelightControlFaceColor] setFill];
 	} else {
 		/* **AND AT REST IT IS `+controlColor` RATHER THAN THE SAMPLE'S WHITE.** The sample's field is `#FFFFFF` on a
 		 * `#F9F9F9` window, and THIS TIER PAINTS EVERY CONTROL THE OTHER WAY: a face slightly DARKER than the surface

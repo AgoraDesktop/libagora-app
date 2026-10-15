@@ -189,6 +189,19 @@ static int first_ink_column(NSBitmapImageRep *rep, int fromX)
  * border was inset by half its width to put it on one pixel column the probe landed UNDER the border and a radio's
  * prelight measured as though no face had been drawn. A probe is a claim about geometry, and it has to be re-derived
  * when the geometry moves. */
+/* **AND THE SAME LOOK-UP WITH THE WINDOW CLOSED TO ALMOST NOTHING, FOR THE CLAIMS `-face_is` IS TOO WIDE FOR.** It
+ * allows 0.05 either way, which is right for a face that moved and wrong for telling 0.90 from 0.88 — two greys 0.02
+ * apart, where the helper would pass on either. A prelight is exactly that case, so the prelight's own colour is
+ * asserted with this, and the SIZE and DIRECTION of the step are asserted as arithmetic beside it. */
+static int face_is_exact(NSBitmapImageRep *rep, NSColor *want)
+{
+	NSColor *c = [rep colorAtX:W - 6 y:H / 2];
+
+	return c != nil && want != nil
+		&& fabs([c redComponent] - [want redComponent]) < 0.005
+		&& fabs([c greenComponent] - [want greenComponent]) < 0.005
+		&& fabs([c blueComponent] - [want blueComponent]) < 0.005;
+}
 static int box_is(NSBitmapImageRep *rep, NSColor *want)
 {
 	NSColor *c = [rep colorAtX:5 y:15];
@@ -390,8 +403,10 @@ int main(void)
 			[w release];
 		}
 
-		/* 11. **THE PRELIGHT AND THE PRESS, WHICH ARE TWO SHADES OF ONE ACCENT.** The fill and the ink are ONE decision
-		 * — a periwinkle chip is light, so its title goes black — which is why the cell asks `-fn_wearsAccent` once. */
+		/* 11. **THE POINTER AND THE PRESS, WHICH ARE NOW TWO DIFFERENT KINDS OF CHANGE.** The pointer DARKENS the face by
+		 * one grey step and leaves the ink ALONE; the press takes the face to the accent and turns the ink white. Those
+		 * two sentences are the whole reason `-fn_wearsAccent` is asked by the fill AND by the ink: the accent says "this
+		 * control is being used" and the greys say "where the pointer is", so neither channel has to carry both. */
 		{
 			NSButtonCell *bc = (NSButtonCell *)[button cell];
 
@@ -415,26 +430,48 @@ int main(void)
 				NSBitmapImageRep *down;
 
 				check(face_is(rest, [NSColor controlColor]), "an idle button's face is the control colour");
-				[rest release];
+				check(fabs([[bc cg_inkColor] redComponent] - [[NSColor controlTextColor] redComponent]) < 0.01,
+				      "and its title is inked in the control's own text colour");
 
 				[bc cg_setMouseInside:YES];
 				hover = draw((NSView *)button);
-				check(face_is(hover, [NSColor cg_accentPrelightColor]),
-				      "a HOVERED button's face is the accent's PRELIGHT shade");
+				/* **AND THE PRELIGHT IS COMPARED AS A NUMBER RATHER THAN THROUGH `-face_is`.** That helper's window is
+				 * 0.05 wide and the whole step from 0.90 to 0.88 is 0.02, so a claim made with it would hold whichever of
+				 * the two faces the cell drew — the probe would pass on the very face it is meant to catch. The two are
+				 * subtracted instead, and the DIRECTION is asserted as well as the size. */
+				{
+					NSColor *restFace = [rest colorAtX:W - 6 y:H / 2];
+					NSColor *hoverFace = [hover colorAtX:W - 6 y:H / 2];
+					CGFloat step = [restFace redComponent] - [hoverFace redComponent];
+
+					check(face_is_exact(hover, [NSColor cg_prelightControlFaceColor]),
+					      "a HOVERED button's face is the PRELIGHT grey");
+					check(step > 0.0 && step <= 0.05,
+					      "which is a step DARKER than the face at rest, and a SMALL one");
+					check([hoverFace redComponent] > [[NSColor cg_disabledControlFaceColor] redComponent],
+					      "and still LIGHTER than a disabled face, so the greys keep one direction");
+					check([hoverFace redComponent] == [hoverFace greenComponent]
+					      && [hoverFace greenComponent] == [hoverFace blueComponent],
+					      "and it is a GREY — one number three times — not a shade of the accent");
+					check(fabs([[bc cg_inkColor] redComponent] - [[NSColor controlTextColor] redComponent]) < 0.01,
+					      "and THE INK DOES NOT MOVE: a face the pointer rests on is not a face being used");
+				}
 				[hover release];
+				[rest release];
 
 				[bc setHighlighted:YES];
 				down = draw((NSView *)button);
 				check(face_is(down, [NSColor cg_accentColor]), "and a PRESSED one wears the ACCENT itself");
-				check(!face_is(down, [NSColor cg_accentPrelightColor]),
-				      "which is a different colour from the prelight it had a moment ago");
+				check(!face_is(down, [NSColor cg_prelightControlFaceColor]),
+				      "which is not the grey its own pointer was wearing a moment ago");
+				check(fabs([[bc cg_inkColor] redComponent] - 1.0) < 0.01
+				      && fabs([[bc cg_inkColor] greenComponent] - 1.0) < 0.01
+				      && fabs([[bc cg_inkColor] blueComponent] - 1.0) < 0.01,
+				      "and THERE the title goes white, because the accent is the state that says \"being used\"");
 				[down release];
 				[bc setHighlighted:NO];
+				[bc cg_setMouseInside:NO];
 			}
-			check([[NSColor cg_accentPrelightColor] redComponent] > [[NSColor cg_accentColor] redComponent]
-			      && [[NSColor cg_accentPrelightColor] greenComponent] > [[NSColor cg_accentColor] greenComponent]
-			      && [[NSColor cg_accentPrelightColor] blueComponent] >= [[NSColor cg_accentColor] blueComponent],
-			      "and the prelight IS a lighter shade of the accent, component by component");
 
 			/* AND THE TWO CASES THAT MUST NOT PRELIGHT: a disabled button, and one with a background colour a caller
 			 * chose — a colour a caller set is the colour the button is. */
@@ -462,7 +499,7 @@ int main(void)
 				[away release];
 				[bc cg_setMouseInside:YES];
 				over = draw((NSView *)button);
-				check(face_is(over, [NSColor cg_accentPrelightColor]),
+				check(face_is_exact(over, [NSColor cg_prelightControlFaceColor]),
 				      "and the pointer arriving brings it back, prelighted");
 				[over release];
 			}
@@ -540,8 +577,8 @@ int main(void)
 
 			[[cbox cell] cg_setMouseInside:YES];
 			rep = draw((NSView *)cbox);
-			check(box_is(rep, [NSColor cg_accentPrelightColor]),
-			      "and under the pointer its BOX prelights with the accent's lighter shade");
+			check(box_is(rep, [NSColor cg_prelightControlFaceColor]),
+			      "and under the pointer its BOX takes the same PRELIGHT grey a push button's face does");
 			[rep release];
 
 			[[cbox cell] setHighlighted:YES];
@@ -554,7 +591,7 @@ int main(void)
 
 			[[dot cell] cg_setMouseInside:YES];
 			rep = draw((NSView *)dot);
-			check(box_is(rep, [NSColor cg_accentPrelightColor]),
+			check(box_is(rep, [NSColor cg_prelightControlFaceColor]),
 			      "a RADIO's circle prelights the same way, inside its ring");
 			[rep release];
 
@@ -627,7 +664,8 @@ int main(void)
 				[rep release];
 			}
 
-			/* the two live states: white ink, measured as the darkest thing inside the face */
+			/* the three states, measured as the darkest thing inside the face: the pointer leaves the ink where it is, and
+			 * only the PRESS whitens it */
 			{
 				double rest, hover, down;
 
@@ -653,8 +691,10 @@ int main(void)
 				printf("  (note: darkest ink inside the face — idle %.2f, prelit %.2f, pressed %.2f)\n",
 				       rest, hover, down);
 				check(rest < 0.35, "an IDLE button's title is dark ink");
-				check(hover >= 0.60, "a PRELIGHTED button's title is WHITE — no dark ink inside its face");
-				check(down >= 0.60, "and so is a PRESSED one's");
+				check(hover < 0.35,
+				      "and a PRELIGHTED one's is STILL DARK ink — the pointer moves the FACE and leaves the words alone");
+				check(down >= 0.60,
+				      "while a PRESSED one's goes WHITE, which is the whole of what the accent is for");
 				[bc setHighlighted:NO];
 				[bc cg_setMouseInside:NO];
 			}

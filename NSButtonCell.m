@@ -413,9 +413,12 @@
 #define NS_BUTTON_INDICATOR_GAP   4.0
 #define NS_BUTTON_TITLE_LEAD      (NS_BUTTON_INDICATOR_INSET + NS_BUTTON_INDICATOR_SIDE + NS_BUTTON_INDICATOR_GAP)
 
-/* **THE INDICATOR'S OWN FILL, WHICH IS THE SAME TWO SHADES A PUSH BUTTON WEARS.** A checkbox's square and a radio's
- * circle are the parts of those buttons that ANSWER the pointer — the label does not move — so they prelight with the
- * accent's lighter shade while the pointer is over the control, and take the accent itself while it is held down.
+/* **THE INDICATOR'S OWN FILL, WHICH IS THE GREY SCALE'S TWO LIVE STATES.** A checkbox's square and a radio's circle
+ * are the parts of those buttons that ANSWER the pointer — the label does not move — so they take the SAME two faces a
+ * push button's bezel takes: the prelight grey while the pointer is over the control, and the accent itself while it
+ * is held down. It used to say the accent's LIGHTER shade for the prelight, which is where "the text is inverting when
+ * prelit" came from as well as the wider complaint that a control under the pointer went a different COLOUR rather
+ * than a different SHADE. See `+cg_prelightControlFaceColor` for why the prelight is a grey now.
  *
  * **AND THE PRESS IS READ FROM `-isHighlighted` RATHER THAN FROM `-fn_faceIsPushed`.** That door asks whether the
  * cell's TYPE paints its press onto the FACE (`highlightsBy`), and the switch and radio rows of the table name
@@ -435,7 +438,7 @@
 		return [NSColor cg_accentColor];
 	}
 	if ([self cg_mouseIsInside]) {
-		return [NSColor cg_accentPrelightColor];
+		return [NSColor cg_prelightControlFaceColor];
 	}
 	return [NSColor controlBackgroundColor];
 }
@@ -524,9 +527,10 @@
  * same decision — a periwinkle chip is LIGHT, so the title on it has to be black — and asking it twice is how the two
  * come to disagree. False for every face that is not a chip: a DISABLED button keeps its greyed face and grey ink, a
  * TRANSPARENT one has no face to colour, one with a `-backgroundColor:` of its own was told what colour to be, and an
- * INDICATOR button's face is its mark rather than a chip of its own. What is left is a push button, and it wears the
- * accent in its two live states: THE PRESSED ONE in the full accent, and THE PRELIGHT — the pointer over it, no
- * button down — in the lighter shade. */
+ * INDICATOR button's face is its mark rather than a chip of its own. What is left is a push button, and the accent on
+ * it means ONE thing: THIS ONE IS BEING PRESSED. It used to answer YES for the pointer resting on the button as well,
+ * which made the accent the colour of two different states; a prelight is a grey now (`+cg_prelightControlFaceColor`),
+ * so the accent is left saying the press and the pointer is left saying a shade. */
 - (BOOL)fn_wearsAccent
 {
 	/* AN INDICATOR BUTTON IS EXCLUDED HERE BECAUSE ITS FACE IS ITS MARK AND NOT A CHIP — the accent a checkbox
@@ -534,7 +538,7 @@
 	if (!_enabled || _transparent || _backgroundColor != nil || [self fn_isIndicatorButton]) {
 		return NO;
 	}
-	return [self fn_faceIsPushed] || [self cg_mouseIsInside];
+	return [self fn_faceIsPushed];
 }
 
 - (void)drawWithFrame:(NSRect)cellFrame inView:(id)controlView
@@ -574,10 +578,16 @@
 			 * the enabled button beside it included. */
 			fill = [NSColor cg_disabledControlFaceColor];
 		} else if ([self fn_wearsAccent]) {
-			/* PRESSED WEARS THE ACCENT ITSELF; PRELIGHTED WEARS ITS LIGHTER SHADE. Both come from `NSColor`'s one
-			 * accent, which is also what the menu's selection chip is made of, so the platform has one highlight
+			/* PRESSED WEARS THE ACCENT ITSELF, WHICH IS THE ONLY THING THE ACCENT SAYS NOW. It comes from `NSColor`'s
+			 * one accent, which is also what the menu's selection chip is made of, so the platform has one highlight
 			 * colour rather than a menu's and a button's that happen to look alike. */
-			fill = [self fn_faceIsPushed] ? [NSColor cg_accentColor] : [NSColor cg_accentPrelightColor];
+			fill = [NSColor cg_accentColor];
+		} else if ([self cg_mouseIsInside]) {
+			/* **AND A PRELIGHT IS A STEP DOWN THE SAME SCALE RATHER THAN A LIGHTER ACCENT.** See
+			 * `+cg_prelightControlFaceColor`: a face the pointer rests on is a darker grey than the face at rest, which
+			 * keeps the fill and the ink in two separate channels — the FILL says where the pointer is, the INK says
+			 * whether the control is being used — instead of one colour trying to say both. */
+			fill = [NSColor cg_prelightControlFaceColor];
 		} else {
 			fill = [NSColor controlColor];
 		}
@@ -697,13 +707,15 @@ static NSSize fn_button_image_size(NSSize image, NSSize box, NSImageScaling scal
 {
 	NSRect content = [self fn_isIndicatorButton] ? [self titleRectForBounds:cellFrame]
 						     : [self drawingRectForBounds:cellFrame];
-	/* **AND THE INK FOLLOWS THE FACE, WHICH IS WHY BOTH ASK `-fn_wearsAccent`.** A button wearing the accent is in one of
-	 * its two LIVE states — the pointer is on it or it is being pressed — and those are the states where a button says
-	 * "yes, this one", so its title goes WHITE: the mark a person reads is the one under their finger, and it is the
-	 * only thing on the surface drawn in white. A button that kept `controlTextColor` through both live states would be
-	 * black-on-violet, which is legible and still reads as though nothing had happened to it. A DISABLED button keeps
-	 * the era's dimmed grey, and that is a third state rather than a shade of these two: it is the only one whose ink
-	 * is chosen for being QUIET. */
+	/* **AND THE INK FOLLOWS THE FACE, WHICH IS WHY BOTH ASK `-fn_wearsAccent`.** A button wearing the accent is BEING
+	 * PRESSED — the one live state the accent is left for — and that is the state where a button says "yes, this one",
+	 * so its title goes WHITE: the mark a person reads is the one under their finger, and it is the only thing on the
+	 * surface drawn in white. A button that kept `controlTextColor` while held down would be black-on-violet, which is
+	 * legible and still reads as though nothing had happened to it. THE POINTER RESTING ON A BUTTON IS NOT THIS STATE:
+	 * the face under it takes a darker grey instead of the accent, so a hovered title stays `controlTextColor` — which
+	 * is what the grey prelight is FOR, since white ink over a 0.88 grey would be the inversion this pairing exists to
+	 * avoid. A DISABLED button keeps the era's dimmed grey, and that is a third state rather than a shade of these
+	 * two: it is the only one whose ink is chosen for being QUIET. */
 	NSColor *ink = [self cg_inkColor];
 	BOOL useAlternate = NO;
 	NSAttributedString *attributed;

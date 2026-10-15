@@ -274,17 +274,18 @@ extern NSString *NSSystemColorsDidChangeNotification;
  * mark for a door the tier adds, and it is defined ONCE — the menu's selection chip and every control that
  * highlights now read the same two numbers instead of each carrying its own copy of them.
  *
- * THE SECOND IS THE PRELIGHT SHADE: the same hue LIGHTENED, which is what a control wears while the pointer is over
- * it and it is not yet pressed. Apple's AppKit has no such door either, because its prelight is a private drawing
- * state; naming it here is what keeps "lighter than the accent" a MEASURED relationship (`+blendedColorWithFraction:`
- * of white) rather than a second pair of invented numbers. */
+ * AND IT IS NAMED FOR THE PRESS, WHICH IS THE ONLY STATE THAT WEARS IT. There used to be a second door beside it —
+ * the same hue LIGHTENED, for the face of a control the pointer was only resting on — and that door is gone, because
+ * a prelight is a step DOWN the grey scale rather than a second colour (see `+cg_prelightControlFaceColor` below).
+ * The accent now means one thing: this control is being used. */
 + (NSColor *)cg_accentColor;
-+ (NSColor *)cg_accentPrelightColor;
 /* **AND THE ONE FACE THE ERA'S OWN NAMES DO NOT COVER.** `+controlColor` is a raised control, `+controlBackgroundColor`
  * is the surface a control shows THROUGH (a field's white), and a DISABLED control's face is neither: the era dims the
  * title and leaves the face alone, which is a face that still says "press me". So it is named `cg_` with the accent,
- * and its one relationship is stated where it is defined — BELOW the window's grey, the way `+controlColor` is above
- * it. */
+ * and its one relationship is stated where it is defined — the BOTTOM of the same scale `+controlColor` opens.
+ * THE PRELIGHT'S FACE IS THE SAME KIND OF DOOR and sits between the two: a control the pointer is resting on is
+ * neither at rest nor out of action, and the era has no name for that face either. */
++ (NSColor *)cg_prelightControlFaceColor;
 + (NSColor *)cg_disabledControlFaceColor;
 /* **AND THE INK THE TITLE BAR'S MARKS ARE DRAWN IN: THE X, THE MINUS, THE PLUS, AND THE TOOLBAR PILL.** All four are
  * one grey, and they get a name of their own because NO ERA COLOUR COVERS THEM: they are neither text

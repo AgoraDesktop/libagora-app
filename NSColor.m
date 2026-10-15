@@ -755,17 +755,17 @@ static void fn_cmyk_of(NSColor *self, CGFloat cmyk[4])
 + (NSColor *)controlColor
 {
 	static NSColor *s;
-	/* **A CONTROL'S FACE IS SLIGHTLY DARKER THAN THE WINDOW IT SITS ON, AND THE THREE GREYS ARE ONE DIRECTION.**
-	 * The window is 0.93, a control's face is 0.90, and a disabled control's is 0.86 — three STEPS DOWN from the
-	 * surface rather than a face on each side of it.
+	/* **A CONTROL'S FACE IS SLIGHTLY DARKER THAN THE WINDOW IT SITS ON, AND THE GREYS ARE ONE DIRECTION.**
+	 * The window is 0.93, a control's face is 0.90, the face under the pointer is 0.88, and a disabled control's is
+	 * 0.86 — four STEPS DOWN from the surface rather than a face on each side of it.
 	 *
 	 * IT WAS 0.95, ABOVE THE WINDOW, AND THAT ARGUMENT WAS ABOUT RAISING RATHER THAN ABOUT READING. "A button is a
 	 * raised thing and raised means the light falls on it" is a reason to put a face above its surface, and 0.90 had
 	 * been rejected here on the way past for reading "as a hole rather than as a button" — which is a judgement about
 	 * ONE face on its own. A control is read against the one BESIDE it, though, and with the face above the window
 	 * and the disabled face below it, ENABLED and DISABLED sat on opposite sides of the surface's own grey: "quieter"
-	 * and "raised" pointed in two different directions and neither could be read as a step. 0.93 over 0.90 over 0.86
-	 * is an order; what it replaces was a shape.
+	 * and "raised" pointed in two different directions and neither could be read as a step. 0.93 over 0.90 over 0.88
+	 * over 0.86 is an order; what it replaces was a shape.
 	 *
 	 * The margin is still deliberately small — the border is what separates two shapes, and the fill only has to say
 	 * which side of the surface a thing is on. */
@@ -778,9 +778,26 @@ static void fn_cmyk_of(NSColor *self, CGFloat cmyk[4])
 	return fn_singleton(&s, 1.0, 1.0, 1.0, 1.0);
 }
 
-/* **AND IT IS THE BOTTOM OF THE SAME SCALE RATHER THAN THE OTHER SIDE OF THE WINDOW.** 0.86 against a control's 0.90
- * and `+windowBackgroundColor`'s 0.93: three steps DOWN from the surface, so a disabled face is the far end of the
- * direction an enabled one has already started in. It used to be the mirror of `+controlColor` — that face above the
+/* **AND A CONTROL UNDER THE POINTER IS A STEP FURTHER DOWN — A DARKER GREY, NOT A LIGHTER ACCENT.** The pointer
+ * resting on a control used to lighten its face TOWARD the accent, which gave the tier one hue meaning two different
+ * things: everywhere else the accent says "being pressed" (the menu's selection chip, a selected segment, a button
+ * held down), and on a prelight it said "being pointed at" instead, at a different lightness, so the same colour
+ * carried two claims and neither was the stronger for it. A prelight is a shade of the SURFACE a control already sits
+ * on, so it is a GREY — one step under `+controlColor`'s 0.90 and one step over `+cg_disabledControlFaceColor`'s 0.86,
+ * which reads as "quieter than at rest, louder than out of action". The accent is left to mean the press.
+ *
+ * THE STEP IS SMALL ON PURPOSE. 0.88 against 0.90 is five levels: enough to see a face change, and far less than the
+ * ink changes by, so the two channels stay separate things — the FILL says where the pointer is and the INK says
+ * whether the control is being used. */
++ (NSColor *)cg_prelightControlFaceColor
+{
+	static NSColor *s;
+	return fn_singleton(&s, 0.88, 0.88, 0.88, 1.0);
+}
+
+/* **AND IT IS THE BOTTOM OF THE SAME SCALE RATHER THAN THE OTHER SIDE OF THE WINDOW.** 0.86 against the prelight's
+ * 0.88, a control's 0.90 and `+windowBackgroundColor`'s 0.93: four steps DOWN from the surface, so a disabled face
+ * is the far end of the direction an enabled one has already started in. It used to be the mirror of `+controlColor` — that face above the
  * window and this one below it — and a scale with the surface in the middle of it is a shape rather than a scale. A
  * disabled face that matched an enabled one would say nothing at all until its title was read.
  * THE INK THEN HAS TO CLEAR THE FACE, which is `disabledControlTextColor`'s 0.50 — the darkest of the greys here, and
@@ -858,22 +875,6 @@ static void fn_cmyk_of(NSColor *self, CGFloat cmyk[4])
 {
 	static NSColor *s;
 	return fn_singleton(&s, 0.643, 0.604, 1.0, 1.0);
-}
-
-+ (NSColor *)cg_accentPrelightColor
-{
-	static NSColor *s;
-
-	/* **THE PRELIGHT IS THE ACCENT BLENDED TOWARD WHITE, WHICH IS A MEASURED RELATIONSHIP AND NOT A SECOND GUESS.**
-	 * A lightened accent keeps the hue the pressed state has, so the two states read as one control in two states
-	 * rather than as two colours; a hand-picked second triple would drift from the first the moment either moved. */
-	if (s == nil) {
-		s = [[[self cg_accentColor] blendedColorWithFraction:0.45 ofColor:[NSColor whiteColor]] retain];
-		if (s == nil) {
-			s = [[NSColor colorWithDeviceRed:0.84 green:0.82 blue:1.0 alpha:1.0] retain];
-		}
-	}
-	return s;
 }
 
 + (NSColor *)selectedControlTextColor
