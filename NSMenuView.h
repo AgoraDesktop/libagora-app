@@ -54,6 +54,15 @@ extern const CGFloat NSMenuPanelPadding;
 - (void)setMenu:(NSMenu *)menu;
 - (NSMenu *)menu;
 
+/* **AND WHETHER A ROW WEARS THE MARK WITHOUT THE POINTER BEING ON IT — THE ONE THING A LIST INSIDE A MENU'S SESSION
+ * NEEDS THAT A MENU DOES NOT.** A menu marks the row under the pointer and nothing else; a LIST also shows the row its
+ * owner currently holds, which is a different fact and a different item. The highlight is painted by THIS VIEW (see
+ * `-drawRect:`), so the question belongs here rather than in a cell: the chip's shape, its colour and its inset are the
+ * view's, and a subclass that wants a row marked answers this instead of redrawing the panel.
+ *
+ * THE DEFAULT IS NO, so every menu in the tier is unaffected by the door existing. */
+- (BOOL)cg_isItemMarked:(nullable NSMenuItem *)item;
+
 /* THE CELL FOR A ROW, MADE ON FIRST ASK and kept, because a cell carries measured widths and a menu that
  * re-measured every item on every pass would measure the same strings forever. */
 - (NSMenuItemCell *)cellForItemAtIndex:(NSInteger)index;

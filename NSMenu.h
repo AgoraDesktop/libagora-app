@@ -133,6 +133,11 @@ extern NSString *NSMenuDidEndTrackingNotification;
 	 * what "the menus do not work" is: press File, press Edit, and all you get is File's menu closing. */
 	NSPoint _dismissedAt;
 	BOOL _hasDismissedAt;
+	/* **AND WHICH VIEW DRAWS THIS MENU'S ROWS.** Every menu in this tier is drawn by `NSMenuView`, which hard-coded
+	 * it: the class was named at the one place the view is made, so a caller with a different idea about a row — a
+	 * COMBO BOX'S LIST, whose rows are a list's and whose held row is marked — had no way to say so. `Nil` means the
+	 * default, so a menu that nobody has told behaves exactly as before. */
+	Class _cg_menuViewClass;
 	/* **AND WHETHER THE CALLER IS DRIVING THIS SESSION RATHER THAN THE MENU.** One flag, because
 	 * `-popUpMenuPositioningItem:` already does everything a session's beginning needs: the window, the view, the
 	 * first repaint, the notification. With this set it RETURNS at the point the loop would start, which is exactly
@@ -343,6 +348,13 @@ extern NSString *NSMenuDidEndTrackingNotification;
  * space. */
 - (BOOL)cg_ownsEvent:(id)event;
 - (void)cancelTrackingWithoutAnimation;
+/* **AND THE ROWS OF THIS MENU MAY BE DRAWN BY A SUBCLASS OF `NSMenuView`.** Apple has no such door and needs none:
+ * its combo box has a list window of its own. This tier reuses the SESSION — one traversal loop, one window, one
+ * dismissal, none of it written twice — and lets the caller say what a ROW looks like, which is the part a list and a
+ * menu genuinely disagree about. The class must be `NSMenuView` or a subclass of it; `Nil` restores the default. */
+- (void)cg_setMenuViewClass:(nullable Class)aClass;
+- (nullable Class)cg_menuViewClass;
+
 - (BOOL)isAttached;
 - (nullable id)attachedMenu;
 - (NSPoint)locationForSubmenu:(nullable id)aSubmenu;

@@ -34,6 +34,8 @@
 
 #import <AppKit/NSTextFieldCell.h>
 
+@class NSMenu;
+
 NS_ASSUME_NONNULL_BEGIN
 
 @interface NSComboBoxCell : NSTextFieldCell
@@ -135,6 +137,13 @@ NS_ASSUME_NONNULL_BEGIN
 - (NSRect)cg_chipRectInFrame:(NSRect)cellFrame;
 
 /* ---- THE LIST ---------------------------------------------------------------------------------------- */
+
+/* **AND THE ROWS ARE BUILT BY A DOOR OF THEIR OWN, BECAUSE THE ROWS ARE WHAT A PROBE CAN CHECK.** The session needs a
+ * display — a borderless window, a traversal loop, a dismissal — and none of that is needed to ask what the list
+ * CONTAINS: how many rows, what they say, which one is marked and what each one is wired to are facts about a menu that
+ * has been built and never shown. It is also where the held row's mark is set, which is a fact about the list rather
+ * than about the session that displays it. */
+- (nullable NSMenu *)cg_buildListMenu;
 
 /* **AND THIS IS THE DOOR A PRESS ON THE CHIP COMES THROUGH.** It builds the rows from the list this cell holds, anchors
  * them under the chip and runs the session — see the implementation for why the session is `NSMenu`'s rather than a

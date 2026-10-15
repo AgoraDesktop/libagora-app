@@ -973,8 +973,11 @@ static const CGFloat NSMenuStateColumnWidth = 20.0;
 	 * is the floor; the VIEW is what holds the cells that measured each row's title and shortcut, and a menu is
 	 * as wide as its WIDEST row. So the view is made FIRST — it is the thing with the measurement — and the
 	 * window is placed around the width that comes back, which is why the frame is set again just below. */
-	_menuView = [[NSMenuView alloc] initWithFrame:NSMakeRect(0.0, 0.0, (size.width > 0.0) ? size.width : 1.0,
-								 size.height)];
+	/* **AND THE VIEW IS WHATEVER THIS MENU WAS TOLD TO USE.** The class was named here, so a list had to be a second
+	 * session rather than a different row; see `-cg_setMenuViewClass:` for why that trade is the wrong one in this
+	 * tier. `Nil` is the default and the default is `NSMenuView`, which is what every menu in the tier gets. */
+	_menuView = [[(_cg_menuViewClass != Nil ? _cg_menuViewClass : [NSMenuView class])
+		       alloc] initWithFrame:NSMakeRect(0.0, 0.0, (size.width > 0.0) ? size.width : 1.0, size.height)];
 	[(NSMenuView *)_menuView setMenu:self];
 	if ([(NSMenuView *)_menuView requiredWidth] > size.width) {
 		size.width = [(NSMenuView *)_menuView requiredWidth];
@@ -1190,6 +1193,16 @@ static const CGFloat NSMenuStateColumnWidth = 20.0;
 	}
 	where = [event locationInWindow];
 	[menu popUpMenuPositioningItem:nil atLocation:where inView:view];
+}
+
+- (void)cg_setMenuViewClass:(Class)aClass
+{
+	_cg_menuViewClass = aClass;
+}
+
+- (Class)cg_menuViewClass
+{
+	return (_cg_menuViewClass != Nil) ? _cg_menuViewClass : [NSMenuView class];
 }
 
 - (BOOL)isAttached

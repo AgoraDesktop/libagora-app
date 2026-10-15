@@ -20,6 +20,8 @@
  */
 #import <AppKit/NSComboBoxCell.h>
 #import <AppKit/NSComboBox.h>
+#import <AppKit/AGComboListView.h>
+#import <AppKit/NSMenuView.h>
 #import <AppKit/NSWindow.h>
 #import <AppKit/NSView.h>
 #import <AppKit/NSMenu.h>
@@ -441,6 +443,46 @@ int main(void)
 		check(watcher->fired == 2, "and TAB does too, because tabbing out of a field accepts what is in it");
 		[watcher release];
 		[box release];
+	}
+
+	/* 11. **AND THE LIST'S ROWS MARK THE ONE THIS BOX HOLDS.** The session needs a display — a borderless window, a
+	 * traversal loop, a dismissal — and the LIST does not: how many rows it has, what they say, which one is marked and
+	 * what each one is wired to are facts about a menu that has been built and never shown. So they are checked here,
+	 * where a failure says WHICH fact is wrong rather than "the list looked odd on screen".
+	 *
+	 * MEASURED before this: every row looked alike, so the one question a combo box's list exists to answer — which row
+	 * am I on — had to be answered by reading the whole list and comparing it with the field. */
+	{
+		NSMenu *list = [combo cg_buildListMenu];
+		NSMenuItem *held;
+		NSMenuItem *other;
+		AGComboListView *listView;
+		NSMenuView *plainView;
+
+		check(list != nil && [list numberOfItems] == 2, "the list has a row per object, built without a display");
+		held = [list itemAtIndex:[combo indexOfSelectedItem]];
+		other = [list itemAtIndex:0];
+		printf("  (note: the box holds index %ld; row 0 is \"%s\" and the held row is \"%s\")\n",
+		       (long)[combo indexOfSelectedItem], [[other title] UTF8String], [[held title] UTF8String]);
+		check([[held title] isEqualToString:@"and its list"], "the held row is the held OBJECT's own description");
+		check([held state] == NSOnState && [other state] == NSOffState,
+		      "and it is TURNED ON, which is a menu's way of saying \"this is the current choice\"");
+		check([held target] == (id)combo && sel_isEqual([held action], @selector(itemSelected:)),
+		      "every row is still wired to the cell, so the mark costs the pick nothing");
+
+		listView = [[AGComboListView alloc] initWithFrame:NSMakeRect(0.0, 0.0, 120.0, 44.0)];
+		plainView = [[NSMenuView alloc] initWithFrame:NSMakeRect(0.0, 0.0, 120.0, 44.0)];
+		[listView setMenu:list];
+		[plainView setMenu:list];
+		check([listView cg_isItemMarked:held] && ![listView cg_isItemMarked:other],
+		      "the combo box's view marks the ON row and only it");
+		check(![plainView cg_isItemMarked:held] && ![plainView cg_isItemMarked:other],
+		      "while a plain menu view marks NOTHING — the door's default, so no menu in the tier changed");
+		check([list cg_menuViewClass] == [NSMenuView class] &&
+		      [[NSMenu alloc] init] != nil,
+		      "and a menu that was never told uses the default view, which is what every menu is");
+		[listView release];
+		[plainView release];
 	}
 
 	[combo release];

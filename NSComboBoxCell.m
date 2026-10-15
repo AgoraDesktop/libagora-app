@@ -14,6 +14,7 @@
 #import <AppKit/NSMenu.h>
 #import <AppKit/NSMenuItem.h>
 #import <AppKit/NSApplication.h>
+#import "AGComboListView.h"
 #import <AppKit/NSWindow.h>
 #import <Foundation/NSGeometry.h>
 
@@ -343,20 +344,15 @@
  * THE ANCHOR IS THE CHIP'S BOTTOM-LEFT CORNER in the space a window frame lives in, which is the same three-space
  * arithmetic the pop-up's door records — the cell's frame in the view's coordinates, the view's with a nil view into
  * the window's, and the window's own origin where the list's window will be placed. */
-- (void)cg_attachListWithFrame:(NSRect)cellFrame inView:(id)controlView
+/* **AND THE ROWS ARE BUILT ONCE, IN A DOOR OF THEIR OWN, BECAUSE THE ROWS ARE WHAT A PROBE CAN CHECK.** The session
+ * needs a display; the LIST does not — its count, its titles, which row is marked and what each row is wired to are all
+ * facts about a menu that has been built and never shown, so they are built here and popped up below. It is also the
+ * honest place for the mark: the row this box holds is a fact about the LIST, not about the session that shows it. */
+- (NSMenu *)cg_buildListMenu
 {
-	NSWindow *window = [controlView respondsToSelector:@selector(window)] ? [controlView window] : nil;
-	NSMenu *list;
-	NSRect chip = [self cg_chipRectInFrame:cellFrame];
-	NSPoint where;
+	NSMenu *list = [[[NSMenu alloc] initWithTitle:@"List"] autorelease];
 	NSUInteger i;
 
-	if ([_objectValues count] == 0) {
-		fprintf(stderr, "APPKIT-REFUSE: -cg_attachListWithFrame:inView: needs a list with rows — a combo box with "
-				"nothing to choose from is not a combo box\n");
-		return;
-	}
-	list = [[NSMenu alloc] initWithTitle:@"List"];
 	for (i = 0; i < [_objectValues count]; i++) {
 		/* **THE TAG IS THE INDEX, WHICH IS HOW THE PICK FINDS ITS WAY BACK.** A menu item's tag is a number a caller
 		 * may use for anything, and what this control has to remember about a row is WHERE IT IS — the same fact
@@ -368,15 +364,44 @@
 		[item setTarget:self];
 		[item setAction:@selector(itemSelected:)];
 		[item setTag:(NSInteger)i];
+		/* **AND THE ROW THIS BOX HOLDS IS TURNED ON, WHICH IS HOW THIS SESSION SAYS "YOU ARE HERE".** MEASURED, the
+		 * list opened with every row looking alike, so a person had to read the whole list to find the value they
+		 * could already see in the field — and the one fact a combo box's list exists to answer is which row is the
+		 * current one. `AGComboListView` reads this state back as the mark, because a menu already has a way to say an
+		 * item is the current choice and this does not need a second one. */
+		if ((NSInteger)i == _selectedIndex) {
+			[item setState:NSOnState];
+		}
 	}
-	/* **AND THE LIST IS ANCHORED WHERE THE POP-UP'S MENU IS: AT THE CONTROL'S OWN LEFT EDGE.** This door used to hand
-	 * over the CHIP's corner, so the list hung under the arrow — and the two controls beside each other in the
-	 * demonstration lined their raised windows up with different things, which is what "line it up with the control"
-	 * was pointing at. `NSMenu` places its window at `location.x`, so that one number IS the alignment. */
-	(void)window;
+	return list;
+}
+
+/* **AND THE CHIP OPENS THE LIST, WHICH IS THE ONE THING THE CHIP IS FOR.** MEASURED on the demonstration: clicking it
+ * did nothing at all, because the chip's ink was drawn and the list behind it was never built — the row this control's
+ * header recorded from the first slice.
+ *
+ * **THE SESSION IS `NSMenu`'s AND THE ROWS ARE THIS CONTROL'S.** Apple's combo box opens a borderless LIST WINDOW of
+ * its own; this tier reuses the session the pop-up beside it already raises — one traversal loop, one window, one
+ * dismissal, one pick — and says what a ROW looks like through `-cg_setMenuViewClass:`. MEASURED, that trade is the
+ * right way round for this tier: the session is two hundred lines of window and event handling that has now been
+ * written once, and what a list and a menu actually disagree about is the row.
+ *
+ * THE ANCHOR IS THE CONTROL'S OWN LEFT EDGE, the same place the pop-up's menu opens; `NSMenu` places its window at
+ * `location.x`, so that one number IS the alignment. */
+- (void)cg_attachListWithFrame:(NSRect)cellFrame inView:(id)controlView
+{
+	NSMenu *list;
+	NSPoint where;
+
+	if ([_objectValues count] == 0) {
+		fprintf(stderr, "APPKIT-REFUSE: -cg_attachListWithFrame:inView: needs a list with rows — a combo box with "
+				"nothing to choose from is not a combo box\n");
+		return;
+	}
+	list = [self cg_buildListMenu];
+	[list cg_setMenuViewClass:[AGComboListView class]];
 	where = [self cg_popUpAnchorForFrame:cellFrame inView:controlView];
 	[list popUpMenuPositioningItem:nil atLocation:where inView:controlView];
-	[list release];
 }
 
 /* **AND THE PICK IS THE SAME TWO THINGS THE POP-UP'S IS.** The row's index becomes the selection — which writes the

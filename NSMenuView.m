@@ -402,6 +402,12 @@ static void apk_fill_vertical_gradient(NSRect rect, CGFloat radius,
 	[self setNeedsDisplay:YES];
 }
 
+- (BOOL)cg_isItemMarked:(NSMenuItem *)item
+{
+	(void)item;
+	return NO;
+}
+
 - (NSMenuItem *)highlightedItem
 {
 	return _highlightedItem;
@@ -503,7 +509,9 @@ static void apk_fill_vertical_gradient(NSRect rect, CGFloat radius,
 		if (item == nil || cell == nil) {
 			continue;
 		}
-		if (item == _highlightedItem) {
+		/* **AND A SUBCLASS MAY MARK A ROW THE POINTER IS NOT ON.** A list holds a row of its own; a menu holds nothing,
+		 * so its answer is NO and this reads exactly as it did. See the header for why the question is the VIEW's. */
+		if (item == _highlightedItem || [self cg_isItemMarked:item]) {
 			/* **A CHIP INSET INSIDE THE ROW, NOT THE WHOLE ROW.** That inset-and-round is most of what makes a
 			 * Mac menu read as a menu; a full-width band of colour is what a Windows menu does. The bar's chip is
 			 * inset the same way, a little more vertically, so it does not touch the strip's edges. */
