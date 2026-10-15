@@ -1583,6 +1583,27 @@ static const NSSize FN_CELL_NO_OPINION = { 10000.0, 10000.0 };
 
 /* ---- THE THREE RECTS, WITH THIS TIER'S NUMBERS ------------------------------------------------ */
 
+/* **AND THE ANCHOR IS THE FRAME'S BOTTOM-LEFT CORNER IN THE SPACE A WINDOW FRAME LIVES IN.** Three spaces are in play
+ * and only one arithmetic gets them in the right order; the header carries why it is one door rather than two copies.
+ * NO WINDOW IS NOT A REFUSAL: `NSMenu`'s own note says a session with no reachable display is still a session — its
+ * state is real and only its ink is missing — so the point falls back to the frame's own corner and every behaviour
+ * above this stays testable offscreen. */
+- (NSPoint)cg_popUpAnchorForFrame:(NSRect)cellFrame inView:(id)controlView
+{
+	id window = nil;
+
+	if (controlView != nil && [controlView respondsToSelector:@selector(window)]) {
+		window = [controlView window];
+	}
+	if (window != nil && [controlView respondsToSelector:@selector(convertPoint:toView:)]) {
+		NSRect frame = [window frame];
+		NSPoint corner = [controlView convertPoint:NSMakePoint(NSMinX(cellFrame), NSMinY(cellFrame)) toView:nil];
+
+		return NSMakePoint(frame.origin.x + corner.x, frame.origin.y + corner.y);
+	}
+	return NSMakePoint(NSMinX(cellFrame), NSMinY(cellFrame));
+}
+
 - (NSRect)drawingRectForBounds:(NSRect)theRect
 {
 	/* THE BORDER'S AIR IS TAKEN ONLY WHEN THERE IS A BORDER TO TAKE IT FOR: an unbordered cell draws over its whole

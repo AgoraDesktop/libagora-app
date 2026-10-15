@@ -396,7 +396,6 @@ static NSInteger fn_popup_index(NSInteger menu_index)
 
 - (void)attachPopUpWithFrame:(NSRect)cellFrame inView:(id)controlView
 {
-	NSWindow *window = [controlView respondsToSelector:@selector(window)] ? [controlView window] : nil;
 	NSPoint where;
 
 	if (_menu == nil || [(NSMenu *)_menu numberOfItems] == 0) {
@@ -404,22 +403,11 @@ static NSInteger fn_popup_index(NSInteger menu_index)
 				"nothing to pop up is not a popup\n");
 		return;
 	}
-	/* **THE ANCHOR IS THE BOTTOM-LEFT CORNER CARRIED INTO THE SPACE A WINDOW FRAME LIVES IN.** Three spaces are in
-	 * play and only one arithmetic gets them in the right order: the CELL's frame is in the view's coordinates, the
-	 * view's `-convertPoint:toView:` with a nil view reaches the WINDOW's, and the window's own frame origin is where
-	 * that window sits in the space the popped-up menu's window will be placed in. A button at the window's own
-	 * origin hides the middle step, which is exactly the bug this comment exists to stop. */
-	if (window != nil) {
-		NSRect frame = [window frame];
-		NSPoint corner = [controlView convertPoint:NSMakePoint(NSMinX(cellFrame), NSMinY(cellFrame)) toView:nil];
-
-		where = NSMakePoint(frame.origin.x + corner.x, frame.origin.y + corner.y);
-	} else {
-		/* NO WINDOW, AND THE SESSION GOES AHEAD ANYWAY: `NSMenu`'s own note says a menu with no reachable display
-		 * still HAS a session — its state is real and only its ink is missing — so refusing here would make every
-		 * behaviour below untestable offscreen. The point is then the frame's corner in its own space. */
-		where = NSMakePoint(NSMinX(cellFrame), NSMinY(cellFrame));
-	}
+	/* **AND THE ANCHOR IS `NSCell`'s, SO THE POP-UP AND THE COMBO BOX CANNOT DISAGREE ABOUT IT.** This door used to
+	 * do the three-space arithmetic itself and the combo box did it in its own file, with a different corner — which is
+	 * how one control's menu lined up with the control and the other's lined up with its arrow. See
+	 * `-cg_popUpAnchorForFrame:inView:`. */
+	where = [self cg_popUpAnchorForFrame:cellFrame inView:controlView];
 	/* **THE HIGHLIGHT IS THIS DOOR'S TO PUT UP AND TAKE DOWN.** Nothing else knows the press and the session are one
 	 * gesture, and the call below does not return until the session is over — so the two lines around it are the whole
 	 * of "the button is down while its menu is up". */

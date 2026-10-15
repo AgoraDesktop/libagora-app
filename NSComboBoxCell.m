@@ -369,14 +369,12 @@
 		[item setAction:@selector(itemSelected:)];
 		[item setTag:(NSInteger)i];
 	}
-	if (window != nil) {
-		NSRect frame = [window frame];
-		NSPoint corner = [controlView convertPoint:NSMakePoint(NSMinX(chip), NSMinY(chip)) toView:nil];
-
-		where = NSMakePoint(frame.origin.x + corner.x, frame.origin.y + corner.y);
-	} else {
-		where = NSMakePoint(NSMinX(chip), NSMinY(chip));
-	}
+	/* **AND THE LIST IS ANCHORED WHERE THE POP-UP'S MENU IS: AT THE CONTROL'S OWN LEFT EDGE.** This door used to hand
+	 * over the CHIP's corner, so the list hung under the arrow — and the two controls beside each other in the
+	 * demonstration lined their raised windows up with different things, which is what "line it up with the control"
+	 * was pointing at. `NSMenu` places its window at `location.x`, so that one number IS the alignment. */
+	(void)window;
+	where = [self cg_popUpAnchorForFrame:cellFrame inView:controlView];
 	[list popUpMenuPositioningItem:nil atLocation:where inView:controlView];
 	[list release];
 }
