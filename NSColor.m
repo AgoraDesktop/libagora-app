@@ -755,12 +755,21 @@ static void fn_cmyk_of(NSColor *self, CGFloat cmyk[4])
 + (NSColor *)controlColor
 {
 	static NSColor *s;
-	/* **THE FACE OF A CONTROL IS LIGHTER THAN THE WINDOW IT SITS ON, AND THAT IS A RULE RATHER THAN A NUMBER.**
-	 * `windowBackgroundColor` is 0.93, so a control's face is 0.95: a button is a raised thing, and raised means the
-	 * light falls on it — a face BELOW the window's reads as a hole rather than as a button, which is what 0.90 here
-	 * was. The margin is deliberately small, because the border is what separates the two shapes and the fill only has
-	 * to say which side of the surface it is on. */
-	return fn_singleton(&s, 0.95, 0.95, 0.95, 1.0);
+	/* **A CONTROL'S FACE IS SLIGHTLY DARKER THAN THE WINDOW IT SITS ON, AND THE THREE GREYS ARE ONE DIRECTION.**
+	 * The window is 0.93, a control's face is 0.90, and a disabled control's is 0.86 — three STEPS DOWN from the
+	 * surface rather than a face on each side of it.
+	 *
+	 * IT WAS 0.95, ABOVE THE WINDOW, AND THAT ARGUMENT WAS ABOUT RAISING RATHER THAN ABOUT READING. "A button is a
+	 * raised thing and raised means the light falls on it" is a reason to put a face above its surface, and 0.90 had
+	 * been rejected here on the way past for reading "as a hole rather than as a button" — which is a judgement about
+	 * ONE face on its own. A control is read against the one BESIDE it, though, and with the face above the window
+	 * and the disabled face below it, ENABLED and DISABLED sat on opposite sides of the surface's own grey: "quieter"
+	 * and "raised" pointed in two different directions and neither could be read as a step. 0.93 over 0.90 over 0.86
+	 * is an order; what it replaces was a shape.
+	 *
+	 * The margin is still deliberately small — the border is what separates two shapes, and the fill only has to say
+	 * which side of the surface a thing is on. */
+	return fn_singleton(&s, 0.90, 0.90, 0.90, 1.0);
 }
 
 + (NSColor *)controlBackgroundColor
@@ -769,12 +778,13 @@ static void fn_cmyk_of(NSColor *self, CGFloat cmyk[4])
 	return fn_singleton(&s, 1.0, 1.0, 1.0, 1.0);
 }
 
-/* **AND THE SAME RULE FROM THE OTHER SIDE: A DISABLED CONTROL IS NOT RAISED, SO ITS FACE SITS BELOW THE WINDOW'S.**
- * 0.86 against `windowBackgroundColor`'s 0.93, which is the mirror of what `controlColor` does above it — the two
- * faces plus the window's own grey are three STEPS that read in the right order at a glance, and a disabled button
- * whose face was the same as an enabled one (or brighter, which is what white was) would say nothing at all until its
- * title was read. THE INK THEN HAS TO CLEAR THE FACE, which is `disabledControlTextColor`'s 0.50 — the darkest of the
- * three greys here, and the only one of them that is text. */
+/* **AND IT IS THE BOTTOM OF THE SAME SCALE RATHER THAN THE OTHER SIDE OF THE WINDOW.** 0.86 against a control's 0.90
+ * and `+windowBackgroundColor`'s 0.93: three steps DOWN from the surface, so a disabled face is the far end of the
+ * direction an enabled one has already started in. It used to be the mirror of `+controlColor` — that face above the
+ * window and this one below it — and a scale with the surface in the middle of it is a shape rather than a scale. A
+ * disabled face that matched an enabled one would say nothing at all until its title was read.
+ * THE INK THEN HAS TO CLEAR THE FACE, which is `disabledControlTextColor`'s 0.50 — the darkest of the greys here, and
+ * the only one of them that is text. */
 + (NSColor *)cg_disabledControlFaceColor
 {
 	static NSColor *s;

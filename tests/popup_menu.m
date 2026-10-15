@@ -243,9 +243,9 @@ int main(void)
 		 * triangle gives one run and a solid chip gives none, so "two" is the whole of what makes this control's sign the
 		 * pop-up's rather than the combo box's beside it in the sample.
 		 *
-		 * AND THE GROUND IS NOT WHITE, WHICH IS NOT A DETAIL: the field's face IS white, and a white face on a white
-		 * ground is a face this probe cannot see. `+cg_disabledControlFaceColor` is the ground instead, so all three
-		 * things in play — the 0.86 ground, the 1.00 face and the 0.737 border — are tellable apart. */
+		 * AND THE THREE THINGS IN PLAY ARE TELLABLE APART: the ground is white, the field's own face is the CONTROL
+		 * grey — 0.90, one step under the window's 0.93 — and the border is 0.737. A field painted the surface's white
+		 * would be invisible here, which is the point of MEASURING the fill rather than assuming it. */
 		{
 			const int W = 140, H = 23;
 			NSView *view = [[NSView alloc] initWithFrame:NSMakeRect(0.0, 0.0, W, H)];
@@ -330,9 +330,10 @@ int main(void)
 			}
 			printf("  (note: face %.2f on a %.2f ground, border %.2f, chip %.2f, %d accent points, %d white run(s), "
 			       "title ink from x=%d of %d)\n",
-			       faceMid, [[NSColor cg_disabledControlFaceColor] redComponent], borderMid, chipMid,
+			       faceMid, [[NSColor whiteColor] redComponent], borderMid, chipMid,
 			       accent, runs, leftmostInk, zoneLeft);
-			check(faceMid > 0.97, "the face is WHITE — a field's, not a button's");
+			check(fabs(faceMid - [[NSColor controlColor] redComponent]) < 0.01,
+			      "the face is the CONTROL's grey — the same face the push button beside it wears");
 			check(borderMid < 0.80, "and it is BORDERED, in the border's own grey");
 			check(accent > 100, "the CHIP is drawn, in the platform's accent");
 			check(runs == 2, "and the column down its middle crosses TWO white runs — the double chevron, not one arrow");
@@ -398,8 +399,8 @@ int main(void)
 			[cell setBezeled:YES];
 			[NSGraphicsContext setCurrentContext:[NSGraphicsContext graphicsContextWithBitmapImageRep:rep]];
 
-			/* AT REST: the ground is the disabled face so a white FIELD is tellable from the surface under it. */
-			[[NSColor cg_disabledControlFaceColor] setFill];
+			/* AT REST, on a white ground: what has to show is the field's OWN face, the control grey. */
+			[[NSColor whiteColor] setFill];
 			[[NSBezierPath bezierPathWithRect:frame] fill];
 			[cell drawWithFrame:frame inView:view];
 			outFace = [rep colorAtX:W / 2 y:H - 1 - (H - 2)];
@@ -413,7 +414,7 @@ int main(void)
 			/* **AND UNDER THE POINTER, WHICH IS A STATE THE PROBE CAN DRIVE**: `-cg_setMouseInside:` is the door the
 			 * control's own `-mouseEntered:` sets, so this is the same bit the window turns on for a real pointer. */
 			[cell cg_setMouseInside:YES];
-			[[NSColor cg_disabledControlFaceColor] setFill];
+			[[NSColor whiteColor] setFill];
 			[[NSBezierPath bezierPathWithRect:frame] fill];
 			[cell drawWithFrame:frame inView:view];
 			inFace = [rep colorAtX:W / 2 y:H - 1 - (H - 2)];
@@ -427,7 +428,8 @@ int main(void)
 			printf("  (note: at rest the face is %.2f/%.2f/%.2f with %d dark points; under the pointer %.2f/%.2f/%.2f "
 			       "with %d)\n", [outFace redComponent], [outFace greenComponent], [outFace blueComponent], outInk,
 			       [inFace redComponent], [inFace greenComponent], [inFace blueComponent], inInk);
-			check(outFace != nil && [outFace redComponent] > 0.97, "at rest the field is WHITE");
+			check(outFace != nil && fabs([outFace redComponent] - [[NSColor controlColor] redComponent]) < 0.01,
+			      "at rest the field wears the CONTROL's face — one step under the window's grey");
 			check(outInk > 0, "and its title is DARK on it");
 			check(inFace != nil && [inFace blueComponent] > 0.90 && [inFace redComponent] < 0.90,
 			      "under the pointer the FACE takes the accent");

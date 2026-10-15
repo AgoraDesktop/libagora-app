@@ -567,12 +567,11 @@
 		if (_backgroundColor != nil) {
 			fill = (NSColor *)_backgroundColor;
 		} else if (!_enabled) {
-			/* **A DISABLED BUTTON'S FACE IS BELOW THE WINDOW'S, WHICH IS THE ONE THING ABOUT IT THAT IS NOT THE ERA'S.**
-			 * A button is a raised thing and a disabled one is not, so its grey drops under the surface instead of over
-			 * it (`NSColor -cg_disabledControlFaceColor` carries the three steps). It used to be
-			 * `controlBackgroundColor` — WHITE, the field's surface — which put a disabled button ABOVE the window and
-			 * an enabled one below it, and that is backwards twice: the disabled face was the brightest thing on the
-			 * surface and the enabled face was the darkest. */
+			/* **AND IT IS ONE STEP UNDER THE ENABLED FACE, WHICH IS ONE STEP UNDER THE WINDOW.** A button at rest wears
+			 * `+controlColor`'s 0.90 — slightly darker than the surface it sits on — and a disabled one wears 0.86, so
+			 * the three greys read in one direction and "quieter" is a step rather than a second axis. It used to be
+			 * `controlBackgroundColor` — WHITE, the field's surface — which put a disabled button above everything,
+			 * the enabled button beside it included. */
 			fill = [NSColor cg_disabledControlFaceColor];
 		} else if ([self fn_wearsAccent]) {
 			/* PRESSED WEARS THE ACCENT ITSELF; PRELIGHTED WEARS ITS LIGHTER SHADE. Both come from `NSColor`'s one

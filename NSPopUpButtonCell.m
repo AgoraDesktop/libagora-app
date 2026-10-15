@@ -30,9 +30,14 @@
 #import <Foundation/NSGeometry.h>
 
 /* **A POP-UP BUTTON IS A FIELD WITH A CHIP IN IT, AND THAT IS THE WHOLE OF WHAT THE SAMPLE DRAWS.** Not a raised
- * bezel with an arrow beside the words: `Argentum Mockup.png` draws its `NSPopUpButton` as a WHITE RECTANGLE with a
+ * bezel with an arrow beside the words: `Argentum Mockup.png` draws its `NSPopUpButton` as a RECTANGLE with a
  * one-point border — which is what makes it read as a text field — holding an ACCENT-FILLED CHIP at its right end, and
  * inside that chip TWO TRIANGLES, one pointing up and one down, knocked out of it in white.
+ *
+ * **THE SAMPLE'S FIELD IS WHITE AND THIS TIER'S IS NOT, WHICH IS A DEPARTURE AND IS RECORDED AS ONE.** The sample
+ * paints `#FFFFFF` on a `#F9F9F9` window; this tier paints every control the other way — `+controlColor`, slightly
+ * darker than the surface, with a disabled one a step below that — so a pop-up's field takes the face the push button
+ * beside it takes and the two AGREE. THE SHAPE IS THE SAMPLE'S AND THE FILL IS THE TIER'S.
  *
  * **AND THE PAIR BESIDE IT IS WHAT MAKES THE SECOND TRIANGLE MEAN SOMETHING.** The sample's `NSComboBox` is the same
  * field with ONE triangle, down; so a doubled arrow is this control's own sign rather than decoration — a combo box
@@ -475,12 +480,12 @@ static NSInteger fn_popup_index(NSInteger menu_index)
 
 /* ---- THE INK ------------------------------------------------------------------------------------- */
 
-/* **A POP-UP WEARS A FIELD'S FACE, AND DRAWING IT IS WHAT THIS OVERRIDE IS FOR.** `NSButtonCell` draws a raised bezel
- * — `+controlColor`, a thing you press — and the sample draws this control as a TEXT FIELD: white, one point, radius
- * four. `NSText` draws that face already, and its comment is the reason to take the SAME constants rather than
- * look-alikes: a field and the control beside it are noticed when their borders are a shade apart. So the face is the
- * field's, `NSButtonCell`'s bezel is not drawn at all, and the path is inset by half the stroke for the reason both
- * of them do it — a stroke is centred on its path and the drawing layer clips a view to its bounds.
+/* **A POP-UP WEARS A FIELD'S FACE, AND DRAWING IT IS WHAT THIS OVERRIDE IS FOR.** `NSButtonCell` draws a bezel with
+ * its raised-or-sunken edges; the sample draws this control as a TEXT FIELD — one point, radius four, no bevel — and
+ * `NSText` draws that face already, so its constants are taken rather than look-alikes: a field and the control beside
+ * it are noticed when their borders are a shade apart. `NSButtonCell`'s bezel is therefore not drawn at all, and the
+ * path is inset by half the stroke for the reason `NSText` does it — a stroke is centred on its path and the drawing
+ * layer clips a view to its bounds.
  *
  * **AND THE SAMPLE DRAWS NO PRELIT OR PRESSED POP-UP AT ALL, SO THE STATES COME FROM THE CONTROL IT IS BUILT ON.** A
  * pop-up IS a button in this tier — `NSPopUpButtonCell` is an `NSButtonCell` and the press is a press — so its face
@@ -493,18 +498,19 @@ static NSInteger fn_popup_index(NSInteger menu_index)
 							      xRadius:NS_CELL_BEZEL_RADIUS
 							      yRadius:NS_CELL_BEZEL_RADIUS];
 
-	/* **AND THE FIELD WEARS THE SAME THREE STATES A BUTTON'S BEZEL DOES.** White at rest — which is what makes it read
-	 * as a text field — then `+cg_accentPrelightColor` under the pointer and `+cg_accentColor` in full while its menu
-	 * is up, exactly the pair `NSButtonCell` fills its own face with. THE WORDS GO WHITE ON THAT FACE, which is the
-	 * button's ink rule and stays this cell's, and THE TWO HAVE TO MOVE TOGETHER: a white title that inverted while
-	 * the field stayed white is precisely what "the text is inverting when prelit" was.
-	 *
-	 * A DISABLED ONE TAKES THE DISABLED FACE, as a button's does, rather than staying white — the state is the same
-	 * state and the surface it is said on is the same surface.
+	/* **AND THE FIELD WEARS THE SAME STATES A BUTTON'S BEZEL DOES, IN THE SAME ORDER.** `+controlColor` at rest, then
+	 * `+cg_accentPrelightColor` under the pointer and `+cg_accentColor` in full while its menu is up, and
+	 * `+cg_disabledControlFaceColor` when it is disabled — the same four answers, and the SAME GREYS, that the button
+	 * beside it gives. THE WORDS GO WHITE ON THE ACCENT FACE, which is the button's ink rule and stays this cell's, and
+	 * THE TWO HAVE TO MOVE TOGETHER: a white title over a face that did not follow is exactly what "the text is
+	 * inverting when prelit" was.
 	 *
 	 * AND THE CHIP NEEDS NO CARE OF ITS OWN: its fill IS the accent and its chevrons are white, so on an accent face
 	 * the chip dissolves and the two arrows are left standing on the field. That is what the control looks like while
-	 * it is being used, and it comes out of the two colours rather than out of a second set of them. */
+	 * it is being used, and it comes out of the two colours rather than out of a second set of them. THE CHEVRONS STAY
+	 * WHITE IN EVERY STATE rather than taking the field's fill: they are the sample's knockouts, and the sample's field
+	 * is white, but on THIS tier's pressed face — an accent field with an accent chip on it — a field-coloured arrow
+	 * would vanish along with the chip. */
 	if (!_enabled) {
 		[[NSColor cg_disabledControlFaceColor] setFill];
 	} else if ([self isHighlighted]) {
@@ -512,7 +518,13 @@ static NSInteger fn_popup_index(NSInteger menu_index)
 	} else if ([self cg_mouseIsInside]) {
 		[[NSColor cg_accentPrelightColor] setFill];
 	} else {
-		[[NSColor controlBackgroundColor] setFill];
+		/* **AND AT REST IT IS `+controlColor` RATHER THAN THE SAMPLE'S WHITE.** The sample's field is `#FFFFFF` on a
+		 * `#F9F9F9` window, and THIS TIER PAINTS EVERY CONTROL THE OTHER WAY: a face slightly DARKER than the surface
+		 * under it, and a disabled one darker still. A pop-up is a control, so it takes the face its neighbour the push
+		 * button takes and the two agree — and what makes the control read as a FIELD is its BORDER, not its fill. The
+		 * sample's white is the one number in the pop-up's table this tier does not follow; it is recorded as a
+		 * departure there rather than left to be rediscovered. */
+		[[NSColor controlColor] setFill];
 	}
 	[bezel fill];
 	[[NSColor controlDarkShadowColor] setStroke];

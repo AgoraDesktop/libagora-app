@@ -595,9 +595,14 @@ int main(void)
 
 			printf("  (note: window %.2f; enabled face %.2f, disabled face %.2f, its title %.2f, border %.2f)\n",
 			       bg, face, dead, deadInk, border);
-			check(face > bg && face - bg <= 0.05,
-			      "an ENABLED button's face sits just ABOVE the window's grey — raised, not sunken");
-			check(dead < bg, "a DISABLED button's face sits BELOW it");
+			/* **AND THE THREE GREYS READ IN ONE DIRECTION, WHICH IS WHAT THESE TWO ARE ABOUT.** The window's grey, a
+			 * control's face just under it, a disabled one's under THAT — 0.93, 0.90, 0.86. The pair used to straddle
+			 * the surface: an enabled face above the window and a disabled one below it, so "quieter" pointed the
+			 * opposite way from "raised" and neither read as a step. */
+			check(face < bg && bg - face <= 0.05,
+			      "an ENABLED control's face sits just BELOW the window's grey — one step under its surface");
+			check(dead < face,
+			      "and a DISABLED one's sits below THAT — three greys in one direction, not one on each side");
 			check(deadInk < dead, "and its title is a darker grey than its own face");
 			/* **AND THE UPPER BOUND IS THE DARKEST FACE RATHER THAN A NUMBER OF ITS OWN.** It was 0.60, which read
 			 * the 0.55 this tree had chosen; the sample's answer is 0.737, and what the claim is really about is that
