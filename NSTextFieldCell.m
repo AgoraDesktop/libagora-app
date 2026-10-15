@@ -60,6 +60,17 @@
 	 * between them is named where it bites. */
 	[self setObjectValue:aString];
 	[self setTitle:(aString != nil ? aString : @"")];
+	/* **AND AN EDITOR SHOWING THE OLD TEXT IS TOLD, WHICH IS WHAT "REPLACE IT MID-EDIT" MEANS.** While a session runs,
+	 * the editor is what draws the words — the cell stops drawing its own string (see `-drawInteriorWithFrame:`) — so a
+	 * value that changed in the CELL alone would be a value nobody could see: MEASURED, choosing a row from a combo
+	 * box's list while its field was being edited left the picked value in the cell and the TYPED text on screen, which
+	 * is the field and the model disagreeing about what the field says.
+	 *
+	 * `-setString:` is the whole of the write because that door is documented as replacing the string AND putting the
+	 * insertion point at its end, which is exactly where a person who has just been given a value wants to be. */
+	if (_cg_editor != nil) {
+		[_cg_editor setString:(aString != nil ? aString : @"")];
+	}
 }
 
 - (NSString *)stringValue
@@ -246,6 +257,7 @@
 	NSString *string = [self stringValue];
 
 	_editorDelegate = anObject;
+	_cg_editor = textObj;
 	_cg_textEditing = YES;
 	[textObj setFrame:room];
 	[textObj setFieldEditor:YES];
@@ -296,11 +308,16 @@
 	id caller = _editorDelegate;
 	NSString *edited = [textObj string];
 
+	/* **AND THE EDITOR IS FORGOTTEN BEFORE THE STRING IS WRITTEN BACK, WHICH IS AN ORDER AND NOT A STYLE.** The
+	 * write-back below goes through `-setStringValue:`, which tells the editor about a new value — so forgetting it
+	 * first keeps the teardown from telling the editor a string it is standing on, and leaves one rule (a session's
+	 * editor hears about changes) rather than an exception to it. */
+	_editorDelegate = nil;
+	_cg_editor = nil;
+	_cg_textEditing = NO;
 	if (edited != nil) {
 		[self setStringValue:edited];
 	}
-	_editorDelegate = nil;
-	_cg_textEditing = NO;
 	[textObj setDelegate:nil];
 	[textObj removeFromSuperview];
 	if (caller != nil && [caller respondsToSelector:@selector(textDidEndEditing:)]) {

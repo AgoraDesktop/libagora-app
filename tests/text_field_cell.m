@@ -106,7 +106,30 @@ int main(void)
 	check([editor delegate] == nil, "and stops being the cell's delegate, so a stale editor cannot report to it");
 	check(watcher->ended == 1, "and the caller's own delegate is told the session ended, once");
 
-	/* 5. **AND A COMBO BOX'S TEXT STOPS AT ITS CHIP, WHICH IS THE ONE RECT THAT IS ITS OWN.** The same override is what
+	/* 5. **AND A VALUE SET WHILE A SESSION IS RUNNING REPLACES WHAT THE EDITOR SHOWS.** This is the claim a pick from
+	 * a combo box's list makes: the field is mid-edit, somebody chooses a row, and the row has to become what the field
+	 * SAYS — not just what the cell holds. While a session runs the editor is what draws the words, so a value written
+	 * into the cell alone is a value nobody can see. */
+	{
+		[cell selectWithFrame:frame inView:content editor:editor delegate:watcher start:0 length:0];
+		[editor replaceCharactersInRange:NSMakeRange(0, [[editor string] length]) withString:@"typed over"];
+		check([[editor string] isEqualToString:@"typed over"], "the editor holds what was typed into it");
+
+		[cell setStringValue:@"chosen"];	/* exactly what a pick from a list does */
+		printf("  (note: after a pick mid-edit, the cell holds \"%s\" and the editor shows \"%s\")\n",
+		       [[cell stringValue] UTF8String], [[editor string] UTF8String]);
+		check([[cell stringValue] isEqualToString:@"chosen"],
+		      "a value set during a session becomes the CELL's value");
+		check([[editor string] isEqualToString:@"chosen"],
+		      "AND the editor's — so the field shows the chosen value rather than the text that was typed");
+		check([editor selectedRange].location == 6 && [editor selectedRange].length == 0,
+		      "with the insertion point left at the END of it, which is where being given a value leaves a person");
+		[cell endEditing:editor];
+		check([[cell stringValue] isEqualToString:@"chosen"],
+		      "and ending the session afterwards keeps the chosen value rather than reviving the typed one");
+	}
+
+	/* 6. **AND A COMBO BOX'S TEXT STOPS AT ITS CHIP, WHICH IS THE ONE RECT THAT IS ITS OWN.** The same override is what
 	 * an edit session is handed, so a typed string cannot be drawn — or typed — under the chip. */
 	{
 		NSRect r = [combo drawingRectForBounds:frame];
@@ -126,7 +149,7 @@ int main(void)
 		      "and stops them where its chip begins, so the chip is never under them");
 	}
 
-	/* 6. **AND A FIELD'S STRING LIVES WHERE A FORMATTER CAN SEE IT.** `NSCell` keeps a `-_title` and an `-_objectValue`
+	/* 7. **AND A FIELD'S STRING LIVES WHERE A FORMATTER CAN SEE IT.** `NSCell` keeps a `-_title` and an `-_objectValue`
 	 * — two doors onto what a caller thinks is one thing — and this class puts the string it was made with in the second
 	 * one, because that is the one `-stringValue` reads and the one a formatter is handed. MEASURED: without that, a
 	 * cell made with `-initTextCell:@"hello"` drew nothing at all. */

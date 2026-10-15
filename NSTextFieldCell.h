@@ -56,6 +56,12 @@ NS_ASSUME_NONNULL_BEGIN
 	 * so the delegate a caller handed to `-selectWithFrame:...` is kept HERE and told what happened afterwards. NOT
 	 * RETAINED: this tree's rule for every delegate. */
 	id _editorDelegate;		/* NOT RETAINED */
+	/* **AND THE EDITOR ITSELF, WHILE ONE IS SHOWING THIS CELL'S TEXT.** It is NOT RETAINED — during a session it is a
+	 * subview of the control being edited, so the VIEW TREE owns it, and the window owns it for the rest of its life.
+	 * It is kept because the cell has to be able to reach the thing that is currently displaying its string: a value
+	 * that changes underneath a running session has to reach BOTH of them, and the editor is the one a person is
+	 * looking at. */
+	NSText *_cg_editor;		/* NOT RETAINED */
 	/* **AND WHETHER AN EDITOR IS SHOWING THIS CELL'S TEXT, WHICH THE DRAWING HAS TO KNOW.** MEASURED on the
 	 * demonstration: typing into a combo box put the editor's words ON TOP of the string the cell had already drawn, so
 	 * the field showed both at once — "NSComboBox" with the typed text over it and a selection between them. The cell
