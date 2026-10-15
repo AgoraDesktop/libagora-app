@@ -158,7 +158,11 @@ the compositor is really gone.
   10-point drag moves the value by 10/35 of the travel rather than to the pointer; both ends clamp; a one-percent
   proportion still draws a knob as long as the control is THICK, because a knob too small to grab is not a knob; and
   `-NSScrollerArrowsNone` is a GEOMETRY change (the line parts vanish and the slot becomes the whole frame) and not
-  an ink one.
+  an ink one. **AND A CLICK STEPS ONCE, WHILE A HELD PAGE KEEPS STEPPING:** the control's tracking loop speaks on the
+  press AND on the release (right for a slider's absolute value, wrong for a step), so the part is REPORTED once — the
+  release is a no-op — and a held PAGE or LINE repeats, which the loop polls on its own 1/60 s deadline
+  (`-cg_trackingShouldRepeat`) and the CELL times, so the numbers (a delay before the first repeat, an interval after)
+  never become the loop's.
 - **And the frame that joins them** (`ctest`, offscreen): `NSScrollView` tiles its content view and its two bars —
   a 200x200 frame with both scrollers gives the content `(0,15)` 185x185, the vertical bar the right column and the
   horizontal one the bottom row — and the two class conversions are EXACT INVERSES of each other and of `-tile`. The

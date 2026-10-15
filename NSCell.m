@@ -192,6 +192,13 @@
 	}
 }
 
+- (BOOL)cg_trackingShouldRepeat
+{
+	/* NOTHING TO REPEAT: the default, and every cell but a stepping one. A cell that DOES step overrides this and
+	 * watches its own clock — see `NSScrollerCell`, which is the one control in this tier whose press repeats. */
+	return NO;
+}
+
 - (BOOL)isBordered
 {
 	return _bordered;

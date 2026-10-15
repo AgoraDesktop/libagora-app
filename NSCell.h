@@ -367,6 +367,14 @@ typedef NSUInteger NSControlSize;
 - (BOOL)cg_mouseIsInside;
 - (void)cg_setMouseInside:(BOOL)flag;
 
+/* **AND THE ONE HOOK A TRACKING LOOP ASKS ON ITS OWN CLOCK: HAS THE CELL SOMETHING MORE TO SAY?** A press that
+ * STEPS — a scroller's page or a line — goes on stepping while the button is held, and the control's tracking loop
+ * is the only thing that knows time is passing: it wakes on a deadline whether or not an event arrived, so it is the
+ * one place the question can be asked. THE CELL OWNS THE TIMING and the loop only polls, because the numbers (the
+ * delay before the first repeat and the interval after it) belong to the control that repeats and not to the loop
+ * that pumps. The default answers NO, which is every cell with nothing to repeat. */
+- (BOOL)cg_trackingShouldRepeat;
+
 /* ============================================================================================ *
  * AND THE REST OF THE STATE, WHICH IS THE SAME SHAPE AND TWO MORE KINDS.                        *
  * ============================================================================================ */

@@ -266,6 +266,31 @@ int main(void)
 		[s highlight:NO];
 		check(![s isHighlighted], "and `-highlight:NO` clears it");
 
+		/* 12. **AND A HELD PAGE REPEATS, WHICH THE TRACKING LOOP POLLS AND THE CELL TIMES.** A press that STEPS goes
+		 * on stepping while the button is held, and the loop is the only thing that knows time is passing — but the
+		 * NUMBERS are the cell's. The clock is SUPPLIED here (`-cg_trackingShouldRepeatAtTime:`), which is what pins
+		 * the delay and the spacing without a test that sleeps through them. */
+		{
+			NSTimeInterval soon;
+
+			[s setFloatValue:0.0 knobProportion:0.5];
+			[cell startTrackingAt:NSMakePoint(7.0, 80.0) inView:s];	/* a press on the increment page (the slot below the knob) */
+			check(![cell cg_trackingShouldRepeat],
+			      "a page does not repeat the instant it is pressed — there is a delay for a hand that meant ONE page");
+			soon = [NSDate timeIntervalSinceReferenceDate] + 30.0;	/* comfortably past the press's own delay */
+			check([cell cg_trackingShouldRepeatAtTime:soon], "but a HELD page repeats once its delay has passed");
+			check(![cell cg_trackingShouldRepeatAtTime:soon],
+			      "and the repeats are SPACED: the next instant is not another step");
+			check([cell cg_trackingShouldRepeatAtTime:(soon + 1.0)], "while a later one is");
+
+			/* THE KNOB NEVER REPEATS — a drag is already a value per point — and the RELEASE disarms a page. */
+			[cell startTrackingAt:NSMakePoint(7.0, 40.0) inView:s];
+			check(![cell cg_trackingShouldRepeatAtTime:soon], "a KNOB never repeats");
+			[cell startTrackingAt:NSMakePoint(7.0, 80.0) inView:s];
+			[cell continueTracking:NSMakePoint(7.0, 80.0) at:NSMakePoint(7.0, 80.0) inView:s];	/* the release */
+			check(![cell cg_trackingShouldRepeatAtTime:soon], "and the release stops a page that was repeating");
+		}
+
 		[s release];
 		printf("scroller: %d case(s) failed\n", s_failed);
 	}

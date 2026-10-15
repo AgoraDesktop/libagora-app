@@ -370,7 +370,15 @@
 					   inMode:nil
 					  dequeue:YES];
 		if (next == nil) {
-			/* NOTHING CAME: draw whatever is still owed, and keep tracking. */
+			/* **AND A PRESS THAT STEPS SPEAKS AGAIN WHILE THE BUTTON IS HELD.** Nothing arrived, but TIME passed — this
+			 * is the one point in the loop that wakes on a deadline whether or not an event came — so it is where a
+			 * repeating cell is asked. THE CELL OWNS THE TIMING (see `-cg_trackingShouldRepeat`) and this only polls it
+			 * and sends what it asks for, which is why a scroller's page repeats and a slider's drag does not: the
+			 * default answer is NO. */
+			if ([_cell cg_trackingShouldRepeat]) {
+				[self sendAction:[_cell action] to:[_cell target]];
+			}
+			/* NOTHING ELSE CAME: draw whatever is still owed, and keep tracking. */
 			if (window != nil) {
 				[window displayIfNeeded];
 			}

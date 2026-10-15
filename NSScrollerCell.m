@@ -22,6 +22,12 @@
 #define NS_SCROLLER_ARROW_INSET 4.0
 #define NS_SCROLLER_KNOB_RADIUS 2.0
 
+/* **A HELD PAGE REPEATS, AND THESE TWO NUMBERS ARE THE FEEL OF IT.** The first repeat waits out a hand that meant ONE
+ * page; after that the steps come fast enough to read as motion. Both belong to the CELL rather than to the tracking
+ * loop, so the loop never learns one control's timing — it only asks whether the cell has something more to say. */
+#define NS_SCROLLER_REPEAT_DELAY	0.35
+#define NS_SCROLLER_REPEAT_INTERVAL	0.05
+
 @implementation NSScrollerCell
 
 - (instancetype)init
@@ -37,6 +43,7 @@
 		_grabDelta = 0.0;
 		_arrowsPosition = NSScrollerArrowsMaxEnd;
 		_lastFrame = NSZeroRect;
+		_repeatDeadline = 0.0;
 		_controlSize = NSRegularControlSize;
 		/* **AND A SCROLLER IS CONTINUOUS, WHICH IS WHAT MAKES THE KNOB FOLLOW.** Its value is set BY the pointer, so
 		 * a value that only spoke when the button came up would be a knob that jumped once at the end; the same
@@ -324,6 +331,15 @@
 
 	_lastFrame = frame;
 	_hitPart = [self testPart:startPoint];
+	/* **A PART THAT STEPS ARMS THE REPEAT, AND THE KNOB DOES NOT.** A drag is already a value per point, so repeating
+	 * it would only re-apply a value that has not moved; a PAGE or a LINE is the part that has nothing to say until
+	 * time passes. Anything else — the bare slot, no part — has no action to repeat at all. */
+	if (_hitPart == NSScrollerDecrementPage || _hitPart == NSScrollerIncrementPage ||
+	    _hitPart == NSScrollerDecrementLine || _hitPart == NSScrollerIncrementLine) {
+		_repeatDeadline = [NSDate timeIntervalSinceReferenceDate] + NS_SCROLLER_REPEAT_DELAY;
+	} else {
+		_repeatDeadline = 0.0;
+	}
 	if (_hitPart == NSScrollerKnob) {
 		NSRect knob = [self fn_knobRectInFrame:frame];
 
@@ -366,8 +382,25 @@
 		 * so it is reported ONCE: clearing it here makes the release's action read `NSScrollerNoPart` and do nothing.
 		 * The KNOB keeps its part, because a drag really is a value that follows every point, the last included. */
 		_hitPart = NSScrollerNoPart;
+		_repeatDeadline = 0.0;	/* AND A HELD PAGE STOPS REPEATING THE MOMENT THE BUTTON MOVES OR COMES UP. */
 	}
 	return YES;
+}
+
+/* ---- AND THE REPEAT, WHICH THE LOOP POLLS --------------------------------------------------------------- */
+
+- (BOOL)cg_trackingShouldRepeat
+{
+	return [self cg_trackingShouldRepeatAtTime:[NSDate timeIntervalSinceReferenceDate]];
+}
+
+- (BOOL)cg_trackingShouldRepeatAtTime:(NSTimeInterval)now
+{
+	if (_repeatDeadline > 0.0 && now >= _repeatDeadline) {
+		_repeatDeadline = now + NS_SCROLLER_REPEAT_INTERVAL;
+		return YES;
+	}
+	return NO;
 }
 
 - (void)stopTracking:(NSPoint)lastPoint at:(NSPoint)stopPoint inView:(NSView *)controlView mouseIsUp:(BOOL)flag
