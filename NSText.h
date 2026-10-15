@@ -38,6 +38,19 @@
 
 @class NSColor;
 
+/* **THE AIR A FIELD LEAVES BETWEEN ITS BORDER AND ITS OWN TEXT, ON ALL FOUR SIDES.** It is ONE number for the same
+ * reason the bezel's radius is: a field is drawn by a VIEW that lays out and hit-tests its own line (`NSText`) and by a
+ * CELL that draws a bordered box around one (`NSTextFieldCell`), and the two have to agree or a field's text sits
+ * somewhere different depending on which half is drawing it. MEASURED, they did not: the view padded by two points on
+ * every side and the cell by four across and two down, because this number lived as a private `#define` inside
+ * `NSText.m` and the cell had grown a second answer of its own.
+ *
+ * FOUR POINTS IS A DEPARTURE FROM THE SAMPLE AND IS RECORDED AS ONE. MEASURED on `Argentum Mockup.png`, its own field
+ * label begins two points inside the border — which is where this tier began too, and a person looking at the field
+ * beside the others called it crowded. The sample is the record of what IT shows; the four is the design owner's
+ * correction to it, which is the same footing the prelight's colour and the pop-up's fill stand on. */
+#define NS_TEXT_INSET 4.0
+
 NS_ASSUME_NONNULL_BEGIN
 
 /* **THE ALIGNMENT, IN APPLE'S ORDER — AND THE ORDER IS WHAT MAKES THE VALUES MEANINGFUL**, which is why the era's

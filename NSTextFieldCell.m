@@ -232,14 +232,16 @@
 {
 	NSRect r = theRect;
 
-	/* **AND THE MARGIN IS `NS_CELL_CONTENT_GAP`, WHICH IS THE TIER'S ONE ANSWER TO "HOW FAR IN DO THE WORDS BEGIN".**
-	 * MEASURED on the sample: its own label starts two points inside its pop-up's border. This tier begins it four —
-	 * the same margin a checkbox leaves between its box and its label — because the pop-up, the combo box and a field
-	 * all begin their words at the same distance here, and three controls in one window that each answered the question
-	 * differently would be three answers a person can see. */
-	r.origin.x += NS_CELL_CONTENT_GAP;
-	r.size.width -= NS_CELL_CONTENT_GAP;
-	return NSInsetRect(r, 0.0, NS_CELL_BORDER_INSET);
+	/* **AND THE PADDING IS `NS_TEXT_INSET`, ON ALL FOUR SIDES, BECAUSE IT IS A FIELD'S PADDING AND NOT A CELL'S.**
+	 * This used to be `NS_CELL_CONTENT_GAP` across and `NS_CELL_BORDER_INSET` down — two numbers with two other jobs,
+	 * neither of them this one — while the VIEW that draws the same kind of field padded by a third number of its own.
+	 * MEASURED, the pair disagreed on the vertical axis and the horizontal one was right by coincidence: the gap
+	 * happens to be four as well.
+	 *
+	 * THE CONTENT GAP KEEPS ITS OWN JOB, which is the margin between a control's MARK and its words — a checkbox's box
+	 * and its label, a pop-up's arrow and its title. A field has no mark; it has a border, and what it owes that border
+	 * is the same air on every side. */
+	return NSInsetRect(r, NS_TEXT_INSET, NS_TEXT_INSET);
 }
 
 - (NSSize)cellSizeForBounds:(NSRect)aRect

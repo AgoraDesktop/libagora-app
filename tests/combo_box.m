@@ -263,8 +263,12 @@ int main(void)
 			}
 		}
 		printf("  (note: title ink from x=%d of %d)\n", leftmostInk, zoneLeft);
-		check(leftmostInk >= (int)NS_CELL_CONTENT_GAP && leftmostInk <= (int)NS_CELL_CONTENT_GAP + 3,
-		      "and the title begins at NS_CELL_CONTENT_GAP — the margin a checkbox leaves its label");
+		/* THE PADDING IS `NS_TEXT_INSET` NOW — a FIELD's padding, named once in `NSText.h` — and not
+		 * `NS_CELL_CONTENT_GAP`, which is the margin between a control's MARK and its words and happens to be four as
+		 * well. The value is the same, so this check was passing while naming the wrong door; the name matters because
+		 * the next change to one of them must not move the other. */
+		check(leftmostInk >= (int)NS_TEXT_INSET && leftmostInk <= (int)NS_TEXT_INSET + 3,
+		      "and the title begins at `NS_TEXT_INSET` — a FIELD's padding, the same air on all four sides");
 	}
 	[rep release];
 

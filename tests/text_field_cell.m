@@ -182,6 +182,18 @@ int main(void)
 		      "a combo box begins its words at the same margin the field beside it does");
 		check(NSMaxX(r) <= NSMinX(chip) + 0.01,
 		      "and stops them where its chip begins, so the chip is never under them");
+		/* **AND THE PADDING IS ON ALL FOUR SIDES, WHICH IS THE CLAIM A FIELD MAKES ABOUT ITS OWN BORDER.** MEASURED
+		 * before this: a plain field's text rect ran to its frame's RIGHT EDGE — there was no right margin at all,
+		 * because the horizontal inset was added to the ORIGIN and subtracted from the width, which pads one side and
+		 * gives the other away. `NSInsetRect` is what makes the two sides agree, and the same call does the vertical. */
+		check(NSMinX(plain) > NSMinX(frame) && NSMaxX(plain) < NSMaxX(frame),
+		      "a field's text is inset on BOTH sides, so no word can touch its border");
+		check(NSMinY(plain) > NSMinY(frame) && NSMaxY(plain) < NSMaxY(frame),
+		      "and on the top and the bottom too — the padding is all four sides, as the VIEW that draws this kind "
+		      "of field also pads");
+		check(fabs((NSMinX(plain) - NSMinX(frame)) - NS_TEXT_INSET) < 0.01
+		      && fabs((NSMaxX(frame) - NSMaxX(plain)) - NS_TEXT_INSET) < 0.01,
+		      "by the same amount on each side, out of the one number both halves read");
 	}
 
 	/* 8. **AND A FIELD'S STRING LIVES WHERE A FORMATTER CAN SEE IT.** `NSCell` keeps a `-_title` and an `-_objectValue`

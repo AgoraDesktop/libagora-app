@@ -41,7 +41,6 @@
 
 /* THE AIR THE TEXT KEEPS INSIDE ITS OWN FRAME, on every side. Named rather than repeated because the baseline, the
  * caret, the hit test and `-sizeToFit` all have to agree about it — and they agree by all reading this one number. */
-#define NS_TEXT_INSET 2.0
 
 /* THE AIR A SCROLLED-TO RANGE KEEPS AT THE EDGE IT WAS SCROLLED TO. A caret exactly on the border is legible but reads
  * as clipped, so the field stops a few points short — and the value is the same on both sides, because a caret moved
