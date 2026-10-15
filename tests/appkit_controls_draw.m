@@ -376,6 +376,16 @@ int main(int argc, char **argv)
 		[field setDrawsBackground:YES];
 		[field setBackgroundColor:[NSColor whiteColor]];
 		[field setString:@"Type here — the caret is already in this field"];
+		/* **AND IT IS SIZED TO ITS OWN TEXT RATHER THAN TO A NUMBER SOMEBODY WROTE DOWN.** `-sizeToFit`'s height is the
+		 * FONT'S BAND plus this class's own padding — so the frame follows `NS_TEXT_INSET`, which is what the field
+		 * beside it (a combo box) already does, and what a frame of twenty-two written by hand does NOT: MEASURED on
+		 * the demonstration, that frame was sized for a two-point padding, and when the padding became four the text
+		 * was left sitting in a field four points too short for it while the combo box beside it grew.
+		 *
+		 * THE WIDTH IS PUT BACK because the door sizes to the STRING as well, and a demonstration field is a wide one on
+		 * purpose — it is where a person types, not a label that hugs its text. */
+		[field sizeToFit];
+		[field setFrameSize:NSMakeSize(350.0, [field frame].size.height)];
 		/* **THE SCROLL PANEL'S OWN SETTINGS: BOTH BARS, A LINE BORDER, AND THE DOCUMENT.** The scrollers are asked for
 		 * BEFORE the document so `-tile` has already sized the clip view when the document arrives and the knobs are
 		 * given the right proportions on the first reflect. */
@@ -464,10 +474,12 @@ int main(int argc, char **argv)
 		[w makeFirstResponder:field];
 		/* ONE LINE OF GEOMETRY, so that a screenshot can be READ against the numbers the application believes rather
 		 * than against a guess about where a window landed. */
-		fprintf(stderr, "controls: window frame = %.0f,%.0f %.0fx%.0f; content = %.0fx%.0f; slider = %.0f,%.0f\n",
+		fprintf(stderr, "controls: window frame = %.0f,%.0f %.0fx%.0f; content = %.0fx%.0f; slider = %.0f,%.0f; "
+			"field = %.0f,%.0f %.0fx%.0f\n",
 			[w frame].origin.x, [w frame].origin.y, [w frame].size.width, [w frame].size.height,
 			[content frame].size.width, [content frame].size.height,
-			[slider frame].origin.x, [slider frame].origin.y);
+			[slider frame].origin.x, [slider frame].origin.y,
+			[field frame].origin.x, [field frame].origin.y, [field frame].size.width, [field frame].size.height);
 		/* **AND THE POP-UP BUTTON'S, WHICH IS THE ONE FRAME HERE THE CELL COMPUTED RATHER THAN THE CALLER.** It is
 		 * fitted to its title plus its arrow, so its width is `-cellSizeForBounds:`'s answer and printing it is how
 		 * a reader checks the measurement against the button they can see. */
