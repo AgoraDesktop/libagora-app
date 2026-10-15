@@ -26,6 +26,13 @@
 #import <AppKit/NSMenuItem.h>
 #import <AppKit/AGChromeTheme.h>	/* the chrome's theme, which this demonstration loads by DEFAULT */
 #import <AppKit/NSEvent.h>
+#import <AppKit/NSScrollView.h>	/* the scroll panel, which is where the scrolling slice can be PLAYED with */
+#import <AppKit/NSClipView.h>
+#import <AppKit/NSColor.h>
+#import <AppKit/NSBezierPath.h>
+#import <AppKit/NSFont.h>
+#import <AppKit/NSStringDrawing.h>
+#import <AppKit/NSAttributedString.h>
 #import <Foundation/Foundation.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -158,6 +165,82 @@ static NSMenuItem *add_menu(NSMenu *bar, NSString *title, NSArray *itemTitles, N
 	return titleItem;
 }
 
+/* ============================================================================================ *
+ * THE SCROLLABLE DOCUMENT, WHICH IS WHAT THE SCROLLING SLICE DRAWS.                             *
+ *                                                                                                *
+ * **A DOCUMENT BIGGER THAN THE WINDOW IT IS IN, WITH LANDMARKS A SCROLL CAN BE READ AGAINST.**  *
+ * A scroll panel that drew one flat colour would prove nothing: the point of it is that        *
+ * dragging a knob MOVES something a person can name. So the document is a grid of numbered     *
+ * rows with a RED mark at its start and a GREEN one at its end — scroll to the bottom and the  *
+ * green is what shows, scroll back and the red returns.                                        *
+ *                                                                                                *
+ * AND IT IS NOT FLIPPED, WHICH IS THE SUBTLE PART. A clip view IS flipped, so the mirror the    *
+ * drawing layer applies on the way in leaves this view in a y-up context — which is the one    *
+ * `-drawAtPoint:withAttributes:` puts upright text in. A flipped document would have drawn its  *
+ * labels upside down, which is the sort of thing a demonstration exists to not do.             *
+ * ============================================================================================ */
+#define AG_DOC_W 900.0
+#define AG_DOC_H 1400.0
+
+@interface AGScrollDoc : NSView
+@end
+
+@implementation AGScrollDoc
+
+- (void)drawRect:(NSRect)rect
+{
+	NSRect b = [self bounds];
+	/* **THE TEXT'S OWN COLOUR IS NAMED, AND IT HAS TO BE.** `apk_apply_colour` only touches the fill when
+	 * `NSForegroundColorAttributeName` is present, so text drawn without one inherits whatever fill was last set —
+	 * here the band it sits on — and comes out invisible. MEASURED: the labels were absent until this key was added.
+	 * The font is added only when the service answers one, because `+systemFontOfSize:` can answer nil on a host
+	 * with no faces and `-setObject:forKey:` raises on a nil value. */
+	NSMutableDictionary *attrs = [NSMutableDictionary dictionary];
+	NSFont *font = [NSFont systemFontOfSize:11.0];
+	NSInteger row;
+
+	(void)rect;
+	[attrs setObject:[NSColor blackColor] forKey:NSForegroundColorAttributeName];
+	if (font != nil) {
+		[attrs setObject:font forKey:NSFontAttributeName];
+	}
+	[[NSColor whiteColor] setFill];
+	[[NSBezierPath bezierPathWithRect:b] fill];
+	/* THE ROWS, EACH WITH ITS OWN y, so a scroll can be read as a NUMBER moving and not only as a colour. */
+	for (row = 0; (CGFloat)(row * 50) < NSHeight(b); row++) {
+		NSRect band = NSMakeRect(0.0, (CGFloat)(row * 50), NSWidth(b), 25.0);
+
+		if (row % 2 == 0) {
+			[[NSColor colorWithCalibratedRed:0.90 green:0.94 blue:1.0 alpha:1.0] setFill];
+		} else {
+			[[NSColor colorWithCalibratedRed:1.0 green:0.95 blue:0.89 alpha:1.0] setFill];
+		}
+		[[NSBezierPath bezierPathWithRect:band] fill];
+		[[NSString stringWithFormat:@"row %ld   ·   y = %ld", (long)row, (long)(row * 50)]
+			drawAtPoint:NSMakePoint(12.0, (CGFloat)(row * 50) + 6.0) withAttributes:attrs];
+	}
+	/* AND A LINE EVERY HUNDRED POINTS ACROSS, so a HORIZONTAL scroll is visible as well as a vertical one. */
+	{
+		NSInteger col;
+		NSBezierPath *lines = [NSBezierPath bezierPath];
+
+		for (col = 0; (CGFloat)(col * 100) <= NSWidth(b); col++) {
+			[lines moveToPoint:NSMakePoint((CGFloat)(col * 100), 0.0)];
+			[lines lineToPoint:NSMakePoint((CGFloat)(col * 100), NSHeight(b))];
+		}
+		[lines setLineWidth:1.0];
+		[[NSColor colorWithCalibratedWhite:0.72 alpha:1.0] setStroke];
+		[lines stroke];
+	}
+	/* THE TWO ENDS: red where the document begins, green where it ends. */
+	[[NSColor redColor] setFill];
+	[[NSBezierPath bezierPathWithRect:NSMakeRect(0.0, NSHeight(b) - 80.0, 220.0, 80.0)] fill];
+	[[NSColor greenColor] setFill];
+	[[NSBezierPath bezierPathWithRect:NSMakeRect(NSWidth(b) - 240.0, 0.0, 240.0, 90.0)] fill];
+}
+
+@end
+
 int main(int argc, char **argv)
 {
 	int seconds = 0;
@@ -197,6 +280,9 @@ int main(int argc, char **argv)
 		 * window's first responder below, so a keystroke goes to it rather than nowhere: the window sends KEY EVENTS to
 		 * the first responder, and a window with none has nobody to type at. */
 		NSText *field;
+		/* AND A SCROLL PANEL, which is the one thing in this window that shows the scrolling slice. */
+		NSScrollView *scroll;
+		AGScrollDoc *doc;
 
 		[app finishLaunching];
 
@@ -216,10 +302,10 @@ int main(int argc, char **argv)
 		 *
 		 * THE FRAME GROWS BY THE STRIP AND THE CONTENT DOES NOT MOVE, because the frame is bottom-left: the title bar is
 		 * added ABOVE the 420x290 the controls are already laid out in. */
-		w = [[NSWindow alloc] initWithContentRect:NSMakeRect(120, 120, 420, 290)
+		w = [[NSWindow alloc] initWithContentRect:NSMakeRect(120, 120, 760, 420)
 			styleMask:(NSTitledWindowMask | NSClosableWindowMask | NSMiniaturizableWindowMask | NSResizableWindowMask)
 			backing:NSBackingStoreBuffered defer:NO];
-		content = [[NSView alloc] initWithFrame:NSMakeRect(0, 0, 420, 290)];
+		content = [[NSView alloc] initWithFrame:NSMakeRect(0, 0, 760, 420)];
 		push = [[NSButton alloc] initWithFrame:NSMakeRect(30, 234, 140, 23)];
 		alt = [[NSButton alloc] initWithFrame:NSMakeRect(200, 234, 180, 23)];
 		check = [[NSButton alloc] initWithFrame:NSMakeRect(30, 190, 170, 22)];
@@ -231,6 +317,10 @@ int main(int argc, char **argv)
 		 * than a teardrop. Same range and same action, so the only difference on screen is the shape. */
 		plain = [[NSSlider alloc] initWithFrame:NSMakeRect(30, 25, 350, 24)];
 		field = [[NSText alloc] initWithFrame:NSMakeRect(30, 95, 350, 22)];
+		/* THE SCROLL PANEL, TO THE RIGHT OF THE CONTROLS: a frame, and a document four times its height and twice and
+		 * a half its width, so both knobs have somewhere to go and both ends have a landmark. */
+		scroll = [[NSScrollView alloc] initWithFrame:NSMakeRect(400, 25, 340, 370)];
+		doc = [[AGScrollDoc alloc] initWithFrame:NSMakeRect(0, 0, AG_DOC_W, AG_DOC_H)];
 
 		[push setTitle:@"Toggle the Checkbox"];
 		[push setTarget:controller];
@@ -269,6 +359,13 @@ int main(int argc, char **argv)
 		[field setDrawsBackground:YES];
 		[field setBackgroundColor:[NSColor whiteColor]];
 		[field setString:@"Type here — the caret is already in this field"];
+		/* **THE SCROLL PANEL'S OWN SETTINGS: BOTH BARS, A LINE BORDER, AND THE DOCUMENT.** The scrollers are asked for
+		 * BEFORE the document so `-tile` has already sized the clip view when the document arrives and the knobs are
+		 * given the right proportions on the first reflect. */
+		[scroll setBorderType:NSLineBorder];
+		[scroll setHasVerticalScroller:YES];
+		[scroll setHasHorizontalScroller:YES];
+		[scroll setDocumentView:doc];
 		[content addSubview:push];
 		[content addSubview:alt];
 		[content addSubview:check];
@@ -278,6 +375,7 @@ int main(int argc, char **argv)
 		[content addSubview:slider];
 		[content addSubview:plain];
 		[content addSubview:field];
+		[content addSubview:scroll];
 		[w setContentView:content];
 		[w setTitle:@"Controls"];
 

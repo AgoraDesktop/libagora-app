@@ -50,7 +50,7 @@ tests/
   window_chrome.m               the DRAWN chrome, offscreen: the symbols, the centred title and the pill
   menu_validation.m             validation and state, which the view tests do not reach
   appkit_activation.m           only the ACTIVE application's menu bar shows
-  appkit_controls_draw.m        a window full of controls, for a person to look at
+  appkit_controls_draw.m        a window full of controls AND A SCROLL PANEL, for a person to look at and play with
   chrome_theme.m                the THEME: an XFWM `.xpm` set becomes the chrome's buttons, 1:1
   chrome_buttons.m              and what a chrome button DOES: a click through the seam, and what happened
   control_drag.m                and what a DRAG costs: forty motions, and how many frames the window committed
