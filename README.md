@@ -162,7 +162,11 @@ the compositor is really gone.
   press AND on the release (right for a slider's absolute value, wrong for a step), so the part is REPORTED once — the
   release is a no-op — and a held PAGE or LINE repeats, which the loop polls on its own 1/60 s deadline
   (`-cg_trackingShouldRepeat`) and the CELL times, so the numbers (a delay before the first repeat, an interval after)
-  never become the loop's.
+  never become the loop's. **AND THE ARROW IS RASTERIZED A POINT AT A TIME, NOT FILLED AS A PATH.** A seven-point
+  triangle filled anti-aliased is a grey smudge, and the two did not even match: MEASURED on the live window, the top
+  arrow came out five points wide at its base and the bottom three, because a fractional vertex lands on the pixel grid
+  differently depending on which way the point faces. Whole-point rows make them CRISP and each other's mirror —
+  MEASURED, 25 points each and no half-covered point between the grey and the ground.
 - **And the frame that joins them** (`ctest`, offscreen): `NSScrollView` tiles its content view and its two bars —
   a 200x200 frame with both scrollers gives the content `(0,15)` 185x185, the vertical bar the right column and the
   horizontal one the bottom row — and the two class conversions are EXACT INVERSES of each other and of `-tile`. The

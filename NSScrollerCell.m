@@ -415,6 +415,47 @@
 
 /* ---- THE INK -------------------------------------------------------------------------------------------- */
 
+/* **AN ARROW IS RASTERIZED A POINT AT A TIME, AND THAT IS THE WHOLE FIX.** A seven-point triangle filled as an
+ * ANTI-ALIASED PATH comes out a grey smudge — MEASURED on the live window: the two arrows did not even match each
+ * other, the top one five points wide at its base and the bottom three, because a fractional vertex lands
+ * differently on the pixel grid depending on which way the point faces. WHOLE-POINT ROWS have no such freedom: the
+ * arrow is CRISP, it is SYMMETRIC about its axis by construction, and the up one is exactly the down one turned
+ * over. A scroll button is small enough that every edge is half the drawing, which is the size at which a path
+ * stops being a shape and starts being a blur. */
+static void fn_fill_arrow_rows(CGContextRef c, int centre_x, int top, int box, BOOL points_up)
+{
+	int row;
+
+	for (row = 0; row < box; row++) {
+		/* THE WIDTH STEPS BY WHOLE POINTS, so the sides are a staircase and not a blur; the `box / 2` half-steps
+		 * keep it centred, which is what makes the apex a SINGLE point rather than a two-point flat. */
+		int step = points_up ? row : (box - 1 - row);
+		int wide = 1 + 2 * ((step * (box / 2)) / (box > 1 ? box - 1 : 1));
+
+		if (wide > box) {
+			wide = box;
+		}
+		CGContextFillRect(c, CGRectMake((CGFloat)(centre_x - wide / 2), (CGFloat)(top + row),
+						(CGFloat)wide, 1.0));
+	}
+}
+
+static void fn_fill_arrow_cols(CGContextRef c, int centre_y, int left, int box, BOOL points_left)
+{
+	int col;
+
+	for (col = 0; col < box; col++) {
+		int step = points_left ? col : (box - 1 - col);
+		int high = 1 + 2 * ((step * (box / 2)) / (box > 1 ? box - 1 : 1));
+
+		if (high > box) {
+			high = box;
+		}
+		CGContextFillRect(c, CGRectMake((CGFloat)(left + col), (CGFloat)(centre_y - high / 2),
+						1.0, (CGFloat)high));
+	}
+}
+
 /* ONE ARROW, POINTING THE WAY ITS PART SCROLLS. The decrement arrow points to the smaller values — up in a vertical
  * scroller, left in a horizontal one — which in a flipped view is the smaller y or x, so no flip arithmetic is
  * needed here: the coordinates are already the reader's. */
@@ -422,44 +463,39 @@
 {
 	NSRect r = [self rectForPart:(whichArrow == NSScrollerDecrementArrow) ? NSScrollerDecrementLine
 									     : NSScrollerIncrementLine];
-	CGFloat inset = NS_SCROLLER_ARROW_INSET;
-	NSBezierPath *p;
+	CGContextRef c = [[NSGraphicsContext currentContext] CGContext];
+	BOOL decrement = (whichArrow == NSScrollerDecrementArrow);
+	int side;
+	int box;
+	int inset;
 
-	if (r.size.width <= 0.0 || r.size.height <= 0.0) {
+	if (c == NULL || r.size.width <= 0.0 || r.size.height <= 0.0) {
 		return;
 	}
-	if (2.0 * inset >= NSWidth(r) || 2.0 * inset >= NSHeight(r)) {
-		inset = 1.0;
+	side = (int)(NSWidth(r) < NSHeight(r) ? NSWidth(r) : NSHeight(r));
+	inset = (int)NS_SCROLLER_ARROW_INSET;
+	box = side - 2 * inset;
+	if (box < 3) {
+		inset = 1;
+		box = side - 2;
 	}
-	p = [NSBezierPath bezierPath];
-	if (![self fn_horizontalInFrame:[self cg_frame]]) {
-		if (whichArrow == NSScrollerDecrementArrow) {
-			[p moveToPoint:NSMakePoint(NSMinX(r) + inset, NSMaxY(r) - inset)];
-			[p lineToPoint:NSMakePoint(NSMaxX(r) - inset, NSMaxY(r) - inset)];
-			[p lineToPoint:NSMakePoint(NSMidX(r), NSMinY(r) + inset)];
-		} else {
-			[p moveToPoint:NSMakePoint(NSMinX(r) + inset, NSMinY(r) + inset)];
-			[p lineToPoint:NSMakePoint(NSMaxX(r) - inset, NSMinY(r) + inset)];
-			[p lineToPoint:NSMakePoint(NSMidX(r), NSMaxY(r) - inset)];
-		}
-	} else {
-		if (whichArrow == NSScrollerDecrementArrow) {
-			[p moveToPoint:NSMakePoint(NSMaxX(r) - inset, NSMinY(r) + inset)];
-			[p lineToPoint:NSMakePoint(NSMaxX(r) - inset, NSMaxY(r) - inset)];
-			[p lineToPoint:NSMakePoint(NSMinX(r) + inset, NSMidY(r))];
-		} else {
-			[p moveToPoint:NSMakePoint(NSMinX(r) + inset, NSMinY(r) + inset)];
-			[p lineToPoint:NSMakePoint(NSMinX(r) + inset, NSMaxY(r) - inset)];
-			[p lineToPoint:NSMakePoint(NSMaxX(r) - inset, NSMidY(r))];
-		}
+	if (box < 1) {
+		return;
 	}
-	[p closePath];
 	if (flag && [self isEnabled]) {
-		[[NSColor controlDarkShadowColor] setFill];
+		CGContextSetFillColorWithColor(c, [[NSColor controlDarkShadowColor] CGColor]);
 	} else {
-		[[NSColor controlShadowColor] setFill];
+		CGContextSetFillColorWithColor(c, [[NSColor controlShadowColor] CGColor]);
 	}
-	[p fill];
+	if (![self fn_horizontalInFrame:[self cg_frame]]) {
+		int top = (int)NSMinY(r) + ((int)NSHeight(r) - box) / 2;
+
+		fn_fill_arrow_rows(c, (int)NSMidX(r), top, box, decrement);
+	} else {
+		int left = (int)NSMinX(r) + ((int)NSWidth(r) - box) / 2;
+
+		fn_fill_arrow_cols(c, (int)NSMidY(r), left, box, decrement);
+	}
 }
 
 - (void)drawKnob

@@ -260,6 +260,61 @@ int main(void)
 			[rep release];
 		}
 
+		/* 10b. **AND THE ARROWS ARE CRISP AND EACH OTHER'S MIRROR.** A path fill at this size anti-aliased into a
+		 * smudge, AND THE TWO DID NOT EVEN MATCH: MEASURED on the live window, the top arrow's base came out five
+		 * points wide and the bottom's three, because a fractional vertex lands on the pixel grid differently
+		 * depending on which way the point faces. The face is rasterized a point at a time now, so the two claims
+		 * below are the ones a person can see: the arrows cover the SAME number of points, and there is NO
+		 * half-covered point between the arrow's grey and the ground it sits on. */
+		{
+			NSBitmapImageRep *rep = [[NSBitmapImageRep alloc] initWithBitmapDataPlanes:NULL pixelsWide:15
+				pixelsHigh:100 bitsPerSample:8 samplesPerPixel:4 hasAlpha:YES isPlanar:NO
+				colorSpaceName:NSCalibratedRGBColorSpace bytesPerRow:15 * 4 bitsPerPixel:32];
+			int top_ink = 0;
+			int bottom_ink = 0;
+			int partial = 0;
+			int x, y;
+
+			[s setArrowsPosition:NSScrollerArrowsDefaultSetting];
+			[s setFloatValue:0.0 knobProportion:0.5];
+			[NSGraphicsContext setCurrentContext:[NSGraphicsContext graphicsContextWithBitmapImageRep:rep]];
+			[[NSColor whiteColor] setFill];
+			[[NSBezierPath bezierPathWithRect:NSMakeRect(0.0, 0.0, 15.0, 100.0)] fill];
+			[s drawRect:NSMakeRect(0.0, 0.0, 15.0, 100.0)];
+			/* **THE ARROW'S OWN ROWS, AND NOT THE KNOB'S.** The knob's top edge is at y=15 and its 1-point STROKE is
+			 * anti-aliased into y=14 — which is correct for a curve and is not the arrow. The arrow's box is centred in
+			 * its 15-point button, so the rows below are its own: 4..10 at the top, 89..95 at the bottom. */
+			for (y = 0; y < 100; y++) {
+				int drawing_y = 99 - y;	/* the bitmap counts rows from the top, the drawing from its own origin */
+				BOOL in_top = (drawing_y >= 0 && drawing_y <= 13);
+				BOOL in_bottom = (drawing_y >= 87 && drawing_y < 100);
+
+				if (!in_top && !in_bottom) {
+					continue;
+				}
+				for (x = 0; x < 15; x++) {
+					double v = [[rep colorAtX:x y:y] redComponent];
+
+					if (v < 0.8) {		/* the arrow's own grey */
+						if (in_top) {
+							top_ink++;
+						} else {
+							bottom_ink++;
+						}
+					} else if (v < 0.97) {	/* neither the grey nor the ground: a half-covered point */
+						partial++;
+					}
+				}
+			}
+			printf("  (note: the two arrows cover %d and %d points, and %d point(s) are half-covered)\n",
+			       top_ink, bottom_ink, partial);
+			check(top_ink > 0 && top_ink == bottom_ink,
+			      "the decrement and increment arrows are each other's MIRROR — the same points, turned over");
+			check(partial == 0,
+			      "and there is no half-covered point in either: the arrow is CRISP, not an anti-aliased smudge");
+			[rep release];
+		}
+
 		/* 11. AND THE FLAG ITS OWN DOOR SETS, read back through the control. */
 		[s highlight:YES];
 		check([s isHighlighted], "`-highlight:YES` reads back as highlighted");
