@@ -357,6 +357,15 @@
 			value = 1.0;
 		}
 		[self setFloatValue:value knobProportion:_knobProportion];
+	} else {
+		/* **A PAGE OR A LINE HAS ALREADY ACTED, AND THE POINT THE BUTTON CAME UP AT IS NOT A SECOND ACT.**
+		 * `NSControl -mouseDown:` sends a continuous cell's action on the PRESS AND AGAIN on the release, because
+		 * for a SLIDER those are the same question — its value is ABSOLUTE, so setting it twice is setting it once.
+		 * A PAGE IS A STEP, so the same loop scrolls twice per click: MEASURED, one click on the increment page
+		 * moved the clip view to the document's end (215) instead of one page (175). The PART is the press's fact,
+		 * so it is reported ONCE: clearing it here makes the release's action read `NSScrollerNoPart` and do nothing.
+		 * The KNOB keeps its part, because a drag really is a value that follows every point, the last included. */
+		_hitPart = NSScrollerNoPart;
 	}
 	return YES;
 }

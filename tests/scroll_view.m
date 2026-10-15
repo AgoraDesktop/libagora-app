@@ -227,6 +227,27 @@ int main(void)
 				check(near([clip bounds].origin.y, 90.0), "a decrement line moves back by `-lineScroll`");
 			}
 
+			/* 6b. **AND A CLICK IS ONE STEP, NOT TWO.** `NSControl -mouseDown:` sends a continuous cell's action on
+			 * the PRESS and AGAIN on the point the button came up at — which is right for a slider, whose value is
+			 * ABSOLUTE and therefore the same question twice, and WRONG for a page, which is a STEP: the press scrolled
+			 * a page and the release scrolled another, so one click moved two pages. MEASURED, by driving the cell's own
+			 * hooks the way the control loop does: the origin went to 215 (the document's end) instead of 175. The cell
+			 * reports the part ONCE now — on the press — and the click below is what holds it. */
+			[clip scrollToPoint:NSMakePoint(0.0, 0.0)];
+			{
+				NSScroller *v = [sv verticalScroller];
+				NSScrollerCell *vc = (NSScrollerCell *)[v cell];
+
+				[vc startTrackingAt:NSMakePoint(7.0, 120.0) inView:v];	/* press on the increment page */
+				[sv cg_scrollerAction:v];
+				check(near([clip bounds].origin.y, 175.0), "a page click steps once, ON THE PRESS");
+				[vc continueTracking:NSMakePoint(7.0, 120.0) at:NSMakePoint(7.0, 120.0) inView:v];	/* the release */
+				[sv cg_scrollerAction:v];
+				printf("  (note: after the release the clip origin is still %.1f)\n", (double)[clip bounds].origin.y);
+				check(near([clip bounds].origin.y, 175.0),
+				      "and the RELEASE is not a second step — the action speaks twice, the page moves once");
+			}
+
 			/* 7. **AND THE DOOR THAT COULD NOT EXIST BEFORE THIS CLASS.** */
 			check([doc enclosingScrollView] == sv,
 			      "`-enclosingScrollView` finds the scroll view from the document inside it");
