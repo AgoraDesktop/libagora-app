@@ -623,6 +623,21 @@ typedef NSUInteger NSControlSize;
 - (void)setObjectValue:(nullable id)value;
 @property (readonly) BOOL hasValidObjectValue;
 @property (readonly, nullable) NSString *stringValue;
+
+/* **AND THE ONE DOOR THAT ANSWERS "WHICH TEXT DOES THIS CELL SHOW" — THE QUESTION THE TWO ABOVE ARE TWO HALVES OF.**
+ * `-_title` is a LABEL: a button's caption, set by `-initTextCell:` and by `-setTitle:`. `-_objectValue` is a VALUE:
+ * any object, which a formatter turns into text and which `-stringValue` answers as one. BOTH ARE LEGITIMATE AND APPLE
+ * HAS BOTH — which is why this is not a refactor that merges them. What went wrong, three times in one unit, is that a
+ * TEXT FIELD's text arrives as a VALUE while its MEASUREMENT read the LABEL: a cell made with a string measured
+ * nothing, drew nothing, and then measured 19.61 points once the string arrived, because the two questions were being
+ * answered from two different ivars.
+ *
+ * SO THE QUESTION GETS ONE DOOR. A cell's default is its label, which is what a button, a menu item and a status item
+ * each want and what `-cellSizeForBounds:` measured before this existed; a FIELD overrides it to its value, because a
+ * field's text IS its value. The base's measurement asks THIS rather than an ivar, so a subclass that answers it
+ * differently is measured differently without an override of the measurement — and a subclass that DRAWS its text asks
+ * the same door, which is what makes "what it measures" and "what it shows" one fact rather than two. */
+- (nullable NSString *)cg_contentText;
 @property (readonly) int intValue;
 @property (readonly) float floatValue;
 @property (readonly) double doubleValue;

@@ -16,6 +16,7 @@
  */
 #import <AppKit/NSTextFieldCell.h>
 #import <AppKit/NSComboBoxCell.h>
+#import <AppKit/NSButtonCell.h>
 #import <AppKit/NSText.h>
 #import <AppKit/NSView.h>
 #import <AppKit/NSWindow.h>
@@ -206,6 +207,34 @@ int main(void)
 		check([[fresh stringValue] isEqualToString:@"made with a string"],
 		      "a cell made with a string answers it from the door a formatter reads");
 		[fresh release];
+	}
+
+	/* 9. **AND ONE DOOR ANSWERS WHAT A CELL SHOWS: A FIELD'S VALUE, A BUTTON'S LABEL.** `NSCell` keeps a label
+	 * (`-_title`, set by `-initTextCell:` and `-setTitle:`) and a value (`-_objectValue`, what `-stringValue` reads
+	 * and what a formatter produces) — both legitimate, which is why they are not merged. What was wrong was that a
+	 * FIELD's text arrives as a VALUE while its MEASUREMENT read the LABEL, and that produced three bugs in one unit:
+	 * a cell made with a string that drew nothing, one whose string arrived later that measured 19.61 points and drew
+	 * a clipped letter, and a band-aid that wrote the string into both doors to keep them in step.
+	 *
+	 * THE RULE IS THEREFORE STATED WHERE IT CAN BE MEASURED: the base answers the label, a field answers the value, and
+	 * the fallback keeps a field that was given only a title from going blank. */
+	{
+		NSTextFieldCell *fieldCell = [[NSTextFieldCell alloc] initTextCell:@"a label"];
+		NSButtonCell *buttonCell = [[NSButtonCell alloc] initTextCell:@"a caption"];
+
+		check([[fieldCell cg_contentText] isEqualToString:@"a label"],
+		      "a field made with a string shows it — through the VALUE, because the value is a field's text");
+		[fieldCell setTitle:@"a different label"];
+		[fieldCell setStringValue:@"a value"];
+		check([[fieldCell cg_contentText] isEqualToString:@"a value"],
+		      "and when the two doors disagree the VALUE wins, because that is what a field draws and measures");
+		[fieldCell setObjectValue:nil];
+		check([[fieldCell cg_contentText] isEqualToString:@"a different label"],
+		      "while a field with no value at all falls back to its label rather than going blank");
+		check([[buttonCell cg_contentText] isEqualToString:@"a caption"],
+		      "and a BUTTON answers its label, which is the base's default and what a caption is");
+		[fieldCell release];
+		[buttonCell release];
 	}
 
 	[watcher release];

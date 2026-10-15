@@ -825,6 +825,15 @@
 	return _title;
 }
 
+/* **AND THE ANSWER IS THE LABEL, BECAUSE THAT IS WHAT EVERY CELL THAT DOES NOT SAY OTHERWISE SHOWS.** A button's
+ * caption, a menu item's row and a status item's line are all `-_title`; a FIELD's is its value, and `NSTextFieldCell`
+ * overrides this to say so. See the header for why the two doors are both real and what went wrong when a measurement
+ * read one of them while the drawing read the other. */
+- (NSString *)cg_contentText
+{
+	return _title;
+}
+
 - (void)setTitle:(NSString *)aString
 {
 	if (aString != _title) {
@@ -1411,13 +1420,21 @@ static const NSSize FN_CELL_NO_OPINION = { 10000.0, 10000.0 };
 		CGFloat pad = NS_CELL_CONTENT_PADDING + ((_bordered || _bezeled) ? NS_CELL_BORDER_INSET : 0.0);
 		NSSize content = NSZeroSize;
 
-		if (_type == NSTextCellType && _title != nil) {
-			id font = [self fn_cellDrawFont];
-			NSDictionary *attributes = (font != nil)
-				? [NSDictionary dictionaryWithObject:font forKey:NSFontAttributeName]
-				: [NSDictionary dictionary];
+		if (_type == NSTextCellType) {
+			/* **AND IT MEASURES `-cg_contentText`, WHICH IS THE ONE DOOR THAT ANSWERS WHAT THIS CELL SHOWS.** This read
+			 * `_title` directly, which is right for every cell whose text is a LABEL and wrong for every cell whose text
+			 * is a VALUE — and a text field is the second kind. MEASURED, that is why a field cell made with a string
+			 * measured nothing, and why one whose string arrived afterwards measured 19.61 points with two words in it. */
+			NSString *text = [self cg_contentText];
 
-			content = [_title sizeWithAttributes:attributes];
+			if (text != nil) {
+				id font = [self fn_cellDrawFont];
+				NSDictionary *attributes = (font != nil)
+					? [NSDictionary dictionaryWithObject:font forKey:NSFontAttributeName]
+					: [NSDictionary dictionary];
+
+				content = [text sizeWithAttributes:attributes];
+			}
 		} else if (_image != nil) {
 			content = [_image size];
 		}

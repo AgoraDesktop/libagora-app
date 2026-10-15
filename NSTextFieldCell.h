@@ -75,6 +75,12 @@ NS_ASSUME_NONNULL_BEGIN
 - (void)setStringValue:(nullable NSString *)aString;
 - (nullable NSString *)stringValue;
 
+/* **AND THIS IS THE CLASS THAT ANSWERS `NSCell`'s TWO TEXT DOORS WITH ONE.** A field's text is its VALUE — what a
+ * formatter produces, what an edit session reads back, and what this cell draws and measures. The base's default
+ * answer is the LABEL, which is what a button or a menu item wants; a field overrides it, and from that one override
+ * follow the measurement's size, the drawn words, and the answer an editor is opened with. */
+- (nullable NSString *)cg_contentText;
+
 /* ---- THE FACE ---------------------------------------------------------------------------------------- */
 
 - (BOOL)drawsBackground;

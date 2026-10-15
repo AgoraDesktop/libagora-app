@@ -70,7 +70,10 @@
 	 * is what makes "the cell holds this" a statement that stays true while something else holds a pointer to a buffer
 	 * with the same contents. */
 	[self setObjectValue:[[aString copy] autorelease]];
-	[self setTitle:(aString != nil ? aString : @"")];
+	/* **AND THE LABEL IS NO LONGER WRITTEN BESIDE IT, WHICH IS THE PART THIS REFACTOR TOOK BACK.** An earlier fix for
+	 * the same confusion wrote the string into BOTH doors, because the base's measurement read the label while the
+	 * drawing read the value — a patch at the point of the bite, and an honest one at the time. The measurement reads
+	 * `-cg_contentText` now, so the patch is not needed and its absence is the point: one fact, one place. */
 	/* **AND AN EDITOR SHOWING THE OLD TEXT IS TOLD, WHICH IS WHAT "REPLACE IT MID-EDIT" MEANS.** While a session runs,
 	 * the editor is what draws the words — the cell stops drawing its own string (see `-drawInteriorWithFrame:`) — so a
 	 * value that changed in the CELL alone would be a value nobody could see: MEASURED, choosing a row from a combo
@@ -87,6 +90,22 @@
 - (NSString *)stringValue
 {
 	return [super stringValue];
+}
+
+/* **AND A FIELD'S TEXT IS ITS VALUE RATHER THAN ITS LABEL, WHICH IS THE WHOLE OF THIS CLASS'S ANSWER TO THE TWO DOORS.**
+ * `NSCell` has a label (`-_title`) and a value (`-_objectValue`), and for a field the SECOND is the text: it is what a
+ * formatter produces, what an edit session reads back, and what this class draws. Answering `-cg_contentText` here is
+ * what makes the base's measurement measure the value too, so "what a field measures" and "what a field shows" stop
+ * being two questions with two answers.
+ *
+ * THE LABEL IS STILL THE FALLBACK, because a field cell given a title and no value has been given something and should
+ * show it — and because the base's `-initTextCell:` sets the label, so a caller who makes one that way gets a field
+ * that says what they asked for rather than an empty one. */
+- (NSString *)cg_contentText
+{
+	NSString *value = [self stringValue];
+
+	return (value != nil) ? value : [super cg_contentText];
 }
 
 /* ---- THE FACE ---------------------------------------------------------------------------------------- */
@@ -190,7 +209,10 @@
  * at the edge rather than running out of the control, which is what a field does at its far end. */
 - (void)drawInteriorWithFrame:(NSRect)cellFrame inView:(id)controlView
 {
-	NSString *string = [self stringValue];
+	/* **AND WHAT IS DRAWN IS `-cg_contentText`, THE SAME DOOR THE MEASUREMENT ASKS.** A field that measured its value
+	 * and drew its label would be a field whose frame and whose words disagreed, which is the shape of every bug this
+	 * door exists to end. */
+	NSString *string = [self cg_contentText];
 	NSFont *font = (NSFont *)[self font];
 	NSDictionary *attributes;
 	NSRect room = [self drawingRectForBounds:cellFrame];
