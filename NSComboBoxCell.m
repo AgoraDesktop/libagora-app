@@ -228,16 +228,21 @@
  * pop-up's, and the WORDS move with the accent for the reason the ink door gives. */
 - (NSColor *)cg_fieldFillColor
 {
-	if (![self isEnabled]) {
-		return [NSColor cg_disabledControlFaceColor];
-	}
+	/* **AND THE FIELD IS WHITE, WHICH IS THE SAMPLE'S OWN ANSWER AND THE ONE THE TIER'S TEXT FIELD GIVES.** The
+	 * sample draws this control's field `#FFFFFF` on its `#F9F9F9` window — the same white the pop-up's is drawn in —
+	 * and the pop-up is the one that DEPARTED from that, taking a button's control grey because the sample draws the
+	 * pair as two fields and this tier reads a pop-up as a control. A COMBO BOX IS NOT A CONTROL THAT WAS PRESSED: a
+	 * value is TYPED into it, so its surface is the one a value is written on, which is `NSTextFieldCell`'s own answer
+	 * and is inherited here rather than restated. What this override still owns is the two LIVE states — the pointer
+	 * darkening the field and the accent while the list is open — because those are a control's and a plain field has
+	 * none. */
 	if ([self isHighlighted]) {
 		return [NSColor cg_accentColor];
 	}
 	if ([self cg_mouseIsInside]) {
 		return [NSColor cg_prelightControlFaceColor];
 	}
-	return [NSColor controlColor];
+	return [super cg_fieldFillColor];
 }
 
 /* **AND THE ROOM THE WORDS GET IS THE FIELD'S LESS THE CHIP'S, WHICH IS THIS CLASS'S ONE MEASUREMENT OF THEM.** The

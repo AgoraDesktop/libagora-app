@@ -179,6 +179,12 @@
 		/* NOTHING TO SAY: an empty field is its face and its border, which is a state a field starts in. */
 		return;
 	}
+	/* **AND WHILE AN EDITOR IS UP, THE TEXT IS THE EDITOR'S.** Two objects drawing one string is two strings on
+	 * screen the moment the editor's differs from the cell's — which is every keystroke — and the demonstration showed
+	 * exactly that. See the ivar's note. */
+	if (_cg_textEditing) {
+		return;
+	}
 	if (font == nil) {
 		font = [NSFont systemFontOfSize:[NSFont systemFontSize]];
 	}
@@ -240,13 +246,15 @@
 	NSString *string = [self stringValue];
 
 	_editorDelegate = anObject;
+	_cg_textEditing = YES;
 	[textObj setFrame:room];
 	[textObj setFieldEditor:YES];
-	/* **AND THE EDITOR DOES NOT DRAW A BACKGROUND OF ITS OWN, WHICH IS WHAT MAKES A FIELD ONE FIELD.** The face under
-	 * the editor is the one this cell drew a moment ago; an editor that painted white would cover the accent a combo
-	 * box's field takes while it is being used, and the ink this cell chose for that face would then be white on white.
-	 * The editor is text ON the field, not a second field. */
-	[textObj setDrawsBackground:NO];
+	/* **AND THE EDITOR PAINTS THE FIELD'S OWN FILL, WHICH IS WHAT LETS THE CELL STOP DRAWING ITS STRING.** An editor
+	 * that painted nothing would show the string underneath it — the overlay this was — and one that painted a colour
+	 * of its own would cover the accent a combo box's field takes while its list is open and leave dark ink on it. So
+	 * the fill comes from the same door the cell's own face comes from, and the two cannot disagree. */
+	[textObj setDrawsBackground:YES];
+	[textObj setBackgroundColor:[self cg_fieldFillColor]];
 	[textObj setEditable:YES];
 	[textObj setSelectable:YES];
 	if ([self font] != nil) {
@@ -287,6 +295,7 @@
 		[self setStringValue:edited];
 	}
 	_editorDelegate = nil;
+	_cg_textEditing = NO;
 	[textObj setDelegate:nil];
 	[textObj removeFromSuperview];
 	if (caller != nil && [caller respondsToSelector:@selector(textDidEndEditing:)]) {

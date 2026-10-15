@@ -56,6 +56,12 @@ NS_ASSUME_NONNULL_BEGIN
 	 * so the delegate a caller handed to `-selectWithFrame:...` is kept HERE and told what happened afterwards. NOT
 	 * RETAINED: this tree's rule for every delegate. */
 	id _editorDelegate;		/* NOT RETAINED */
+	/* **AND WHETHER AN EDITOR IS SHOWING THIS CELL'S TEXT, WHICH THE DRAWING HAS TO KNOW.** MEASURED on the
+	 * demonstration: typing into a combo box put the editor's words ON TOP of the string the cell had already drawn, so
+	 * the field showed both at once — "NSComboBox" with the typed text over it and a selection between them. The cell
+	 * draws the string and the EDITOR draws the string; while a session is running it must be only one of them, and it
+	 * is the editor's, because it is the one with the caret in it. */
+	BOOL _cg_textEditing;
 }
 
 /* ---- THE STRING, WHICH IS THE BASE'S OBJECT SEEN AS TEXT -------------------------------------------- */

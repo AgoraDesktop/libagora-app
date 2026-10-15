@@ -101,8 +101,12 @@ int main(void)
 
 	/* 1. **THE FIELD IS A FIELD, AND IT IS THIS TIER'S GREY RATHER THAN THE SAMPLE'S WHITE.** */
 	rep = draw_cell(combo, W, H, view);
-	check(fabs([[rep colorAtX:W / 2 y:H - 1 - (H - 2)] redComponent] - [[NSColor controlColor] redComponent]) < 0.01,
-	      "the field's face is the CONTROL's grey — the same face the pop-up and the push button wear");
+	/* **AND ITS FACE IS THE FIELD'S WHITE RATHER THAN A CONTROL'S GREY.** The sample draws this control's field
+	 * `#FFFFFF`, the tier's own text field is white, and a value is TYPED into a combo box — so its surface is the one
+	 * a value is written on. The POP-UP is the one that departed from the sample and took a button's grey, and the pair
+	 * differing here is the pair behaving as the two different things they are. */
+	check(fabs([[rep colorAtX:W / 2 y:H - 1 - (H - 2)] redComponent] - [[NSColor controlBackgroundColor] redComponent]) < 0.01,
+	      "the field's face is WHITE — the surface a value is typed on, like the text field beside it");
 	/* **AND THE BORDER IS THE FIRST THING UNDER THE WHITE GROUND AT THE FIELD'S TOP EDGE.** Sampling a remembered row
 	 * would be a claim about the FRAME rather than about the ink; walking down the column until the ground stops is a
 	 * claim about where the border actually is, which is what the check is for. */
@@ -139,29 +143,53 @@ int main(void)
 		}
 		check(accent > 100, "the CHIP is drawn, in the platform's accent");
 		/* AND THE CHIP'S OWN ROW IS ITS MIDDLE, which is where a triangle's centre column is measured from. */
-		for (y = 0; y < H; y++) {
-			NSColor *c = [rep colorAtX:chipMidX y:y];
-			int w = whiteish(c);
+		/* **AND THE COUNT IS TAKEN INSIDE THE CHIP, WHICH IS NOT A REFINEMENT BUT A REQUIREMENT.** A combo box's field
+		 * is WHITE — it is the surface a value is typed on — so "white" no longer means "the mark knocked out of the
+		 * accent": the field around the chip is white too, and a counter that walked the whole zone found the field
+		 * instead of the arrow and reported a 21-point run. The mark is knocked out OF THE CHIP, so the chip's own box
+		 * is the only place the question has an answer. */
+		{
+			CGFloat side = (CGFloat)H * NS_CELL_CHIP_FRACTION;
+			int chipL = W - (int)ceil((CGFloat)H * NS_CELL_CHIP_INSET_FRACTION) - (int)ceil(side);
+			int chipR = chipL + (int)ceil(side) - 1;
 
-			if (w && first < 0) first = y;
-			if (w) last = y;
-			if (w && !whiteish([rep colorAtX:chipMidX y:y - 1])) runs++;
-		}
-		for (y = 0; y < H; y++) {
-			int n = 0;
-			NSColor *c;
+			/* AND THE SAME BOUND APPLIES TO THE COLUMN: a centre line drawn down the whole field runs through the
+			 * white ABOVE and BELOW the chip as well, which is two more runs that are the field rather than the mark.
+			 * The chip's own box is the only place either question has an answer. */
+			{
+				int chipT = (int)ceil((H - (int)ceil(side)) / 2.0);
+				int chipB = chipT + (int)ceil(side) - 1;
 
-			for (x = zoneLeft; x < W; x++) {
-				if (whiteish([rep colorAtX:x y:y])) n++;
+				for (y = chipT; y <= chipB; y++) {
+					NSColor *c = [rep colorAtX:chipMidX y:y];
+					int w = whiteish(c);
+
+					if (w && first < 0) first = y;
+					if (w) last = y;
+					if (w && !whiteish([rep colorAtX:chipMidX y:y - 1])) runs++;
+				}
 			}
-			if (n > widest) { widest = n; widestY = y; }
+			/* **AND THE WIDEST ROW IS LOOKED FOR ONLY WHERE THE MARK IS.** A chip is a ROUNDED square, so its top and
+			 * bottom rows show the FIELD's white in their corners — MEASURED, a scan over the chip's whole box reported
+			 * the widest white row as 18 points at y=1, which is the corner and not the arrow, and the direction check
+			 * below then passed for a reason that had nothing to do with the triangle. The mark's own rows are
+			 * `first`..`last`, and among those a DOWN triangle is widest at its FIRST row and an up one at its last. */
+			for (y = first; first >= 0 && y <= last; y++) {
+				int n = 0;
+
+				for (x = chipL; x <= chipR; x++) {
+					if (whiteish([rep colorAtX:x y:y])) n++;
+				}
+				if (n > widest) { widest = n; widestY = y; }
+			}
 		}
 		printf("  (note: chip x=%d..%d, centre column %d, white runs %d, widest %d px at y=%d, run y=%d..%d)\n",
 		       comboLeft, comboRight, chipMidX, runs, widest, widestY, first, last);
 		check(runs == 1, "ONE white run down the chip's centre column — the single arrow, where the pop-up has two");
-		check(widest >= 8, "and the triangle is a triangle: its widest row is 10 points across the 20-point chip");
-		check(widestY < (first + last) / 2,
-		      "with that widest row in the UPPER half of the run — a DOWN triangle, base up and apex down");
+		check(widest >= 8 && widest <= 12,
+		      "and the triangle is a triangle: its base is 10 points across the 20-point chip, no more and no less");
+		check(widestY == first,
+		      "with that base at the FIRST row of the mark — a DOWN triangle, base up and apex down");
 		check((last - first + 1) <= 6, "and it is 5 points tall, apex to base, as the sample's is");
 	}
 	[rep release];
