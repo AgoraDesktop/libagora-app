@@ -67,7 +67,10 @@
 		if (editor == nil) {
 			return;
 		}
-		[cell editWithFrame:bounds inView:self editor:editor delegate:nil event:event];
+		/* **AND THE CONTROL IS THE CALLER, WHICH IS HOW A COMMITTED EDIT REACHES A CALLER'S ACTION.** The cell hands the
+		 * movement to whoever it was given here, and `NSControl -textDidEndEditing:` turns Return and Tab into this
+		 * control's own action — so the field and the handler are one gesture rather than two. */
+		[cell editWithFrame:bounds inView:self editor:editor delegate:self event:event];
 	}
 	[self setNeedsDisplay:YES];
 }

@@ -16,8 +16,8 @@
  * Apple's own order; `NSWritingDirection` is `NSInteger` — SIGNED — because its first case is `-1`, which is the whole
  * reason the two types cannot share a spelling.
  *
- * WHAT IS NOT HERE, AND ITS ROWS STAY OPEN: the text-movement codes of `NSTextDidEndEditing`, the notification keys,
- * the RTF/RTFD reading and writing, the spelling and substitution services, and the two
+ * WHAT IS NOT HERE, AND ITS ROWS STAY OPEN: the RTF/RTFD reading and writing, the spelling and substitution services,
+ * and the two
  * `NSTextWritingDirection*` values that modify a direction "when used with `NSWritingDirectionAttributeName`" — that
  * pair is a vocabulary whose user (an attributed-string attribute key) this tier does not have, so it is named here
  * and left for the unit that brings its user.
@@ -61,6 +61,29 @@ enum {
 	NSWritingDirectionRightToLeft = 1
 };
 typedef NSInteger NSWritingDirection;
+
+/* **AND WHY AN EDIT ENDED, WHICH IS A FACT ONLY THE KEY THAT ENDED IT KNOWS.** A field's session finishes for one of a
+ * few reasons and they mean different things to whoever owns the value: RETURN accepts what was typed, TAB accepts it
+ * and moves on, and ESCAPE THROWS IT AWAY. The notification that ends a session therefore carries one of these codes,
+ * which is what a cell reads to decide whether to take the editor's string or to drop it.
+ *
+ * THE VALUES ARE THE ERA'S, AND THE NUMBERING IS THE POINT: they run from 0x10 upward rather than from zero, because
+ * Apple's own header starts there and a code that disagreed with it would be a silent mismatch for anybody porting a
+ * caller across. The nine named here are the movements a single-line field can produce — the three ways out and the
+ * arrows — and `Other` is what a session ends with when nothing said why, which is the honest answer for a session
+ * ended by a click into another field. */
+enum {
+	NSTextMovementReturn = 0x10,
+	NSTextMovementTab = 0x11,
+	NSTextMovementBacktab = 0x12,
+	NSTextMovementLeft = 0x13,
+	NSTextMovementRight = 0x14,
+	NSTextMovementUp = 0x15,
+	NSTextMovementDown = 0x16,
+	NSTextMovementCancel = 0x17,
+	NSTextMovementOther = 0x18
+};
+typedef NSInteger NSTextMovement;
 
 /* ============================================================================================ *
  * AND THE CLASS ITSELF, WHICH IS THE BIGGEST THING THIS HEADER HOLDS IN APPLE'S TREE.            *
@@ -108,6 +131,10 @@ typedef NSInteger NSWritingDirection;
 	BOOL _richText;
 	BOOL _importsGraphics;
 	BOOL _editing;
+	/* **AND WHY THE SESSION IN FLIGHT IS ENDING, IF ANYTHING HAS SAID WHY YET.** Set by the key that ends it — Return,
+	 * Tab or Escape — and read once, when `-resignFirstResponder` posts the notification that carries it. `Other` is
+	 * the answer for a session ended by something that did not say, which is every session ended by a click elsewhere. */
+	NSTextMovement _movement;
 	BOOL _dragging;		/* a selection drag is in flight, which is a fact about the POINTER */
 	/* **AND THE END OF THE DRAG THAT DOES NOT MOVE.** A selection has two ends and one of them is fixed by the press,
 	 * so it is REMEMBERED here rather than recomputed from the selection — see `-mouseDown:` for what recomputing
@@ -184,6 +211,11 @@ typedef NSInteger NSWritingDirection;
 /* **AND THE THREE NOTIFICATIONS A DELEGATE CAN WATCH INSTEAD.** They are the OTHER half of the delegate protocol — a
  * delegate that only wants to know registers for these and leaves the `Should` questions unanswered — and `userInfo`
  * is empty in all three: the OBJECT is the text view, which is the whole of what a listener needs. */
+/* **AND WHERE THE REASON TRAVELS.** Apple's header does not publish a name for this key — it spells the string as a
+ * literal at every site — so this tier gives it one, and the STRING IS THE ERA'S so that a listener keyed to Apple's
+ * own literal still finds it. A movement that reached a cell under a key nobody else used would be a reason only this
+ * tree could read. */
+extern NSString *NSTextMovementUserInfoKey;
 extern NSString *NSTextDidBeginEditingNotification;
 extern NSString *NSTextDidEndEditingNotification;
 extern NSString *NSTextDidChangeNotification;

@@ -58,7 +58,18 @@
 	 * because the measurement was looking at a title nobody had ever set. A field cell that wrote one door and not the
 	 * other would be a field that shows its value and cannot measure it, so both are written here and the divergence
 	 * between them is named where it bites. */
-	[self setObjectValue:aString];
+	/* **AND THE VALUE THE CELL KEEPS IS ITS OWN RATHER THAN THE CALLER'S.** `-setObjectValue:` RETAINS what it is
+	 * given, which is the right contract for a value and the wrong one for a STRING that somebody else is still
+	 * editing in place. MEASURED, and it cost the whole point of a keyboard loop: the editor's `-string` hands out the
+	 * view's own MUTABLE buffer, so a session that committed its text left the CELL's value and the EDITOR's buffer as
+	 * THE SAME OBJECT — and every later keystroke wrote into the cell's value directly. Escape could not discard
+	 * anything, because the typed text had already arrived; the cell reported "thrown away" while its own instrumented
+	 * writes said "typed".
+	 *
+	 * A COPY MAKE THE FIELD'S VALUE THE FIELD'S. It costs nothing for an immutable string (`-copy` answers self) and it
+	 * is what makes "the cell holds this" a statement that stays true while something else holds a pointer to a buffer
+	 * with the same contents. */
+	[self setObjectValue:[[aString copy] autorelease]];
 	[self setTitle:(aString != nil ? aString : @"")];
 	/* **AND AN EDITOR SHOWING THE OLD TEXT IS TOLD, WHICH IS WHAT "REPLACE IT MID-EDIT" MEANS.** While a session runs,
 	 * the editor is what draws the words — the cell stops drawing its own string (see `-drawInteriorWithFrame:`) — so a
@@ -303,10 +314,17 @@
  * that order, because a delegate that reads the cell is entitled to find the new value already in it. NOTHING HERE
  * DISCARDS THE EDITOR: it is the window's and it goes back to the window, which is the whole reason a window lends one
  * rather than each field making its own. */
-- (void)endEditing:(NSText *)textObj
+/* **AND ENDING A SESSION IS ONE PIECE OF WORK WITH TWO ANSWERS, WHICH IS WHY THE MOVEMENT IS AN ARGUMENT.** Everything
+ * about ending is the same either way — the editor stops being this cell's delegate, it leaves the view it was put in,
+ * and the caller's delegate is told — and the ONE thing that differs is whether the editor's string becomes the cell's
+ * value. So the two public answers are this method with a flag, rather than two copies of a teardown that would drift.
+ *
+ * THE MOVEMENT IS HANDED ON RATHER THAN SWALLOWED. A caller who lent an editor wants to know WHY the session ended —
+ * a control sends its action on Return and Tab and must not on Escape — and the caller's notification carries the same
+ * code this cell was told, so nobody has to reconstruct it. */
+- (void)fn_finishEditing:(NSText *)textObj keep:(BOOL)keep movement:(NSTextMovement)movement
 {
 	id caller = _editorDelegate;
-	NSString *edited = [textObj string];
 
 	/* **AND THE EDITOR IS FORGOTTEN BEFORE THE STRING IS WRITTEN BACK, WHICH IS AN ORDER AND NOT A STYLE.** The
 	 * write-back below goes through `-setStringValue:`, which tells the editor about a new value — so forgetting it
@@ -315,24 +333,46 @@
 	_editorDelegate = nil;
 	_cg_editor = nil;
 	_cg_textEditing = NO;
-	if (edited != nil) {
-		[self setStringValue:edited];
+	if (keep) {
+		NSString *edited = [textObj string];
+
+		if (edited != nil) {
+			[self setStringValue:edited];
+		}
 	}
 	[textObj setDelegate:nil];
 	[textObj removeFromSuperview];
 	if (caller != nil && [caller respondsToSelector:@selector(textDidEndEditing:)]) {
+		NSDictionary *info = [NSDictionary dictionaryWithObject:[NSNumber numberWithInteger:(NSInteger)movement]
+								 forKey:NSTextMovementUserInfoKey];
+
 		[caller textDidEndEditing:[NSNotification notificationWithName:NSTextDidEndEditingNotification
-								      object:textObj]];
+								       object:textObj
+								     userInfo:info]];
 	}
 }
 
-/* **AND THIS IS HOW THE CELL HEARS THAT A SESSION IS OVER**, because it is the editor's delegate while one is running:
- * `NSText` posts this when it stops editing, and the cell's answer is to take its string back. A cell that did not
- * implement this would leave the editor's text on screen and the cell's own value behind it, which is a field that
- * shows one thing and holds another. */
+- (void)endEditing:(NSText *)textObj
+{
+	/* A DIRECT CALL TAKES THE STRING, because a caller who ends a session by hand is not expressing a cancellation —
+	 * there is no key behind it and therefore no reason to discard anything. The reason only exists when a KEY ended
+	 * the session, which is the path below. */
+	[self fn_finishEditing:textObj keep:YES movement:NSTextMovementOther];
+}
+
+/* **AND THIS IS HOW THE CELL HEARS THAT A SESSION IS OVER, AND WHY.** The editor is this cell's delegate while one is
+ * running, so the notification arrives here carrying the movement — and the ONE movement that is not an acceptance is
+ * `NSTextMovementCancel`: MEASURED before this, Escape ended the session and the cell took the string back, so the key
+ * that exists to undo an edit performed it. Everything else keeps what was typed, which is what Return and Tab mean.
+ *
+ * A NOTIFICATION WITH NO MOVEMENT IN IT SENDS THE STRING, deliberately: `Other` is what a session that ended by a click
+ * elsewhere reports, and a click into another field is an acceptance of what was typed rather than a cancellation. */
 - (void)textDidEndEditing:(NSNotification *)notification
 {
-	[self endEditing:[notification object]];
+	id raw = [[notification userInfo] objectForKey:NSTextMovementUserInfoKey];
+	NSTextMovement movement = (raw != nil) ? (NSTextMovement)[raw integerValue] : NSTextMovementOther;
+
+	[self fn_finishEditing:[notification object] keep:(movement != NSTextMovementCancel) movement:movement];
 }
 
 @end

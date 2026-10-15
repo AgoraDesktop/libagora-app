@@ -50,6 +50,8 @@
 
 NSString *NSTextDidBeginEditingNotification = @"NSTextDidBeginEditingNotification";
 NSString *NSTextDidEndEditingNotification = @"NSTextDidEndEditingNotification";
+/* THE STRING IS THE ERA'S LITERAL, under a name this tier gives it — see the header for why. */
+NSString *NSTextMovementUserInfoKey = @"NSTextMovement";
 NSString *NSTextDidChangeNotification = @"NSTextDidChangeNotification";
 
 /* ONE NOTIFICATION, POSTED AND HANDED TO THE DELEGATE. Both halves always happen together — the notification is the
@@ -720,7 +722,14 @@ static void fn_announce(NSText *text, NSString *name, SEL delegateSelector)
 		return NO;
 	}
 	_editing = NO;
-	note = [NSNotification notificationWithName:NSTextDidEndEditingNotification object:self];
+	/* **AND THE REASON GOES WITH IT, BECAUSE IT IS THE ONLY MOMENT IT CAN BE SAID.** The movement is carried in the
+	 * notification's `userInfo` and then RESET, so a session that ends by a click — which sets nothing — reports
+	 * `Other` rather than the reason the previous session ended. A movement that outlived its session would be the
+	 * worst kind of bug: a field whose second edit behaves like the first one's. */
+	note = [NSNotification notificationWithName:NSTextDidEndEditingNotification object:self
+					  userInfo:[NSDictionary dictionaryWithObject:[NSNumber numberWithInteger:(NSInteger)_movement]
+									       forKey:NSTextMovementUserInfoKey]];
+	_movement = NSTextMovementOther;
 	[[NSNotificationCenter defaultCenter] postNotification:note];
 	if (delegate != nil && [delegate respondsToSelector:@selector(textDidEndEditing:)]) {
 		[delegate textDidEndEditing:note];
@@ -860,13 +869,19 @@ static void fn_announce(NSText *text, NSString *name, SEL delegateSelector)
 	}
 }
 
+/* **RETURN ENDS THE SESSION, AND THAT IS NOT THE SAME QUESTION AS INSERTING A LINE.** This door used to refuse
+ * outright, with the reason that a one-line view has no second line — which is TRUE ABOUT INSERTING and was the wrong
+ * answer to the key: in a field, Return means "I am done with this value", and what it produces is an ENDED SESSION
+ * carrying `NSTextMovementReturn`, which is how the value reaches the model and how the control's action gets sent. A
+ * person pressing Return in a one-line field is not asking for a line break; they are asking to be finished.
+ *
+ * THE INSERT HALF IS STILL REFUSED, at the door that inserts: `-insertText:` refuses a newline inside a string, and
+ * that is where "no second line" belongs. */
 - (void)insertNewline:(id)sender
 {
 	(void)sender;
-	/* APPKIT-REFUSE: a second line needs the geometry this class does not have — see `-insertText:`, which refuses the
-	 * same character at the same door for the same reason. */
-	fprintf(stderr, "APPKIT-REFUSE: -[NSText insertNewline:] — this class holds ONE LINE, so there is no second one "
-			"to insert; a multi-line text view is a stack of these and is the geometry's work\n");
+	_movement = NSTextMovementReturn;
+	[[self window] makeFirstResponder:nil];
 }
 
 - (void)insertTab:(id)sender
@@ -874,21 +889,31 @@ static void fn_announce(NSText *text, NSString *name, SEL delegateSelector)
 	(void)sender;
 	/* **TAB IS A FOCUS MOVE AND NOT A CHARACTER**, which is Apple's rule for every field on this platform and the
 	 * reason a form can be filled with one hand: the window's key-view loop already knows what comes next, so this
-	 * hands it the question rather than answering it with a tab character nobody asked for. */
+	 * hands it the question rather than answering it with a tab character nobody asked for.
+	 *
+	 * AND IT SAYS SO ON THE WAY OUT. The focus move ends the session by itself — `-selectNextKeyView:` makes the next
+	 * view the first responder, which makes this one resign — so the only thing missing was the REASON, and a session
+	 * that ended without one would reach the cell looking like a click into another field. */
+	_movement = NSTextMovementTab;
 	[[self window] selectNextKeyView:self];
 }
 
 - (void)insertBacktab:(id)sender
 {
 	(void)sender;
+	_movement = NSTextMovementBacktab;
 	[[self window] selectPreviousKeyView:self];
 }
 
 - (void)cancelOperation:(id)sender
 {
 	(void)sender;
-	/* **ESCAPE ENDS THE SESSION**, which is what it means in a field: the window is told the view is done rather than
-	 * the view deciding who is next, because making a responder resign is the window's business. */
+	/* **ESCAPE ENDS THE SESSION AND THROWS AWAY WHAT WAS TYPED**, which is what it means in a field: the window is told
+	 * the view is done rather than the view deciding who is next, because making a responder resign is the window's
+	 * business — and `NSTextMovementCancel` is what tells whoever owns the string that this ending is a DISCARD.
+	 * MEASURED before this code existed: Escape ended the session and the cell took the string back, so the key that is
+	 * supposed to undo an edit performed it. */
+	_movement = NSTextMovementCancel;
 	[[self window] makeFirstResponder:nil];
 }
 

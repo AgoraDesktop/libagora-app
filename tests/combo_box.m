@@ -19,10 +19,13 @@
  * SAMPLE — every control here is slightly darker than the surface under it — and the check says so by name.
  */
 #import <AppKit/NSComboBoxCell.h>
+#import <AppKit/NSComboBox.h>
 #import <AppKit/NSWindow.h>
 #import <AppKit/NSView.h>
 #import <AppKit/NSMenu.h>
 #import <AppKit/NSMenuItem.h>
+#import <AppKit/NSText.h>
+#import <Foundation/NSNotification.h>
 #import <AppKit/NSActionCell.h>
 #import <AppKit/NSPopUpButtonCell.h>
 #import <AppKit/NSBitmapImageRep.h>
@@ -401,6 +404,39 @@ int main(void)
 		      "which is NOT the chip's left edge — that is what the combo box's list used to hang under");
 		[content release];
 		[w release];
+	}
+
+	/* 10. **AND A COMMITTED EDIT SENDS THE CONTROL'S ACTION, WHILE A CANCELLED ONE DOES NOT.** The cell tells whoever
+	 * lent the editor WHY a session ended; the CONTROL is what a caller set a target on, and `NSControl
+	 * -textDidEndEditing:` is where Return and Tab become the action. The prohibited half is the point: an action sent
+	 * on Escape would tell a caller that a value the model never accepted had been entered. */
+	{
+		/* **AND IT IS A CONTROL THAT HEARS THIS, NOT A CELL — which the first draft of this check got wrong.** The
+		 * rest of this probe works with CELLS, so it called the control's door on a cell; the cell's own
+		 * `-textDidEndEditing:` ran instead and treated the cell as the EDITOR, asking it for `-string`. A control is
+		 * what a caller sets a target on, so a control is what this needs. */
+		NSComboBox *box = [[NSComboBox alloc] initWithFrame:NSMakeRect(0.0, 0.0, (CGFloat)W, (CGFloat)H)];
+		Watcher *watcher = [[Watcher alloc] init];
+		NSDictionary *ret = [NSDictionary dictionaryWithObject:[NSNumber numberWithInteger:NSTextMovementReturn]
+							       forKey:NSTextMovementUserInfoKey];
+		NSDictionary *esc = [NSDictionary dictionaryWithObject:[NSNumber numberWithInteger:NSTextMovementCancel]
+							       forKey:NSTextMovementUserInfoKey];
+		NSDictionary *tab = [NSDictionary dictionaryWithObject:[NSNumber numberWithInteger:NSTextMovementTab]
+							       forKey:NSTextMovementUserInfoKey];
+
+		[box setTarget:watcher];
+		[box setAction:@selector(picked:)];
+		[box textDidEndEditing:[NSNotification notificationWithName:NSTextDidEndEditingNotification
+								     object:box userInfo:ret]];
+		check(watcher->fired == 1, "a session ended by RETURN sends the control's action");
+		[box textDidEndEditing:[NSNotification notificationWithName:NSTextDidEndEditingNotification
+								     object:box userInfo:esc]];
+		check(watcher->fired == 1, "and one ended by ESCAPE does NOT — the value was never accepted");
+		[box textDidEndEditing:[NSNotification notificationWithName:NSTextDidEndEditingNotification
+								     object:box userInfo:tab]];
+		check(watcher->fired == 2, "and TAB does too, because tabbing out of a field accepts what is in it");
+		[watcher release];
+		[box release];
 	}
 
 	[combo release];

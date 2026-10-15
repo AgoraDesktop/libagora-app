@@ -38,14 +38,17 @@ static void check(int ok, const char *what)
 {
 @public
 	int ended;
+	NSTextMovement movement;
 }
 @end
 
 @implementation Watcher
 - (void)textDidEndEditing:(NSNotification *)note
 {
-	(void)note;
+	id raw = [[note userInfo] objectForKey:NSTextMovementUserInfoKey];
+
 	ended++;
+	movement = (raw != nil) ? (NSTextMovement)[raw integerValue] : NSTextMovementOther;
 }
 @end
 
@@ -129,7 +132,39 @@ int main(void)
 		      "and ending the session afterwards keeps the chosen value rather than reviving the typed one");
 	}
 
-	/* 6. **AND A COMBO BOX'S TEXT STOPS AT ITS CHIP, WHICH IS THE ONE RECT THAT IS ITS OWN.** The same override is what
+	/* 6. **RETURN COMMITS AND ESCAPE DISCARDS, WHICH IS THE FIELD'S KEYBOARD LOOP AND THE REASON THE MOVEMENT
+	 * EXISTS.** Both keys end the session; they differ in ONE answer — whether the editor's string becomes the cell's
+	 * value — and the caller is told which happened, because a control sends its action on Return and must not on
+	 * Escape. MEASURED before this slice: Return printed a refusal and did nothing, and Escape COMMITTED, because
+	 * nothing distinguished an ending from an ending. */
+	{
+		int before = watcher->ended;
+
+		[cell setStringValue:@"original"];
+		[cell selectWithFrame:frame inView:content editor:editor delegate:watcher start:0 length:0];
+		[editor replaceCharactersInRange:NSMakeRange(0, [[editor string] length]) withString:@"typed"];
+		[editor insertNewline:nil];
+		printf("  (note: after RETURN the cell holds \"%s\" and the caller was told movement 0x%lx)\n",
+		       [[cell stringValue] UTF8String], (unsigned long)watcher->movement);
+		check([[cell stringValue] isEqualToString:@"typed"],
+		      "RETURN ends the session and the typed value is COMMITTED — it is not asking for a line break");
+		check([editor superview] == nil, "and the editor leaves the field, as it does at any end");
+		check(watcher->movement == NSTextMovementReturn, "and the caller is told WHY, with Return's own code");
+
+		[cell selectWithFrame:frame inView:content editor:editor delegate:watcher start:0 length:0];
+		[editor replaceCharactersInRange:NSMakeRange(0, [[editor string] length]) withString:@"thrown away"];
+		[editor cancelOperation:nil];
+		printf("  (note: after ESCAPE the cell still holds \"%s\" and the caller was told movement 0x%lx)\n",
+		       [[cell stringValue] UTF8String], (unsigned long)watcher->movement);
+		check([[cell stringValue] isEqualToString:@"typed"],
+		      "ESCAPE ends the session and DISCARDS what was typed — the cell keeps what it had");
+		check(watcher->movement == NSTextMovementCancel, "and the caller is told WHY, with Cancel's own code");
+		/* THE GROWTH RATHER THAN A REMEMBERED TOTAL: a count written from memory is a count that goes stale the next
+		 * time a case above this one is added, which is exactly what it did the first time. */
+		check(watcher->ended == before + 2, "both endings were announced, one each");
+	}
+
+	/* 7. **AND A COMBO BOX'S TEXT STOPS AT ITS CHIP, WHICH IS THE ONE RECT THAT IS ITS OWN.** The same override is what
 	 * an edit session is handed, so a typed string cannot be drawn — or typed — under the chip. */
 	{
 		NSRect r = [combo drawingRectForBounds:frame];
@@ -149,7 +184,7 @@ int main(void)
 		      "and stops them where its chip begins, so the chip is never under them");
 	}
 
-	/* 7. **AND A FIELD'S STRING LIVES WHERE A FORMATTER CAN SEE IT.** `NSCell` keeps a `-_title` and an `-_objectValue`
+	/* 8. **AND A FIELD'S STRING LIVES WHERE A FORMATTER CAN SEE IT.** `NSCell` keeps a `-_title` and an `-_objectValue`
 	 * — two doors onto what a caller thinks is one thing — and this class puts the string it was made with in the second
 	 * one, because that is the one `-stringValue` reads and the one a formatter is handed. MEASURED: without that, a
 	 * cell made with `-initTextCell:@"hello"` drew nothing at all. */
