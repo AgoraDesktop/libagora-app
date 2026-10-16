@@ -83,4 +83,26 @@ enum {
 };
 typedef NSInteger NSUnderlineStyle;
 
+/* ============================================================================================ *
+ * AND THE DOOR THAT READS RICH TEXT FORMAT (RTF), WHICH IS THE HALF THIS TIER'S FOUNDATION DOES *
+ * NOT HAVE. `libagora-base` already WRITES RTF — its `-RTFFromRange:documentAttributes:` is a real   *
+ * writer, keyed on its own presentation-intent bits — but a READER has to turn RTF's control words   *
+ * into the APPKIT's attribute keys (`NSFontAttributeName`, `NSForegroundColorAttributeName`, …),    *
+ * which is exactly the vocabulary Foundation does not have. So the reader lives here, in the file   *
+ * Apple declares the RTF category in, and it understands the subset this tier can draw: the font    *
+ * table and `\f`/`\fs`, the colour table and `\cf`/`\highlight`, `\ul`/`\strike`, and the     *
+ * paragraph alignments. AN APPKIT-AWARE WRITER — one that encodes NSFont/NSColor/the two rules and  *
+ * the paragraph style, rather than Foundation's intent bits — is NAMED AS OWED and would be a door   *
+ * beside this one, because `-RTFFromRange:` is already implemented below in the stack.              *
+ * ============================================================================================ */
+
+@interface NSAttributedString (NSAttributedStringKitAdditions)
+
+/* **THE READER.** A failed parse answers nil rather than an empty string, because a caller that handed over bytes
+ * which are not RTF should be able to tell. `documentAttributes` is filled with the document's own facts (the
+ * character encoding), which is the one key this tier has an answer for. */
+- (nullable instancetype)initWithRTF:(NSData *)data documentAttributes:(NSDictionary **)dict;
+
+@end
+
 #endif /* APP_KIT_NSATTRIBUTEDSTRING_H */

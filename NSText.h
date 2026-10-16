@@ -16,7 +16,8 @@
  * Apple's own order; `NSWritingDirection` is `NSInteger` — SIGNED — because its first case is `-1`, which is the whole
  * reason the two types cannot share a spelling.
  *
- * WHAT IS NOT HERE, AND ITS ROWS STAY OPEN: the RTF/RTFD reading and writing, the spelling and substitution services,
+ * WHAT IS NOT HERE, AND ITS ROWS STAY OPEN: RTFD (RTF whose attachments are a directory — the reader here is the
+ * plain-RTF one, and Foundation writes RTF), the spelling and substitution services,
  * and the two
  * `NSTextWritingDirection*` values that modify a direction "when used with `NSWritingDirectionAttributeName`" — that
  * pair is a vocabulary whose user (an attributed-string attribute key) this tier does not have, so it is named here

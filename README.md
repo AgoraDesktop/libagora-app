@@ -57,6 +57,7 @@ tests/
   text_input_context.m          and the INPUT CONTEXT: where a key goes before the view, and where a composition lives
   text_editing_commands.m       and `-transpose:` plus the insertions that ignore a field's role
   text_table.m                  and the TABLE BLOCK: the box a paragraph is set in, drawn by the manager
+  text_rtf.m                    and the RTF READER: control words into the AppKit's attribute keys
   text_word_movement.m          and its WORD granularity: Option+arrow and Option+Delete, over the string
   text_view_lines.m             and the first slice of the MULTI-LINE view: the line model, and what reads it
   text_view_wrapping.m          and the slice above it: the same model WRAPPED to the view's width
@@ -310,6 +311,16 @@ the compositor is really gone.
   automatic column and a cell answers its row/span/column; a style's `-textBlocks` survives `-copy`; and the manager
   puts the ground and the border around `ab` — read as green and red pixels. **WHAT IS STILL OWED IS THE GRID**: shared
   column widths, rows measured across spanning cells, and `-collapsesBorders`.
+- **And the RTF READER, which is the half Foundation does not have** (`ctest`): `libagora-base` already WRITES RTF (`-RTFFromRange:documentAttributes:`), but a reader has to turn control words into the APPKIT's attribute keys —
+  `NSFontAttributeName`, `NSForegroundColorAttributeName`, … — which Foundation has no vocabulary for. MEASURED: a
+  literal RTF document with a font table, a colour table, a centred underlined red paragraph and a plain one parses to
+  the text (the `\par` break and the `\'hh`/`\uN?` escapes included), the size by `\fs`, the ink by `\cf`, the rule by
+  `\ul`, the alignment by `\qc`, and a second paragraph that says `\ulnone`/`\cf0` is neither underlined nor coloured;
+  a document with no RTF header answers **nil** rather than an empty string. **A FACE THIS TIER CANNOT RESOLVE IS
+  SUBSTITUTED** (the size is kept, which is what the layout measures with) — which is what an RTF reader is supposed
+  to do. **AN APPKIT-AWARE WRITER IS NAMED AS OWED**: Foundation's writer is keyed on its own presentation-intent
+  bits, so it does not encode NSFont/NSColor/the two rules/the paragraph style, and `-RTFFromRange:` is already
+  implemented below in the stack.
 - **And the ATTACHMENT, which is a character that stands for a picture** (`ctest`): `NSTextAttachment.h` declares
   `NSAttachmentCharacter` (U+FFFC), the `NSTextAttachmentCell` protocol and class, and the attachment itself, with
   `NSAttachmentAttributeName` carrying it; the layout manager's run walk asks the cell for its size and calls
@@ -378,8 +389,8 @@ the compositor is really gone.
   subclass with an editor of its own overrides one method. The probe checks the chain at all three objects: a flag set
   on the CONTROL reaches the CELL, and the NEXT session's EDITOR is configured from it — while a field with the flags
   OFF gets a plain editor, so the check cannot pass against an editor that is always rich. What still does not happen
-  is named rather than implied: no RTF reader, no attachment drawing and no paragraph model, so the flags travel and
-  nothing obeys them yet.
+  is named rather than implied: no AppKit-aware RTF WRITER (the RTF READER is here, `tests/text_rtf.m`, and Foundation
+  writes RTF instead), and no paragraph model in the cell — so the flags travel and nothing obeys them yet.
 - **The chrome** (`ctest`, offscreen): the title bar's symbols are SHAPES in pixels — ink on both diagonals of
   the X, a thick stroke across the minus, and a pill rounded at both caps — the title is centred and bold, and
   each symbol appears only for the style-mask bit that asks for it.
@@ -462,7 +473,7 @@ the compositor is really gone.
   and the child clip is the child's FRAME region rather than its bounds rect — which was the same value only while the
   origin was zero. MEASURED: a mark at a document's own y 100..120 draws at 110 with the clip view at the top and at
   10 after a scroll of 100, in one run, through `-displayRect:`.
-- **`ctest`: 53 of 53 passed** (the keyboard and the seam, the AppKit and its input path, the controls and their
+- **`ctest`: 54 of 54 passed** (the keyboard and the seam, the AppKit and its input path, the controls and their
   metrics, the field control and its cell and its bezel and its placeholder and what it may hold, the text path and its
   word granularity and the multi-line view and its wrapping and its scrolling and its READING OF THE STORE, the STORE
   the rich-text slice is built on and the REGION it is laid out in and the WEB that ties the three together and the

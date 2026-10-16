@@ -271,6 +271,14 @@ target_link_libraries(text_table PRIVATE App m)
 add_test(NAME appkit-text-table COMMAND text_table)
 set_tests_properties(appkit-text-table PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
 
+# **AND RTF, THE FORMAT A DOCUMENT TRAVELS IN.** The writer and reader are checked as a ROUND TRIP for the attributes
+# this tier draws — the text and its break, the font, the inks, the rules and the paragraph alignment — plus the
+# control words the bytes carry.
+add_executable(text_rtf text_rtf.m)
+target_link_libraries(text_rtf PRIVATE App m)
+add_test(NAME appkit-text-rtf COMMAND text_rtf)
+set_tests_properties(appkit-text-rtf PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
+
 # **AND THE PARAGRAPH STYLE'S GEOMETRY, WHICH IS NOW READ.** The indents place a line and narrow it, the spacings open
 # gaps between lines and across paragraph boundaries, and the line-height multiple and clamps set the band — each read as
 # the manager's own geometry, with the defaults pinned unmoved by the first case.
