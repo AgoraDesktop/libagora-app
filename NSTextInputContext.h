@@ -16,9 +16,9 @@
  * keyboard has and `-selectedInputSource` names it; a caller installs a COMPOSING source with `-setInputSource:`, and
  * then `-handleEvent:` sends each key to it FIRST — the source composes through the client's marked-text doors and
  * answers whether it consumed the event, and only what it DECLINES reaches the standard key binding below. THE TIER
- * SHIPS ONE SUCH SOURCE: `AGInputMethod`, a dead-key table that composes an accent with the next letter. WHAT IS
- * STILL OWED is the CANDIDATE LIST — a source that offers a person several readings needs a window to show them, and
- * this tier answers the four questions such a window asks (`NSTextInput`) without drawing one.
+ * SHIPS TWO SUCH SOURCES: `AGInputMethod`, a dead-key table that composes an accent with the next letter, and
+ * `AGVariantsInputMethod`, which offers a letter's readings in an `AGCandidateWindow` — the candidate list, placed at
+ * the caret the client reports and moved by `-invalidateCharacterCoordinates`.
  */
 #ifndef APPKIT_NSTEXTINPUTCONTEXT_H
 #define APPKIT_NSTEXTINPUTCONTEXT_H
@@ -44,6 +44,9 @@ NS_ASSUME_NONNULL_BEGIN
  * marked text itself; a source that holds state across keystrokes clears it here, so it does not compose with the NEXT
  * key into a composition that is already gone. */
 - (void)discardComposition;
+/* **AND WHEN THE CARET MOVED.** A source with a candidate window re-places it here; the context calls this from
+ * `-invalidateCharacterCoordinates`. */
+- (void)invalidateCharacterCoordinates;
 @end
 
 @interface NSTextInputContext : NSObject

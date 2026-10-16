@@ -17,10 +17,10 @@
  * and a Command-modified key is declined before anything else because it is the menu bar's. That is what makes a
  * source safe to install: it stands in front of the mapping and only takes what it composes.
  *
- * **WHAT THIS METHOD IS NOT IS A CANDIDATE-BASED ONE.** A dead key has ONE reading per keystroke, so there is no list
- * to choose from and no window to place; a method that offered several — a phonetic IME — would use
- * `NSTextInput -firstRectForCharacterRange:` and the candidate questions beside it, which the view already answers.
- * THAT is the piece still owed, and it is a method's, not this engine's.
+ * **AND THIS METHOD IS NOT THE CANDIDATE-BASED ONE.** A dead key has ONE reading per keystroke, so there is nothing to
+ * choose from; `AGVariantsInputMethod` is the one that offers a letter's readings, and it shows them in an
+ * `AGCandidateWindow` placed at `NSTextInput -firstRectForCharacterRange:`. The two are different methods over the
+ * same door, which is the point of the door being a SOURCE rather than a fixed engine.
  */
 #ifndef APPKIT_AGINPUTMETHOD_H
 #define APPKIT_AGINPUTMETHOD_H

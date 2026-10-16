@@ -14,9 +14,9 @@
  *
  * **AND THE CALLER IS THE TIER'S OWN INPUT METHOD NOW.** `NSResponder -interpretKeyEvents:` hands each key to the
  * view's INPUT CONTEXT, and the context sends it to its input source FIRST — so the doors below are CALLED: the marked
- * text by `AGInputMethod`'s dead-key table, and the candidate questions by whatever method needs them. The protocol is
- * still what an application's own method would implement. WHAT IS NOT HERE is the candidate LIST — a method that offers
- * several readings needs a window, and this tier answers where it would go without drawing one.
+ * text by `AGInputMethod`'s dead-key table, the candidate questions by `AGVariantsInputMethod`, which shows what it
+ * offers in an `AGCandidateWindow` placed at `-firstRectForCharacterRange:`. The protocol is still what an
+ * application's own method would implement.
  */
 #ifndef APPKIT_NSTEXTINPUT_H
 #define APPKIT_NSTEXTINPUT_H

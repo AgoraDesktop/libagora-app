@@ -56,6 +56,7 @@ tests/
   text_attachment.m             and the ATTACHMENT: a character that stands for a picture, and the cell that draws it
   text_input_context.m          and the INPUT CONTEXT: where a key goes before the view, and where a composition lives
   text_input_method.m           and the METHOD: a dead key composes with the next keystroke, marked until it does
+  text_candidate_list.m         and the CANDIDATE LIST: a letter's readings, the window under the caret, and the pick
   text_editing_commands.m       and `-transpose:` plus the insertions that ignore a field's role
   text_table.m                  and the TABLE BLOCK: the box a paragraph is set in, drawn by the manager
   text_rtf.m                    and RTF: the reader's control words, and an AppKit-aware WRITER beside it
@@ -519,14 +520,14 @@ the compositor is really gone.
   and the child clip is the child's FRAME region rather than its bounds rect — which was the same value only while the
   origin was zero. MEASURED: a mark at a document's own y 100..120 draws at 110 with the clip view at the top and at
   10 after a scroll of 100, in one run, through `-displayRect:`.
-- **`ctest`: 60 of 60 passed** (the keyboard and the seam, the AppKit and its input path, the controls and their
+- **`ctest`: 61 of 61 passed** (the keyboard and the seam, the AppKit and its input path, the controls and their
   metrics, the field control and its cell and its bezel and its placeholder and what it may hold, the text path and its
   word granularity and the multi-line view and its wrapping and its scrolling and its READING OF THE STORE, the STORE
   the rich-text slice is built on and the REGION it is laid out in and the WEB that ties the three together and the
   FRAGMENTS it produces and the GLYPH STORE it keeps and the INK it draws and the BACKGROUND, UNDERLINE and
   STRIKETHROUGH it paints and the SECOND CONTAINER it overflows into and the PARAGRAPH STYLE it aligns and breaks by
   and the TABLE GRID whose shared borders collapse and whose rows flow into the next container and the INPUT METHOD
-  whose dead key composes with the next keystroke,
+  whose dead key composes with the next keystroke and the CANDIDATE LIST a variants method shows under the caret,
   what a drag costs, the resize by edge, the tracking engine, the clip view and the scroller and the scroll view and the
   drawn offset, the chrome and what its buttons do, the chrome theme, the menus and activation).
 - **And the desktop's own text is SUB-PIXEL ANTIALIASED**, which is the AppKit's half of a renderer change in
@@ -695,9 +696,9 @@ side, rows as tall as their tallest cell. **AND THE BORDERS COLLAPSE** (`tests/t
 the min-side one), the table's own border competing with the outer cells on its four outer edges; and a cell's box is
 its CELL rather than its text, and a table that does not fit FLOWS into the next container at a row boundary. The input-method
 CONTEXT are named in the view's own header as what is still owed — the `NSTextInput`
-protocol is here, the view ANSWERS it (`tests/text_marked_text.m`), and the class that owns a composition across
-keystrokes is here too (`AGInputMethod`); what remains is the candidate LIST — a method with several readings needs a
-window, which this tier places but does not draw. ATTACHMENTS draw (`tests/text_attachment.m`) with
+protocol is here, the view ANSWERS it (`tests/text_marked_text.m`), the class that owns a composition across keystrokes
+is here too (`AGInputMethod`), AND SO IS THE CANDIDATE LIST — `AGVariantsInputMethod` offers a letter's readings in an
+`AGCandidateWindow` placed under the caret (`tests/text_candidate_list.m`). ATTACHMENTS draw (`tests/text_attachment.m`) with
 their inline advance named as the flow slice still owed. Each absence is stated
 rather than stubbed, and the refusals name themselves.
 

@@ -264,6 +264,14 @@ target_link_libraries(text_input_method PRIVATE App m)
 add_test(NAME appkit-text-input-method COMMAND text_input_method)
 set_tests_properties(appkit-text-input-method PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
 
+# **AND THE CANDIDATE LIST: THE READINGS A METHOD OFFERS, AND THE WINDOW THAT SHOWS THEM.** A list view sized from its
+# strings with the selected reading's accent fill; a borderless window placed under the caret and following it; and a
+# method that holds a letter's variants open across keystrokes — arrows to move, Return to pick, Escape to take back.
+add_executable(text_candidate_list text_candidate_list.m)
+target_link_libraries(text_candidate_list PRIVATE App m)
+add_test(NAME appkit-text-candidate-list COMMAND text_candidate_list)
+set_tests_properties(appkit-text-candidate-list PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
+
 # **AND THE EDITING COMMANDS THE RESPONDER NAMED AS OWED**: `-transpose:` (pure string arithmetic over a position) and
 # the `IgnoringFieldEditor` insertions plus the paragraph separator, checked across a view that holds a break and a
 # field that refuses one.

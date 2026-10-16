@@ -177,11 +177,13 @@ static NSString *const FNInputSourceIdentifier = @"AgoraKeyboard";
 	}
 }
 
-/* THE CARET'S RECTANGLE HAS MOVED, WHICH IS WHAT A CANDIDATE WINDOW IS PLACED AT. There is no candidate window in
- * this tier, so there is nothing to move; the door exists because a caller that moves the caret calls it, and the
- * answer — "noted, nothing to do" — is the truthful one. */
+/* THE CARET'S RECTANGLE HAS MOVED, WHICH IS WHAT A CANDIDATE WINDOW IS PLACED AT: the source that owns one is told
+ * here, and a source with none answers nothing. */
 - (void)invalidateCharacterCoordinates
 {
+	if (_inputSource != nil && [_inputSource respondsToSelector:@selector(invalidateCharacterCoordinates)]) {
+		[_inputSource invalidateCharacterCoordinates];
+	}
 }
 
 /* ONE STOCK KEYBOARD WHEN NOTHING IS INSTALLED, AND THE INSTALLED METHOD WHEN ONE IS. */
