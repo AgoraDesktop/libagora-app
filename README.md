@@ -56,6 +56,7 @@ tests/
   text_attachment.m             and the ATTACHMENT: a character that stands for a picture, and the cell that draws it
   text_input_context.m          and the INPUT CONTEXT: where a key goes before the view, and where a composition lives
   text_editing_commands.m       and `-transpose:` plus the insertions that ignore a field's role
+  text_table.m                  and the TABLE BLOCK: the box a paragraph is set in, drawn by the manager
   text_word_movement.m          and its WORD granularity: Option+arrow and Option+Delete, over the string
   text_view_lines.m             and the first slice of the MULTI-LINE view: the line model, and what reads it
   text_view_wrapping.m          and the slice above it: the same model WRAPPED to the view's width
@@ -299,6 +300,16 @@ the compositor is really gone.
   text view holds and a one-line field refuses at its insert door; and the `IgnoringFieldEditor` pair inserts a newline
   and a tab in the view. `-insertLineBreak:` (U+2028), `-insertContainerBreak:` and the substitution insertions stay
   named with the models they need.
+- **And the TABLE BLOCK, the box a paragraph is set in** (`ctest`): `NSTextBlock` measures three LAYERS (padding,
+  border, margin) on four EDGES and holds a ground and four border colours; `NSTextTableBlock` is a block that knows
+  its cell of a grid and `NSTextTable` the grid's column count and algorithm; and `NSParagraphStyle` carries them in
+  `-textBlocks`, which is where Apple puts a table cell. THE MANAGER DRAWS THEM: it groups consecutive lines by the
+  block they carry, grows their union by the block's own layers, and calls `-drawBackgroundWithFrame:...`. MEASURED: a
+  fresh block has no ground and no widths; a per-layer width sets all four edges and a per-edge colour is answered for
+  that edge alone; a content rect of (10,10 30x10) with **5** on every side grows to (5,5 40x20); a fresh table is one
+  automatic column and a cell answers its row/span/column; a style's `-textBlocks` survives `-copy`; and the manager
+  puts the ground and the border around `ab` — read as green and red pixels. **WHAT IS STILL OWED IS THE GRID**: shared
+  column widths, rows measured across spanning cells, and `-collapsesBorders`.
 - **And the ATTACHMENT, which is a character that stands for a picture** (`ctest`): `NSTextAttachment.h` declares
   `NSAttachmentCharacter` (U+FFFC), the `NSTextAttachmentCell` protocol and class, and the attachment itself, with
   `NSAttachmentAttributeName` carrying it; the layout manager's run walk asks the cell for its size and calls
@@ -451,7 +462,7 @@ the compositor is really gone.
   and the child clip is the child's FRAME region rather than its bounds rect — which was the same value only while the
   origin was zero. MEASURED: a mark at a document's own y 100..120 draws at 110 with the clip view at the top and at
   10 after a scroll of 100, in one run, through `-displayRect:`.
-- **`ctest`: 52 of 52 passed** (the keyboard and the seam, the AppKit and its input path, the controls and their
+- **`ctest`: 53 of 53 passed** (the keyboard and the seam, the AppKit and its input path, the controls and their
   metrics, the field control and its cell and its bezel and its placeholder and what it may hold, the text path and its
   word granularity and the multi-line view and its wrapping and its scrolling and its READING OF THE STORE, the STORE
   the rich-text slice is built on and the REGION it is laid out in and the WEB that ties the three together and the
@@ -613,7 +624,9 @@ STRIKETHROUGH keys the manager paints (`tests/text_layout_attributes.m`) and the
 by (`tests/text_paragraph_style.m`) and the GEOMETRY it lays out by (`tests/text_paragraph_geometry.m`) — the indents,
 the two spacings and the three line-height properties, all read as the manager's own fragment geometry. The property
 with no reader is the hyphenation factor (the engine does no hyphenation), the default tab interval (a tab stop needs
-`NSTextTab`) and the base writing direction (left-to-right only), each named at its door. TABLES and the input-method
+`NSTextTab`) and the base writing direction (left-to-right only), each named at its door. The TABLE BLOCK is here
+(`tests/text_table.m`), so a paragraph can carry a box with a ground and a border; what is still owed is the GRID —
+shared column widths and rows across spanning cells. The input-method
 CONTEXT are named in the view's own header as what is still owed — the `NSTextInput`
 protocol is here and the view ANSWERS it (`tests/text_marked_text.m`), while the class that owns a composition across
 keystrokes and arranges a candidate window is the slice behind it. ATTACHMENTS draw (`tests/text_attachment.m`) with

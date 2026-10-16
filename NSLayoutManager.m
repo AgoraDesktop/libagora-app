@@ -16,6 +16,7 @@
 #import <AppKit/NSColor.h>
 #import <AppKit/NSParagraphStyle.h>
 #import <AppKit/NSTextAttachment.h>
+#import <AppKit/NSTextTable.h>
 #import <AppKit/NSTextView.h>
 #import <AppKit/NSGraphicsContext.h>
 #import <AppKit/NSAttributedString.h>
@@ -425,6 +426,95 @@
 	setting.valueSize = sizeof(mode);
 	setting.value = &mode;
 	return CTParagraphStyleCreate(&setting, 1);
+}
+
+/* **AND THE BLOCK A LINE IS SET IN, WHICH IS THE FIRST `NSTextTableBlock` IN ITS PARAGRAPH STYLE — or the first plain
+ * block when there is no table cell.** A block is a paragraph property, so every line of the paragraph reads the same
+ * one; a table cell is preferred over a plain block because a cell IS the inner box. */
+- (NSTextBlock *)cg_blockForFragment:(FNFragment *)fragment
+{
+	NSParagraphStyle *style = [self cg_paragraphStyleAt:fragment->range.location];
+	NSArray *blocks = [style textBlocks];
+	NSTextBlock *plain = nil;
+	NSUInteger i;
+
+	for (i = 0; i < [blocks count]; i++) {
+		id block = [blocks objectAtIndex:i];
+
+		if ([block isKindOfClass:[NSTextTableBlock class]]) {
+			return block;
+		}
+		if (plain == nil) {
+			plain = block;
+		}
+	}
+	return plain;
+}
+
+/* **AND ONE BLOCK GROUP DRAWN.** The union of the group's used rects is the content; the block grows it by its own
+ * layers and draws it at the container's origin. */
+- (void)cg_drawBlock:(NSTextBlock *)block union:(NSRect)unionRect containerIndex:(NSUInteger)index
+	      origin:(NSPoint)origin characterRange:(NSRange)charRange
+{
+	NSTextContainer *container = [_textContainers objectAtIndex:index];
+	NSRect containerRect = NSMakeRect(0.0, 0.0, [container containerSize].width, [container containerSize].height);
+	NSRect bounds = [block boundsRectForContentRect:unionRect inRect:containerRect
+					  textContainer:container characterRange:charRange];
+	NSRect frame = NSMakeRect(bounds.origin.x + origin.x, bounds.origin.y + origin.y,
+				  bounds.size.width, bounds.size.height);
+
+	[block drawBackgroundWithFrame:frame inView:[container textView] characterRange:charRange layoutManager:self];
+}
+
+/* **AND THE PASS THAT GROUPS CONSECUTIVE LINES BY THEIR BLOCK.** A run of fragments sharing the same block object is
+ * one box; a fragment with no block closes the one in flight. The pass is separate from the run walk because a block
+ * is BEHIND every run background, so it is drawn first. */
+- (void)cg_drawBlocksForGlyphRange:(NSRange)glyphsToShow atPoint:(NSPoint)origin
+{
+	NSTextBlock *current = nil;
+	NSRect unionRect = NSZeroRect;
+	NSUInteger containerForBlock = 0;
+	NSRange range = NSMakeRange(0, 0);
+	BOOL haveUnion = NO;
+	NSUInteger i, j;
+
+	(void)glyphsToShow;
+	for (i = 0; i < [_fragments count]; i++) {
+		NSMutableArray *fragments = [_fragments objectAtIndex:i];
+
+		for (j = 0; j < [fragments count]; j++) {
+			FNFragment *fragment = [fragments objectAtIndex:j];
+			NSTextBlock *block = [self cg_blockForFragment:fragment];
+
+			if (block == nil) {
+				if (haveUnion) {
+					[self cg_drawBlock:current union:unionRect containerIndex:containerForBlock origin:origin
+						characterRange:range];
+					haveUnion = NO;
+				}
+				current = nil;
+				continue;
+			}
+			if (block != current) {
+				if (haveUnion) {
+					[self cg_drawBlock:current union:unionRect containerIndex:containerForBlock origin:origin
+						characterRange:range];
+				}
+				current = block;
+				unionRect = fragment->used;
+				containerForBlock = i;
+				range = fragment->range;
+				haveUnion = YES;
+			} else {
+				unionRect = NSUnionRect(unionRect, fragment->used);
+				range.length = (fragment->range.location + fragment->range.length) - range.location;
+			}
+		}
+	}
+	if (haveUnion) {
+		[self cg_drawBlock:current union:unionRect containerIndex:containerForBlock origin:origin
+			characterRange:range];
+	}
 }
 
 /* **THE PARAGRAPH STYLE A LINE BELONGS TO, WHICH IS THE ONE AT ITS PARAGRAPH'S START.** A paragraph begins at the first
@@ -1207,6 +1297,8 @@
 		return;
 	}
 	[self cg_ensureLayout];
+	/* **THE BLOCKS FIRST, BECAUSE A BOX IS BEHIND EVERY RUN BACKGROUND AND THE RUN WALK IS BEHIND THE GLYPHS.** */
+	[self cg_drawBlocksForGlyphRange:glyphsToShow atPoint:origin];
 	string = [_textStorage string];
 	rangeEnd = glyphsToShow.location + glyphsToShow.length;
 	for (i = 0; i < [_fragments count]; i++) {

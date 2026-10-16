@@ -196,13 +196,14 @@ NS_ASSUME_NONNULL_BEGIN
  * does for the whole store. */
 - (NSRect)boundingRectForGlyphRange:(NSRange)glyphRange inTextContainer:(NSTextContainer *)container;
 
-/* **THE BACKGROUND THE GLYPHS SIT ON, WHICH IS A RUN WALK AND NOT A LINE FILL.** Apple's door paints "the background
+/* **THE BACKGROUND THE GLYPHS SIT ON, WHICH IS A RUN WALK OVER THE BLOCKS.** Apple's door paints "the background
  * color and selection and marked range aspects of the text display, along with block decoration such as table
- * backgrounds and borders". THE DIVISION THIS TIER DRAWS IS: the background-COLOUR ATTRIBUTE is the manager's (it is
- * in the store and the manager reads the store), the SELECTION is the VIEW's (it is in the view and the view knows
- * where it is), and tables and marked text do not exist here — so this door paints the first and names the other
- * three rather than pretending to them. Each run's `NSBackgroundColorAttributeName` fills the used rect of ITS OWN
- * glyphs, which is what makes two backgrounds on one line two rectangles instead of a band. */
+ * backgrounds and borders". THE DIVISION THIS TIER DRAWS IS: the background-COLOUR ATTRIBUTE and the BLOCK DECORATION
+ * are the manager's (both are in the store's runs and paragraph styles), and the SELECTION is the VIEW's (only the
+ * view knows where it is). The blocks go down first — a box is behind every run background — each one grown by its own
+ * layers and drawn by the block itself; the marked range is the view's, drawn with the composition rule. Each run's
+ * `NSBackgroundColorAttributeName` then fills the used rect of ITS OWN glyphs, which is what makes two backgrounds on
+ * one line two rectangles instead of a band. */
 - (void)drawBackgroundForGlyphRange:(NSRange)glyphsToShow atPoint:(NSPoint)origin;
 
 /* **AND WHAT IS STILL NOT HERE, NAMED AT THE DOOR THAT WOULD BE IT.** The MARKED RANGE and the temporary-attribute

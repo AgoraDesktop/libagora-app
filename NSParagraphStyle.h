@@ -40,6 +40,8 @@
 
 #import <AppKit/NSText.h>
 
+@class NSTextBlock;
+
 NS_ASSUME_NONNULL_BEGIN
 
 /* WHAT TO DO WITH A LINE THAT IS TOO LONG. The era comments each case with the shape a caller gets, and the first
@@ -77,6 +79,11 @@ typedef NSUInteger NSLineBreakMode;
 	float _hyphenationFactor;
 	float _tighteningFactorForTruncation;
 	CGFloat _defaultTabInterval;
+	/* **AND THE BOXES THE PARAGRAPH IS SET IN, WHICH IS WHERE A TABLE CELL LIVES.** Apple attaches `NSTextBlock`s to a
+	 * paragraph through the style rather than a character attribute, because a block is a PARAGRAPH property: every line
+	 * of the paragraph shares the box, and a `NSTextTableBlock` in this array is what makes the paragraph a table
+	 * cell. The array is retained; `NSParagraphStyle` is a value, so the blocks in it are copied with it. */
+	NSArray *_textBlocks;	/* RETAINED */
 }
 
 /* **ONE SHARED DEFAULT, WHICH IS APPLE'S OWN DOOR AND THE REASON A RUN WITH NO STYLE STILL HAS ONE.** The default has
@@ -114,6 +121,13 @@ typedef NSUInteger NSLineBreakMode;
 - (float)tighteningFactorForTruncation;
 - (CGFloat)defaultTabInterval;
 
+/* ---- AND THE BLOCKS THE PARAGRAPH IS SET IN ------------------------------------------------ */
+
+/* **AN ARRAY OF `NSTextBlock`s, DRAWN OUTWARD FROM THE TEXT IN THE ORDER GIVEN.** A paragraph in a table cell carries
+ * its `NSTextTableBlock` here; a plain block is a box without a cell. The layout manager reads this array, finds the
+ * block covering a line, and draws it; the grid across cells is the table's layout, not the style's. */
+- (NSArray *)textBlocks;
+
 @end
 
 /* **AND THE MUTABLE ONE, WHICH IS WHAT A BUILDER FILLS IN.** It is a SUBCLASS and not a flag on the immutable class,
@@ -135,6 +149,9 @@ typedef NSUInteger NSLineBreakMode;
 - (void)setHyphenationFactor:(float)hyphenationFactor;
 - (void)setTighteningFactorForTruncation:(float)tighteningFactorForTruncation;
 - (void)setDefaultTabInterval:(CGFloat)defaultTabInterval;
+- (void)setTextBlocks:(NSArray *)textBlocks;
+- (void)addTextBlock:(NSTextBlock *)textBlock;
+- (void)removeTextBlock:(NSTextBlock *)textBlock;
 @end
 
 NS_ASSUME_NONNULL_END

@@ -263,6 +263,14 @@ target_link_libraries(text_editing_commands PRIVATE App m)
 add_test(NAME appkit-text-editing-commands COMMAND text_editing_commands)
 set_tests_properties(appkit-text-editing-commands PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
 
+# **AND THE TABLE BLOCK, WHICH IS THE BOX A PARAGRAPH IS SET IN.** The block's ledger and bounds arithmetic, the cell's
+# place in its table, the paragraph style's block array, and the manager drawing the ground and border where the
+# block's lines are — the last read as pixels.
+add_executable(text_table text_table.m)
+target_link_libraries(text_table PRIVATE App m)
+add_test(NAME appkit-text-table COMMAND text_table)
+set_tests_properties(appkit-text-table PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
+
 # **AND THE PARAGRAPH STYLE'S GEOMETRY, WHICH IS NOW READ.** The indents place a line and narrow it, the spacings open
 # gaps between lines and across paragraph boundaries, and the line-height multiple and clamps set the band — each read as
 # the manager's own geometry, with the defaults pinned unmoved by the first case.

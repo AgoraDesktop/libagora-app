@@ -70,8 +70,18 @@ static NSParagraphStyle *fn_defaultParagraphStyle = nil;
 		_hyphenationFactor = style->_hyphenationFactor;
 		_tighteningFactorForTruncation = style->_tighteningFactorForTruncation;
 		_defaultTabInterval = style->_defaultTabInterval;
+		/* **AND THE BLOCKS ARE COPIED, not shared**, because a paragraph style is a value: a caller that changed an
+		 * array it had handed to a store would be changing the document behind the store's back. The array is immutable
+		 * and every block in it is copied. */
+		_textBlocks = [[NSArray alloc] initWithArray:style->_textBlocks copyItems:YES];
 	}
 	return self;
+}
+
+- (void)dealloc
+{
+	[_textBlocks release];
+	[super dealloc];
 }
 
 /* AN IMMUTABLE STYLE HAS NOTHING TO COPY: the object cannot have changed since it was made, so the copy IS the
@@ -162,6 +172,11 @@ static NSParagraphStyle *fn_defaultParagraphStyle = nil;
 	return _defaultTabInterval;
 }
 
+- (NSArray *)textBlocks
+{
+	return (_textBlocks != nil) ? _textBlocks : [NSArray array];
+}
+
 @end
 
 @implementation NSMutableParagraphStyle
@@ -183,6 +198,32 @@ static NSParagraphStyle *fn_defaultParagraphStyle = nil;
 - (void)setHyphenationFactor:(float)hyphenationFactor { _hyphenationFactor = hyphenationFactor; }
 - (void)setTighteningFactorForTruncation:(float)tighteningFactorForTruncation { _tighteningFactorForTruncation = tighteningFactorForTruncation; }
 - (void)setDefaultTabInterval:(CGFloat)defaultTabInterval { _defaultTabInterval = defaultTabInterval; }
+
+- (void)setTextBlocks:(NSArray *)textBlocks
+{
+	NSArray *held = (textBlocks != nil) ? [[NSArray alloc] initWithArray:textBlocks copyItems:YES] : nil;
+
+	[_textBlocks release];
+	_textBlocks = held;
+}
+
+- (void)addTextBlock:(NSTextBlock *)textBlock
+{
+	NSMutableArray *blocks = (_textBlocks != nil) ? [_textBlocks mutableCopy] : [[NSMutableArray alloc] init];
+
+	[blocks addObject:textBlock];
+	[_textBlocks release];
+	_textBlocks = blocks;
+}
+
+- (void)removeTextBlock:(NSTextBlock *)textBlock
+{
+	NSMutableArray *blocks = [_textBlocks mutableCopy];
+
+	[blocks removeObjectIdenticalTo:textBlock];
+	[_textBlocks release];
+	_textBlocks = blocks;
+}
 
 /* **AND A MUTABLE STYLE'S `-copy` IS AN IMMUTABLE ONE**, which is the door that lets a builder be frozen before it goes
  * into a store. It is the same ledger copy the superclass's `-mutableCopy` writes, into the immutable class. */

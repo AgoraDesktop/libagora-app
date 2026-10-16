@@ -24,7 +24,8 @@
  *        `CTLine` are GONE from this class, and the one copy of that arithmetic is in `NSLayoutManager`. It also
  *        means the view DRAWS RUNS rather than one style — a foreground colour, a background colour, the two rules and
  *        an attachment's cell are the manager's — and the PARAGRAPH STYLE's alignment, line-break mode and geometry
- *        are the layout's. What is left is tables and the inline flow an attachment's advance still needs.
+ *        are the layout's. What is left is the TABLE GRID (the blocks and their drawing are here) and the inline flow
+ *        an attachment's advance still needs.
  *
  * **AND THE MIRROR IS HOW THE BASE CLASS STILL WORKS.** `NSText` holds a `NSMutableString` and its movement and word
  * commands read it directly; so the view keeps that string as a MIRROR of the store, refreshed by the store's own
@@ -43,7 +44,10 @@
  * and there can be several per model line; the `cg_visualLine…` doors read the MANAGER, and they change every time
  * the text or the width does. A caller that wants "how many lines" has to say which.
  *
- * **WHAT IS STILL NOT HERE, NAMED RATHER THAN STUBBED:** tables. The `NSTextInput` PROTOCOL is here (`NSTextInput.h`),
+ * **WHAT IS STILL NOT HERE, NAMED RATHER THAN STUBBED:** the TABLE GRID — `NSTextBlock`, `NSTextTableBlock` and
+ * `NSTextTable` are here and the manager draws a block's ground and border around the lines that carry it, but shared
+ * column widths, rows measured across spanning cells and `-collapsesBorders` are the table layout still owed. The
+ * `NSTextInput` PROTOCOL is here (`NSTextInput.h`),
  * this view ANSWERS it, and the INPUT CONTEXT that owns a composition is here too (`NSTextInputContext.h`) — what is
  * still missing is an input METHOD behind it: the context has one stock keyboard and no composition engine, so it
  * reaches the standard key binding directly. ATTACHMENTS are drawn (`NSTextAttachment.h`, and the manager's run walk
