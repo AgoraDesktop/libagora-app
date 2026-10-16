@@ -165,6 +165,22 @@ target_link_libraries(text_layout_draw PRIVATE App m)
 add_test(NAME appkit-text-layout-draw COMMAND text_layout_draw)
 set_tests_properties(appkit-text-layout-draw PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
 
+# **AND THE TWO INK KEYS BESIDES THE GLYPHS: A BACKGROUND AND AN UNDERLINE.** A background colour fills the used rect
+# of its run and an underline draws a rule below the baseline; both are read as PIXELS, and the two-run case is what
+# makes the RUN WALK the subject rather than one colour per line.
+add_executable(text_layout_attributes text_layout_attributes.m)
+target_link_libraries(text_layout_attributes PRIVATE App m)
+add_test(NAME appkit-text-layout-attributes COMMAND text_layout_attributes)
+set_tests_properties(appkit-text-layout-attributes PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
+
+# **AND THE SECOND CONTAINER: TEXT THAT DOES NOT FIT THE FIRST IS CARRIED TO THE NEXT.** A container's own height is
+# the overflow edge, so a first container two lines tall takes two lines and the next takes the rest — checked as
+# fragment counts, per-container glyph ranges and each container's own coordinates.
+add_executable(text_layout_overflow text_layout_overflow.m)
+target_link_libraries(text_layout_overflow PRIVATE App m)
+add_test(NAME appkit-text-layout-overflow COMMAND text_layout_overflow)
+set_tests_properties(appkit-text-layout-overflow PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
+
 # **AND THE WORD GRANULARITY OF THE SAME KEYS.** Option+arrow moves by the word and Option+Delete deletes one, which
 # is arithmetic over the string's own characters and needs no layout model — the correction `NSResponder.h` carries.
 # Driven as KEYS, so the mapping is under test as well as the walk.
@@ -196,6 +212,22 @@ add_executable(text_view_scrolling text_view_scrolling.m)
 target_link_libraries(text_view_scrolling PRIVATE App m)
 add_test(NAME appkit-text-view-scrolling COMMAND text_view_scrolling)
 set_tests_properties(appkit-text-view-scrolling PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
+
+# **AND THE VIEW READING THE STORE THROUGH THE MANAGER, WHICH RETIRED ITS OWN LAYOUT.** The view owns the trio,
+# `-string` is the store's, an edit in either direction reaches the other, the visual line count IS the manager's
+# fragment count, a run in the store is the ink the view draws, and typing inherits the run at the insertion point.
+add_executable(text_view_store text_view_store.m)
+target_link_libraries(text_view_store PRIVATE App m)
+add_test(NAME appkit-text-view-store COMMAND text_view_store)
+set_tests_properties(appkit-text-view-store PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
+
+# **AND THE GLYPH STORE THE MANAGER KEEPS: THE GENERATED LINES, AND THE FOUR REVERSE LOOKUPS.** `-numberOfGlyphs`,
+# the two conversion doors, a glyph's x from its fragment's own origin, the point-to-glyph inverse, and the ORDINAL
+# fragment doors — including the boundary index, which belongs to the fragment that STARTS there.
+add_executable(text_layout_glyphs text_layout_glyphs.m)
+target_link_libraries(text_layout_glyphs PRIVATE App m)
+add_test(NAME appkit-text-layout-glyphs COMMAND text_layout_glyphs)
+set_tests_properties(appkit-text-layout-glyphs PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
 
 # **AND THE INSIDE OF A SCROLL VIEW.** `NSClipView`'s arithmetic is "the whole of it" (its own header), and it is
 # checked in EXACT POINTS rather than by drawing: where a short document sits, where a long one stops, and the

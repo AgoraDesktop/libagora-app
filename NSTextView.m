@@ -1,25 +1,25 @@
 /*
- * NSTextView.m — many lines where `NSText` holds one, and each of those wrapped to the view's width.
+ * NSTextView.m — many lines where `NSText` holds one, and the layout now READ FROM THE MANAGER rather than computed here.
  *
  * Copyright © 2026 Kyle J. Cardoza. MIT licensed — see LICENSE.
  * SPDX-License-Identifier: MIT
  *
- * **TWO UNITS, ONE MODEL.** A MODEL LINE is a `\n`-terminated run — arithmetic over the string, and the three
- * `cg_…OfLine:` doors. A VISUAL LINE is that model LAID OUT at the view's width, so a range a person reads as one line
- * may be several; the layout is a flat array of character ranges in reading order, and everything a text view places
- * (the glyphs, the selection, the caret, a click) reads that array. The BREAKING IS NOT DONE HERE: the tier has a
- * TYPESETTER (`CTTypesetter`, in `libagora-text`), and `-CTTypesetterSuggestLineBreak` answers exactly the question —
- * "how many characters fit" — reading the paragraph style's mode, handling a hard break of its own, and backing off to
- * a word boundary. This class decides WHEN to ask and what to do with the answer; it does not decide where a line
- * ends.
+ * **THE VIEW USED TO CARRY ITS OWN LAYOUT AND DOES NOT ANY MORE.** Slice IV built the trio — `NSTextStorage`,
+ * `NSTextContainer`, `NSLayoutManager` — and the manager already knew how to break a store into line fragments, place a
+ * glyph, hit-test a point and draw the ink. This class had a SECOND copy of that arithmetic (`_cg_visual`, a typesetter
+ * walk, a `CTLine` per line), which is exactly the kind of duplication that drifts. So the copy is GONE: the view owns
+ * the trio, `-string` is the STORE's string, and every layout question is forwarded to the manager. WHAT THE VIEW
+ * KEEPS IS WHAT IS ACTUALLY THE VIEW'S: the selection, the caret, the pointer, the key commands, and the height.
  *
- * **AND RE-WRAPPING IS A DIRTY FLAG RATHER THAN A CALL A CALLER MAKES.** The layout is rebuilt on the next read after
- * the text or the width changes, and the three doors that can change either clear the flag: `-replaceCharactersInRange:`
- * (the one edit primitive), `-setString:` (which writes the buffer directly) and `-setFrameSize:`. Nothing recomputes
- * eagerly, because a view that relaid out on every keystroke of a long document would do it once per character for a
- * frame that has not been drawn yet.
+ * **AND THE ONE THING THAT IS NOT A FORWARD IS THE base CLASS'S STRING.** `NSText` holds a `NSMutableString` and its
+ * character and word movement read it directly, so the view keeps that string as a MIRROR of the store, refreshed by
+ * `NSTextStorageDidProcessEditingNotification`. The store is the authority; the mirror is what lets two decades of
+ * `NSText` arithmetic keep working unchanged.
  */
 #import <AppKit/NSTextView.h>
+#import <AppKit/NSTextStorage.h>
+#import <AppKit/NSLayoutManager.h>
+#import <AppKit/NSTextContainer.h>
 #import <AppKit/NSFont.h>
 #import <AppKit/NSColor.h>
 #import <AppKit/NSGraphicsContext.h>
@@ -28,12 +28,20 @@
 #import <AppKit/NSEvent.h>
 #import <AppKit/NSAttributedString.h>
 #import <Foundation/NSNotification.h>
+#import <Foundation/NSNotificationCenter.h>
 
-#include <stdlib.h>
-#include <CoreGraphics/CGContext.h>
-#include <CoreText/CTLine.h>
-#include <CoreText/CTStringAttributes.h>
-#include <CoreText/CTTypesetter.h>
+/* ONE NOTIFICATION, POSTED AND HANDED TO THE DELEGATE — the same pair `NSText.m` spells, because this class owns the
+ * edit primitive rather than the base and the two halves must still happen together. */
+static void cg_announce(NSText *text, NSString *name, SEL delegateSelector)
+{
+	NSNotification *note = [NSNotification notificationWithName:name object:text];
+	id delegate = [text delegate];
+
+	[[NSNotificationCenter defaultCenter] postNotification:note];
+	if (delegate != nil && [delegate respondsToSelector:delegateSelector]) {
+		[delegate performSelector:delegateSelector withObject:note];
+	}
+}
 
 @implementation NSTextView
 
@@ -43,24 +51,114 @@
 	if (self != nil) {
 		/* APPLE'S DEFAULT FOR A TEXT VIEW, and the one a scroll view needs: the view is as tall as its text. */
 		_cg_verticallyResizable = YES;
+		/* **AND THE TRIO IS BUILT HERE, IN THE ONE DIRECTION THAT CANNOT CYCLE.** The view retains the STORE, the
+		 * store retains the MANAGER, the manager retains the CONTAINER, and the container holds a BORROWED pointer
+		 * back to this view. The padding is the field's own inset, so the manager's lines start where every other
+		 * text surface in this tier starts. */
+		_cg_textStorage = [[NSTextStorage alloc] init];
+		_cg_layoutManager = [[NSLayoutManager alloc] init];
+		_cg_textContainer = [[NSTextContainer alloc] initWithContainerSize:frameRect.size];
+		[_cg_textContainer setLineFragmentPadding:NS_TEXT_INSET];
+		[_cg_textContainer setTextView:self];
+		[_cg_textStorage addLayoutManager:_cg_layoutManager];
+		[_cg_layoutManager addTextContainer:_cg_textContainer];
+		/* **AND EVERY EDIT THE STORE ANNOUNCES REACHES THE MIRROR.** A direct store edit — a caller adding a run —
+		 * and the view's own edits alike, so the base class's string is never older than the store by more than the
+		 * synchronous notification itself. */
+		[[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(cg_textStorageDidProcessEditing:)
+			name:NSTextStorageDidProcessEditingNotification object:_cg_textStorage];
 	}
 	return self;
+}
+
+- (void)dealloc
+{
+	[[NSNotificationCenter defaultCenter] removeObserver:self name:NSTextStorageDidProcessEditingNotification
+		object:_cg_textStorage];
+	[_cg_textContainer setTextView:nil];
+	[_cg_textContainer release];
+	[_cg_layoutManager release];
+	[_cg_textStorage release];
+	[super dealloc];
 }
 
 /* **AND A TEXT VIEW IS FLIPPED, WHICH IS APPLE'S OWN ANSWER AND THE ONE SCROLLING NEEDS.** y runs DOWN from the top,
  * so the FIRST line sits at the clip view's origin and grows downward as a reader expects. The base, `NSText`, is a
  * y-up single-line field and stays one; what this class flips is ITS OWN coordinates, and every measurement below is
- * written in them. THE ONE PLACE THE FLIP IS VISIBLE IS THE TEXT: Core Text's own coordinates run UP from the
- * baseline, so a line is set inside a translate-and-mirror about its baseline — see `-drawRect:`. */
+ * written in them. THE MANAGER'S CONTAINER COORDINATES ARE THE SAME ONES, which is why the view adds only its inset. */
 - (BOOL)isFlipped
 {
 	return YES;
 }
 
-- (void)dealloc
+/* ============================================================================================ *
+ * THE TRIO, AND WHAT REACHES IT                                                                 *
+ * ============================================================================================ */
+
+- (NSTextStorage *)textStorage
 {
-	free(_cg_visual);
-	[super dealloc];
+	return _cg_textStorage;
+}
+
+/* **MOVING THE VIEW TO ANOTHER STORE IS FOUR WIRES AND A MIRROR.** Off the old store's list (which clears the
+ * manager's back-pointer), onto the new one's (which sets it), the observer moved, and the base's string re-read — the
+ * layout is invalidated by the manager's own `-setTextStorage:` along the way, so there is nothing else to forget. */
+- (void)setTextStorage:(NSTextStorage *)storage
+{
+	if (storage == _cg_textStorage) {
+		return;
+	}
+	[[NSNotificationCenter defaultCenter] removeObserver:self name:NSTextStorageDidProcessEditingNotification
+		object:_cg_textStorage];
+	if (_cg_textStorage != nil) {
+		[_cg_textStorage removeLayoutManager:_cg_layoutManager];
+	}
+	[storage retain];
+	[_cg_textStorage release];
+	_cg_textStorage = storage;
+	if (_cg_textStorage != nil) {
+		[_cg_textStorage addLayoutManager:_cg_layoutManager];
+		[[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(cg_textStorageDidProcessEditing:)
+			name:NSTextStorageDidProcessEditingNotification object:_cg_textStorage];
+	}
+	[self cg_mirrorString];
+	[self setNeedsDisplay:YES];
+	[self cg_fitHeight];
+}
+
+- (NSLayoutManager *)layoutManager
+{
+	return _cg_layoutManager;
+}
+
+- (NSTextContainer *)textContainer
+{
+	return _cg_textContainer;
+}
+
+/* THE MIRROR, AND THE TWO THINGS THAT HAPPEN WHEN IT MOVES: the display is stale and the height may be. */
+- (void)cg_textStorageDidProcessEditing:(NSNotification *)note
+{
+	(void)note;
+	[self cg_mirrorString];
+	[self setNeedsDisplay:YES];
+	[self cg_fitHeight];
+}
+
+- (void)cg_mirrorString
+{
+	NSString *current = (_cg_textStorage != nil) ? [_cg_textStorage string] : @"";
+
+	if (![_string isEqualToString:current]) {
+		[_string setString:current];
+	}
+}
+
+/* **AND THE STRING A CALLER READS IS THE STORE'S**, which is the whole point of the slice: a caller that reads
+ * `-string` and a caller that reads `-textStorage` get the same characters, and an edit to either is seen by both. */
+- (NSString *)string
+{
+	return (_cg_textStorage != nil) ? [_cg_textStorage string] : @"";
 }
 
 /* ============================================================================================ *
@@ -69,16 +167,16 @@
 
 /* **AND THE COUNT COUNTS BREAKS RATHER THAN RUNS, WHICH IS WHAT MAKES A TRAILING NEWLINE AN EMPTY LAST LINE.** "a\n"
  * has one break in it and therefore TWO lines — "a" and "" — and that is the state a document is in when the caret
- * sits on a fresh line at the end. An EMPTY STRING is one empty line, not none: a view with no text still has a place
- * to put the caret. */
+ * sits on a fresh line at the end. An EMPTY STRING is one empty line, not none. */
 - (NSUInteger)cg_lineCount
 {
-	NSUInteger n = [_string length];
+	NSString *string = [self string];
+	NSUInteger n = [string length];
 	NSUInteger count = 1;
 	NSUInteger i;
 
 	for (i = 0; i < n; i++) {
-		if ([_string characterAtIndex:i] == '\n') {
+		if ([string characterAtIndex:i] == '\n') {
 			count++;
 		}
 	}
@@ -90,7 +188,8 @@
  * next line's first character. */
 - (NSUInteger)cg_lineIndexForCharacterIndex:(NSUInteger)index
 {
-	NSUInteger n = [_string length];
+	NSString *string = [self string];
+	NSUInteger n = [string length];
 	NSUInteger line = 0;
 	NSUInteger i;
 
@@ -98,7 +197,7 @@
 		index = n;
 	}
 	for (i = 0; i < index; i++) {
-		if ([_string characterAtIndex:i] == '\n') {
+		if ([string characterAtIndex:i] == '\n') {
 			line++;
 		}
 	}
@@ -110,14 +209,15 @@
  * LAST answers the empty range at the end rather than a wrong one. */
 - (NSRange)cg_characterRangeOfLine:(NSUInteger)line
 {
-	NSUInteger n = [_string length];
+	NSString *string = [self string];
+	NSUInteger n = [string length];
 	NSUInteger current = 0;
 	NSUInteger start = 0;
 	NSUInteger i;
 	NSUInteger end;
 
 	for (i = 0; i < n; i++) {
-		if ([_string characterAtIndex:i] != '\n') {
+		if ([string characterAtIndex:i] != '\n') {
 			continue;
 		}
 		if (current == line) {
@@ -130,115 +230,69 @@
 		return NSMakeRange(n, 0);
 	}
 	end = start;
-	while (end < n && [_string characterAtIndex:end] != '\n') {
+	while (end < n && [string characterAtIndex:end] != '\n') {
 		end++;
 	}
 	return NSMakeRange(start, end - start);
 }
 
 /* ============================================================================================ *
- * THE LAYOUT: THE MODEL AT THE VIEW'S WIDTH, WRAPPED BY THE TYPESETTER                          *
+ * THE LAYOUT, WHICH IS NOW THE MANAGER'S                                                        *
  * ============================================================================================ */
 
-- (void)cg_appendVisualLine:(NSRange)range
+/* THE FONT A LINE IS MEASURED IN. The store's own attribute at the first character is the authority — that is what
+ * makes a run's font reach the layout — and a store with none falls back to this view's own font and then the system's,
+ * which is the same chain `NSText` uses. */
+- (NSFont *)cg_font
 {
-	if (_cg_visualCount == _cg_visualCapacity) {
-		NSUInteger capacity = (_cg_visualCapacity == 0) ? 8 : _cg_visualCapacity * 2;
+	id font = nil;
 
-		_cg_visual = realloc(_cg_visual, capacity * sizeof(NSRange));
-		_cg_visualCapacity = capacity;
+	if ([_cg_textStorage length] > 0) {
+		font = [[_cg_textStorage attributesAtIndex:0 effectiveRange:NULL] objectForKey:NSFontAttributeName];
 	}
-	_cg_visual[_cg_visualCount] = range;
-	_cg_visualCount++;
+	if (font == nil) {
+		font = [self font];
+	}
+	return (font != nil) ? (NSFont *)font : [NSFont systemFontOfSize:[NSFont systemFontSize]];
 }
 
-/* **AND THIS IS WHERE THE WIDTH COMES IN.** The content width is the view less the two insets; the typesetter is built
- * once over the whole string and asked for one break at a time, each answer fed straight back as the next start — which
- * is exactly Apple's own description of the loop it is for. A width of zero or less means there is nowhere to wrap TO,
- * so the text is taken a line at a time by its own hard breaks (which the typesetter answers anyway) rather than every
- * character becoming a line.
- *
- * **A TRAILING NEWLINE OWES AN EMPTY LAST LINE.** The typesetter puts a hard break IN the line it ends, so "a\n" comes
- * back as ONE range of two characters — and the position AFTER the break, which is where the caret sits on a fresh
- * last line, would have no line to belong to. The empty range is appended for exactly that position. */
-- (void)cg_ensureLayout
+/* THE FONT'S OWN BAND, taken from the manager so the view and the lines it draws cannot disagree about it. */
+- (CGFloat)cg_lineHeight
 {
-	CGFloat width = NSWidth([self bounds]) - 2.0 * NS_TEXT_INSET;
-	NSUInteger n = [_string length];
-	CFMutableDictionaryRef attributes;
-	CFAttributedStringRef s;
-	CTTypesetterRef ts;
-	CFIndex start = 0;
-
-	if (_cg_layoutValid && width == _cg_layoutWidth) {
-		return;
-	}
-	_cg_layoutWidth = width;
-	_cg_layoutValid = YES;
-	_cg_visualCount = 0;
-	if (n == 0) {
-		[self cg_appendVisualLine:NSMakeRange(0, 0)];
-		return;
-	}
-	attributes = CFDictionaryCreateMutable(kCFAllocatorDefault, 0,
-			&kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
-	CFDictionarySetValue(attributes, kCTFontAttributeName, ((NSFont *)[self cg_font])->_font);
-	s = CFAttributedStringCreate(kCFAllocatorDefault, (CFStringRef)_string, attributes);
-	CFRelease(attributes);
-	ts = (s != NULL) ? CTTypesetterCreateWithAttributedString(s) : NULL;
-	if (s != NULL) {
-		CFRelease(s);
-	}
-	if (ts == NULL) {
-		[self cg_appendVisualLine:NSMakeRange(0, n)];
-		return;
-	}
-	while (start < (CFIndex)n) {
-		CFIndex count = (width > 0.0) ? CTTypesetterSuggestLineBreak(ts, start, (double)width)
-					      : (CFIndex)(n - (NSUInteger)start);
-
-		if (count <= 0) {
-			count = 1;
-		}
-		if (start + count > (CFIndex)n) {
-			count = (CFIndex)n - start;
-		}
-		[self cg_appendVisualLine:NSMakeRange((NSUInteger)start, (NSUInteger)count)];
-		start += count;
-	}
-	CFRelease(ts);
-	if ([_string characterAtIndex:n - 1] == '\n') {
-		[self cg_appendVisualLine:NSMakeRange(n, 0)];
-	}
+	return [_cg_layoutManager cg_lineHeight];
 }
 
+/* **THE VISUAL LINE IS THE MANAGER'S FRAGMENT, INDEX FOR INDEX** — the same object, not a second layout that happens
+ * to agree. A line past the last answers the empty range at the end of the store. */
 - (NSUInteger)cg_visualLineCount
 {
-	[self cg_ensureLayout];
-	return _cg_visualCount;
+	return [_cg_layoutManager cg_lineFragmentCountForTextContainer:_cg_textContainer];
 }
 
 - (NSRange)cg_visualLineRangeAtIndex:(NSUInteger)line
 {
-	[self cg_ensureLayout];
-	if (line >= _cg_visualCount) {
-		return NSMakeRange([_string length], 0);
-	}
-	return _cg_visual[line];
+	return [_cg_layoutManager cg_lineFragmentRangeAtIndex:line inTextContainer:_cg_textContainer];
 }
 
 /* **AND THE RANGE A LINE DRAWS IS THE LAYOUT'S LESS ITS TRAILING WHITESPACE.** The breaker keeps a trailing space or
  * newline in the range because it is part of what it MEASURED; none of it is ink, and taking it off the range a glyph
- * is set for is what makes the boundary between two visual lines UNAMBIGUOUS — the position after a wrapped space is
- * the NEXT line's start and the position before it is THIS line's end. Without that, both lines claim the same index
- * and a click at the left edge of the second line lands, visibly, at the end of the first. */
+ * is set for is what makes the boundary between two visual lines UNAMBIGUOUS. */
 - (NSRange)cg_textRangeOfVisualLine:(NSUInteger)line
 {
 	NSRange r = [self cg_visualLineRangeAtIndex:line];
-	NSUInteger end = r.location + r.length;
+	NSString *string = [self string];
+	NSUInteger n = [string length];
+	NSUInteger end;
 
+	if (r.location >= n) {
+		return NSMakeRange(n, 0);
+	}
+	end = r.location + r.length;
+	if (end > n) {
+		end = n;
+	}
 	while (end > r.location) {
-		unichar c = [_string characterAtIndex:end - 1];
+		unichar c = [string characterAtIndex:end - 1];
 
 		if (c == ' ' || c == '\t' || c == '\n') {
 			end--;
@@ -249,154 +303,68 @@
 	return NSMakeRange(r.location, end - r.location);
 }
 
-/* **WHICH VISUAL LINE A CARET INDEX BELONGS TO: THE FIRST ONE WHOSE TEXT RANGE CONTAINS IT.** With trailing whitespace
- * off the range, every index belongs to exactly one line — the wrapped line's own end and the next line's first
- * character are DIFFERENT indices — so this is a lookup rather than a tie-break, and both the caret and a click read
- * it the same way. A line with no visible characters (an empty one, or the line a hard break opened) holds its own
- * start position. */
+/* **WHICH VISUAL LINE A CARET INDEX BELONGS TO: THE FIRST FRAGMENT THAT HOLDS IT.** The fragment's own start is the
+ * lower bound and the TRIMMED end the upper, which is what keeps the wrapped line's trailing space on the line it
+ * ended and the next line's first character a different index. A line with no visible characters holds its own start. */
 - (NSUInteger)cg_visualLineIndexForCharacterIndex:(NSUInteger)index
 {
 	NSUInteger i, count = [self cg_visualLineCount];
 
 	for (i = 0; i < count; i++) {
-		NSRange range = [self cg_textRangeOfVisualLine:i];
+		NSRange full = [self cg_visualLineRangeAtIndex:i];
+		NSRange trimmed = [self cg_textRangeOfVisualLine:i];
 
-		if (_cg_visual[i].location <= index && index <= range.location + range.length) {
+		if (full.location <= index && index <= trimmed.location + trimmed.length) {
 			return i;
 		}
 	}
-	return count - 1;
+	return (count > 0) ? (count - 1) : 0;
 }
 
-/* ============================================================================================ *
- * THE THREE NUMBERS THE LAYOUT IS MADE OF: THE FONT, THE LINE'S HEIGHT, AND A LINE'S BASELINE    *
- * ============================================================================================ */
-
-- (NSFont *)cg_font
-{
-	NSFont *font = [self font];
-
-	return (font != nil) ? font : [NSFont systemFontOfSize:[NSFont systemFontSize]];
-}
-
-/* THE FONT'S OWN BAND, which is a fact about the FONT and not about any line's text — so an empty line is the same
- * height as a full one and a document does not jump when a character arrives on a blank line. */
-- (CGFloat)cg_lineHeight
-{
-	NSFont *font = [self cg_font];
-
-	return [font ascender] - [font descender];
-}
-
-/* **A LINE'S BASELINE, MEASURED DOWN FROM THE TOP OF THE VIEW** — line 0 at the same baseline `NSText` places its
- * single line at, and each line after it one band lower. It takes a VISUAL line's index: a wrapped line's second part
- * is a line of its own for every purpose this file has. */
+/* **A LINE'S BASELINE, MEASURED DOWN FROM THE TOP OF THE VIEW** — the container origin's inset plus the fragment's own
+ * place plus the font's ascender. It takes a VISUAL line's index: a wrapped line's second part is a line of its own
+ * for every purpose this file has. */
 - (CGFloat)cg_baselineForLine:(NSUInteger)line
 {
-	NSFont *font = [self cg_font];
+	NSRange range = [self cg_visualLineRangeAtIndex:line];
+	NSRect fragment = [_cg_layoutManager lineFragmentRectForGlyphAtIndex:range.location effectiveRange:NULL];
 
-	return NS_TEXT_INSET + [font ascender] + (CGFloat)line * [self cg_lineHeight];
+	return NS_TEXT_INSET + fragment.origin.y + [[self cg_font] ascender];
 }
 
-/* **A `CTLine` IS BUILT FOR A RANGE RATHER THAN FOR THE WHOLE STRING**, because a `CTLine` lays the string it is given
- * as ONE line: the breaking is the typesetter's (above) and this is only the setting. A range with no characters
- * answers NULL, which every caller reads as "an empty line with no glyphs". */
-- (CTLineRef)cg_createLineForRange:(NSRange)range
-{
-	NSFont *font = [self cg_font];
-	NSString *sub = [_string substringWithRange:range];
-	CFMutableDictionaryRef attributes;
-	CFAttributedStringRef s;
-	CTLineRef line;
-
-	attributes = CFDictionaryCreateMutable(kCFAllocatorDefault, 0,
-			&kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
-	CFDictionarySetValue(attributes, kCTFontAttributeName, ((NSFont *)font)->_font);
-	s = CFAttributedStringCreate(kCFAllocatorDefault, (CFStringRef)sub, attributes);
-	CFRelease(attributes);
-	if (s == NULL) {
-		return NULL;
-	}
-	line = CTLineCreateWithAttributedString(s);
-	CFRelease(s);
-	return line;
-}
-
-/* THE X OF A CHARACTER INDEX, measured from the LEFT EDGE OF THE VISUAL LINE IT LANDS ON — every line begins at the
- * same inset, so this is also its x in the view. The index is made relative to the line's TEXT range before Core Text
- * is asked, because Core Text counts from the start of the line it was given. */
+/* THE X OF A CHARACTER INDEX, measured from the LEFT EDGE OF THE VISUAL LINE it lands on — the manager's offset less
+ * its fragment padding, so every caller adds the one inset itself, exactly as before. */
 - (CGFloat)cg_xForIndex:(NSUInteger)index
 {
-	NSUInteger line = [self cg_visualLineIndexForCharacterIndex:index];
-	NSRange range = [self cg_textRangeOfVisualLine:line];
-	CTLineRef ctline = [self cg_createLineForRange:range];
-	CGFloat x = -1.0;
-
-	if (ctline != NULL) {
-		CFIndex rel = (CFIndex)(index - range.location);
-
-		if (rel < 0) {
-			rel = 0;
-		}
-		if ((NSUInteger)rel > range.length) {
-			rel = (CFIndex)range.length;
-		}
-		x = (CGFloat)CTLineGetOffsetForStringIndex(ctline, rel, NULL);
-		CFRelease(ctline);
-	}
-	return (x < 0.0) ? 0.0 : x;
+	return [_cg_layoutManager cg_offsetForGlyphAtIndex:index] - NS_TEXT_INSET;
 }
 
-/* **THE INVERSE, WHICH IS WHAT A CLICK ASKS: WHICH VISUAL LINE FROM THE Y, THEN WHICH CHARACTER FROM THE X.** The line
- * is arithmetic — the distance down from the top of the first line, divided by the band — and only the character is
- * Core Text's. A click above the first line lands on line 0 and one below the last lands on the last. */
+/* **THE INVERSE, WHICH IS WHAT A CLICK ASKS: WHICH VISUAL LINE FROM THE y, THEN WHICH CHARACTER FROM THE x.** The
+ * manager does both; the view only moves the point out of its own inset and into the container's coordinates. */
 - (NSUInteger)cg_indexForPoint:(NSPoint)point
 {
-	CGFloat lineHeight = [self cg_lineHeight];
-	CGFloat offset = point.y - NS_TEXT_INSET;
-	NSUInteger line, count;
-	NSRange range;
-	CTLineRef ctline;
-	CFIndex index = 0;
+	return [_cg_layoutManager cg_glyphIndexForPoint:NSMakePoint(point.x, point.y - NS_TEXT_INSET)
+					      inTextContainer:_cg_textContainer];
+}
 
-	[self cg_ensureLayout];
-	count = _cg_visualCount;
-	if (lineHeight <= 0.0 || offset <= 0.0) {
-		line = 0;
-	} else {
-		line = (NSUInteger)(offset / lineHeight);
-	}
-	if (line >= count) {
-		line = count - 1;
-	}
-	range = [self cg_textRangeOfVisualLine:line];
-	ctline = [self cg_createLineForRange:range];
-	if (ctline != NULL) {
-		index = CTLineGetStringIndexForPosition(ctline, CGPointMake(point.x - NS_TEXT_INSET, 0.0));
-		CFRelease(ctline);
-	}
-	if (index < 0) {
-		index = 0;
-	}
-	if ((NSUInteger)index > range.length) {
-		index = (CFIndex)range.length;
-	}
-	return range.location + (NSUInteger)index;
+/* THE INDEX ON A GIVEN VISUAL LINE NEAREST TO AN X — the goal column of a vertical movement. The line's own y picks
+ * the fragment and the x picks the character, so this is the same hit test aimed at a chosen line. */
+- (NSUInteger)cg_indexOnLine:(NSUInteger)line atX:(CGFloat)x
+{
+	NSRange range = [self cg_visualLineRangeAtIndex:line];
+	NSRect fragment = [_cg_layoutManager lineFragmentRectForGlyphAtIndex:range.location effectiveRange:NULL];
+
+	return [_cg_layoutManager cg_glyphIndexForPoint:NSMakePoint(NS_TEXT_INSET + x, fragment.origin.y + [self cg_lineHeight] / 2.0)
+					      inTextContainer:_cg_textContainer];
 }
 
 /* ============================================================================================ *
  * THE MEASUREMENT: THE HEIGHT THE LAYOUT NEEDS AT THE WIDTH IT HAS                             *
  * ============================================================================================ */
 
-/* **A WRAPPING VIEW'S WIDTH IS THE CALLER'S AND ITS HEIGHT IS ITS OWN.** `-sizeToFit` here keeps the frame's width —
- * which is the container's, or the caller's — and answers the height the wrapped layout needs at it. A view that set
- * its own width from its longest line would RE-WRAP ITSELF the next time it laid out, because that line may only be
- * the longest BECAUSE of the width; the height has no such circle. */
-/* **AND A TEXT VIEW IS AS TALL AS ITS LAYOUT, WHICH IS WHAT A CLIP VIEW NEEDS IN ORDER TO SCROLL ANYTHING** — unless
- * the caller said otherwise. The height is settled after every edit and after a width change, because both re-wrap:
- * a document that grew a line and kept its old frame would have the new line outside the scrollable area, and one
- * that SHRANK would leave the clip view showing space the document no longer has. THE WIDTH IS NEVER TOUCHED — it is
- * the caller's, and a view that set its own width from its longest line would RE-WRAP ITSELF on the next layout. */
+/* **A WRAPPING VIEW'S WIDTH IS THE CALLER'S AND ITS HEIGHT IS ITS OWN.** `-sizeToFit` keeps the frame's width and
+ * answers the height the manager's used rect implies, plus the view's own two insets. THE WIDTH IS NEVER TOUCHED — a
+ * view that set its own width from its longest line would RE-WRAP ITSELF on the next layout. */
 - (BOOL)isVerticallyResizable
 {
 	return _cg_verticallyResizable;
@@ -412,12 +380,19 @@
 
 - (void)cg_setHeightToLayout
 {
+	CGFloat width = [self frame].size.width;
 	CGFloat height;
 
-	[self cg_ensureLayout];
-	height = (CGFloat)_cg_visualCount * [self cg_lineHeight] + 2.0 * NS_TEXT_INSET;
+	[_cg_layoutManager ensureLayoutForTextContainer:_cg_textContainer];
+	height = [_cg_layoutManager usedRectForTextContainer:_cg_textContainer].size.height + 2.0 * NS_TEXT_INSET;
 	if (height != [self frame].size.height) {
-		[super setFrameSize:NSMakeSize([self frame].size.width, height)];
+		/* **THE CONTAINER FOLLOWS THE FRAME IN WIDTH AND NOT IN HEIGHT, AND THAT ASYMMETRY IS THE POINT.** The manager
+		 * wraps to the container's width; a ZERO height means UNBOUNDED, which is what a scrolling document is — its
+		 * height is the layout's answer rather than an input, so a container that carried the frame's short height would
+		 * clip the very lines this method is measuring. `[super setFrameSize:]` is deliberate: the overridden door would
+		 * set the container and invalidate the layout this method just asked for. */
+		[_cg_textContainer setContainerSize:NSMakeSize(width, 0.0)];
+		[super setFrameSize:NSMakeSize(width, height)];
 	}
 }
 
@@ -428,18 +403,15 @@
 	}
 }
 
-/* **AND `-sizeToFit` FITS REGARDLESS**, because it is an explicit request rather than the automatic height above: a
- * caller that asks for the fit wants it whether or not the view is auto-sizing. */
+/* **AND `-sizeToFit` FITS REGARDLESS**, because it is an explicit request rather than the automatic height above. */
 - (void)sizeToFit
 {
 	[self cg_setHeightToLayout];
 }
 
-/* **AND BRINGING A RANGE INTO VIEW IS ASKING THE CLIP VIEW, WHICH IS WHAT SLICE III IS.** The base carried its own
- * horizontal origin because it is a FIELD with no clip view; a DOCUMENT is put inside one by its caller, and the
- * scrolling is that clip view's — so this door computes the caret's RECTANGLE and hands it to
- * `-scrollRectToVisible:`, which walks up to the clip view and moves it just far enough. With WRAPPING there is
- * nothing to scroll sideways: every line is inside the width, so the question is vertical and the answer is a line. */
+/* **AND BRINGING A RANGE INTO VIEW IS ASKING THE CLIP VIEW.** The caret's rectangle is computed from the manager's
+ * fragment, and `-scrollRectToVisible:` walks up to the clip view just far enough. With WRAPPING there is nothing to
+ * scroll sideways: every line is inside the width, so the question is vertical and the answer is a line. */
 - (NSRect)cg_rectForCharacterIndex:(NSUInteger)index
 {
 	NSFont *font = [self cg_font];
@@ -452,60 +424,113 @@
 
 - (void)scrollRangeToVisible:(NSRange)range
 {
-	[self cg_ensureLayout];
 	[self scrollRectToVisible:[self cg_rectForCharacterIndex:range.location]];
 }
 
 /* ============================================================================================ *
- * THE THREE DOORS THAT CHANGE THE TEXT OR THE WIDTH, EACH CLEARING THE LAYOUT                    *
+ * THE THREE DOORS THAT CHANGE THE TEXT OR THE WIDTH                                             *
  * ============================================================================================ */
 
-/* **A LAYOUT IS STALE THE MOMENT THE TEXT OR THE WIDTH IS NOT WHAT IT WAS BUILT FROM, AND THESE ARE THE ONLY THREE
- * WAYS EITHER CAN CHANGE.** `-replaceCharactersInRange:` is the one edit primitive every other edit is spelled in;
- * `-setString:` writes the buffer directly and would otherwise be missed; and `-setFrameSize:` is the width. A
- * HEIGHT-ONLY RESIZE DOES NOT INVALIDATE, because a wrap depends on the width alone — which is also why
- * `-sizeToFit`, which sets the height it just measured, does not throw its own work away. */
+/* **THE EDIT PRIMITIVE IS THE STORE'S NOW, AND THE BASE'S STRING IS THE MIRROR.** Every other edit in the base class is
+ * spelled in this door, so this is the one place a keystroke, a paste and a programmatic replacement all meet. THE
+ * INSERTED TEXT INHERITS THE RUN AT THE INSERTION POINT — the character before it, or the first character if the edit
+ * is at the start — which is what makes typing into a coloured run stay coloured; a store with no runs takes the view's
+ * own font when it has one. */
 - (void)replaceCharactersInRange:(NSRange)range withString:(NSString *)string
 {
-	_cg_layoutValid = NO;
-	[super replaceCharactersInRange:range withString:string];
+	NSString *text = (string != nil) ? string : @"";
+	NSUInteger length = [_cg_textStorage length];
+	NSDictionary *inherited = nil;
+
+	if (range.location > length) {
+		range.location = length;
+	}
+	if (range.location + range.length > length) {
+		range.length = length - range.location;
+	}
+	if (length > 0 && range.location > 0) {
+		inherited = [_cg_textStorage attributesAtIndex:range.location - 1 effectiveRange:NULL];
+	} else if (length > 0) {
+		inherited = [_cg_textStorage attributesAtIndex:0 effectiveRange:NULL];
+	} else if ([self font] != nil) {
+		inherited = [NSDictionary dictionaryWithObject:[self font] forKey:NSFontAttributeName];
+	}
+	[_cg_textStorage beginEditing];
+	[_cg_textStorage replaceCharactersInRange:range withString:text];
+	if (inherited != nil && [text length] > 0) {
+		[_cg_textStorage setAttributes:inherited range:NSMakeRange(range.location, [text length])];
+	}
+	[_cg_textStorage endEditing];
+	[self setSelectedRange:NSMakeRange(range.location + [text length], 0)];
+	cg_announce(self, NSTextDidChangeNotification, @selector(textDidChange:));
+	[self setNeedsDisplay:YES];
 	[self cg_fitHeight];
 }
 
+/* **AND `-setString:` REPLACES THE WHOLE STORE**, keeping the view's font as the run the new text is set in, because a
+ * setter is a caller saying what the text is and not throwing the face away with it. */
 - (void)setString:(NSString *)string
 {
-	_cg_layoutValid = NO;
-	[super setString:string];
+	NSString *text = (string != nil) ? string : @"";
+	id font = [self font];
+
+	[_cg_textStorage beginEditing];
+	[_cg_textStorage replaceCharactersInRange:NSMakeRange(0, [_cg_textStorage length]) withString:text];
+	if (font != nil && [text length] > 0) {
+		[_cg_textStorage addAttribute:NSFontAttributeName value:font range:NSMakeRange(0, [text length])];
+	}
+	[_cg_textStorage endEditing];
+	[self setSelectedRange:NSMakeRange([text length], 0)];
+	cg_announce(self, NSTextDidChangeNotification, @selector(textDidChange:));
+	[self setNeedsDisplay:YES];
 	[self cg_fitHeight];
 }
 
+/* **AND THE FONT IS CARRIED INTO THE STORE.** `NSText` answers `-font` from its own ivar and the manager reads the
+ * store; setting one without the other would be two answers to one question, so this door writes both: the ivar
+ * through the base and the run through the store. */
+- (void)setFont:(id)font
+{
+	[super setFont:font];
+	if (font != nil && [_cg_textStorage length] > 0) {
+		[_cg_textStorage addAttribute:NSFontAttributeName value:font
+					 range:NSMakeRange(0, [_cg_textStorage length])];
+	}
+}
+
+/* **AND THE WIDTH IS THE CONTAINER'S.** A resize carries the new size into the container, marks the layout stale —
+ * a wrap depends on the width and an overflow on the height, so neither is assumed unchanged — and re-fits when the
+ * WIDTH moved, because that is what re-wraps. */
 - (void)setFrameSize:(NSSize)newSize
 {
 	BOOL widthChanged = (newSize.width != [self frame].size.width);
 
-	if (widthChanged) {
-		_cg_layoutValid = NO;
-	}
 	[super setFrameSize:newSize];
+	[_cg_textContainer setContainerSize:NSMakeSize(newSize.width, 0.0)];
+	[_cg_layoutManager invalidateLayoutForCharacterRange:NSMakeRange(0, [_cg_textStorage length])
+					     actualCharacterRange:NULL];
 	if (widthChanged) {
 		[self cg_fitHeight];
 	}
+	[self setNeedsDisplay:YES];
 }
 
 /* ============================================================================================ *
- * THE DRAWING: THE BACKGROUND, THEN EVERY VISUAL LINE'S BAND AND GLYPHS, THEN THE CARET         *
+ * THE DRAWING: THE BACKDROP, THE SELECTION, THE MANAGER'S INK, AND THE CARET                    *
  * ============================================================================================ */
 
 /* **AND THE BEZEL IS GONE, WHICH IS A DIFFERENCE FROM THE BASE WORTH STATING.** `NSText` is the editable surface under
  * a CONTROL, so it draws the field's border; a TEXT VIEW is the document itself, and Apple's draws no bezel either.
- * What it keeps is the BACKGROUND FILL. The rest is the base's drawing run once per VISUAL line. */
+ * What it keeps is the BACKGROUND FILL and the SELECTION, both of which are the VIEW's — the selection because only
+ * the view knows where it is. THE GLYPHS AND THEIR RUNS ARE THE MANAGER'S: a foreground colour, a background colour and
+ * an underline all come out of `NSLayoutManager`'s two draw doors. */
 - (void)drawRect:(NSRect)dirtyRect
 {
 	NSGraphicsContext *context = [NSGraphicsContext currentContext];
 	CGContextRef cg = (context != nil) ? (CGContextRef)[context graphicsPort] : NULL;
 	NSFont *font = [self cg_font];
 	CGFloat bandHeight = [font ascender] - [font descender];
-	NSUInteger i, count;
+	NSUInteger n = [[self string] length];
 
 	(void)dirtyRect;
 	if (cg == NULL) {
@@ -515,64 +540,35 @@
 		[[self backgroundColor] != nil ? [self backgroundColor] : [NSColor controlBackgroundColor] setFill];
 		[[NSBezierPath bezierPathWithRect:[self bounds]] fill];
 	}
-	[self cg_ensureLayout];
-	count = _cg_visualCount;
-	for (i = 0; i < count; i++) {
-		NSRange lr = _cg_visual[i];
-		NSRange range = [self cg_textRangeOfVisualLine:i];
-		NSUInteger caretEnd = range.location + range.length;
-		CGFloat baseline = [self cg_baselineForLine:i];
-		CTLineRef line = [self cg_createLineForRange:range];
-		NSRect band = NSZeroRect;
+	/* **THE SELECTION IS CLIPPED TO EACH VISUAL LINE, ONE LINE AT A TIME**, which is what makes a selection that spans
+	 * a break or a wrap draw as a band on each line it covers. The newline itself carries no band: there is no glyph
+	 * there to highlight. */
+	if ([self isSelectable] && _selectedRange.length > 0) {
 		NSUInteger selStart = _selectedRange.location;
 		NSUInteger selEnd = selStart + _selectedRange.length;
-		NSUInteger lo = (selStart > lr.location) ? selStart : lr.location;
-		NSUInteger hi = (selEnd < caretEnd) ? selEnd : caretEnd;
-		BOOL hasBand = NO;
+		NSUInteger count = [self cg_visualLineCount];
+		NSUInteger i;
 
-		/* **THE SELECTION IS CLIPPED TO THIS VISUAL LINE, ONE LINE AT A TIME**, which is what makes a selection that
-		 * spans a break or a wrap draw as a band on each line it covers. The newline itself carries no band: there is
-		 * no glyph there to highlight. */
-		if ([self isSelectable] && _selectedRange.length > 0 && lo < hi) {
-			CGFloat x0 = NS_TEXT_INSET + [self cg_xForIndex:lo];
-			CGFloat x1 = NS_TEXT_INSET + [self cg_xForIndex:hi];
+		for (i = 0; i < count; i++) {
+			NSRange lr = [self cg_textRangeOfVisualLine:i];
+			NSUInteger caretEnd = lr.location + lr.length;
+			NSUInteger lo = (selStart > lr.location) ? selStart : lr.location;
+			NSUInteger hi = (selEnd < caretEnd) ? selEnd : caretEnd;
 
-			band = NSMakeRect(x0, baseline - [font ascender], x1 - x0, bandHeight);
-			hasBand = YES;
-			[[NSColor cg_accentColor] setFill];
-			[[NSBezierPath bezierPathWithRect:band] fill];
-		}
-		if (line != NULL) {
-			/* **AND THE TEXT IS SET IN ITS OWN y-UP FRAME, BECAUSE A FLIPPED VIEW'S IS y-DOWN.** That is what flipping
-			 * MEANS, and Core Text's own coordinates run UP from the baseline — so the line is set inside a
-			 * translate-then-mirror ABOUT THE BASELINE, which is the standard AppKit idiom for text in a flipped view
-			 * and the reason `-cg_baselineForLine:` can be a y-down measurement. WITHOUT it every glyph comes out upside
-			 * down, which is exactly what a first attempt at a flip produces. */
-			[[NSColor controlTextColor] setFill];
-			CGContextSaveGState(cg);
-			CGContextTranslateCTM(cg, 0.0, baseline);
-			CGContextScaleCTM(cg, 1.0, -1.0);
-			CGContextSetTextPosition(cg, NS_TEXT_INSET, 0.0);
-			CTLineDraw(line, cg);
-			CGContextRestoreGState(cg);
-			/* AND THE GLYPHS THE BAND COVERS ARE DRAWN AGAIN IN WHITE THROUGH A CLIP — the base's second pass, for
-			 * the same reason (selected text is drawn in the surface colour) and with the same limitation: this view
-			 * holds ONE run, so the whole line is redrawn and the clip does the splitting. THE CLIP IS SET IN THE VIEW'S
-			 * OWN SPACE BEFORE the context is mirrored, because a clip is a region of the surface rather than a
-			 * coordinate. */
-			if (hasBand) {
-				CGContextSaveGState(cg);
-				CGContextClipToRect(cg, band);
-				[[NSColor whiteColor] setFill];
-				CGContextTranslateCTM(cg, 0.0, baseline);
-				CGContextScaleCTM(cg, 1.0, -1.0);
-				CGContextSetTextPosition(cg, NS_TEXT_INSET, 0.0);
-				CTLineDraw(line, cg);
-				CGContextRestoreGState(cg);
+			if (lo < hi) {
+				CGFloat baseline = [self cg_baselineForLine:i];
+				CGFloat x0 = NS_TEXT_INSET + [self cg_xForIndex:lo];
+				CGFloat x1 = NS_TEXT_INSET + [self cg_xForIndex:hi];
+
+				[[NSColor cg_accentColor] setFill];
+				[[NSBezierPath bezierPathWithRect:
+					NSMakeRect(x0, baseline - [font ascender], x1 - x0, bandHeight)] fill];
 			}
-			CFRelease(line);
 		}
 	}
+	/* AND THE STORE'S OWN INK, WHICH IS THE MANAGER'S TO LAY DOWN — backgrounds first, then the glyphs and the rules. */
+	[_cg_layoutManager drawBackgroundForGlyphRange:NSMakeRange(0, n) atPoint:NSMakePoint(0.0, NS_TEXT_INSET)];
+	[_cg_layoutManager drawGlyphsForGlyphRange:NSMakeRange(0, n) atPoint:NSMakePoint(0.0, NS_TEXT_INSET)];
 	/* AND THE CARET, ON WHICHEVER VISUAL LINE IT IS ON — which is the LAST line that starts at or before it, so a caret
 	 * just after a hard break sits on the empty line it opened. */
 	if (_editing && [self isEditable]) {
@@ -623,7 +619,7 @@
 
 /* **A NEWLINE IS TEXT HERE, WHICH IS THE ONE REFUSAL THIS CLASS OVERTURNS.** `NSText -insertText:` drops a newline by
  * name because it holds one line; a text view's whole point is that the break is a character like any other, so the
- * edit goes through the base's own primitive — which clears the layout — and the next read re-wraps. */
+ * edit goes through this class's own primitive — which edits the STORE — and the layout follows. */
 - (void)insertText:(id)insertString
 {
 	NSString *text = ([insertString isKindOfClass:[NSAttributedString class]])
@@ -635,10 +631,7 @@
 	[self replaceCharactersInRange:_selectedRange withString:text];
 }
 
-/* **AND THE TWO KEYS THAT MEANT "I AM DONE WITH THIS FIELD" NOW MEAN "PUT A BREAK HERE" AND "PUT A TAB HERE".** In a
- * field, Return ends the session and hands the value to the model; in a document there is no model to hand it to and
- * the person is asking for a second line. Tab is the same reversal: a field's Tab is a focus move, and a text view's
- * is a tab character. */
+/* **AND THE TWO KEYS THAT MEANT "I AM DONE WITH THIS FIELD" NOW MEAN "PUT A BREAK HERE" AND "PUT A TAB HERE".** */
 - (void)insertNewline:(id)sender
 {
 	(void)sender;
@@ -655,9 +648,6 @@
  * THE MOVEMENT: "THE LINE" MEANS THE VISUAL LINE, WHICH IS WHAT A PERSON SEES                     *
  * ============================================================================================ */
 
-/* **AND THAT IS THE WHOLE SEMANTIC CHANGE FROM THE BASE.** A field's beginning-of-line is index 0 and its end-of-line
- * the string's end; a document's are the CARET's own line — and with wrapping, "the caret's line" is the VISUAL one,
- * because Home goes to the start of what is DISPLAYED, not to the start of the paragraph that was wrapped. */
 - (void)moveToBeginningOfLine:(id)sender
 {
 	NSRange range = [self cg_textRangeOfVisualLine:
@@ -696,30 +686,8 @@
 					   range.location + range.length - _selectedRange.location)];
 }
 
-/* THE INDEX ON A GIVEN VISUAL LINE NEAREST TO AN X — the goal column of a vertical movement, turned back into a
- * position by the line's own characters. */
-- (NSUInteger)cg_indexOnLine:(NSUInteger)line atX:(CGFloat)x
-{
-	NSRange range = [self cg_textRangeOfVisualLine:line];
-	CTLineRef ctline = [self cg_createLineForRange:range];
-	CFIndex index = 0;
-
-	if (ctline != NULL) {
-		index = CTLineGetStringIndexForPosition(ctline, CGPointMake(x, 0.0));
-		CFRelease(ctline);
-	}
-	if (index < 0) {
-		index = 0;
-	}
-	if ((NSUInteger)index > range.length) {
-		index = (CFIndex)range.length;
-	}
-	return range.location + (NSUInteger)index;
-}
-
 /* **A SELECTION COLLAPSES BEFORE THE STEP, AND TO THE END THE STEP IS GOING AWAY FROM** — the character movements'
- * rule, one line up: Down from a selection starts at its END (the bottom of it) and Up from its START. The line and
- * the column are then read from the position the caret ACTUALLY has, not the one it had before the collapse. */
+ * rule, one line up: Down from a selection starts at its END (the bottom of it) and Up from its START. */
 - (void)moveUp:(id)sender
 {
 	NSUInteger location = _selectedRange.location;
@@ -757,9 +725,7 @@
 	[self setSelectedRange:NSMakeRange([self cg_indexOnLine:line + 1 atX:x], 0)];
 }
 
-/* **AND EXTENDING BY A LINE MOVES THE ONE END THE DIRECTION MOVES**, the base's Shift rule one line up: the selection's
- * LOCATION is its UPPER end (a range keeps its lower index) and its END is its lower one, so Up rewrites the location
- * and Down the length. */
+/* **AND EXTENDING BY A LINE MOVES THE ONE END THE DIRECTION MOVES.** */
 - (void)moveUpAndModifySelection:(id)sender
 {
 	NSUInteger location = _selectedRange.location;
@@ -790,9 +756,7 @@
 	[self setSelectedRange:NSMakeRange(location, target - location)];
 }
 
-/* **AND THE TWO DOCUMENT ENDS, WHICH ARE THE STRING'S OWN TWO ENDS.** They need no line at all — the first character
- * and the one past the last — which is why a one-line field could have implemented them from the start and simply had
- * no reason to. */
+/* **AND THE TWO DOCUMENT ENDS, WHICH ARE THE STRING'S OWN TWO ENDS.** */
 - (void)moveToBeginningOfDocument:(id)sender
 {
 	(void)sender;
@@ -802,7 +766,7 @@
 - (void)moveToEndOfDocument:(id)sender
 {
 	(void)sender;
-	[self setSelectedRange:NSMakeRange([_string length], 0)];
+	[self setSelectedRange:NSMakeRange([[self string] length], 0)];
 }
 
 - (void)moveToBeginningOfDocumentAndModifySelection:(id)sender
@@ -816,7 +780,7 @@
 - (void)moveToEndOfDocumentAndModifySelection:(id)sender
 {
 	(void)sender;
-	[self setSelectedRange:NSMakeRange(_selectedRange.location, [_string length] - _selectedRange.location)];
+	[self setSelectedRange:NSMakeRange(_selectedRange.location, [[self string] length] - _selectedRange.location)];
 }
 
 @end

@@ -9,11 +9,14 @@
  * ranges of characters in the NSTextStorage and ranges of glyphs within itself. It understands and keeps track of two
  * types of range invalidation: a character range can need GLYPHS generated for it or it can need its glyphs LAID OUT."
  *
- * WHAT IS HERE IS THE WEB RATHER THAN THE GLYPHS. The manager knows its STORE, it holds its CONTAINERS, an edit in the
- * store REACHES it, and it records that its layout is stale — which is the whole of the second type of invalidation and
- * the thing every later slice hangs off. WHAT IS NOT HERE IS THE FIRST TYPE: NO GLYPHS ARE GENERATED, NO LINES ARE LAID
- * OUT, nothing is drawn, and the character-to-glyph map is not built. Each of those is named at the door that would
- * answer it rather than stubbed, and the slice that lands glyphs is the one that can make them real.
+ * **WHAT IS HERE IS THE WHOLE OF APPLE'S SENTENCE NOW, AND EACH PART ARRIVED AS ITS OWN SLICE.** The manager knows its
+ * STORE, it holds its CONTAINERS, an edit in the store REACHES it, and it records that its layout is stale — the
+ * second type of invalidation. It also GENERATES GLYPHS (a `CTLine` per fragment, KEPT as the glyph store), LAYS the
+ * store into line fragments with the same TYPESETTER the text view uses, FLOWS what does not fit one container into
+ * the NEXT, DRAWS the glyphs and the two rules beside them (a background and an underline), and answers the
+ * character-to-glyph map by WALKING the store it generated. THAT LAST PART IS THE ONE STILL ONE-TO-ONE: Core Text maps
+ * one glyph per character here, so the map arrives at the identity rather than being declared as it — and a shaper that
+ * made a ligature would make the arithmetic wrong rather than making a declared identity wrong.
  *
  * **AND THE LAYOUT IS THE SECOND KIND OF INVALIDATION MADE REAL.** Apple's sentence names two: a range can need
  * GLYPHS generated, or it can need its glyphs LAID OUT. Slice one built the web and recorded which ranges were stale;
@@ -21,15 +24,16 @@
  * TYPESETTER the text view uses, and answers where each fragment is — which is what `-usedRectForTextContainer:` is
  * the size of, and what a view will draw into.
  *
- * **THE CHARACTER-TO-GLYPH MAP IS ONE TO ONE, AND THAT IS NAMED RATHER THAN HIDDEN.** Apple's map is where ligatures
- * and combining marks make a character range and a glyph range differ; this tier draws through Core Text, which does
- * that mapping inside the engine, so there is no glyph STORE here to differ FROM. The two conversion doors are
- * therefore the identity with the clamping Apple's contract needs, and the day a glyph store arrives is the day this
- * note is wrong — which is why it is written at the doors rather than in a comment nobody reads. `NSTextStorage.h` refused
+ * **AND THE GLYPH STORE IS THE GENERATED LINES, WHICH IS WHAT KEEPS THE MAP HONEST.** Apple's manager "stores glyphs,
+ * attributes, and layout information"; the glyphs a `CTLine` maps its string to ARE the store here, and the layout
+ * keeps the line it generated for each fragment rather than throwing it away and rebuilding it per draw. The two
+ * conversion doors therefore COUNT AND SLICE STORED GLYPHS rather than declaring the identity: they happen to come out
+ * one to one — `CTLine` maps one glyph per character through `CTFontGetGlyphsForCharacters`, notdef included — and the
+ * day a shaper makes them differ, the arithmetic already walks a store to say so. `NSTextStorage.h` refused
  * `-addLayoutManager:`/`-removeLayoutManager:`/`-layoutManagers` because they name a class that did not exist, and
- * `NSTextContainer.h` refused `-layoutManager`/`-setLayoutManager:` for the same reason. Both are here now, because the
- * class is: the storage owns a LIST of managers and calls `-setTextStorage:` on the way in and out, and the container
- * holds a BORROWED pointer to the one that lays it out.
+ * `NSTextContainer.h` refused `-layoutManager`/`-setLayoutManager:` for the same reason. Both are here now: the
+ * storage owns a LIST of managers and calls `-setTextStorage:` on the way in and out, and the container holds a
+ * BORROWED pointer to the one that lays it out.
  */
 #ifndef APPKIT_NSLAYOUTMANAGER_H
 #define APPKIT_NSLAYOUTMANAGER_H
@@ -126,13 +130,13 @@ NS_ASSUME_NONNULL_BEGIN
 - (nullable id <NSLayoutManagerDelegate>)delegate;
 - (void)setDelegate:(nullable id <NSLayoutManagerDelegate>)anObject;
 
-/* ---- THE CHARACTER-TO-GLYPH MAP, WHICH IS ONE TO ONE HERE -------------------------------------------- */
+/* ---- THE CHARACTER-TO-GLYPH MAP, WHICH WALKS THE GLYPH STORE ----------------------------------------- */
 
-/* **THE MAP IS THE IDENTITY, AND THE REASON IS THE ENGINE.** Apple's two doors exist because a glyph store can hold
- * FEWER or MORE glyphs than there are characters — a ligature is two characters and one glyph, a precomposed character
- * may be two. Core Text does that work INSIDE `CTLine`, so this tier has no glyph store and nothing for the ranges to
- * differ over. Both doors therefore answer the range they were given, clamped to the store, and report it back as the
- * "actual" range — which is what Apple's contract promises for text whose mapping is one to one. */
+/* **THE MAP IS COMPUTED FROM THE STORED GLYPHS, AND IT COMES OUT ONE TO ONE.** Apple's two doors exist because a glyph
+ * store can hold FEWER or MORE glyphs than there are characters — a ligature is two characters and one glyph, a
+ * precomposed character may be two. This tier's `CTLine` maps every character to exactly one glyph through
+ * `CTFontGetGlyphsForCharacters`, so the arithmetic below finds the fragment a character is in, adds the glyphs of the
+ * fragments before it, and answers a range the same length — which is the identity ARRIVED AT rather than assumed. */
 - (NSUInteger)numberOfGlyphs;
 - (NSRange)glyphRangeForCharacterRange:(NSRange)charRange actualCharacterRange:(nullable NSRangePointer)actualCharRange;
 - (NSRange)characterRangeForGlyphRange:(NSRange)glyphRange actualGlyphRange:(nullable NSRangePointer)actualGlyphRange;
@@ -143,7 +147,8 @@ NS_ASSUME_NONNULL_BEGIN
  * other two are the same request narrowed by a range, and with one container they are the whole of it);
  * `-usedRectForTextContainer:` is the size a view would need to show what is laid in it; and the two fragment doors
  * answer where ONE glyph sits and which range shares its line. ALL COORDINATES ARE THE CONTAINER'S, as Apple's own
- * comments insist. */
+ * comments insist. **AND THE FLOW IS THE CONTAINERS'**: text that does not fit one is carried to the NEXT on the
+ * manager's list, in order, each container's own fragments in its own coordinates. */
 - (void)ensureLayoutForTextContainer:(NSTextContainer *)container;
 - (void)ensureLayoutForCharacterRange:(NSRange)charRange;
 - (void)ensureLayoutForGlyphRange:(NSRange)glyphRange;
@@ -155,6 +160,21 @@ NS_ASSUME_NONNULL_BEGIN
 /* AND HOW MANY FRAGMENTS THERE ARE, which is THIS TIER'S OWN DOOR for the same reason `-cg_invalidatedRange` is: a
  * probe that counts lines must be able to, and Apple answers only through the geometry. */
 - (NSUInteger)cg_lineFragmentCountForTextContainer:(NSTextContainer *)container;
+
+/* **AND THE FOUR REVERSE-LOOKUP DOORS A VIEW NEEDS, EACH `cg_`-NAMED FOR THE SAME REASON.** Apple's own view asks
+ * these questions through doors a view holds privately; putting them here is what lets `NSTextView` stop carrying a
+ * layout of its own and read the manager's instead. The RANGE is the ordinal fragment's glyph range — trailing
+ * whitespace and all, exactly as the breaker kept it — and the INDEX is the fragment a glyph is in; the OFFSET is the
+ * x of a glyph from the CONTAINER's left edge (the fragment padding INCLUDED, which is what a caret is drawn at); and
+ * the POINT door is the inverse, the glyph nearest a container point. */
+- (NSRange)cg_lineFragmentRangeAtIndex:(NSUInteger)index inTextContainer:(NSTextContainer *)container;
+- (NSUInteger)cg_lineFragmentIndexForGlyphAtIndex:(NSUInteger)glyphIndex inTextContainer:(NSTextContainer *)container;
+- (CGFloat)cg_offsetForGlyphAtIndex:(NSUInteger)glyphIndex;
+- (NSUInteger)cg_glyphIndexForPoint:(NSPoint)point inTextContainer:(NSTextContainer *)container;
+
+/* AND THE LINE HEIGHT THE FRAGMENTS ARE LAID IN, so a caller that owns a view's height does not have to guess the
+ * font the manager measured with. */
+- (CGFloat)cg_lineHeight;
 
 /* ---- THE DRAWING, WHICH IS WHAT A VIEW CALLS AND WHO ELSE WOULD --------------------------------------- */
 
@@ -171,13 +191,20 @@ NS_ASSUME_NONNULL_BEGIN
  * does for the whole store. */
 - (NSRect)boundingRectForGlyphRange:(NSRange)glyphRange inTextContainer:(NSTextContainer *)container;
 
-/* **AND WHAT IS NOT HERE, NAMED AT THE DOOR THAT WOULD BE IT: `-drawBackgroundForGlyphRange:atPoint:`.** Apple's door
- * paints "the background color and selection and marked range aspects of the text display, along with block decoration
- * such as table backgrounds and borders" — and this tier has NO background-colour attribute KEY (its vocabulary is the
- * font and the foreground colour), no marked range and no tables, so three of the four things it would paint do not
- * exist and the fourth — the SELECTION — belongs to the VIEW, which is what knows where the selection is. The underline
- * and strikethrough doors are absent for the same kind of reason: they need an underline attribute this tier has not
- * got. */
+/* **THE BACKGROUND THE GLYPHS SIT ON, WHICH IS A RUN WALK AND NOT A LINE FILL.** Apple's door paints "the background
+ * color and selection and marked range aspects of the text display, along with block decoration such as table
+ * backgrounds and borders". THE DIVISION THIS TIER DRAWS IS: the background-COLOUR ATTRIBUTE is the manager's (it is
+ * in the store and the manager reads the store), the SELECTION is the VIEW's (it is in the view and the view knows
+ * where it is), and tables and marked text do not exist here — so this door paints the first and names the other
+ * three rather than pretending to them. Each run's `NSBackgroundColorAttributeName` fills the used rect of ITS OWN
+ * glyphs, which is what makes two backgrounds on one line two rectangles instead of a band. */
+- (void)drawBackgroundForGlyphRange:(NSRange)glyphsToShow atPoint:(NSPoint)origin;
+
+/* **AND WHAT IS STILL NOT HERE, NAMED AT THE DOOR THAT WOULD BE IT.** The STRIKETHROUGH doors are absent because
+ * this tier's vocabulary has no strikethrough key — the underline half of `-drawGlyphsForGlyphRange:atPoint:` reads
+ * `NSUnderlineStyleAttributeName` and `NSUnderlineColorAttributeName`, which now exist, and a strikethrough line is
+ * the same arithmetic at the opposite offset with a key that does not. The MARKED RANGE and the temporary-attribute
+ * question belong to the marked-text family and the drawing delegate, neither of which is here. */
 
 @end
 

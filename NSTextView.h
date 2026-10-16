@@ -12,63 +12,75 @@
  *        lands on the line it is over; the caret sits on its own line; and the movement a one-line field had no
  *        answer for (`-moveUp:`, `-moveDown:`, the document ends) is real.
  *   II.  WRAPPING (shipped). The model gains a WIDTH: a line too wide for the view becomes several VISUAL LINES,
- *        and the caret, the hit test, the selection and every movement walk those instead. `NSResponder.h`'s word
- *        correction already said a WORD is not a layout question; a VISUAL LINE is one, and this is where it is
- *        decided.
+ *        and the caret, the hit test, the selection and every movement walk those instead.
  *   III. SCROLLING AND THE DOCUMENT'S ORIENTATION (shipped). The view is FLIPPED, so its FIRST line sits at the clip
- *        view's origin and the origin grows as a reader moves DOWN; the two `NSView` doors move an enclosing clip
- *        view; the view settles its own height so there is something to scroll; and `-scrollRangeToVisible:` turns a
- *        caret into a rectangle.
- *   IV.  RICH TEXT, ATTACHMENTS AND PARAGRAPHS (IN PROGRESS). The STORE (`NSTextStorage.h`), the REGION
- *        (`NSTextContainer.h`) and the manager (`NSLayoutManager.h`) are all here: the web is connected, an edit
- *        reaches the manager, and the manager LAYS THE STORE INTO THE CONTAINER'S LINES *and draws them* — line
- *        fragments, a used rect, a bounding rect, the ink, and a character-to-glyph map that is the identity. What is
- *        left is the glyph STORE, the overflow into a second container, and this view reading a store rather than its
- *        own plain string.
+ *        view's origin and the origin grows as a reader moves DOWN; the view settles its own height so there is
+ *        something to scroll.
+ *   IV.  RICH TEXT, ATTACHMENTS AND PARAGRAPHS (IN PROGRESS). The store, the region and the manager are here, and
+ *        **THE VIEW NOW READS THE STORE THROUGH THE MANAGER**: the view owns an `NSTextStorage`, an `NSLayoutManager`
+ *        and an `NSTextContainer`, `-string` is the STORE's string, every edit goes through the store, and the layout
+ *        the view asks for — a visual line's range, a caret's x, a point's index, the ink — is the MANAGER's. THIS IS
+ *        WHAT RETIRED THE VIEW'S OWN LAYOUT: the `malloc`'d visual array, the typesetter walk and the per-line
+ *        `CTLine` are GONE from this class, and the one copy of that arithmetic is in `NSLayoutManager`. It also
+ *        means the view DRAWS RUNS rather than one style — a foreground colour, a background colour and an underline
+ *        are the manager's to paint. What is left is attachments, tables, the paragraph model, the marked-text family
+ *        and the input-method half.
+ *
+ * **AND THE MIRROR IS HOW THE BASE CLASS STILL WORKS.** `NSText` holds a `NSMutableString` and its movement and word
+ * commands read it directly; so the view keeps that string as a MIRROR of the store, refreshed by the store's own
+ * `NSTextStorageDidProcessEditingNotification`, and the base's arithmetic keeps working while the STORE is what a
+ * caller reads and writes. THE TWO CANNOT DISAGREE for longer than one synchronous notification, which is what makes
+ * the mirror safe rather than a second source of truth.
  *
  * **AND THE FLIP IS WHY THE LAYOUT BELOW IS y-DOWN.** A flipped view measures y from the TOP — that is what flipping
- * MEANS — so `-cg_baselineForLine:` counts downward and a band is drawn ABOVE its baseline. THE ONE PLACE IT SHOWS is
- * the text: Core Text's own coordinates run UP from the baseline, so a line is set inside a translate-and-mirror about
- * its baseline (`-drawRect:`). The base, `NSText`, is a y-up single-line field and is left one.
+ * MEANS — so a band is drawn ABOVE its baseline. THE ONE PLACE IT SHOWS is the text: Core Text's own coordinates run
+ * UP from the baseline, and the MANAGER is what applies the translate-and-mirror now. The base, `NSText`, is a y-up
+ * single-line field and is left one.
  *
  * **THE TWO UNITS ARE NOT THE SAME THING AND BOTH KEEP THEIR OWN NAME.** A MODEL LINE — a paragraph, in Apple's
  * vocabulary — is a `\n`-terminated run, and the three `cg_…OfLine:` doors below are that model: they are facts about
  * the STRING and do not change when the view is resized. A VISUAL LINE is one line as LAID OUT at the view's width,
- * and there can be several per model line; the two `cg_visualLine…` doors are that layout, and they change every time
+ * and there can be several per model line; the `cg_visualLine…` doors read the MANAGER, and they change every time
  * the text or the width does. A caller that wants "how many lines" has to say which.
  *
- * **WHAT THE SLICES ABOVE STILL HAVE NOT GOT, NAMED RATHER THAN STUBBED:** the GLYPH STORE, the OVERFLOW, and the
- * VIEW that reads them. The three objects are here and CONNECTED (`NSTextStorage.h`, `NSTextContainer.h`,
- * `NSLayoutManager.h`) and the manager LAYS OUT and DRAWS — line fragments, a used rect, a bounding rect, the ink, and
- * a character-to-glyph map that is the IDENTITY (Core Text does the real mapping inside `CTLine`); what it does not do
- * is keep a glyph store, fill a SECOND container by overflow, draw a BACKGROUND or an UNDERLINE (this tier has no such
- * attribute keys), or map character and glyph ranges in anything but the identity — plus attachments, tables, the
- * paragraph commands, the marked-text family and the input-method half. And this view still reads a PLAIN string rather
- * than attribute runs.
+ * **WHAT IS STILL NOT HERE, NAMED RATHER THAN STUBBED:** attachments, tables, the paragraph commands, the marked-text
+ * family, the input-method half, and a glyph map that is not the one-to-one Core Text produces. The view's own
+ * `NSText`-inherited `_string` is a mirror (see above) rather than the authority.
  */
 #ifndef APPKIT_NSTEXTVIEW_H
 #define APPKIT_NSTEXTVIEW_H
 
 #import <AppKit/NSText.h>
 
+@class NSTextStorage;
+@class NSLayoutManager;
+@class NSTextContainer;
+
 NS_ASSUME_NONNULL_BEGIN
 
 @interface NSTextView : NSText
 {
-	/* **THE VISUAL LAYOUT, WHICH IS THE MODEL LAID OUT AT A WIDTH AND IS REBUILT WHENEVER EITHER CHANGES.** A flat
-	 * array of character ranges in reading order, which is all a line IS: the y is the index times the line height and
-	 * the x is Core Text's offset within the line, so a second array of positions would be a second thing to keep in
-	 * step. `malloc`'d rather than an `NSArray` because a layout is a run of PODs a draw reads in a loop, and
-	 * `_cg_layoutValid` is the dirty flag `-replaceCharactersInRange:`, `-setString:` and `-setFrameSize:` clear. */
-	NSRange *_cg_visual;		/* malloc'd; the first `_cg_visualCount` are live */
-	NSUInteger _cg_visualCount;
-	NSUInteger _cg_visualCapacity;
-	BOOL _cg_layoutValid;
-	CGFloat _cg_layoutWidth;
+	/* **THE TRIO, AND THE VIEW OWNS THE FIRST TWO.** The store is RETAINED here and it retains the MANAGER (its own
+	 * list does); the manager retains the CONTAINER (its array does) and the container holds a BORROWED pointer back
+	 * to this view — one `-setTextStorage:` and one `-addTextContainer:` build that web in `-initWithFrame:`, and the
+	 * view's `_string` is a mirror the store's edits refresh. */
+	NSTextStorage *_cg_textStorage;		/* RETAINED */
+	NSLayoutManager *_cg_layoutManager;	/* RETAINED (the store also retains it) */
+	NSTextContainer *_cg_textContainer;	/* RETAINED (the manager also retains it) */
 	/* **AND WHETHER THIS VIEW IS TALL ENOUGH FOR ITS OWN LAYOUT.** Apple's default for a text view is YES — one inside
 	 * a scroll view grows and shrinks with its text — and a caller that gave the view a frame on purpose says NO. */
 	BOOL _cg_verticallyResizable;
 }
+
+/* ---- THE TRIO, WHICH A CALLER REACHES TO PUT RUNS IN ------------------------------------------------ */
+
+/* **THE STORE IS WHERE A CALLER PUTS ATTRIBUTES, AND THIS IS HOW THEY REACH IT.** The manager and the container are
+ * named too, because Apple's `NSTextView` names them and because a caller that wants a second container has to be
+ * able to reach the manager. */
+- (NSTextStorage *)textStorage;
+- (void)setTextStorage:(NSTextStorage *)storage;
+- (nullable NSLayoutManager *)layoutManager;
+- (nullable NSTextContainer *)textContainer;
 
 /* ---- THE MODEL: A LINE IS A `\n`-TERMINATED RUN, AND NONE OF THIS DEPENDS ON THE VIEW'S WIDTH ---------------- */
 

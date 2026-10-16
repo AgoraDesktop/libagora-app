@@ -21,33 +21,50 @@
 #include <CoreGraphics/CGContext.h>
 #include <CoreFoundation/CFAttributedString.h>
 #include <CoreText/CTLine.h>
+#include <CoreText/CTRun.h>
 #include <CoreText/CTStringAttributes.h>
 #include <CoreText/CTTypesetter.h>
 
-/* **THE ONE PIECE OF STATE A FRAGMENT IS: A GLYPH RANGE AND TWO RECTS.** Apple distinguishes the FRAGMENT rect — the
- * whole width the container gives a line — from the USED rect, which is the part the glyphs actually fill; a selection
- * and a highlight want the second and a background wants the first, which is why both are kept. A tiny object rather
- * than a struct because the fragments live in an `NSMutableArray` and an array of PODs would be a second lifetime to
- * manage by hand. */
+/* **THE ONE PIECE OF STATE A FRAGMENT IS: TWO RANGES, TWO RECTS AND THE GLYPHS THEMSELVES.** Apple distinguishes
+ * the FRAGMENT rect — the whole width the container gives a line — from the USED rect, which is the part the glyphs
+ * actually fill; a selection and a highlight want the second and a background wants the first, which is why both are
+ * kept. THE CHARACTER RANGE IS THE BREAKER'S (trailing whitespace INCLUDED) and the GLYPH range is the same span in
+ * the manager's glyph space; the LINE below is the glyph STORE for this fragment — the generated glyphs, kept rather
+ * than rebuilt per draw, and counting one glyph per character because that is what this tier's `CTLine` maps. A
+ * tiny object rather than a struct because the fragments live in an `NSMutableArray` and an array of PODs would be a
+ * second lifetime to manage by hand. */
 @interface FNFragment : NSObject
 {
 @public
-	NSRange range;
+	NSRange range;		/* characters: what the breaker decided, trailing whitespace and all */
+	NSRange glyphs;		/* the same span in the manager's glyph space */
 	NSRect rect;
 	NSRect used;
+	CTLineRef line;		/* the glyph store; OWNED, and NULL for an empty fragment */
 }
-+ (id)fragmentWithRange:(NSRange)aRange rect:(NSRect)aRect usedRect:(NSRect)aUsedRect;
++ (id)fragmentWithRange:(NSRange)aRange glyphRange:(NSRange)aGlyphRange rect:(NSRect)aRect usedRect:(NSRect)aUsedRect line:(CTLineRef)aLine;
 @end
 
 @implementation FNFragment
-+ (id)fragmentWithRange:(NSRange)aRange rect:(NSRect)aRect usedRect:(NSRect)aUsedRect
++ (id)fragmentWithRange:(NSRange)aRange glyphRange:(NSRange)aGlyphRange rect:(NSRect)aRect usedRect:(NSRect)aUsedRect line:(CTLineRef)aLine
 {
 	FNFragment *fragment = [[[FNFragment alloc] init] autorelease];
 
 	fragment->range = aRange;
+	fragment->glyphs = aGlyphRange;
 	fragment->rect = aRect;
 	fragment->used = aUsedRect;
+	fragment->line = aLine;		/* ownership transferred to the fragment */
 	return fragment;
+}
+
+/* THE LINE IS THE ONLY THING HERE THAT IS NOT A SCALAR, so it is the only thing dealloc has to release. */
+- (void)dealloc
+{
+	if (line != NULL) {
+		CFRelease(line);
+	}
+	[super dealloc];
 }
 @end
 
@@ -256,17 +273,33 @@
  * THE CHARACTER-TO-GLYPH MAP, WHICH IS THE IDENTITY                                                  *
  * ============================================================================================ */
 
-/* **BOTH DOORS ANSWER THE RANGE THEY WERE GIVEN, CLAMPED TO THE STORE.** Core Text maps characters to glyphs inside
- * `CTLine`, so there is no glyph STORE here and nothing for the two ranges to differ over; see the header for why the
- * identity is the honest answer rather than a placeholder. */
+/* **BOTH DOORS WALK THE GLYPH STORE, WHICH IS WHY THEY ARE ARITHMETIC RATHER THAN A DECLARATION.** The character a
+ * caller names is found in the fragment whose range holds it; the glyph index is that fragment's own glyph base plus
+ * the distance into it. Because this tier's `CTLine` maps one glyph per character, the LENGTH comes back unchanged —
+ * but it is counted from the store, so a shaper that made a ligature would make this wrong rather than making the
+ * identity wrong. A range the store cannot honour is CLAMPED first, as Apple's contract requires. */
 - (NSUInteger)numberOfGlyphs
 {
-	return [_textStorage length];
+	NSUInteger total = 0;
+	NSUInteger i, j;
+
+	[self cg_ensureLayout];
+	for (i = 0; i < [_fragments count]; i++) {
+		NSMutableArray *fragments = [_fragments objectAtIndex:i];
+
+		for (j = 0; j < [fragments count]; j++) {
+			total = ((FNFragment *)[fragments objectAtIndex:j])->glyphs.location
+				+ ((FNFragment *)[fragments objectAtIndex:j])->glyphs.length;
+		}
+	}
+	return total;
 }
 
 - (NSRange)glyphRangeForCharacterRange:(NSRange)charRange actualCharacterRange:(NSRange *)actualCharRange
 {
 	NSUInteger n = [_textStorage length];
+	FNFragment *fragment = nil;
+	NSUInteger i, j;
 
 	if (charRange.location > n) {
 		charRange.location = n;
@@ -277,12 +310,54 @@
 	if (actualCharRange != NULL) {
 		*actualCharRange = charRange;
 	}
-	return charRange;
+	[self cg_ensureLayout];
+	for (i = 0; i < [_fragments count] && fragment == nil; i++) {
+		NSMutableArray *fragments = [_fragments objectAtIndex:i];
+
+		for (j = 0; j < [fragments count]; j++) {
+			FNFragment *f = [fragments objectAtIndex:j];
+
+			if (charRange.location >= f->range.location
+			    && charRange.location <= f->range.location + f->range.length) {
+				fragment = f;
+				break;
+			}
+		}
+	}
+	if (fragment == nil) {
+		return charRange;
+	}
+	return NSMakeRange(fragment->glyphs.location + (charRange.location - fragment->range.location),
+			   charRange.length);
 }
 
 - (NSRange)characterRangeForGlyphRange:(NSRange)glyphRange actualGlyphRange:(NSRange *)actualGlyphRange
 {
-	return [self glyphRangeForCharacterRange:glyphRange actualCharacterRange:actualGlyphRange];
+	FNFragment *fragment = nil;
+	NSUInteger i, j;
+
+	if (actualGlyphRange != NULL) {
+		*actualGlyphRange = glyphRange;
+	}
+	[self cg_ensureLayout];
+	for (i = 0; i < [_fragments count] && fragment == nil; i++) {
+		NSMutableArray *fragments = [_fragments objectAtIndex:i];
+
+		for (j = 0; j < [fragments count]; j++) {
+			FNFragment *f = [fragments objectAtIndex:j];
+
+			if (glyphRange.location >= f->glyphs.location
+			    && glyphRange.location <= f->glyphs.location + f->glyphs.length) {
+				fragment = f;
+				break;
+			}
+		}
+	}
+	if (fragment == nil) {
+		return glyphRange;
+	}
+	return NSMakeRange(fragment->range.location + (glyphRange.location - fragment->glyphs.location),
+			   glyphRange.length);
 }
 
 /* ============================================================================================ *
@@ -305,35 +380,59 @@
 /* **AND THIS IS THE LAYOUT: THE SAME TYPESETTER WALK THE TEXT VIEW MAKES, ASKED BY THE MANAGER INSTEAD.** The line's
  * width comes from the CONTAINER (its size less the fragment padding on both sides), the breaking is
  * `CTTypesetterSuggestLineBreak`'s, and what comes back is a fragment per line: the whole width the container gives it,
- * and the part the glyphs fill. A trailing newline owes an EMPTY last fragment, exactly as it owes an empty last line
- * in the text view, because the caret sits there.
+ * and the part the glyphs fill. THE GENERATED LINE IS KEPT, not released — that is the glyph store — so a draw sets
+ * the glyphs the layout already made instead of remaking them. A trailing newline owes an EMPTY last fragment,
+ * exactly as it owes an empty last line in the text view, because the caret sits there.
  *
- * **ONE CONTAINER IS FILLED, WHICH IS WHAT ONE TEXT VIEW HAS.** Apple's flow moves what does not fit into the NEXT
- * container on the manager's list; this slice lays the whole store into the FIRST, and a manager with two containers
- * therefore has one full and one empty. That is NAMED rather than half-done: the overflow flow is the slice this one
- * does not carry. */
-- (void)cg_layOutContainerAtIndex:(NSUInteger)index
+ * **AND THE FLOW IS THE CONTAINERS', IN ORDER.** A line that would fall past a container's own height is carried to
+ * the NEXT container on the list rather than out of the region, which is what makes two containers one document: the
+ * first fills, the second takes the rest, and each container's fragments are in its own coordinates. A container with
+ * a ZERO height is unbounded — the common case for a scrolling text view — so one container still takes everything. */
+- (CGFloat)cg_lineHeight
 {
-	NSTextContainer *container = [_textContainers objectAtIndex:index];
-	NSMutableArray *fragments = [_fragments objectAtIndex:index];
-	NSString *string = [_textStorage string];
-	NSUInteger n = [string length];
-	CGFloat padding = [container lineFragmentPadding];
-	CGFloat containerWidth = [container containerSize].width;
-	CGFloat width = containerWidth - 2.0 * padding;
 	NSFont *font = [self cg_font];
-	CGFloat lineHeight = [font ascender] - [font descender];
-	CGFloat y = 0.0;
+
+	return [font ascender] - [font descender];
+}
+
+- (void)cg_ensureLayout
+{
+	NSString *string;
+	NSUInteger n;
+	NSFont *font;
+	CGFloat lineHeight;
 	CFMutableDictionaryRef attributes;
 	CFAttributedStringRef s;
 	CTTypesetterRef ts;
-	CFIndex start = 0;
+	CFIndex start;
+	NSUInteger i;
+	NSUInteger glyphBase = 0;
+	NSUInteger lastContainer = 0;
+	CGFloat lastY = 0.0;
 
-	[fragments removeAllObjects];
+	if (_invalidatedRange.location == NSNotFound) {
+		return;
+	}
+	for (i = 0; i < [_fragments count]; i++) {
+		[[_fragments objectAtIndex:i] removeAllObjects];
+	}
+	string = [_textStorage string];
+	n = [string length];
+	font = [self cg_font];
+	lineHeight = [font ascender] - [font descender];
+
+	if ([_textContainers count] == 0) {
+		_invalidatedRange = NSMakeRange(NSNotFound, 0);
+		return;
+	}
 	if (n == 0) {
-		[fragments addObject:[FNFragment fragmentWithRange:NSMakeRange(0, 0)
-							     rect:NSMakeRect(0.0, 0.0, containerWidth, lineHeight)
-							 usedRect:NSMakeRect(padding, 0.0, 0.0, lineHeight)]];
+		NSTextContainer *container = [_textContainers objectAtIndex:0];
+
+		[[_fragments objectAtIndex:0] addObject:
+			[FNFragment fragmentWithRange:NSMakeRange(0, 0) glyphRange:NSMakeRange(0, 0)
+				rect:NSMakeRect(0.0, 0.0, [container containerSize].width, lineHeight)
+				usedRect:NSMakeRect([container lineFragmentPadding], 0.0, 0.0, lineHeight) line:NULL]];
+		_invalidatedRange = NSMakeRange(NSNotFound, 0);
 		return;
 	}
 	attributes = CFDictionaryCreateMutable(kCFAllocatorDefault, 0,
@@ -345,55 +444,81 @@
 	if (s != NULL) {
 		CFRelease(s);
 	}
+	/* **AND A STORE THE TYPESETTER WILL NOT TAKE IS STILL LAID OUT**, as one fragment, so a glyph can be found and a
+	 * line drawn even when the engine refused the string. */
 	if (ts == NULL) {
-		[fragments addObject:[FNFragment fragmentWithRange:NSMakeRange(0, n)
-							     rect:NSMakeRect(0.0, 0.0, containerWidth, lineHeight)
-							 usedRect:NSMakeRect(padding, 0.0, width, lineHeight)]];
+		NSTextContainer *container = [_textContainers objectAtIndex:0];
+		CGFloat padding = [container lineFragmentPadding];
+		CGFloat containerWidth = [container containerSize].width;
+		CTLineRef line = [self cg_createLineForRange:NSMakeRange(0, n) font:font];
+
+		[[_fragments objectAtIndex:0] addObject:
+			[FNFragment fragmentWithRange:NSMakeRange(0, n) glyphRange:NSMakeRange(0, n)
+				rect:NSMakeRect(0.0, 0.0, containerWidth, lineHeight)
+				usedRect:NSMakeRect(padding, 0.0, containerWidth - 2.0 * padding, lineHeight) line:line]];
+		_invalidatedRange = NSMakeRange(NSNotFound, 0);
 		return;
 	}
-	while (start < (CFIndex)n) {
-		CFIndex count = (width > 0.0) ? CTTypesetterSuggestLineBreak(ts, start, (double)width)
-					      : (CFIndex)(n - (NSUInteger)start);
-		CTLineRef line;
-		CGFloat lineWidth = 0.0;
+	start = 0;
+	for (i = 0; i < [_textContainers count] && start < (CFIndex)n; i++) {
+		NSTextContainer *container = [_textContainers objectAtIndex:i];
+		NSMutableArray *fragments = [_fragments objectAtIndex:i];
+		CGFloat padding = [container lineFragmentPadding];
+		CGFloat containerWidth = [container containerSize].width;
+		CGFloat width = containerWidth - 2.0 * padding;
+		CGFloat containerHeight = [container containerSize].height;
+		CGFloat y = 0.0;
 
-		if (count <= 0) {
-			count = 1;
-		}
-		if (start + count > (CFIndex)n) {
-			count = (CFIndex)n - start;
-		}
-		line = CTTypesetterCreateLine(ts, CFRangeMake(start, count));
-		if (line != NULL) {
-			lineWidth = (CGFloat)CTLineGetTypographicBounds(line, NULL, NULL, NULL);
-			if (width > 0.0 && lineWidth > width) {
-				lineWidth = width;
+		while (start < (CFIndex)n) {
+			CFIndex count;
+			CTLineRef line = NULL;
+			CGFloat lineWidth = 0.0;
+			NSRange range;
+
+			/* THE CONTAINER'S OWN HEIGHT IS THE OVERFLOW EDGE — but only once it has taken a line, so a container
+			 * shorter than one line still gets one rather than looping forever. */
+			if (containerHeight > 0.0 && y + lineHeight > containerHeight + 0.001 && [fragments count] > 0) {
+				break;
 			}
-			CFRelease(line);
+			count = (width > 0.0) ? CTTypesetterSuggestLineBreak(ts, start, (double)width)
+					      : (CFIndex)(n - (NSUInteger)start);
+			if (count <= 0) {
+				count = 1;
+			}
+			if (start + count > (CFIndex)n) {
+				count = (CFIndex)n - start;
+			}
+			range = NSMakeRange((NSUInteger)start, (NSUInteger)count);
+			line = CTTypesetterCreateLine(ts, CFRangeMake(start, count));
+			if (line == NULL) {
+				line = [self cg_createLineForRange:range font:font];
+			}
+			if (line != NULL) {
+				lineWidth = (CGFloat)CTLineGetTypographicBounds(line, NULL, NULL, NULL);
+				if (width > 0.0 && lineWidth > width) {
+					lineWidth = width;
+				}
+			}
+			[fragments addObject:[FNFragment fragmentWithRange:range
+				glyphRange:NSMakeRange(glyphBase, (NSUInteger)count)
+				rect:NSMakeRect(0.0, y, containerWidth, lineHeight)
+				usedRect:NSMakeRect(padding, y, lineWidth, lineHeight) line:line]];
+			glyphBase += (NSUInteger)count;
+			start += count;
+			y += lineHeight;
+			lastContainer = i;
+			lastY = y;
 		}
-		[fragments addObject:[FNFragment fragmentWithRange:NSMakeRange((NSUInteger)start, (NSUInteger)count)
-							     rect:NSMakeRect(0.0, y, containerWidth, lineHeight)
-							 usedRect:NSMakeRect(padding, y, lineWidth, lineHeight)]];
-		start += count;
-		y += lineHeight;
 	}
 	CFRelease(ts);
-	if ([string characterAtIndex:n - 1] == '\n') {
-		[fragments addObject:[FNFragment fragmentWithRange:NSMakeRange(n, 0)
-							     rect:NSMakeRect(0.0, y, containerWidth, lineHeight)
-							 usedRect:NSMakeRect(padding, y, 0.0, lineHeight)]];
-	}
-}
+	/* **AND A TRAILING NEWLINE OWES AN EMPTY LAST FRAGMENT IN THE CONTAINER THE TEXT ENDED IN.** */
+	if (start >= (CFIndex)n && [string characterAtIndex:n - 1] == '\n') {
+		NSTextContainer *container = [_textContainers objectAtIndex:lastContainer];
 
-/* **AND EVERY LAYOUT DOOR GOES THROUGH HERE, WHICH IS ALSO WHAT CLEARS THE STALE RECORD.** A manager with nothing
- * stale has nothing to do — which is why `-usedRectForTextContainer:` costs no layout, as Apple's comment promises. */
-- (void)cg_ensureLayout
-{
-	if (_invalidatedRange.location == NSNotFound) {
-		return;
-	}
-	if ([_textContainers count] > 0) {
-		[self cg_layOutContainerAtIndex:0];
+		[[_fragments objectAtIndex:lastContainer] addObject:
+			[FNFragment fragmentWithRange:NSMakeRange(n, 0) glyphRange:NSMakeRange(glyphBase, 0)
+				rect:NSMakeRect(0.0, lastY, [container containerSize].width, lineHeight)
+				usedRect:NSMakeRect([container lineFragmentPadding], lastY, 0.0, lineHeight) line:NULL]];
 	}
 	_invalidatedRange = NSMakeRange(NSNotFound, 0);
 }
@@ -416,17 +541,31 @@
 	[self cg_ensureLayout];
 }
 
-/* **ALL THE STORE IS IN THE FIRST CONTAINER AND NONE OF IT IS IN ANY OTHER**, which is the same single-container
- * statement the layout makes: an answer of `(0, n)` for the container that was filled and `(n, 0)` for one that was
- * not is the truth about this slice rather than a plausible-looking range. */
+/* **AND EACH CONTAINER ANSWERS THE GLYPHS THAT LANDED IN IT**, which is the range from its first fragment's glyph base to
+ * its last fragment's end — the flow having put the earlier containers' glyphs before it. A container that is not this
+ * manager's, or that took no glyphs, answers the empty range at the end of the store. */
 - (NSRange)glyphRangeForTextContainer:(NSTextContainer *)container
 {
+	NSUInteger index = [_textContainers indexOfObjectIdenticalTo:container];
+	NSMutableArray *fragments;
 	NSUInteger n = [_textStorage length];
 
-	if ([_textContainers count] > 0 && [_textContainers objectAtIndex:0] == container) {
-		return NSMakeRange(0, n);
+	if (index == NSNotFound) {
+		return NSMakeRange(n, 0);
 	}
-	return NSMakeRange(n, 0);
+	[self cg_ensureLayout];
+	fragments = [_fragments objectAtIndex:index];
+	if ([fragments count] == 0) {
+		return NSMakeRange(n, 0);
+	}
+	{
+		FNFragment *first = [fragments objectAtIndex:0];
+		FNFragment *last = [fragments lastObject];
+		NSUInteger location = first->glyphs.location;
+		NSUInteger end = last->glyphs.location + last->glyphs.length;
+
+		return NSMakeRange(location, end - location);
+	}
 }
 
 /* **THE SIZE A VIEW WOULD NEED, WHICH IS THE UNION OF WHAT THE FRAGMENTS FILL.** Apple's comment says this causes
@@ -455,29 +594,33 @@
 }
 
 /* THE FRAGMENT A GLYPH IS IN, with the range that shares it reported back — which is what a caller drawing a line or
- * placing a caret asks for, and the reason the fragments are kept as ranges rather than as rects alone. */
+ * placing a caret asks for, and the reason the fragments are kept as ranges rather than as rects alone. ALL THE
+ * CONTAINERS ARE SEARCHED, in flow order, and the LAST fragment that holds the index WINS: contiguous fragments share
+ * their boundary index, and the glyph at the END of one line is the START of the next — so a caret at index 4 in
+ * `one\ntwo` belongs to `two`'s fragment, and the index at the very end of the store belongs to the empty fragment a
+ * trailing newline opened rather than to the line before it. */
 - (FNFragment *)cg_fragmentForGlyphAtIndex:(NSUInteger)glyphIndex effectiveRange:(NSRange *)effectiveGlyphRange
 {
-	NSMutableArray *fragments;
-	NSUInteger i;
+	FNFragment *found = nil;
+	NSUInteger i, j;
 
 	[self cg_ensureLayout];
-	if ([_fragments count] == 0) {
-		return nil;
-	}
-	fragments = [_fragments objectAtIndex:0];
-	for (i = 0; i < [fragments count]; i++) {
-		FNFragment *fragment = [fragments objectAtIndex:i];
+	for (i = 0; i < [_fragments count]; i++) {
+		NSMutableArray *fragments = [_fragments objectAtIndex:i];
 
-		if (glyphIndex >= fragment->range.location
-		    && glyphIndex <= fragment->range.location + fragment->range.length) {
-			if (effectiveGlyphRange != NULL) {
-				*effectiveGlyphRange = fragment->range;
+		for (j = 0; j < [fragments count]; j++) {
+			FNFragment *fragment = [fragments objectAtIndex:j];
+
+			if (glyphIndex >= fragment->glyphs.location
+			    && glyphIndex <= fragment->glyphs.location + fragment->glyphs.length) {
+				found = fragment;
 			}
-			return fragment;
 		}
 	}
-	return [fragments count] > 0 ? [fragments lastObject] : nil;
+	if (found != nil && effectiveGlyphRange != NULL) {
+		*effectiveGlyphRange = found->range;
+	}
+	return found;
 }
 
 - (NSRect)lineFragmentRectForGlyphAtIndex:(NSUInteger)glyphIndex effectiveRange:(NSRange *)effectiveGlyphRange
@@ -506,6 +649,116 @@
 }
 
 /* ============================================================================================ *
+ * THE REVERSE LOOKUPS A VIEW ASKS FOR                                                                *
+ * ============================================================================================ */
+
+/* **THE ORDINAL FRAGMENT'S RANGE, WHICH IS WHAT A VIEW'S VISUAL LINE IS.** A line index past the last answers the empty
+ * range at the end of the store rather than a wrong one, and a container that is not this manager's answers nothing. */
+- (NSRange)cg_lineFragmentRangeAtIndex:(NSUInteger)index inTextContainer:(NSTextContainer *)container
+{
+	NSUInteger containerIndex = [_textContainers indexOfObjectIdenticalTo:container];
+	NSMutableArray *fragments;
+
+	if (containerIndex == NSNotFound) {
+		return NSMakeRange(NSNotFound, 0);
+	}
+	[self cg_ensureLayout];
+	fragments = [_fragments objectAtIndex:containerIndex];
+	if (index >= [fragments count]) {
+		return NSMakeRange([_textStorage length], 0);
+	}
+	return ((FNFragment *)[fragments objectAtIndex:index])->range;
+}
+
+/* AND WHICH ORDINAL FRAGMENT A GLYPH IS IN — the same containment the fragment lookup uses, numbered, and the LAST
+ * match wins for the same boundary reason. */
+- (NSUInteger)cg_lineFragmentIndexForGlyphAtIndex:(NSUInteger)glyphIndex inTextContainer:(NSTextContainer *)container
+{
+	NSUInteger containerIndex = [_textContainers indexOfObjectIdenticalTo:container];
+	NSMutableArray *fragments;
+	NSUInteger i, found = NSNotFound;
+
+	if (containerIndex == NSNotFound) {
+		return NSNotFound;
+	}
+	[self cg_ensureLayout];
+	fragments = [_fragments objectAtIndex:containerIndex];
+	for (i = 0; i < [fragments count]; i++) {
+		FNFragment *fragment = [fragments objectAtIndex:i];
+
+		if (glyphIndex >= fragment->range.location
+		    && glyphIndex <= fragment->range.location + fragment->range.length) {
+			found = i;
+		}
+	}
+	return found;
+}
+
+/* **AND THE X OF A GLYPH FROM THE CONTAINER'S LEFT EDGE**, which is the fragment padding plus Core Text's own offset —
+ * the same sum `-drawGlyphsForGlyphRange:` writes, so a caret and the glyph it stands before cannot disagree. */
+- (CGFloat)cg_offsetForGlyphAtIndex:(NSUInteger)glyphIndex
+{
+	FNFragment *fragment = [self cg_fragmentForGlyphAtIndex:glyphIndex effectiveRange:NULL];
+	CFIndex relative;
+
+	if (fragment == nil) {
+		return 0.0;
+	}
+	if (fragment->line == NULL) {
+		return fragment->used.origin.x;
+	}
+	relative = (CFIndex)(glyphIndex - fragment->range.location);
+	if (relative < 0) {
+		relative = 0;
+	}
+	if ((NSUInteger)relative > fragment->range.length) {
+		relative = (CFIndex)fragment->range.length;
+	}
+	return fragment->used.origin.x + (CGFloat)CTLineGetOffsetForStringIndex(fragment->line, relative, NULL);
+}
+
+/* **AND THE INVERSE: THE GLYPH NEAREST A POINT**, which is what a click asks. The FRAGMENT is chosen by the y — the
+ * line height is uniform, so the arithmetic is a division — and only the x is Core Text's. */
+- (NSUInteger)cg_glyphIndexForPoint:(NSPoint)point inTextContainer:(NSTextContainer *)container
+{
+	NSUInteger containerIndex = [_textContainers indexOfObjectIdenticalTo:container];
+	NSMutableArray *fragments;
+	CGFloat lineHeight = [self cg_lineHeight];
+	NSUInteger line;
+	FNFragment *fragment;
+	CFIndex index = 0;
+
+	if (containerIndex == NSNotFound) {
+		return NSNotFound;
+	}
+	[self cg_ensureLayout];
+	fragments = [_fragments objectAtIndex:containerIndex];
+	if ([fragments count] == 0) {
+		return 0;
+	}
+	if (lineHeight <= 0.0 || point.y <= 0.0) {
+		line = 0;
+	} else {
+		line = (NSUInteger)(point.y / lineHeight);
+	}
+	if (line >= [fragments count]) {
+		line = [fragments count] - 1;
+	}
+	fragment = [fragments objectAtIndex:line];
+	if (fragment->line != NULL) {
+		index = CTLineGetStringIndexForPosition(fragment->line,
+			CGPointMake(point.x - fragment->used.origin.x, 0.0));
+	}
+	if (index < 0) {
+		index = 0;
+	}
+	if ((NSUInteger)index > fragment->range.length) {
+		index = (CFIndex)fragment->range.length;
+	}
+	return fragment->range.location + (NSUInteger)index;
+}
+
+/* ============================================================================================ *
  * THE DRAWING                                                                                   *
  * ============================================================================================ */
 
@@ -531,80 +784,251 @@
 	return line;
 }
 
-/* **THE INK, AND THE DOOR `NSTextView` CALLS.** The fragments the range touches are drawn, each line set at the origin
- * the caller gave plus the fragment's own place, and the trailing whitespace is taken off the drawn range exactly as
- * the text view takes it off — the newline a breaker keeps is part of what it MEASURED and not a glyph to set.
+/* **THE TRAILING WHITESPACE OFF A FRAGMENT'S RANGE, WHICH IS NOT INK.** The breaker keeps a space or a newline because
+ * it is part of what it MEASURED; taking it off the range a glyph is set for is what makes the boundary between two
+ * lines unambiguous. The GLYPHS for it are still in the store — `-numberOfGlyphs` counts them — they are simply not
+ * drawn, which is the same split the text view used to make by hand. */
+- (NSRange)cg_drawnRangeForFragment:(FNFragment *)fragment
+{
+	NSRange range = fragment->range;
+	NSString *string = [_textStorage string];
+	NSUInteger n = [string length];
+
+	if (range.location >= n) {
+		return NSMakeRange(range.location, 0);
+	}
+	if (range.location + range.length > n) {
+		range.length = n - range.location;
+	}
+	while (range.length > 0) {
+		unichar c = [string characterAtIndex:range.location + range.length - 1];
+
+		if (c == ' ' || c == '\t' || c == '\n') {
+			range.length--;
+		} else {
+			break;
+		}
+	}
+	return range;
+}
+
+/* **AND THE INK, WHICH IS NOW A RUN WALK RATHER THAN ONE COLOUR PER LINE.** The fragments the range touches are drawn,
+ * each line set at the origin the caller gave PLUS the fragment's own place, and the trailing whitespace comes off the
+ * drawn range as above. WITHIN a fragment the store's attribute runs are walked: each run's foreground colour is set
+ * and only ITS glyphs are drawn — `CTRunDraw` over a subrange, the store being one glyph per character — so a line
+ * whose text changes colour halfway comes out in both colours. THAT IS THE "INHERITS RUNS" the view could not do
+ * while it drew a plain string of its own.
  *
- * **AND THE COLOR IS THE STORE'S AT THE FRAGMENT'S START.** Apple draws each RUN in its own colour; reading attributes
- * run by run is the machinery a run walk needs, so this slice takes ONE colour per fragment and names the rest — which
- * is honest because a store carrying a single foreground colour (the common case) draws exactly right. */
+ * **AND THE UNDERLINE IS DRAWN AFTER THE GLYPHS, IN THE CONTAINER'S OWN y-DOWN SPACE**, because a rule below a baseline
+ * is a rectangle and needs no mirroring. The style is the low nibble of `NSUnderlineStyleAttributeName` and the
+ * pattern its high byte; the colour is `NSUnderlineColorAttributeName` or the run's foreground. A double rule is two
+ * hairlines, a dashed one is the same line stroked with a dash pattern. */
 - (void)drawGlyphsForGlyphRange:(NSRange)glyphsToShow atPoint:(NSPoint)origin
 {
 	NSGraphicsContext *context = [NSGraphicsContext currentContext];
 	CGContextRef cg = (context != nil) ? (CGContextRef)[context graphicsPort] : NULL;
-	NSString *string;
-	NSTextContainer *container;
-	NSMutableArray *fragments;
 	NSFont *font;
-	CGFloat ascender, padding;
-	NSUInteger i, rangeEnd, n;
+	CGFloat ascender;
+	NSUInteger i, j, rangeEnd;
 
-	if (cg == NULL || [_textContainers count] == 0 || [_textStorage length] == 0) {
+	if (cg == NULL || [_textStorage length] == 0) {
 		return;
 	}
 	[self cg_ensureLayout];
-	container = [_textContainers objectAtIndex:0];
-	fragments = [_fragments objectAtIndex:0];
 	font = [self cg_font];
 	ascender = [font ascender];
-	padding = [container lineFragmentPadding];
-	string = [_textStorage string];
-	n = [string length];
 	rangeEnd = glyphsToShow.location + glyphsToShow.length;
+	for (i = 0; i < [_fragments count]; i++) {
+		NSMutableArray *fragments = [_fragments objectAtIndex:i];
 
-	for (i = 0; i < [fragments count]; i++) {
-		FNFragment *fragment = [fragments objectAtIndex:i];
-		NSRange textRange = fragment->range;
-		CTLineRef line;
-		NSColor *colour;
+		for (j = 0; j < [fragments count]; j++) {
+			FNFragment *fragment = [fragments objectAtIndex:j];
+			NSRange drawn;
+			CFArrayRef runs;
+			CGFloat baselineY;
+			NSUInteger pos;
 
-		if (fragment->range.location >= rangeEnd) {
-			break;
-		}
-		if (fragment->range.location + fragment->range.length <= glyphsToShow.location) {
-			continue;
-		}
-		if (textRange.location + textRange.length > n) {
-			textRange.length = n - textRange.location;
-		}
-		while (textRange.length > 0) {
-			unichar c = [string characterAtIndex:textRange.location + textRange.length - 1];
+			if (fragment->glyphs.location >= rangeEnd) {
+				continue;
+			}
+			if (fragment->glyphs.location + fragment->glyphs.length <= glyphsToShow.location) {
+				continue;
+			}
+			if (fragment->line == NULL) {
+				continue;
+			}
+			drawn = [self cg_drawnRangeForFragment:fragment];
+			if (drawn.length == 0) {
+				continue;
+			}
+			runs = CTLineGetGlyphRuns(fragment->line);
+			baselineY = origin.y + fragment->rect.origin.y + ascender;
+			/* THE GLYPHS, RUN BY RUN. */
+			pos = drawn.location;
+			while (pos < drawn.location + drawn.length) {
+				NSRange runRange;
+				NSDictionary *attrs = [_textStorage attributesAtIndex:pos longestEffectiveRange:&runRange inRange:drawn];
+				NSColor *colour = [attrs objectForKey:NSForegroundColorAttributeName];
+				NSUInteger runEnd = runRange.location + runRange.length;
+				CFIndex a, b;
 
-			if (c == ' ' || c == '\t' || c == '\n') {
-				textRange.length--;
-			} else {
-				break;
+				if (runEnd > drawn.location + drawn.length) {
+					runEnd = drawn.location + drawn.length;
+				}
+				if (runEnd <= pos) {
+					runEnd = pos + 1;
+				}
+				a = (CFIndex)(pos - fragment->range.location);
+				b = (CFIndex)(runEnd - fragment->range.location);
+				[(colour != nil) ? colour : [NSColor controlTextColor] setFill];
+				/* **AND THE CONTEXT IS MIRRORED ABOUT THE BASELINE, WHICH IS WHAT A FLIPPED CONTAINER NEEDS.** The fragments
+				 * are y-DOWN — a container's coordinates are a text view's — and Core Text's own run UP from the baseline. */
+				CGContextSaveGState(cg);
+				CGContextTranslateCTM(cg, origin.x + fragment->used.origin.x, baselineY);
+				CGContextScaleCTM(cg, 1.0, -1.0);
+				CGContextSetTextPosition(cg, 0.0, 0.0);
+				if (runs != NULL && CFArrayGetCount(runs) > 0 && a < b) {
+					CTRunDraw((CTRunRef)CFArrayGetValueAtIndex(runs, 0), cg, CFRangeMake(a, b - a));
+				}
+				CGContextRestoreGState(cg);
+				pos = runEnd;
+			}
+			/* AND THE UNDERLINE, IF ANY RUN CARRIES ONE. */
+			pos = drawn.location;
+			while (pos < drawn.location + drawn.length) {
+				NSRange runRange;
+				NSDictionary *attrs = [_textStorage attributesAtIndex:pos longestEffectiveRange:&runRange inRange:drawn];
+				NSNumber *styleNumber = [attrs objectForKey:NSUnderlineStyleAttributeName];
+				NSColor *underlineColour = [attrs objectForKey:NSUnderlineColorAttributeName];
+				NSInteger style = (styleNumber != nil) ? [styleNumber integerValue] : NSUnderlineStyleNone;
+				NSInteger shape = style & 0x0F;
+				NSInteger pattern = style & 0xFF00;
+				NSUInteger runEnd = runRange.location + runRange.length;
+
+				if (runEnd > drawn.location + drawn.length) {
+					runEnd = drawn.location + drawn.length;
+				}
+				if (runEnd <= pos) {
+					runEnd = pos + 1;
+				}
+				if (shape != NSUnderlineStyleNone) {
+					CFIndex a = (CFIndex)(pos - fragment->range.location);
+					CFIndex b = (CFIndex)(runEnd - fragment->range.location);
+					CGFloat x0 = origin.x + fragment->used.origin.x
+						+ (CGFloat)CTLineGetOffsetForStringIndex(fragment->line, a, NULL);
+					CGFloat x1 = origin.x + fragment->used.origin.x
+						+ (CGFloat)CTLineGetOffsetForStringIndex(fragment->line, b, NULL);
+					NSColor *colour = underlineColour;
+					CGFloat thickness = (shape == NSUnderlineStyleThick) ? 2.0 : 1.0;
+					CGFloat y = baselineY + 2.0;
+
+					if (colour == nil) {
+						colour = [attrs objectForKey:NSForegroundColorAttributeName];
+					}
+					if (colour == nil) {
+						colour = [NSColor controlTextColor];
+					}
+					if (pattern == NSUnderlinePatternSolid) {
+						[colour setFill];
+						if (shape == NSUnderlineStyleDouble) {
+							CGContextFillRect(cg, CGRectMake(x0, y, x1 - x0, 1.0));
+							CGContextFillRect(cg, CGRectMake(x0, y + 2.0, x1 - x0, 1.0));
+						} else {
+							CGContextFillRect(cg, CGRectMake(x0, y, x1 - x0, thickness));
+						}
+					} else {
+						CGFloat dash[2];
+						CGPoint points[2];
+
+						switch (pattern) {
+						case NSUnderlinePatternDot: dash[0] = 1.0; dash[1] = 1.0; break;
+						case NSUnderlinePatternDash: dash[0] = 3.0; dash[1] = 2.0; break;
+						case NSUnderlinePatternDashDot: dash[0] = 3.0; dash[1] = 2.0; break;
+						case NSUnderlinePatternDashDotDot: dash[0] = 3.0; dash[1] = 2.0; break;
+						default: dash[0] = 1.0; dash[1] = 1.0; break;
+						}
+						points[0] = CGPointMake(x0, y + thickness / 2.0);
+						points[1] = CGPointMake(x1, y + thickness / 2.0);
+						[colour setStroke];
+						CGContextSetLineWidth(cg, thickness);
+						CGContextSetLineDash(cg, 0.0, dash, 2);
+						CGContextStrokeLineSegments(cg, points, 2);
+						CGContextSetLineDash(cg, 0.0, NULL, 0);
+					}
+				}
+				pos = runEnd;
 			}
 		}
-		if (textRange.length == 0) {
-			continue;
+	}
+}
+
+/* **AND THE BACKGROUND THE GLYPHS SIT ON, WHICH IS THE OTHER HALF OF THE RUN WALK.** Each run carrying
+ * `NSBackgroundColorAttributeName` fills the used rect of ITS OWN glyphs, so two backgrounds on one line are two
+ * rectangles. THE SELECTION IS NOT PAINTED HERE: it belongs to the VIEW, which is the only object that knows where it
+ * is, and that is the division the header states. */
+- (void)drawBackgroundForGlyphRange:(NSRange)glyphsToShow atPoint:(NSPoint)origin
+{
+	NSGraphicsContext *context = [NSGraphicsContext currentContext];
+	CGContextRef cg = (context != nil) ? (CGContextRef)[context graphicsPort] : NULL;
+	NSString *string;
+	CGFloat lineHeight;
+	NSUInteger i, j, rangeEnd;
+
+	if (cg == NULL || [_textStorage length] == 0) {
+		return;
+	}
+	[self cg_ensureLayout];
+	string = [_textStorage string];
+	lineHeight = [self cg_lineHeight];
+	rangeEnd = glyphsToShow.location + glyphsToShow.length;
+	for (i = 0; i < [_fragments count]; i++) {
+		NSMutableArray *fragments = [_fragments objectAtIndex:i];
+
+		for (j = 0; j < [fragments count]; j++) {
+			FNFragment *fragment = [fragments objectAtIndex:j];
+			NSUInteger pos, end;
+
+			if (fragment->glyphs.location >= rangeEnd) {
+				continue;
+			}
+			if (fragment->glyphs.location + fragment->glyphs.length <= glyphsToShow.location) {
+				continue;
+			}
+			if (fragment->line == NULL) {
+				continue;
+			}
+			pos = fragment->range.location;
+			end = fragment->range.location + fragment->range.length;
+			if (end > [string length]) {
+				end = [string length];
+			}
+			while (pos < end) {
+				NSRange runRange;
+				NSDictionary *attrs = [_textStorage attributesAtIndex:pos longestEffectiveRange:&runRange
+									  inRange:NSMakeRange(fragment->range.location, end - fragment->range.location)];
+				NSColor *background = [attrs objectForKey:NSBackgroundColorAttributeName];
+				NSUInteger runEnd = runRange.location + runRange.length;
+
+				if (runEnd > end) {
+					runEnd = end;
+				}
+				if (runEnd <= pos) {
+					runEnd = pos + 1;
+				}
+				if (background != nil) {
+					CFIndex a = (CFIndex)(pos - fragment->range.location);
+					CFIndex b = (CFIndex)(runEnd - fragment->range.location);
+					CGFloat x0 = origin.x + fragment->used.origin.x
+						+ (CGFloat)CTLineGetOffsetForStringIndex(fragment->line, a, NULL);
+					CGFloat x1 = origin.x + fragment->used.origin.x
+						+ (CGFloat)CTLineGetOffsetForStringIndex(fragment->line, b, NULL);
+
+					[background setFill];
+					CGContextFillRect(cg, CGRectMake(x0, origin.y + fragment->rect.origin.y, x1 - x0, lineHeight));
+				}
+				pos = runEnd;
+			}
 		}
-		line = [self cg_createLineForRange:textRange font:font];
-		if (line == NULL) {
-			continue;
-		}
-		colour = [[_textStorage attributesAtIndex:textRange.location effectiveRange:NULL]
-					objectForKey:NSForegroundColorAttributeName];
-		[(colour != nil) ? colour : [NSColor controlTextColor] setFill];
-		/* **AND THE CONTEXT IS MIRRORED ABOUT THE BASELINE, WHICH IS WHAT A FLIPPED CONTAINER NEEDS.** The fragments are
-		 * y-DOWN — the container's coordinates are a text view's — and Core Text's own run UP from the baseline. */
-		CGContextSaveGState(cg);
-		CGContextTranslateCTM(cg, origin.x + padding, origin.y + fragment->rect.origin.y + ascender);
-		CGContextScaleCTM(cg, 1.0, -1.0);
-		CGContextSetTextPosition(cg, 0.0, 0.0);
-		CTLineDraw(line, cg);
-		CGContextRestoreGState(cg);
-		CFRelease(line);
 	}
 }
 

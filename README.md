@@ -48,10 +48,14 @@ tests/
   text_layout_web.m             and the WEB that ties the trio together: the store, its managers, and what goes stale
   text_layout_fragments.m       and the FRAGMENTS that web produces: the store laid into the container's lines
   text_layout_draw.m            and the INK: the manager drawing the glyphs it laid out, where the origin says
+  text_layout_attributes.m      and the BACKGROUND and UNDERLINE keys the manager now paints, run by run
+  text_layout_overflow.m        and the SECOND CONTAINER: what does not fit the first is carried to the next
+  text_layout_glyphs.m          and the GLYPH STORE: the generated lines, and the four reverse lookups
   text_word_movement.m          and its WORD granularity: Option+arrow and Option+Delete, over the string
   text_view_lines.m             and the first slice of the MULTI-LINE view: the line model, and what reads it
   text_view_wrapping.m          and the slice above it: the same model WRAPPED to the view's width
   text_view_scrolling.m         and above that: the view in a SCROLL VIEW, and the doors that move it
+  text_view_store.m             and the VIEW reading the store through the manager, its own layout gone
   text_field_cell.m             a FIELD's cell: its string, its face, and one edit session end to end
   text_field_control.m          and the VIEW above it: a press that opens a session, and what commits it
   text_field_bezel.m            and its BORDER's two shapes, read out of the corner PIXELS
@@ -199,8 +203,10 @@ the compositor is really gone.
   fragment padding, **3** lines tall, as wide as the text rather than the container — and a container that is not the
   manager's has nothing used in it; the SAME paragraph is **1** fragment in 300 points and **3** in 90, so the width is
   the container's; an edit makes the layout STALE and asking for the geometry REBUILDS it one line taller, clearing the
-  record; and asking twice changes nothing. **WHAT IS OWED AND NAMED IN ITS HEADER**: drawing, the glyph store, the
-  overflow into a second container, and any glyph map that is not the identity.
+  record; and asking twice changes nothing. **WHAT WAS OWED HERE HAS SINCE LANDED**: drawing (`text_layout_draw.m`),
+  the glyph store (`text_layout_glyphs.m`), the overflow into a second container (`text_layout_overflow.m`), and the
+  background and underline keys (`text_layout_attributes.m`) — each its own probe below. What remains owed is a glyph
+  map that is not the one-to-one Core Text produces.
 - **And the INK the layout produces** (`ctest`): `NSLayoutManager -drawGlyphsForGlyphRange:atPoint:` reads the
   fragments and sets each line at the ORIGIN the caller gave — "that container's origin in the currently focused
   view's coordinates", as Apple's comment puts it — and `-boundingRectForGlyphRange:inTextContainer:` answers the union
@@ -211,9 +217,37 @@ the compositor is really gone.
   and the second's begins at **y=15.73**; and a RED foreground attribute in the store is the colour the glyphs come
   out, while no colour attribute leaves them the control's own ink. **AND THE PROBE FOUND ONE REAL DEFECT**: the
   bounding rect included a fragment the range only TOUCHED at its boundary, so a one-line range answered two lines —
-  the overlap test is now strict on both ends. **WHAT IS OWED AND NAMED IN ITS HEADER**: `-drawBackgroundForGlyphRange:atPoint:`
-  (this tier has no background-colour key, no marked range and no tables, and the SELECTION belongs to the view), the
-  underline and strikethrough doors (no underline attribute), and one colour per FRAGMENT rather than per run.
+  the overlap test is now strict on both ends. **AND THE ONE-COLOUR-PER-FRAGMENT LIMITATION IS RETIRED**: the draw
+  walks the store's ATTRIBUTE RUNS, so a line whose text changes colour halfway is drawn in both colours.
+- **And the BACKGROUND and UNDERLINE the manager now paints** (`ctest`): `NSBackgroundColorAttributeName`,
+  `NSUnderlineStyleAttributeName` and `NSUnderlineColorAttributeName` arrived with the two doors that read them, and
+  `-drawBackgroundForGlyphRange:atPoint:` fills the used rect of each run with its own colour. MEASURED: a GREEN
+  background attribute puts **301** green pixels behind `abcd`; a blue underline draws a rule the plain draw does not
+  (**0** blue pixels with no attribute, then some with one), and a DOUBLE underline draws TWO rules — measurably more
+  than one; two foreground runs on one line come out in BOTH colours (red **20**, blue **14**); and two backgrounds on
+  one line are two rectangles in two colours (green **147**, yellow **154**).
+- **And the SECOND CONTAINER, which is where text goes when it does not fit** (`ctest`): a container's OWN HEIGHT is
+  the overflow edge, so `one\ntwo\nthree\nfour` in a first container TWO lines tall fills **2** fragments and carries
+  the other **2** to the next; `-glyphRangeForTextContainer:` answers **(0,8)** for the first and **(8,10)** for the
+  second; the overflow line sits at **y=0** in the SECOND container's own coordinates; each container's used rect is
+  the two lines it took; a single tall container still takes everything; and text past the LAST container is clipped at
+  the last line that fit.
+- **And the GLYPH STORE, which is the generated lines themselves** (`ctest`): the layout KEEPS the `CTLine` it made for
+  each fragment instead of rebuilding it per draw, and the character-to-glyph map WALKS that store rather than
+  declaring the identity — `-numberOfGlyphs` is the last stored glyph's end, the two conversion doors find a
+  character's fragment and count the glyphs before it, and the four reverse lookups the view needs are here too.
+  MEASURED: **7** glyphs for a 7-character store; a range in the second line maps to itself and one spanning the break
+  keeps its length; a glyph's x is its fragment's padding plus Core Text's offset (**10** at the first glyph, **33.05**
+  at the end of `one`, and back to **10** at the start of `two`); the point door is that inverse; and the ORDINAL
+  fragment doors put the boundary index in the fragment that STARTS there (glyph 4 of `one\ntwo` is fragment **1**).
+- **And the VIEW reading the store through the manager** (`ctest`): `NSTextView` owns the trio, `-string` is the
+  STORE's string, and the `malloc`'d visual array, the typesetter walk and the per-line `CTLine` are GONE from the
+  class. MEASURED: a text view owns an `NSTextStorage`, an `NSLayoutManager` and an `NSTextContainer`; a direct store
+  edit is mirrored into the view's string and an edit in the view reaches the store; the view's visual line count IS
+  the manager's fragment count, before and after a re-wrap; a RED run in the store is the colour the VIEW draws; and a
+  character typed at the end of a red run INHERITS the run. **THE `_string` MIRROR IS WHAT LETS THE BASE CLASS KEEP
+  WORKING** — `NSText`'s movement and word commands read that string directly, so the store's own
+  `NSTextStorageDidProcessEditingNotification` refreshes it.
 - **And the field, which is a cell under a view** (`ctest`, offscreen): `NSTextFieldCell` owns the string, the face
   and the three doors of an edit; `NSTextField` is the control above it, and it contributes the two things a cell
   cannot — a PRESS that opens a session with the WINDOW's field editor, and `-selectText:` for the same session with
@@ -344,12 +378,14 @@ the compositor is really gone.
   and the child clip is the child's FRAME region rather than its bounds rect — which was the same value only while the
   origin was zero. MEASURED: a mark at a document's own y 100..120 draws at 110 with the clip view at the top and at
   10 after a scroll of 100, in one run, through `-displayRect:`.
-- **`ctest`: 42 of 42 passed** (the keyboard and the seam, the AppKit and its input path, the controls and their
+- **`ctest`: 46 of 46 passed** (the keyboard and the seam, the AppKit and its input path, the controls and their
   metrics, the field control and its cell and its bezel and its placeholder and what it may hold, the text path and its
-  word granularity and the multi-line view and its wrapping and its scrolling, the STORE the rich-text slice is built
-  on and the REGION it is laid out in and the WEB that ties the three together and the FRAGMENTS it produces and the
-  INK it draws, what a drag costs, the resize by edge, the tracking engine, the clip view and the scroller and the
-  scroll view and the drawn offset, the chrome and what its buttons do, the chrome theme, the menus and activation).
+  word granularity and the multi-line view and its wrapping and its scrolling and its READING OF THE STORE, the STORE
+  the rich-text slice is built on and the REGION it is laid out in and the WEB that ties the three together and the
+  FRAGMENTS it produces and the GLYPH STORE it keeps and the INK it draws and the BACKGROUND and UNDERLINE it paints
+  and the SECOND CONTAINER it overflows into, what a drag costs, the resize by edge, the tracking engine, the clip view
+  and the scroller and the scroll view and the drawn offset, the chrome and what its buttons do, the chrome theme, the
+  menus and activation).
 - **And the desktop's own text is SUB-PIXEL ANTIALIASED**, which is the AppKit's half of a renderer change in
   CoreGraphics: a window's surface is OPAQUE (`kCGImageAlphaNoneSkipFirst`), and the destination's opacity is
   exactly what decides whether a glyph is rasterised in colour. MEASURED on the live session: the window title's
@@ -495,7 +531,11 @@ drives Option+arrow and Option+Delete, because a word is a run of the string's o
 model. And the MULTI-LINE TEXT VIEW has its FIRST SLICE: `NSTextView` holds many lines where `NSText` holds one
 (`tests/text_view_lines.m`), and WRAPPING and SCROLLING are the slices above it (`tests/text_view_wrapping.m`,
 `tests/text_view_scrolling.m` — the second including the FLIP that puts a document's first line at the clip view's
-origin) — with RICH TEXT, attachments and paragraphs named in its own header as the slice still owed. Each absence is stated
+origin). **AND THE VIEW NOW READS A STORE THROUGH THE MANAGER** (`tests/text_view_store.m`): it owns the trio,
+`-string` is the store's, the `malloc`'d visual array and the typesetter walk are GONE from the class, and a run put
+in the store is the ink it draws — which is the rich-text half of the slice, with the BACKGROUND and UNDERLINE keys
+the manager paints (`tests/text_layout_attributes.m`). Attachments, tables, the paragraph model, the marked-text
+family and the input-method half are named in its own header as what is still owed. Each absence is stated
 rather than stubbed, and the refusals name themselves.
 
 ## Build
