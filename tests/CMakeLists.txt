@@ -233,6 +233,15 @@ set_tests_properties(appkit-text-layout-glyphs PROPERTIES ENVIRONMENT "${_agora_
 # dance are the first half; the ALIGNMENT (which moves a line inside its width) and the LINE-BREAK MODE (which the
 # typesetter obeys) are the two properties the layout reads, and the view's `-setAlignment:` is the store writing the
 # style the manager then reads.
+# **AND THE HYPHENATION FACTOR, THE LAST PROPERTY OF `NSParagraphStyle` WITH NO READER.** It is read as a
+# HYPHENATION ZONE (`lineWidth < factor * width`), a piece of the word that did not fit is pulled onto the line
+# and a U+2010 that is NOT a character of the store is drawn at its end — so the case checks the ranges, that the
+# fragments still tile the text, that the glyph space is unmoved, and that the ink reaches the reserved edge.
+add_executable(text_hyphenation text_hyphenation.m)
+target_link_libraries(text_hyphenation PRIVATE App m)
+add_test(NAME appkit-text-hyphenation COMMAND text_hyphenation)
+set_tests_properties(appkit-text-hyphenation PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
+
 add_executable(text_paragraph_style text_paragraph_style.m)
 target_link_libraries(text_paragraph_style PRIVATE App m)
 add_test(NAME appkit-text-paragraph-style COMMAND text_paragraph_style)

@@ -290,10 +290,11 @@ the compositor is really gone.
   lines); `-lineSpacing:5` adds its gap between a wrapping paragraph's lines; `-paragraphSpacing:6` plus
   `-paragraphSpacingBefore:4` add **10** at each paragraph boundary; a first-line indent of **20** and a head indent of
   **8** put line 0 at x=**30** and line 1 at x=**18**; a tail indent of **60** wraps the same paragraph into more
-  lines; and a two-times multiple, a minimum and a maximum set the band to **2*base**, **base+12** and **base-4**. The
-  hyphenation factor is the one the layout does not read YET, and the reason is no longer the ENGINE's — the RESOURCE
-  landed in `libagora-core/CFHyphenation.c`, so the factor is readable and having the layout manager read it is what is
-  owed; the BASE WRITING DIRECTION is read as far as NATURAL ALIGNMENT (right for a
+  lines; and a two-times multiple, a minimum and a maximum set the band to **2*base**, **base+12** and **base-4**. THE
+  HYPHENATION FACTOR IS READ NOW (`tests/text_hyphenation.m`): the layout manager reads it as a hyphenation zone
+  (`lineWidth < factor * width`) and a hyphenated line ends in a **U+2010 that is drawn and is not a character of the
+  text** — the resource it asks is `libagora-core/CFHyphenation.c`, and at the default 0.0 nothing is hyphenated; the
+  BASE WRITING DIRECTION is read as far as NATURAL ALIGNMENT (right for a
   right-to-left paragraph), while reordering a right-to-left script's glyphs is the engine's, named at its door.
 - **And the INPUT CONTEXT, where a key goes before the text view** (`ctest`): `NSTextInputContext` is the object
   `NSResponder -interpretKeyEvents:` hands each event to, and the STANDARD KEY BINDING MOVED THERE FROM THE RESPONDER — the
@@ -691,9 +692,10 @@ origin). **AND THE VIEW NOW READS A STORE THROUGH THE MANAGER** (`tests/text_vie
 in the store is the ink it draws — which is the rich-text half of the slice, with the BACKGROUND, UNDERLINE and
 STRIKETHROUGH keys the manager paints (`tests/text_layout_attributes.m`) and the PARAGRAPH STYLE it aligns and breaks
 by (`tests/text_paragraph_style.m`) and the GEOMETRY it lays out by (`tests/text_paragraph_geometry.m`) — the indents,
-the two spacings and the three line-height properties, all read as the manager's own fragment geometry. The property
-with no reader is the hyphenation factor — and its recorded reason is SPENT: the resource landed in
-`libagora-core/CFHyphenation.c`, so the factor is readable and having the layout manager read it is what is owed. The
+the two spacings and the three line-height properties, all read as the manager's own fragment geometry. **THE
+HYPHENATION FACTOR HAS A READER NOW TOO** (`tests/text_hyphenation.m`): it is read as a hyphenation zone, a piece of the
+word that did not fit is pulled onto the line, and the U+2010 that ends it is DRAWN INK rather than a character — so
+the property that carried the longest "no reader" note in this file is read like the rest. The
 BASE WRITING DIRECTION has a reader now (`tests/text_writing_direction.m`):
 `+defaultWritingDirectionForLanguage:` asks the locale, and a natural paragraph in a right-to-left direction aligns
 RIGHT; reordering a right-to-left script's glyphs stays the engine's, named at its door. The TABLE BLOCK is here

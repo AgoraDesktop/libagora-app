@@ -13,10 +13,12 @@
  * width the container gave it; the LINE-BREAK MODE goes into the attributed string the typesetter obeys; the two HEAD
  * INDENTS place the first line and the wrapped ones; the TAIL INDENT takes width off the line; `-lineSpacing` and the
  * two PARAGRAPH SPACINGS are the gaps between lines and across paragraph boundaries; and the LINE-HEIGHT MULTIPLE with
- * its MINIMUM and MAXIMUM set the band. WHAT IT STILL DOES NOT READ is the HYPHENATION FACTOR — and the reason is
- * NO LONGER THE ENGINE'S: the RESOURCE arrived, in `libagora-core/CFHyphenation.c`, which answers Core Foundation's
- * `CFStringGetHyphenationLocationBeforeIndex` — the very door platform AppKit reads this factor through — so the
- * factor is READABLE now and having the layout manager read it is what is owed — and THE BASE WRITING DIRECTION is
+ * its MINIMUM and MAXIMUM set the band. **THE HYPHENATION FACTOR IS READ NOW**, AND IT IS THE LAST PROPERTY OF THIS
+ * CLASS TO GET A READER: `NSLayoutManager` reads it as a HYPHENATION ZONE — a line is hyphenated when the breaker's
+ * own break would leave more than `1 - factor` of the width empty, which reduces to `lineWidth < factor * width` —
+ * and the resulting line ends in a U+2010 that is DRAWN and is NOT a character of the text
+ * (`tests/text_hyphenation.m`; the resource it asks is `libagora-core/CFHyphenation.c`). At the default 0.0 the test
+ * is `lineWidth < 0`, so every existing document lays out exactly as before — and THE BASE WRITING DIRECTION is
  * read only so far as NATURAL ALIGNMENT: it decides which edge "natural"
  * means, while reordering the glyphs of a right-to-left SCRIPT is the engine's (it now READS the direction — the line
  * hands it to the run, `CTRunGetStatus` — but does not reorder yet). Each is

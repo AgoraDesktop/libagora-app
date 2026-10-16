@@ -91,6 +91,7 @@
 	NSRect used;		/* the text band: where the glyphs sit, after the indents and the alignment */
 	CGFloat baseline;	/* the baseline's y in the CONTAINER's coordinates */
 	CTLineRef line;		/* the glyph store; OWNED, and NULL for an empty fragment */
+	BOOL hyphenated;	/* the line ends in a DRAWN HYPHEN that is not a character of the store */
 	NSArray *boxes;		/* RETAINED; FNBox objects sorted by character index, or nil */
 }
 + (id)fragmentWithRange:(NSRange)aRange glyphRange:(NSRange)aGlyphRange rect:(NSRect)aRect usedRect:(NSRect)aUsedRect baseline:(CGFloat)aBaseline line:(CTLineRef)aLine boxes:(NSArray *)someBoxes;
@@ -723,6 +724,111 @@ static CGFloat fn_attachment_width(void *refCon)
 		}
 	}
 	return line;
+}
+
+/* **WHETHER A CHARACTER IS ONE A HYPHENATION POINT CAN SIT INSIDE, AND IT IS THE DOOR'S OWN RULE.** The word to
+ * hyphenate is the run of LETTERS the break left behind, because `-lineBreakByHyphenatingBeforeIndex:` itself
+ * refuses a location whose predecessor is not a letter — so asking it about a run that is not all letters would be
+ * asking a question it has already answered "no" to, and a break taken there would be a break with no hyphen. */
+static BOOL fn_letter_char(unichar c)
+{
+	return [[NSCharacterSet letterCharacterSet] characterIsMember:c];
+}
+
+/* **THE LINE FOR A PIECE THAT ENDS IN A HYPHEN, WHICH IS ONE GLYPH LONGER THAN ITS RANGE HAS CHARACTERS.**
+ * AppKit never writes a hyphen into the text, so the hyphen is appended to a COPY of the piece's attributed
+ * string and the line is built from that. **APPENDING IS WHAT MAKES IT SAFE**: the store's characters keep their
+ * glyph indices and their offsets — the hyphen lands at the line's END, where nothing before it can move — so
+ * `CTLineGetOffsetForStringIndex:` still answers for every character of the range, and `glyphRange` for the
+ * fragment is unchanged. What it costs is that the LINE has one more glyph than the fragment claims characters,
+ * which is why the draw pass widens the LAST run by that one glyph and why `hyphenated` is a flag on the fragment
+ * rather than something a reader could infer.
+ *
+ * A DECIMAL TAB IS NOT RE-ALIGNED ON A HYPHENATED LINE, AND THAT IS A LIMITATION NAMED RATHER THAN HIDDEN: the
+ * alignment needs the provisional line's tab positions and this line is built with the style's own stops. A line
+ * that both ends in a hyphen AND carries a decimal tab is not a case this tier claims. */
+- (CTLineRef)cg_createHyphenatedLineForRange:(NSRange)range attributedString:(CFAttributedStringRef)rich
+{
+	CFAttributedStringRef sub = CFAttributedStringCreateWithSubstring(kCFAllocatorDefault, rich,
+		CFRangeMake((CFIndex)range.location, (CFIndex)range.length));
+	CFMutableAttributedStringRef mutable = (sub != NULL)
+		? CFAttributedStringCreateMutableCopy(kCFAllocatorDefault, 0, sub) : NULL;
+	CTLineRef line = NULL;
+
+	if (sub != NULL) {
+		CFRelease(sub);
+	}
+	if (mutable != NULL) {
+		/* **THE HYPHEN CARRIES THE ATTRIBUTES OF THE CHARACTER BEFORE IT**, which is the face, the size and the
+		 * colour the hyphen should be drawn in; there is no other character it could take them from. */
+		CFDictionaryRef attrs = CFAttributedStringGetAttributes(rich,
+			(CFIndex)(range.location + range.length - 1), NULL);
+
+		CFAttributedStringReplaceString(mutable, CFRangeMake((CFIndex)range.length, 0), CFSTR("\u2010"));
+		if (attrs != NULL) {
+			CFAttributedStringSetAttributes(mutable, CFRangeMake((CFIndex)range.length, 1), attrs, true);
+		}
+		line = CTLineCreateWithAttributedString(mutable);
+		CFRelease(mutable);
+	}
+	return line;
+}
+
+/* **THE HYPHENATION ZONE, AND IT IS DERIVED FROM APPLE'S OWN TWO ENDPOINTS RATHER THAN CHOSEN FREELY.** Apple's
+ * sentence for the factor is "0.0 means no hyphenation; 1.0 means hyphenate as much as possible", so the factor is
+ * a THRESHOLD and a LARGER one means MORE hyphenation — which pins the direction and rules out the obvious-looking
+ * "fraction of the line the piece must fill". Read as a zone, the two endpoints fall out: a line is hyphenated when
+ * the breaker's own break would leave more than `1 - factor` of the width EMPTY, and since the slack is
+ * `width - lineWidth`, that condition is exactly **`lineWidth < factor * width`**. At 0.0 it is `lineWidth < 0`,
+ * which nothing satisfies — so the DEFAULT (the factor is 0.0) leaves every existing document laid out as it was,
+ * without a special case; at 1.0 it is `lineWidth < width`, which is every line that is not exactly full, which is
+ * "as much as possible". **THE MAPPING IS THIS TIER'S AND IS SAID SO HERE**: AppKit's own numbers for the zone are
+ * not published, and what is modelled is the threshold, not whatever arithmetic AppKit uses behind it. */
+- (CTLineRef)cg_hyphenatedLineForRange:(NSRange *)range style:(NSParagraphStyle *)style
+	attributedString:(CFAttributedStringRef)rich typesetter:(CTTypesetterRef)ts font:(NSFont *)font
+	width:(CGFloat)width
+{
+	NSUInteger length = [_textStorage length];
+	NSUInteger wordStart = NSMaxRange(*range);
+	NSUInteger wordEnd = wordStart;
+	CFIndex ceiling;
+
+	/* **THE WORD THAT DID NOT FIT IS THE ONE THAT BEGINS WHERE THE BREAK LEFT OFF.** A break at a line ending, at
+	 * the end of the text, or before something that is not a letter has no word to hyphenate, and this answers NULL
+	 * for all three rather than moving the break. */
+	if (wordStart >= length || !fn_letter_char([[_textStorage string] characterAtIndex:wordStart])) {
+		return NULL;
+	}
+	while (wordEnd < length && fn_letter_char([[_textStorage string] characterAtIndex:wordEnd])) {
+		wordEnd++;
+	}
+	/* **THE DOOR GIVES THE POINTS BACKWARD AND THE LONGEST PIECE IS TRIED FIRST**, so the first piece that FITS is
+	 * the longest that fits — which is the only piece worth taking, because a shorter one would leave the line even
+	 * emptier than the break the typesetter already chose. `ceiling` walks down one point at a time and the loop
+	 * ends when the door runs out or when a piece would be too short to be a line. */
+	for (ceiling = (CFIndex)wordEnd; ceiling > (CFIndex)wordStart + 1;) {
+		CFIndex at = (CFIndex)[_textStorage lineBreakByHyphenatingBeforeIndex:(NSUInteger)ceiling
+							withinRange:NSMakeRange(wordStart, wordEnd - wordStart)];
+		NSRange piece;
+		CTLineRef line;
+
+		if (at == (CFIndex)NSNotFound || at <= (CFIndex)range->location) {
+			break;
+		}
+		piece = NSMakeRange(range->location, (NSUInteger)(at - (CFIndex)range->location));
+		line = [self cg_createHyphenatedLineForRange:piece attributedString:rich];
+		if (line != NULL) {
+			CGFloat pieceWidth = (CGFloat)CTLineGetTypographicBounds(line, NULL, NULL, NULL);
+
+			if (pieceWidth <= width) {
+				*range = piece;
+				return line;
+			}
+			CFRelease(line);
+		}
+		ceiling = at;
+	}
+	return NULL;
 }
 
 /* **AND THE BLOCK A LINE IS SET IN, WHICH IS THE FIRST `NSTextTableBlock` IN ITS PARAGRAPH STYLE — or the first plain
@@ -1818,6 +1924,7 @@ static BOOL fn_cell_owns_edge(CGFloat thisWidth, CGFloat otherWidth, BOOL tieGoe
 			CFIndex count;
 			CTLineRef line = NULL;
 			CGFloat lineWidth = 0.0;
+			BOOL hyphenated = NO;
 			NSRange range;
 
 			if (width < 1.0) {
@@ -1871,18 +1978,40 @@ static BOOL fn_cell_owns_edge(CGFloat thisWidth, CGFloat otherWidth, BOOL tieGoe
 					lineWidth = width;
 				}
 			}
+			/* **THEN THE ZONE IS ASKED, BEFORE THE FRAGMENT IS MADE, because the answer changes the fragment.** The
+			 * factor's reading is at `cg_hyphenatedLineForRange:`, including why the test is `lineWidth < factor *
+			 * width` and why the default leaves every existing document alone. A hyphenated line REPLACES the
+			 * breaker's, and the piece it took from the next word moves `count`, `range` and the width with it. */
+			hyphenated = NO;
+			if (line != NULL && [style hyphenationFactor] > 0.0f
+			    && lineWidth < (CGFloat)[style hyphenationFactor] * width) {
+				NSRange extended = range;
+				CTLineRef hyphenatedLine = [self cg_hyphenatedLineForRange:&extended style:style
+							  attributedString:s typesetter:ts font:font width:width];
+
+				if (hyphenatedLine != NULL) {
+					CFRelease(line);
+					line = hyphenatedLine;
+					range = extended;
+					count = (CFIndex)extended.length;
+					lineWidth = (CGFloat)CTLineGetTypographicBounds(line, NULL, NULL, NULL);
+					hyphenated = YES;
+				}
+			}
 			{
 				CGFloat textTop = y + leading;
 				CGFloat baseline = textTop + lineAscent;
 				CGFloat alignOffset = [self cg_alignmentOffsetForLine:line
 						alignment:[self cg_alignmentForParagraphAt:(NSUInteger)start] width:width];
 				NSArray *boxes = [self cg_boxesForRange:range line:line];
-
-				[fragments addObject:[FNFragment fragmentWithRange:range
+				FNFragment *made = [FNFragment fragmentWithRange:range
 					glyphRange:NSMakeRange(glyphBase, (NSUInteger)count)
 					rect:NSMakeRect(0.0, y, containerWidth, leading + lineHeight)
 					usedRect:NSMakeRect(leadingEdge + alignOffset, textTop, lineWidth + [self cg_boxExtra:boxes], lineHeight)
-					baseline:baseline line:line boxes:boxes]];
+					baseline:baseline line:line boxes:boxes];
+
+				made->hyphenated = hyphenated;
+				[fragments addObject:made];
 				y = textTop + lineHeight;
 			}
 			glyphBase += (NSUInteger)count;
@@ -2331,6 +2460,39 @@ static BOOL fn_cell_owns_edge(CGFloat thisWidth, CGFloat otherWidth, BOOL tieGoe
 				}
 				CGContextRestoreGState(cg);
 				pos = runEnd;
+			}
+			/* **AND A HYPHENATED FRAGMENT'S HYPHEN IS DRAWN HERE, BECAUSE THE WALK ABOVE CANNOT REACH IT.** That walk
+			 * draws each attribute run over the fragment's CHARACTERS, and the hyphen is the one glyph the line has that
+			 * no character owns — so it is drawn on its own, as the LAST glyph of the line's last run, at the position the
+			 * line gave it. **IT IS DRAWN RATHER THAN ASSUMED**: the fragment reserved room for it out of the line's own
+			 * advance, and a hyphen reserved and not painted is a line with a gap in it that reads as a kerning bug. The
+			 * colour comes from the character before it, which is the character whose attributes the hyphen was built
+			 * with, and the x carries every box that precedes it so a hyphen after an attachment lands in the right
+			 * place. MEASURED by `tests/text_hyphenation.m`, which renders this line and the same layout with the
+			 * hyphen's ink withheld: the reserved edge moves by the hyphen's own width. */
+			if (fragment->hyphenated && fragment->line != NULL) {
+				CFArrayRef hyphenRuns = CTLineGetGlyphRuns(fragment->line);
+				CFIndex runCount = (hyphenRuns != NULL) ? CFArrayGetCount(hyphenRuns) : 0;
+
+				if (runCount > 0) {
+					CTRunRef last = (CTRunRef)CFArrayGetValueAtIndex(hyphenRuns, runCount - 1);
+					CFIndex glyphCount = CTRunGetGlyphCount(last);
+					NSDictionary *endAttrs = [_textStorage attributesAtIndex:
+						(fragment->range.location + fragment->range.length - 1) effectiveRange:NULL];
+					NSColor *endColour = [endAttrs objectForKey:NSForegroundColorAttributeName];
+					NSUInteger end = fragment->range.location + fragment->range.length;
+
+					if (glyphCount > 0) {
+						[(endColour != nil) ? endColour : [NSColor controlTextColor] setFill];
+						CGContextSaveGState(cg);
+						CGContextTranslateCTM(cg, origin.x + fragment->used.origin.x
+							+ [self cg_boxExtraBeforeIndex:end inFragment:fragment], baselineY);
+						CGContextScaleCTM(cg, 1.0, -1.0);
+						CGContextSetTextPosition(cg, 0.0, 0.0);
+						CTRunDraw(last, cg, CFRangeMake(glyphCount - 1, 1));
+						CGContextRestoreGState(cg);
+					}
+				}
 			}
 			/* **AND THE TWO RULES BESIDE THE GLYPHS: THE UNDERLINE BELOW THE BASELINE AND THE STRIKETHROUGH THROUGH THE
 			 * MIDDLE OF THE X-HEIGHT.** They are the same run walk and the same arithmetic at two offsets, which is why both
