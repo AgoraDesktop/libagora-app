@@ -48,6 +48,7 @@ tests/
   text_field_control.m          and the VIEW above it: a press that opens a session, and what commits it
   text_field_bezel.m            and its BORDER's two shapes, read out of the corner PIXELS
   text_field_placeholder.m      and what an EMPTY field says it is for: a hint, drawn DIMMER than a value
+  text_field_attributes.m       and what it MAY HOLD: the two attributed-editing flags, and the editor they reach
   clip_view.m                   the INSIDE of a scroll view: the arithmetic, and the wire that re-runs it
   scroller.m                    and its BAR: a fraction into a knob, a point into a part, a drag back into a value
   scroll_view.m                 and the FRAME that joins them: the tiling, the loop, and -enclosingScrollView
@@ -152,6 +153,15 @@ the compositor is really gone.
   value — so `-sizeToFit` on the empty field a placeholder implies handed back something with no room in it. A field's
   height is its font's line whatever it holds, and `NSTextFieldCell -cellSizeForBounds:` now measures the line when the
   text is empty (the width is left as the base computed it).
+- **And what a field may hold** (`ctest`, offscreen + real sessions): the attributed-editing flags
+  (`-allowsEditingTextAttributes`, `-importsGraphics`) were carried by the CELL since the cell family's first slice and
+  by the field EDITOR since the text view's, and NOTHING CONNECTED THEM — a caller could set a field rich and get a
+  plain editor. `-setUpFieldEditorAttributes:` is now the door that carries them, factored out of the session so a
+  subclass with an editor of its own overrides one method. The probe checks the chain at all three objects: a flag set
+  on the CONTROL reaches the CELL, and the NEXT session's EDITOR is configured from it — while a field with the flags
+  OFF gets a plain editor, so the check cannot pass against an editor that is always rich. What still does not happen
+  is named rather than implied: no RTF reader, no attachment drawing and no paragraph model, so the flags travel and
+  nothing obeys them yet.
 - **The chrome** (`ctest`, offscreen): the title bar's symbols are SHAPES in pixels — ink on both diagonals of
   the X, a thick stroke across the minus, and a pill rounded at both caps — the title is centred and bold, and
   each symbol appears only for the style-mask bit that asks for it.
@@ -234,10 +244,10 @@ the compositor is really gone.
   and the child clip is the child's FRAME region rather than its bounds rect — which was the same value only while the
   origin was zero. MEASURED: a mark at a document's own y 100..120 draws at 110 with the clip view at the top and at
   10 after a scroll of 100, in one run, through `-displayRect:`.
-- **`ctest`: 33 of 33 passed** (the keyboard and the seam, the AppKit and its input path, the controls and their
-  metrics, the field control and its cell and its bezel and its placeholder, the text path and its word granularity,
-  what a drag costs, the resize by edge, the tracking engine, the clip view and the scroller and the scroll view and
-  the drawn offset, the chrome and what its buttons do, the chrome theme, the menus and activation).
+- **`ctest`: 34 of 34 passed** (the keyboard and the seam, the AppKit and its input path, the controls and their
+  metrics, the field control and its cell and its bezel and its placeholder and what it may hold, the text path and its
+  word granularity, what a drag costs, the resize by edge, the tracking engine, the clip view and the scroller and the
+  scroll view and the drawn offset, the chrome and what its buttons do, the chrome theme, the menus and activation).
 - **And the desktop's own text is SUB-PIXEL ANTIALIASED**, which is the AppKit's half of a renderer change in
   CoreGraphics: a window's surface is OPAQUE (`kCGImageAlphaNoneSkipFirst`), and the destination's opacity is
   exactly what decides whether a glyph is rasterised in colour. MEASURED on the live session: the window title's

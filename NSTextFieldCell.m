@@ -427,6 +427,42 @@
 
 /* ---- THE SESSION ------------------------------------------------------------------------------------- */
 
+/* **AND HOW AN EDITOR IS TOLD WHAT KIND OF FIELD IT IS EDITING, WHICH IS THE DOOR THE SESSION BELOW USED TO INLINE.**
+ * The font, the alignment, the fact that the editor paints nothing, and the two flags about what the field may hold
+ * are all settings about the FIELD and not about one session — so they live here, the session calls this, and a
+ * subclass with an editor of its own overrides one method rather than editing a copy of the session.
+ *
+ * **AND THE TWO ATTRIBUTED-EDITING FLAGS ARE THE PART THAT WAS NOT WIRED.** `NSCell` has carried
+ * `-allowsEditingTextAttributes` and `-importsGraphics` since the cell family's first slice, and the EDITOR has carried
+ * `-isRichText` and `-isImportsGraphics` since the text view's, and nothing connected them — so a caller could set a
+ * field rich and get a plain editor. They are copied here. **WHAT STILL DOES NOT HAPPEN IS NAMED RATHER THAN IMPLIED:**
+ * this tier has no RTF reader, no attachment drawing and no paragraph model, so the editor stores both and obeys
+ * neither (`NSText.h` says so where the flags live), and this is the door that would make them mean something. */
+- (NSText *)setUpFieldEditorAttributes:(NSText *)textObj
+{
+	/* **AND THE EDITOR PAINTS NOTHING AT ALL, WHICH IS THE ONLY ANSWER THAT CANNOT GO WRONG.** An earlier version of
+	 * this setting made the editor draw a background and handed it `-cg_fieldFillColor` — on the theory that one fill
+	 * asked for twice would agree with itself. IT DOES NOT AGREE, because the answer DEPENDS ON THE POINTER: the moment
+	 * a person clicks into the field the pointer is inside it, so the door answered the PRELIGHT GREY rather than the
+	 * field's white, and the editor painted a grey rectangle inside a white field. MEASURED on the demonstration: that
+	 * grey box is exactly the editor's own background — inset from the border, stopping at the chip.
+	 *
+	 * THE CELL ALREADY DRAWS THE FACE and always did; what it stops drawing during a session is its STRING (see
+	 * `-drawInteriorWithFrame:`), and that alone is what removes the double text. An editor that draws no background is
+	 * text ON a field rather than a second field, which is what a field editor is. */
+	[textObj setFieldEditor:YES];
+	[textObj setDrawsBackground:NO];
+	[textObj setEditable:YES];
+	[textObj setSelectable:YES];
+	if ([self font] != nil) {
+		[textObj setFont:[self font]];
+	}
+	[textObj setAlignment:[self alignment]];
+	[textObj setRichText:[self allowsEditingTextAttributes]];
+	[textObj setImportsGraphics:[self importsGraphics]];
+	return textObj;
+}
+
 /* **THE CELL IS THE EDITOR'S DELEGATE, AND THAT IS THE WHOLE DESIGN OF AN EDIT.** Apple's field editor is ONE object
  * the window owns and lends; the cell is told to begin a session, sets the editor up over its own text, and is the
  * thing the editor reports back to — because the string belongs to the cell and reading it back is the cell's job. The
@@ -439,27 +475,13 @@
 	NSString *string = [self stringValue];
 
 	_editorDelegate = anObject;
-	_cg_editor = textObj;
 	_cg_textEditing = YES;
 	[textObj setFrame:room];
-	[textObj setFieldEditor:YES];
-	/* **AND THE EDITOR PAINTS NOTHING AT ALL, WHICH IS THE ONLY ANSWER THAT CANNOT GO WRONG.** An earlier version of
-	 * this line set `-drawsBackground:` YES and handed the editor `-cg_fieldFillColor` — on the theory that one fill
-	 * asked for twice would agree with itself. IT DOES NOT AGREE, because the answer DEPENDS ON THE POINTER: the moment
-	 * a person clicks into the field the pointer is inside it, so the door answered the PRELIGHT GREY rather than the
-	 * field's white, and the editor painted a grey rectangle inside a white field. MEASURED on the demonstration: that
-	 * grey box is exactly the editor's own background — inset from the border, stopping at the chip.
-	 *
-	 * THE CELL ALREADY DRAWS THE FACE and always did; what it stops drawing during a session is its STRING (see
-	 * `-drawInteriorWithFrame:`), and that alone is what removes the double text. An editor that draws no background is
-	 * text ON a field rather than a second field, which is what a field editor is. */
-	[textObj setDrawsBackground:NO];
-	[textObj setEditable:YES];
-	[textObj setSelectable:YES];
-	if ([self font] != nil) {
-		[textObj setFont:[self font]];
-	}
-	[textObj setAlignment:[self alignment]];
+	/* **AND THE FIELD'S OWN SETTINGS COME FROM THE DOOR ABOVE**, so a subclass that wants a different editor changes
+	 * one method rather than editing this one — and the editor that comes back is the one held as this session's, in
+	 * case it is not the same object. */
+	textObj = [self setUpFieldEditorAttributes:textObj];
+	_cg_editor = textObj;
 	[textObj setString:(string != nil ? string : @"")];
 	[textObj setDelegate:self];
 	[controlView addSubview:textObj];

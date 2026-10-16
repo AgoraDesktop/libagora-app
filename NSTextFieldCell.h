@@ -175,6 +175,13 @@ typedef NSUInteger NSTextFieldBezelStyle;
 
 /* ---- THE SESSION ------------------------------------------------------------------------------------- */
 
+/* **AND HOW THE EDITOR IS TOLD WHAT KIND OF FIELD IT IS EDITING, WHICH IS ONE DOOR RATHER THAN A ROW OF SETTERS.**
+ * Apple's `-setUpFieldEditorAttributes:` is where a cell configures the editor it was lent — the font, the alignment,
+ * and the two flags about what the field MAY HOLD — and it RETURNS the editor, because a subclass may hand back a
+ * DIFFERENT one. It is a door rather than a block inside the session below for that reason: a subclass wanting its own
+ * editor (a secure field, a formatted cell) overrides exactly this and nothing else. */
+- (NSText *)setUpFieldEditorAttributes:(NSText *)textObj;
+
 /* **THE THREE DOORS OF AN EDIT, AND THE SPLIT BETWEEN THEM IS APPLE'S.** The cell does not make an editor and does not
  * take the keyboard: it is handed one and told to begin, which is what lets a window own a single editor and lend it
  * to whichever field is being typed into. `start` and `length` are the selection to open with, and the delegate is

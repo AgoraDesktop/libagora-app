@@ -27,10 +27,8 @@
  *     declares `NSTextField : NSControl <NSUserInterfaceValidations>` and keeps a separate action for a value a
  *     formatter REJECTED; this tier has neither that protocol nor a formatter-driven editing path, so both are named
  *     rather than half-declared.
- *   * `-placeholderString`, `-allowsEditingTextAttributes:`, `-importsGraphics:` AND THE AFTER-10.6 CONSTRUCTORS
- *     (`+labelWithString:`, `+textFieldWithString:`, `+wrappingLabelWithString:`). The placeholders are the CELL's in
- *     the era and this cell draws none; the attributed-string category needs the attribute vocabulary to survive an
- *     edit session; and the constructors postdate 10.6.
+ *   * THE AFTER-10.6 CONSTRUCTORS (`+labelWithString:`, `+textFieldWithString:`, `+wrappingLabelWithString:`), which
+ *     postdate 10.6 and would be this tier inventing a spelling the era does not have.
  *   * READ-ONLY SELECTION. A field that is selectable but not editable opens a NON-editable editor in Apple, so a
  *     person can copy out of a label. This tier's cell sets its editor editable when a session begins, so the
  *     distinction has no meaning here yet; `-isSelectable` is stored and forwarded, and this is the door that would
@@ -144,6 +142,22 @@ NS_ASSUME_NONNULL_BEGIN
 - (void)textDidEndEditing:(NSNotification *)notification;
 - (void)textDidChange:(NSNotification *)notification;
 
+@end
+
+/* **AND THE TWO FLAGS ABOUT WHAT THIS FIELD MAY HOLD, IN THE CATEGORY APPLE PUTS THEM IN.**
+ * `-allowsEditingTextAttributes:` says whether a person may change the text's ATTRIBUTES while editing, and
+ * `-importsGraphics:` whether an image may be dropped into it; both are the CELL's (its rows, not this class's) and
+ * both are FORWARDS, like every other face and value door here. **THEY ARE ALSO THE PART THAT WAS NOT WIRED:** a cell
+ * has carried them since the cell family's first slice and the field EDITOR has carried `-isRichText` and
+ * `-isImportsGraphics` since the text view's, and nothing connected the two — so a caller could set a field rich and
+ * get a plain editor. `-setUpFieldEditorAttributes:` copies them now, and what still does not happen is named at that
+ * door rather than implied here: the tier has no RTF reader, no attachment drawing and no paragraph model, so the
+ * flags travel and nothing obeys them yet. */
+@interface NSTextField (NSTextFieldAttributedStringMethods)
+- (BOOL)allowsEditingTextAttributes;
+- (void)setAllowsEditingTextAttributes:(BOOL)flag;
+- (BOOL)importsGraphics;
+- (void)setImportsGraphics:(BOOL)flag;
 @end
 
 /* **AND THE PROTOCOL ITSELF, WHICH IS EMPTY, AND THAT IS APPLE'S OWN SHAPE.** `NSTextFieldDelegate` adds nothing to

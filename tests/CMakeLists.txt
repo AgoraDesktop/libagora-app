@@ -226,6 +226,14 @@ target_link_libraries(text_field_placeholder PRIVATE App m)
 add_test(NAME appkit-text-field-placeholder COMMAND text_field_placeholder)
 set_tests_properties(appkit-text-field-placeholder PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
 
+# **AND WHAT A FIELD MAY HOLD, AND THE DOOR THAT TELLS THE EDITOR.** The attributed-editing flags were carried by the
+# cell and by the editor and were never connected; this checks the chain at all three objects, and drives
+# `-setUpFieldEditorAttributes:` directly because that is the door a subclass would override.
+add_executable(text_field_attributes text_field_attributes.m)
+target_link_libraries(text_field_attributes PRIVATE App m)
+add_test(NAME appkit-text-field-attributes COMMAND text_field_attributes)
+set_tests_properties(appkit-text-field-attributes PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
+
 # **AND THE DISPLAY PATH.** The ink tests are all offscreen; this one puts a menu's window on a headless
 # compositor and reads the COMPOSITOR'S OWN FRAMEBUFFER back, which is the only place the present can be seen.
 # It skips when there is no window server, so a component's tests still do not need a sibling's build.

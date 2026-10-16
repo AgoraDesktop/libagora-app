@@ -141,6 +141,32 @@
 	[self setNeedsDisplay:YES];
 }
 
+/* ---- AND THE TWO FLAGS ABOUT WHAT THE FIELD MAY HOLD ------------------------------------------------ */
+
+/* **THE CELL'S, LIKE EVERY OTHER FACE AND VALUE DOOR HERE, AND THE FORWARD IS THIS CLASS'S WHOLE PART.** The door that
+ * makes them MEAN anything is the cell's `-setUpFieldEditorAttributes:`, which copies them onto the editor a session is
+ * lent. NO `-setNeedsDisplay:` on the setters: neither flag changes a pixel this view draws, and a redisplay asked for
+ * by a flag with no ink is a request nobody can answer. */
+- (BOOL)allowsEditingTextAttributes
+{
+	return [(NSTextFieldCell *)[self cell] allowsEditingTextAttributes];
+}
+
+- (void)setAllowsEditingTextAttributes:(BOOL)flag
+{
+	[(NSTextFieldCell *)[self cell] setAllowsEditingTextAttributes:flag];
+}
+
+- (BOOL)importsGraphics
+{
+	return [(NSTextFieldCell *)[self cell] importsGraphics];
+}
+
+- (void)setImportsGraphics:(BOOL)flag
+{
+	[(NSTextFieldCell *)[self cell] setImportsGraphics:flag];
+}
+
 /* ---- THE KEYBOARD, WHICH A FIELD SURRENDERS TO ITS EDITOR ------------------------------------------- */
 
 /* **A FIELD WANTS THE KEYBOARD ONLY WHEN IT HAS SOMEWHERE TO PUT A CARET.** An editable, enabled field says yes; a
