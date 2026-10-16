@@ -18,9 +18,12 @@
  * `-drawRect:` IS DECLARED IN THIS SLICE AND DOES NOTHING — which is also what Apple's plain `NSView`
  * does, since a view with no subclass draws nothing and the method exists to be OVERRIDDEN — **AND
  * `-cacheDisplayInRect:toBitmapImageRep:` IS WHAT CALLS IT.** That method is this layer's SUBSTRATE
- * ANSWER: with no window server, a view is asked to draw into a BITMAP the caller supplies, which is the
- * one thing a window system would otherwise be doing for it. `-display` and `-displayIfNeeded` stay
- * ABSENT because they mean "draw me where I live", and nothing here can answer where that is.
+ * ANSWER: a view can be asked to draw into a BITMAP the caller supplies, which is what makes a view's ink
+ * checkable with no display at all — and it is better at that than any window is, because a probe wants the pixels
+ * without a screen. WHAT THIS SAID WAS THAT THE DOOR EXISTED BECAUSE THERE WAS NOWHERE ELSE TO DRAW: "with no window
+ * server", and that `-display` and `-displayIfNeeded` "stay ABSENT because they mean 'draw me where I live'". MEASURED,
+ * the window server exists, the display family is implemented, and a view knows where it lives — so the offscreen door
+ * is kept for what it is good at rather than for a retreat that has since been made.
  *
  * THE TWO PARTS OF A VIEW'S GEOMETRY, AND WHY BOTH EXIST: `frame` is the view's rectangle in its
  * SUPERVIEW's coordinates, and `bounds` is its own coordinate system. They are usually the same size and
@@ -405,7 +408,9 @@ extern NSString *NSDefinitionPresentationTypeOverlay;
 
 /* AND THE FOUR ANSWERED HANDS AND FLAGS, each for its own reason: `-acceptsFirstMouse:` is NO for a plain view
  * (Apple's own default, an override point), `-shouldDelayWindowOrderingForEvent:` likewise, `-shouldDrawColor` is
- * YES, `-menuForEvent:` is nil because this tier has no menus, `-makeBackingLayer` is nil because it has no layers,
+ * YES, `-menuForEvent:` is nil because a plain view is given no menu of its OWN — `NSMenu` has shipped since stage D
+ * and this sentence used to say the tier had none, which stopped being true several stages ago — `-makeBackingLayer`
+ * is nil because it has no layers,
  * and `-mouse:inRect:` — the pre-10.0 door — reports that the point was outside the rectangle rather than
  * pretending to hit-test. */
 - (BOOL)acceptsFirstMouse:(nullable NSEvent *)theEvent;

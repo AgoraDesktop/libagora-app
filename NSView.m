@@ -635,7 +635,11 @@ static NSRect fn_intersect(NSRect a, NSRect b)
 - (nullable id)menuForEvent:(NSEvent *)theEvent
 {
 	(void)theEvent;
-	return nil;	/* no NSMenu in this tier */
+	/* **AND THE REASON IS THE VIEW'S OWN MENU RATHER THAN A MISSING SUBSYSTEM.** This said "no NSMenu in this tier",
+	 * which stopped being true at stage D: menus exist, they are drawn, and the pop-up button beside them raises one.
+	 * What a view answers here is ITS OWN menu, and this class gives a caller no way to set one — so nil is the truth
+	 * for a plain view either way, and the note now says which truth it is. */
+	return nil;
 }
 
 - (nullable id)makeBackingLayer
@@ -1147,7 +1151,7 @@ FN_VIEW_PAIR(setPostsBoundsChangedNotifications, postsBoundsChangedNotifications
 
 - (nullable id)defaultMenu
 {
-	return nil;	/* no NSMenu in this tier */
+	return nil;	/* this view's own default menu, which no caller can set: NOT a missing NSMenu — see -menuForEvent: */
 }
 
 - (nullable id)pageHeader

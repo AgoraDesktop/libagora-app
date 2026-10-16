@@ -361,15 +361,20 @@ extern const NSBezierPathElement NSLineToBezierPathElement;
  * THE FOUR GLYPH DOORS, WHICH REFUSE BY NAME — AND WHAT STOPS THEM IS A CLASS, NOT A TECHNIQUE.  *
  * ============================================================================================ *
  *
- * EACH OF THE FOUR TAKES SOMETHING THIS TIER HAS NOT GOT: three take an `NSFont` (stage F's largest
- * class, which is where the glyph-outline machinery lives) and the fourth takes the glyphs a font would
- * have produced. A REFUSAL IS THE RIGHT ANSWER RATHER THAN A WITHDRAWAL: a door that quietly appended
+ * EACH OF THE FOUR TAKES SOMETHING THIS TIER HAS NOT GOT, AND IT IS NOT THE CLASS: three take an `NSFont` and the
+ * fourth takes the glyphs a font would have produced. THIS USED TO SAY "a class this tier has not got" AND THAT HAS
+ * BEEN FALSE SINCE `NSFont` SHIPPED — what is missing is the GLYPH-OUTLINE MACHINERY inside it, which `NSFont.h` names
+ * as its own second slice, because it needs `NSGlyph`. The distinction matters to a reader deciding whether to write
+ * the door: there is a class to ask now, and nothing in it that answers. A REFUSAL IS THE RIGHT ANSWER RATHER THAN A WITHDRAWAL: a door that quietly appended
  * nothing would hand back a path the caller believes contains letterforms, which is the silent wrongness
  * this tier refuses — and the alternative, inventing outlines without a font's metrics, would be a wrong
  * shape rather than a missing one.
  *
- * TWO SPELLINGS ARE NAMED RATHER THAN GLOSSED: the font parameter is `id` because `NSFont` is a class this
- * tier does not ship (naming it would have the ledger credit its class row — the rule this header states
+ * TWO SPELLINGS ARE NAMED RATHER THAN GLOSSED: the font parameter is `id`, and the reason it USED TO GIVE — that
+ * `NSFont` is a class this tier does not ship, so that naming it "would have the ledger credit its class row" — is no
+ * longer the reason, because the class HAS shipped and its row is credited. The parameter stays `id` for the honest
+ * one: typing it `NSFont *` would promise a font that can answer for a glyph, and no font here can yet. THE TIGHTENING
+ * IS OWED WITH THE MACHINERY, and is named here so it is not mistaken for an oversight — the rule this header states
  * wherever an unshipped type would otherwise appear), and the glyph is spelled `unsigned int` because
  * `NSGlyph` is a typedef in that same missing header. Apple's `NSGlyph` IS an `unsigned int`, so a caller
  * passing a glyph — or `NSNullGlyph` — compiles and means what it says. */

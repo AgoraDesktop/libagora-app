@@ -271,9 +271,12 @@ typedef NSUInteger NSApplicationPresentationOptions;
 - (void)unregisterUserInterfaceItemSearchHandler:(id)handler;
 
 /* **AND THE MENUS ANSWER NIL, WITH THEIR SETTERS RECORDING WHAT THEY WERE GIVEN.** Apple's doors return the
- * application's menus; this tier has no `NSMenu`, so nil is the truth, and a setter that kept the object would only
- * be something else to leak — WHAT IT RECORDS IS THAT IT WAS CALLED, which is the state `-servicesProvider` and the
- * search handlers also keep, and the reason the setters exist at all is that a ported program calls them. */
+ * application's menus. THIS USED TO SAY "this tier has no `NSMenu`" AND THAT IS NO LONGER TRUE — menus shipped at stage
+ * D and are what the bar is made of — so the reason is now the real one: the menu bar belongs to the WINDOW SERVER,
+ * which owns the strip and tells a client where it is, and this class carries no menu of its own to hand back. A
+ * setter that kept the object would only be something else to leak — WHAT IT RECORDS IS THAT IT WAS CALLED, which is
+ * the state `-servicesProvider` and the search handlers also keep, and the reason the setters exist at all is that a
+ * ported program calls them. */
 - (void)setMainMenu:(nullable id)menu;
 - (nullable id)mainMenu;
 
