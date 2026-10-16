@@ -45,6 +45,7 @@
 #import <AppKit/NSTextTable.h>
 #import <AppKit/NSParagraphStyle.h>
 #import <AppKit/NSImage.h>
+#import <AppKit/NSScreen.h>
 #import <AppKit/NSBitmapImageRep.h>
 #import <Foundation/Foundation.h>
 #include <stdio.h>
@@ -197,6 +198,17 @@ static void fn_playground_fill(NSTextView *view)
 							  | NSTextBlockMinYEdge | NSTextBlockMaxYEdge)];
 	[table setWidth:1.0 type:NSTextBlockAbsoluteValueType forLayer:NSTextBlockBorder];
 	[table setWidth:6.0 type:NSTextBlockAbsoluteValueType forLayer:NSTextBlockPadding];
+	/* **AND EACH CELL CARRIES ITS OWN, WHICH IS WHAT THE GRID RESERVES.** The table's layers frame the WHOLE grid; a
+	 * cell's layers are what the grid adds to its column's width, so a cell with none would have its text touching its
+	 * neighbour — which is what the first cut of this demonstration showed. */
+	[leftCell setWidth:1.0 type:NSTextBlockAbsoluteValueType forLayer:NSTextBlockBorder];
+	[leftCell setWidth:6.0 type:NSTextBlockAbsoluteValueType forLayer:NSTextBlockPadding];
+	[leftCell setBorderColor:[NSColor lightGrayColor] forEdge:(NSTextBlockMinXEdge | NSTextBlockMaxXEdge
+							      | NSTextBlockMinYEdge | NSTextBlockMaxYEdge)];
+	[rightCell setWidth:1.0 type:NSTextBlockAbsoluteValueType forLayer:NSTextBlockBorder];
+	[rightCell setWidth:6.0 type:NSTextBlockAbsoluteValueType forLayer:NSTextBlockPadding];
+	[rightCell setBorderColor:[NSColor lightGrayColor] forEdge:(NSTextBlockMinXEdge | NSTextBlockMaxXEdge
+							       | NSTextBlockMinYEdge | NSTextBlockMaxYEdge)];
 	[leftStyle addTextBlock:leftCell];
 	[rightStyle addTextBlock:rightCell];
 	[store addAttribute:NSFontAttributeName value:bodyFont range:leftRange];
@@ -276,19 +288,71 @@ static void fn_playground_fill(NSTextView *view)
  * scroll view's content width, which is what makes the wrap visible when the window is resized by its edge. */
 - (void)showPlayground:(id)sender
 {
+	NSUInteger mask = NSTitledWindowMask | NSClosableWindowMask | NSMiniaturizableWindowMask | NSResizableWindowMask;
+
 	(void)sender;
 	if (_playground == nil) {
-		NSWindow *w = [[NSWindow alloc] initWithContentRect:NSMakeRect(180, 180, 560, 460)
-			styleMask:(NSTitledWindowMask | NSClosableWindowMask | NSMiniaturizableWindowMask
-				   | NSResizableWindowMask)
-			backing:NSBackingStoreBuffered defer:NO];
-		NSScrollView *scroll = [[NSScrollView alloc] initWithFrame:NSMakeRect(0, 0, 560, 460)];
+		/* **A WINDOW IS PLACED INSIDE THE VISIBLE FRAME, WHICH IS WHAT EXCLUDES THE MENU BAR.** The first cut placed it
+		 * at (180,180) with a 486-point frame on a 600-tall screen, so its TITLE BAR sat ABOVE the menu — which is
+		 * unacceptable at any size, and the reason the placement is arithmetic here rather than three numbers. */
+		NSRect visible = [[NSScreen mainScreen] visibleFrame];
+		NSRect content;
+		NSRect frameRect;
+		NSWindow *w;
+		NSScrollView *scroll;
 		NSTextView *tv;
 
+		if (NSIsEmptyRect(visible)) {
+			visible = NSMakeRect(0.0, 0.0, 900.0, 600.0);
+		}
+		content.size.width = 520.0;
+		content.size.height = 380.0;
+		if (content.size.width > NSWidth(visible) - 40.0) {
+			content.size.width = NSWidth(visible) - 40.0;
+		}
+		if (content.size.height > NSHeight(visible) - 60.0) {
+			content.size.height = NSHeight(visible) - 60.0;
+		}
+		content.origin.x = NSMaxX(visible) - content.size.width - 20.0;
+		content.origin.y = NSMinY(visible) + 20.0;
+		/* THE FRAME IS TALLER THAN THE CONTENT BY THE CHROME STRIP, so the fit is checked on the FRAME: if the title bar
+		 * would leave the visible area the content is moved down until it does not. */
+		frameRect = [NSWindow frameRectForContentRect:content styleMask:mask];
+		if (NSMaxY(frameRect) > NSMaxY(visible)) {
+			content.origin.y -= (NSMaxY(frameRect) - NSMaxY(visible));
+		}
+		if (NSMaxX(frameRect) > NSMaxX(visible)) {
+			content.origin.x -= (NSMaxX(frameRect) - NSMaxX(visible));
+		}
+		if (NSMinY(content) < NSMinY(visible)) {
+			content.origin.y = NSMinY(visible);
+		}
+		if (NSMinX(content) < NSMinX(visible)) {
+			content.origin.x = NSMinX(visible);
+		}
+		w = [[NSWindow alloc] initWithContentRect:content styleMask:mask backing:NSBackingStoreBuffered defer:NO];
+		/* AND THE FRAME IS CLAMPED ONCE MORE, now that the window knows its own chrome: a clamp on the object cannot be
+		 * wrong, and it is the line that makes the guarantee hold for a screen this code did not imagine. */
+		frameRect = [w frame];
+		if (NSMaxY(frameRect) > NSMaxY(visible)) {
+			frameRect.origin.y = NSMaxY(visible) - NSHeight(frameRect);
+		}
+		if (NSMinY(frameRect) < NSMinY(visible)) {
+			frameRect.origin.y = NSMinY(visible);
+		}
+		if (NSMaxX(frameRect) > NSMaxX(visible)) {
+			frameRect.origin.x = NSMaxX(visible) - NSWidth(frameRect);
+		}
+		if (NSMinX(frameRect) < NSMinX(visible)) {
+			frameRect.origin.x = NSMinX(visible);
+		}
+		[w setFrame:frameRect display:YES];
+
+		scroll = [[NSScrollView alloc] initWithFrame:NSMakeRect(0.0, 0.0, content.size.width, content.size.height)];
 		[scroll setBorderType:NSLineBorder];
 		[scroll setHasVerticalScroller:YES];
 		[scroll setAutoresizingMask:(NSViewWidthSizable | NSViewHeightSizable)];
-		tv = [[NSTextView alloc] initWithFrame:NSMakeRect(0, 0, 544, 460)];
+		tv = [[NSTextView alloc] initWithFrame:NSMakeRect(0.0, 0.0, content.size.width - 16.0, content.size.height)];
 		[tv setDrawsBackground:YES];
 		[tv setBackgroundColor:[NSColor whiteColor]];
 		[tv setVerticallyResizable:YES];
@@ -300,9 +364,13 @@ static void fn_playground_fill(NSTextView *view)
 		_playground = w;
 		[tv release];
 		[scroll release];
-		fprintf(stderr, "controls: playground opened\n");
+		fprintf(stderr, "controls: playground opened — window %.0f,%.0f %.0fx%.0f; visible %.0f,%.0f %.0fx%.0f; "
+			"text = %lu chars\n",
+			[w frame].origin.x, [w frame].origin.y, [w frame].size.width, [w frame].size.height,
+			visible.origin.x, visible.origin.y, visible.size.width, visible.size.height,
+			(unsigned long)[[[(NSTextView *)[scroll documentView] textStorage] string] length]);
 	}
-	[_playground makeKeyAndOrderFront:nil];
+	[_playground orderFront:nil];
 }
 
 @end
@@ -658,11 +726,6 @@ int main(int argc, char **argv)
 			 [NSArray arrayWithObjects:@"", nil], controller, @selector(noop:));
 		[app setMainMenu:bar];
 
-		/* **AND THE PLAYGROUND IS PUT ON SCREEN WITH THE WINDOW, SO THERE IS NOTHING TO GO LOOKING FOR.** It is opened
-		 * BEFORE the controls window is made key, so the CONTROLS keep the keyboard and their field keeps its editor —
-		 * the playground is there to click into when the eye moves to it. */
-		[controller showPlayground:nil];
-
 		/* **AND IT IS MADE KEY, WHICH IS WHAT A FRONTMOST WINDOW IS.** A theme's four states are the point of
 		 * looking at it, and `-orderFront:` alone leaves the window inactive — so the ACTIVE art a theme ships for a
 		 * focused window would never be on screen, and the thing being iterated on would be the grey half of it. On
@@ -673,6 +736,10 @@ int main(int argc, char **argv)
 		 * responder — so a field that is focused is a field a person can type into, and the line below is what makes
 		 * that true rather than a decoration. */
 		[w makeFirstResponder:field];
+		/* **AND THE PLAYGROUND IS PUT ON SCREEN LAST, SO IT IS IN FRONT OF THE EYE.** The compositor stacks in map order,
+		 * so a window mapped after the controls window sits above it; it is ORDERED FRONT rather than made key, so the
+		 * CONTROLS keep the keyboard and their field keeps its editor while the playground is what a person sees. */
+		[controller showPlayground:nil];
 		/* ONE LINE OF GEOMETRY, so that a screenshot can be READ against the numbers the application believes rather
 		 * than against a guess about where a window landed. */
 		fprintf(stderr, "controls: window frame = %.0f,%.0f %.0fx%.0f; content = %.0fx%.0f; slider = %.0f,%.0f; "

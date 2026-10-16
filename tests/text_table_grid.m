@@ -160,7 +160,45 @@ int main(void)
 		[table release];
 	}
 
-	/* 4. **AND A FIXED-LAYOUT TABLE DIVIDES THE WIDTH EQUALLY.** */
+	/* 4. **AND A CELL'S OWN LAYERS ARE RESERVED, SO ITS TEXT IS INSET AND ITS NEIGHBOUR KEEPS OFF.** A cell with 6
+	 * points of padding and 1 of border moves its content IN by 7 and its column grows by 14, so the two cells' texts
+	 * are separated by the two adjacent insets rather than touching — which is what the first cut of the demonstration
+	 * showed. */
+	{
+		NSTextTable *table = [[NSTextTable alloc] init];
+		NSTextTableBlock *left;
+		NSTextTableBlock *right;
+		NSTextStorage *store;
+		NSLayoutManager *manager = [[NSLayoutManager alloc] init];
+		NSTextContainer *container = [[NSTextContainer alloc] initWithContainerSize:NSMakeSize(300.0, 300.0)];
+		NSRect zero, one;
+
+		[table setNumberOfColumns:2];
+		left = cell(table, 0, 0);
+		right = cell(table, 0, 1);
+		[left setWidth:1.0 type:NSTextBlockAbsoluteValueType forLayer:NSTextBlockBorder];
+		[left setWidth:6.0 type:NSTextBlockAbsoluteValueType forLayer:NSTextBlockPadding];
+		[right setWidth:1.0 type:NSTextBlockAbsoluteValueType forLayer:NSTextBlockBorder];
+		[right setWidth:6.0 type:NSTextBlockAbsoluteValueType forLayer:NSTextBlockPadding];
+		store = new_table_store([NSArray arrayWithObjects:@"aa", @"bb", nil],
+					[NSArray arrayWithObjects:left, right, nil], table);
+		[store addLayoutManager:manager];
+		[manager addTextContainer:container];
+		zero = [manager lineFragmentUsedRectForGlyphAtIndex:0 effectiveRange:NULL];
+		one = [manager lineFragmentUsedRectForGlyphAtIndex:3 effectiveRange:NULL];
+		printf("  (note: a padded cell — text 0 at x=%g, text 1 at x=%g, gap %g)\n",
+		       (double)zero.origin.x, (double)one.origin.x,
+		       (double)(one.origin.x - (zero.origin.x + zero.size.width)));
+		check(fabs(zero.origin.x - 17.0) < 0.01, "the first cell's text is inset by its 6+1 points of layers");
+		check(one.origin.x - (zero.origin.x + zero.size.width) >= 13.9,
+		      "and the two cells' texts are separated by the two adjacent insets rather than touching");
+		[container release];
+		[manager release];
+		[store release];
+		[table release];
+	}
+
+	/* 5. **AND A FIXED-LAYOUT TABLE DIVIDES THE WIDTH EQUALLY.** */
 	{
 		NSTextTable *table = [[NSTextTable alloc] init];
 		NSTextStorage *store;

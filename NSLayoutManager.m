@@ -966,6 +966,18 @@ static CGFloat fn_attachment_width(void *refCon)
  * GLYPH MAP IS THE IDENTITY HERE — a cell's glyph range is its character range — because the cells are in character
  * order, which is what keeps `-glyphRangeForCharacterRange:` a walk of the fragment list. A table lays out WHOLE in
  * one container; flowing it across containers is named as owed. */
+/* **AND A CELL'S OWN LAYERS ARE RESERVED IN THE COLUMN'S WIDTH.** The grid measures a column by its widest cell and
+ * then the cell's padding, border and margin are ADDED, so the ground and the border have room and neighbouring cells
+ * do not touch; the content is placed INSIDE them. The widths are read as ABSOLUTE points here — a percentage layer
+ * belongs to the block's own `-boundsRectForContentRect:`, which resolves it against a rectangle the grid does not
+ * have when it measures. */
+- (CGFloat)cg_tableCellInset:(NSTextTableBlock *)cell edge:(NSTextBlockEdge)edge
+{
+	return [cell widthForLayer:NSTextBlockPadding edge:edge]
+	     + [cell widthForLayer:NSTextBlockBorder edge:edge]
+	     + [cell widthForLayer:NSTextBlockMargin edge:edge];
+}
+
 - (NSUInteger)cg_layOutTableStartingAt:(NSUInteger)start typesetter:(CTTypesetterRef)ts font:(NSFont *)font
 	baseAscent:(CGFloat)baseAscent baseLineHeight:(CGFloat)baseLineHeight
 	fragments:(NSMutableArray *)fragments container:(NSTextContainer *)container
@@ -1032,7 +1044,9 @@ static CGFloat fn_attachment_width(void *refCon)
 		for (ci = 0; ci < [cells count]; ci++) {
 			NSTextTableBlock *cell = [cells objectAtIndex:ci];
 			NSRange r = [[ranges objectAtIndex:ci] rangeValue];
-			CGFloat natural = [self cg_naturalWidthOfRange:r font:font];
+			CGFloat natural = [self cg_naturalWidthOfRange:r font:font]
+					+ [self cg_tableCellInset:cell edge:NSTextBlockMinXEdge]
+					+ [self cg_tableCellInset:cell edge:NSTextBlockMaxXEdge];
 			NSInteger span = [cell columnSpan];
 			NSInteger c;
 
@@ -1081,6 +1095,17 @@ static CGFloat fn_attachment_width(void *refCon)
 			for (column = [cell startingColumn]; column < [cell startingColumn] + [cell columnSpan] && column < columns; column++) {
 				width += widths[column];
 			}
+			/* THE CELL'S LAYERS FRAME ITS CONTENT: the content moves in by the left inset and loses both. */
+			{
+				CGFloat left = [self cg_tableCellInset:cell edge:NSTextBlockMinXEdge];
+				CGFloat right = [self cg_tableCellInset:cell edge:NSTextBlockMaxXEdge];
+
+				x += left;
+				width -= left + right;
+				if (width < 1.0) {
+					width = 1.0;
+				}
+			}
 			height = [self cg_layOutCell:cell range:r typesetter:ts font:font baseAscent:baseAscent
 				baseLineHeight:baseLineHeight x:x width:width into:nil top:0.0];
 			if (height > rowHeight) {
@@ -1107,6 +1132,16 @@ static CGFloat fn_attachment_width(void *refCon)
 			}
 			for (column = [cell startingColumn]; column < [cell startingColumn] + [cell columnSpan] && column < columns; column++) {
 				width += widths[column];
+			}
+			{
+				CGFloat left = [self cg_tableCellInset:cell edge:NSTextBlockMinXEdge];
+				CGFloat right = [self cg_tableCellInset:cell edge:NSTextBlockMaxXEdge];
+
+				x += left;
+				width -= left + right;
+				if (width < 1.0) {
+					width = 1.0;
+				}
 			}
 			[self cg_layOutCell:cell range:r typesetter:ts font:font baseAscent:baseAscent
 				baseLineHeight:baseLineHeight x:x width:width into:fragments top:y];
