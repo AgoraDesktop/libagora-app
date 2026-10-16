@@ -94,6 +94,13 @@ typedef NSUInteger NSTextBlockEdge;
 - (void)drawBackgroundWithFrame:(NSRect)frame inView:(nullable NSView *)view characterRange:(NSRange)charRange
 		  layoutManager:(nullable NSLayoutManager *)layoutManager;
 
+/* **AND THE SAME DRAW WITH THE EDGES THE CALLER WANTS**, which is how a table that collapses its borders asks a cell
+ * for only the edges the cell does not SHARE with a neighbour — so a shared edge is drawn ONCE rather than by both
+ * cells. The GROUND is drawn whole either way, because a background is a rectangle and not an edge. The door above is
+ * this one with all four edges, which is what a block outside a collapsing table gets. */
+- (void)drawBackgroundWithFrame:(NSRect)frame inView:(nullable NSView *)view characterRange:(NSRange)charRange
+		  layoutManager:(nullable NSLayoutManager *)layoutManager edges:(NSTextBlockEdge)edges;
+
 @end
 
 NS_ASSUME_NONNULL_END

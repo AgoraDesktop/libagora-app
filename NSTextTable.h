@@ -18,8 +18,13 @@
  * `NSTextTableBlock`, and the manager lays them out as a grid: columns are MEASURED — automatically from the widest
  * cell in each column, its span divided out, scaled to fit the container, or equally for a fixed table — and each cell
  * lays its text out inside its own columns' width and is PLACED at its column's x. A row is as tall as its tallest
- * cell. WHAT IS STILL OWED IS NAMED WHERE IT WOULD BE: `-collapsesBorders` (shared edges drawn once) and a table that
- * FLOWS across containers; a cell of several paragraphs lays out, and its row is the tallest cell's height.
+ * cell, THE VERTICAL LAYERS INCLUDED. **AND A TABLE CAN COLLAPSE ITS BORDERS**: with `-collapsesBorders` YES the
+ * manager draws an edge two cells share ONCE — the cell on the min side (left or top) keeps its MaxX/MaxY and the
+ * other suppresses its MinX/MinY — so a doubled seam becomes a single border. WHAT IS STILL OWED IS NAMED WHERE IT
+ * WOULD BE: a table that FLOWS across containers; the TABLE's own border collapsed with its outer cells' (only
+ * cell-to-cell edges collapse today); and a shared edge whose two cells set DIFFERENT widths or colours resolved by
+ * one rule, since the min-side cell's own border is the one drawn; a cell of several paragraphs lays out, and its row
+ * is the tallest cell's height.
  */
 #ifndef APPKIT_NSTEXTTABLE_H
 #define APPKIT_NSTEXTTABLE_H

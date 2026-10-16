@@ -225,9 +225,18 @@ static NSInteger fn_edgeColumn(NSTextBlockEdge edge)
 
 /* **THE GROUND FIRST, THEN THE FOUR EDGES.** An edge is drawn only when it has a width; its colour is the one set for
  * it, or black when a width was given without one — which is Apple's default border colour and is the reason a border
- * with no colour still shows. */
+ * with no colour still shows. THIS DOOR DRAWS ALL FOUR; the `edges:` door below is the one a collapsing table uses. */
 - (void)drawBackgroundWithFrame:(NSRect)frame inView:(NSView *)view characterRange:(NSRange)charRange
 		  layoutManager:(NSLayoutManager *)layoutManager
+{
+	[self drawBackgroundWithFrame:frame inView:view characterRange:charRange layoutManager:layoutManager
+		edges:(NSTextBlockMinXEdge | NSTextBlockMaxXEdge | NSTextBlockMinYEdge | NSTextBlockMaxYEdge)];
+}
+
+/* **AND THE EDGE MASK, WHICH IS ALL THE DIFFERENCE.** The ground is unconditional; an edge is skipped when its bit is
+ * not set, which is how one of two cells sharing a border leaves that border to the other. */
+- (void)drawBackgroundWithFrame:(NSRect)frame inView:(NSView *)view characterRange:(NSRange)charRange
+		  layoutManager:(NSLayoutManager *)layoutManager edges:(NSTextBlockEdge)edges
 {
 	NSUInteger i;
 
@@ -243,6 +252,10 @@ static NSInteger fn_edgeColumn(NSTextBlockEdge edge)
 		NSColor *colour;
 		NSRect edgeRect;
 
+		/* A SHARED EDGE THIS CELL DOES NOT OWN IS NOT THIS CELL'S TO DRAW. */
+		if ((edges & fn_edges[i]) == 0) {
+			continue;
+		}
 		if (width <= 0.0) {
 			continue;
 		}

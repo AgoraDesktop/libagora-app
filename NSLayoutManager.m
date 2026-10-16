@@ -33,6 +33,7 @@
 #include <CoreText/CTStringAttributes.h>
 #include <CoreText/CTTextTab.h>
 #include <CoreText/CTTypesetter.h>
+#include <math.h>
 #include <stdlib.h>
 
 /* **THE ONE PIECE OF STATE A FRAGMENT IS: TWO RANGES, TWO RECTS AND THE GLYPHS THEMSELVES.** Apple distinguishes
@@ -118,6 +119,26 @@
 	[boxes release];
 	[super dealloc];
 }
+@end
+
+/* **AND THE ONE PIECE OF STATE A COLLAPSING TABLE NEEDS THAT IS NOT A LINE: A CELL'S BOX.** A cell is the run of
+ * fragments sharing one `NSTextTableBlock`; its CONTENT is their union, its FRAME is that content grown by the block's
+ * own layers, and the EDGES it draws are all four unless a neighbour's box shares one — in which case ONE of the two
+ * draws it, and this is where that decision is recorded before either is drawn. The frame and the mask are computed
+ * in one pass over the whole grid, which is why they live here rather than being computed at the draw. */
+@interface FNCellBox : NSObject
+{
+@public
+	NSTextBlock *block;	/* BORROWED; the cell's own block */
+	NSRect content;		/* the union of the cell's fragments' FLOW bands (its cell, not its text) */
+	NSUInteger containerIndex;
+	NSRange range;
+	NSRect frame;		/* content grown by the block's layers */
+	NSTextBlockEdge edges;	/* which of the four edges THIS cell draws */
+}
+@end
+
+@implementation FNCellBox
 @end
 
 @implementation NSLayoutManager
@@ -581,25 +602,155 @@ static CGFloat fn_attachment_width(void *refCon)
 	return plain;
 }
 
-/* **AND ONE BLOCK GROUP DRAWN.** The union of the group's used rects is the content; the block grows it by its own
- * layers and draws it at the container's origin. */
-- (void)cg_drawBlock:(NSTextBlock *)block union:(NSRect)unionRect containerIndex:(NSUInteger)index
-	      origin:(NSPoint)origin characterRange:(NSRange)charRange
+/* **AND ONE BLOCK'S FRAME, WHICH IS ITS CONTENT GROWN BY ITS OWN LAYERS.** The union of the group's used rects is the
+ * content; the block's `-boundsRectForContentRect:` grows it by padding, border and margin on each edge; the
+ * container's origin offsets the whole thing. THE FRAME IS SEPARATE FROM THE DRAW because a COLLAPSING table has to
+ * know every cell's frame before it can decide which edge each cell draws. */
+- (NSRect)cg_frameForBlock:(NSTextBlock *)block union:(NSRect)unionRect containerIndex:(NSUInteger)index
+		    origin:(NSPoint)origin characterRange:(NSRange)charRange
 {
 	NSTextContainer *container = [_textContainers objectAtIndex:index];
 	NSRect containerRect = NSMakeRect(0.0, 0.0, [container containerSize].width, [container containerSize].height);
 	NSRect bounds = [block boundsRectForContentRect:unionRect inRect:containerRect
 					  textContainer:container characterRange:charRange];
-	NSRect frame = NSMakeRect(bounds.origin.x + origin.x, bounds.origin.y + origin.y,
-				  bounds.size.width, bounds.size.height);
 
-	[block drawBackgroundWithFrame:frame inView:[container textView] characterRange:charRange layoutManager:self];
+	return NSMakeRect(bounds.origin.x + origin.x, bounds.origin.y + origin.y,
+			  bounds.size.width, bounds.size.height);
+}
+
+/* **AND ONE BLOCK GROUP DRAWN, WITH THE EDGES IT OWNS.** All four for a plain block; the mask comes from the grid when
+ * the block is a cell of a table that collapses its borders. */
+- (void)cg_drawBlock:(NSTextBlock *)block union:(NSRect)unionRect containerIndex:(NSUInteger)index
+	      origin:(NSPoint)origin characterRange:(NSRange)charRange edges:(NSTextBlockEdge)edges
+{
+	NSTextContainer *container = [_textContainers objectAtIndex:index];
+	NSRect frame = [self cg_frameForBlock:block union:unionRect containerIndex:index origin:origin
+				characterRange:charRange];
+
+	[block drawBackgroundWithFrame:frame inView:[container textView] characterRange:charRange layoutManager:self
+		edges:edges];
+}
+
+- (void)cg_drawBlock:(NSTextBlock *)block union:(NSRect)unionRect containerIndex:(NSUInteger)index
+	      origin:(NSPoint)origin characterRange:(NSRange)charRange
+{
+	[self cg_drawBlock:block union:unionRect containerIndex:index origin:origin characterRange:charRange
+		edges:(NSTextBlockMinXEdge | NSTextBlockMaxXEdge | NSTextBlockMinYEdge | NSTextBlockMaxYEdge)];
+}
+
+/* **AND A CELL ADDED TO THE GRID BEING COLLECTED.** A cell is the run of fragments sharing one block object, so a
+ * fragment either opens a cell or joins the one it belongs to. The search is linear because a table's cells are few
+ * and the alternative — a dictionary keyed by a borrowed pointer — needs the same lifetime argument anyway.
+ *
+ * **AND A CELL'S BOX IS ITS CELL, NOT ITS TEXT.** The union is taken over the fragments' FLOW BAND (`rect` — the
+ * column's content width) rather than their USED rect (the glyphs' own extent), so a short cell's box still reaches
+ * its column's edge and two neighbours' boxes actually MEET. That is what makes a shared border something two cells
+ * can disagree about drawing once; with a text-tight box the two borders float apart and there is nothing to collapse. */
+- (void)cg_addCell:(FNFragment *)fragment block:(NSTextBlock *)block containerIndex:(NSUInteger)index
+		to:(NSMutableArray *)cells
+{
+	NSUInteger k;
+
+	for (k = 0; k < [cells count]; k++) {
+		FNCellBox *cell = [cells objectAtIndex:k];
+
+		if (cell->block == block) {
+			cell->content = NSUnionRect(cell->content, fragment->rect);
+			cell->range.length = (fragment->range.location + fragment->range.length) - cell->range.location;
+			return;
+		}
+	}
+	{
+		FNCellBox *cell = [[[FNCellBox alloc] init] autorelease];
+
+		cell->block = block;
+		cell->content = fragment->rect;
+		cell->containerIndex = index;
+		cell->range = fragment->range;
+		[cells addObject:cell];
+	}
+}
+
+/* TWO INTERVALS OVERLAP WHEN EACH STARTS BEFORE THE OTHER ENDS, with the epsilon the whole file uses for a
+ * measurement it did not compute itself. */
+static BOOL fn_spans_overlap(CGFloat a0, CGFloat a1, CGFloat b0, CGFloat b1)
+{
+	return (a0 < b1 - 0.01) && (b0 < a1 - 0.01);
+}
+
+/* **AND WHICH OF A CELL'S FOUR EDGES IT DRAWS WHEN THE BORDERS COLLAPSE.** A cell's box shares an edge with a
+ * neighbour when the neighbour's OPPOSITE edge lies on it and their bands overlap: the neighbour to the LEFT shares
+ * this cell's MinX, the one ABOVE shares its MinY. THE MIN-SIDE CELL OWNS A SHARED EDGE — it draws its MaxX/MaxY, and
+ * the cell on the other side suppresses its MinX/MinY — so this cell drops MinX when something is to its left and
+ * MinY when something is above it, and always keeps MaxX and MaxY. The test is by GEOMETRY rather than by row and
+ * column, so two boxes that do NOT actually meet (a short cell above a tall one) keep both their edges rather than
+ * collapsing a line they do not share. */
+- (NSTextBlockEdge)cg_edgesForCell:(FNCellBox *)cell inCells:(NSMutableArray *)cells
+{
+	NSTextBlockEdge edges = (NSTextBlockMinXEdge | NSTextBlockMaxXEdge | NSTextBlockMinYEdge | NSTextBlockMaxYEdge);
+	NSUInteger k;
+
+	for (k = 0; k < [cells count]; k++) {
+		FNCellBox *other = [cells objectAtIndex:k];
+
+		if (other == cell) {
+			continue;
+		}
+		if (fabs(cell->frame.origin.x - (other->frame.origin.x + other->frame.size.width)) < 0.01
+		    && fn_spans_overlap(cell->frame.origin.y, cell->frame.origin.y + cell->frame.size.height,
+					other->frame.origin.y, other->frame.origin.y + other->frame.size.height)) {
+			edges &= ~NSTextBlockMinXEdge;
+		}
+		if (fabs(cell->frame.origin.y - (other->frame.origin.y + other->frame.size.height)) < 0.01
+		    && fn_spans_overlap(cell->frame.origin.x, cell->frame.origin.x + cell->frame.size.width,
+					other->frame.origin.x, other->frame.origin.x + other->frame.size.width)) {
+			edges &= ~NSTextBlockMinYEdge;
+		}
+	}
+	return edges;
+}
+
+/* **AND THE TABLE'S RUN DRAWN.** The table's own box first, so every cell's ground sits on it and every border frames
+ * it; then each cell. WHEN THE TABLE COLLAPSES ITS BORDERS every cell's frame is computed before any of them is drawn,
+ * so a shared edge can be left to ONE of the two cells that meet there. Otherwise each cell draws its whole frame,
+ * which is Apple's default and what this tier did before the collapse existed. */
+- (void)cg_drawTable:(NSTextTable *)table cells:(NSMutableArray *)cells union:(NSRect)tableUnion
+      containerIndex:(NSUInteger)tableContainer origin:(NSPoint)origin characterRange:(NSRange)tableRange
+{
+	NSUInteger k;
+
+	[self cg_drawBlock:table union:tableUnion containerIndex:tableContainer origin:origin characterRange:tableRange];
+	if ([table collapsesBorders]) {
+		for (k = 0; k < [cells count]; k++) {
+			FNCellBox *cell = [cells objectAtIndex:k];
+
+			cell->frame = [self cg_frameForBlock:cell->block union:cell->content
+				containerIndex:cell->containerIndex origin:origin characterRange:cell->range];
+			cell->edges = [self cg_edgesForCell:cell inCells:cells];
+		}
+		for (k = 0; k < [cells count]; k++) {
+			FNCellBox *cell = [cells objectAtIndex:k];
+
+			[self cg_drawBlock:cell->block union:cell->content containerIndex:cell->containerIndex
+				origin:origin characterRange:cell->range edges:cell->edges];
+		}
+		return;
+	}
+	for (k = 0; k < [cells count]; k++) {
+		FNCellBox *cell = [cells objectAtIndex:k];
+
+		[self cg_drawBlock:cell->block union:cell->content containerIndex:cell->containerIndex origin:origin
+			characterRange:cell->range];
+	}
 }
 
 /* **AND THE PASS THAT GROUPS CONSECUTIVE LINES BY THEIR BLOCK — AND BY THEIR TABLE, WHICH IS BEHIND IT.** A run of
  * fragments sharing the same block object is one box; a run sharing the same `NSTextTable` is the table's own box,
  * drawn FIRST so every cell's ground sits on it and every border frames it. A fragment with no block closes both runs
- * in flight. The pass is separate from the run walk because a box is BEHIND every run background. */
+ * in flight. The pass is separate from the run walk because a box is BEHIND every run background.
+ *
+ * **A TABLE'S CELLS ARE COLLECTED RATHER THAN DRAWN AS THEY ARRIVE**, because a collapsing table cannot decide who
+ * owns a shared edge until it has seen both cells that meet there. Everything else is drawn when its run closes. */
 - (void)cg_drawBlocksForGlyphRange:(NSRange)glyphsToShow atPoint:(NSPoint)origin
 {
 	NSTextBlock *current = nil;
@@ -610,8 +761,8 @@ static CGFloat fn_attachment_width(void *refCon)
 	NSUInteger containerForTable = 0;
 	NSRange range = NSMakeRange(0, 0);
 	NSRange tableRange = NSMakeRange(0, 0);
+	NSMutableArray *tableCells = nil;
 	BOOL haveUnion = NO;
-	BOOL haveTable = NO;
 	NSUInteger i, j;
 
 	(void)glyphsToShow;
@@ -624,25 +775,36 @@ static CGFloat fn_attachment_width(void *refCon)
 			NSTextTable *table = [block isKindOfClass:[NSTextTableBlock class]]
 				? [(NSTextTableBlock *)block table] : nil;
 
-			/* THE TABLE'S OWN BOX. */
+			/* A CHANGE OF TABLE CLOSES THE TABLE RUN IN FLIGHT, and a table OPENING closes any plain-block run
+			 * first, so the two kinds of box stay in the order they were laid out in. */
 			if (table != currentTable) {
-				if (haveTable) {
-					[self cg_drawBlock:currentTable union:tableUnion containerIndex:containerForTable origin:origin
-						characterRange:tableRange];
-					haveTable = NO;
+				if (currentTable != nil) {
+					[self cg_drawTable:currentTable cells:tableCells union:tableUnion
+						containerIndex:containerForTable origin:origin characterRange:tableRange];
 				}
-				if (table != nil) {
-					tableUnion = fragment->used;
-					tableRange = fragment->range;
-					containerForTable = i;
-					haveTable = YES;
+				if (table != nil && haveUnion) {
+					[self cg_drawBlock:current union:unionRect containerIndex:containerForBlock origin:origin
+						characterRange:range];
+					haveUnion = NO;
+					current = nil;
 				}
 				currentTable = table;
-			} else if (haveTable) {
-				tableUnion = NSUnionRect(tableUnion, fragment->used);
+				tableCells = (table != nil) ? [NSMutableArray array] : nil;
+				if (table != nil) {
+					tableUnion = fragment->rect;
+					tableRange = fragment->range;
+					containerForTable = i;
+				}
+			} else if (table != nil) {
+				tableUnion = NSUnionRect(tableUnion, fragment->rect);
 				tableRange.length = (fragment->range.location + fragment->range.length) - tableRange.location;
 			}
-			/* AND EACH CELL'S (or plain block's) BOX. */
+			if (table != nil) {
+				[self cg_addCell:fragment block:block containerIndex:i to:tableCells];
+				continue;
+			}
+
+			/* AND EACH PLAIN BLOCK'S BOX. */
 			if (block == nil) {
 				if (haveUnion) {
 					[self cg_drawBlock:current union:unionRect containerIndex:containerForBlock origin:origin
@@ -672,9 +834,9 @@ static CGFloat fn_attachment_width(void *refCon)
 		[self cg_drawBlock:current union:unionRect containerIndex:containerForBlock origin:origin
 			characterRange:range];
 	}
-	if (haveTable) {
-		[self cg_drawBlock:currentTable union:tableUnion containerIndex:containerForTable origin:origin
-			characterRange:tableRange];
+	if (currentTable != nil) {
+		[self cg_drawTable:currentTable cells:tableCells union:tableUnion containerIndex:containerForTable
+			origin:origin characterRange:tableRange];
 	}
 }
 
@@ -1108,6 +1270,12 @@ static CGFloat fn_attachment_width(void *refCon)
 			}
 			height = [self cg_layOutCell:cell range:r typesetter:ts font:font baseAscent:baseAscent
 				baseLineHeight:baseLineHeight x:x width:width into:nil top:0.0];
+			/* **AND THE VERTICAL LAYERS ARE RESERVED IN THE ROW'S HEIGHT.** Without this the content starts at the
+			 * row's top and the box grows UPWARD from it, so two stacked cells' boxes OVERLAP by both their vertical
+			 * insets and no edge is shared. Adding the insets here and starting the content below the top one below
+			 * makes the boxes meet at the row boundary, which is what a collapsed border needs. */
+			height += [self cg_tableCellInset:cell edge:NSTextBlockMinYEdge]
+				+ [self cg_tableCellInset:cell edge:NSTextBlockMaxYEdge];
 			if (height > rowHeight) {
 				rowHeight = height;
 			}
@@ -1144,7 +1312,8 @@ static CGFloat fn_attachment_width(void *refCon)
 				}
 			}
 			[self cg_layOutCell:cell range:r typesetter:ts font:font baseAscent:baseAscent
-				baseLineHeight:baseLineHeight x:x width:width into:fragments top:y];
+				baseLineHeight:baseLineHeight x:x width:width into:fragments
+				top:y + [self cg_tableCellInset:cell edge:NSTextBlockMinYEdge]];
 		}
 		y += rowHeight;
 	}

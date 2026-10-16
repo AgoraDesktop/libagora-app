@@ -24,7 +24,7 @@
  *        `CTLine` are GONE from this class, and the one copy of that arithmetic is in `NSLayoutManager`. It also
  *        means the view DRAWS RUNS rather than one style — a foreground colour, a background colour, the two rules and
  *        an attachment's cell are the manager's — and the PARAGRAPH STYLE's alignment, line-break mode and geometry
- *        are the layout's. What is left is a table's `-collapsesBorders` and its flow across containers; an
+ *        are the layout's. What is left is a table's flow across containers; an
  *        attachment's inline flow is HERE — the manager reserves a box of the cell's width and shifts the text after
  *        it.
  *
@@ -45,9 +45,9 @@
  * and there can be several per model line; the `cg_visualLine…` doors read the MANAGER, and they change every time
  * the text or the width does. A caller that wants "how many lines" has to say which.
  *
- * **WHAT IS STILL NOT HERE, NAMED RATHER THAN STUBBED:** `-collapsesBorders` (a table's shared edges drawn once) and
- * a table that FLOWS across containers — the GRID itself is here: the manager measures the columns, lays each cell
- * inside them and places them side by side. The
+ * **WHAT IS STILL NOT HERE, NAMED RATHER THAN STUBBED:** a table that FLOWS across containers — the GRID itself is
+ * here: the manager measures the columns, lays each cell inside them and places them side by side, and
+ * `-collapsesBorders` is here too, drawing an edge two cells share ONCE. The
  * `NSTextInput` PROTOCOL is here (`NSTextInput.h`),
  * this view ANSWERS it, and the INPUT CONTEXT that owns a composition is here too (`NSTextInputContext.h`) — what is
  * still missing is an input METHOD behind it: the context has one stock keyboard and no composition engine, so it

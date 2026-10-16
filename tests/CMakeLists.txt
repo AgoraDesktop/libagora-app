@@ -287,6 +287,15 @@ target_link_libraries(text_table_grid PRIVATE App m)
 add_test(NAME appkit-text-table-grid COMMAND text_table_grid)
 set_tests_properties(appkit-text-table-grid PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
 
+# **AND A SHARED BORDER DRAWN ONCE WHEN THE TABLE COLLAPSES ITS BORDERS.** Two cells side by side meet at their
+# column's edge and each drew that edge; with `-collapsesBorders` the left cell keeps it and the right cell's is
+# suppressed, which the probe reads as the red pixels either side of the seam — plus a lone cell, which must be
+# unchanged, and a stack of two, where the difference must be EXACTLY one strip.
+add_executable(text_table_collapse text_table_collapse.m)
+target_link_libraries(text_table_collapse PRIVATE App m)
+add_test(NAME appkit-text-table-collapse COMMAND text_table_collapse)
+set_tests_properties(appkit-text-table-collapse PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
+
 # **AND THE ATTACHMENT'S INLINE FLOW: A FIXED-SIZE BOX THE TEXT FLOWS AROUND.** The manager records the difference
 # between the box's width and the placeholder glyph's advance, so the character after an attachment is one box width
 # past it, a point inside the box hit-tests to the attachment, and the picture is drawn where the box is.
