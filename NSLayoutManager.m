@@ -15,6 +15,7 @@
 #import <AppKit/NSFont.h>
 #import <AppKit/NSColor.h>
 #import <AppKit/NSParagraphStyle.h>
+#import <AppKit/NSTextTab.h>
 #import <AppKit/NSTextAttachment.h>
 #import <AppKit/NSTextTable.h>
 #import <AppKit/NSTextView.h>
@@ -30,6 +31,7 @@
 #include <CoreText/CTRun.h>
 #include <CoreText/CTRunDelegate.h>
 #include <CoreText/CTStringAttributes.h>
+#include <CoreText/CTTextTab.h>
 #include <CoreText/CTTypesetter.h>
 #include <stdlib.h>
 
@@ -485,20 +487,75 @@ static CGFloat fn_attachment_width(void *refCon)
 - (CTParagraphStyleRef)cg_createParagraphStyle
 {
 	CTLineBreakMode mode = kCTLineBreakByWordWrapping;
-	CTParagraphStyleSetting setting;
+	CFMutableArrayRef tabs = NULL;
+	CGFloat interval = 0.0;
+	CTParagraphStyleSetting settings[3];
+	CFIndex count = 0;
+	NSParagraphStyle *style = nil;
 
 	if ([_textStorage length] > 0) {
-		id style = [[_textStorage attributesAtIndex:0 effectiveRange:NULL]
-					objectForKey:NSParagraphStyleAttributeName];
+		style = [[_textStorage attributesAtIndex:0 effectiveRange:NULL] objectForKey:NSParagraphStyleAttributeName];
+	}
+	if (style != nil) {
+		NSArray *stops = [style tabStops];
+		NSUInteger i;
 
-		if (style != nil) {
-			mode = (CTLineBreakMode)[style lineBreakMode];
+		mode = (CTLineBreakMode)[style lineBreakMode];
+		interval = [style defaultTabInterval];
+		/* **AND THE TAB STOPS TRAVEL INTO CORE TEXT, WHICH IS WHAT WALKS THEM.** Each `NSTextTab`'s type is an alignment
+		 * here — the two vocabularies are the same three edges — and A DECIMAL TAB HAS NO CORE TEXT COUNTERPART, so it is
+		 * carried as a LEFT stop and that divergence is named here rather than silently drawn as something else. */
+		/* **AND AN EMPTY ARRAY IS SET WHEN THERE ARE NO STOPS BUT THERE IS AN INTERVAL**, because Core Text's OWN default
+		 * is twelve stops at 28-point multiples — so leaving TabStops unset would let that default win over the
+		 * `-defaultTabInterval` the caller asked for. Setting an EMPTY array suppresses it and the interval applies. */
+		if ([stops count] > 0 || interval > 0.0) {
+			tabs = CFArrayCreateMutable(kCFAllocatorDefault, (CFIndex)[stops count], &kCFTypeArrayCallBacks);
+			for (i = 0; i < [stops count] && tabs != NULL; i++) {
+				NSTextTab *stop = [stops objectAtIndex:i];
+				CTTextAlignment alignment = kCTLeftTextAlignment;
+				CTTextTabRef tab;
+
+				switch ([stop tabStopType]) {
+				case NSRightTabStopType:
+					alignment = kCTRightTextAlignment;
+					break;
+				case NSCenterTabStopType:
+					alignment = kCTCenterTextAlignment;
+					break;
+				default:
+					alignment = kCTLeftTextAlignment;
+					break;
+				}
+				tab = CTTextTabCreate(alignment, (double)[stop location], NULL);
+				if (tab != NULL) {
+					CFArrayAppendValue(tabs, tab);
+					CFRelease(tab);
+				}
+			}
 		}
 	}
-	setting.spec = kCTParagraphStyleSpecifierLineBreakMode;
-	setting.valueSize = sizeof(mode);
-	setting.value = &mode;
-	return CTParagraphStyleCreate(&setting, 1);
+	settings[count].spec = kCTParagraphStyleSpecifierLineBreakMode;
+	settings[count].valueSize = sizeof(mode);
+	settings[count].value = &mode;
+	count++;
+	if (tabs != NULL) {
+		settings[count].spec = kCTParagraphStyleSpecifierTabStops;
+		settings[count].valueSize = sizeof(CFArrayRef);
+		settings[count].value = &tabs;
+		count++;
+	}
+	settings[count].spec = kCTParagraphStyleSpecifierDefaultTabInterval;
+	settings[count].valueSize = sizeof(interval);
+	settings[count].value = &interval;
+	count++;
+	{
+		CTParagraphStyleRef created = CTParagraphStyleCreate(settings, count);
+
+		if (tabs != NULL) {
+			CFRelease(tabs);
+		}
+		return created;
+	}
 }
 
 /* **AND THE BLOCK A LINE IS SET IN, WHICH IS THE FIRST `NSTextTableBlock` IN ITS PARAGRAPH STYLE — or the first plain

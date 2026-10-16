@@ -60,6 +60,7 @@ tests/
   text_rtf.m                    and the RTF READER: control words into the AppKit's attribute keys
   text_table_grid.m             and the GRID: cells side by side, columns measured, rows as tall as their tallest cell
   text_attachment_flow.m        and the attachment's BOX: a fixed-size run the text flows around
+  text_tab_stops.m              and the TAB STOPS: a tab goes to its place, named by the paragraph style
   text_word_movement.m          and its WORD granularity: Option+arrow and Option+Delete, over the string
   text_view_lines.m             and the first slice of the MULTI-LINE view: the line model, and what reads it
   text_view_wrapping.m          and the slice above it: the same model WRAPPED to the view's width
@@ -346,6 +347,15 @@ the compositor is really gone.
   themselves — the manager's own `FNBox` arithmetic sees an advance that already IS the width and adds nothing. See
   `libagora-text`'s `CTRunDelegate.h`. `-fileWrapper`, `-initWithFileWrapper:` and the cell's tracking family are owed
   with the classes they name.
+- **And the TAB STOPS, which are a PLACE rather than a width** (`ctest`): `NSTextTab` names a location and a kind (left,
+  right, centre, decimal), `NSParagraphStyle` carries them in `-tabStops` with `-defaultTabInterval` after the last, and
+  the layout manager copies them into the `CTParagraphStyle` it builds — so `CTLine` advances a `\t` to the next stop.
+  MEASURED: stops at **50** and **100** over `a\tb\tc` put the characters after the tabs exactly at **50** and **100**;
+  an empty list with a **40**-point interval puts them at **40** and **80** (the manager sets an EMPTY TabStops so
+  Core Text's own 28-point default does not win); and the view's `-insertTab:` puts the character in the store. **STILL
+  OWED AND NAMED**: `+[NSTextTab columnTerminatorsForLocale:]` (it needs `NSLocale` and a per-locale table), a decimal
+  tab is carried as a LEFT stop (Core Text's `CTTextAlignment` has no decimal edge), and `NSTextTab`'s `-options` is
+  carried and not read.
 - **And the MARKED TEXT, which is what an input method composes through** (`ctest`): `NSTextInput.h` declares the eleven
   doors an input system drives a text view through, `NSTextView` adopts the protocol, and the composition is an ordinary
   edit with a remembered range — the marked characters really go into the store, so the caret and the layout work as
@@ -488,7 +498,7 @@ the compositor is really gone.
   and the child clip is the child's FRAME region rather than its bounds rect — which was the same value only while the
   origin was zero. MEASURED: a mark at a document's own y 100..120 draws at 110 with the clip view at the top and at
   10 after a scroll of 100, in one run, through `-displayRect:`.
-- **`ctest`: 56 of 56 passed** (the keyboard and the seam, the AppKit and its input path, the controls and their
+- **`ctest`: 57 of 57 passed** (the keyboard and the seam, the AppKit and its input path, the controls and their
   metrics, the field control and its cell and its bezel and its placeholder and what it may hold, the text path and its
   word granularity and the multi-line view and its wrapping and its scrolling and its READING OF THE STORE, the STORE
   the rich-text slice is built on and the REGION it is laid out in and the WEB that ties the three together and the
@@ -650,7 +660,9 @@ STRIKETHROUGH keys the manager paints (`tests/text_layout_attributes.m`) and the
 by (`tests/text_paragraph_style.m`) and the GEOMETRY it lays out by (`tests/text_paragraph_geometry.m`) — the indents,
 the two spacings and the three line-height properties, all read as the manager's own fragment geometry. The property
 with no reader is the hyphenation factor (the engine does no hyphenation), the default tab interval (a tab stop needs
-`NSTextTab`) and the base writing direction (left-to-right only), each named at its door. The TABLE BLOCK is here
+`NSTextTab`) — `NSTextTab` IS here now (`tests/text_tab_stops.m`), and a tab goes to its stop; what is owed is
+`+columnTerminatorsForLocale:` and a decimal tab's edge — and the base writing direction (left-to-right only), each
+named at its door. The TABLE BLOCK is here
 (`tests/text_table.m`), so a paragraph can carry a box with a ground and a border. **AND THE GRID IS HERE TOO**
 (`tests/text_table_grid.m`): the manager measures the columns, lays each cell inside them and places the cells side by
 side, rows as tall as their tallest cell. What is still owed for tables is `-collapsesBorders` and a table that flows

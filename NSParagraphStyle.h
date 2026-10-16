@@ -30,15 +30,17 @@
  * initialiser, unlike the alignment one file over, whose default is not its zero. The era's short gloss on each case is
  * kept, because "truncating head" and "truncating tail" are not shapes a reader can guess from the names alone.
  *
- * WHAT IS STILL NOT HERE, AND ITS ROWS STAY OPEN: `NSTextTab` — the tab-stop element `-tabStops` would hold — and with
- * it `-tabStops`, because a tab stop is a claim about a class this tier has not got; `-defaultTabInterval` is carried
- * without it because it is a bare distance, and is one of the three the layout does not read (see above). And
+ * WHAT IS STILL NOT HERE, AND ITS ROWS STAY OPEN: `NSTextTab` IS HERE NOW, and with it `-tabStops` — the stops are
+ * the layout's (`CTTextTab` is what `CTLine` advances a `\t` to), so this class carries them and the engine walks
+ * them. `-defaultTabInterval` is the fallback after the last stop and is read too. What remains owed is
+ * `+[NSTextTab columnTerminatorsForLocale:]` (it needs `NSLocale` and a per-locale table) and
  * `NSTabColumnTerminatorsAttributeName`.
  */
 #ifndef APPKIT_NSPARAGRAPHSTYLE_H
 #define APPKIT_NSPARAGRAPHSTYLE_H
 
 #import <AppKit/NSText.h>
+#import <AppKit/NSTextTab.h>
 
 @class NSTextBlock;
 
@@ -79,6 +81,10 @@ typedef NSUInteger NSLineBreakMode;
 	float _hyphenationFactor;
 	float _tighteningFactorForTruncation;
 	CGFloat _defaultTabInterval;
+	/* **AND THE STOPS A TAB GOES TO, IN ORDER.** A `\t` advances to the first stop past the pen; after the last one the
+	 * text falls back to `-defaultTabInterval`. The array is retained and its tabs are copied with the style, because a
+	 * paragraph style is a value. */
+	NSArray *_tabStops;	/* RETAINED */
 	/* **AND THE BOXES THE PARAGRAPH IS SET IN, WHICH IS WHERE A TABLE CELL LIVES.** Apple attaches `NSTextBlock`s to a
 	 * paragraph through the style rather than a character attribute, because a block is a PARAGRAPH property: every line
 	 * of the paragraph shares the box, and a `NSTextTableBlock` in this array is what makes the paragraph a table
@@ -121,6 +127,12 @@ typedef NSUInteger NSLineBreakMode;
 - (float)tighteningFactorForTruncation;
 - (CGFloat)defaultTabInterval;
 
+/* ---- AND THE STOPS A TAB GOES TO ----------------------------------------------------------- */
+
+/* **AN ORDERED ARRAY OF `NSTextTab`s.** The layout manager copies them into the `CTParagraphStyle` it builds, and
+ * `CTLine` advances a tab to the next one; the array is by LOCATION, which is what an ordered list of stops is. */
+- (NSArray *)tabStops;
+
 /* ---- AND THE BLOCKS THE PARAGRAPH IS SET IN ------------------------------------------------ */
 
 /* **AN ARRAY OF `NSTextBlock`s, DRAWN OUTWARD FROM THE TEXT IN THE ORDER GIVEN.** A paragraph in a table cell carries
@@ -149,6 +161,9 @@ typedef NSUInteger NSLineBreakMode;
 - (void)setHyphenationFactor:(float)hyphenationFactor;
 - (void)setTighteningFactorForTruncation:(float)tighteningFactorForTruncation;
 - (void)setDefaultTabInterval:(CGFloat)defaultTabInterval;
+- (void)setTabStops:(NSArray *)tabStops;
+- (void)addTabStop:(NSTextTab *)textTab;
+- (void)removeTabStop:(NSTextTab *)textTab;
 - (void)setTextBlocks:(NSArray *)textBlocks;
 - (void)addTextBlock:(NSTextBlock *)textBlock;
 - (void)removeTextBlock:(NSTextBlock *)textBlock;

@@ -295,6 +295,14 @@ target_link_libraries(text_attachment_flow PRIVATE App m)
 add_test(NAME appkit-text-attachment-flow COMMAND text_attachment_flow)
 set_tests_properties(appkit-text-attachment-flow PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
 
+# **AND THE TAB STOPS.** `NSTextTab` names a place and a kind; the manager copies them into the `CTParagraphStyle` it
+# builds, and `CTLine` advances a `\t` to the next stop — so the character after a tab begins AT the stop, which the
+# probe reads from the manager's own offsets.
+add_executable(text_tab_stops text_tab_stops.m)
+target_link_libraries(text_tab_stops PRIVATE App m)
+add_test(NAME appkit-text-tab-stops COMMAND text_tab_stops)
+set_tests_properties(appkit-text-tab-stops PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
+
 # **AND THE PARAGRAPH STYLE'S GEOMETRY, WHICH IS NOW READ.** The indents place a line and narrow it, the spacings open
 # gaps between lines and across paragraph boundaries, and the line-height multiple and clamps set the band — each read as
 # the manager's own geometry, with the defaults pinned unmoved by the first case.

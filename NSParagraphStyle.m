@@ -74,6 +74,7 @@ static NSParagraphStyle *fn_defaultParagraphStyle = nil;
 		 * array it had handed to a store would be changing the document behind the store's back. The array is immutable
 		 * and every block in it is copied. */
 		_textBlocks = [[NSArray alloc] initWithArray:style->_textBlocks copyItems:YES];
+		_tabStops = [[NSArray alloc] initWithArray:style->_tabStops copyItems:YES];
 	}
 	return self;
 }
@@ -81,6 +82,7 @@ static NSParagraphStyle *fn_defaultParagraphStyle = nil;
 - (void)dealloc
 {
 	[_textBlocks release];
+	[_tabStops release];
 	[super dealloc];
 }
 
@@ -172,6 +174,11 @@ static NSParagraphStyle *fn_defaultParagraphStyle = nil;
 	return _defaultTabInterval;
 }
 
+- (NSArray *)tabStops
+{
+	return (_tabStops != nil) ? _tabStops : [NSArray array];
+}
+
 - (NSArray *)textBlocks
 {
 	return (_textBlocks != nil) ? _textBlocks : [NSArray array];
@@ -198,6 +205,32 @@ static NSParagraphStyle *fn_defaultParagraphStyle = nil;
 - (void)setHyphenationFactor:(float)hyphenationFactor { _hyphenationFactor = hyphenationFactor; }
 - (void)setTighteningFactorForTruncation:(float)tighteningFactorForTruncation { _tighteningFactorForTruncation = tighteningFactorForTruncation; }
 - (void)setDefaultTabInterval:(CGFloat)defaultTabInterval { _defaultTabInterval = defaultTabInterval; }
+
+- (void)setTabStops:(NSArray *)tabStops
+{
+	NSArray *held = (tabStops != nil) ? [[NSArray alloc] initWithArray:tabStops copyItems:YES] : nil;
+
+	[_tabStops release];
+	_tabStops = held;
+}
+
+- (void)addTabStop:(NSTextTab *)textTab
+{
+	NSMutableArray *stops = (_tabStops != nil) ? [_tabStops mutableCopy] : [[NSMutableArray alloc] init];
+
+	[stops addObject:textTab];
+	[_tabStops release];
+	_tabStops = stops;
+}
+
+- (void)removeTabStop:(NSTextTab *)textTab
+{
+	NSMutableArray *stops = [_tabStops mutableCopy];
+
+	[stops removeObjectIdenticalTo:textTab];
+	[_tabStops release];
+	_tabStops = stops;
+}
 
 - (void)setTextBlocks:(NSArray *)textBlocks
 {
