@@ -12,6 +12,7 @@
 /* THE SAMPLE'S OWN MEASURES, as fractions of the track's HEIGHT so that a switch asked for at another size stays the
  * shape the sample draws: the knob is 12 of 20 points, and the air either side of it is the other 8. */
 #define AG_SWITCH_ASPECT       1.6	/* 32/20: the track's width against the cell's own height */
+#define AG_SWITCH_HEIGHT       20.0	/* the sample's 20 points tall, and the height the width is derived from */
 #define AG_SWITCH_KNOB_FRACTION 0.6	/* 12/20 of the track's height, and round */
 
 @implementation AGSwitchCell
@@ -62,15 +63,24 @@
 	[[NSBezierPath bezierPathWithOvalInRect:knobRect] fill];
 }
 
-/* AND WHAT IT MEASURES: the sample's 32 x 20, taken from the height the caller asks for so that the aspect is the
- * sample's rather than a pair of numbers that happens to match it. The base's answer is kept for a NULL cell. */
+/* **AND WHAT IT MEASURES IS THE SAMPLE'S 32 x 20, WITH THE CALLER'S RECT AS A BOUND RATHER THAN AS AN INPUT.** That is
+the base's own contract — "a caller's rectangle is the bound", see `NSCell -cellSizeForBounds:` — and MEASURED, the
+first draft broke it by deriving the height FROM the rect: `-sizeToFit` reaches this door through `-cellSize`, which
+asks with the NO-OPINION rectangle of 10000 x 10000, so the switch was fitted to 16000 points across and the
+demonstration drew nothing at all. A rect SMALLER than the natural size still clamps, which is what a bound means.
+ *
+ * AND A CALLER WHO WANTS A BIGGER SWITCH SETS A BIGGER FRAME: the drawing reads the frame it is handed and takes its
+ * radius and its knob as fractions of that, so a switch drawn into a taller rectangle comes out proportionally larger
+ * even though its measured size is the sample's. */
 - (NSSize)cellSizeForBounds:(NSRect)aRect
 {
-	NSSize size = [super cellSizeForBounds:aRect];
-	CGFloat h = NSHeight(aRect);
+	NSSize size = NSMakeSize(AG_SWITCH_HEIGHT * AG_SWITCH_ASPECT, AG_SWITCH_HEIGHT);
 
-	if ([self type] != NSNullCellType && h > 0.0) {
-		size = NSMakeSize(h * AG_SWITCH_ASPECT, h);
+	if (size.width > NSWidth(aRect)) {
+		size.width = NSWidth(aRect);
+	}
+	if (size.height > NSHeight(aRect)) {
+		size.height = NSHeight(aRect);
 	}
 	return size;
 }

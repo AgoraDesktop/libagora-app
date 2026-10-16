@@ -108,8 +108,19 @@ int main(void)
 	measured = [cell cellSizeForBounds:NSMakeRect(0.0, 0.0, 200.0, H)];
 	printf("  (note: a %d-point switch measures %.1f x %.1f)\n", H, (double)measured.width, (double)measured.height);
 	check(near(measured.width, W) && near(measured.height, H), "a switch measures the sample's 32 x 20");
-	check(near([cell cellSizeForBounds:NSMakeRect(0.0, 0.0, 200.0, 40.0)].width, 64.0),
-	      "and asking for a taller one gives a proportionally wider one, because the aspect is derived");
+	/* **AND THE RECT IS A BOUND, SO THE TWO CASES THAT MATTER ARE THE HUGE ONE AND THE TINY ONE.** MEASURED, the first
+	 * draft derived its height FROM the rect — and `-sizeToFit` reaches this door through `-cellSize`, which asks with
+	 * the NO-OPINION rectangle of 10000 x 10000, so the switch was fitted to 16000 points across and the demonstration
+	 * drew nothing at all. A probe that only ever asked with a sensible rectangle would have passed on a control that
+	 * could not be fitted, which is why the 10000 is the FIRST of these checks. */
+	check(near([cell cellSizeForBounds:NSMakeRect(0.0, 0.0, 10000.0, 10000.0)].width, W)
+	      && near([cell cellSizeForBounds:NSMakeRect(0.0, 0.0, 10000.0, 10000.0)].height, H),
+	      "the NO-OPINION rect — which is what -sizeToFit and -cellSize ask with — gives the natural 32 x 20");
+	check(near([cell cellSizeForBounds:NSMakeRect(0.0, 0.0, 20.0, 10.0)].width, 20.0)
+	      && near([cell cellSizeForBounds:NSMakeRect(0.0, 0.0, 20.0, 10.0)].height, 10.0),
+	      "while a rect SMALLER than the natural size clamps it, which is what a bound means");
+	check(near([cell cellSize].width, W) && near([cell cellSize].height, H),
+	      "and -cellSize answers the same natural size, because it forwards here with no bound at all");
 
 	/* 2. **OFF: THE KNOB AT THE LEFT AND THE TRACK THE CONTROL'S OWN GREY.** */
 	[cell setState:NSOffState];

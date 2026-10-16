@@ -29,6 +29,7 @@
 #import <AppKit/NSScrollView.h>
 #import <AppKit/NSPopUpButton.h>
 #import <AppKit/NSComboBox.h>	/* the other field with a chip, and the one-triangle mark that tells them apart */
+#import <AppKit/AGSwitch.h>	/* the tier's own control: a track and a knob, 32 x 20 */
 #import <AppKit/NSClipView.h>
 #import <AppKit/NSColor.h>
 #import <AppKit/NSBezierPath.h>
@@ -294,6 +295,7 @@ int main(int argc, char **argv)
 		 * window's first responder below, so a keystroke goes to it rather than nowhere: the window sends KEY EVENTS to
 		 * the first responder, and a window with none has nobody to type at. */
 		NSText *field;
+		AGSwitch *sw;
 		/* AND A SCROLL PANEL, which is the one thing in this window that shows the scrolling slice. */
 		NSScrollView *scroll;
 		NSPopUpButton *popup;
@@ -334,6 +336,17 @@ int main(int argc, char **argv)
 		 * than a teardrop. Same range and same action, so the only difference on screen is the shape. */
 		plain = [[NSSlider alloc] initWithFrame:NSMakeRect(30, 25, 350, 24)];
 		field = [[NSText alloc] initWithFrame:NSMakeRect(30, 95, 350, 22)];
+		/* **AND A SWITCH, WHICH IS THIS TIER'S OWN CONTROL RATHER THAN AN ERA DOOR.** Apple has no `NSSwitch` until
+		 * 10.15 and the era's `NSSwitchButton` is a checkbox, so the sample's pill is drawn by `AGSwitch` — a track and a
+		 * knob, 32 x 20, with the four states the sample's legend gives. It sits beside the radio because the two are the
+		 * same question asked two ways: one says its value with a filled circle, the other with where the knob is.
+		 *
+		 * AND IT IS PLACED OFF THE RADIO'S LABEL, WHICH IS A MEASUREMENT RATHER THAN A GUESS: the radio occupies x=30..290,
+		 * so the switch goes to the right of it and to the left of the scroll panel at x=400, which is the only free room
+		 * on the row. A demonstration is where a layout mistake is supposed to be visible, and the first position tried
+		 * (230) would have drawn a track across the word "on". */
+		sw = [[AGSwitch alloc] initWithFrame:NSMakeRect(330, 158, 0, 0)];
+		[sw setState:NSOnState];
 		/* THE SCROLL PANEL, TO THE RIGHT OF THE CONTROLS: a frame, and a document four times its height and twice and
 		 * a half its width, so both knobs have somewhere to go and both ends have a landmark. */
 		scroll = [[NSScrollView alloc] initWithFrame:NSMakeRect(400, 25, 340, 370)];
@@ -440,6 +453,7 @@ int main(int argc, char **argv)
 		[content addSubview:slider];
 		[content addSubview:plain];
 		[content addSubview:field];
+		[content addSubview:sw];
 		[content addSubview:scroll];
 		[w setContentView:content];
 		[w setTitle:@"Controls"];
