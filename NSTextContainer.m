@@ -10,6 +10,7 @@
  * layout manager that will ask it for fragments.
  */
 #import <AppKit/NSTextContainer.h>
+#import <AppKit/NSLayoutManager.h>
 #import <Foundation/NSGeometry.h>
 
 @implementation NSTextContainer
@@ -34,6 +35,50 @@
 		_heightTracksTextView = NO;
 	}
 	return self;
+}
+
+/* ---- THE MANAGER THAT LAYS THIS CONTAINER OUT, WHICH IS BORROWED -------------------------------- */
+
+- (NSLayoutManager *)layoutManager
+{
+	return _layoutManager;
+}
+
+/* **THE PRIMITIVE IS THE MANAGER'S TO CALL, NOT A CALLER'S.** Apple's comment says the set method is called when a
+ * container is added to a manager, and that is exactly what this is: `[manager addTextContainer:container]` reaches it, so
+ * the pointer and the manager's list are written in one direction and cannot disagree. */
+- (void)setLayoutManager:(NSLayoutManager *)layoutManager
+{
+	_layoutManager = layoutManager;
+}
+
+/* **AND THE DOOR A CALLER USES MOVES THE WHOLE WEB, WHICH IS WHY IT CANNOT BE THE PRIMITIVE.** Apple's comment: "All
+ * the NSTextContainers on the old NSLayoutManager get transferred to the new one." The manager has no way to remove by
+ * POINTER in this era (`-removeTextContainerAtIndex:` is the only door), so the transfer is: take the old list, empty
+ * it from the front, and add each container to the new manager — which sets each container's own back-pointer as it
+ * goes. A nil new manager clears this container's pointer and leaves the old manager's list alone, which is stated
+ * rather than half-done. */
+- (void)replaceLayoutManager:(NSLayoutManager *)newLayoutManager
+{
+	NSLayoutManager *old = _layoutManager;
+
+	if (old == newLayoutManager) {
+		return;
+	}
+	if (old != nil && newLayoutManager != nil) {
+		NSArray *containers = [[old textContainers] retain];
+		NSUInteger i;
+
+		for (i = 0; i < [containers count]; i++) {
+			[old removeTextContainerAtIndex:0];
+		}
+		for (i = 0; i < [containers count]; i++) {
+			[newLayoutManager addTextContainer:[containers objectAtIndex:i]];
+		}
+		[containers release];
+	} else {
+		_layoutManager = newLayoutManager;
+	}
 }
 
 /* ---- THE REGION, AND THE PADDING ITS LINES TAKE ------------------------------------------------------ */

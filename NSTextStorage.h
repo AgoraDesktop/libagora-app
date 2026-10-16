@@ -18,12 +18,14 @@
  * `-appendAttributedString:`) reaches them by DISPATCH — it does not need to be overridden, because it was written to
  * call a primitive and this class IS the primitive's implementation.
  *
- * **WHAT IS NOT HERE, NAMED RATHER THAN STUBBED: THE LAYOUT MANAGERS.** `-addLayoutManager:`, `-removeLayoutManager:`
- * and `-layoutManagers` are the other half of Apple's class and they need `NSLayoutManager`, which this tier has not
- * built — and a door that took a class that does not exist would be a declaration with nothing behind it. The
- * `NSTextStorageScripting` category is likewise out (it needs the whole key-value-coding scripting surface), and so is
- * LAZY ATTRIBUTE FIXING: `-fixesAttributesLazily` answers NO and `-invalidateAttributesInRange:` fixes at once,
- * because there is no substitution or attachment machinery here whose attributes would ever need fixing.
+ * **AND THE LAYOUT MANAGERS ARRIVED WITH THE CLASS THEY NAME.** This header used to REFUSE `-addLayoutManager:`,
+ * `-removeLayoutManager:` and `-layoutManagers` — the three would have taken a class that did not exist — and
+ * `NSLayoutManager` does now, so the three are here: the storage RETAINS each manager it is given, sets its
+ * `-textStorage:` on the way in and clears it on the way out, and calls
+ * `-textStorage:edited:range:changeInLength:invalidatedRange:` on each of them from `-processEditing`. WHAT IS STILL
+ * NOT HERE: the `NSTextStorageScripting` category (it needs the whole key-value-coding scripting surface), and LAZY
+ * ATTRIBUTE FIXING — `-fixesAttributesLazily` answers NO and `-invalidateAttributesInRange:` fixes at once, because
+ * there is no substitution or attachment machinery here whose attributes would ever need fixing.
  */
 #ifndef APPKIT_NSTEXTSTORAGE_H
 #define APPKIT_NSTEXTSTORAGE_H
@@ -33,6 +35,7 @@
 NS_ASSUME_NONNULL_BEGIN
 
 @class NSTextStorage;
+@class NSLayoutManager;
 
 /* **WHAT KIND OF EDIT HAPPENED, AS A MASK.** The two values combine — an edit may change characters AND attributes —
  * and they are the era's numbers: 1 is the ATTRIBUTES and 2 is the CHARACTERS, in that order. */
@@ -65,6 +68,11 @@ extern NSString *NSTextStorageDidProcessEditingNotification;
 	NSUInteger _editedMask;
 	NSUInteger _editingCount;
 	id _delegate;			/* NOT RETAINED */
+	/* **AND THE MANAGERS THIS STORE TELLS, WHICH IT RETAINS AND WHICH START AS NOTHING.** Apple's own comment on
+	 * `-addLayoutManager:` is "Retains & calls setTextStorage: on the item", so the list is an owning one and the
+	 * manager is handed the storage by the storage itself — the pointer is never written by the manager's caller.
+	 * Lazily made, because a store with no layout is the common case. */
+	NSMutableArray *_layoutManagers;	/* RETAINED; made on the first add */
 }
 
 /* **THE DOOR THE PRIMITIVES CALL, AND THE ONE A SUBCLASS OVERRIDES.** It ACCUMULATES: the mask is OR-ed in, the range
@@ -98,6 +106,17 @@ extern NSString *NSTextStorageDidProcessEditingNotification;
  * announcement happens — one per group rather than one per edit. */
 - (void)beginEditing;
 - (void)endEditing;
+
+/* ---- AND THE LAYOUT MANAGERS, WHICH THIS STORE RETAINS AND TELLS -------------------------------- */
+
+/* **THE OTHER HALF OF APPLE'S CLASS, AND THE HALF THAT MAKES THE STORE A SUBJECT RATHER THAN A VALUE.** A manager is
+ * RETAINED for as long as it is on the list (Apple's comment says so), it is handed THIS store through
+ * `-setTextStorage:` on the way in and nil on the way out, and every `-processEditing` reports the edit to each of
+ * them. THAT LAST CALL IS THE WHOLE WEB: it is how a change to a character reaches the thing that lays the characters
+ * out, and it is why the manager's own door for it takes the two ranges the storage's record already holds. */
+- (void)addLayoutManager:(NSLayoutManager *)obj;
+- (void)removeLayoutManager:(NSLayoutManager *)obj;
+- (nullable NSArray *)layoutManagers;
 
 @end
 

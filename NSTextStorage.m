@@ -11,6 +11,7 @@
  * happened to them, and the two are one object because Apple's storage IS an `NSMutableAttributedString`.
  */
 #import <AppKit/NSTextStorage.h>
+#import <AppKit/NSLayoutManager.h>
 #import <Foundation/NSNotification.h>
 #import <Foundation/NSNotificationCenter.h>
 #import <Foundation/NSDictionary.h>
@@ -48,6 +49,52 @@ NSString *NSTextStorageDidProcessEditingNotification = @"NSTextStorageDidProcess
 		_editedRange = NSMakeRange(NSNotFound, 0);
 	}
 	return self;
+}
+
+- (void)dealloc
+{
+	[_layoutManagers release];
+	[super dealloc];
+}
+
+/* ============================================================================================ *
+ * THE LAYOUT MANAGERS, WHICH THIS STORE RETAINS AND TELLS                                     *
+ * ============================================================================================ */
+
+/* **THE STORE HANDS ITSELF TO THE MANAGER, WHICH IS THE DIRECTION APPLE'S COMMENT GIVES.** "Retains & calls
+ * setTextStorage: on the item" — so the list owns the manager and the manager's pointer to the store is written BY the
+ * store, never by a caller. That is what makes the two objects' holdings impossible to get out of step: a manager on a
+ * list has that list's store, and one taken off has nil. */
+- (void)addLayoutManager:(NSLayoutManager *)obj
+{
+	if (obj == nil) {
+		return;
+	}
+	if (_layoutManagers == nil) {
+		_layoutManagers = [[NSMutableArray alloc] init];
+	}
+	if (![_layoutManagers containsObject:obj]) {
+		[_layoutManagers addObject:obj];
+		[obj setTextStorage:self];
+	}
+}
+
+- (void)removeLayoutManager:(NSLayoutManager *)obj
+{
+	if (obj == nil || _layoutManagers == nil) {
+		return;
+	}
+	if ([_layoutManagers containsObject:obj]) {
+		[obj setTextStorage:nil];
+		[_layoutManagers removeObject:obj];
+	}
+}
+
+/* AN EMPTY ARRAY WHEN THERE ARE NONE is Apple's answer for a store with no layout, and not nil: a caller that asks how
+ * many managers there are can count it either way, and one that iterates it gets no iterations rather than a crash. */
+- (NSArray *)layoutManagers
+{
+	return (_layoutManagers != nil) ? [[_layoutManagers copy] autorelease] : [NSArray array];
 }
 
 - (id <NSTextStorageDelegate>)delegate
@@ -196,6 +243,24 @@ NSString *NSTextStorageDidProcessEditingNotification = @"NSTextStorageDidProcess
 	[[NSNotificationCenter defaultCenter] postNotification:note];
 	if (_delegate != nil && [_delegate respondsToSelector:@selector(textStorageDidProcessEditing:)]) {
 		[_delegate textStorageDidProcessEditing:note];
+	}
+	/* **AND THE MANAGERS, WHICH IS THE WHOLE WEB AND THE REASON A STORE IS A SUBJECT RATHER THAN A VALUE.** Each is
+	 * handed the two ranges Apple's header describes — the OLD one the storage's record holds, and the one that
+	 * changed in the NEW string, which is the old one grown by the delta because with no attribute fixing nothing can
+	 * have widened it — plus the MASK, so a manager that one day cares about attributes as well as characters is told
+	 * which kind of change it is looking at. THE RECORD IS STILL STANDING here: a manager that reads the store's own
+	 * `-editedRange` while it is being told gets the edit and not NSNotFound. */
+	if (_layoutManagers != nil && _editedRange.location != NSNotFound) {
+		NSInteger grown = (NSInteger)_editedRange.length + _editedDelta;
+		NSRange newRange = NSMakeRange(_editedRange.location, (grown > 0) ? (NSUInteger)grown : 0);
+		NSUInteger i;
+
+		for (i = 0; i < [_layoutManagers count]; i++) {
+			NSLayoutManager *manager = [_layoutManagers objectAtIndex:i];
+
+			[manager textStorage:self edited:_editedMask range:_editedRange
+			     changeInLength:_editedDelta invalidatedRange:newRange];
+		}
 	}
 	_editedMask = 0;
 	_editedDelta = 0;

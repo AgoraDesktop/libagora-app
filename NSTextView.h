@@ -19,10 +19,11 @@
  *        view's origin and the origin grows as a reader moves DOWN; the two `NSView` doors move an enclosing clip
  *        view; the view settles its own height so there is something to scroll; and `-scrollRangeToVisible:` turns a
  *        caret into a rectangle.
- *   IV.  RICH TEXT, ATTACHMENTS AND PARAGRAPHS (STARTED). `NSTextStorage` — an attributed string that announces its
- *        own edits — is here (`NSTextStorage.h`); what is left is the `NSLayoutManager` that lays it out (the STORE
- *        and the CONTAINER are here: `NSTextStorage.h`, `NSTextContainer.h`), and this view reading RUNS rather than
- *        one plain string.
+ *   IV.  RICH TEXT, ATTACHMENTS AND PARAGRAPHS (IN PROGRESS). The STORE (`NSTextStorage.h`), the REGION
+ *        (`NSTextContainer.h`) and the WEB that ties them to a layout MANAGER (`NSLayoutManager.h`) are all here —
+ *        three objects connected, an edit reaching the manager, and the manager marking its layout stale. What is left
+ *        is GLYPHS AND LINES: no glyph is generated, no line is laid out and nothing is drawn, and this view reads a
+ *        PLAIN string rather than runs.
  *
  * **AND THE FLIP IS WHY THE LAYOUT BELOW IS y-DOWN.** A flipped view measures y from the TOP — that is what flipping
  * MEANS — so `-cg_baselineForLine:` counts downward and a band is drawn ABOVE its baseline. THE ONE PLACE IT SHOWS is
@@ -35,10 +36,11 @@
  * and there can be several per model line; the two `cg_visualLine…` doors are that layout, and they change every time
  * the text or the width does. A caller that wants "how many lines" has to say which.
  *
- * **WHAT THE SLICES ABOVE STILL HAVE NOT GOT, NAMED RATHER THAN STUBBED:** the `NSLayoutManager` and the door names
- * that come with it — **THE STORE AND THE CONTAINER HAVE ARRIVED** (`NSTextStorage.h`, `NSTextContainer.h`), and what
- * this view reads is still a PLAIN string — plus attachments, tables, the paragraph commands, the marked-text family
- * and the input-method half.
+ * **WHAT THE SLICES ABOVE STILL HAVE NOT GOT, NAMED RATHER THAN STUBBED:** GLYPHS, LINES AND DRAWING. The text
+ * system's three objects are all here and CONNECTED (`NSTextStorage.h`, `NSTextContainer.h`, `NSLayoutManager.h`), and
+ * what the manager does NOT yet do is lay anything out — no glyph generation, no character-to-glyph map, no line
+ * fragments, no draw — plus attachments, tables, the paragraph commands, the marked-text family and the input-method
+ * half. And this view still reads a PLAIN string rather than attribute runs.
  */
 #ifndef APPKIT_NSTEXTVIEW_H
 #define APPKIT_NSTEXTVIEW_H

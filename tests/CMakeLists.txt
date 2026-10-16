@@ -141,6 +141,14 @@ target_link_libraries(text_container PRIVATE App)
 add_test(NAME appkit-text-container COMMAND text_container)
 set_tests_properties(appkit-text-container PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
 
+# **AND THE WEB THAT TIES THE TRIO TOGETHER.** `NSLayoutManager` slice one: a store it is handed by the storage that
+# lists it, containers it owns and they borrow, and ONE piece of behaviour — an edit in the store is folded into a stale
+# range and announced to a delegate. Each pair is checked from BOTH sides.
+add_executable(text_layout_web text_layout_web.m)
+target_link_libraries(text_layout_web PRIVATE App)
+add_test(NAME appkit-text-layout-web COMMAND text_layout_web)
+set_tests_properties(appkit-text-layout-web PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
+
 # **AND THE WORD GRANULARITY OF THE SAME KEYS.** Option+arrow moves by the word and Option+Delete deletes one, which
 # is arithmetic over the string's own characters and needs no layout model — the correction `NSResponder.h` carries.
 # Driven as KEYS, so the mapping is under test as well as the walk.

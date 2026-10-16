@@ -18,11 +18,12 @@
  * inset a FRAGMENT's text takes, and it is applied along the SWEEP direction, which is why it is a padding and not a
  * margin: it belongs to the line's own rectangle rather than to the region.
  *
- * **WHAT IS NOT HERE, AND IT IS HALF OF APPLE'S CLASS: THE LAYOUT MANAGER'S END OF THE WEB.** `-layoutManager`,
- * `-setLayoutManager:` and `-replaceLayoutManager:` name `NSLayoutManager` on both sides — the property, and the
- * container-transfer dance Apple's comments describe at length — and that class does not exist here, so declaring them
- * would be a door with nothing behind it (the same decision `NSTextStorage.h` records for its own three). What IS here
- * is everything a container can answer on its own, which is the geometry the manager would ask for.
+ * **AND THE LAYOUT MANAGER'S END OF THE WEB IS HERE NOW, BECAUSE THE CLASS IS.** `-layoutManager`/`-setLayoutManager:`
+ * used to be REFUSED on the ground that declaring them would have taken a class that did not exist — `NSLayoutManager`
+ * does, and what the container holds is a BORROWED pointer, because the MANAGER retains the container (its array does)
+ * and not the other way round, which is the split that keeps the web from being a cycle. `-replaceLayoutManager:`
+ * DOES THE HALF THAT CROSSES THE OBJECT BOUNDARY — off the old manager's list and onto the new one's — which is why it
+ * exists beside the primitive.
  *
  * **AND THE CONTAINER IS NOT GENERAL: `-isSimpleRectangularTextContainer` ANSWERS YES.** Apple's default returns YES
  * and a SUBCLASS overrides it to NO when its region has holes or concavities — which is exactly the line between "the
@@ -37,6 +38,7 @@
 NS_ASSUME_NONNULL_BEGIN
 
 @class NSTextView;
+@class NSLayoutManager;
 
 /* **THE TWO DIRECTIONS A FRAGMENT IS PLACED BY, IN APPLE'S OWN ORDER.** The SWEEP direction is which edge of the
  * proposed rectangle the fragment starts from — left, right, down, up, numbered 0 through 3 — and the MOVEMENT
@@ -62,8 +64,10 @@ typedef NSUInteger NSLineMovementDirection;
 
 @interface NSTextContainer : NSObject
 {
-	/* **FOUR FACTS AND A BORROWED POINTER.** The view is not retained — it is the same relationship a subview has to
-	 * its superview, and a container that owned its view would keep a window alive from a layout object. */
+	/* **FOUR FACTS AND TWO BORROWED POINTERS.** Neither is retained: the view is the same relationship a subview has to
+	 * its superview, and the MANAGER retains the CONTAINER (its array does) rather than the other way round, because a
+	 * container that owned its manager would make the web a cycle. */
+	NSLayoutManager *_layoutManager;	/* NOT RETAINED */
 	NSTextView *_textView;		/* NOT RETAINED */
 	NSSize _size;
 	CGFloat _lineFragmentPadding;
@@ -75,6 +79,16 @@ typedef NSUInteger NSLineMovementDirection;
  * with, so `-init` gives a ZERO size (a container that can hold nothing until it is told otherwise) and this door is
  * the one that says what the region is. */
 - (instancetype)initWithContainerSize:(NSSize)size;
+
+/* ---- THE MANAGER THAT LAYS THIS CONTAINER OUT, WHICH IS BORROWED -------------------------------------- */
+
+/* **THE PRIMITIVE IS THE MANAGER'S TO CALL, NOT A CALLER'S** — Apple's comment says the set method is called when a
+ * container is added to a manager — so `[manager addTextContainer:container]` is the way to tie the two, and this pair
+ * is what that call writes. `-replaceLayoutManager:` is the one a CALLER uses to move a container between managers,
+ * and it does the two halves the primitive cannot: out of the old manager's list and into the new one's. */
+- (nullable NSLayoutManager *)layoutManager;
+- (void)setLayoutManager:(nullable NSLayoutManager *)layoutManager;
+- (void)replaceLayoutManager:(nullable NSLayoutManager *)newLayoutManager;
 
 /* ---- THE REGION, AND THE PADDING ITS LINES TAKE ------------------------------------------------------ */
 
