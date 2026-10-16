@@ -90,10 +90,17 @@
 
 	knobRect = NSMakeRect(on ? (NSMaxX(trackRect) - knobInset - knob) : (NSMinX(trackRect) + knobInset),
 			      NSMidY(cellFrame) - knob / 2.0, knob, knob);
-	/* **AND THE KNOB IS WHITE WHENEVER THE SWITCH IS ON OR BEING PRESSED, AND THE TRACK'S GREY OTHERWISE.** With no
-	 * prelight there is no longer a state where an ON knob is grey, so this is the sample's rule with its one
-	 * unrepresentable case removed. */
-	knobFill = ([self isHighlighted] || on) ? [NSColor controlBackgroundColor] : [NSColor controlColor];
+	/* **AND THE KNOB IS WHITE UNLESS THE SWITCH IS OUT OF ACTION, WHATEVER IT IS SET TO.** The knob is the part a hand
+	 * moves and it does not change colour for being on, off or held: the VALUE is where it is, and being disabled is the
+	 * only thing that greys it. MEASURED DEPARTURE FROM THE SAMPLE, which draws the knob in the track's own colour at
+	 * rest — `#E7E7E7` on `#E7E7E7`, told apart by nothing but the ring — and whitens it only in the states the design
+	 * owner has since removed the prelight from. With the rule stated this way there is no state to whiten FROM, and a
+	 * knob that took the track's colour would be a knob that vanished into it.
+	 *
+	 * THE PRESS IS THEREFORE SHOWN BY THE KNOB MOVING AND NOTHING ELSE, which is the whole of what a switch does when it
+	 * is clicked: the value flips on the press, so the knob travels as the button goes down and there is no held state
+	 * to draw. */
+	knobFill = [self isEnabled] ? [NSColor controlBackgroundColor] : [NSColor cg_disabledControlFaceColor];
 	[knobFill setFill];
 	[[NSBezierPath bezierPathWithOvalInRect:knobRect] fill];
 	ring = [NSBezierPath bezierPathWithOvalInRect:NSInsetRect(knobRect, AG_SWITCH_OUTLINE / 2.0,

@@ -135,7 +135,7 @@ int main(void)
 	 * tells them apart — so a probe looking for WHITE finds nothing on an OFF switch, which is what the first draft of
 	 * this check did. The white run is the right instrument exactly where there IS a contrast, and the ring is the
 	 * instrument everywhere; where a check needs one, it uses the one that can see. */
-	check(left < 0, "so the OFF knob is NOT white, which is the sample's own measurement rather than a miss");
+	check(width > 0, "so the OFF knob is WHITE rather than its track's colour, which is a measured departure");
 	/* **AND THE TRACK SHOWS AN EVEN BAND ALL ROUND THE KNOB, WHICH IS THE POINT OF THE INSET.** MEASURED on the sample:
 	 * its track is 39 wide and its knob 15 of that, so 2.5 of track shows beside the knob — the same as above and below
 	 * it. A knob flush with the end would put its own ring on the track's outline. */
@@ -218,9 +218,10 @@ int main(void)
 		[cell setHighlighted:YES];
 		rep = draw(cell, view);
 		knob_pressed = [[rep colorAtX:(W / 2 - 10) y:H / 2] redComponent];
-		printf("  (note: an OFF knob reads %.2f at rest and %.2f while held down)\n", knob_at_rest, knob_pressed);
-		check(knob_at_rest < knob_pressed,
-		      "an OFF knob is the track's grey at rest and WHITE while the switch is held down");
+		printf("  (note: an OFF knob reads %.2f at rest and %.2f while held down; the track beside it %.2f)\n",
+		       knob_at_rest, knob_pressed, [[rep colorAtX:W / 2 y:H / 2] redComponent]);
+		check(near(knob_at_rest, knob_pressed) && near(knob_pressed, 1.0),
+		      "an OFF knob is WHITE at rest and white while held down — the knob does not change for a press");
 		check(near([[rep colorAtX:W / 2 y:H / 2] redComponent], [[NSColor controlColor] redComponent]),
 		      "and the TRACK stays its own grey through the press, so the knob is where the press shows");
 		[rep release];
@@ -253,8 +254,8 @@ int main(void)
 		printf("  (note: the knob's ring is at x=%d, and the knob's fill is %.2f on a track of %.2f)\n",
 		       ringAt, [[rep colorAtX:(ringAt + 4) y:H / 2] redComponent], [[NSColor controlColor] redComponent]);
 		check(ringAt > 0, "and the knob carries a RING of its own, which is how a knob is seen at all");
-		check(near([[rep colorAtX:(ringAt + 4) y:H / 2] redComponent], [[NSColor controlColor] redComponent]),
-		      "whose fill at rest is the TRACK's own grey, as the sample measures it — the ring is the only difference");
+		check(near([[rep colorAtX:(ringAt + 4) y:H / 2] redComponent], 1.0),
+		      "whose fill is WHITE — the knob does not take its track's colour, whatever the switch is set to");
 	}
 	[rep release];
 
@@ -265,6 +266,10 @@ int main(void)
 	rep = draw(cell, view);
 	check(near(track_red(rep, 1), [[NSColor cg_disabledControlFaceColor] redComponent]),
 	      "a DISABLED switch wears the out-of-action grey, whatever the pointer is doing and whatever it holds");
+	/* AND ITS KNOB IS THE ONE GREY A KNOB CAN BE, which is the other half of the rule: the knob is white unless the
+	 * switch is out of action, so a disabled knob is the ONLY grey one in the control. */
+	check(near([[rep colorAtX:(W - 10) y:H / 2] redComponent], [[NSColor cg_disabledControlFaceColor] redComponent]),
+	      "and its knob is GREY, which is the only thing in this control that greys a knob");
 	[rep release];
 
 	[cell release];
