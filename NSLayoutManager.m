@@ -12,7 +12,41 @@
 #import <AppKit/NSLayoutManager.h>
 #import <AppKit/NSTextStorage.h>
 #import <AppKit/NSTextContainer.h>
+#import <AppKit/NSFont.h>
+#import <AppKit/NSAttributedString.h>
 #import <Foundation/NSArray.h>
+
+#include <CoreFoundation/CFAttributedString.h>
+#include <CoreText/CTLine.h>
+#include <CoreText/CTStringAttributes.h>
+#include <CoreText/CTTypesetter.h>
+
+/* **THE ONE PIECE OF STATE A FRAGMENT IS: A GLYPH RANGE AND TWO RECTS.** Apple distinguishes the FRAGMENT rect — the
+ * whole width the container gives a line — from the USED rect, which is the part the glyphs actually fill; a selection
+ * and a highlight want the second and a background wants the first, which is why both are kept. A tiny object rather
+ * than a struct because the fragments live in an `NSMutableArray` and an array of PODs would be a second lifetime to
+ * manage by hand. */
+@interface FNFragment : NSObject
+{
+@public
+	NSRange range;
+	NSRect rect;
+	NSRect used;
+}
++ (id)fragmentWithRange:(NSRange)aRange rect:(NSRect)aRect usedRect:(NSRect)aUsedRect;
+@end
+
+@implementation FNFragment
++ (id)fragmentWithRange:(NSRange)aRange rect:(NSRect)aRect usedRect:(NSRect)aUsedRect
+{
+	FNFragment *fragment = [[[FNFragment alloc] init] autorelease];
+
+	fragment->range = aRange;
+	fragment->rect = aRect;
+	fragment->used = aUsedRect;
+	return fragment;
+}
+@end
 
 @implementation NSLayoutManager
 
@@ -26,6 +60,8 @@
 		 * `NSNotFound` rather than a zero-length range at the start. */
 		_textStorage = nil;
 		_textContainers = [[NSMutableArray alloc] init];
+		/* ONE FRAGMENT LIST PER CONTAINER, index-matched for as long as the two arrays are only ever changed together. */
+		_fragments = [[NSMutableArray alloc] init];
 		_invalidatedRange = NSMakeRange(NSNotFound, 0);
 	}
 	return self;
@@ -42,6 +78,7 @@
 		[_textContainers removeLastObject];
 	}
 	[_textContainers release];
+	[_fragments release];
 	[_textStorage release];
 	[super dealloc];
 }
@@ -135,6 +172,7 @@
 		}
 	}
 	[_textContainers insertObject:container atIndex:index];
+	[_fragments insertObject:[NSMutableArray array] atIndex:index];
 	[container setLayoutManager:self];
 	[self invalidateLayoutForCharacterRange:NSMakeRange(0, [_textStorage length]) actualCharacterRange:NULL];
 }
@@ -145,6 +183,7 @@
 
 	[container setLayoutManager:nil];
 	[_textContainers removeObjectAtIndex:index];
+	[_fragments removeObjectAtIndex:index];
 	[container release];
 	[self invalidateLayoutForCharacterRange:NSMakeRange(0, [_textStorage length]) actualCharacterRange:NULL];
 }
@@ -208,6 +247,259 @@
 - (NSRange)cg_invalidatedRange
 {
 	return _invalidatedRange;
+}
+
+/* ============================================================================================ *
+ * THE CHARACTER-TO-GLYPH MAP, WHICH IS THE IDENTITY                                                  *
+ * ============================================================================================ */
+
+/* **BOTH DOORS ANSWER THE RANGE THEY WERE GIVEN, CLAMPED TO THE STORE.** Core Text maps characters to glyphs inside
+ * `CTLine`, so there is no glyph STORE here and nothing for the two ranges to differ over; see the header for why the
+ * identity is the honest answer rather than a placeholder. */
+- (NSUInteger)numberOfGlyphs
+{
+	return [_textStorage length];
+}
+
+- (NSRange)glyphRangeForCharacterRange:(NSRange)charRange actualCharacterRange:(NSRange *)actualCharRange
+{
+	NSUInteger n = [_textStorage length];
+
+	if (charRange.location > n) {
+		charRange.location = n;
+	}
+	if (charRange.location + charRange.length > n) {
+		charRange.length = n - charRange.location;
+	}
+	if (actualCharRange != NULL) {
+		*actualCharRange = charRange;
+	}
+	return charRange;
+}
+
+- (NSRange)characterRangeForGlyphRange:(NSRange)glyphRange actualGlyphRange:(NSRange *)actualGlyphRange
+{
+	return [self glyphRangeForCharacterRange:glyphRange actualCharacterRange:actualGlyphRange];
+}
+
+/* ============================================================================================ *
+ * THE LAYOUT: THE FRAGMENTS A CONTAINER IS FILLED WITH                                                  *
+ * ============================================================================================ */
+
+/* THE FONT A LINE IS MEASURED IN, taken from the store's own attributes at the first character and falling back to the
+ * system font — which is the same default `NSText` and `NSTextView` use, so a store with no font attribute is not a
+ * different document here than it is there. */
+- (NSFont *)cg_font
+{
+	id font = nil;
+
+	if ([_textStorage length] > 0) {
+		font = [[_textStorage attributesAtIndex:0 effectiveRange:NULL] objectForKey:NSFontAttributeName];
+	}
+	return (font != nil) ? (NSFont *)font : [NSFont systemFontOfSize:[NSFont systemFontSize]];
+}
+
+/* **AND THIS IS THE LAYOUT: THE SAME TYPESETTER WALK THE TEXT VIEW MAKES, ASKED BY THE MANAGER INSTEAD.** The line's
+ * width comes from the CONTAINER (its size less the fragment padding on both sides), the breaking is
+ * `CTTypesetterSuggestLineBreak`'s, and what comes back is a fragment per line: the whole width the container gives it,
+ * and the part the glyphs fill. A trailing newline owes an EMPTY last fragment, exactly as it owes an empty last line
+ * in the text view, because the caret sits there.
+ *
+ * **ONE CONTAINER IS FILLED, WHICH IS WHAT ONE TEXT VIEW HAS.** Apple's flow moves what does not fit into the NEXT
+ * container on the manager's list; this slice lays the whole store into the FIRST, and a manager with two containers
+ * therefore has one full and one empty. That is NAMED rather than half-done: the overflow flow is the slice this one
+ * does not carry. */
+- (void)cg_layOutContainerAtIndex:(NSUInteger)index
+{
+	NSTextContainer *container = [_textContainers objectAtIndex:index];
+	NSMutableArray *fragments = [_fragments objectAtIndex:index];
+	NSString *string = [_textStorage string];
+	NSUInteger n = [string length];
+	CGFloat padding = [container lineFragmentPadding];
+	CGFloat containerWidth = [container containerSize].width;
+	CGFloat width = containerWidth - 2.0 * padding;
+	NSFont *font = [self cg_font];
+	CGFloat lineHeight = [font ascender] - [font descender];
+	CGFloat y = 0.0;
+	CFMutableDictionaryRef attributes;
+	CFAttributedStringRef s;
+	CTTypesetterRef ts;
+	CFIndex start = 0;
+
+	[fragments removeAllObjects];
+	if (n == 0) {
+		[fragments addObject:[FNFragment fragmentWithRange:NSMakeRange(0, 0)
+							     rect:NSMakeRect(0.0, 0.0, containerWidth, lineHeight)
+							 usedRect:NSMakeRect(padding, 0.0, 0.0, lineHeight)]];
+		return;
+	}
+	attributes = CFDictionaryCreateMutable(kCFAllocatorDefault, 0,
+			&kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+	CFDictionarySetValue(attributes, kCTFontAttributeName, ((NSFont *)font)->_font);
+	s = CFAttributedStringCreate(kCFAllocatorDefault, (CFStringRef)string, attributes);
+	CFRelease(attributes);
+	ts = (s != NULL) ? CTTypesetterCreateWithAttributedString(s) : NULL;
+	if (s != NULL) {
+		CFRelease(s);
+	}
+	if (ts == NULL) {
+		[fragments addObject:[FNFragment fragmentWithRange:NSMakeRange(0, n)
+							     rect:NSMakeRect(0.0, 0.0, containerWidth, lineHeight)
+							 usedRect:NSMakeRect(padding, 0.0, width, lineHeight)]];
+		return;
+	}
+	while (start < (CFIndex)n) {
+		CFIndex count = (width > 0.0) ? CTTypesetterSuggestLineBreak(ts, start, (double)width)
+					      : (CFIndex)(n - (NSUInteger)start);
+		CTLineRef line;
+		CGFloat lineWidth = 0.0;
+
+		if (count <= 0) {
+			count = 1;
+		}
+		if (start + count > (CFIndex)n) {
+			count = (CFIndex)n - start;
+		}
+		line = CTTypesetterCreateLine(ts, CFRangeMake(start, count));
+		if (line != NULL) {
+			lineWidth = (CGFloat)CTLineGetTypographicBounds(line, NULL, NULL, NULL);
+			if (width > 0.0 && lineWidth > width) {
+				lineWidth = width;
+			}
+			CFRelease(line);
+		}
+		[fragments addObject:[FNFragment fragmentWithRange:NSMakeRange((NSUInteger)start, (NSUInteger)count)
+							     rect:NSMakeRect(0.0, y, containerWidth, lineHeight)
+							 usedRect:NSMakeRect(padding, y, lineWidth, lineHeight)]];
+		start += count;
+		y += lineHeight;
+	}
+	CFRelease(ts);
+	if ([string characterAtIndex:n - 1] == '\n') {
+		[fragments addObject:[FNFragment fragmentWithRange:NSMakeRange(n, 0)
+							     rect:NSMakeRect(0.0, y, containerWidth, lineHeight)
+							 usedRect:NSMakeRect(padding, y, 0.0, lineHeight)]];
+	}
+}
+
+/* **AND EVERY LAYOUT DOOR GOES THROUGH HERE, WHICH IS ALSO WHAT CLEARS THE STALE RECORD.** A manager with nothing
+ * stale has nothing to do — which is why `-usedRectForTextContainer:` costs no layout, as Apple's comment promises. */
+- (void)cg_ensureLayout
+{
+	if (_invalidatedRange.location == NSNotFound) {
+		return;
+	}
+	if ([_textContainers count] > 0) {
+		[self cg_layOutContainerAtIndex:0];
+	}
+	_invalidatedRange = NSMakeRange(NSNotFound, 0);
+}
+
+- (void)ensureLayoutForTextContainer:(NSTextContainer *)container
+{
+	(void)container;
+	[self cg_ensureLayout];
+}
+
+- (void)ensureLayoutForCharacterRange:(NSRange)charRange
+{
+	(void)charRange;
+	[self cg_ensureLayout];
+}
+
+- (void)ensureLayoutForGlyphRange:(NSRange)glyphRange
+{
+	(void)glyphRange;
+	[self cg_ensureLayout];
+}
+
+/* **ALL THE STORE IS IN THE FIRST CONTAINER AND NONE OF IT IS IN ANY OTHER**, which is the same single-container
+ * statement the layout makes: an answer of `(0, n)` for the container that was filled and `(n, 0)` for one that was
+ * not is the truth about this slice rather than a plausible-looking range. */
+- (NSRange)glyphRangeForTextContainer:(NSTextContainer *)container
+{
+	NSUInteger n = [_textStorage length];
+
+	if ([_textContainers count] > 0 && [_textContainers objectAtIndex:0] == container) {
+		return NSMakeRange(0, n);
+	}
+	return NSMakeRange(n, 0);
+}
+
+/* **THE SIZE A VIEW WOULD NEED, WHICH IS THE UNION OF WHAT THE FRAGMENTS FILL.** Apple's comment says this causes
+ * neither glyph generation nor layout, and that is exactly what falling through `-cg_ensureLayout` with a clean record
+ * does: nothing is rebuilt, the fragments that are there are read. */
+- (NSRect)usedRectForTextContainer:(NSTextContainer *)container
+{
+	NSUInteger index = [_textContainers indexOfObjectIdenticalTo:container];
+	NSMutableArray *fragments;
+	NSRect used = NSZeroRect;
+	NSUInteger i;
+	BOOL first = YES;
+
+	if (index == NSNotFound) {
+		return NSZeroRect;
+	}
+	[self cg_ensureLayout];
+	fragments = [_fragments objectAtIndex:index];
+	for (i = 0; i < [fragments count]; i++) {
+		NSRect r = ((FNFragment *)[fragments objectAtIndex:i])->used;
+
+		used = first ? r : NSUnionRect(used, r);
+		first = NO;
+	}
+	return used;
+}
+
+/* THE FRAGMENT A GLYPH IS IN, with the range that shares it reported back — which is what a caller drawing a line or
+ * placing a caret asks for, and the reason the fragments are kept as ranges rather than as rects alone. */
+- (FNFragment *)cg_fragmentForGlyphAtIndex:(NSUInteger)glyphIndex effectiveRange:(NSRange *)effectiveGlyphRange
+{
+	NSMutableArray *fragments;
+	NSUInteger i;
+
+	[self cg_ensureLayout];
+	if ([_fragments count] == 0) {
+		return nil;
+	}
+	fragments = [_fragments objectAtIndex:0];
+	for (i = 0; i < [fragments count]; i++) {
+		FNFragment *fragment = [fragments objectAtIndex:i];
+
+		if (glyphIndex >= fragment->range.location
+		    && glyphIndex <= fragment->range.location + fragment->range.length) {
+			if (effectiveGlyphRange != NULL) {
+				*effectiveGlyphRange = fragment->range;
+			}
+			return fragment;
+		}
+	}
+	return [fragments count] > 0 ? [fragments lastObject] : nil;
+}
+
+- (NSRect)lineFragmentRectForGlyphAtIndex:(NSUInteger)glyphIndex effectiveRange:(NSRange *)effectiveGlyphRange
+{
+	FNFragment *fragment = [self cg_fragmentForGlyphAtIndex:glyphIndex effectiveRange:effectiveGlyphRange];
+
+	return (fragment != nil) ? fragment->rect : NSZeroRect;
+}
+
+- (NSRect)lineFragmentUsedRectForGlyphAtIndex:(NSUInteger)glyphIndex effectiveRange:(NSRange *)effectiveGlyphRange
+{
+	FNFragment *fragment = [self cg_fragmentForGlyphAtIndex:glyphIndex effectiveRange:effectiveGlyphRange];
+
+	return (fragment != nil) ? fragment->used : NSZeroRect;
+}
+
+- (NSUInteger)cg_lineFragmentCountForTextContainer:(NSTextContainer *)container
+{
+	NSUInteger index = [_textContainers indexOfObjectIdenticalTo:container];
+
+	if (index == NSNotFound) {
+		return 0;
+	}
+	[self cg_ensureLayout];
+	return [[_fragments objectAtIndex:index] count];
 }
 
 - (id <NSLayoutManagerDelegate>)delegate

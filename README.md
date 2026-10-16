@@ -46,6 +46,7 @@ tests/
   text_storage.m                and the STORE the rich-text slice is built on: an attributed string that announces edits
   text_container.m              and the REGION that store is laid out in: a size, a padding, and the fragments that fit
   text_layout_web.m             and the WEB that ties the trio together: the store, its managers, and what goes stale
+  text_layout_fragments.m       and the FRAGMENTS that web produces: the store laid into the container's lines
   text_word_movement.m          and its WORD granularity: Option+arrow and Option+Delete, over the string
   text_view_lines.m             and the first slice of the MULTI-LINE view: the line model, and what reads it
   text_view_wrapping.m          and the slice above it: the same model WRAPPED to the view's width
@@ -188,6 +189,17 @@ the compositor is really gone.
   manager owns them and the old one no longer does. **AND THE PROBE FOUND ONE REAL DEFECT**: a container added to a
   second manager stayed on the FIRST one's list, because a container holds ONE borrowed pointer — a manager adopting one
   now RELEASES it from the manager it was on, since a container is laid out in one place.
+- **And the FRAGMENTS that web produces** (`ctest`): `NSLayoutManager` slice two LAYS THE STORE INTO THE CONTAINER'S
+  LINES — the same typesetter walk the text view makes, asked by the manager — and answers where each line is. MEASURED:
+  the character-to-glyph map is the IDENTITY, clamped (`numberOfGlyphs` == the character count, a range past the store
+  comes back **clamped**); three newline-separated lines give **3** fragments, each the container's whole width
+  (**300**) and one line high (15.73), with the range INCLUDING the newline the typesetter kept; a glyph in `two` is in
+  the fragment for `two` at **y=15.73** (container coordinates); `-usedRectForTextContainer:` is the UNION — x at the
+  fragment padding, **3** lines tall, as wide as the text rather than the container — and a container that is not the
+  manager's has nothing used in it; the SAME paragraph is **1** fragment in 300 points and **3** in 90, so the width is
+  the container's; an edit makes the layout STALE and asking for the geometry REBUILDS it one line taller, clearing the
+  record; and asking twice changes nothing. **WHAT IS OWED AND NAMED IN ITS HEADER**: drawing, the glyph store, the
+  overflow into a second container, and any glyph map that is not the identity.
 - **And the field, which is a cell under a view** (`ctest`, offscreen): `NSTextFieldCell` owns the string, the face
   and the three doors of an edit; `NSTextField` is the control above it, and it contributes the two things a cell
   cannot — a PRESS that opens a session with the WINDOW's field editor, and `-selectText:` for the same session with
@@ -318,12 +330,12 @@ the compositor is really gone.
   and the child clip is the child's FRAME region rather than its bounds rect — which was the same value only while the
   origin was zero. MEASURED: a mark at a document's own y 100..120 draws at 110 with the clip view at the top and at
   10 after a scroll of 100, in one run, through `-displayRect:`.
-- **`ctest`: 40 of 40 passed** (the keyboard and the seam, the AppKit and its input path, the controls and their
+- **`ctest`: 41 of 41 passed** (the keyboard and the seam, the AppKit and its input path, the controls and their
   metrics, the field control and its cell and its bezel and its placeholder and what it may hold, the text path and its
   word granularity and the multi-line view and its wrapping and its scrolling, the STORE the rich-text slice is built
-  on and the REGION it is laid out in and the WEB that ties the three together, what a drag costs, the resize by edge,
-  the tracking engine, the clip view and the scroller and the scroll view and the drawn offset, the chrome and what its
-  buttons do, the chrome theme, the menus and activation).
+  on and the REGION it is laid out in and the WEB that ties the three together and the FRAGMENTS it produces, what a
+  drag costs, the resize by edge, the tracking engine, the clip view and the scroller and the scroll view and the drawn
+  offset, the chrome and what its buttons do, the chrome theme, the menus and activation).
 - **And the desktop's own text is SUB-PIXEL ANTIALIASED**, which is the AppKit's half of a renderer change in
   CoreGraphics: a window's surface is OPAQUE (`kCGImageAlphaNoneSkipFirst`), and the destination's opacity is
   exactly what decides whether a glyph is rasterised in colour. MEASURED on the live session: the window title's

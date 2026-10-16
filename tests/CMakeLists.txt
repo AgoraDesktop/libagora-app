@@ -149,6 +149,14 @@ target_link_libraries(text_layout_web PRIVATE App)
 add_test(NAME appkit-text-layout-web COMMAND text_layout_web)
 set_tests_properties(appkit-text-layout-web PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
 
+# **AND THE FRAGMENTS THAT WEB PRODUCES.** `NSLayoutManager` slice two: the store is laid into the container's lines by
+# the typesetter — one fragment per line, the container's width — and the geometry doors answer where each is and what
+# the container has used. The character-to-glyph map is checked as the IDENTITY it is, clamping included.
+add_executable(text_layout_fragments text_layout_fragments.m)
+target_link_libraries(text_layout_fragments PRIVATE App m)
+add_test(NAME appkit-text-layout-fragments COMMAND text_layout_fragments)
+set_tests_properties(appkit-text-layout-fragments PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
+
 # **AND THE WORD GRANULARITY OF THE SAME KEYS.** Option+arrow moves by the word and Option+Delete deletes one, which
 # is arithmetic over the string's own characters and needs no layout model — the correction `NSResponder.h` carries.
 # Driven as KEYS, so the mapping is under test as well as the walk.

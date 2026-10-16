@@ -15,7 +15,17 @@
  * OUT, nothing is drawn, and the character-to-glyph map is not built. Each of those is named at the door that would
  * answer it rather than stubbed, and the slice that lands glyphs is the one that can make them real.
  *
- * **AND THIS SLICE IS ALSO WHAT TURNS TWO DECLARATIONS INTO IMPLEMENTATIONS.** `NSTextStorage.h` refused
+ * **AND THE LAYOUT IS THE SECOND KIND OF INVALIDATION MADE REAL.** Apple's sentence names two: a range can need
+ * GLYPHS generated, or it can need its glyphs LAID OUT. Slice one built the web and recorded which ranges were stale;
+ * this slice asks the CONTAINER how wide a line may be, breaks the store's string into LINE FRAGMENTS with the same
+ * TYPESETTER the text view uses, and answers where each fragment is — which is what `-usedRectForTextContainer:` is
+ * the size of, and what a view will draw into.
+ *
+ * **THE CHARACTER-TO-GLYPH MAP IS ONE TO ONE, AND THAT IS NAMED RATHER THAN HIDDEN.** Apple's map is where ligatures
+ * and combining marks make a character range and a glyph range differ; this tier draws through Core Text, which does
+ * that mapping inside the engine, so there is no glyph STORE here to differ FROM. The two conversion doors are
+ * therefore the identity with the clamping Apple's contract needs, and the day a glyph store arrives is the day this
+ * note is wrong — which is why it is written at the doors rather than in a comment nobody reads. `NSTextStorage.h` refused
  * `-addLayoutManager:`/`-removeLayoutManager:`/`-layoutManagers` because they name a class that did not exist, and
  * `NSTextContainer.h` refused `-layoutManager`/`-setLayoutManager:` for the same reason. Both are here now, because the
  * class is: the storage owns a LIST of managers and calls `-setTextStorage:` on the way in and out, and the container
@@ -59,6 +69,11 @@ NS_ASSUME_NONNULL_BEGIN
 	 * store has reported since the last time a caller asked — `NSNotFound` as the location meaning NOTHING IS STALE,
 	 * which is the same "no edit" sentinel `NSTextStorage` uses for its own record. */
 	NSRange _invalidatedRange;
+	/* **AND THE FRAGMENTS EACH CONTAINER HAS BEEN FILLED WITH, index-matched to `_textContainers`.** An `NSMutableArray`
+	 * per container, each holding `FNFragment` objects (a glyph range and two rects) — rebuilt whenever the container
+	 * list changes, which is what keeps the two arrays in step BY CONSTRUCTION rather than by a rule somebody has to
+	 * remember. Nil until a layout is asked for. */
+	NSMutableArray *_fragments;	/* RETAINED; one array per container */
 }
 
 /* ---- THE STORE, WHICH THE STORAGE DRIVES ------------------------------------------------------------ */
@@ -110,6 +125,36 @@ NS_ASSUME_NONNULL_BEGIN
 /* THE DELEGATE, NOT RETAINED — this tree's rule for every delegate. */
 - (nullable id <NSLayoutManagerDelegate>)delegate;
 - (void)setDelegate:(nullable id <NSLayoutManagerDelegate>)anObject;
+
+/* ---- THE CHARACTER-TO-GLYPH MAP, WHICH IS ONE TO ONE HERE -------------------------------------------- */
+
+/* **THE MAP IS THE IDENTITY, AND THE REASON IS THE ENGINE.** Apple's two doors exist because a glyph store can hold
+ * FEWER or MORE glyphs than there are characters — a ligature is two characters and one glyph, a precomposed character
+ * may be two. Core Text does that work INSIDE `CTLine`, so this tier has no glyph store and nothing for the ranges to
+ * differ over. Both doors therefore answer the range they were given, clamped to the store, and report it back as the
+ * "actual" range — which is what Apple's contract promises for text whose mapping is one to one. */
+- (NSUInteger)numberOfGlyphs;
+- (NSRange)glyphRangeForCharacterRange:(NSRange)charRange actualCharacterRange:(nullable NSRangePointer)actualCharRange;
+- (NSRange)characterRangeForGlyphRange:(NSRange)glyphRange actualGlyphRange:(nullable NSRangePointer)actualGlyphRange;
+
+/* ---- THE LAYOUT: THE FRAGMENTS A CONTAINER IS FILLED WITH -------------------------------------------- */
+
+/* **THE QUESTION THE CONTAINER EXISTS TO ANSWER, ASKED AND ANSWERED.** `-ensureLayoutForTextContainer:` fills it (the
+ * other two are the same request narrowed by a range, and with one container they are the whole of it);
+ * `-usedRectForTextContainer:` is the size a view would need to show what is laid in it; and the two fragment doors
+ * answer where ONE glyph sits and which range shares its line. ALL COORDINATES ARE THE CONTAINER'S, as Apple's own
+ * comments insist. */
+- (void)ensureLayoutForTextContainer:(NSTextContainer *)container;
+- (void)ensureLayoutForCharacterRange:(NSRange)charRange;
+- (void)ensureLayoutForGlyphRange:(NSRange)glyphRange;
+- (NSRange)glyphRangeForTextContainer:(NSTextContainer *)container;
+- (NSRect)usedRectForTextContainer:(NSTextContainer *)container;
+- (NSRect)lineFragmentRectForGlyphAtIndex:(NSUInteger)glyphIndex effectiveRange:(nullable NSRangePointer)effectiveGlyphRange;
+- (NSRect)lineFragmentUsedRectForGlyphAtIndex:(NSUInteger)glyphIndex effectiveRange:(nullable NSRangePointer)effectiveGlyphRange;
+
+/* AND HOW MANY FRAGMENTS THERE ARE, which is THIS TIER'S OWN DOOR for the same reason `-cg_invalidatedRange` is: a
+ * probe that counts lines must be able to, and Apple answers only through the geometry. */
+- (NSUInteger)cg_lineFragmentCountForTextContainer:(NSTextContainer *)container;
 
 @end
 
