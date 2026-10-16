@@ -26,6 +26,7 @@
 #import <AppKit/NSText.h>
 #import <AppKit/NSCell.h>	/* NS_CELL_BEZEL_RADIUS — the bezel a field shares with a button */
 #import <AppKit/NSFont.h>
+#import <AppKit/NSAttributedString.h>
 #import <AppKit/NSColor.h>
 #import <AppKit/NSBezierPath.h>
 #import <AppKit/NSGraphicsContext.h>
@@ -787,6 +788,76 @@ static void fn_announce(NSText *text, NSString *name, SEL delegateSelector)
 		return;
 	}
 	[self replaceCharactersInRange:_selectedRange withString:text];
+}
+
+/* ============================================================================================ *
+ * AND THE `NSTextInput` DOORS, WHICH A ONE-LINE FIELD ANSWERS WITHOUT COMPOSING                   *
+ * ============================================================================================ */
+
+/* **A FIELD HAS NO MARKED TEXT, WHICH IS THE HONEST ANSWER RATHER THAN A STUB.** `NSText` is the base for a document
+ * view AND for the field editor, and a one-line field never composes — its input context has no source that would. So
+ * the marked-text doors answer "none" and `-setMarkedText:` INSERTS what it is handed, which is what a caller that
+ * composes into a field would get. `NSTextView` OVERRIDES the four that carry the composition with real ones. */
+- (BOOL)hasMarkedText
+{
+	return NO;
+}
+
+- (NSRange)markedRange
+{
+	return NSMakeRange(NSNotFound, 0);
+}
+
+- (void)setMarkedText:(id)string selectedRange:(NSRange)selectedRange
+{
+	(void)selectedRange;
+	[self insertText:string];
+}
+
+- (void)unmarkText
+{
+}
+
+- (NSArray *)validAttributesForMarkedText
+{
+	return [NSArray array];
+}
+
+- (NSAttributedString *)attributedSubstringFromRange:(NSRange)range
+{
+	NSUInteger n = [_string length];
+
+	if (range.location > n) {
+		range.location = n;
+	}
+	if (range.location + range.length > n) {
+		range.length = n - range.location;
+	}
+	return [[[NSAttributedString alloc] initWithString:[_string substringWithRange:range]] autorelease];
+}
+
+/* **AND THE TWO SCREEN DOORS, ANSWERED FROM THE FIELD'S ONE LINE.** The caret's rectangle moved into screen coordinates
+ * (the window's frame origin is the whole transformation this tier owns, as in the view), and `-characterIndexForPoint:`
+ * as that conversion run backwards into the field's own hit test. */
+- (NSRect)firstRectForCharacterRange:(NSRange)range
+{
+	id font = [self font] != nil ? [self font] : [NSFont systemFontOfSize:[NSFont systemFontSize]];
+	NSUInteger index = (range.location < [_string length]) ? range.location : [_string length];
+	NSRect rect = NSMakeRect([self fn_viewXForIndex:index], [self fn_baseline] - [font ascender], 1.0,
+				 [font ascender] - [font descender]);
+	NSRect inWindow = [self convertRect:rect toView:nil];
+	NSRect frame = [[self window] frame];
+
+	return NSMakeRect(inWindow.origin.x + frame.origin.x, inWindow.origin.y + frame.origin.y,
+			  inWindow.size.width, inWindow.size.height);
+}
+
+- (NSUInteger)characterIndexForPoint:(NSPoint)point
+{
+	NSRect frame = [[self window] frame];
+	NSPoint inWindow = NSMakePoint(point.x - frame.origin.x, point.y - frame.origin.y);
+
+	return [self fn_indexForPoint:[self convertPoint:inWindow fromView:nil]];
 }
 
 /* **AND WHAT A WORD IS, WHICH IS THE ONE THING THE WORD COMMANDS BELOW HAVE TO DECIDE.** A word is a run of

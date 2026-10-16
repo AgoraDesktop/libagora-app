@@ -45,11 +45,12 @@
  *   given rather than a table this tier cannot read, and says so.
  *
  *   `-interpretKeyEvents:` WAS REFUSED BY NAME, and it no longer is. Apple hands each event to the receiver's INPUT
- *   CONTEXT, and the answers come back as `-insertText:` and `-doCommandBySelector:`; there is no input method in this
- *   tier. WHAT THE DOOR DOES NOW IS THE DIRECT MAPPING — a key that types becomes `-insertText:` and a key that
- *   commands becomes `-doCommandBySelector:` with the selector the key binding names — which is enough for typing and
- *   is stated in the implementation to be exactly that: THE INPUT-METHOD HALF IS STILL ABSENT, and it is named there
- *   rather than papered over. (Apple's informal protocol for the commands themselves is declared below.)
+ *   CONTEXT, and the answers come back as `-insertText:` and `-doCommandBySelector:`. THE CONTEXT EXISTS NOW
+ *   (`NSTextInputContext.h`): `NSView -inputContext` answers one for a text input client, the door hands the event
+ *   over, and THE STANDARD KEY BINDING LIVES THERE — a key that types becomes `-insertText:` and a key that commands
+ *   becomes `-doCommandBySelector:` with the selector the binding names. WHAT IS STILL ABSENT IS AN INPUT METHOD: the
+ *   context has one stock keyboard and no composition engine, so the binding is reached directly, and the door that a
+ *   real source would be inserted at is the context's. (Apple's informal protocol for the commands is declared below.)
  *
  * AND TWO DECLARATIONS ARE SPELLED `id` FOR A REASON THAT HAS NOTHING TO DO WITH THIS CLASS: `-menu` and
  * `-setMenu:` hold an `NSMenu`, which is a class this tier does not ship — naming it, even forward, would
@@ -258,9 +259,11 @@ typedef NSUInteger NSInterfaceStyle;
 - (void)delete:(nullable id)sender;
 
 /* **AND THE DOOR THAT TURNS EVENTS INTO COMMANDS.** Apple hands each event to the receiver's INPUT CONTEXT and the
- * answers come back as `-insertText:` and `-doCommandBySelector:`. THIS TIER HAS NO INPUT CONTEXT — no dead-key
- * composition, no marked text, no input method — so what this does instead is the DIRECT mapping for the keys a text
- * view needs, and its refusals are named where they stand. See the implementation. */
+ * answers come back as `-insertText:` and `-doCommandBySelector:`. THE CONTEXT IS HERE NOW (`NSTextInputContext.h`):
+ * `NSView -inputContext` answers one for a view that is a text input client, and it is the context that does the
+ * standard key binding — a command selector for the key, `-insertText:` for a printable character — while an input
+ * method would stand in front of that mapping. A responder with no context handles no keys here, which is the truth
+ * for a responder with no text behavior. */
 - (void)interpretKeyEvents:(NSArray *)eventArray;
 
 @end

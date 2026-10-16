@@ -22,6 +22,8 @@
 #import <AppKit/NSWindow.h>
 #import <AppKit/NSGraphicsContext.h>
 #import <AppKit/NSImage.h>
+#import <AppKit/NSTextInputContext.h>
+#import <AppKit/NSTextInput.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -245,6 +247,7 @@ static NSRect fn_intersect(NSRect a, NSRect b)
 		[_subviews release];
 	}
 	[_cg_registeredDraggedTypes release];
+	[_cg_inputContext release];
 	[super dealloc];
 }
 
@@ -1208,7 +1211,14 @@ FN_VIEW_PAIR(setPostsBoundsChangedNotifications, postsBoundsChangedNotifications
 
 - (nullable id)inputContext
 {
-	return nil;	/* no NSTextInputContext: this tier has no text system */
+	/* **A VIEW THAT IS A TEXT INPUT CLIENT OWNS A CONTEXT; EVERY OTHER VIEW ANSWERS NIL.** Apple's door is what
+	 * `NSResponder -interpretKeyEvents:` reads to find where a key goes, so a view with no context is a view with no
+	 * key handling — which is the truth for everything that is not a text surface. The context is made once and kept,
+	 * and its client is this view, borrowed. */
+	if (_cg_inputContext == nil && [self conformsToProtocol:@protocol(NSTextInput)]) {
+		_cg_inputContext = [[NSTextInputContext alloc] initWithClient:(id <NSTextInput>)self];
+	}
+	return _cg_inputContext;
 }
 
 - (nullable id)defaultMenu

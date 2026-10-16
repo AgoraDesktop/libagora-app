@@ -241,6 +241,10 @@ extern NSString *NSDefinitionPresentationTypeOverlay;
 	id _shadow;
 	id _pageHeader;
 	id _pageFooter;
+	/* **AND THE VIEW'S INPUT CONTEXT, MADE LAZILY FOR A VIEW THAT IS A TEXT INPUT CLIENT.** It is retained because it
+	 * is this view's for as long as the view lives; the context's CLIENT back-pointer is the borrowed half, so the two
+	 * do not cycle. Nil for every view that is not a text input. */
+	id _cg_inputContext;	/* RETAINED once made */
 	NSFocusRingType _focusRingType;
 	NSView *_focusView;
 	CGFloat _frameCenterRotation;

@@ -30,12 +30,19 @@
  * only when it has no opinion of its own, which is what `NSNoInterfaceStyle` means); `-undoManager` IS a
  * walk and nothing else, because Foundation ships the class it answers; the error-presentation pair runs
  * Apple's hook and then REFUSES AT THE END OF THE CHAIN, where the thing this tier has not got — an NSAlert
- * to put the error in — is what Apple's own final step needs; and `-interpretKeyEvents:` REFUSES WITHOUT
- * FORWARDING, because an event handed on uninterpreted would claim a keystroke had been dealt with.
+ * to put the error in — is what Apple's own final step needs; and `-interpretKeyEvents:` HANDS EACH EVENT TO THE
+ * RECEIVER'S INPUT CONTEXT, which is where an input method belongs and where the standard key binding now lives.
  */
 #import <AppKit/NSResponder.h>
+#import <AppKit/NSTextInputContext.h>
 
 #include "AppKitRefusal.h"	/* fn_refuse_window — the one refusal message, in one place. */
+
+/* THE VIEW'S INPUT CONTEXT, DECLARED HERE SO THIS FILE CAN ASK FOR IT WITHOUT PUTTING A VIEW'S DOOR IN THE RESPONDER'S
+ * HEADER. A responder that is not a view does not answer it, which the guard in `-interpretKeyEvents:` allows for. */
+@interface NSResponder (FNInputContext)
+- (nullable id)inputContext;
+@end
 
 @implementation NSResponder
 
@@ -489,115 +496,22 @@
 /* The door that turns events into commands                                    */
 /* ------------------------------------------------------------------------- */
 
-/* **A DIRECT KEY BINDING, AND THE INPUT METHOD'S ABSENCE IS THE FIRST THING IT SAYS.** Apple hands every event to the
- * receiver's input context and lets the CONTEXT decide whether the key typed something, marked something, or named a
- * command; that is where dead keys, composition and every input method live. THIS TIER HAS NO CONTEXT, so what this
- * does is the mapping a US keyboard needs and no more:
- *
- *   * A FUNCTION KEY becomes the command it names, with Shift turning a movement into a selection-extending one.
- *   * A CONTROL CHARACTER becomes the command it names — Backspace and Delete both backward, the function-key Delete
- *     forward, Return and Enter a newline, Tab and Shift-Tab their insertions, Escape a cancellation.
- *   * ANYTHING ELSE THAT IS PRINTABLE becomes `-insertText:`.
- *
- * AND WHAT IT REFUSES BY NAME IS THE HALF IT CANNOT DO: `-interpretKeyEvents:`'s whole point in Apple's design is the
- * CONTEXT, and no mapping table is a substitute for one. A caller who ports an application expecting composed text
- * from an input method gets plain characters here, and the difference is stated at this door rather than discovered.
- *
- * A COMMAND MODIFIER IS NOT READ. Command-A and Command-C are key EQUIVALENTS — the menu bar's business — and a
- * window whose menu does not carry them should not have them invented by its text view. So an event with Command held
- * falls through to "printable", which for a control combination means the character it produced, which is nothing. */
+/* **AND THE KEY GOES TO THE INPUT CONTEXT, WHICH IS WHERE AN INPUT METHOD WOULD SEE IT FIRST.** Apple's
+ * `-interpretKeyEvents:` is a hand-off: the context sends the event to the input source, the source composes through
+ * the `NSTextInput` doors, and what it does not consume falls back to the standard key binding — which is why the
+ * MAPPING LIVES IN `NSTextInputContext` NOW rather than here. THE CONTEXT IS THE VIEW'S, and a responder that has none
+ * — one that is not a view, or a view that is not a text input client — handles no keys here, which is the truth for
+ * a responder with no text behavior. */
 - (void)interpretKeyEvents:(NSArray *)eventArray
 {
 	NSUInteger i, count = [eventArray count];
+	id context = [self respondsToSelector:@selector(inputContext)] ? [self inputContext] : nil;
 
+	if (context == nil) {
+		return;
+	}
 	for (i = 0; i < count; i++) {
-		NSEvent *event = [eventArray objectAtIndex:i];
-		NSString *chars = [event characters];
-		NSUInteger flags = [event modifierFlags];
-		BOOL shift;
-		BOOL alt;
-		unichar c;
-		SEL command = NULL;
-
-		if ([event type] != NSKeyDown || [chars length] == 0) {
-			continue;
-		}
-		if ((flags & NSCommandKeyMask) != 0) {
-			continue;	/* a key equivalent belongs to the menu bar, not to this */
-		}
-		shift = ((flags & NSShiftKeyMask) != 0);
-		alt = ((flags & NSAlternateKeyMask) != 0);
-		c = [chars characterAtIndex:0];
-
-		switch (c) {
-		case NSUpArrowFunctionKey:
-			/* **AND THE VERTICAL ARROWS ARE MAPPED NOW, WHERE THEY USED TO BE A NO-OP.** A one-line field has no line to
-			 * move to, so it answers neither command and the chain ends quietly — which is the same as the old `break` for
-			 * that class, and a real movement for a multi-line view. Shift still extends. */
-			command = shift ? @selector(moveUpAndModifySelection:) : @selector(moveUp:);
-			break;
-		case NSDownArrowFunctionKey:
-			command = shift ? @selector(moveDownAndModifySelection:) : @selector(moveDown:);
-			break;
-		case NSPageUpFunctionKey:
-		case NSPageDownFunctionKey:
-			/* NO PAGE MOVEMENT: a page is a viewport's height and this tier has no viewport — a clip view and its
-			 * document height are a later slice, named rather than faked onto a line. */
-			break;
-		case NSLeftArrowFunctionKey:
-			/* **AND OPTION IS THE WORD GRANULARITY OF THE SAME KEY**, which is one decision rather than a second
-			 * command: the key and the direction are unchanged, and Option asks for the boundary a WORD away instead of
-			 * the character one. Shift still extends, so the four spellings are the two-by-two of the same pair. */
-			if (alt) {
-				command = shift ? @selector(moveWordLeftAndModifySelection:) : @selector(moveWordLeft:);
-			} else {
-				command = shift ? @selector(moveLeftAndModifySelection:) : @selector(moveLeft:);
-			}
-			break;
-		case NSRightArrowFunctionKey:
-			if (alt) {
-				command = shift ? @selector(moveWordRightAndModifySelection:) : @selector(moveWordRight:);
-			} else {
-				command = shift ? @selector(moveRightAndModifySelection:) : @selector(moveRight:);
-			}
-			break;
-		case NSHomeFunctionKey:
-			command = shift ? @selector(moveToBeginningOfLineAndModifySelection:)
-					: @selector(moveToBeginningOfLine:);
-			break;
-		case NSEndFunctionKey:
-			command = shift ? @selector(moveToEndOfLineAndModifySelection:) : @selector(moveToEndOfLine:);
-			break;
-		case NSDeleteFunctionKey:
-			command = alt ? @selector(deleteWordForward:) : @selector(deleteForward:);
-			break;
-		case NSBackspaceCharacter:
-		case NSDeleteCharacter:
-			/* BOTH ARE BACKWARD DELETE, which is the keymap difference the constants above record. */
-			command = alt ? @selector(deleteWordBackward:) : @selector(deleteBackward:);
-			break;
-		case NSNewlineCharacter:
-		case NSCarriageReturnCharacter:
-		case NSEnterCharacter:
-			command = @selector(insertNewline:);
-			break;
-		case NSTabCharacter:
-			command = @selector(insertTab:);
-			break;
-		case NSBackTabCharacter:
-			command = @selector(insertBacktab:);
-			break;
-		case 0x1B:	/* ESC — no constant of Apple's names it, so the code point stands with this note */
-			command = @selector(cancelOperation:);
-			break;
-		default:
-			break;
-		}
-		if (command != NULL) {
-			[self doCommandBySelector:command];
-		} else if (c >= 0x20 && c != NSDeleteCharacter) {
-			[self insertText:chars];
-		}
+		[(NSTextInputContext *)context handleEvent:[eventArray objectAtIndex:i]];
 	}
 }
 

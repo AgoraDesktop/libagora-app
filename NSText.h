@@ -35,6 +35,7 @@
  * (The two errors it produced pointed at `NSColor.h`'s own declaration of `-colorForControlTint:`, which is a good
  * description of the problem and a poor one of the cause.) */
 #import <AppKit/NSView.h>
+#import <AppKit/NSTextInput.h>
 
 @class NSColor;
 
@@ -123,7 +124,7 @@ typedef NSInteger NSTextMovement;
 - (void)textDidChange:(NSNotification *)notification;
 @end
 
-@interface NSText : NSView
+@interface NSText : NSView <NSTextInput>
 {
 	/* **THE STRING IS MUTABLE AND HELD, rather than an immutable value swapped on every keystroke**: an edit is a
 	 * RANGE REPLACEMENT — that is the one primitive every other edit is written in terms of — and a class that

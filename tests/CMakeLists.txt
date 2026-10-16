@@ -246,6 +246,15 @@ target_link_libraries(text_marked_text PRIVATE App m)
 add_test(NAME appkit-text-marked-text COMMAND text_marked_text)
 set_tests_properties(appkit-text-marked-text PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
 
+# **AND THE INPUT CONTEXT, WHERE A KEY GOES BEFORE THE TEXT VIEW.** `NSView -inputContext` answers one for a text input
+# client; the standard key binding now lives in its `-handleEvent:`; and it owns the composition through
+# `-discardMarkedText`. The probe drives the context directly, so the mapping's new home is under test rather than the
+# responder that hands the event over.
+add_executable(text_input_context text_input_context.m)
+target_link_libraries(text_input_context PRIVATE App m)
+add_test(NAME appkit-text-input-context COMMAND text_input_context)
+set_tests_properties(appkit-text-input-context PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
+
 # **AND THE PARAGRAPH STYLE'S GEOMETRY, WHICH IS NOW READ.** The indents place a line and narrow it, the spacings open
 # gaps between lines and across paragraph boundaries, and the line-height multiple and clamps set the band — each read as
 # the manager's own geometry, with the defaults pinned unmoved by the first case.

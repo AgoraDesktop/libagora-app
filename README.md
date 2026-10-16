@@ -54,6 +54,7 @@ tests/
   text_paragraph_style.m        and the PARAGRAPH STYLE: the value object, and the alignment and line-break mode
   text_paragraph_geometry.m     and its GEOMETRY: the indents, the spacings and the line heights the layout reads
   text_attachment.m             and the ATTACHMENT: a character that stands for a picture, and the cell that draws it
+  text_input_context.m          and the INPUT CONTEXT: where a key goes before the view, and where a composition lives
   text_word_movement.m          and its WORD granularity: Option+arrow and Option+Delete, over the string
   text_view_lines.m             and the first slice of the MULTI-LINE view: the line model, and what reads it
   text_view_wrapping.m          and the slice above it: the same model WRAPPED to the view's width
@@ -281,6 +282,15 @@ the compositor is really gone.
   lines; and a two-times multiple, a minimum and a maximum set the band to **2*base**, **base+12** and **base-4**. The
   hyphenation factor, the default tab interval and the base writing direction are the three the layout still does not
   read, each named at its door.
+- **And the INPUT CONTEXT, where a key goes before the text view** (`ctest`): `NSTextInputContext` is the object
+  `NSResponder -interpretKeyEvents:` hands each event to, and the STANDARD KEY BINDING MOVED THERE FROM THE RESPONDER — the
+  responder now only finds the receiver's context. MEASURED: a text view answers an input context whose client is the
+  view, while a view that is not a text input client answers NONE; driving `-handleEvent:` directly maps a LEFT ARROW to
+  a movement and a printable character to an insertion (and leaves a Command-modified key to the menu bar);
+  `+currentInputContext` is nil until `-activate`, the context while active, and nil after `-deactivate`; the source
+  doors name the one stock keyboard; and `-discardMarkedText` ends a composition through its client. **AND THE INPUT
+  METHOD ITSELF IS STILL ABSENT**: the context has one keyboard and no composition engine, which its own header says —
+  what landed is the DOOR a real source would be inserted at.
 - **And the ATTACHMENT, which is a character that stands for a picture** (`ctest`): `NSTextAttachment.h` declares
   `NSAttachmentCharacter` (U+FFFC), the `NSTextAttachmentCell` protocol and class, and the attachment itself, with
   `NSAttachmentAttributeName` carrying it; the layout manager's run walk asks the cell for its size and calls
@@ -433,7 +443,7 @@ the compositor is really gone.
   and the child clip is the child's FRAME region rather than its bounds rect — which was the same value only while the
   origin was zero. MEASURED: a mark at a document's own y 100..120 draws at 110 with the clip view at the top and at
   10 after a scroll of 100, in one run, through `-displayRect:`.
-- **`ctest`: 50 of 50 passed** (the keyboard and the seam, the AppKit and its input path, the controls and their
+- **`ctest`: 51 of 51 passed** (the keyboard and the seam, the AppKit and its input path, the controls and their
   metrics, the field control and its cell and its bezel and its placeholder and what it may hold, the text path and its
   word granularity and the multi-line view and its wrapping and its scrolling and its READING OF THE STORE, the STORE
   the rich-text slice is built on and the REGION it is laid out in and the WEB that ties the three together and the
@@ -577,9 +587,10 @@ the MINIMISE is
 still only a state the window marks and announces, because there is no Dock to put a miniaturized window in and no
 iconify in the protocol (Kestrel is parked). The chrome's toolbar pill is drawn and performs nothing, because
 there is no toolbar for it to toggle; the three symbols beside it ARE buttons now, and `tests/chrome_buttons.m`
-presses them. The `NSTextInput` PROTOCOL is here and `NSTextView` answers it (`tests/text_marked_text.m`), but the
-input-method CONTEXT is still absent (`-interpretKeyEvents:` does the direct mapping at the view and says so), and the
-ALIGNMENT COMMANDS are NOT: `NSText` declares `-alignLeft:` and its three siblings and each is one `-setAlignment:`,
+presses them. The `NSTextInput` PROTOCOL is here and `NSTextView` answers it (`tests/text_marked_text.m`), and the
+input-method CONTEXT is here too (`tests/text_input_context.m`), so the DOOR an input method is inserted at exists;
+what is still absent is the METHOD itself — the context has one stock keyboard and no composition engine. And the
+ALIGNMENT COMMANDS are NOT absent: `NSText` declares `-alignLeft:` and its three siblings and each is one `-setAlignment:`,
 which the view moves glyphs for. **THE FIELD EDITOR IS NOT ON THAT LIST AND HAS NOT BEEN SINCE THE WINDOW LEARNED TO LEND ONE** —
 `-fieldEditor:forObject:` is implemented and the field cells open their sessions with it, so what that clause used to
 defer is a door that exists. The WORD commands are NOT in that list any more: `tests/text_word_movement.m`
