@@ -42,7 +42,8 @@
  * is implemented — while the WINDOW SERVER the sentence denied exists and is what draws any of this. WHAT IS STILL
  * ABSENT is the layer and backing-scale family: `-convertPointToBacking:`, `-convertPointToLayer:` and
  * `-backingScaleFactor` have no implementation here, and a scale factor is a thing a screen would have to be asked
- * for. A DEFERRAL WHOSE REASON HAS EXPIRED IS WORSE THAN NO NOTE AT ALL, because the next reader trusts it. */ `-graphicsContext`, `-lockFocus`, `-unlockFocus`,
+ * for. A DEFERRAL WHOSE REASON HAS EXPIRED IS WORSE THAN NO NOTE AT ALL, because the next reader trusts it.
+ * `-graphicsContext`, `-lockFocus`, `-unlockFocus`,
  * `-lockFocusIfCanDraw` and the `…ToBase`/`…FromBase` conversions are ABSENT BECAUSE THEY ARE `struck`
  * ROWS: deprecated at this tree's pinned vintage, and the modern replacements
  * (`-cacheDisplayInRect:toBitmapImageRep:`, `-convertPoint:fromView:`) are the ones a caller should
