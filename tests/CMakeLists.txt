@@ -133,6 +133,14 @@ target_link_libraries(text_word_movement PRIVATE App m)
 add_test(NAME appkit-text-word-movement COMMAND text_word_movement)
 set_tests_properties(appkit-text-word-movement PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
 
+# **AND THE FIRST SLICE OF THE MULTI-LINE TEXT VIEW.** `NSTextView` holds many lines where `NSText` holds one: the line
+# model is checked as arithmetic (including a trailing newline's empty last line), the layout as PIXELS (two lines, two
+# ink bands), and the behaviour as KEYS and CLICKS — Return, Tab, Up and Down are the keys a one-line field refuses.
+add_executable(text_view_lines text_view_lines.m)
+target_link_libraries(text_view_lines PRIVATE App m)
+add_test(NAME appkit-text-view-lines COMMAND text_view_lines)
+set_tests_properties(appkit-text-view-lines PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
+
 # **AND THE INSIDE OF A SCROLL VIEW.** `NSClipView`'s arithmetic is "the whole of it" (its own header), and it is
 # checked in EXACT POINTS rather than by drawing: where a short document sits, where a long one stops, and the
 # notification wire that re-constrains the scroll when the document's own frame or bounds changes. Offscreen, so it

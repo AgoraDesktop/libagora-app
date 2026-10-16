@@ -44,6 +44,7 @@ tests/
   tracking_area.m               an AREA's region, owner and SCOPE — and a control's own hover area
   text_input.m                  the first slice of the text system, driven a keystroke at a time
   text_word_movement.m          and its WORD granularity: Option+arrow and Option+Delete, over the string
+  text_view_lines.m             and the first slice of the MULTI-LINE view: the line model, and what reads it
   text_field_cell.m             a FIELD's cell: its string, its face, and one edit session end to end
   text_field_control.m          and the VIEW above it: a press that opens a session, and what commits it
   text_field_bezel.m            and its BORDER's two shapes, read out of the corner PIXELS
@@ -114,6 +115,15 @@ the compositor is really gone.
   (`abc123` is one) and punctuation does not (`a...b` is two with three non-word characters between); a SELECTION
   collapses to its near end like any movement; Shift extends by the word (four characters, not one); and Option+Delete
   removes a word — or a selection WHOLE, word key or not — while Option+ForwardDelete removes the one after the caret.
+- **And the first slice of the multi-line text view** (`ctest`): `NSTextView` holds many lines where `NSText` holds one,
+  and the whole model is ONE sentence — a line is a `\n`-terminated run — which everything else reads. MEASURED: the
+  line's range EXCLUDES its own newline; a TRAILING newline is an EMPTY last line and an empty string is ONE line;
+  Return and Tab INSERT where a field ends a session and moves the focus; `-moveToBeginningOfLine:` means the CARET's
+  line rather than the document's; Up and Down move by line — and the arrow keys are mapped to them at last, a
+  one-line field simply answering neither — with the ends staying put; a click lands on the line it is over; TWO lines
+  write ink in TWO bands while one writes nothing in the second; and `-sizeToFit` grows with the line count (**23.7**
+  points for one line, **55.2** for three). Slice I does NOT wrap and does NOT scroll — a line wider than the view is
+  clipped — and the header names wrapping, scrolling and rich text as the slices above it rather than stubbing them.
 - **And the field, which is a cell under a view** (`ctest`, offscreen): `NSTextFieldCell` owns the string, the face
   and the three doors of an edit; `NSTextField` is the control above it, and it contributes the two things a cell
   cannot — a PRESS that opens a session with the WINDOW's field editor, and `-selectText:` for the same session with
@@ -244,10 +254,11 @@ the compositor is really gone.
   and the child clip is the child's FRAME region rather than its bounds rect — which was the same value only while the
   origin was zero. MEASURED: a mark at a document's own y 100..120 draws at 110 with the clip view at the top and at
   10 after a scroll of 100, in one run, through `-displayRect:`.
-- **`ctest`: 34 of 34 passed** (the keyboard and the seam, the AppKit and its input path, the controls and their
+- **`ctest`: 35 of 35 passed** (the keyboard and the seam, the AppKit and its input path, the controls and their
   metrics, the field control and its cell and its bezel and its placeholder and what it may hold, the text path and its
-  word granularity, what a drag costs, the resize by edge, the tracking engine, the clip view and the scroller and the
-  scroll view and the drawn offset, the chrome and what its buttons do, the chrome theme, the menus and activation).
+  word granularity and the first slice of the multi-line view, what a drag costs, the resize by edge, the tracking
+  engine, the clip view and the scroller and the scroll view and the drawn offset, the chrome and what its buttons do,
+  the chrome theme, the menus and activation).
 - **And the desktop's own text is SUB-PIXEL ANTIALIASED**, which is the AppKit's half of a renderer change in
   CoreGraphics: a window's surface is OPAQUE (`kCGImageAlphaNoneSkipFirst`), and the destination's opacity is
   exactly what decides whether a glyph is rasterised in colour. MEASURED on the live session: the window title's
@@ -381,10 +392,11 @@ still only a state the window marks and announces, because there is no Dock to p
 iconify in the protocol (Kestrel is parked). The chrome's toolbar pill is drawn and performs nothing, because
 there is no toolbar for it to toggle; the three symbols beside it ARE buttons now, and `tests/chrome_buttons.m`
 presses them. The input-method half of the text system is
-still absent (`-interpretKeyEvents:` does the direct mapping and says so), and the multi-line text view, the
-PARAGRAPH and DOCUMENT commands and the field editor are named rather than guessed. The WORD commands are NOT in
-that list any more: `tests/text_word_movement.m` drives Option+arrow and Option+Delete, because a word is a run of
-the string's own characters and needs no layout model — which the responder header now says. Each absence is stated
+still absent (`-interpretKeyEvents:` does the direct mapping and says so), and the PARAGRAPH commands and the field
+editor are named rather than guessed. The WORD commands are NOT in that list any more: `tests/text_word_movement.m`
+drives Option+arrow and Option+Delete, because a word is a run of the string's own characters and needs no layout
+model. And the MULTI-LINE TEXT VIEW has its FIRST SLICE: `NSTextView` holds many lines where `NSText` holds one
+(`tests/text_view_lines.m`), with WRAPPING, SCROLLING and rich text named in its own header as the slices above it. Each absence is stated
 rather than stubbed, and the refusals name themselves.
 
 ## Build

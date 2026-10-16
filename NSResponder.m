@@ -455,6 +455,20 @@
 - (void)moveWordRight:(id)sender				{ [[self nextResponder] moveWordRight:sender]; }
 - (void)moveWordLeftAndModifySelection:(id)sender	{ [[self nextResponder] moveWordLeftAndModifySelection:sender]; }
 - (void)moveWordRightAndModifySelection:(id)sender	{ [[self nextResponder] moveWordRightAndModifySelection:sender]; }
+- (void)moveUp:(id)sender				{ [[self nextResponder] moveUp:sender]; }
+- (void)moveDown:(id)sender				{ [[self nextResponder] moveDown:sender]; }
+- (void)moveUpAndModifySelection:(id)sender		{ [[self nextResponder] moveUpAndModifySelection:sender]; }
+- (void)moveDownAndModifySelection:(id)sender		{ [[self nextResponder] moveDownAndModifySelection:sender]; }
+- (void)moveToBeginningOfDocument:(id)sender		{ [[self nextResponder] moveToBeginningOfDocument:sender]; }
+- (void)moveToEndOfDocument:(id)sender			{ [[self nextResponder] moveToEndOfDocument:sender]; }
+- (void)moveToBeginningOfDocumentAndModifySelection:(id)sender
+{
+	[[self nextResponder] moveToBeginningOfDocumentAndModifySelection:sender];
+}
+- (void)moveToEndOfDocumentAndModifySelection:(id)sender
+{
+	[[self nextResponder] moveToEndOfDocumentAndModifySelection:sender];
+}
 - (void)deleteBackward:(id)sender			{ [[self nextResponder] deleteBackward:sender]; }
 - (void)deleteForward:(id)sender			{ [[self nextResponder] deleteForward:sender]; }
 - (void)deleteWordBackward:(id)sender			{ [[self nextResponder] deleteWordBackward:sender]; }
@@ -517,11 +531,18 @@
 
 		switch (c) {
 		case NSUpArrowFunctionKey:
+			/* **AND THE VERTICAL ARROWS ARE MAPPED NOW, WHERE THEY USED TO BE A NO-OP.** A one-line field has no line to
+			 * move to, so it answers neither command and the chain ends quietly — which is the same as the old `break` for
+			 * that class, and a real movement for a multi-line view. Shift still extends. */
+			command = shift ? @selector(moveUpAndModifySelection:) : @selector(moveUp:);
+			break;
 		case NSDownArrowFunctionKey:
+			command = shift ? @selector(moveDownAndModifySelection:) : @selector(moveDown:);
+			break;
 		case NSPageUpFunctionKey:
 		case NSPageDownFunctionKey:
-			/* NO VERTICAL MOVEMENT IN A SINGLE RUN: these are named as the family's remainder rather than mapped onto
-			 * a line, which would be inventing a document model this class does not have. */
+			/* NO PAGE MOVEMENT: a page is a viewport's height and this tier has no viewport — a clip view and its
+			 * document height are a later slice, named rather than faked onto a line. */
 			break;
 		case NSLeftArrowFunctionKey:
 			/* **AND OPTION IS THE WORD GRANULARITY OF THE SAME KEY**, which is one decision rather than a second

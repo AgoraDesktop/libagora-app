@@ -181,15 +181,20 @@ typedef NSUInteger NSInterfaceStyle;
  * has not been asked to handle it yet, and the chain's end in this tier is silent because there   *
  * is no beep to give it.                                                                          *
  *                                                                                                *
- * THIS WAS THE SUBSET A SINGLE-LINE FIELD NEEDED, AND THE WORD COMMANDS HAVE SINCE JOINED IT.     *
- * The header used to name `-moveWordLeft:` and `-deleteWordForward:` among the family that        *
- * "need[s] a LAYOUT MODEL — words, paragraphs, several lines — that one line of text does not     *
- * have". THAT REASON WAS WRONG FOR THE WORD COMMANDS AND IS CORRECTED HERE: a WORD is a run of    *
- * the STRING's own characters, so a word command is arithmetic over the text a one-line field     *
- * already holds, and it needs no layout at all. What genuinely does need a layout model is the    *
- * REST of that list — the PARAGRAPH and DOCUMENT commands (several lines), `-transpose:` and the  *
- * marked-text family (a position model), and the substitution and container-break insertions —    *
- * and those stay named rather than guessed.                                                        *
+ * THIS WAS THE SUBSET A SINGLE-LINE FIELD NEEDED, AND EVERY COMMAND THAT NEEDS ONLY THE STRING    *
+ * HAS SINCE JOINED IT. The header used to name `-moveWordLeft:` and `-deleteWordForward:` among  *
+ * the family that "need[s] a LAYOUT MODEL — words, paragraphs, several lines — that one line of   *
+ * text does not have". THAT REASON WAS WRONG FOR THE WORD COMMANDS: a WORD is a run of the       *
+ * STRING's own characters, so a word command is arithmetic over the text a one-line field already  *
+ * holds. The two DOCUMENT ends below are the same kind of fact — they are the string's own two     *
+ * ends — and they are declared for the same reason.                                                *
+ *                                                                                                  *
+ * WHAT GENUINELY NEEDS A LAYOUT IS THE VERTICAL PAIR AND THE PARAGRAPH FAMILY. `-moveUp:` and      *
+ * `-moveDown:` are declared here and left UNIMPLEMENTED by a one-line field because it has        *
+ * nowhere to move TO; `NSTextView` implements them against its line model, and the arrow keys are  *
+ * mapped to them there. The PARAGRAPH commands, `-transpose:`, the marked-text family and the      *
+ * substitution and container-break insertions stay NAMED rather than guessed — each needs a model  *
+ * (paragraphs, a position, a marked range) this tier has not built.                                *
  * ============================================================================================ */
 
 /* INSERTION: what an input context, or a key binding, produces. */
@@ -216,6 +221,19 @@ typedef NSUInteger NSInterfaceStyle;
 - (void)moveWordLeftAndModifySelection:(nullable id)sender;
 - (void)moveWordRight:(nullable id)sender;
 - (void)moveWordRightAndModifySelection:(nullable id)sender;
+
+/* **AND THE VERTICAL PAIR AND THE TWO DOCUMENT ENDS.** A one-line field implements the document ends (the string's own
+ * two ends need no layout) and NOT the vertical pair, which has nowhere to move to; a multi-line view implements all
+ * four. They are declared here because a command is sent to the FIRST RESPONDER and WHICH responder can honour it is a
+ * question the chain answers rather than this header — the same reason every other command in this block is here. */
+- (void)moveUp:(nullable id)sender;
+- (void)moveDown:(nullable id)sender;
+- (void)moveUpAndModifySelection:(nullable id)sender;
+- (void)moveDownAndModifySelection:(nullable id)sender;
+- (void)moveToBeginningOfDocument:(nullable id)sender;
+- (void)moveToEndOfDocument:(nullable id)sender;
+- (void)moveToBeginningOfDocumentAndModifySelection:(nullable id)sender;
+- (void)moveToEndOfDocumentAndModifySelection:(nullable id)sender;
 
 /* DELETION. */
 - (void)deleteBackward:(nullable id)sender;
