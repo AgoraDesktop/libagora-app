@@ -27,6 +27,10 @@
 		 * control face a button wears. A field is a hole in the surface that holds something; a button is a thing
 		 * standing on it. */
 		_drawsBackground = YES;
+		/* **AND A FIELD'S BORDER IS ROUNDED UNTIL SOMEBODY SAYS SQUARE.** This is the one default in this class that
+		 * Objective-C's zeroing would get wrong — `NSTextFieldSquareBezel` is 0 and `NSTextFieldRoundedBezel` is 1, the
+		 * opposite of the button family's convention — so it is set out loud. */
+		_bezelStyle = NSTextFieldRoundedBezel;
 		/* **AND THE STRING A CELL IS MADE WITH BECOMES ITS VALUE, WHICH THE BASE'S INITIALISER DOES NOT DO.** `NSCell
 		 * -initTextCell:` stores what it was given in `-_title`; a FIELD draws and measures `-_objectValue`, so a cell
 		 * made with a string would otherwise draw with a value it does not have. `-setStringValue:` writes both doors
@@ -120,6 +124,20 @@
 	_drawsBackground = flag;
 }
 
+/* **THE TWO BEZEL STYLES, WHICH ARE STORED AND READ BY THE DRAWING ALONE.** See the header for why the pair is a
+ * `NSTextFieldBezelStyle` rather than the button family's `NSBezelStyle`; here it is enough that the setter is plain
+ * storage — a cell has no view to redraw, and the control that owns it owes the `-setNeedsDisplay:` when it forwards
+ * the change. */
+- (NSTextFieldBezelStyle)bezelStyle
+{
+	return _bezelStyle;
+}
+
+- (void)setBezelStyle:(NSTextFieldBezelStyle)style
+{
+	_bezelStyle = style;
+}
+
 - (NSColor *)backgroundColor
 {
 	return _backgroundColor;
@@ -185,9 +203,15 @@
 	 * half the stroke for the reason `NSText` records: a stroke is centred on its path, so a border drawn AT the edge
 	 * spends half its ink outside the control, where a view's own clip would cut it. */
 	NSRect faceRect = NSInsetRect(cellFrame, NS_CELL_BEZEL_WIDTH / 2.0, NS_CELL_BEZEL_WIDTH / 2.0);
+	/* **AND THE CORNERS ARE THE ONE THING THE BEZEL STYLE CHANGES.** One path constructor does both: a rounded field
+	 * passes `NS_CELL_BEZEL_RADIUS` and a square one passes ZERO, which `CGPathAddRoundedRect` treats as the rectangle
+	 * it is (MEASURED in `libagora-drawing`: the zero case is a plain `CGPathAddRect`). So a square field is not a
+	 * second drawing path — it is the same path with its corners not cut — which is what keeps every other measure
+	 * (the border's inset, its width, the text rect) identical between the two. */
+	CGFloat radius = (_bezelStyle == NSTextFieldSquareBezel) ? 0.0 : NS_CELL_BEZEL_RADIUS;
 	NSBezierPath *face = [NSBezierPath bezierPathWithRoundedRect:faceRect
-							     xRadius:NS_CELL_BEZEL_RADIUS
-							     yRadius:NS_CELL_BEZEL_RADIUS];
+							     xRadius:radius
+							     yRadius:radius];
 	NSColor *fill = [self cg_fieldFillColor];
 
 	if (fill != nil) {

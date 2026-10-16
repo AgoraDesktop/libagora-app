@@ -127,6 +127,20 @@
 	[self setNeedsDisplay:YES];
 }
 
+/* **AND THE BORDER'S SHAPE IS A FORWARD LIKE THE REST, WITH THE REDISPLAY A VIEW OWES.** The cell stores the style and
+ * the DRAWING reads it, so the control's half is exactly what `-setBordered:`'s is: tell the cell, then mark this view
+ * for redisplay. A cell has no view to ask, which is why the redisplay cannot live in its setter. */
+- (NSTextFieldBezelStyle)bezelStyle
+{
+	return [(NSTextFieldCell *)[self cell] bezelStyle];
+}
+
+- (void)setBezelStyle:(NSTextFieldBezelStyle)style
+{
+	[(NSTextFieldCell *)[self cell] setBezelStyle:style];
+	[self setNeedsDisplay:YES];
+}
+
 /* ---- THE KEYBOARD, WHICH A FIELD SURRENDERS TO ITS EDITOR ------------------------------------------- */
 
 /* **A FIELD WANTS THE KEYBOARD ONLY WHEN IT HAS SOMEWHERE TO PUT A CARET.** An editable, enabled field says yes; a

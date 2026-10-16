@@ -201,6 +201,14 @@ target_link_libraries(text_field_control PRIVATE App)
 add_test(NAME appkit-text-field-control COMMAND text_field_control)
 set_tests_properties(appkit-text-field-control PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
 
+# **AND THE FIELD'S TWO BORDER SHAPES, WHICH ARE A CLAIM ABOUT PIXELS.** The square/rounded pair is read where the ink
+# falls: the four corner pixels carry the border for a square field and none for a rounded one, and every measure that
+# is NOT the corner is checked to agree. Offscreen, into a bitmap rep.
+add_executable(text_field_bezel text_field_bezel.m)
+target_link_libraries(text_field_bezel PRIVATE App m)
+add_test(NAME appkit-text-field-bezel COMMAND text_field_bezel)
+set_tests_properties(appkit-text-field-bezel PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
+
 # **AND THE DISPLAY PATH.** The ink tests are all offscreen; this one puts a menu's window on a headless
 # compositor and reads the COMPOSITOR'S OWN FRAMEBUFFER back, which is the only place the present can be seen.
 # It skips when there is no window server, so a component's tests still do not need a sibling's build.

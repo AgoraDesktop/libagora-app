@@ -42,6 +42,18 @@
 
 NS_ASSUME_NONNULL_BEGIN
 
+/* **AND A FIELD'S TWO BEZEL SHAPES, WHICH ARE APPLE'S OWN VOCABULARY AND NOT A BUTTON'S.** `NSButtonCell` has
+ * `NSBezelStyle` — fifteen values, none of them a field's — and `NSTextFieldCell` has this pair instead, declared in
+ * Apple's `NSTextFieldCell.h` rather than in `NSCell.h`. The two cases are the same face drawn twice: SQUARE means the
+ * border is a rectangle, ROUNDED means its corners take `NS_CELL_BEZEL_RADIUS`. **ZERO IS SQUARE HERE, WHICH IS THE
+ * OPPOSITE OF THE BUTTON'S** — `NSRoundedBezelStyle` IS 1 over there and zero is not a bezel style at all — so the
+ * default cannot come from Objective-C's zeroing and is set out loud where the cell is made. */
+enum {
+	NSTextFieldSquareBezel = 0,
+	NSTextFieldRoundedBezel = 1
+};
+typedef NSUInteger NSTextFieldBezelStyle;
+
 @interface NSTextFieldCell : NSActionCell
 {
 	/* THE FACE'S OWN TWO COLOURS. The background is what the field shows when it draws one, and it is WHITE by
@@ -51,6 +63,10 @@ NS_ASSUME_NONNULL_BEGIN
 	NSColor *_backgroundColor;	/* RETAINED */
 	NSColor *_textColor;		/* RETAINED */
 	BOOL _drawsBackground;
+	/* **AND THE SHAPE OF THAT FACE'S BORDER, WHICH IS THIS CLASS'S OWN VOCABULARY (both cases are declared above).**
+	 * ROUNDED is the default, which is Apple's for a text field — and it is SET rather than left to the zeroing,
+	 * because zero is SQUARE here: the opposite of the button family, where zero is not a bezel style at all. */
+	NSTextFieldBezelStyle _bezelStyle;
 	/* **THE CALLER'S DELEGATE FOR THE SESSION IN FLIGHT, WHICH IS NOT THE SAME THING AS THE CELL'S OWN.** This cell
 	 * IS the editor's delegate while an edit is running — it has to be, because reading the string back is its job —
 	 * so the delegate a caller handed to `-selectWithFrame:...` is kept HERE and told what happened afterwards. NOT
@@ -82,6 +98,14 @@ NS_ASSUME_NONNULL_BEGIN
 - (nullable NSString *)cg_contentText;
 
 /* ---- THE FACE ---------------------------------------------------------------------------------------- */
+
+/* **THE TWO BEZEL STYLES, WHICH ARE A FACT ABOUT THE BORDER AND NOT ABOUT THE WORDS.** Only the DRAWING reads them:
+ * `-drawWithFrame:` builds its border path with `NS_CELL_BEZEL_RADIUS` for a rounded field and with zero for a square
+ * one, and `NSBezierPath`'s rounded-rectangle constructor treats a zero radius as the rectangle it is (measured: the
+ * zero case is a plain `CGPathAddRect` in `libagora-drawing`). The margin, the radius of anything else, and the text
+ * rect are the same at either setting — a square field is the same field with its corners not cut. */
+- (NSTextFieldBezelStyle)bezelStyle;
+- (void)setBezelStyle:(NSTextFieldBezelStyle)style;
 
 - (BOOL)drawsBackground;
 - (void)setDrawsBackground:(BOOL)flag;

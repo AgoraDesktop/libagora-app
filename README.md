@@ -45,6 +45,7 @@ tests/
   text_input.m                  the first slice of the text system, driven a keystroke at a time
   text_field_cell.m             a FIELD's cell: its string, its face, and one edit session end to end
   text_field_control.m          and the VIEW above it: a press that opens a session, and what commits it
+  text_field_bezel.m            and its BORDER's two shapes, read out of the corner PIXELS
   clip_view.m                   the INSIDE of a scroll view: the arithmetic, and the wire that re-runs it
   scroller.m                    and its BAR: a fraction into a knob, a point into a part, a drag back into a value
   scroll_view.m                 and the FRAME that joins them: the tiling, the loop, and -enclosingScrollView
@@ -122,6 +123,13 @@ the compositor is really gone.
   the CONTROL, never the editor, and its `userInfo` names the editor under `NSFieldEditorUserInfoKey`; and a listener
   that conforms to NOTHING is told the same three by registering. The formatter trio and the two `NSTextView` methods
   are DECLARED AND NEVER ASKED, each named for what it needs (formatter-driven validation, and command interception).
+- **And the field's border has two shapes** (`ctest`, offscreen): `NSTextFieldBezelStyle`'s square and rounded pair is
+  the same face with its corners cut or not, and the claim is read where the INK falls — the four corner pixels carry
+  the border for a square field and NONE for a rounded one, while the middle of an edge carries it at both settings,
+  and the text rect and the cell's own measurement agree. A fresh field is ROUNDED, which is the default that matters
+  because zero is SQUARE here: the opposite of the button family, where zero is not a bezel style at all. The whole
+  thing is one path constructor with a radius that is `NS_CELL_BEZEL_RADIUS` or zero, so a square field is not a
+  second drawing path — just this one with its corners not cut.
 - **The chrome** (`ctest`, offscreen): the title bar's symbols are SHAPES in pixels — ink on both diagonals of
   the X, a thick stroke across the minus, and a pill rounded at both caps — the title is centred and bold, and
   each symbol appears only for the style-mask bit that asks for it.
@@ -204,10 +212,10 @@ the compositor is really gone.
   and the child clip is the child's FRAME region rather than its bounds rect — which was the same value only while the
   origin was zero. MEASURED: a mark at a document's own y 100..120 draws at 110 with the clip view at the top and at
   10 after a scroll of 100, in one run, through `-displayRect:`.
-- **`ctest`: 30 of 30 passed** (the keyboard and the seam, the AppKit and its input path, the controls and their
-  metrics, the field control and its cell, what a drag costs, the resize by edge, the tracking engine, the text path,
-  the clip view and the scroller and the scroll view and the drawn offset, the chrome and what its buttons do, the
-  chrome theme, the menus and activation).
+- **`ctest`: 31 of 31 passed** (the keyboard and the seam, the AppKit and its input path, the controls and their
+  metrics, the field control and its cell and its bezel, what a drag costs, the resize by edge, the tracking engine, the
+  text path, the clip view and the scroller and the scroll view and the drawn offset, the chrome and what its buttons
+  do, the chrome theme, the menus and activation).
 - **And the desktop's own text is SUB-PIXEL ANTIALIASED**, which is the AppKit's half of a renderer change in
   CoreGraphics: a window's surface is OPAQUE (`kCGImageAlphaNoneSkipFirst`), and the destination's opacity is
   exactly what decides whether a glyph is rasterised in colour. MEASURED on the live session: the window title's

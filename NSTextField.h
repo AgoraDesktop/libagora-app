@@ -27,10 +27,6 @@
  *     declares `NSTextField : NSControl <NSUserInterfaceValidations>` and keeps a separate action for a value a
  *     formatter REJECTED; this tier has neither that protocol nor a formatter-driven editing path, so both are named
  *     rather than half-declared.
- *   * `-bezelStyle`/`-setBezelStyle:` AND THE `NSTextFieldBezelStyle` VOCABULARY. Its two cases place a field's
- *     border square or rounded, which is a DRAWING decision the cell makes — so it belongs with the cell's
- *     `-drawWithFrame:`, which draws one rounded shape today. Shipping the vocabulary without the branch would be a
- *     door that changes a number and nothing on screen.
  *   * `-placeholderString`, `-allowsEditingTextAttributes:`, `-importsGraphics:` AND THE AFTER-10.6 CONSTRUCTORS
  *     (`+labelWithString:`, `+textFieldWithString:`, `+wrappingLabelWithString:`). The placeholders are the CELL's in
  *     the era and this cell draws none; the attributed-string category needs the attribute vocabulary to survive an
@@ -44,6 +40,10 @@
 #define APPKIT_NSTEXTFIELD_H
 
 #import <AppKit/NSControl.h>
+/* **AND THE CELL'S HEADER, WHICH IS WHERE `NSTextFieldBezelStyle` LIVES — APPLE IMPORTS IT AND SO DOES THIS.** A
+ * field's bezel vocabulary is declared one class down, so the control's header has to reach it; the import is
+ * one-directional (`NSTextFieldCell.h` imports `NSActionCell.h` and never this file), so it closes no cycle. */
+#import <AppKit/NSTextFieldCell.h>
 
 @class NSColor;
 @class NSEvent;
@@ -99,6 +99,13 @@ NS_ASSUME_NONNULL_BEGIN
 - (void)setBezeled:(BOOL)flag;
 - (BOOL)isBordered;
 - (void)setBordered:(BOOL)flag;
+
+/* **AND THE TWO BORDER SHAPES, WHICH ARE THE ONE PART OF A FIELD'S FACE A CALLER PICKS.** `NSTextFieldBezelStyle`'s
+ * two cases — square and rounded — are declared in `NSTextFieldCell.h`, and this pair is the same forward as the flags
+ * above. UNLIKE A BUTTON'S BEZEL, A FIELD'S CHANGES NO METRIC: the border is the same width on the same rect and only
+ * the corners differ, so nothing here has to re-measure. */
+- (NSTextFieldBezelStyle)bezelStyle;
+- (void)setBezelStyle:(NSTextFieldBezelStyle)style;
 
 /* ---- THE KEYBOARD, WHICH A FIELD SURRENDERS TO ITS EDITOR ------------------------------------------- */
 
