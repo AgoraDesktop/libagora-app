@@ -36,6 +36,16 @@
 #import <AppKit/NSFont.h>
 #import <AppKit/NSStringDrawing.h>
 #import <AppKit/NSAttributedString.h>
+/* **AND THE TEXT SYSTEM, WHICH IS WHAT THIS DEMONSTRATION NOW HAS TO SHOW.** The store the view reads, the tab stops a
+ * `\t` goes to, the attachment that stands for a picture, and the table whose cells are paragraphs. */
+#import <AppKit/NSTextView.h>
+#import <AppKit/NSTextStorage.h>
+#import <AppKit/NSTextTab.h>
+#import <AppKit/NSTextAttachment.h>
+#import <AppKit/NSTextTable.h>
+#import <AppKit/NSParagraphStyle.h>
+#import <AppKit/NSImage.h>
+#import <AppKit/NSBitmapImageRep.h>
 #import <Foundation/Foundation.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -57,13 +67,145 @@
 	NSButton *readout;
 	NSSlider *slider;
 	NSSlider *plain;
+	/* **AND THE PLAYGROUND WINDOW, KEPT SO A SECOND CHOICE BRINGS IT FORWARD rather than making another.** */
+	NSWindow *_playground;
 }
 - (BOOL)validateMenuItem:(NSMenuItem *)item;
 - (void)toggleCheckbox:(id)sender;
 - (void)sliderMoved:(id)sender;
 - (void)noop:(id)sender;
 - (void)choiceMade:(id)sender;
+- (void)showPlayground:(id)sender;
 @end
+
+/* ============================================================================================ *
+ * THE TEXT PLAYGROUND: A SCROLLABLE, EDITABLE `NSTextView` THAT SHOWS WHAT THE TEXT SLICES DRAW.   *
+ *                                                                                                *
+ * **IT IS A THING TO PLAY WITH RATHER THAN A TEST.** Type in it, select, click; every feature the *
+ * text slices added is in ONE store so the eye can move between them: runs of colour and the two  *
+ * rules, a background span, a centred paragraph, tab stops that line a column up, an attachment   *
+ * that stands for a picture, and a two-cell table. THE STORE IS THE VIEW'S OWN, reached through   *
+ * `-textStorage` — which is the slice this whole playground exists to make visible.              *
+ * ============================================================================================ */
+
+/* A PICTURE WITH SOMETHING TO SEE: a small two-tone tile, built in a bitmap and handed to an `NSImage`. An attachment
+ * over a blank image would prove the box but show nothing. */
+static NSImage *fn_playground_picture(CGFloat w, CGFloat h)
+{
+	NSBitmapImageRep *rep = [[NSBitmapImageRep alloc] initWithBitmapDataPlanes:NULL pixelsWide:(NSInteger)w
+		pixelsHigh:(NSInteger)h bitsPerSample:8 samplesPerPixel:4 hasAlpha:YES isPlanar:NO
+		colorSpaceName:NSCalibratedRGBColorSpace bytesPerRow:(NSInteger)w * 4 bitsPerPixel:32];
+	NSImage *image = [[NSImage alloc] initWithSize:NSMakeSize(w, h)];
+
+	[NSGraphicsContext setCurrentContext:[NSGraphicsContext graphicsContextWithBitmapImageRep:rep]];
+	[[NSColor colorWithCalibratedRed:0.20 green:0.45 blue:0.85 alpha:1.0] setFill];
+	[[NSBezierPath bezierPathWithRect:NSMakeRect(0.0, 0.0, w, h)] fill];
+	[[NSColor whiteColor] setFill];
+	[[NSBezierPath bezierPathWithRect:NSMakeRect(w * 0.25, h * 0.25, w * 0.5, h * 0.5)] fill];
+	[image addRepresentation:rep];
+	[rep release];
+	return [image autorelease];
+}
+
+/* **AND THE STORE, FILLED SECTION BY SECTION.** Each block is appended to a string and its range remembered, so an
+ * attribute can be set over exactly the characters a person can see; the ranges are arithmetic over the string rather
+ * than numbers written down, so moving a word does not silently move an attribute onto it. */
+static void fn_playground_fill(NSTextView *view)
+{
+	NSMutableString *text = [[NSMutableString alloc] init];
+	NSTextStorage *store;
+	NSFont *titleFont = [NSFont systemFontOfSize:20.0];
+	NSFont *bodyFont = [NSFont systemFontOfSize:14.0];
+	NSRange titleRange, runsRange, red, blue, struck, highlight;
+	NSRange tabsRange, attachRange, box, leftRange, rightRange;
+	NSTextAttachment *attachment = [NSTextAttachment textAttachmentWithImage:fn_playground_picture(28.0, 20.0)];
+	NSTextTable *table = [[[NSTextTable alloc] init] autorelease];
+	NSTextTableBlock *leftCell = [[[NSTextTableBlock alloc] initWithTable:table startingRow:0 rowSpan:1
+		startingColumn:0 columnSpan:1] autorelease];
+	NSTextTableBlock *rightCell = [[[NSTextTableBlock alloc] initWithTable:table startingRow:0 rowSpan:1
+		startingColumn:1 columnSpan:1] autorelease];
+	NSMutableParagraphStyle *centre = [[[NSParagraphStyle defaultParagraphStyle] mutableCopy] autorelease];
+	NSMutableParagraphStyle *tabs = [[[NSParagraphStyle defaultParagraphStyle] mutableCopy] autorelease];
+	NSMutableParagraphStyle *leftStyle = [[[NSParagraphStyle defaultParagraphStyle] mutableCopy] autorelease];
+	NSMutableParagraphStyle *rightStyle = [[[NSParagraphStyle defaultParagraphStyle] mutableCopy] autorelease];
+	unichar boxChar = (unichar)NSAttachmentCharacter;
+
+	/* **THE STRING IS BUILT FIRST AND THE ATTRIBUTES SECOND**, so every range below is arithmetic over characters a
+	 * person can see rather than a number written down that a moved word would silently miss. */
+	titleRange.location = [text length];
+	[text appendString:@"Agora's text playground\n\n"];
+	titleRange.length = [text length] - titleRange.location;
+
+	runsRange.location = [text length];
+	[text appendString:@"Runs: red blue struck highlight — type here and inherit what you type into.\n\n"];
+	runsRange.length = [text length] - runsRange.location;
+	red = NSMakeRange(runsRange.location + 6, 3);
+	blue = NSMakeRange(runsRange.location + 10, 4);
+	struck = NSMakeRange(runsRange.location + 15, 6);
+	highlight = NSMakeRange(runsRange.location + 22, 9);
+
+	tabsRange.location = [text length];
+	[text appendString:@"Tabs:\talpha\tbeta\none:\tone\ttwo\n\n"];
+	tabsRange.length = [text length] - tabsRange.location;
+
+	attachRange.location = [text length];
+	[text appendString:@"Attachment: "];
+	box = NSMakeRange([text length], 1);
+	[text appendFormat:@"%C", boxChar];
+	[text appendString:@" sits inline; the text flows past it.\n\n"];
+	attachRange.length = [text length] - attachRange.location;
+
+	[text appendString:@"cell one\n"];
+	leftRange = NSMakeRange(attachRange.location + attachRange.length, 9);
+	[text appendString:@"cell two"];
+	rightRange = NSMakeRange(leftRange.location + leftRange.length, 8);
+
+	/* AND NOW THE VIEW OWNS THE STRING, which is the one edit that replaces everything. */
+	[view setString:text];
+	store = [view textStorage];
+	[text release];
+
+	/* THE TITLE: a larger face, centred. */
+	[store addAttribute:NSFontAttributeName value:titleFont range:titleRange];
+	[centre setAlignment:NSCenterTextAlignment];
+	[store addAttribute:NSParagraphStyleAttributeName value:centre range:titleRange];
+
+	/* THE RUNS: a red word, a blue underlined one, a struck-through one, and a highlighted span. */
+	[store addAttribute:NSFontAttributeName value:bodyFont range:runsRange];
+	[store addAttribute:NSForegroundColorAttributeName value:[NSColor redColor] range:red];
+	[store addAttribute:NSForegroundColorAttributeName value:[NSColor blueColor] range:blue];
+	[store addAttribute:NSUnderlineStyleAttributeName value:[NSNumber numberWithInteger:NSUnderlineStyleSingle]
+		      range:blue];
+	[store addAttribute:NSStrikethroughStyleAttributeName
+		      value:[NSNumber numberWithInteger:NSUnderlineStyleSingle] range:struck];
+	[store addAttribute:NSBackgroundColorAttributeName value:[NSColor yellowColor] range:highlight];
+
+	/* THE TAB STOPS: two lines whose columns land on the same two places. */
+	[tabs addTabStop:[[[NSTextTab alloc] initWithType:NSLeftTabStopType location:90.0] autorelease]];
+	[tabs addTabStop:[[[NSTextTab alloc] initWithType:NSLeftTabStopType location:180.0] autorelease]];
+	[store addAttribute:NSFontAttributeName value:bodyFont range:tabsRange];
+	[store addAttribute:NSParagraphStyleAttributeName value:tabs range:tabsRange];
+
+	/* THE ATTACHMENT: a picture that occupies a character's worth of the line and none of its ink. */
+	[store addAttribute:NSFontAttributeName value:bodyFont range:attachRange];
+	[store addAttribute:NSAttachmentAttributeName value:attachment range:box];
+
+	/* THE TABLE: two cells in one row, each a paragraph carrying its block. */
+	[table setNumberOfColumns:2];
+	[table setBackgroundColor:[NSColor colorWithCalibratedWhite:0.94 alpha:1.0]];
+	[table setBorderColor:[NSColor darkGrayColor] forEdge:(NSTextBlockMinXEdge | NSTextBlockMaxXEdge
+							  | NSTextBlockMinYEdge | NSTextBlockMaxYEdge)];
+	[table setWidth:1.0 type:NSTextBlockAbsoluteValueType forLayer:NSTextBlockBorder];
+	[table setWidth:6.0 type:NSTextBlockAbsoluteValueType forLayer:NSTextBlockPadding];
+	[leftStyle addTextBlock:leftCell];
+	[rightStyle addTextBlock:rightCell];
+	[store addAttribute:NSFontAttributeName value:bodyFont range:leftRange];
+	[store addAttribute:NSFontAttributeName value:bodyFont range:rightRange];
+	[store addAttribute:NSParagraphStyleAttributeName value:leftStyle range:leftRange];
+	[store addAttribute:NSParagraphStyleAttributeName value:rightStyle range:rightRange];
+
+	[view setNeedsDisplay:YES];
+}
 
 @implementation AGControlsController
 
@@ -127,6 +269,40 @@
 	fprintf(stderr, "controls: popup chose \"%s\" at index %ld\n",
 		[[(NSPopUpButton *)sender titleOfSelectedItem] UTF8String],
 		(long)[(NSPopUpButton *)sender indexOfSelectedItem]);
+}
+
+/* **THE PLAYGROUND WINDOW, MADE ONCE AND BROUGHT FORWARD AFTER.** A scrollable, EDITABLE `NSTextView` over the store
+ * `-fn_playground_fill` builds, so a person can type and select in exactly the text the slices drew. Its width is the
+ * scroll view's content width, which is what makes the wrap visible when the window is resized by its edge. */
+- (void)showPlayground:(id)sender
+{
+	(void)sender;
+	if (_playground == nil) {
+		NSWindow *w = [[NSWindow alloc] initWithContentRect:NSMakeRect(180, 180, 560, 460)
+			styleMask:(NSTitledWindowMask | NSClosableWindowMask | NSMiniaturizableWindowMask
+				   | NSResizableWindowMask)
+			backing:NSBackingStoreBuffered defer:NO];
+		NSScrollView *scroll = [[NSScrollView alloc] initWithFrame:NSMakeRect(0, 0, 560, 460)];
+		NSTextView *tv;
+
+		[scroll setBorderType:NSLineBorder];
+		[scroll setHasVerticalScroller:YES];
+		[scroll setAutoresizingMask:(NSViewWidthSizable | NSViewHeightSizable)];
+		tv = [[NSTextView alloc] initWithFrame:NSMakeRect(0, 0, 544, 460)];
+		[tv setDrawsBackground:YES];
+		[tv setBackgroundColor:[NSColor whiteColor]];
+		[tv setVerticallyResizable:YES];
+		fn_playground_fill(tv);
+		[scroll setDocumentView:tv];
+		[w setContentView:scroll];
+		[w setTitle:@"Text playground"];
+		[w setReleasedWhenClosed:NO];
+		_playground = w;
+		[tv release];
+		[scroll release];
+		fprintf(stderr, "controls: playground opened\n");
+	}
+	[_playground makeKeyAndOrderFront:nil];
 }
 
 @end
@@ -470,6 +646,10 @@ int main(int argc, char **argv)
 		 * menu's own shortcut is a search field this tier has not got, and a made-up key would be one nobody typed. */
 		add_menu(bar, @"File", [NSArray arrayWithObjects:@"New", @"Open", @"Close", nil],
 			 [NSArray arrayWithObjects:@"n", @"o", @"w", nil], controller, @selector(noop:));
+		/* **AND A DEMO MENU, WHERE THE TEXT PLAYGROUND LIVES.** One item, one window: the rich-text, tab-stop,
+		 * attachment and table slices in a store a person can type in. */
+		add_menu(bar, @"Demo", [NSArray arrayWithObjects:@"Text playground", nil],
+			 [NSArray arrayWithObjects:@"t", nil], controller, @selector(showPlayground:));
 		add_menu(bar, @"Edit", [NSArray arrayWithObjects:@"Undo", @"Redo", nil],
 			 [NSArray arrayWithObjects:@"z", @"Z", nil], controller, @selector(noop:));
 		add_menu(bar, @"View", [NSArray arrayWithObjects:@"Show Grid", @"Show Ruler", nil],
@@ -477,6 +657,11 @@ int main(int argc, char **argv)
 		add_menu(bar, @"Help", [NSArray arrayWithObjects:@"Agora Help", nil],
 			 [NSArray arrayWithObjects:@"", nil], controller, @selector(noop:));
 		[app setMainMenu:bar];
+
+		/* **AND THE PLAYGROUND IS PUT ON SCREEN WITH THE WINDOW, SO THERE IS NOTHING TO GO LOOKING FOR.** It is opened
+		 * BEFORE the controls window is made key, so the CONTROLS keep the keyboard and their field keeps its editor —
+		 * the playground is there to click into when the eye moves to it. */
+		[controller showPlayground:nil];
 
 		/* **AND IT IS MADE KEY, WHICH IS WHAT A FRONTMOST WINDOW IS.** A theme's four states are the point of
 		 * looking at it, and `-orderFront:` alone leaves the window inactive — so the ACTIVE art a theme ships for a
