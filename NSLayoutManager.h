@@ -172,6 +172,11 @@ NS_ASSUME_NONNULL_BEGIN
 - (CGFloat)cg_offsetForGlyphAtIndex:(NSUInteger)glyphIndex;
 - (NSUInteger)cg_glyphIndexForPoint:(NSPoint)point inTextContainer:(NSTextContainer *)container;
 
+/* AND THE BASELINE A GLYPH SITS ON, which is PER-FRAGMENT once a paragraph style can change the line height: the
+ * fragment records its own when it is laid out, and a caller holding a caret does not have to reconstruct the
+ * arithmetic that put it there. */
+- (CGFloat)cg_baselineForGlyphAtIndex:(NSUInteger)glyphIndex;
+
 /* AND THE LINE HEIGHT THE FRAGMENTS ARE LAID IN, so a caller that owns a view's height does not have to guess the
  * font the manager measured with. */
 - (CGFloat)cg_lineHeight;

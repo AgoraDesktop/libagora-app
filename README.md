@@ -51,7 +51,8 @@ tests/
   text_layout_attributes.m      and the BACKGROUND, UNDERLINE and STRIKETHROUGH keys the manager paints, run by run
   text_layout_overflow.m        and the SECOND CONTAINER: what does not fit the first is carried to the next
   text_layout_glyphs.m          and the GLYPH STORE: the generated lines, and the four reverse lookups
-  text_paragraph_style.m        and the PARAGRAPH STYLE: the value object, and the two properties the layout reads
+  text_paragraph_style.m        and the PARAGRAPH STYLE: the value object, and the alignment and line-break mode
+  text_paragraph_geometry.m     and its GEOMETRY: the indents, the spacings and the line heights the layout reads
   text_word_movement.m          and its WORD granularity: Option+arrow and Option+Delete, over the string
   text_view_lines.m             and the first slice of the MULTI-LINE view: the line model, and what reads it
   text_view_wrapping.m          and the slice above it: the same model WRAPPED to the view's width
@@ -268,6 +269,17 @@ the compositor is really gone.
   `-removeAttribute:range:` edit their runs DIRECTLY, so `-addAttribute:` never reached `-setAttributes:range:` and
   announced nothing — a style put into a store that way never reached its manager. `NSTextStorage` now overrides both
   and announces, which is the exception its own header names.
+- **And the PARAGRAPH STYLE'S GEOMETRY, which is read now** (`ctest`): `-lineSpacing`, `-paragraphSpacing`,
+  `-paragraphSpacingBefore`, `-firstLineHeadIndent`, `-headIndent`, `-tailIndent`, `-lineHeightMultiple`,
+  `-minimumLineHeight` and `-maximumLineHeight` all move the layout. Each fragment now records its OWN baseline and its
+  own flow band (any leading space plus the line), so a line's height and its place are facts the fragment carries
+  rather than arithmetic a caller reconstructs. MEASURED: the DEFAULTS are unmoved (padding at x=**10**, three natural
+  lines); `-lineSpacing:5` adds its gap between a wrapping paragraph's lines; `-paragraphSpacing:6` plus
+  `-paragraphSpacingBefore:4` add **10** at each paragraph boundary; a first-line indent of **20** and a head indent of
+  **8** put line 0 at x=**30** and line 1 at x=**18**; a tail indent of **60** wraps the same paragraph into more
+  lines; and a two-times multiple, a minimum and a maximum set the band to **2*base**, **base+12** and **base-4**. The
+  hyphenation factor, the default tab interval and the base writing direction are the three the layout still does not
+  read, each named at its door.
 - **And the MARKED TEXT, which is what an input method composes through** (`ctest`): `NSTextInput.h` declares the eleven
   doors an input system drives a text view through, `NSTextView` adopts the protocol, and the composition is an ordinary
   edit with a remembered range — the marked characters really go into the store, so the caret and the layout work as
@@ -410,7 +422,7 @@ the compositor is really gone.
   and the child clip is the child's FRAME region rather than its bounds rect — which was the same value only while the
   origin was zero. MEASURED: a mark at a document's own y 100..120 draws at 110 with the clip view at the top and at
   10 after a scroll of 100, in one run, through `-displayRect:`.
-- **`ctest`: 48 of 48 passed** (the keyboard and the seam, the AppKit and its input path, the controls and their
+- **`ctest`: 49 of 49 passed** (the keyboard and the seam, the AppKit and its input path, the controls and their
   metrics, the field control and its cell and its bezel and its placeholder and what it may hold, the text path and its
   word granularity and the multi-line view and its wrapping and its scrolling and its READING OF THE STORE, the STORE
   the rich-text slice is built on and the REGION it is laid out in and the WEB that ties the three together and the
@@ -568,10 +580,11 @@ origin). **AND THE VIEW NOW READS A STORE THROUGH THE MANAGER** (`tests/text_vie
 `-string` is the store's, the `malloc`'d visual array and the typesetter walk are GONE from the class, and a run put
 in the store is the ink it draws — which is the rich-text half of the slice, with the BACKGROUND, UNDERLINE and
 STRIKETHROUGH keys the manager paints (`tests/text_layout_attributes.m`) and the PARAGRAPH STYLE it aligns and breaks
-by (`tests/text_paragraph_style.m`). The paragraph style is a value object whose geometry properties (indents, the two
-paragraph spacings, the three line-height properties, the hyphenation factor) are carried and answered and await their
-reader in the layout, which `NSParagraphStyle.h` names property by property. Attachments, tables, the marked-text
-family and the input-method CONTEXT are named in the view's own header as what is still owed — the `NSTextInput`
+by (`tests/text_paragraph_style.m`) and the GEOMETRY it lays out by (`tests/text_paragraph_geometry.m`) — the indents,
+the two spacings and the three line-height properties, all read as the manager's own fragment geometry. The property
+with no reader is the hyphenation factor (the engine does no hyphenation), the default tab interval (a tab stop needs
+`NSTextTab`) and the base writing direction (left-to-right only), each named at its door. Attachments, tables and the
+input-method CONTEXT are named in the view's own header as what is still owed — the `NSTextInput`
 protocol is here and the view ANSWERS it (`tests/text_marked_text.m`), while the class that owns a composition across
 keystrokes and arranges a candidate window is the slice behind it. Each absence is stated
 rather than stubbed, and the refusals name themselves.

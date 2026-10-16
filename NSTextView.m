@@ -323,15 +323,14 @@ static void cg_announce(NSText *text, NSString *name, SEL delegateSelector)
 	return (count > 0) ? (count - 1) : 0;
 }
 
-/* **A LINE'S BASELINE, MEASURED DOWN FROM THE TOP OF THE VIEW** — the container origin's inset plus the fragment's own
- * place plus the font's ascender. It takes a VISUAL line's index: a wrapped line's second part is a line of its own
- * for every purpose this file has. */
+/* **A LINE'S BASELINE, MEASURED DOWN FROM THE TOP OF THE VIEW** — the container origin's inset plus the baseline the
+ * MANAGER recorded for the fragment, which is per-fragment once a paragraph style can change the line height. It takes
+ * a VISUAL line's index: a wrapped line's second part is a line of its own for every purpose this file has. */
 - (CGFloat)cg_baselineForLine:(NSUInteger)line
 {
 	NSRange range = [self cg_visualLineRangeAtIndex:line];
-	NSRect fragment = [_cg_layoutManager lineFragmentRectForGlyphAtIndex:range.location effectiveRange:NULL];
 
-	return NS_TEXT_INSET + fragment.origin.y + [[self cg_font] ascender];
+	return NS_TEXT_INSET + [_cg_layoutManager cg_baselineForGlyphAtIndex:range.location];
 }
 
 /* THE X OF A CHARACTER INDEX, measured from the LEFT EDGE OF THE VISUAL LINE it lands on — the manager's offset less
@@ -350,13 +349,14 @@ static void cg_announce(NSText *text, NSString *name, SEL delegateSelector)
 }
 
 /* THE INDEX ON A GIVEN VISUAL LINE NEAREST TO AN X — the goal column of a vertical movement. The line's own y picks
- * the fragment and the x picks the character, so this is the same hit test aimed at a chosen line. */
+ * the fragment and the x picks the character, so this is the same hit test aimed at a chosen line. THE Y IS THE USED
+ * RECT'S CENTRE rather than a line height's multiple, because the paragraph style can put a gap above the text. */
 - (NSUInteger)cg_indexOnLine:(NSUInteger)line atX:(CGFloat)x
 {
 	NSRange range = [self cg_visualLineRangeAtIndex:line];
-	NSRect fragment = [_cg_layoutManager lineFragmentRectForGlyphAtIndex:range.location effectiveRange:NULL];
+	NSRect used = [_cg_layoutManager lineFragmentUsedRectForGlyphAtIndex:range.location effectiveRange:NULL];
 
-	return [_cg_layoutManager cg_glyphIndexForPoint:NSMakePoint(NS_TEXT_INSET + x, fragment.origin.y + [self cg_lineHeight] / 2.0)
+	return [_cg_layoutManager cg_glyphIndexForPoint:NSMakePoint(NS_TEXT_INSET + x, used.origin.y + used.size.height / 2.0)
 					      inTextContainer:_cg_textContainer];
 }
 

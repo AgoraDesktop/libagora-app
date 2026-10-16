@@ -5,17 +5,21 @@
 /*
  * NSParagraphStyle.h — THE LINE-BREAK VOCABULARY AND THE STYLE CLASS THAT CARRIES IT.
  *
- * **THE CLASS ARRIVED WITH ITS FIRST TWO READERS, AND THE REST OF ITS PROPERTIES ARE CARRIED AND ANSWERED AND WAIT
- * FOR THEIRS.** The vocabulary below came first — `NSLineBreakMode` is what `NSCell`'s `-lineBreakMode` is declared in
- * terms of, and Apple declares it here because a line-break mode IS a paragraph property. What was owed was the pair
- * of classes named beside it: `NSParagraphStyle` is a VALUE OBJECT (a run's paragraph settings, copied not referenced)
- * and `NSMutableParagraphStyle` is the one a builder fills in. THE LAYOUT MANAGER READS TWO OF THE PROPERTIES TODAY —
- * the ALIGNMENT (it offsets a line inside the width the container gave it) and the LINE-BREAK MODE (it puts the style
- * into the attributed string the typesetter reads, which obeys the mode) — AND THE OTHERS ARE CARRIED because a
- * paragraph style without its spacing is not the class a caller can port against. `-lineSpacing`, the three indents,
- * the three line-height properties, the two paragraph spacings and the hyphenation factor have no reader in
- * `NSLayoutManager` YET; that is named at each door below rather than left for a caller to discover, and it is the
- * honest shape of a value object whose consumer is a slice behind it.
+ * **THE CLASS ARRIVED WITH ITS FIRST TWO READERS, AND THE LAYOUT READS THE GEOMETRY NOW TOO.** The vocabulary below
+ * came first — `NSLineBreakMode` is what `NSCell`'s `-lineBreakMode` is declared in terms of, and Apple declares it
+ * here because a line-break mode IS a paragraph property. What was owed was the pair of classes named beside it:
+ * `NSParagraphStyle` is a VALUE OBJECT (a run's paragraph settings, copied not referenced) and `NSMutableParagraphStyle`
+ * is the one a builder fills in. THE LAYOUT MANAGER READS NEARLY ALL OF IT: the ALIGNMENT offsets a line inside the
+ * width the container gave it; the LINE-BREAK MODE goes into the attributed string the typesetter obeys; the two HEAD
+ * INDENTS place the first line and the wrapped ones; the TAIL INDENT takes width off the line; `-lineSpacing` and the
+ * two PARAGRAPH SPACINGS are the gaps between lines and across paragraph boundaries; and the LINE-HEIGHT MULTIPLE with
+ * its MINIMUM and MAXIMUM set the band. WHAT IT STILL DOES NOT READ is the HYPHENATION FACTOR (the engine does no
+ * hyphenation, so there is nothing to tune), the DEFAULT TAB INTERVAL (a tab stop needs `NSTextTab`), and the BASE
+ * WRITING DIRECTION (this tier lays out left-to-right only) — each named at its door below.
+ *
+ * **AND THE STYLE'S CONSUMER IS THE LAYOUT, NOT FOUR SEPARATE DOORS.** A paragraph style could have been four
+ * properties on the view, and instead it is one object the store carries — which is what lets a run of text and the
+ * geometry it is set in travel together, and what makes a wrapped line read the SAME style as the line it wrapped from.
  *
  * AND THE IMPORT BELOW IS APPLE'S OWN INCLUDE GRAPH: the era's `NSParagraphStyle.h` imports `AppKit/NSText.h`, because
  * a paragraph style has an ALIGNMENT — so the two headers this unit adds depend on each other in the same direction
@@ -28,7 +32,8 @@
  *
  * WHAT IS STILL NOT HERE, AND ITS ROWS STAY OPEN: `NSTextTab` — the tab-stop element `-tabStops` would hold — and with
  * it `-tabStops`, because a tab stop is a claim about a class this tier has not got; `-defaultTabInterval` is carried
- * without it because it is a bare distance. And `NSTabColumnTerminatorsAttributeName`.
+ * without it because it is a bare distance, and is one of the three the layout does not read (see above). And
+ * `NSTabColumnTerminatorsAttributeName`.
  */
 #ifndef APPKIT_NSPARAGRAPHSTYLE_H
 #define APPKIT_NSPARAGRAPHSTYLE_H
@@ -94,7 +99,7 @@ typedef NSUInteger NSLineBreakMode;
  * would consult it, and this tier lays out left-to-right so the value is carried and not yet consulted. */
 - (NSWritingDirection)baseWritingDirection;
 
-/* ---- THE GEOMETRY, WHICH IS RECORDED AND ANSWERED AND HAS NO READER IN THE LAYOUT YET ------------------ */
+/* ---- THE GEOMETRY, WHICH THE LAYOUT NOW READS ---------------------------------------------------------- */
 
 - (CGFloat)lineHeightMultiple;
 - (CGFloat)maximumLineHeight;

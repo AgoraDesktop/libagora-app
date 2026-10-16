@@ -40,15 +40,16 @@
 @public
 	NSRange range;		/* characters: what the breaker decided, trailing whitespace and all */
 	NSRange glyphs;		/* the same span in the manager's glyph space */
-	NSRect rect;
-	NSRect used;
+	NSRect rect;		/* the whole flow band: any LEADING space (line or paragraph) plus the line */
+	NSRect used;		/* the text band: where the glyphs sit, after the indents and the alignment */
+	CGFloat baseline;	/* the baseline's y in the CONTAINER's coordinates */
 	CTLineRef line;		/* the glyph store; OWNED, and NULL for an empty fragment */
 }
-+ (id)fragmentWithRange:(NSRange)aRange glyphRange:(NSRange)aGlyphRange rect:(NSRect)aRect usedRect:(NSRect)aUsedRect line:(CTLineRef)aLine;
++ (id)fragmentWithRange:(NSRange)aRange glyphRange:(NSRange)aGlyphRange rect:(NSRect)aRect usedRect:(NSRect)aUsedRect baseline:(CGFloat)aBaseline line:(CTLineRef)aLine;
 @end
 
 @implementation FNFragment
-+ (id)fragmentWithRange:(NSRange)aRange glyphRange:(NSRange)aGlyphRange rect:(NSRect)aRect usedRect:(NSRect)aUsedRect line:(CTLineRef)aLine
++ (id)fragmentWithRange:(NSRange)aRange glyphRange:(NSRange)aGlyphRange rect:(NSRect)aRect usedRect:(NSRect)aUsedRect baseline:(CGFloat)aBaseline line:(CTLineRef)aLine
 {
 	FNFragment *fragment = [[[FNFragment alloc] init] autorelease];
 
@@ -56,6 +57,7 @@
 	fragment->glyphs = aGlyphRange;
 	fragment->rect = aRect;
 	fragment->used = aUsedRect;
+	fragment->baseline = aBaseline;
 	fragment->line = aLine;		/* ownership transferred to the fragment */
 	return fragment;
 }
@@ -423,18 +425,17 @@
 	return CTParagraphStyleCreate(&setting, 1);
 }
 
-/* **THE ALIGNMENT OF THE PARAGRAPH A LINE STARTS IN, WHICH IS THE PARAGRAPH'S OWN AND NOT THE LINE'S.** A fragment is
- * aligned by the style at the beginning of its PARAGRAPH — the character after the previous newline — so a wrapped line
- * in the middle of a centred paragraph is centred with the rest of them. Natural and left both answer the left factor,
- * which is why this tier's left-to-right layout can treat them alike. */
-- (NSTextAlignment)cg_alignmentForParagraphAt:(NSUInteger)start
+/* **THE PARAGRAPH STYLE A LINE BELONGS TO, WHICH IS THE ONE AT ITS PARAGRAPH'S START.** A paragraph begins at the first
+ * character of the store or after a newline, so a wrapped line in the middle of a paragraph reads the same style as the
+ * line above it — which is the whole point of a PARAGRAPH style as against a character one. A store with no style
+ * answers nil, and every scalar read from nil is zero, which is exactly the default style. */
+- (NSParagraphStyle *)cg_paragraphStyleAt:(NSUInteger)start
 {
 	NSString *string = [_textStorage string];
 	NSUInteger paragraphStart = start;
-	id style;
 
 	if ([_textStorage length] == 0) {
-		return NSLeftTextAlignment;
+		return nil;
 	}
 	if (paragraphStart >= [string length]) {
 		paragraphStart = [string length] - 1;
@@ -442,9 +443,15 @@
 	while (paragraphStart > 0 && [string characterAtIndex:paragraphStart - 1] != '\n') {
 		paragraphStart--;
 	}
-	style = [[_textStorage attributesAtIndex:paragraphStart effectiveRange:NULL]
-				objectForKey:NSParagraphStyleAttributeName];
-	return (style != nil) ? [style alignment] : NSLeftTextAlignment;
+	return [[_textStorage attributesAtIndex:paragraphStart effectiveRange:NULL]
+			objectForKey:NSParagraphStyleAttributeName];
+}
+
+/* **THE ALIGNMENT OF THE PARAGRAPH A LINE STARTS IN, WHICH IS THE PARAGRAPH'S OWN AND NOT THE LINE'S.** Natural and left
+ * both answer the left factor, which is why this tier's left-to-right layout can treat them alike. */
+- (NSTextAlignment)cg_alignmentForParagraphAt:(NSUInteger)start
+{
+	return [[self cg_paragraphStyleAt:start] alignment];
 }
 
 /* **AND THE FLOAT IS THE LINE'S PLACE INSIDE THE WIDTH IT WAS GIVEN** — 0 for left, 1 for right, 0.5 for centre, and the
@@ -473,7 +480,8 @@
 	NSString *string;
 	NSUInteger n;
 	NSFont *font;
-	CGFloat lineHeight;
+	CGFloat baseAscent;
+	CGFloat baseLineHeight;
 	CFMutableDictionaryRef attributes;
 	CFAttributedStringRef s;
 	CTTypesetterRef ts;
@@ -482,6 +490,10 @@
 	NSUInteger glyphBase = 0;
 	NSUInteger lastContainer = 0;
 	CGFloat lastY = 0.0;
+	CGFloat lastAscent = 0.0;
+	CGFloat lastLineHeight = 0.0;
+	NSParagraphStyle *previousStyle = nil;
+	BOOL firstFragment = YES;
 
 	if (_invalidatedRange.location == NSNotFound) {
 		return;
@@ -492,7 +504,8 @@
 	string = [_textStorage string];
 	n = [string length];
 	font = [self cg_font];
-	lineHeight = [font ascender] - [font descender];
+	baseAscent = [font ascender];
+	baseLineHeight = [font ascender] - [font descender];
 
 	if ([_textContainers count] == 0) {
 		_invalidatedRange = NSMakeRange(NSNotFound, 0);
@@ -503,8 +516,9 @@
 
 		[[_fragments objectAtIndex:0] addObject:
 			[FNFragment fragmentWithRange:NSMakeRange(0, 0) glyphRange:NSMakeRange(0, 0)
-				rect:NSMakeRect(0.0, 0.0, [container containerSize].width, lineHeight)
-				usedRect:NSMakeRect([container lineFragmentPadding], 0.0, 0.0, lineHeight) line:NULL]];
+				rect:NSMakeRect(0.0, 0.0, [container containerSize].width, baseLineHeight)
+				usedRect:NSMakeRect([container lineFragmentPadding], 0.0, 0.0, baseLineHeight)
+				baseline:baseAscent line:NULL]];
 		_invalidatedRange = NSMakeRange(NSNotFound, 0);
 		return;
 	}
@@ -540,8 +554,9 @@
 
 		[[_fragments objectAtIndex:0] addObject:
 			[FNFragment fragmentWithRange:NSMakeRange(0, n) glyphRange:NSMakeRange(0, n)
-				rect:NSMakeRect(0.0, 0.0, containerWidth, lineHeight)
-				usedRect:NSMakeRect(padding, 0.0, containerWidth - 2.0 * padding, lineHeight) line:line]];
+				rect:NSMakeRect(0.0, 0.0, containerWidth, baseLineHeight)
+				usedRect:NSMakeRect(padding, 0.0, containerWidth - 2.0 * padding, baseLineHeight)
+				baseline:baseAscent line:line]];
 		_invalidatedRange = NSMakeRange(NSNotFound, 0);
 		return;
 	}
@@ -551,23 +566,67 @@
 		NSMutableArray *fragments = [_fragments objectAtIndex:i];
 		CGFloat padding = [container lineFragmentPadding];
 		CGFloat containerWidth = [container containerSize].width;
-		CGFloat width = containerWidth - 2.0 * padding;
 		CGFloat containerHeight = [container containerSize].height;
 		CGFloat y = 0.0;
 
 		while (start < (CFIndex)n) {
+			/* **THE PARAGRAPH'S OWN GEOMETRY, READ AT THE PARAGRAPH'S START.** A nil style answers zero for every
+			 * scalar and `NSLeftTextAlignment` for the alignment, which IS the default style, so a store with no style
+			 * takes the same path as one set in `+defaultParagraphStyle`. */
+			NSParagraphStyle *style = [self cg_paragraphStyleAt:(NSUInteger)start];
+			BOOL paragraphStart = (start == 0) || ([string characterAtIndex:(NSUInteger)start - 1] == '\n');
+			CGFloat indent = paragraphStart ? [style firstLineHeadIndent] : [style headIndent];
+			CGFloat tailIndent = [style tailIndent];
+			CGFloat leadingEdge = padding + indent;
+			CGFloat trailingEdge = (tailIndent >= 0.0) ? (containerWidth - padding - tailIndent)
+								  : (padding - tailIndent);
+			CGFloat width = trailingEdge - leadingEdge;
+			CGFloat multiple = [style lineHeightMultiple];
+			CGFloat lineHeight;
+			CGFloat lineAscent;
+			CGFloat leading;
 			CFIndex count;
 			CTLineRef line = NULL;
 			CGFloat lineWidth = 0.0;
 			NSRange range;
 
+			if (width < 1.0) {
+				width = 1.0;
+			}
+			if (multiple <= 0.0) {
+				multiple = 1.0;
+			}
+			lineHeight = baseLineHeight * multiple;
+			if ([style minimumLineHeight] > 0.0 && lineHeight < [style minimumLineHeight]) {
+				lineHeight = [style minimumLineHeight];
+			}
+			if ([style maximumLineHeight] > 0.0 && lineHeight > [style maximumLineHeight]) {
+				lineHeight = [style maximumLineHeight];
+			}
+			lineAscent = baseAscent * multiple;
+			if (lineAscent > lineHeight) {
+				lineAscent = lineHeight;
+			}
+			if (lineAscent < 0.0) {
+				lineAscent = 0.0;
+			}
+			/* **AND THE LEADING IS WHAT SITS ABOVE THIS LINE**: the gap between lines WITHIN a paragraph, or the two
+			 * paragraph spacings across a paragraph boundary. A new paragraph takes the PREVIOUS paragraph's
+			 * `-paragraphSpacing` plus its own `-paragraphSpacingBefore`; a wrapped line takes the line spacing. */
+			if (firstFragment) {
+				leading = 0.0;
+			} else if (paragraphStart) {
+				leading = [previousStyle paragraphSpacing] + [style paragraphSpacingBefore];
+			} else {
+				leading = [style lineSpacing];
+			}
+
 			/* THE CONTAINER'S OWN HEIGHT IS THE OVERFLOW EDGE — but only once it has taken a line, so a container
 			 * shorter than one line still gets one rather than looping forever. */
-			if (containerHeight > 0.0 && y + lineHeight > containerHeight + 0.001 && [fragments count] > 0) {
+			if (containerHeight > 0.0 && y + leading + lineHeight > containerHeight + 0.001 && [fragments count] > 0) {
 				break;
 			}
-			count = (width > 0.0) ? CTTypesetterSuggestLineBreak(ts, start, (double)width)
-					      : (CFIndex)(n - (NSUInteger)start);
+			count = CTTypesetterSuggestLineBreak(ts, start, (double)width);
 			if (count <= 0) {
 				count = 1;
 			}
@@ -581,21 +640,31 @@
 			}
 			if (line != NULL) {
 				lineWidth = (CGFloat)CTLineGetTypographicBounds(line, NULL, NULL, NULL);
-				if (width > 0.0 && lineWidth > width) {
+				if (lineWidth > width) {
 					lineWidth = width;
 				}
 			}
-			[fragments addObject:[FNFragment fragmentWithRange:range
-				glyphRange:NSMakeRange(glyphBase, (NSUInteger)count)
-				rect:NSMakeRect(0.0, y, containerWidth, lineHeight)
-				usedRect:NSMakeRect(padding + [self cg_alignmentOffsetForLine:line
-						alignment:[self cg_alignmentForParagraphAt:(NSUInteger)start] width:width],
-					y, lineWidth, lineHeight) line:line]];
+			{
+				CGFloat textTop = y + leading;
+				CGFloat baseline = textTop + lineAscent;
+				CGFloat alignOffset = [self cg_alignmentOffsetForLine:line
+						alignment:[style alignment] width:width];
+
+				[fragments addObject:[FNFragment fragmentWithRange:range
+					glyphRange:NSMakeRange(glyphBase, (NSUInteger)count)
+					rect:NSMakeRect(0.0, y, containerWidth, leading + lineHeight)
+					usedRect:NSMakeRect(leadingEdge + alignOffset, textTop, lineWidth, lineHeight)
+					baseline:baseline line:line]];
+				y = textTop + lineHeight;
+			}
 			glyphBase += (NSUInteger)count;
 			start += count;
-			y += lineHeight;
+			previousStyle = style;
 			lastContainer = i;
 			lastY = y;
+			lastAscent = lineAscent;
+			lastLineHeight = lineHeight;
+			firstFragment = NO;
 		}
 	}
 	CFRelease(ts);
@@ -605,8 +674,9 @@
 
 		[[_fragments objectAtIndex:lastContainer] addObject:
 			[FNFragment fragmentWithRange:NSMakeRange(n, 0) glyphRange:NSMakeRange(glyphBase, 0)
-				rect:NSMakeRect(0.0, lastY, [container containerSize].width, lineHeight)
-				usedRect:NSMakeRect([container lineFragmentPadding], lastY, 0.0, lineHeight) line:NULL]];
+				rect:NSMakeRect(0.0, lastY, [container containerSize].width, lastLineHeight)
+				usedRect:NSMakeRect([container lineFragmentPadding], lastY, 0.0, lastLineHeight)
+				baseline:(lastY + lastAscent) line:NULL]];
 	}
 	_invalidatedRange = NSMakeRange(NSNotFound, 0);
 }
@@ -805,16 +875,17 @@
 	return fragment->used.origin.x + (CGFloat)CTLineGetOffsetForStringIndex(fragment->line, relative, NULL);
 }
 
-/* **AND THE INVERSE: THE GLYPH NEAREST A POINT**, which is what a click asks. The FRAGMENT is chosen by the y — the
- * line height is uniform, so the arithmetic is a division — and only the x is Core Text's. */
+/* **AND THE INVERSE: THE GLYPH NEAREST A POINT**, which is what a click asks. The FRAGMENT is chosen by WALKING the
+ * fragments' own flow bands — the line heights are the paragraph style's, so a division by one height would be wrong the
+ * moment a style set `-lineSpacing` or `-minimumLineHeight` — and only the x is Core Text's. A point past the last band
+ * clamps to the last fragment, and one before the first to the first. */
 - (NSUInteger)cg_glyphIndexForPoint:(NSPoint)point inTextContainer:(NSTextContainer *)container
 {
 	NSUInteger containerIndex = [_textContainers indexOfObjectIdenticalTo:container];
 	NSMutableArray *fragments;
-	CGFloat lineHeight = [self cg_lineHeight];
-	NSUInteger line;
-	FNFragment *fragment;
+	FNFragment *fragment = nil;
 	CFIndex index = 0;
+	NSUInteger i;
 
 	if (containerIndex == NSNotFound) {
 		return NSNotFound;
@@ -824,15 +895,21 @@
 	if ([fragments count] == 0) {
 		return 0;
 	}
-	if (lineHeight <= 0.0 || point.y <= 0.0) {
-		line = 0;
-	} else {
-		line = (NSUInteger)(point.y / lineHeight);
+	for (i = 0; i < [fragments count]; i++) {
+		FNFragment *candidate = [fragments objectAtIndex:i];
+
+		if (fragment == nil) {
+			fragment = candidate;
+		}
+		if (point.y >= candidate->rect.origin.y
+		    && point.y <= candidate->rect.origin.y + candidate->rect.size.height) {
+			fragment = candidate;
+			break;
+		}
+		if (point.y > candidate->rect.origin.y) {
+			fragment = candidate;
+		}
 	}
-	if (line >= [fragments count]) {
-		line = [fragments count] - 1;
-	}
-	fragment = [fragments objectAtIndex:line];
 	if (fragment->line != NULL) {
 		index = CTLineGetStringIndexForPosition(fragment->line,
 			CGPointMake(point.x - fragment->used.origin.x, 0.0));
@@ -844,6 +921,16 @@
 		index = (CFIndex)fragment->range.length;
 	}
 	return fragment->range.location + (NSUInteger)index;
+}
+
+/* **AND THE BASELINE A GLYPH SITS ON, WHICH IS PER-FRAGMENT NOW.** The view needs it for the caret and the composition
+ * rule, and with a paragraph style's line spacing and line-height clamps there is no single baseline arithmetic — each
+ * fragment recorded its own when it was laid out. */
+- (CGFloat)cg_baselineForGlyphAtIndex:(NSUInteger)glyphIndex
+{
+	FNFragment *fragment = [self cg_fragmentForGlyphAtIndex:glyphIndex effectiveRange:NULL];
+
+	return (fragment != nil) ? fragment->baseline : 0.0;
 }
 
 /* ============================================================================================ *
@@ -916,7 +1003,6 @@
 	NSGraphicsContext *context = [NSGraphicsContext currentContext];
 	CGContextRef cg = (context != nil) ? (CGContextRef)[context graphicsPort] : NULL;
 	NSFont *font;
-	CGFloat ascender;
 	NSUInteger i, j, rangeEnd;
 
 	if (cg == NULL || [_textStorage length] == 0) {
@@ -924,7 +1010,6 @@
 	}
 	[self cg_ensureLayout];
 	font = [self cg_font];
-	ascender = [font ascender];
 	rangeEnd = glyphsToShow.location + glyphsToShow.length;
 	for (i = 0; i < [_fragments count]; i++) {
 		NSMutableArray *fragments = [_fragments objectAtIndex:i];
@@ -950,7 +1035,7 @@
 				continue;
 			}
 			runs = CTLineGetGlyphRuns(fragment->line);
-			baselineY = origin.y + fragment->rect.origin.y + ascender;
+			baselineY = origin.y + fragment->baseline;
 			/* THE GLYPHS, RUN BY RUN. */
 			pos = drawn.location;
 			while (pos < drawn.location + drawn.length) {
@@ -1091,7 +1176,6 @@
 	NSGraphicsContext *context = [NSGraphicsContext currentContext];
 	CGContextRef cg = (context != nil) ? (CGContextRef)[context graphicsPort] : NULL;
 	NSString *string;
-	CGFloat lineHeight;
 	NSUInteger i, j, rangeEnd;
 
 	if (cg == NULL || [_textStorage length] == 0) {
@@ -1099,7 +1183,6 @@
 	}
 	[self cg_ensureLayout];
 	string = [_textStorage string];
-	lineHeight = [self cg_lineHeight];
 	rangeEnd = glyphsToShow.location + glyphsToShow.length;
 	for (i = 0; i < [_fragments count]; i++) {
 		NSMutableArray *fragments = [_fragments objectAtIndex:i];
@@ -1144,7 +1227,8 @@
 						+ (CGFloat)CTLineGetOffsetForStringIndex(fragment->line, b, NULL);
 
 					[background setFill];
-					CGContextFillRect(cg, CGRectMake(x0, origin.y + fragment->rect.origin.y, x1 - x0, lineHeight));
+					CGContextFillRect(cg, CGRectMake(x0, origin.y + fragment->used.origin.y, x1 - x0,
+									 fragment->used.size.height));
 				}
 				pos = runEnd;
 			}

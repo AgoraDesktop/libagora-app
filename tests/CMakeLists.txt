@@ -246,6 +246,14 @@ target_link_libraries(text_marked_text PRIVATE App m)
 add_test(NAME appkit-text-marked-text COMMAND text_marked_text)
 set_tests_properties(appkit-text-marked-text PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
 
+# **AND THE PARAGRAPH STYLE'S GEOMETRY, WHICH IS NOW READ.** The indents place a line and narrow it, the spacings open
+# gaps between lines and across paragraph boundaries, and the line-height multiple and clamps set the band — each read as
+# the manager's own geometry, with the defaults pinned unmoved by the first case.
+add_executable(text_paragraph_geometry text_paragraph_geometry.m)
+target_link_libraries(text_paragraph_geometry PRIVATE App m)
+add_test(NAME appkit-text-paragraph-geometry COMMAND text_paragraph_geometry)
+set_tests_properties(appkit-text-paragraph-geometry PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
+
 # **AND THE INSIDE OF A SCROLL VIEW.** `NSClipView`'s arithmetic is "the whole of it" (its own header), and it is
 # checked in EXACT POINTS rather than by drawing: where a short document sits, where a long one stops, and the
 # notification wire that re-constrains the scroll when the document's own frame or bounds changes. Offscreen, so it
