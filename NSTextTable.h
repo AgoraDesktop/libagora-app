@@ -19,11 +19,11 @@
  * cell in each column, its span divided out, scaled to fit the container, or equally for a fixed table — and each cell
  * lays its text out inside its own columns' width and is PLACED at its column's x. A row is as tall as its tallest
  * cell, THE VERTICAL LAYERS INCLUDED. **AND A TABLE CAN COLLAPSE ITS BORDERS**: with `-collapsesBorders` YES the
- * manager draws an edge two cells share ONCE, awarded to the cell whose border ON THAT EDGE is WIDER (a tie goes to
- * the min-side cell), so a doubled seam becomes one border as heavy as the heavier of the two. WHAT IS STILL OWED IS
- * NAMED WHERE IT WOULD BE: a table that FLOWS across containers, and the TABLE's own border collapsed with its outer
- * cells' (only cell-to-cell edges collapse today); a cell of several paragraphs lays out, and its row is the tallest
- * cell's height.
+ * manager draws an edge two blocks share ONCE, awarded to the block whose border ON THAT EDGE is WIDER (a tie goes to
+ * the min-side one), so a doubled seam becomes one border as heavy as the heavier of the two. THE TABLE'S OWN BORDER
+ * IS PART OF THAT: it competes with the outer cells on its four outer edges, and the table's box is the box around the
+ * CELLS, so a collapsed table ends up with ONE outer border. WHAT IS STILL OWED IS NAMED WHERE IT WOULD BE: a table
+ * that FLOWS across containers; a cell of several paragraphs lays out, and its row is the tallest cell's height.
  */
 #ifndef APPKIT_NSTEXTTABLE_H
 #define APPKIT_NSTEXTTABLE_H

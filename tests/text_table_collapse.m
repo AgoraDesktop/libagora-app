@@ -12,7 +12,8 @@
  * side must carry it ONLY when the borders are not collapsed. The outer edge is checked to be untouched, and a lone
  * cell (nothing to share a border with) must come out identical either way. A fourth case gives the two cells
  * DIFFERENT border weights and colours and reads which one owns the shared edge: the HEAVIER cell's, not simply the
- * left cell's.
+ * left cell's. A fifth gives the TABLE itself a border and shows it joining the collapse on its OUTER edges, where it
+ * competes with the outer cells by the same rule.
  *
  * THE GEOMETRY IS FIXED LAYOUT ON PURPOSE: two equal columns make every column boundary an integer, so the seam is a
  * pixel column and not a fraction its fill would antialias across.
@@ -379,6 +380,53 @@ int main(void)
 		      "with collapse the heavier RIGHT cell owns the edge, so the left cell's is suppressed");
 		check(redSeam > 0 && redSeamWidth, "and the shared edge is the right cell's 6-point red border, not the left's blue");
 
+		[flat release];
+		[collapsed release];
+		[container release];
+		[manager release];
+		[store release];
+		[table release];
+	}
+
+	/* 5. **AND THE TABLE'S OWN BORDER JOINS THE COLLAPSE.** The table block draws a 6-point green border and its one
+	 * cell a 2-point red one. Collapsed, the HEAVIER table border owns the outer edge and the cell's red edge is
+	 * suppressed; uncollapsed, both are drawn. The table's own box is the box around the CELLS, so its frame sits
+	 * OUTSIDE the cells' frames and its border is where an outer frame belongs. */
+	{
+		NSTextTable *table = [[NSTextTable alloc] init];
+		NSTextTableBlock *only;
+		NSTextStorage *store;
+		NSLayoutManager *manager = [[NSLayoutManager alloc] init];
+		NSTextContainer *container = [[NSTextContainer alloc] initWithContainerSize:NSMakeSize(200.0, 300.0)];
+		NSBitmapImageRep *flat;
+		NSBitmapImageRep *collapsed;
+		int redFlat, redCollapsed, greenTable;
+
+		[table setNumberOfColumns:1];
+		[table setLayoutAlgorithm:NSTextTableFixedLayoutAlgorithm];
+		[table setWidth:6.0 type:NSTextBlockAbsoluteValueType forLayer:NSTextBlockBorder
+			  edge:(NSTextBlockMinXEdge | NSTextBlockMaxXEdge)];
+		[table setBorderColor:[NSColor greenColor] forEdge:(NSTextBlockMinXEdge | NSTextBlockMaxXEdge)];
+		only = cell(table, 0, 0);
+		[only setWidth:2.0 type:NSTextBlockAbsoluteValueType forLayer:NSTextBlockBorder
+			 edge:(NSTextBlockMinXEdge | NSTextBlockMaxXEdge)];
+		[only setBorderColor:[NSColor redColor] forEdge:(NSTextBlockMinXEdge | NSTextBlockMaxXEdge)];
+		store = new_table_store([NSArray arrayWithObject:@"aaaa"], [NSArray arrayWithObject:only], 0.0);
+		[store addLayoutManager:manager];
+		[manager addTextContainer:container];
+
+		flat = draw(manager, [store length]);
+		[table setCollapsesBorders:YES];
+		collapsed = draw(manager, [store length]);
+
+		redFlat = count_red(flat);
+		redCollapsed = count_red(collapsed);
+		greenTable = count_pure_in_column(collapsed, 5, 0.0, 1.0, 0.0);
+		printf("  (note: table border — red cell edges %d flat / %d collapsed; table green at x=5 is %d)\n",
+		       redFlat, redCollapsed, greenTable);
+		check(redFlat > 0, "without collapse the cell draws its red edges beside the table's green ones");
+		check(redCollapsed == 0, "with collapse the heavier TABLE border wins, so the cell's red edges are suppressed");
+		check(greenTable > 0, "and the table's own 6-point green border is the outer edge, at the frame around the cells");
 		[flat release];
 		[collapsed release];
 		[container release];

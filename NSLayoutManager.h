@@ -201,9 +201,10 @@ NS_ASSUME_NONNULL_BEGIN
  * backgrounds and borders". THE DIVISION THIS TIER DRAWS IS: the background-COLOUR ATTRIBUTE and the BLOCK DECORATION
  * are the manager's (both are in the store's runs and paragraph styles), and the SELECTION is the VIEW's (only the
  * view knows where it is). The blocks go down first — a box is behind every run background — each one grown by its own
- * layers and drawn by the block itself; a table that collapses its borders draws a shared edge ONCE, by whichever of
- * the two cells has the heavier border on it, so the block is handed the mask of edges it owns; the marked range is
- * the view's, drawn with the composition rule. Each run's
+ * layers and drawn by the block itself; a table that collapses its borders draws a shared edge ONCE, by whichever
+ * block — the table itself on an outer edge, a neighbouring cell on an inner one — has the heavier border on it, so
+ * each block is handed the mask of edges it owns; the marked range is the view's, drawn with the composition rule.
+ * Each run's
  * `NSBackgroundColorAttributeName` then fills the used rect of ITS OWN glyphs, which is what makes two backgrounds on
  * one line two rectangles instead of a band. */
 - (void)drawBackgroundForGlyphRange:(NSRange)glyphsToShow atPoint:(NSPoint)origin;

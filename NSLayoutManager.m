@@ -135,6 +135,7 @@
 	NSRange range;
 	NSRect frame;		/* content grown by the block's layers */
 	NSTextBlockEdge edges;	/* which of the four edges THIS cell draws */
+	NSTextBlockEdge outer;	/* which of its edges meet ANOTHER CELL (the rest are the table's own edge) */
 }
 @end
 
@@ -698,12 +699,15 @@ static BOOL fn_cell_owns_edge(CGFloat thisWidth, CGFloat otherWidth, BOOL tieGoe
  * neighbour when the neighbour's OPPOSITE edge lies on it and their bands overlap: the neighbour to the LEFT shares
  * this cell's MinX, the one to the RIGHT its MaxX, the one ABOVE its MinY and the one BELOW its MaxY. EACH SHARED
  * EDGE IS AWARDED to one of the two cells — the wider border, ties to the min-side cell — and the cell that LOSES it
- * suppresses that one edge while keeping the other three. The test is by GEOMETRY rather than by row and column, so
- * two boxes that do NOT actually meet (a short cell above a tall one) keep both their edges rather than collapsing a
- * line they do not share. */
+ * suppresses that one edge while keeping the other three. THE EDGES NO CELL MEETS are reported back through `outer`:
+ * those are the TABLE's own edge to compete for, which is why this door says which ones are outer rather than only
+ * which ones to draw. The test is by GEOMETRY rather than by row and column, so two boxes that do NOT actually meet
+ * (a short cell above a tall one) keep both their edges rather than collapsing a line they do not share. */
 - (NSTextBlockEdge)cg_edgesForCell:(FNCellBox *)cell inCells:(NSMutableArray *)cells
+			     outer:(NSTextBlockEdge *)outerPtr
 {
 	NSTextBlockEdge edges = (NSTextBlockMinXEdge | NSTextBlockMaxXEdge | NSTextBlockMinYEdge | NSTextBlockMaxYEdge);
+	NSTextBlockEdge outer = edges;
 	CGFloat left = cell->frame.origin.x, right = NSMaxX(cell->frame);
 	CGFloat top = cell->frame.origin.y, bottom = NSMaxY(cell->frame);
 	NSUInteger k;
@@ -719,71 +723,121 @@ static BOOL fn_cell_owns_edge(CGFloat thisWidth, CGFloat otherWidth, BOOL tieGoe
 		horizontal = fn_spans_overlap(left, right, other->frame.origin.x, NSMaxX(other->frame));
 
 		/* THE LEFT NEIGHBOUR'S MaxX AND THIS CELL'S MinX ARE ONE EDGE, and the LEFT cell is the min side. */
-		if (vertical && fabs(left - NSMaxX(other->frame)) < 0.01
-		    && !fn_cell_owns_edge([cell->block widthForLayer:NSTextBlockBorder edge:NSTextBlockMinXEdge],
-					  [other->block widthForLayer:NSTextBlockBorder edge:NSTextBlockMaxXEdge], NO)) {
-			edges &= ~NSTextBlockMinXEdge;
+		if (vertical && fabs(left - NSMaxX(other->frame)) < 0.01) {
+			outer &= ~NSTextBlockMinXEdge;
+			if (!fn_cell_owns_edge([cell->block widthForLayer:NSTextBlockBorder edge:NSTextBlockMinXEdge],
+					       [other->block widthForLayer:NSTextBlockBorder edge:NSTextBlockMaxXEdge], NO)) {
+				edges &= ~NSTextBlockMinXEdge;
+			}
 		}
 		/* THE RIGHT NEIGHBOUR'S MinX AND THIS CELL'S MaxX ARE ONE EDGE, and THIS cell is the min side. */
-		if (vertical && fabs(right - other->frame.origin.x) < 0.01
-		    && !fn_cell_owns_edge([cell->block widthForLayer:NSTextBlockBorder edge:NSTextBlockMaxXEdge],
-					  [other->block widthForLayer:NSTextBlockBorder edge:NSTextBlockMinXEdge], YES)) {
-			edges &= ~NSTextBlockMaxXEdge;
+		if (vertical && fabs(right - other->frame.origin.x) < 0.01) {
+			outer &= ~NSTextBlockMaxXEdge;
+			if (!fn_cell_owns_edge([cell->block widthForLayer:NSTextBlockBorder edge:NSTextBlockMaxXEdge],
+					       [other->block widthForLayer:NSTextBlockBorder edge:NSTextBlockMinXEdge], YES)) {
+				edges &= ~NSTextBlockMaxXEdge;
+			}
 		}
 		/* THE NEIGHBOUR ABOVE'S MaxY AND THIS CELL'S MinY ARE ONE EDGE, and the ABOVE cell is the min side. */
-		if (horizontal && fabs(top - NSMaxY(other->frame)) < 0.01
-		    && !fn_cell_owns_edge([cell->block widthForLayer:NSTextBlockBorder edge:NSTextBlockMinYEdge],
-					  [other->block widthForLayer:NSTextBlockBorder edge:NSTextBlockMaxYEdge], NO)) {
-			edges &= ~NSTextBlockMinYEdge;
+		if (horizontal && fabs(top - NSMaxY(other->frame)) < 0.01) {
+			outer &= ~NSTextBlockMinYEdge;
+			if (!fn_cell_owns_edge([cell->block widthForLayer:NSTextBlockBorder edge:NSTextBlockMinYEdge],
+					       [other->block widthForLayer:NSTextBlockBorder edge:NSTextBlockMaxYEdge], NO)) {
+				edges &= ~NSTextBlockMinYEdge;
+			}
 		}
 		/* THE NEIGHBOUR BELOW'S MinY AND THIS CELL'S MaxY ARE ONE EDGE, and THIS cell is the min side. */
-		if (horizontal && fabs(bottom - other->frame.origin.y) < 0.01
-		    && !fn_cell_owns_edge([cell->block widthForLayer:NSTextBlockBorder edge:NSTextBlockMaxYEdge],
-					  [other->block widthForLayer:NSTextBlockBorder edge:NSTextBlockMinYEdge], YES)) {
-			edges &= ~NSTextBlockMaxYEdge;
+		if (horizontal && fabs(bottom - other->frame.origin.y) < 0.01) {
+			outer &= ~NSTextBlockMaxYEdge;
+			if (!fn_cell_owns_edge([cell->block widthForLayer:NSTextBlockBorder edge:NSTextBlockMaxYEdge],
+					       [other->block widthForLayer:NSTextBlockBorder edge:NSTextBlockMinYEdge], YES)) {
+				edges &= ~NSTextBlockMaxYEdge;
+			}
 		}
+	}
+	if (outerPtr != NULL) {
+		*outerPtr = outer;
 	}
 	return edges;
 }
 
-/* **AND THE TABLE'S RUN DRAWN.** The table's own box first, so every cell's ground sits on it and every border frames
- * it; then each cell. WHEN THE TABLE COLLAPSES ITS BORDERS every cell's frame is computed before any of them is drawn,
- * so a shared edge can be left to ONE of the two cells that meet there. Otherwise each cell draws its whole frame,
+/* **AND THE TABLE'S RUN DRAWN — FIRST ITS OWN BOX, THEN EVERY CELL'S.** The cells' frames are computed first, because
+ * the table's box is the box around THEM (their frames, not their text) and a collapsing table must know every frame
+ * before it can award any edge. THE TABLE ITSELF JOINS THE COLLAPSE ON ITS OUTER EDGES: a side the table borders
+ * competes with the outer cells that meet it by the same heavier-border rule, so the grid ends up with ONE outer
+ * border rather than the table's and the cells' drawn one over the other. Otherwise each block draws its whole frame,
  * which is Apple's default and what this tier did before the collapse existed. */
-- (void)cg_drawTable:(NSTextTable *)table cells:(NSMutableArray *)cells union:(NSRect)tableUnion
+- (void)cg_drawTable:(NSTextTable *)table cells:(NSMutableArray *)cells
       containerIndex:(NSUInteger)tableContainer origin:(NSPoint)origin characterRange:(NSRange)tableRange
 {
-	NSUInteger k;
+	NSTextBlockEdge sides[4] = { NSTextBlockMinXEdge, NSTextBlockMaxXEdge, NSTextBlockMinYEdge, NSTextBlockMaxYEdge };
+	/* WHICH SIDE IS THE MIN ONE: the table is outside on the LEFT and TOP, so a tie there is the table's; on the
+	 * right and bottom the OUTER CELL is the min side, so a tie is the cell's. */
+	BOOL tieToTable[4] = { YES, NO, YES, NO };
+	NSTextBlockEdge tableEdges = (NSTextBlockMinXEdge | NSTextBlockMaxXEdge | NSTextBlockMinYEdge | NSTextBlockMaxYEdge);
+	NSRect cellsUnion = NSZeroRect;
+	BOOL collapse = [table collapsesBorders];
+	BOOL haveOuter[4] = { NO, NO, NO, NO };
+	CGFloat tableWidth[4];
+	CGFloat maxCellWidth[4] = { 0.0, 0.0, 0.0, 0.0 };
+	NSUInteger k, s;
 
-	[self cg_drawBlock:table union:tableUnion containerIndex:tableContainer origin:origin characterRange:tableRange];
-	if ([table collapsesBorders]) {
-		/* **EVERY FRAME FIRST, THEN EVERY EDGE.** An edge is awarded by comparing the two boxes that meet on it, so a
-		 * cell's neighbour must already have its frame when the comparison runs — computing a frame and an edge in one
-		 * pass leaves the neighbour at the zero rect and no shared edge is ever seen. */
-		for (k = 0; k < [cells count]; k++) {
-			FNCellBox *cell = [cells objectAtIndex:k];
+	for (k = 0; k < [cells count]; k++) {
+		FNCellBox *cell = [cells objectAtIndex:k];
+		NSRect frame = [self cg_frameForBlock:cell->block union:cell->content
+			containerIndex:cell->containerIndex origin:origin characterRange:cell->range];
 
-			cell->frame = [self cg_frameForBlock:cell->block union:cell->content
-				containerIndex:cell->containerIndex origin:origin characterRange:cell->range];
-		}
-		for (k = 0; k < [cells count]; k++) {
-			FNCellBox *cell = [cells objectAtIndex:k];
-
-			cell->edges = [self cg_edgesForCell:cell inCells:cells];
-		}
-		for (k = 0; k < [cells count]; k++) {
-			FNCellBox *cell = [cells objectAtIndex:k];
-
-			[self cg_drawBlock:cell->block union:cell->content containerIndex:cell->containerIndex
-				origin:origin characterRange:cell->range edges:cell->edges];
-		}
-		return;
+		cell->frame = frame;
+		cell->edges = (NSTextBlockEdge)(NSTextBlockMinXEdge | NSTextBlockMaxXEdge
+			| NSTextBlockMinYEdge | NSTextBlockMaxYEdge);
+		/* THE UNION IS KEPT IN CONTAINER COORDINATES, because the table's frame is grown from it and
+		 * `-cg_frameForBlock:` adds the origin itself. */
+		frame.origin.x -= origin.x;
+		frame.origin.y -= origin.y;
+		cellsUnion = (k == 0) ? frame : NSUnionRect(cellsUnion, frame);
 	}
+	if (collapse) {
+		/* EVERY CELL'S SHARED EDGES FIRST; then the table competes for the OUTER ones. */
+		for (k = 0; k < [cells count]; k++) {
+			FNCellBox *cell = [cells objectAtIndex:k];
+
+			cell->edges = [self cg_edgesForCell:cell inCells:cells outer:&cell->outer];
+		}
+		for (s = 0; s < 4; s++) {
+			tableWidth[s] = [table widthForLayer:NSTextBlockBorder edge:sides[s]];
+			for (k = 0; k < [cells count]; k++) {
+				FNCellBox *cell = [cells objectAtIndex:k];
+
+				if ((cell->outer & sides[s]) != 0) {
+					CGFloat w = [cell->block widthForLayer:NSTextBlockBorder edge:sides[s]];
+
+					haveOuter[s] = YES;
+					if (w > maxCellWidth[s]) {
+						maxCellWidth[s] = w;
+					}
+				}
+			}
+			/* **THE TABLE KEEPS A SIDE ONLY IF IT WINS IT**; where it loses, the outer cells keep theirs. */
+			if (haveOuter[s] && !fn_cell_owns_edge(tableWidth[s], maxCellWidth[s], tieToTable[s])) {
+				tableEdges &= ~sides[s];
+			}
+			for (k = 0; k < [cells count]; k++) {
+				FNCellBox *cell = [cells objectAtIndex:k];
+
+				if ((cell->outer & sides[s]) != 0
+				    && fn_cell_owns_edge(tableWidth[s], maxCellWidth[s], tieToTable[s])) {
+					cell->edges &= ~sides[s];
+				}
+			}
+		}
+	}
+	[self cg_drawBlock:table union:cellsUnion containerIndex:tableContainer origin:origin characterRange:tableRange
+		edges:tableEdges];
 	for (k = 0; k < [cells count]; k++) {
 		FNCellBox *cell = [cells objectAtIndex:k];
 
-		[self cg_drawBlock:cell->block union:cell->content containerIndex:cell->containerIndex origin:origin
-			characterRange:cell->range];
+		[self cg_drawBlock:cell->block union:cell->content containerIndex:cell->containerIndex
+			origin:origin characterRange:cell->range edges:cell->edges];
 	}
 }
 
@@ -799,7 +853,6 @@ static BOOL fn_cell_owns_edge(CGFloat thisWidth, CGFloat otherWidth, BOOL tieGoe
 	NSTextBlock *current = nil;
 	NSTextTable *currentTable = nil;
 	NSRect unionRect = NSZeroRect;
-	NSRect tableUnion = NSZeroRect;
 	NSUInteger containerForBlock = 0;
 	NSUInteger containerForTable = 0;
 	NSRange range = NSMakeRange(0, 0);
@@ -822,7 +875,7 @@ static BOOL fn_cell_owns_edge(CGFloat thisWidth, CGFloat otherWidth, BOOL tieGoe
 			 * first, so the two kinds of box stay in the order they were laid out in. */
 			if (table != currentTable) {
 				if (currentTable != nil) {
-					[self cg_drawTable:currentTable cells:tableCells union:tableUnion
+					[self cg_drawTable:currentTable cells:tableCells
 						containerIndex:containerForTable origin:origin characterRange:tableRange];
 				}
 				if (table != nil && haveUnion) {
@@ -834,12 +887,10 @@ static BOOL fn_cell_owns_edge(CGFloat thisWidth, CGFloat otherWidth, BOOL tieGoe
 				currentTable = table;
 				tableCells = (table != nil) ? [NSMutableArray array] : nil;
 				if (table != nil) {
-					tableUnion = fragment->rect;
 					tableRange = fragment->range;
 					containerForTable = i;
 				}
 			} else if (table != nil) {
-				tableUnion = NSUnionRect(tableUnion, fragment->rect);
 				tableRange.length = (fragment->range.location + fragment->range.length) - tableRange.location;
 			}
 			if (table != nil) {
@@ -878,7 +929,7 @@ static BOOL fn_cell_owns_edge(CGFloat thisWidth, CGFloat otherWidth, BOOL tieGoe
 			characterRange:range];
 	}
 	if (currentTable != nil) {
-		[self cg_drawTable:currentTable cells:tableCells union:tableUnion containerIndex:containerForTable
+		[self cg_drawTable:currentTable cells:tableCells containerIndex:containerForTable
 			origin:origin characterRange:tableRange];
 	}
 }
