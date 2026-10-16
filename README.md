@@ -45,6 +45,7 @@ tests/
   text_input.m                  the first slice of the text system, driven a keystroke at a time
   text_word_movement.m          and its WORD granularity: Option+arrow and Option+Delete, over the string
   text_view_lines.m             and the first slice of the MULTI-LINE view: the line model, and what reads it
+  text_view_wrapping.m          and the slice above it: the same model WRAPPED to the view's width
   text_field_cell.m             a FIELD's cell: its string, its face, and one edit session end to end
   text_field_control.m          and the VIEW above it: a press that opens a session, and what commits it
   text_field_bezel.m            and its BORDER's two shapes, read out of the corner PIXELS
@@ -124,6 +125,18 @@ the compositor is really gone.
   write ink in TWO bands while one writes nothing in the second; and `-sizeToFit` grows with the line count (**23.7**
   points for one line, **55.2** for three). Slice I does NOT wrap and does NOT scroll — a line wider than the view is
   clipped — and the header names wrapping, scrolling and rich text as the slices above it rather than stubbing them.
+- **And the slice above it, WRAPPING** (`ctest`): the model gains a width, so a paragraph too wide becomes several
+  VISUAL LINES — and the breaking is not this class's, it is the tier's TYPESETTER (`CTTypesetterSuggestLineBreak`),
+  which reads the paragraph style's mode, handles a hard break itself and backs off to a word boundary. MEASURED: one
+  model line, one visual line at width **400** and **4** at width **96**, with the MODEL count unmoved at 1; the ranges
+  are contiguous and cover all **39** characters; the first wrapped line ends on a SPACE; a trailing newline is still an
+  empty last visual line; `-moveToEndOfLine:` stops at the visual line's own end (index **9**, not 39) and
+  `-moveToBeginningOfLine:` at its start; a click in the second band lands on the second visual line; the ink is in the
+  second band at the narrow width (**336** pixels) and NOWHERE below the first band at the wide one (**0**), so the wrap
+  is DRAWN and not just counted; and `-sizeToFit` keeps the width and grows the height (**23.7** points wide against
+  **70.9** narrow). A layout is rebuilt on the next read after the text or the width changes, which is the three doors
+  that can change either, and the trailing-whitespace rule (`-cg_textRangeOfVisualLine:`) is what makes the boundary
+  between two wrapped lines one index rather than two.
 - **And the field, which is a cell under a view** (`ctest`, offscreen): `NSTextFieldCell` owns the string, the face
   and the three doors of an edit; `NSTextField` is the control above it, and it contributes the two things a cell
   cannot — a PRESS that opens a session with the WINDOW's field editor, and `-selectText:` for the same session with
@@ -254,11 +267,11 @@ the compositor is really gone.
   and the child clip is the child's FRAME region rather than its bounds rect — which was the same value only while the
   origin was zero. MEASURED: a mark at a document's own y 100..120 draws at 110 with the clip view at the top and at
   10 after a scroll of 100, in one run, through `-displayRect:`.
-- **`ctest`: 35 of 35 passed** (the keyboard and the seam, the AppKit and its input path, the controls and their
+- **`ctest`: 36 of 36 passed** (the keyboard and the seam, the AppKit and its input path, the controls and their
   metrics, the field control and its cell and its bezel and its placeholder and what it may hold, the text path and its
-  word granularity and the first slice of the multi-line view, what a drag costs, the resize by edge, the tracking
-  engine, the clip view and the scroller and the scroll view and the drawn offset, the chrome and what its buttons do,
-  the chrome theme, the menus and activation).
+  word granularity and the multi-line view and its wrapping, what a drag costs, the resize by edge, the tracking engine,
+  the clip view and the scroller and the scroll view and the drawn offset, the chrome and what its buttons do, the
+  chrome theme, the menus and activation).
 - **And the desktop's own text is SUB-PIXEL ANTIALIASED**, which is the AppKit's half of a renderer change in
   CoreGraphics: a window's surface is OPAQUE (`kCGImageAlphaNoneSkipFirst`), and the destination's opacity is
   exactly what decides whether a glyph is rasterised in colour. MEASURED on the live session: the window title's
@@ -396,7 +409,8 @@ still absent (`-interpretKeyEvents:` does the direct mapping and says so), and t
 editor are named rather than guessed. The WORD commands are NOT in that list any more: `tests/text_word_movement.m`
 drives Option+arrow and Option+Delete, because a word is a run of the string's own characters and needs no layout
 model. And the MULTI-LINE TEXT VIEW has its FIRST SLICE: `NSTextView` holds many lines where `NSText` holds one
-(`tests/text_view_lines.m`), with WRAPPING, SCROLLING and rich text named in its own header as the slices above it. Each absence is stated
+(`tests/text_view_lines.m`), and WRAPPING is the slice above it (`tests/text_view_wrapping.m`) — with SCROLLING and
+rich text named in its own header as the slices still owed. Each absence is stated
 rather than stubbed, and the refusals name themselves.
 
 ## Build

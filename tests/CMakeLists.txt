@@ -141,6 +141,14 @@ target_link_libraries(text_view_lines PRIVATE App m)
 add_test(NAME appkit-text-view-lines COMMAND text_view_lines)
 set_tests_properties(appkit-text-view-lines PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
 
+# **AND THE SLICE ABOVE IT: THE SAME MODEL WRAPPED TO THE VIEW'S WIDTH.** A paragraph too wide becomes several VISUAL
+# lines; the model line count does not move; the ranges are contiguous; a wrapped line ends on a space; the click, the
+# movements and the INK all walk the visual lines; and `-sizeToFit` keeps the width and answers the height.
+add_executable(text_view_wrapping text_view_wrapping.m)
+target_link_libraries(text_view_wrapping PRIVATE App m)
+add_test(NAME appkit-text-view-wrapping COMMAND text_view_wrapping)
+set_tests_properties(appkit-text-view-wrapping PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
+
 # **AND THE INSIDE OF A SCROLL VIEW.** `NSClipView`'s arithmetic is "the whole of it" (its own header), and it is
 # checked in EXACT POINTS rather than by drawing: where a short document sits, where a long one stops, and the
 # notification wire that re-constrains the scroll when the document's own frame or bounds changes. Offscreen, so it

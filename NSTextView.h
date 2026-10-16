@@ -1,37 +1,34 @@
 /*
- * NSTextView.h — A TEXT VIEW: MANY LINES WHERE `NSText` HOLDS ONE.
+ * NSTextView.h — A TEXT VIEW: THE MODEL, AND THE LAYOUT THAT WRAPS IT.
  *
  * Copyright © 2026 Kyle J. Cardoza. MIT licensed — see LICENSE.
  * SPDX-License-Identifier: MIT
  *
- * **THIS IS A RECONNAISSANCE AND ITS FIRST SLICE, AND THE TWO ARE ONE FILE BECAUSE THE FIRST THING A READER NEEDS IS
- * WHERE THIS CLASS IS GOING.** Apple's `NSTextView` is the top of the Cocoa text system: a DOCUMENT view over an
- * `NSTextStorage`, laid out by an `NSLayoutManager` through one or more `NSTextContainer`s, with attachments, tables
- * and rich text on top. NONE OF THAT STACK EXISTS HERE — this tier has no storage, no layout manager and no container
- * — so what this class is for now is the thing those three exist to make: MORE THAN ONE LINE.
+ * **APPLE'S `NSTextView` IS THE TOP OF A STACK THIS TIER HAS NOT GOT** — an `NSTextStorage`, an `NSLayoutManager` and
+ * an `NSTextContainer`, with attachments and rich text on top — so this class is built in slices, each one a thing a
+ * person can see:
  *
- * THE SLICES, IN THE ORDER THEY CAN BE BUILT, each one a thing a person can see:
- *
- *   I.   THE LINE MODEL, WHICH IS THIS SLICE. The string is broken at its EXPLICIT newlines, a line is drawn per
- *        line, a click lands on the line it is over, the caret sits on its own line, and the movement commands that
- *        were no-ops for a one-line field (`-moveUp:`, `-moveDown:`, the document ends) are real. A line WIDER than
- *        the view is CLIPPED — no wrapping yet, and no scrolling.
- *   II.  WRAPPING, which is a line model with a width: a logical line becomes several VISUAL lines, and the caret and
- *        the hit test have to walk a visual line rather than a logical one.
- *   III. SCROLLING, which is a clip view and a document height — and it is why slice I takes the horizontal origin
- *        away from its base rather than pretending a document scrolls sideways.
+ *   I.   THE LINE MODEL (shipped). The string is broken at its EXPLICIT newlines; a line is drawn per line; a click
+ *        lands on the line it is over; the caret sits on its own line; and the movement a one-line field had no
+ *        answer for (`-moveUp:`, `-moveDown:`, the document ends) is real.
+ *   II.  WRAPPING (THIS SLICE). The model gains a WIDTH: a line too wide for the view becomes several VISUAL LINES,
+ *        and the caret, the hit test, the selection and every movement walk those instead. `NSResponder.h`'s word
+ *        correction already said a WORD is not a layout question; a VISUAL LINE is one, and this is where it is
+ *        decided.
+ *   III. SCROLLING, which is a clip view and a document height — and it is why slice I took the horizontal origin
+ *        away from the base rather than pretending a document scrolls sideways.
  *   IV.  RICH TEXT, ATTACHMENTS AND PARAGRAPHS, which need the attributed store and the attribute vocabulary the
  *        `NSTextFieldAttributedStringMethods` note already names as travelling without being obeyed.
  *
- * **WHAT SLICE I DOES NOT HAVE, NAMED RATHER THAN LEFT TO BE FOUND:** wrapping, any scroll view integration, the
- * `NSTextStorage`/`NSLayoutManager`/`NSTextContainer` trio and the door names that come with it, attachments, tables,
- * the paragraph commands, the marked-text family and the input-method half. Each is a slice above; none is stubbed.
+ * **THE TWO UNITS ARE NOT THE SAME THING AND BOTH KEEP THEIR OWN NAME.** A MODEL LINE — a paragraph, in Apple's
+ * vocabulary — is a `\n`-terminated run, and the three `cg_…OfLine:` doors below are that model: they are facts about
+ * the STRING and do not change when the view is resized. A VISUAL LINE is one line as LAID OUT at the view's width,
+ * and there can be several per model line; the two `cg_visualLine…` doors are that layout, and they change every time
+ * the text or the width does. A caller that wants "how many lines" has to say which.
  *
- * **AND THE ONE THING THAT IS NOT A SLICE BUT A DESIGN DECISION: A LINE IS A `\n`-TERMINATED RUN, AND NOTHING ELSE.**
- * A trailing newline therefore ends with an EMPTY last line — "a\n" is two lines — which is what a document editor
- * means by "the caret is on an empty line at the end" and what a naive split on the newline would get wrong. The two
- * `cg_` doors below are this tier's own name for the model (Apple's line doors need the layout manager), and they are
- * public because a caller laying anything out beside a text view needs the count.
+ * **WHAT THE SLICES ABOVE STILL HAVE NOT GOT, NAMED RATHER THAN STUBBED:** scrolling and the clip view, the
+ * `NSTextStorage`/`NSLayoutManager`/`NSTextContainer` trio and the door names that come with it, attachments, tables,
+ * the paragraph commands, the marked-text family and the input-method half.
  */
 #ifndef APPKIT_NSTEXTVIEW_H
 #define APPKIT_NSTEXTVIEW_H
@@ -41,15 +38,33 @@
 NS_ASSUME_NONNULL_BEGIN
 
 @interface NSTextView : NSText
+{
+	/* **THE VISUAL LAYOUT, WHICH IS THE MODEL LAID OUT AT A WIDTH AND IS REBUILT WHENEVER EITHER CHANGES.** A flat
+	 * array of character ranges in reading order, which is all a line IS: the y is the index times the line height and
+	 * the x is Core Text's offset within the line, so a second array of positions would be a second thing to keep in
+	 * step. `malloc`'d rather than an `NSArray` because a layout is a run of PODs a draw reads in a loop, and
+	 * `_cg_layoutValid` is the dirty flag `-replaceCharactersInRange:`, `-setString:` and `-setFrameSize:` clear. */
+	NSRange *_cg_visual;		/* malloc'd; the first `_cg_visualCount` are live */
+	NSUInteger _cg_visualCount;
+	NSUInteger _cg_visualCapacity;
+	BOOL _cg_layoutValid;
+	CGFloat _cg_layoutWidth;
+}
 
-/* ---- THE LINE MODEL, WHICH IS THIS TIER'S OWN NAME FOR IT -------------------------------------------- */
+/* ---- THE MODEL: A LINE IS A `\n`-TERMINATED RUN, AND NONE OF THIS DEPENDS ON THE VIEW'S WIDTH ---------------- */
 
-/* **A LINE IS A MAXIMAL RUN OF CHARACTERS NOT CONTAINING A NEWLINE**, and the line's range EXCLUDES the newline that
- * ends it — so an edit that replaces a whole line cannot eat the break between it and the next. Bytes and indices are
- * the string's own, which is what every other door in this family counts in. */
 - (NSUInteger)cg_lineCount;
 - (NSUInteger)cg_lineIndexForCharacterIndex:(NSUInteger)index;
 - (NSRange)cg_characterRangeOfLine:(NSUInteger)line;
+
+/* ---- THE LAYOUT: THE SAME MODEL AT THE VIEW'S WIDTH, WRAPPED ------------------------------------------------- */
+
+/* **AND A VISUAL LINE'S RANGE INCLUDES THE SPACE OR NEWLINE IT ENDED ON**, which is the engine's own convention (a
+ * line's trailing whitespace is part of it) — so the range a caller gets back is the range the BREAKER decided on,
+ * not one this class trimmed. A caller drawing an index within a line asks Core Text, and the caret at the END of a
+ * line is at the end of that range. */
+- (NSUInteger)cg_visualLineCount;
+- (NSRange)cg_visualLineRangeAtIndex:(NSUInteger)line;
 
 @end
 
