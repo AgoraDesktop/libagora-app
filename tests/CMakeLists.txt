@@ -157,6 +157,14 @@ target_link_libraries(text_layout_fragments PRIVATE App m)
 add_test(NAME appkit-text-layout-fragments COMMAND text_layout_fragments)
 set_tests_properties(appkit-text-layout-fragments PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
 
+# **AND THE INK THAT LAYOUT PRODUCES.** The manager DRAWS the fragments it laid out: two lines are two bands, the
+# origin moves them, a glyph range draws only its own line, the bounding rect is the union of the fragments a range
+# touches, and a foreground colour in the STORE is the colour the glyphs come out.
+add_executable(text_layout_draw text_layout_draw.m)
+target_link_libraries(text_layout_draw PRIVATE App m)
+add_test(NAME appkit-text-layout-draw COMMAND text_layout_draw)
+set_tests_properties(appkit-text-layout-draw PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
+
 # **AND THE WORD GRANULARITY OF THE SAME KEYS.** Option+arrow moves by the word and Option+Delete deletes one, which
 # is arithmetic over the string's own characters and needs no layout model — the correction `NSResponder.h` carries.
 # Driven as KEYS, so the mapping is under test as well as the walk.

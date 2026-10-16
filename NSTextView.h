@@ -21,9 +21,10 @@
  *        caret into a rectangle.
  *   IV.  RICH TEXT, ATTACHMENTS AND PARAGRAPHS (IN PROGRESS). The STORE (`NSTextStorage.h`), the REGION
  *        (`NSTextContainer.h`) and the manager (`NSLayoutManager.h`) are all here: the web is connected, an edit
- *        reaches the manager, and the manager LAYS THE STORE INTO THE CONTAINER'S LINES — line fragments, a used rect,
- *        and a character-to-glyph map that is the identity. What is left is DRAWING (nothing is drawn yet), the glyph
- *        STORE, the overflow into a second container, and this view reading a store rather than its own plain string.
+ *        reaches the manager, and the manager LAYS THE STORE INTO THE CONTAINER'S LINES *and draws them* — line
+ *        fragments, a used rect, a bounding rect, the ink, and a character-to-glyph map that is the identity. What is
+ *        left is the glyph STORE, the overflow into a second container, and this view reading a store rather than its
+ *        own plain string.
  *
  * **AND THE FLIP IS WHY THE LAYOUT BELOW IS y-DOWN.** A flipped view measures y from the TOP — that is what flipping
  * MEANS — so `-cg_baselineForLine:` counts downward and a band is drawn ABOVE its baseline. THE ONE PLACE IT SHOWS is
@@ -36,12 +37,14 @@
  * and there can be several per model line; the two `cg_visualLine…` doors are that layout, and they change every time
  * the text or the width does. A caller that wants "how many lines" has to say which.
  *
- * **WHAT THE SLICES ABOVE STILL HAVE NOT GOT, NAMED RATHER THAN STUBBED:** DRAWING AND THE GLYPH STORE. The three
- * objects are here and CONNECTED (`NSTextStorage.h`, `NSTextContainer.h`, `NSLayoutManager.h`) and the manager now LAYS
- * OUT — line fragments, a used rect, a character-to-glyph map that is the IDENTITY (Core Text does the real mapping
- * inside `CTLine`); what it does not do is DRAW, keep a glyph store, fill a SECOND container by overflow, or map
- * character and glyph ranges in anything but the identity — plus attachments, tables, the paragraph commands, the
- * marked-text family and the input-method half. And this view still reads a PLAIN string rather than attribute runs.
+ * **WHAT THE SLICES ABOVE STILL HAVE NOT GOT, NAMED RATHER THAN STUBBED:** the GLYPH STORE, the OVERFLOW, and the
+ * VIEW that reads them. The three objects are here and CONNECTED (`NSTextStorage.h`, `NSTextContainer.h`,
+ * `NSLayoutManager.h`) and the manager LAYS OUT and DRAWS — line fragments, a used rect, a bounding rect, the ink, and
+ * a character-to-glyph map that is the IDENTITY (Core Text does the real mapping inside `CTLine`); what it does not do
+ * is keep a glyph store, fill a SECOND container by overflow, draw a BACKGROUND or an UNDERLINE (this tier has no such
+ * attribute keys), or map character and glyph ranges in anything but the identity — plus attachments, tables, the
+ * paragraph commands, the marked-text family and the input-method half. And this view still reads a PLAIN string rather
+ * than attribute runs.
  */
 #ifndef APPKIT_NSTEXTVIEW_H
 #define APPKIT_NSTEXTVIEW_H

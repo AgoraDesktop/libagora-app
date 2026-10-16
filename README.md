@@ -47,6 +47,7 @@ tests/
   text_container.m              and the REGION that store is laid out in: a size, a padding, and the fragments that fit
   text_layout_web.m             and the WEB that ties the trio together: the store, its managers, and what goes stale
   text_layout_fragments.m       and the FRAGMENTS that web produces: the store laid into the container's lines
+  text_layout_draw.m            and the INK: the manager drawing the glyphs it laid out, where the origin says
   text_word_movement.m          and its WORD granularity: Option+arrow and Option+Delete, over the string
   text_view_lines.m             and the first slice of the MULTI-LINE view: the line model, and what reads it
   text_view_wrapping.m          and the slice above it: the same model WRAPPED to the view's width
@@ -200,6 +201,19 @@ the compositor is really gone.
   the container's; an edit makes the layout STALE and asking for the geometry REBUILDS it one line taller, clearing the
   record; and asking twice changes nothing. **WHAT IS OWED AND NAMED IN ITS HEADER**: drawing, the glyph store, the
   overflow into a second container, and any glyph map that is not the identity.
+- **And the INK the layout produces** (`ctest`): `NSLayoutManager -drawGlyphsForGlyphRange:atPoint:` reads the
+  fragments and sets each line at the ORIGIN the caller gave — "that container's origin in the currently focused
+  view's coordinates", as Apple's comment puts it — and `-boundingRectForGlyphRange:inTextContainer:` answers the union
+  of the fragments a range touches, which is what an invalidation is spelled in. MEASURED: two lines are **2** bands of
+  ink; drawing one line at (0,0) begins at **(11,5)** and at (30,12) at **(41,17)** — exactly the origin's offset; the
+  FIRST line's ink spans rows **5..12** and the SECOND's **19..27**, so a glyph range draws its own line and not the
+  other; the whole store's bounding rect is **2** lines tall from y=0 (31.46), the first line's **1** (15.73) from y=0,
+  and the second's begins at **y=15.73**; and a RED foreground attribute in the store is the colour the glyphs come
+  out, while no colour attribute leaves them the control's own ink. **AND THE PROBE FOUND ONE REAL DEFECT**: the
+  bounding rect included a fragment the range only TOUCHED at its boundary, so a one-line range answered two lines —
+  the overlap test is now strict on both ends. **WHAT IS OWED AND NAMED IN ITS HEADER**: `-drawBackgroundForGlyphRange:atPoint:`
+  (this tier has no background-colour key, no marked range and no tables, and the SELECTION belongs to the view), the
+  underline and strikethrough doors (no underline attribute), and one colour per FRAGMENT rather than per run.
 - **And the field, which is a cell under a view** (`ctest`, offscreen): `NSTextFieldCell` owns the string, the face
   and the three doors of an edit; `NSTextField` is the control above it, and it contributes the two things a cell
   cannot — a PRESS that opens a session with the WINDOW's field editor, and `-selectText:` for the same session with
@@ -330,12 +344,12 @@ the compositor is really gone.
   and the child clip is the child's FRAME region rather than its bounds rect — which was the same value only while the
   origin was zero. MEASURED: a mark at a document's own y 100..120 draws at 110 with the clip view at the top and at
   10 after a scroll of 100, in one run, through `-displayRect:`.
-- **`ctest`: 41 of 41 passed** (the keyboard and the seam, the AppKit and its input path, the controls and their
+- **`ctest`: 42 of 42 passed** (the keyboard and the seam, the AppKit and its input path, the controls and their
   metrics, the field control and its cell and its bezel and its placeholder and what it may hold, the text path and its
   word granularity and the multi-line view and its wrapping and its scrolling, the STORE the rich-text slice is built
-  on and the REGION it is laid out in and the WEB that ties the three together and the FRAGMENTS it produces, what a
-  drag costs, the resize by edge, the tracking engine, the clip view and the scroller and the scroll view and the drawn
-  offset, the chrome and what its buttons do, the chrome theme, the menus and activation).
+  on and the REGION it is laid out in and the WEB that ties the three together and the FRAGMENTS it produces and the
+  INK it draws, what a drag costs, the resize by edge, the tracking engine, the clip view and the scroller and the
+  scroll view and the drawn offset, the chrome and what its buttons do, the chrome theme, the menus and activation).
 - **And the desktop's own text is SUB-PIXEL ANTIALIASED**, which is the AppKit's half of a renderer change in
   CoreGraphics: a window's surface is OPAQUE (`kCGImageAlphaNoneSkipFirst`), and the destination's opacity is
   exactly what decides whether a glyph is rasterised in colour. MEASURED on the live session: the window title's

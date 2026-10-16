@@ -156,6 +156,29 @@ NS_ASSUME_NONNULL_BEGIN
  * probe that counts lines must be able to, and Apple answers only through the geometry. */
 - (NSUInteger)cg_lineFragmentCountForTextContainer:(NSTextContainer *)container;
 
+/* ---- THE DRAWING, WHICH IS WHAT A VIEW CALLS AND WHO ELSE WOULD --------------------------------------- */
+
+/* **THE INK, AND THE DOOR `NSTextView` CALLS.** Apple's comment gives the contract exactly: "draws the actual glyphs,
+ * including attachments, as well as any underlines or strikethroughs… all of the specified glyphs must lie in a single
+ * container. The origin point … is that container's origin in the currently focused view's coordinates." So the
+ * fragments are read, each one's line is set at the origin the caller gave, and THE FOCUS MUST ALREADY BE LOCKED —
+ * which is why this door does no locking of its own. */
+- (void)drawGlyphsForGlyphRange:(NSRange)glyphsToShow atPoint:(NSPoint)origin;
+
+/* **AND THE RECT A RANGE OCCUPIES, WHICH IS WHAT AN INVALIDATION IS SPELLED IN.** "The smallest bounding rect which
+ * completely encloses the glyphs in the given glyphRange that are in the given container… always in container
+ * coordinates." It is the union of the fragments the range touches — the same arithmetic `-usedRectForTextContainer:`
+ * does for the whole store. */
+- (NSRect)boundingRectForGlyphRange:(NSRange)glyphRange inTextContainer:(NSTextContainer *)container;
+
+/* **AND WHAT IS NOT HERE, NAMED AT THE DOOR THAT WOULD BE IT: `-drawBackgroundForGlyphRange:atPoint:`.** Apple's door
+ * paints "the background color and selection and marked range aspects of the text display, along with block decoration
+ * such as table backgrounds and borders" — and this tier has NO background-colour attribute KEY (its vocabulary is the
+ * font and the foreground colour), no marked range and no tables, so three of the four things it would paint do not
+ * exist and the fourth — the SELECTION — belongs to the VIEW, which is what knows where the selection is. The underline
+ * and strikethrough doors are absent for the same kind of reason: they need an underline attribute this tier has not
+ * got. */
+
 @end
 
 NS_ASSUME_NONNULL_END
