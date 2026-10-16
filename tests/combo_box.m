@@ -433,6 +433,11 @@ int main(void)
 
 		[box setTarget:watcher];
 		[box setAction:@selector(picked:)];
+		/* **AND THE BOX IS EDITABLE, WHICH IS THE FLAG ITS BASE NOW READS.** A combo box's press opens a session
+		 * through `NSTextField -mouseDown:`, and that door is gated on `-isEditable`. Before the cell said YES the
+		 * flag answered NO while the control opened a session anyway — the flag and the behaviour disagreed, and the
+		 * rebase onto `NSTextField` is what forced them to agree. */
+		check([box isEditable], "a combo box is editable by default, which is the flag its field base's press reads");
 		[box textDidEndEditing:[NSNotification notificationWithName:NSTextDidEndEditingNotification
 								     object:box userInfo:ret]];
 		check(watcher->fired == 1, "a session ended by RETURN sends the control's action");

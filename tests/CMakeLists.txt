@@ -192,6 +192,15 @@ target_link_libraries(text_field_cell PRIVATE App)
 add_test(NAME appkit-text-field-cell COMMAND text_field_cell)
 set_tests_properties(appkit-text-field-cell PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
 
+# **AND THE VIEW ABOVE THAT CELL, WHICH IS THE HALF A PERSON EXERCISES.** The cell probe begins a session by hand;
+# this one presses the field, commits with Return, throws away with Escape, opens with `-selectText:`, and aborts —
+# and asks the WINDOW who its first responder is, because a field's keyboard belongs to its editor and not to itself.
+# Offscreen, so it runs anywhere.
+add_executable(text_field_control text_field_control.m)
+target_link_libraries(text_field_control PRIVATE App)
+add_test(NAME appkit-text-field-control COMMAND text_field_control)
+set_tests_properties(appkit-text-field-control PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
+
 # **AND THE DISPLAY PATH.** The ink tests are all offscreen; this one puts a menu's window on a headless
 # compositor and reads the COMPOSITOR'S OWN FRAMEBUFFER back, which is the only place the present can be seen.
 # It skips when there is no window server, so a component's tests still do not need a sibling's build.

@@ -3916,8 +3916,16 @@ static NSUInteger fn_edge_index(NSRectEdge edge)
 
 - (void)endEditingFor:(id)anObject
 {
-	/* THE CONTRACT IS ALREADY MET: there is no field editor in this tier for anything to be editing in. */
 	(void)anObject;
+	/* **THE GROUND THIS DOOR STOOD ON EXPIRED, AND THIS IS WHAT IT DOES NOW.** It used to be a no-op "because this
+	 * tier has no field editor"; a window lends one now, so the honest answer is the ending a click into another view
+	 * performs — the editor resigns, the cell takes the string back, and the control decides whether its action fires.
+	 * The reason it is NOT a refusal: the machinery is all here, and the door is the window's own `-makeFirstResponder:`
+	 * rather than a second teardown. `anObject` is not consulted because the window owns exactly ONE field editor, so
+	 * there is one session to end whichever object a caller names. */
+	if (_fieldEditor != nil && _firstResponder == (NSResponder *)_fieldEditor) {
+		[self makeFirstResponder:nil];
+	}
 }
 
 - (void)useOptimizedDrawing:(BOOL)flag

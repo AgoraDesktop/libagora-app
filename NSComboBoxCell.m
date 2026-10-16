@@ -39,6 +39,12 @@
 		 * asks will get rather than to zeroes that would read as "no list". */
 		_numberOfVisibleItems = 10;
 		_completes = YES;
+		/* **AND A COMBO BOX IS EDITABLE BY DEFAULT, WHICH IS APPLE'S ANSWER AND THE ONE THE VIEW NOW DEPENDS ON.**
+		 * `NSCell`'s default is NO — a cell is not a field unless it says so — and this class inherited that while the
+		 * CONTROL above opened a session on every press anyway, so the flag said one thing and the behaviour did another.
+		 * The control's base is `NSTextField` now, whose press is gated on exactly this flag, so setting it here is what
+		 * makes the two agree: a combo box IS a field, and a field IS editable. */
+		[self setEditable:YES];
 	}
 	return self;
 }

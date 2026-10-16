@@ -16,8 +16,6 @@
 #import <AppKit/NSComboBox.h>
 #import <AppKit/NSComboBoxCell.h>
 #import <AppKit/NSView.h>
-#import <AppKit/NSWindow.h>
-#import <AppKit/NSText.h>
 #import <AppKit/NSEvent.h>
 
 @implementation NSComboBox
@@ -48,9 +46,12 @@
  * height, which is a measurement rather than a constant. The point is carried into the control's own space first —
  * `-convertPoint:fromView:nil` — because an event's location is in the WINDOW's.
  *
- * AND IT DOES NOT CALL `-super`. `NSControl`'s tracking loop highlights the cell, follows the pointer and sends the
- * action on the release — which is a push button's gesture. Neither of this control's answers is that gesture: one is a
- * session that outlives the press and the other is an edit that does. */
+ * **AND A PRESS ANYWHERE ELSE IS A PRESS ON A FIELD, WHICH IS A DOOR THIS CLASS NOW INHERITS.** It used to open the
+ * session here, in a copy of `NSTextField`'s command written before `NSTextField` existed. The base is that class
+ * now, so the field half is `-super` and this method keeps only what a text field cannot do: the CHIP. (Calling
+ * `-super` is not calling `NSControl`'s tracking loop any more — `NSTextField -mouseDown:` overrides it — so the
+ * button gesture the earlier note warned about is not what is reached.) The one thing the base needs from this class
+ * is that the box be EDITABLE, which a combo cell now says of itself. */
 - (void)mouseDown:(NSEvent *)event
 {
 	NSComboBoxCell *cell = (NSComboBoxCell *)[self cell];
@@ -61,18 +62,9 @@
 		[cell cg_attachListWithFrame:bounds inView:self];
 		return;
 	}
-	{
-		NSText *editor = (NSText *)[[self window] fieldEditor:YES forObject:self];
-
-		if (editor == nil) {
-			return;
-		}
-		/* **AND THE CONTROL IS THE CALLER, WHICH IS HOW A COMMITTED EDIT REACHES A CALLER'S ACTION.** The cell hands the
-		 * movement to whoever it was given here, and `NSControl -textDidEndEditing:` turns Return and Tab into this
-		 * control's own action — so the field and the handler are one gesture rather than two. */
-		[cell editWithFrame:bounds inView:self editor:editor delegate:self event:event];
-	}
-	[self setNeedsDisplay:YES];
+	/* **THE CONTROL IS THE CALLER, WHICH IS HOW A COMMITTED EDIT REACHES A CALLER'S ACTION** — and that is still true
+	 * through the base: `NSTextField` passes this control as the cell's caller, exactly as the copy above did. */
+	[super mouseDown:event];
 }
 
 /* ---- THE LIST ------------------------------------------------------------------------------------- */

@@ -4,26 +4,29 @@
  * Copyright © 2026 Kyle J. Cardoza. MIT licensed — see LICENSE.
  * SPDX-License-Identifier: MIT
  *
- * **EVERY DOOR HERE IS A FORWARD**, in the shape `NSPopUpButton` records for its own: a cell can decide and draw, and
- * what a view contributes is a coordinate space and a window to put a list in. Unlike the pop-up there is no press to
- * hand over yet — the list this control's chip promises does not open, for the reason the cell's header gives — so
- * every door below ends at the cell and nothing here has behaviour of its own.
+ * **ALMOST EVERY DOOR HERE IS A FORWARD**, in the shape `NSPopUpButton` records for its own: a cell can decide and
+ * draw, and what a view contributes is a coordinate space and a window to put a list in. THE PRESS IS THE ONE DOOR
+ * THAT IS NOT — a combo box is two things in one frame, so `-mouseDown:` asks the cell where its CHIP is and either
+ * opens the list or hands the press to the field base below — and that split is the class's whole behaviour.
  *
- * **AND THE BASE IS `NSControl` RATHER THAN APPLE'S `NSTextField`.** Apple builds a combo box on a text field, which
- * is where its editing and its string live; this tier has no `NSTextField` and no text-field CELL, so the class
- * starts where the tier's control layer starts — the same choice, for the same reason, the cell's header records one
- * level down, and the row that closes it is the field cell that would make this control editable.
+ * **AND THE BASE IS APPLE'S NOW: `NSTextField`.** This class started at `NSControl`, and the header said why in as
+ * many words — the tier had no `NSTextField` and no text-field CELL, so a combo box began where the control layer
+ * began and the row that would close it was named. BOTH HAVE SINCE ARRIVED: `NSTextFieldCell` is what
+ * `NSComboBoxCell` already derives from, and `NSTextField` is the control above it. So the hierarchy matches Apple's,
+ * and the ONE thing the base changes is the press — a click in the field opens a session through `NSTextField`'s own
+ * `-mouseDown:` rather than through a copy of that logic kept here — while the CHIP's press stays this class's,
+ * because opening a list is the one thing a text field cannot do.
  */
 #ifndef APPKIT_NSCOMBOBOX_H
 #define APPKIT_NSCOMBOBOX_H
 
-#import <AppKit/NSControl.h>
+#import <AppKit/NSTextField.h>
 
 @class NSComboBoxCell;
 
 NS_ASSUME_NONNULL_BEGIN
 
-@interface NSComboBox : NSControl
+@interface NSComboBox : NSTextField
 
 - (instancetype)initWithFrame:(NSRect)frameRect;
 

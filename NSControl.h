@@ -16,9 +16,15 @@
  * the receiver's cell". So the doors below are FORWARDS to the cell — a second copy here would be a second place for
  * the two to disagree.
  *
- * WHAT IS NOT HERE: the cell-based editors (`-currentEditor`, `-selectText:`, `-abortEditing`), which need a field
- * editor and therefore the text-input session; the formatter-driven validation and its delegate family; and any
- * `-sizeToFit` arithmetic beyond the cell's own measurement. Each is absent rather than stubbed.
+ * **THE CELL-BASED EDITORS WERE THE FIRST THING THIS LIST NAMED, AND THE FIRST OF THEM HAS ARRIVED.** A window
+ * lends a field editor, a field cell opens a session with it, and the two doors that ask about that session —
+ * `-currentEditor` and `-abortEditing` — are declared below and answered by the cell that owns it. `-selectText:` is
+ * NOT among them: Apple declares it on `NSTextField` rather than here, and it lives there now.
+ *
+ * WHAT IS NOT HERE: the formatter-driven validation and its delegate family (`-validateEditing`, and the
+ * `NSControlTextEditingDelegate` protocol with the `NSControlSubclassNotifications` category behind it); the
+ * attributed-string value pair (`-attributedStringValue` and its setter); and any `-sizeToFit` arithmetic beyond the
+ * cell's own measurement. Each is absent rather than stubbed.
  */
 #ifndef APPKIT_NSCONTROL_H
 #define APPKIT_NSCONTROL_H
@@ -100,6 +106,14 @@ NS_ASSUME_NONNULL_BEGIN
 - (BOOL)sendAction:(nullable SEL)theAction to:(nullable id)theTarget;
 - (void)performClick:(nullable id)sender;
 - (void)sizeToFit;
+
+/* **AND THE TWO DOORS THAT ASK ABOUT AN EDIT SESSION, WHICH THE CELL ANSWERS BECAUSE THE CELL OWNS IT.** A control
+ * whose cell can be typed into owes a caller a way to reach the editor that is running — `-currentEditor` — and a way
+ * to throw the session away without committing it — `-abortEditing`. Neither is a fact a VIEW has: a view has no
+ * editor, and the string being edited is the cell's. So both are forwards, and the cell's `cg_` pair (see
+ * `NSCell.h`) is what they reach. */
+- (nullable NSText *)currentEditor;
+- (BOOL)abortEditing;
 
 /* **AND THE TWO DOORS THE POINTER'S CROSSING ARRIVES BY.** Apple's `NSView` gets these from an `NSTrackingArea` — a
  * class this tier does not ship — so the WINDOW synthesises them out of the pointer's motion and the deepest view

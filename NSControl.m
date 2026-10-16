@@ -466,6 +466,28 @@
 	[self setFrameSize:[_cell cellSize]];
 }
 
+/* ---- AND THE TWO DOORS THAT ASK ABOUT AN EDIT SESSION ------------------------------------------------ */
+
+/* **BOTH ARE THE CELL'S ANSWER, WHICH IS THE WHOLE OF THE DESIGN.** The editor a field session runs in is put in a
+ * view and taken out again by the CELL (see `NSTextFieldCell -selectWithFrame:...`), so the cell is what knows when a
+ * session is live — and a control that kept its own flag would be a second record of one fact, drifting from the
+ * first the moment an abort or a key ended a session behind its back. `-currentEditor` therefore returns the cell's
+ * editor and nothing else, and an empty cell answers nil rather than a stale pointer. */
+- (NSText *)currentEditor
+{
+	return [_cell cg_currentEditor];
+}
+
+/* **AND ABORTING IS ENDING A SESSION WITHOUT COMMITTING IT.** Apple's contract is a BOOL, and its meaning is whether
+ * there was anything to abort — so a control with no session says NO rather than pretending to have done something.
+ * The DISCARD is the cell's (it is the one holding the string): the same ending a keyboard's Escape performs, reached
+ * through a door instead of a key, which is why the cell names `NSTextMovementCancel` as the reason and a control
+ * with an action does not send it. */
+- (BOOL)abortEditing
+{
+	return [_cell cg_abortEditing];
+}
+
 
 /* ---- AND THE END OF AN EDIT, WHICH IS THE FIRST THING THIS CLASS HEARS FROM A FIELD ---------------- */
 

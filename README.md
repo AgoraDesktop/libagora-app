@@ -43,6 +43,8 @@ tests/
   slider_ink.m                  a control whose VALUE is a POSITION: the knob and its inverse
   tracking_area.m               an AREA's region, owner and SCOPE — and a control's own hover area
   text_input.m                  the first slice of the text system, driven a keystroke at a time
+  text_field_cell.m             a FIELD's cell: its string, its face, and one edit session end to end
+  text_field_control.m          and the VIEW above it: a press that opens a session, and what commits it
   clip_view.m                   the INSIDE of a scroll view: the arithmetic, and the wire that re-runs it
   scroller.m                    and its BAR: a fraction into a knob, a point into a part, a drag back into a value
   scroll_view.m                 and the FRAME that joins them: the tiling, the loop, and -enclosingScrollView
@@ -99,6 +101,17 @@ the compositor is really gone.
 - **The text path** (`ctest`): a key is built as an `NSEvent`, `-interpretKeyEvents:` turns it into a command,
   and the command edits the string — typing, both Backspace spellings, movement, Shift-extension, and the
   notification and its delegate both firing for one edit.
+- **And the field, which is a cell under a view** (`ctest`, offscreen): `NSTextFieldCell` owns the string, the face
+  and the three doors of an edit; `NSTextField` is the control above it, and it contributes the two things a cell
+  cannot — a PRESS that opens a session with the WINDOW's field editor, and `-selectText:` for the same session with
+  no pointer. The editor is put in the FIELD at the field's own text rect and made the window's FIRST RESPONDER, so
+  the keyboard goes to the editor rather than to the field, and a committed session reaches a caller's action through
+  `NSControl -textDidEndEditing:`. MEASURED: Return COMMITS the typed value into the field and sends the action ONCE;
+  Escape DISCARDS it and sends nothing; `-abortEditing` is that same discard through a door (and answers NO when no
+  session is running); a press on a field that is not editable opens NOTHING; and focusing the field (`-makeFirstResponder:`)
+  opens its session, leaving the EDITOR as the responder. `NSComboBox` now derives from `NSTextField` — Apple's own
+  hierarchy, which its header had named as the row this control would close — so its press is the base's press and the
+  chip is the only thing it adds.
 - **The chrome** (`ctest`, offscreen): the title bar's symbols are SHAPES in pixels — ink on both diagonals of
   the X, a thick stroke across the minus, and a pill rounded at both caps — the title is centred and bold, and
   each symbol appears only for the style-mask bit that asks for it.
@@ -181,10 +194,10 @@ the compositor is really gone.
   and the child clip is the child's FRAME region rather than its bounds rect — which was the same value only while the
   origin was zero. MEASURED: a mark at a document's own y 100..120 draws at 110 with the clip view at the top and at
   10 after a scroll of 100, in one run, through `-displayRect:`.
-- **`ctest`: 25 of 25 passed** (the keyboard and the seam, the AppKit and its input path, the controls and their
-  metrics, what a drag costs, the resize by edge, the tracking engine, the text path, the clip view and the scroller
-  and the scroll view and the drawn offset, the chrome and what its buttons do, the chrome theme, the menus and
-  activation).
+- **`ctest`: 30 of 30 passed** (the keyboard and the seam, the AppKit and its input path, the controls and their
+  metrics, the field control and its cell, what a drag costs, the resize by edge, the tracking engine, the text path,
+  the clip view and the scroller and the scroll view and the drawn offset, the chrome and what its buttons do, the
+  chrome theme, the menus and activation).
 - **And the desktop's own text is SUB-PIXEL ANTIALIASED**, which is the AppKit's half of a renderer change in
   CoreGraphics: a window's surface is OPAQUE (`kCGImageAlphaNoneSkipFirst`), and the destination's opacity is
   exactly what decides whether a glyph is rasterised in colour. MEASURED on the live session: the window title's

@@ -834,6 +834,21 @@
 	return _title;
 }
 
+/* **AND THE TWO DOORS A SESSION PUTS ON A CELL, WHICH THIS BASE ANSWERS "NOTHING" TO.** The pair exists so that a
+ * control can answer `-currentEditor` and `-abortEditing` without knowing which of its cells can hold a session: the
+ * base's cell cannot, so it says so, and `NSTextFieldCell` overrides both. They live here rather than only on the
+ * field cell because `NSControl` must be able to ask them of whatever cell it was given — the same reason
+ * `-cg_contentText` is a base door and not a field-only one. */
+- (NSText *)cg_currentEditor
+{
+	return nil;
+}
+
+- (BOOL)cg_abortEditing
+{
+	return NO;
+}
+
 - (void)setTitle:(NSString *)aString
 {
 	if (aString != _title) {

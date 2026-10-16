@@ -638,6 +638,18 @@ typedef NSUInteger NSControlSize;
  * differently is measured differently without an override of the measurement — and a subclass that DRAWS its text asks
  * the same door, which is what makes "what it measures" and "what it shows" one fact rather than two. */
 - (nullable NSString *)cg_contentText;
+
+/* **AND THE TWO DOORS AN EDIT SESSION PUTS ON A CELL, WHOSE BASE ANSWERS "NOT EDITING".** Apple declares
+ * `-currentEditor` and `-abortEditing` on `NSControl` and neither on `NSCell`, because in Apple's design the CONTROL
+ * tracks the field editor. This tier's design puts that knowledge one level down: the CELL is what puts an editor over
+ * its own text and what takes the string back, so it is the object that knows whether a session is running — and a
+ * second record of the same fact, kept by the control, would be a second thing to keep in step. So the question is
+ * asked through a pair of `cg_`-named doors, in the same spirit as `-cg_contentText` above, and the base answers the
+ * two things a cell with no session can honestly say: there is no editor, and there is nothing to abort.
+ * `NSTextFieldCell` is the one subclass that overrides them, because it is the one that runs a session. */
+- (nullable NSText *)cg_currentEditor;
+- (BOOL)cg_abortEditing;
+
 @property (readonly) int intValue;
 @property (readonly) float floatValue;
 @property (readonly) double doubleValue;

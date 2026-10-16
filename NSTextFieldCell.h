@@ -131,6 +131,14 @@ NS_ASSUME_NONNULL_BEGIN
  * `-editWithFrame:...` exists to be a spelling of. */
 - (void)endEditing:(nullable NSText *)textObj;
 
+/* **AND THE TWO QUESTIONS A CONTROL ASKS ABOUT A SESSION, WHICH ARE THIS CLASS'S TO ANSWER BECAUSE THIS CLASS RUNS
+ * IT.** `NSControl -currentEditor` and `-abortEditing` are forwards to these; see `NSCell.h` for why the pair is a
+ * base door rather than a fact the control also keeps. `-cg_currentEditor` answers the editor WHILE ONE IS SHOWING
+ * THIS CELL'S TEXT and nil otherwise, and `-cg_abortEditing` throws the session away — the same ending Escape performs,
+ * with the string left as it was — answering whether there was a session to throw away. */
+- (nullable NSText *)cg_currentEditor;
+- (BOOL)cg_abortEditing;
+
 @end
 
 NS_ASSUME_NONNULL_END

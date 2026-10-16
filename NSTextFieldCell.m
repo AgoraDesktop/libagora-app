@@ -384,6 +384,43 @@
 	[self fn_finishEditing:textObj keep:YES movement:NSTextMovementOther];
 }
 
+/* **AND THE TWO QUESTIONS A CONTROL ASKS, ANSWERED FROM THE ONE RECORD THIS CLASS KEEPS.** The editor and the flag are
+ * set together when a session opens and cleared together when it ends, so asking the flag and returning the pointer is
+ * one answer rather than two that could disagree: there is never an editor without a session, and the flag is what the
+ * DRAWING reads to decide whether the words are the cell's or the editor's. */
+- (NSText *)cg_currentEditor
+{
+	return _cg_textEditing ? _cg_editor : nil;
+}
+
+/* **AND AN ABORT IS THE ENDING ESCAPE PERFORMS, REACHED THROUGH A DOOR RATHER THAN A KEY.** That is not a figure of
+ * speech: the ending is `-cancelOperation:`, which marks the reason `NSTextMovementCancel` and asks the WINDOW to take
+ * the editor down. Going through the window matters, and not for tidiness — a teardown done here in private would
+ * remove the editor from the view while the window still believed it was the first responder, so the keyboard would
+ * keep going to a detached view. The one ending, `-fn_finishEditing:keep:movement:`, still does the work; this door
+ * only supplies the reason and lets the window unwind the focus.
+ *
+ * NO WHEN THERE IS NOTHING TO ABORT, which is Apple's reading of the BOOL: a caller that aborted an untouched control
+ * is told nothing was thrown away rather than that it succeeded. */
+- (BOOL)cg_abortEditing
+{
+	NSText *editor = _cg_editor;
+
+	if (!_cg_textEditing || editor == nil) {
+		return NO;
+	}
+	if ([editor window] != nil) {
+		[editor cancelOperation:nil];
+	}
+	/* **AND THE TEARDOWN IS NOT ASSUMED.** A session opened on a view that has no window — which the session door above
+	 * permits, since a field can be built before it is put anywhere — cannot reach the window's door, so whatever is
+	 * still running after that attempt is ended here. The fallback is the same ending with the same reason. */
+	if (_cg_textEditing) {
+		[self fn_finishEditing:editor keep:NO movement:NSTextMovementCancel];
+	}
+	return YES;
+}
+
 /* **AND THIS IS HOW THE CELL HEARS THAT A SESSION IS OVER, AND WHY.** The editor is this cell's delegate while one is
  * running, so the notification arrives here carrying the movement — and the ONE movement that is not an acceptance is
  * `NSTextMovementCancel`: MEASURED before this, Escape ended the session and the cell took the string back, so the key

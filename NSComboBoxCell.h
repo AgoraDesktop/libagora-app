@@ -52,16 +52,17 @@ NS_ASSUME_NONNULL_BEGIN
 	 * cache of one. `-1` is "nothing chosen", which is also what an empty box answers, and it is why this is an
 	 * `NSInteger` and not a count of anything. */
 	NSInteger _selectedIndex;
-	/* APPLE'S TWO SHAPE DOORS. `-_numberOfVisibleItems` is how tall the list should be when it opens, and it is
-	 * STORED AND ANSWERED here for the same reason the editable flag is: the list does not open yet. */
+	/* APPLE'S TWO SHAPE DOORS. `-_numberOfVisibleItems` is how tall the list should be when it opens. It is STORED
+	 * AND ANSWERED but not yet OBEYED: the list DOES open now (see `-cg_attachListWithFrame:inView:`), and its height
+	 * is not yet taken from this number — a row of its own rather than a silent approximation. */
 	NSInteger _numberOfVisibleItems;
 	BOOL _completes;
 	BOOL _usesDataSource;
 	/* **AND `-_editable` IS NOT HERE BECAUSE `NSCell` ALREADY HAS IT**, along with the `-isEditable` and
-	 * `-setEditable:` pair that answers it. This class adds nothing to that flag yet, so it inherits both rather than
-	 * shadowing them with a second copy that would have to be kept in step — which is the same reason the two doors
-	 * are not redeclared below. What Apple's `NSComboBoxCell` does to that flag (it decides whether a person may type)
-	 * is the machinery this slice leaves open, stated at the top of this file. */
+	 * `-setEditable:` pair that answers it. This class therefore inherits both rather than shadowing them with a
+	 * second copy that would have to be kept in step — the same reason the two doors are not redeclared below. WHAT
+	 * THIS CLASS DOES DO IS SET IT: `-initTextCell:` turns it on, because a combo box IS a field, and the control
+	 * above reads that very flag to decide whether a press opens an edit. */
 }
 
 /* **THE INITIALISER IS APPLE'S, AND IT TAKES ONE FACT RATHER THAN TWO.** A pop-up's init asks whether it pulls down,

@@ -803,8 +803,12 @@ typedef NSUInteger NSWindowSharingType;
  * of the window's content view, and this tier draws through a `CGContext` rather than a state stack, so there is
  * no ID to return. A caller comparing two windows' gStates gets 0 == 0, which is the truth here.
 
- * `-endEditingFor:` IS A NO-OP BECAUSE THE CONTRACT IS ALREADY MET: it ends editing in that view's field editor,
- * and this tier has no field editor to end anything in. Nothing is approximated — there is nothing to do.
+ * `-endEditingFor:` ENDS THE WINDOW'S EDITING SESSION, WHICH IS A THING THAT NOW EXISTS. It used to be a no-op whose
+ * reason was "this tier has no field editor to end anything in", and a window lends one now, so the reason is gone and
+ * the door does the work: the editor resigns, the cell takes the string back, and the control it was lent to decides
+ * whether its action fires — the same ending a click into another view performs. `anObject` is not consulted, and that
+ * is stated rather than pretended: a window owns exactly ONE field editor, so "the session this window is in" is the
+ * whole of what a caller could name.
 
  * `-useOptimizedDrawing:` IS RECORDED, with the effect named: it let a window promise that its views do not
  * overlap, and this tier's drawing does not consult such a promise, so the flag is kept for a caller that reads

@@ -20,7 +20,7 @@
 #import <AppKit/NSView.h>
 #import <AppKit/NSButton.h>
 #import <AppKit/NSSlider.h>
-#import <AppKit/NSText.h>
+#import <AppKit/NSTextField.h>	/* the field CONTROL — a cell, a click, and the window's field editor */
 #import <AppKit/NSCell.h>
 #import <AppKit/NSMenu.h>
 #import <AppKit/NSMenuItem.h>
@@ -291,10 +291,11 @@ int main(int argc, char **argv)
 		NSButton *readout;
 		NSSlider *slider;
 		NSSlider *plain;
-		/* **AND A TEXT VIEW, WHICH IS THE ONE CONTROL IN THIS WINDOW THAT TAKES THE KEYBOARD.** It is made the
-		 * window's first responder below, so a keystroke goes to it rather than nowhere: the window sends KEY EVENTS to
-		 * the first responder, and a window with none has nobody to type at. */
-		NSText *field;
+		/* **AND A TEXT FIELD, WHICH IS THE ONE CONTROL IN THIS WINDOW THAT TAKES THE KEYBOARD.** It is focused below,
+		 * which opens its editor, so a keystroke goes to the field rather than nowhere: the window sends KEY EVENTS to its
+		 * first responder, and a window with none has nobody to type at. (The responder that ends up holding the keyboard
+		 * is the EDITOR, not the field — that is the arrangement the field control exists to set up.) */
+		NSTextField *field;
 		AGSwitch *sw;
 		/* AND A SCROLL PANEL, which is the one thing in this window that shows the scrolling slice. */
 		NSScrollView *scroll;
@@ -335,7 +336,7 @@ int main(int argc, char **argv)
 		/* THE SECOND ONE, WITH NO TICK MARKS AT ALL — which is the whole of what makes its grabber a circle rather
 		 * than a teardrop. Same range and same action, so the only difference on screen is the shape. */
 		plain = [[NSSlider alloc] initWithFrame:NSMakeRect(30, 25, 350, 24)];
-		field = [[NSText alloc] initWithFrame:NSMakeRect(30, 95, 350, 22)];
+		field = [[NSTextField alloc] initWithFrame:NSMakeRect(30, 95, 350, 22)];
 		/* **AND A SWITCH, WHICH IS THIS TIER'S OWN CONTROL RATHER THAN AN ERA DOOR.** Apple has no `NSSwitch` until
 		 * 10.15 and the era's `NSSwitchButton` is a checkbox, so the sample's pill is drawn by `AGSwitch` — a track and a
 		 * knob, 32 x 20, with the four states the sample's legend gives. It sits beside the radio because the two are the
@@ -383,12 +384,11 @@ int main(int argc, char **argv)
 		[plain setDoubleValue:25.0];
 		[plain setTarget:controller];
 		[plain setAction:@selector(sliderMoved:)];
-		/* THE TEXT VIEW DRAWS ITS OWN BACKGROUND, because the window's surface is white already and a field that did
-		 * not would be invisible until the first character arrived. `-setString:` also puts the caret at the END of
-		 * what it was given, which is where a person expects to carry on typing. */
-		[field setDrawsBackground:YES];
-		[field setBackgroundColor:[NSColor whiteColor]];
-		[field setString:@"Type here — the caret is already in this field"];
+		/* **THE FIELD SHOWS A WHITE SURFACE BY DEFAULT, WHICH IS THE CELL'S OWN CHOICE RATHER THAN A CALLER'S.** A field
+		 * is a hole in the surface a value is written on, so its face is white where a button's is grey; the class sets
+		 * that up, so this line only gives it the string it opens with. Focusing the field selects the WHOLE line, which
+		 * is Apple's rule for a field that has just been given the keyboard — so the first keystroke replaces the hint. */
+		[field setStringValue:@"Type here — focusing selects the whole line, ready to replace"];
 		/* **AND IT IS SIZED TO ITS OWN TEXT RATHER THAN TO A NUMBER SOMEBODY WROTE DOWN.** `-sizeToFit`'s height is the
 		 * FONT'S BAND plus this class's own padding — so the frame follows `NS_TEXT_INSET`, which is what the field
 		 * beside it (a combo box) already does, and what a frame of twenty-two written by hand does NOT: MEASURED on
@@ -437,8 +437,9 @@ int main(int argc, char **argv)
 		 * that the two are told apart by their words as well as by their arrows, and it is fitted the same way — after
 		 * its list exists.
 		 *
-		 * AND IT IS NOT A LIVE CONTROL YET: the list this chip promises does not open, and nothing here pretends it
-		 * does. What it demonstrates is the INK, which is what the sample's gallery specifies. */
+		 * AND IT IS A LIVE CONTROL NOW: its chip opens the list, and a row chosen from it becomes the box's value — so
+		 * the press does the thing the chip promises. What it demonstrates BESIDE the pop-up is still the INK, which is
+		 * what the sample's gallery specifies: one triangle where the pop-up knocks out two. */
 		combo = [[NSComboBox alloc] initWithFrame:NSMakeRect(180, 268, 0, 0)];
 		[combo addItemsWithObjectValues:[NSArray arrayWithObjects:@"NSComboBox", @"and its list", nil]];
 		[combo selectItemAtIndex:0];
@@ -482,9 +483,10 @@ int main(int argc, char **argv)
 		 * focused window would never be on screen, and the thing being iterated on would be the grey half of it. On
 		 * a real desktop the compositor's keyboard enter makes the APPLICATION active; the WINDOW is made key here. */
 		[w makeKeyAndOrderFront:nil];
-		/* **AND THE TEXT VIEW TAKES THE KEYBOARD.** A window sends KEY events to its FIRST RESPONDER and nowhere
-		 * else, so a field that is not the first responder is a field nobody can type into — which is what this line
-		 * is for, rather than a decoration. */
+		/* **AND IT IS MADE THE KEYBOARD'S, WHICH IS HOW A FIELD IS FOCUSED AND NOT HOW IT IS MADE THE RESPONDER.**
+		 * `-makeFirstResponder:` asks the field, the field opens a session, and the session makes the EDITOR the window's
+		 * responder — so a field that is focused is a field a person can type into, and the line below is what makes
+		 * that true rather than a decoration. */
 		[w makeFirstResponder:field];
 		/* ONE LINE OF GEOMETRY, so that a screenshot can be READ against the numbers the application believes rather
 		 * than against a guess about where a window landed. */
@@ -504,7 +506,8 @@ int main(int argc, char **argv)
 		 * sends KEY events to its FIRST RESPONDER, so a field that is not the first responder is one nobody can type
 		 * into — and printing this is cheaper than guessing when it is not. */
 		fprintf(stderr, "controls: first responder = %s\n",
-			([w firstResponder] == field) ? "the text field" : "NOT the text field");
+			([field currentEditor] != nil && [w firstResponder] == (id)[field currentEditor])
+				? "the field's editor" : "NOT the field's editor");
 		/* **AND WHICH CHROME THIS WINDOW WILL WEAR**, printed for the same reason the geometry is: iterating on a
 		 * theme means knowing whether the one you pointed at is the one that resolved. */
 		{
