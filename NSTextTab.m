@@ -7,8 +7,9 @@
  * **THE CLASS IS A VALUE, SO `-copy` IS A RETAIN** and the only arithmetic is the mapping between the type and the
  * alignment, which are the same vocabulary spelled two ways. A decimal tab has no alignment counterpart — it lines
  * numbers up on their point rather than along an edge — so its `-alignment` answers `NSNaturalTextAlignment`, which is
- * stated here rather than guessed at. AND THE COLUMN'S TERMINATORS ARE A LOCALE'S: `+columnTerminatorsForLocale:`
- * answers the locale's decimal separator, read from ICU, so no table of ours is needed.
+ * stated here rather than guessed at. A decimal stop's terminators are the LOCALE's (`+columnTerminatorsForLocale:`)
+ * or its own `-options`, and `-initWithType:location:options:` is the door that pairs a TYPE with them, because the
+ * alignment door cannot name a decimal.
  */
 #import <AppKit/NSTextTab.h>
 #import <Foundation/NSLocale.h>
@@ -57,9 +58,17 @@ NSString *const NSTabColumnTerminatorsAttributeName = @"NSTabColumnTerminators";
 
 - (instancetype)initWithType:(NSTextTabType)type location:(CGFloat)loc
 {
+	return [self initWithType:type location:loc options:nil];
+}
+
+/* **AND THE TYPE WITH OPTIONS, WHICH IS THE PAIRING THE OTHER TWO DOORS LEAVE APART.** A decimal stop wants to carry
+ * `NSTabColumnTerminatorsAttributeName`; this is where it does. */
+- (instancetype)initWithType:(NSTextTabType)type location:(CGFloat)loc options:(NSDictionary *)options
+{
 	self = [super init];
 	if (self != nil) {
 		_location = loc;
+		_options = [options retain];
 		_tabStopType = (type <= NSDecimalTabStopType) ? type : NSLeftTabStopType;
 	}
 	return self;

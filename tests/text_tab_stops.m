@@ -35,6 +35,29 @@ static void check(int ok, const char *what)
 	}
 }
 
+/* THE x OF THE COMMA IN `x\t12,5` FOR A GIVEN DECIMAL STOP, which is where the stop's own terminators show: a stop
+ * that treats the comma as the point lands it ON the stop, and one that does not carries the whole number instead. */
+static CGFloat comma_offset_with_tab(NSTextTab *tab)
+{
+	NSTextStorage *store = [[NSTextStorage alloc] initWithString:@"x\t12,5"];
+	NSLayoutManager *manager = [[NSLayoutManager alloc] init];
+	NSTextContainer *container = [[NSTextContainer alloc] initWithContainerSize:NSMakeSize(300.0, 100.0)];
+	NSMutableParagraphStyle *style = [[NSParagraphStyle defaultParagraphStyle] mutableCopy];
+	CGFloat offset;
+
+	[style addTabStop:tab];
+	[container setLineFragmentPadding:0.0];
+	[store addLayoutManager:manager];
+	[manager addTextContainer:container];
+	[store addAttribute:NSParagraphStyleAttributeName value:style range:NSMakeRange(0, [store length])];
+	offset = [manager cg_offsetForGlyphAtIndex:4];
+	[style release];
+	[container release];
+	[manager release];
+	[store release];
+	return offset;
+}
+
 int main(void)
 {
 	NSAutoreleasePool *pool = [[NSAutoreleasePool alloc] init];
@@ -160,6 +183,29 @@ int main(void)
 		[container release];
 		[manager release];
 		[store release];
+	}
+
+	/* 6. **AND A DECIMAL STOP'S OWN TERMINATORS, WHICH `-initWithType:location:options:` IS THE DOOR FOR.** The same
+	 * stop at 100, twice: with the PERIOD as its terminator the comma in `12,5` is no point at all, so the number is
+	 * carried whole and right-aligned at the stop; with the COMMA as its terminator the comma lands ON the stop. */
+	{
+		NSArray *periods = [NSArray arrayWithObject:@"."];
+		NSArray *commas = [NSArray arrayWithObject:@","];
+		NSTextTab *periodStop = [[NSTextTab alloc] initWithType:NSDecimalTabStopType location:100.0
+			options:[NSDictionary dictionaryWithObject:periods forKey:NSTabColumnTerminatorsAttributeName]];
+		NSTextTab *commaStop = [[NSTextTab alloc] initWithType:NSDecimalTabStopType location:100.0
+			options:[NSDictionary dictionaryWithObject:commas forKey:NSTabColumnTerminatorsAttributeName]];
+		CGFloat periodComma = comma_offset_with_tab(periodStop);
+		CGFloat commaComma = comma_offset_with_tab(commaStop);
+
+		printf("  (note: with a PERIOD terminator the comma is at %g; with a COMMA it is at %g)\n",
+		       (double)periodComma, (double)commaComma);
+		check(fabs(periodComma - 100.0) > 1.0,
+		      "a stop whose terminator is the PERIOD finds no point in `12,5` and carries the number whole");
+		check(fabs(commaComma - 100.0) < 0.01,
+		      "and the stop's OWN comma terminator lands the comma ON the stop");
+		[periodStop release];
+		[commaStop release];
 	}
 
 	[pool release];

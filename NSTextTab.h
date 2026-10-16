@@ -20,8 +20,8 @@
  * `NSTabColumnTerminatorsAttributeName` is the OPTIONS key that names them for one stop. **AND THE POSITIONING IS THE
  * LAYOUT'S NOW**: Core Text has no decimal edge, so the manager lays the line out with the stop as a LEFT one and
  * REBUILDS it with the stop moved left by the width of what goes before the point, so the point lands AT the stop.
- * WHAT REMAINS NAMED: the two initialisers cannot attach `-options` to a DECIMAL stop — the alignment door's
- * vocabulary has no decimal — so the locale's separator is what a decimal tab uses today.
+ * **AND THE OPTIONS ARE REACHABLE NOW TOO**: Apple's alignment door cannot name a decimal and its type door takes no
+ * options, so the pairing is this class's third initialiser, `-initWithType:location:options:`.
  */
 #ifndef APPKIT_NSTEXTAB_H
 #define APPKIT_NSTEXTAB_H
@@ -54,12 +54,13 @@ extern NSString *const NSTabColumnTerminatorsAttributeName;
 	NSDictionary *_options;		/* RETAINED */
 }
 
-/* THE TWO WAYS IN, WHICH AGREE: an alignment or a type, a location in points, and — for the alignment door — the
- * options Apple's newer API takes. `-initWithType:location:` is the older spelling and maps its type onto the
- * alignment the other door asks for. */
+/* THE THREE WAYS IN, WHICH AGREE: an alignment or a type, a location in points, and the options. `-initWithType:`
+ * maps its type onto the alignment the other door asks for, and `-initWithType:location:options:` pairs a TYPE with
+ * options — which is what the alignment door cannot do for a decimal, its vocabulary having no decimal. */
 - (instancetype)initWithTextAlignment:(NSTextAlignment)alignment location:(CGFloat)loc
 			      options:(nullable NSDictionary *)options;
 - (instancetype)initWithType:(NSTextTabType)type location:(CGFloat)loc;
+- (instancetype)initWithType:(NSTextTabType)type location:(CGFloat)loc options:(nullable NSDictionary *)options;
 
 /* **THE CHARACTERS THAT END A DECIMAL TAB'S COLUMN FOR A LOCALE.** The answer is that locale's decimal separator —
  * "." in an English locale, "," in a German one — read from ICU through `NSLocale -decimalSeparator`; a nil locale

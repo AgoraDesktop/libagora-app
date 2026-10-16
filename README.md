@@ -367,8 +367,9 @@ the compositor is really gone.
   where the box is). **AND THE BOX IS THE ENGINE'S NOW**: the manager sets CORE TEXT'S `CTRunDelegate`
   (`kCTRunDelegateAttributeName`) over the attachment character, so `CTLine` and `CTTypesetter` reserve the width
   themselves — the manager's own `FNBox` arithmetic sees an advance that already IS the width and adds nothing. See
-  `libagora-text`'s `CTRunDelegate.h`. `-fileWrapper`, `-initWithFileWrapper:` and the cell's tracking family are owed
-  with the classes they name.
+  `libagora-text`'s `CTRunDelegate.h`. `-fileWrapper` and `-initWithFileWrapper:` wait on the tree's missing image
+  ENCODER — the read half decodes, the write half has nothing to encode with — and the cell's tracking family waits on
+  `NSCell`'s refused tracking loop; both named where they would be.
 - **And the TAB STOPS, which are a PLACE rather than a width** (`ctest`): `NSTextTab` names a location and a kind (left,
   right, centre, decimal), `NSParagraphStyle` carries them in `-tabStops` with `-defaultTabInterval` after the last, and
   the layout manager copies them into the `CTParagraphStyle` it builds — so `CTLine` advances a `\t` to the next stop.
@@ -377,7 +378,10 @@ the compositor is really gone.
   Core Text's own 28-point default does not win); and the view's `-insertTab:` puts the character in the store. **AND
   THE COLUMN'S TERMINATORS ARE A LOCALE'S** (`ctest`): `+[NSTextTab columnTerminatorsForLocale:]` answers the locale's
   decimal separator, read from ICU through `NSLocale -decimalSeparator` — `.` for en_US and `,` for de_DE — and
-  `NSTabColumnTerminatorsAttributeName` names them in a stop's `-options`. **AND A DECIMAL TAB IS ALIGNED ON ITS POINT**
+  `NSTabColumnTerminatorsAttributeName` names them in a stop's `-options`, which `-initWithType:location:options:` is
+  the door that sets on a DECIMAL stop (the alignment door cannot name a decimal) — MEASURED, a stop at 100 whose
+  terminator is the COMMA lands the comma of `12,5` at **100**, while the same stop with a PERIOD terminator finds no
+  point and carries the number whole. **AND A DECIMAL TAB IS ALIGNED ON ITS POINT**
   (`ctest`): Core Text has no decimal edge, so the manager lays the line out with the stop as a LEFT one and REBUILDS
   it with the stop moved left by the integer part's width — MEASURED, a decimal stop at **100** puts the point of both
   `12.5` and `123.5` at **100**, so the integer part grows and the point does not move, which a left stop cannot do.

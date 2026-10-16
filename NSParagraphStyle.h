@@ -35,9 +35,10 @@
  * WHAT IS STILL NOT HERE, AND ITS ROWS STAY OPEN: `NSTextTab` IS HERE NOW, and with it `-tabStops` — the stops are
  * the layout's (`CTTextTab` is what `CTLine` advances a `\t` to), so this class carries them and the engine walks
  * them. `-defaultTabInterval` is the fallback after the last stop and is read too, and
- * `+[NSTextTab columnTerminatorsForLocale:]` and `NSTabColumnTerminatorsAttributeName` are here. A DECIMAL TAB IS
- * ALIGNED NOW: the manager moves the stop left by the integer part's width so the point lands on it. The one row left
- * open is that a decimal stop's `-options` cannot be set through `NSTextTab`'s two initialisers.
+ * `+[NSTextTab columnTerminatorsForLocale:]` and `NSTabColumnTerminatorsAttributeName` are here, and a DECIMAL TAB IS
+ * ALIGNED NOW: the manager moves the stop left by the integer part's width so the point lands on it, reading the stop's
+ * own `-options` terminators when it has them — which `-initWithType:location:options:` is the door that sets. Nothing
+ * on that row is owed.
  */
 #ifndef APPKIT_NSPARAGRAPHSTYLE_H
 #define APPKIT_NSPARAGRAPHSTYLE_H

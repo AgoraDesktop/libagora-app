@@ -18,9 +18,14 @@
  * the width and the text after an attachment flows past it rather than over it. See `CTRunDelegate.h` for the box
  * itself.
  *
- * **WHAT IS NOT HERE, AND ITS ROWS STAY OPEN:** `-fileWrapper` and `-initWithFileWrapper:` (they name `NSFileWrapper`,
- * a class this tier has not got), and the tracking half of the cell protocol (`-wantsToTrackMouse`, `-highlight:…`,
- * `-trackMouse:…`) — a picture in a document is not draggable here yet.
+ * **WHAT IS NOT HERE, AND ITS ROWS STAY OPEN — AND ONE OF THE TWO GROUNDS HAS EXPIRED.** `NSFileWrapper` IS here now
+ * (`libagora-base`), so `-fileWrapper` and `-initWithFileWrapper:` are owed for a DIFFERENT reason than this note used
+ * to give: the READ half is decodable (the tree reads PNG and JPEG), but the WRITE half has no image ENCODER to turn
+ * the attachment's picture back into bytes, so the pair cannot round-trip and it lands with the ENCODER rather than
+ * with the wrapper. AND THE TRACKING FAMILY (`-wantsToTrackMouse`, `-highlight:…`, `-trackMouse:…`) IS OWED WITH
+ * `NSCell`'s OWN REFUSAL: the door that would drive it is `-trackMouse:inRect:ofView:untilMouseUp:`, a MODAL LOOP this
+ * tree has refused by name (see `NSCell.h`) because a loop built from guessed coordination can hang the guest — so the
+ * three hooks wait for that decision rather than being half-wired here. A picture in a document is not draggable yet.
  */
 #ifndef APPKIT_NSTEXTATTACHMENT_H
 #define APPKIT_NSTEXTATTACHMENT_H
