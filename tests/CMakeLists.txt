@@ -229,6 +229,15 @@ target_link_libraries(text_layout_glyphs PRIVATE App m)
 add_test(NAME appkit-text-layout-glyphs COMMAND text_layout_glyphs)
 set_tests_properties(appkit-text-layout-glyphs PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
 
+# **AND THE PARAGRAPH STYLE, WHICH IS A VALUE OBJECT WITH TWO READERS.** The class's defaults and its copy/freeze
+# dance are the first half; the ALIGNMENT (which moves a line inside its width) and the LINE-BREAK MODE (which the
+# typesetter obeys) are the two properties the layout reads, and the view's `-setAlignment:` is the store writing the
+# style the manager then reads.
+add_executable(text_paragraph_style text_paragraph_style.m)
+target_link_libraries(text_paragraph_style PRIVATE App m)
+add_test(NAME appkit-text-paragraph-style COMMAND text_paragraph_style)
+set_tests_properties(appkit-text-paragraph-style PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
+
 # **AND THE INSIDE OF A SCROLL VIEW.** `NSClipView`'s arithmetic is "the whole of it" (its own header), and it is
 # checked in EXACT POINTS rather than by drawing: where a short document sits, where a long one stops, and the
 # notification wire that re-constrains the scroll when the document's own frame or bounds changes. Offscreen, so it

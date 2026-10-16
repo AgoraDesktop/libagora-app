@@ -21,3 +21,4 @@ NSString *NSUnderlineStyleAttributeName = @"NSUnderline";
 NSString *NSUnderlineColorAttributeName = @"NSUnderlineColor";
 NSString *NSStrikethroughStyleAttributeName = @"NSStrikethrough";
 NSString *NSStrikethroughColorAttributeName = @"NSStrikethroughColor";
+NSString *NSParagraphStyleAttributeName = @"NSParagraphStyle";

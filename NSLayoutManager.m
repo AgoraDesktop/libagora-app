@@ -14,6 +14,7 @@
 #import <AppKit/NSTextContainer.h>
 #import <AppKit/NSFont.h>
 #import <AppKit/NSColor.h>
+#import <AppKit/NSParagraphStyle.h>
 #import <AppKit/NSGraphicsContext.h>
 #import <AppKit/NSAttributedString.h>
 #import <Foundation/NSArray.h>
@@ -21,6 +22,7 @@
 #include <CoreGraphics/CGContext.h>
 #include <CoreFoundation/CFAttributedString.h>
 #include <CoreText/CTLine.h>
+#include <CoreText/CTParagraphStyle.h>
 #include <CoreText/CTRun.h>
 #include <CoreText/CTStringAttributes.h>
 #include <CoreText/CTTypesetter.h>
@@ -395,6 +397,77 @@
 	return [font ascender] - [font descender];
 }
 
+/* **THE PARAGRAPH STYLE THE TYPESETTER BREAKS BY, TAKEN FROM THE STORE'S FIRST RUN.** The typesetter obeys one thing
+ * here — the LINE-BREAK MODE — and it reads it from the attributed string's `kCTParagraphStyleAttributeName`, so the
+ * manager builds the Core Text style from the `NSParagraphStyle` the store carries at index 0. A store with no style
+ * (the common case) gets word wrapping, which is the mode the typesetter already defaulted to; a store with one gets
+ * the mode it named. PER-PARAGRAPH STYLES are named rather than half-done: this reads the style at the START of the
+ * store and applies it to every line, which is right for a document set in one paragraph style and is where the
+ * run-by-run slice will start. */
+- (CTParagraphStyleRef)cg_createParagraphStyle
+{
+	CTLineBreakMode mode = kCTLineBreakByWordWrapping;
+	CTParagraphStyleSetting setting;
+
+	if ([_textStorage length] > 0) {
+		id style = [[_textStorage attributesAtIndex:0 effectiveRange:NULL]
+					objectForKey:NSParagraphStyleAttributeName];
+
+		if (style != nil) {
+			mode = (CTLineBreakMode)[style lineBreakMode];
+		}
+	}
+	setting.spec = kCTParagraphStyleSpecifierLineBreakMode;
+	setting.valueSize = sizeof(mode);
+	setting.value = &mode;
+	return CTParagraphStyleCreate(&setting, 1);
+}
+
+/* **THE ALIGNMENT OF THE PARAGRAPH A LINE STARTS IN, WHICH IS THE PARAGRAPH'S OWN AND NOT THE LINE'S.** A fragment is
+ * aligned by the style at the beginning of its PARAGRAPH — the character after the previous newline — so a wrapped line
+ * in the middle of a centred paragraph is centred with the rest of them. Natural and left both answer the left factor,
+ * which is why this tier's left-to-right layout can treat them alike. */
+- (NSTextAlignment)cg_alignmentForParagraphAt:(NSUInteger)start
+{
+	NSString *string = [_textStorage string];
+	NSUInteger paragraphStart = start;
+	id style;
+
+	if ([_textStorage length] == 0) {
+		return NSLeftTextAlignment;
+	}
+	if (paragraphStart >= [string length]) {
+		paragraphStart = [string length] - 1;
+	}
+	while (paragraphStart > 0 && [string characterAtIndex:paragraphStart - 1] != '\n') {
+		paragraphStart--;
+	}
+	style = [[_textStorage attributesAtIndex:paragraphStart effectiveRange:NULL]
+				objectForKey:NSParagraphStyleAttributeName];
+	return (style != nil) ? [style alignment] : NSLeftTextAlignment;
+}
+
+/* **AND THE FLOAT IS THE LINE'S PLACE INSIDE THE WIDTH IT WAS GIVEN** — 0 for left, 1 for right, 0.5 for centre, and the
+ * engine's own `-CTLineGetPenOffsetForFlush` does the arithmetic so the answer agrees with the glyphs it will set. A
+ * justified paragraph is drawn LEFT for now; stretching a line is the door this slice does not carry, and it is named
+ * in `NSParagraphStyle.h` rather than silently pretended. */
+- (CGFloat)cg_alignmentOffsetForLine:(CTLineRef)line alignment:(NSTextAlignment)alignment width:(CGFloat)width
+{
+	CGFloat factor = 0.0;
+	CGFloat offset;
+
+	if (alignment == NSCenterTextAlignment) {
+		factor = 0.5;
+	} else if (alignment == NSRightTextAlignment) {
+		factor = 1.0;
+	}
+	if (line == NULL || factor == 0.0 || width <= 0.0) {
+		return 0.0;
+	}
+	offset = (CGFloat)CTLineGetPenOffsetForFlush(line, factor, (double)width);
+	return (offset > 0.0) ? offset : 0.0;
+}
+
 - (void)cg_ensureLayout
 {
 	NSString *string;
@@ -438,8 +511,21 @@
 	attributes = CFDictionaryCreateMutable(kCFAllocatorDefault, 0,
 			&kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
 	CFDictionarySetValue(attributes, kCTFontAttributeName, ((NSFont *)font)->_font);
-	s = CFAttributedStringCreate(kCFAllocatorDefault, (CFStringRef)string, attributes);
-	CFRelease(attributes);
+	{
+		/* **AND THE PARAGRAPH STYLE, WHICH IS WHAT MAKES THE TYPESETTER OBEY A LINE-BREAK MODE.** It is put in the
+		 * dictionary the attributed string is made with, so the breaker sees it for every character; a store with no
+		 * style gets word wrapping, which is what the typesetter already defaulted to. */
+		CTParagraphStyleRef paragraphStyle = [self cg_createParagraphStyle];
+
+		if (paragraphStyle != NULL) {
+			CFDictionarySetValue(attributes, kCTParagraphStyleAttributeName, paragraphStyle);
+		}
+		s = CFAttributedStringCreate(kCFAllocatorDefault, (CFStringRef)string, attributes);
+		CFRelease(attributes);
+		if (paragraphStyle != NULL) {
+			CFRelease(paragraphStyle);
+		}
+	}
 	ts = (s != NULL) ? CTTypesetterCreateWithAttributedString(s) : NULL;
 	if (s != NULL) {
 		CFRelease(s);
@@ -502,7 +588,9 @@
 			[fragments addObject:[FNFragment fragmentWithRange:range
 				glyphRange:NSMakeRange(glyphBase, (NSUInteger)count)
 				rect:NSMakeRect(0.0, y, containerWidth, lineHeight)
-				usedRect:NSMakeRect(padding, y, lineWidth, lineHeight) line:line]];
+				usedRect:NSMakeRect(padding + [self cg_alignmentOffsetForLine:line
+						alignment:[self cg_alignmentForParagraphAt:(NSUInteger)start] width:width],
+					y, lineWidth, lineHeight) line:line]];
 			glyphBase += (NSUInteger)count;
 			start += count;
 			y += lineHeight;

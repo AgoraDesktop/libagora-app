@@ -27,6 +27,7 @@
 #import <AppKit/NSWindow.h>
 #import <AppKit/NSEvent.h>
 #import <AppKit/NSAttributedString.h>
+#import <AppKit/NSParagraphStyle.h>
 #import <Foundation/NSNotification.h>
 #import <Foundation/NSNotificationCenter.h>
 
@@ -484,6 +485,41 @@ static void cg_announce(NSText *text, NSString *name, SEL delegateSelector)
 	cg_announce(self, NSTextDidChangeNotification, @selector(textDidChange:));
 	[self setNeedsDisplay:YES];
 	[self cg_fitHeight];
+}
+
+/* **AND THE ALIGNMENT IS THE STORE'S PARAGRAPH STYLE NOW, WHICH RETIRES THE BASE'S DEFERRAL.** `NSText -setAlignment:`
+ * stores and answers and says it does not move the glyphs, because a single-line field has no width to align WITHIN;
+ * a text view has the manager's container width, so the style goes into the store and the manager offsets the line
+ * inside that width. THE OTHER PROPERTIES OF THE STYLE TRAVEL WITH IT — a caller that set `-lineSpacing` on the run
+ * keeps it — because this door takes a MUTABLE COPY of what is there rather than writing a fresh style over it. */
+- (NSTextAlignment)alignment
+{
+	id style = nil;
+
+	if ([_cg_textStorage length] > 0) {
+		style = [[_cg_textStorage attributesAtIndex:0 effectiveRange:NULL]
+					objectForKey:NSParagraphStyleAttributeName];
+	}
+	return (style != nil) ? [style alignment] : [super alignment];
+}
+
+- (void)setAlignment:(NSTextAlignment)alignment
+{
+	NSUInteger n = [_cg_textStorage length];
+	id existing;
+	NSMutableParagraphStyle *style;
+
+	[super setAlignment:alignment];
+	if (n == 0) {
+		return;
+	}
+	existing = [[_cg_textStorage attributesAtIndex:0 effectiveRange:NULL]
+				objectForKey:NSParagraphStyleAttributeName];
+	style = (existing != nil) ? [existing mutableCopy]
+				  : [[NSParagraphStyle defaultParagraphStyle] mutableCopy];
+	[style setAlignment:alignment];
+	[_cg_textStorage addAttribute:NSParagraphStyleAttributeName value:style range:NSMakeRange(0, n)];
+	[style release];
 }
 
 /* **AND THE FONT IS CARRIED INTO THE STORE.** `NSText` answers `-font` from its own ivar and the manager reads the

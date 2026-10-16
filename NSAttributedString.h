@@ -9,13 +9,14 @@
  * say what a run of text MEANS — and the era's own `NSStringDrawing.h` imports this header for exactly that
  * reason (10.6 line 11). So the keys live here, in an AppKit header Apple also names `NSAttributedString.h`.
  *
- * **AND WHAT THIS HEADER CARRIES IS THE KEYS THE DRAWING DOORS READ, ARRIVING WITH THOSE DOORS.** Apple's era header
- * declares twenty of these (`NSParagraphStyleAttributeName`, `NSAttachmentAttributeName`, …) and each one is a claim
- * about a VALUE TYPE this tier may not have yet — a paragraph style, an attachment — so declaring them all would be
- * writing twenty promises to satisfy one unit. The seven below are the ones a text layer can NAME TODAY: the font and
- * the foreground colour a `-drawAtPoint:withAttributes:` caller must have, and the ink keys the layout manager's own
- * door reads (`-drawBackgroundForGlyphRange:atPoint:` and the rule half of `-drawGlyphsForGlyphRange:atPoint:`) — a
- * background, an underline and a strikethrough, each with its colour. The rest arrive with the classes they name.
+ * **AND WHAT THIS HEADER CARRIES IS THE KEYS THE TEXT LAYER READS, ARRIVING WITH THOSE READERS.** Apple's era header
+ * declares twenty of these (`NSAttachmentAttributeName`, …) and each one is a claim about a VALUE TYPE this tier may
+ * not have yet — an attachment, a marked range — so declaring them all would be writing twenty promises to satisfy one
+ * unit. The eight below are the ones a caller can NAME TODAY: the font and the foreground colour a
+ * `-drawAtPoint:withAttributes:` caller must have, the ink keys the layout manager's own doors read
+ * (`-drawBackgroundForGlyphRange:atPoint:` and the rule half of `-drawGlyphsForGlyphRange:atPoint:`) — a background, an
+ * underline and a strikethrough, each with its colour — and the paragraph style whose alignment and line-break mode it
+ * lays out by. The rest arrive with the classes they name.
  *
  * **THE LITERALS ARE OURS, AND THE REASON IS MEASURED RATHER THAN ASSUMED**: the era header annotates each name
  * with the VALUE'S TYPE and default (`// NSFont, default Helvetica 12`) and publishes no literal, so no era
@@ -51,6 +52,11 @@ extern NSString *NSUnderlineColorAttributeName;
  * at a different offset. So the two keys below arrive with the door that draws them and no new type is invented. */
 extern NSString *NSStrikethroughStyleAttributeName;
 extern NSString *NSStrikethroughColorAttributeName;
+
+/* **AND WHAT A WHOLE PARAGRAPH OF A RUN IS SET IN.** The value is an `NSParagraphStyle`, and the one part of it the
+ * layout reads TODAY is the alignment and the line-break mode; see `NSParagraphStyle.h` for the property-by-property
+ * account of what is carried and what has a reader. */
+extern NSString *NSParagraphStyleAttributeName;
 
 /* **AND THE STYLE THE NUMBER SPELLS, WHICH IS ONE ENUM BECAUSE A STYLE AND ITS PATTERN OR-TOGETHER.** The four
  * shapes are the low bits and the patterns the high byte, which is what makes `NSUnderlineStyleSingle |

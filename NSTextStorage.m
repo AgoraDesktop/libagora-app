@@ -159,6 +159,25 @@ NSString *NSTextStorageDidProcessEditingNotification = @"NSTextStorageDidProcess
 	[self edited:NSTextStorageEditedAttributes range:range changeInLength:0];
 }
 
+/* **AND THE TWO ATTRIBUTE MUTATORS FOUNDATION DOES NOT ROUTE THROUGH `-setAttributes:range:`.** The override above
+ * catches a caller that sets a whole dictionary, but Foundation's `-addAttributes:range:` and `-removeAttribute:range:`
+ * edit their runs DIRECTLY — so an attribute edit made with `-addAttribute:value:range:` announced NOTHING, and a
+ * paragraph style put into a store that way never reached its layout manager. MEASURED, which is how this was found:
+ * a centred style left every line at the left margin because the manager was never told the layout was stale.
+ * `-addAttribute:` itself is covered by the first override below, because Foundation's own implementation calls
+ * `-addAttributes:range:` on SELF, which dispatches here. */
+- (void)addAttributes:(NSDictionary *)attrs range:(NSRange)range
+{
+	[super addAttributes:attrs range:range];
+	[self edited:NSTextStorageEditedAttributes range:range changeInLength:0];
+}
+
+- (void)removeAttribute:(NSString *)name range:(NSRange)range
+{
+	[super removeAttribute:name range:range];
+	[self edited:NSTextStorageEditedAttributes range:range changeInLength:0];
+}
+
 /* ============================================================================================ *
  * THE ACCUMULATION, AND THE COALESCING                                                            *
  * ============================================================================================ */

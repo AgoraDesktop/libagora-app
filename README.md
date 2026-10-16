@@ -48,9 +48,10 @@ tests/
   text_layout_web.m             and the WEB that ties the trio together: the store, its managers, and what goes stale
   text_layout_fragments.m       and the FRAGMENTS that web produces: the store laid into the container's lines
   text_layout_draw.m            and the INK: the manager drawing the glyphs it laid out, where the origin says
-  text_layout_attributes.m      and the BACKGROUND and UNDERLINE keys the manager now paints, run by run
+  text_layout_attributes.m      and the BACKGROUND, UNDERLINE and STRIKETHROUGH keys the manager paints, run by run
   text_layout_overflow.m        and the SECOND CONTAINER: what does not fit the first is carried to the next
   text_layout_glyphs.m          and the GLYPH STORE: the generated lines, and the four reverse lookups
+  text_paragraph_style.m        and the PARAGRAPH STYLE: the value object, and the two properties the layout reads
   text_word_movement.m          and its WORD granularity: Option+arrow and Option+Delete, over the string
   text_view_lines.m             and the first slice of the MULTI-LINE view: the line model, and what reads it
   text_view_wrapping.m          and the slice above it: the same model WRAPPED to the view's width
@@ -219,13 +220,16 @@ the compositor is really gone.
   bounding rect included a fragment the range only TOUCHED at its boundary, so a one-line range answered two lines —
   the overlap test is now strict on both ends. **AND THE ONE-COLOUR-PER-FRAGMENT LIMITATION IS RETIRED**: the draw
   walks the store's ATTRIBUTE RUNS, so a line whose text changes colour halfway is drawn in both colours.
-- **And the BACKGROUND and UNDERLINE the manager now paints** (`ctest`): `NSBackgroundColorAttributeName`,
-  `NSUnderlineStyleAttributeName` and `NSUnderlineColorAttributeName` arrived with the two doors that read them, and
-  `-drawBackgroundForGlyphRange:atPoint:` fills the used rect of each run with its own colour. MEASURED: a GREEN
-  background attribute puts **301** green pixels behind `abcd`; a blue underline draws a rule the plain draw does not
-  (**0** blue pixels with no attribute, then some with one), and a DOUBLE underline draws TWO rules — measurably more
-  than one; two foreground runs on one line come out in BOTH colours (red **20**, blue **14**); and two backgrounds on
-  one line are two rectangles in two colours (green **147**, yellow **154**).
+- **And the BACKGROUND, UNDERLINE and STRIKETHROUGH the manager now paints** (`ctest`): `NSBackgroundColorAttributeName`,
+  `NSUnderlineStyleAttributeName`, `NSUnderlineColorAttributeName`, `NSStrikethroughStyleAttributeName` and
+  `NSStrikethroughColorAttributeName` arrived with the doors that read them, `-drawBackgroundForGlyphRange:atPoint:`
+  fills the used rect of each run with its own colour, and the rule half of `-drawGlyphsForGlyphRange:atPoint:` is one
+  helper called twice — below the baseline for an underline (`-underlinePosition`), through the middle of the x-height
+  for a strikethrough. MEASURED: a GREEN background attribute puts **301** green pixels behind `abcd`; a blue underline
+  draws a rule the plain draw does not (**0** blue pixels with no attribute, then some with one), and a DOUBLE
+  underline draws TWO rules; a strikethrough is checked as its OWN key (a door reading the underline keys would fail
+  it); two foreground runs on one line come out in BOTH colours (red **20**, blue **14**); and two backgrounds on one
+  line are two rectangles in two colours (green **147**, yellow **154**).
 - **And the SECOND CONTAINER, which is where text goes when it does not fit** (`ctest`): a container's OWN HEIGHT is
   the overflow edge, so `one\ntwo\nthree\nfour` in a first container TWO lines tall fills **2** fragments and carries
   the other **2** to the next; `-glyphRangeForTextContainer:` answers **(0,8)** for the first and **(8,10)** for the
@@ -248,6 +252,19 @@ the compositor is really gone.
   character typed at the end of a red run INHERITS the run. **THE `_string` MIRROR IS WHAT LETS THE BASE CLASS KEEP
   WORKING** — `NSText`'s movement and word commands read that string directly, so the store's own
   `NSTextStorageDidProcessEditingNotification` refreshes it.
+- **And the PARAGRAPH STYLE, which is a value object with two readers** (`ctest`): `NSParagraphStyle` and
+  `NSMutableParagraphStyle` arrived with `NSParagraphStyleAttributeName` — the default is natural-aligned,
+  word-wrapping and zero everywhere, a `-mutableCopy` takes every setter, changing it leaves the shared DEFAULT alone,
+  and a `-copy` freezes the builder. THE TWO PROPERTIES THE LAYOUT READS are the ALIGNMENT (it moves a line inside the
+  width the container gave it, via `CTLineGetPenOffsetForFlush`, recorded in the fragment's used rect so the caret and
+  the ink follow) and the LINE-BREAK MODE (it travels into the attributed string as a `CTParagraphStyle`, so the
+  typesetter obeys it). MEASURED: glyph 0's x is **10** left-aligned, larger centred and larger still right-aligned;
+  the same paragraph is word-wrapped with its first line ending on a space, char-wrapped ending mid-word and holding at
+  least as much, and CLIPPED at **1** fragment; and the view's `-setAlignment:` writes the style into its store while
+  `-alignment` reads it back. **AND THE PROBE FOUND ONE REAL DEFECT**: Foundation's `-addAttributes:range:` and
+  `-removeAttribute:range:` edit their runs DIRECTLY, so `-addAttribute:` never reached `-setAttributes:range:` and
+  announced nothing — a style put into a store that way never reached its manager. `NSTextStorage` now overrides both
+  and announces, which is the exception its own header names.
 - **And the field, which is a cell under a view** (`ctest`, offscreen): `NSTextFieldCell` owns the string, the face
   and the three doors of an edit; `NSTextField` is the control above it, and it contributes the two things a cell
   cannot — a PRESS that opens a session with the WINDOW's field editor, and `-selectText:` for the same session with
@@ -378,14 +395,14 @@ the compositor is really gone.
   and the child clip is the child's FRAME region rather than its bounds rect — which was the same value only while the
   origin was zero. MEASURED: a mark at a document's own y 100..120 draws at 110 with the clip view at the top and at
   10 after a scroll of 100, in one run, through `-displayRect:`.
-- **`ctest`: 46 of 46 passed** (the keyboard and the seam, the AppKit and its input path, the controls and their
+- **`ctest`: 47 of 47 passed** (the keyboard and the seam, the AppKit and its input path, the controls and their
   metrics, the field control and its cell and its bezel and its placeholder and what it may hold, the text path and its
   word granularity and the multi-line view and its wrapping and its scrolling and its READING OF THE STORE, the STORE
   the rich-text slice is built on and the REGION it is laid out in and the WEB that ties the three together and the
-  FRAGMENTS it produces and the GLYPH STORE it keeps and the INK it draws and the BACKGROUND and UNDERLINE it paints
-  and the SECOND CONTAINER it overflows into, what a drag costs, the resize by edge, the tracking engine, the clip view
-  and the scroller and the scroll view and the drawn offset, the chrome and what its buttons do, the chrome theme, the
-  menus and activation).
+  FRAGMENTS it produces and the GLYPH STORE it keeps and the INK it draws and the BACKGROUND, UNDERLINE and
+  STRIKETHROUGH it paints and the SECOND CONTAINER it overflows into and the PARAGRAPH STYLE it aligns and breaks by,
+  what a drag costs, the resize by edge, the tracking engine, the clip view and the scroller and the scroll view and the
+  drawn offset, the chrome and what its buttons do, the chrome theme, the menus and activation).
 - **And the desktop's own text is SUB-PIXEL ANTIALIASED**, which is the AppKit's half of a renderer change in
   CoreGraphics: a window's surface is OPAQUE (`kCGImageAlphaNoneSkipFirst`), and the destination's opacity is
   exactly what decides whether a glyph is rasterised in colour. MEASURED on the live session: the window title's
@@ -533,9 +550,12 @@ model. And the MULTI-LINE TEXT VIEW has its FIRST SLICE: `NSTextView` holds many
 `tests/text_view_scrolling.m` — the second including the FLIP that puts a document's first line at the clip view's
 origin). **AND THE VIEW NOW READS A STORE THROUGH THE MANAGER** (`tests/text_view_store.m`): it owns the trio,
 `-string` is the store's, the `malloc`'d visual array and the typesetter walk are GONE from the class, and a run put
-in the store is the ink it draws — which is the rich-text half of the slice, with the BACKGROUND and UNDERLINE keys
-the manager paints (`tests/text_layout_attributes.m`). Attachments, tables, the paragraph model, the marked-text
-family and the input-method half are named in its own header as what is still owed. Each absence is stated
+in the store is the ink it draws — which is the rich-text half of the slice, with the BACKGROUND, UNDERLINE and
+STRIKETHROUGH keys the manager paints (`tests/text_layout_attributes.m`) and the PARAGRAPH STYLE it aligns and breaks
+by (`tests/text_paragraph_style.m`). The paragraph style is a value object whose geometry properties (indents, the two
+paragraph spacings, the three line-height properties, the hyphenation factor) are carried and answered and await their
+reader in the layout, which `NSParagraphStyle.h` names property by property. Attachments, tables, the marked-text
+family and the input-method half are named in the view's own header as what is still owed. Each absence is stated
 rather than stubbed, and the refusals name themselves.
 
 ## Build

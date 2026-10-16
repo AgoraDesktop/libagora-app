@@ -14,9 +14,11 @@
  * **THE WHOLE DESIGN IS "THE PRIMITIVES OPEN THE DOOR AND EVERYTHING ELSE WALKS THROUGH IT".** Apple's own header
  * says it: "These primitives should perform the change then call `-edited:range:changeInLength:` to get everything else
  * to happen." So `-replaceCharactersInRange:withString:` and `-setAttributes:range:` are overridden here to do exactly
- * that, and every other mutator the base class offers (`-insertAttributedString:atIndex:`, `-deleteCharactersInRange:`,
- * `-appendAttributedString:`) reaches them by DISPATCH — it does not need to be overridden, because it was written to
- * call a primitive and this class IS the primitive's implementation.
+ * that, and the CHARACTER mutators the base class offers (`-insertAttributedString:atIndex:`, `-deleteCharactersInRange:`,
+ * `-appendAttributedString:`) reach them by DISPATCH — they were written to call a primitive, so they need no override.
+ * **THE TWO ATTRIBUTE MUTATORS ARE THE EXCEPTION, AND THEY ARE OVERRIDDEN FOR THAT REASON**: Foundation's
+ * `-addAttributes:range:` and `-removeAttribute:range:` edit their runs DIRECTLY, so a caller using `-addAttribute:`
+ * bypassed `-setAttributes:range:` and announced nothing — MEASURED, a paragraph style that never reached its manager.
  *
  * **AND THE LAYOUT MANAGERS ARRIVED WITH THE CLASS THEY NAME.** This header used to REFUSE `-addLayoutManager:`,
  * `-removeLayoutManager:` and `-layoutManagers` — the three would have taken a class that did not exist — and
