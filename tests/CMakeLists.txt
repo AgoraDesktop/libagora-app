@@ -296,6 +296,14 @@ target_link_libraries(text_table_collapse PRIVATE App m)
 add_test(NAME appkit-text-table-collapse COMMAND text_table_collapse)
 set_tests_properties(appkit-text-table-collapse PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
 
+# **AND A TABLE THAT DOES NOT FIT GOES ON IN THE NEXT CONTAINER.** A row that does not fit the container it is being
+# laid into begins the next one, with the columns measured from EVERY cell so they do not move across the break. The
+# probe reads each container's fragments, the glyph range each took, and column two's x either side of the break.
+add_executable(text_table_flow text_table_flow.m)
+target_link_libraries(text_table_flow PRIVATE App m)
+add_test(NAME appkit-text-table-flow COMMAND text_table_flow)
+set_tests_properties(appkit-text-table-flow PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
+
 # **AND THE ATTACHMENT'S INLINE FLOW: A FIXED-SIZE BOX THE TEXT FLOWS AROUND.** The manager records the difference
 # between the box's width and the placeholder glyph's advance, so the character after an attachment is one box width
 # past it, a point inside the box hit-tests to the attachment, and the picture is drawn where the box is.

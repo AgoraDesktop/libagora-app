@@ -22,8 +22,8 @@
  * manager draws an edge two blocks share ONCE, awarded to the block whose border ON THAT EDGE is WIDER (a tie goes to
  * the min-side one), so a doubled seam becomes one border as heavy as the heavier of the two. THE TABLE'S OWN BORDER
  * IS PART OF THAT: it competes with the outer cells on its four outer edges, and the table's box is the box around the
- * CELLS, so a collapsed table ends up with ONE outer border. WHAT IS STILL OWED IS NAMED WHERE IT WOULD BE: a table
- * that FLOWS across containers; a cell of several paragraphs lays out, and its row is the tallest cell's height.
+ * CELLS, so a collapsed table ends up with ONE outer border. AND A TABLE FLOWS ACROSS CONTAINERS AT A ROW BOUNDARY,
+ * its columns measured from EVERY cell; a cell of several paragraphs lays out, and its row is the tallest cell's height.
  */
 #ifndef APPKIT_NSTEXTTABLE_H
 #define APPKIT_NSTEXTTABLE_H

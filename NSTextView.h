@@ -45,9 +45,9 @@
  * and there can be several per model line; the `cg_visualLine…` doors read the MANAGER, and they change every time
  * the text or the width does. A caller that wants "how many lines" has to say which.
  *
- * **WHAT IS STILL NOT HERE, NAMED RATHER THAN STUBBED:** a table that FLOWS across containers — the GRID itself is
- * here: the manager measures the columns, lays each cell inside them and places them side by side, and
- * `-collapsesBorders` is here too, drawing an edge two cells share ONCE. The
+ * **THE GRID IS WHOLE HERE, FLOW INCLUDED:** the manager measures the columns, lays each cell inside them and places
+ * them side by side, `-collapsesBorders` draws an edge two cells share ONCE, and a table that does not fit a container
+ * goes on in the NEXT one at a row boundary. The
  * `NSTextInput` PROTOCOL is here (`NSTextInput.h`),
  * this view ANSWERS it, and the INPUT CONTEXT that owns a composition is here too (`NSTextInputContext.h`) — what is
  * still missing is an input METHOD behind it: the context has one stock keyboard and no composition engine, so it

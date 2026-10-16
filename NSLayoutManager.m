@@ -1363,8 +1363,9 @@ static BOOL fn_cell_owns_edge(CGFloat thisWidth, CGFloat otherWidth, BOOL tieGoe
  * the container) or fixed (equal shares); and its rows are as tall as the tallest cell in them. Each cell's content is
  * laid out inside its own columns' width and PLACED at its column's x, so cells in one row sit side by side. THE
  * GLYPH MAP IS THE IDENTITY HERE — a cell's glyph range is its character range — because the cells are in character
- * order, which is what keeps `-glyphRangeForCharacterRange:` a walk of the fragment list. A table lays out WHOLE in
- * one container; flowing it across containers is named as owed. */
+ * order, which is what keeps `-glyphRangeForCharacterRange:` a walk of the fragment list. **AND A TABLE FLOWS ACROSS
+ * CONTAINERS AT A ROW BOUNDARY**: a row that does not fit the container it is being laid into begins the next one,
+ * with the columns measured from EVERY cell so the widths do not change halfway through the table. */
 /* **AND A CELL'S OWN LAYERS ARE RESERVED IN THE COLUMN'S WIDTH.** The grid measures a column by its widest cell and
  * then the cell's padding, border and margin are ADDED, so the ground and the border have room and neighbouring cells
  * do not touch; the content is placed INSIDE them. The widths are read as ABSOLUTE points here — a percentage layer
@@ -1377,6 +1378,32 @@ static BOOL fn_cell_owns_edge(CGFloat thisWidth, CGFloat otherWidth, BOOL tieGoe
 	     + [cell widthForLayer:NSTextBlockMargin edge:edge];
 }
 
+/* **AND THE PARAGRAPH A TABLE BEGINS AT, FOUND BY WALKING BACK.** When a table flows across containers the manager
+ * resumes at a row in the MIDDLE, and the columns must be measured from EVERY cell — so the scan has to begin at the
+ * table's first paragraph, not at the resume point. A paragraph before `index` whose cell belongs to the SAME table is
+ * part of it; another table, plain text, or the start of the store is the boundary. */
+- (NSUInteger)cg_tableStartFor:(NSUInteger)index
+{
+	NSString *string = [_textStorage string];
+	NSTextTable *table = [[self cg_cellAtParagraphStart:index] table];
+	NSUInteger p = index;
+
+	while (p > 0 && [string characterAtIndex:p - 1] == '\n') {
+		NSUInteger prevStart = p - 1;
+		NSTextTableBlock *prevCell;
+
+		while (prevStart > 0 && [string characterAtIndex:prevStart - 1] != '\n') {
+			prevStart--;
+		}
+		prevCell = [self cg_cellAtParagraphStart:prevStart];
+		if (prevCell == nil || [prevCell table] != table) {
+			break;
+		}
+		p = prevStart;
+	}
+	return p;
+}
+
 - (NSUInteger)cg_layOutTableStartingAt:(NSUInteger)start typesetter:(CTTypesetterRef)ts
 	attributedString:(CFAttributedStringRef)rich font:(NSFont *)font
 	baseAscent:(CGFloat)baseAscent baseLineHeight:(CGFloat)baseLineHeight
@@ -1386,18 +1413,24 @@ static BOOL fn_cell_owns_edge(CGFloat thisWidth, CGFloat otherWidth, BOOL tieGoe
 	NSString *string = [_textStorage string];
 	NSUInteger n = [string length];
 	NSTextTable *table = [[self cg_cellAtParagraphStart:start] table];
+	NSUInteger tableStart = [self cg_tableStartFor:start];
 	NSMutableArray *cells = [NSMutableArray array];
 	NSMutableArray *ranges = [NSMutableArray array];
-	NSUInteger p = start;
+	NSUInteger p = tableStart;
 	NSUInteger tableEnd;
-	NSInteger rows = 0, columns = 0;
+	NSUInteger resume = NSNotFound;
+	NSInteger rows = 0, columns = 0, firstRow = 0;
 	CGFloat padding = [container lineFragmentPadding];
 	CGFloat containerWidth = [container containerSize].width;
+	CGFloat containerHeight = [container containerSize].height;
 	CGFloat available = containerWidth - 2.0 * padding;
 	CGFloat *widths;
 	CGFloat y = *yPtr;
+	BOOL placed = NO;
 	NSInteger row, column;
 
+	/* **AND THE WHOLE TABLE IS SCANNED, NOT ONLY THE PART STILL TO PLACE.** A table that resumed in a later container
+	 * must measure its columns from EVERY cell, or the widths would change halfway through it. */
 	while (p < n) {
 		NSTextTableBlock *cell = [self cg_cellAtParagraphStart:p];
 		NSUInteger paraEnd;
@@ -1422,6 +1455,17 @@ static BOOL fn_cell_owns_edge(CGFloat thisWidth, CGFloat otherWidth, BOOL tieGoe
 	tableEnd = p;
 	if ([cells count] == 0) {
 		return start;
+	}
+	/* WHICH ROW THIS CALL BEGINS AT: the row of the cell the caller resumed on, or the first row. */
+	{
+		NSUInteger ci;
+
+		for (ci = 0; ci < [cells count]; ci++) {
+			if ([[ranges objectAtIndex:ci] rangeValue].location == start) {
+				firstRow = [[cells objectAtIndex:ci] startingRow];
+				break;
+			}
+		}
 	}
 	if (columns < 1) {
 		columns = 1;
@@ -1477,6 +1521,9 @@ static BOOL fn_cell_owns_edge(CGFloat thisWidth, CGFloat otherWidth, BOOL tieGoe
 		CGFloat rowHeight = 0.0;
 		NSUInteger ci;
 
+		if (row < firstRow) {
+			continue;	/* placed in an earlier container */
+		}
 		/* MEASURE THE ROW: the tallest cell sets it. */
 		for (ci = 0; ci < [cells count]; ci++) {
 			NSTextTableBlock *cell = [cells objectAtIndex:ci];
@@ -1521,6 +1568,20 @@ static BOOL fn_cell_owns_edge(CGFloat thisWidth, CGFloat otherWidth, BOOL tieGoe
 		if (rowHeight <= 0.0) {
 			rowHeight = baseLineHeight;
 		}
+		/* **AND THE CONTAINER'S OWN HEIGHT IS THE OVERFLOW EDGE**, once this container has taken a row: a table flows
+		 * across containers by breaking at a ROW boundary, and the row that does not fit resumes in the next one. A
+		 * container shorter than a single row still gets that row, which is what keeps the flow from looping. */
+		if (containerHeight > 0.0 && placed && y + rowHeight > containerHeight + 0.001) {
+			for (ci = 0; ci < [cells count]; ci++) {
+				NSTextTableBlock *cell = [cells objectAtIndex:ci];
+
+				if ([cell startingRow] == row) {
+					resume = [[ranges objectAtIndex:ci] rangeValue].location;
+					break;
+				}
+			}
+			break;
+		}
 		/* PLACE THE ROW: every cell starts at the row's top, at its own columns' x. */
 		for (ci = 0; ci < [cells count]; ci++) {
 			NSTextTableBlock *cell = [cells objectAtIndex:ci];
@@ -1553,10 +1614,15 @@ static BOOL fn_cell_owns_edge(CGFloat thisWidth, CGFloat otherWidth, BOOL tieGoe
 				baseAscent:baseAscent baseLineHeight:baseLineHeight x:x width:width into:fragments
 				top:y + [self cg_tableCellInset:cell edge:NSTextBlockMinYEdge]];
 		}
+		placed = YES;
 		y += rowHeight;
 	}
 	free(widths);
 	*yPtr = y;
+	if (resume != NSNotFound) {
+		*glyphBasePtr = resume;
+		return resume;
+	}
 	*glyphBasePtr = tableEnd;
 	return tableEnd;
 }
@@ -1705,6 +1771,8 @@ static BOOL fn_cell_owns_edge(CGFloat thisWidth, CGFloat otherWidth, BOOL tieGoe
 			 * APPENDS its own fragments and advances `start` past the table. A paragraph without a cell falls through to
 			 * the ordinary one-line-at-a-time flow below, which is what every document that is not a table uses. */
 			if ([self cg_cellAtParagraphStart:(NSUInteger)start] != nil) {
+				NSTextTable *tableInProgress = [[self cg_cellAtParagraphStart:(NSUInteger)start] table];
+
 				start = (CFIndex)[self cg_layOutTableStartingAt:(NSUInteger)start typesetter:ts
 					attributedString:s font:font
 					baseAscent:baseAscent baseLineHeight:baseLineHeight fragments:fragments
@@ -1715,6 +1783,12 @@ static BOOL fn_cell_owns_edge(CGFloat thisWidth, CGFloat otherWidth, BOOL tieGoe
 				lastY = y;
 				lastAscent = baseAscent;
 				lastLineHeight = baseLineHeight;
+				/* **AND A TABLE THAT DID NOT FINISH GOES ON IN THE NEXT CONTAINER**: `start` is still a cell of the
+				 * SAME table, so this container is done and the outer loop advances. */
+				if (start < (CFIndex)n && [self cg_cellAtParagraphStart:(NSUInteger)start] != nil
+				    && [[self cg_cellAtParagraphStart:(NSUInteger)start] table] == tableInProgress) {
+					break;
+				}
 				continue;
 			}
 			/* **THE PARAGRAPH'S OWN GEOMETRY, READ AT THE PARAGRAPH'S START.** A nil style answers zero for every

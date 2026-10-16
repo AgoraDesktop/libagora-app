@@ -60,6 +60,7 @@ tests/
   text_rtf.m                    and RTF: the reader's control words, and an AppKit-aware WRITER beside it
   text_table_grid.m             and the GRID: cells side by side, columns measured, rows as tall as their tallest cell
   text_table_collapse.m         and `-collapsesBorders`: an edge two cells share is drawn once, by the min-side cell
+  text_table_flow.m             and the FLOW: a row that does not fit goes on in the next container, columns unmoved
   text_attachment_flow.m        and the attachment's BOX: a fixed-size run the text flows around
   text_tab_stops.m              and the TAB STOPS: a tab goes to its place, named by the paragraph style
   text_word_movement.m          and its WORD granularity: Option+arrow and Option+Delete, over the string
@@ -344,8 +345,11 @@ the compositor is really gone.
   a shared edge are compared and the WIDER one draws it — in its own colour — with a tie going to the min-side one, so
   a 2-point edge beside a 6-point one collapses to the 6-point one and the light edge is the one suppressed. THE
   TABLE'S OWN BORDER JOINS IN on its four outer edges, and its box is the box around the cells, so a collapsed table
-  ends with one outer border rather than the table's and the cells' drawn over each other. **STILL OWED AND NAMED**: a
-  table that flows across containers.
+  ends with one outer border rather than the table's and the cells' drawn over each other. **AND A TABLE FLOWS ACROSS
+  CONTAINERS** (`ctest`): a row that does not fit the container it is being laid into begins the NEXT one, with the
+  columns measured from EVERY cell so they do not move across the break — MEASURED, three rows over a short container
+  and a tall one give **2 + 1** fragments, the third row at the new container's top (y=0), and column two at x=**73.832**
+  either side of the break; a table taller than every container is clipped at the last, like text past it.
 - **And the ATTACHMENT, which is a character that stands for a picture** (`ctest`): `NSTextAttachment.h` declares
   `NSAttachmentCharacter` (U+FFFC), the `NSTextAttachmentCell` protocol and class, and the attachment itself, with
   `NSAttachmentAttributeName` carrying it; the layout manager's run walk asks the cell for its size and calls
@@ -513,13 +517,13 @@ the compositor is really gone.
   and the child clip is the child's FRAME region rather than its bounds rect — which was the same value only while the
   origin was zero. MEASURED: a mark at a document's own y 100..120 draws at 110 with the clip view at the top and at
   10 after a scroll of 100, in one run, through `-displayRect:`.
-- **`ctest`: 58 of 58 passed** (the keyboard and the seam, the AppKit and its input path, the controls and their
+- **`ctest`: 59 of 59 passed** (the keyboard and the seam, the AppKit and its input path, the controls and their
   metrics, the field control and its cell and its bezel and its placeholder and what it may hold, the text path and its
   word granularity and the multi-line view and its wrapping and its scrolling and its READING OF THE STORE, the STORE
   the rich-text slice is built on and the REGION it is laid out in and the WEB that ties the three together and the
   FRAGMENTS it produces and the GLYPH STORE it keeps and the INK it draws and the BACKGROUND, UNDERLINE and
   STRIKETHROUGH it paints and the SECOND CONTAINER it overflows into and the PARAGRAPH STYLE it aligns and breaks by
-  and the TABLE GRID whose shared borders collapse,
+  and the TABLE GRID whose shared borders collapse and whose rows flow into the next container,
   what a drag costs, the resize by edge, the tracking engine, the clip view and the scroller and the scroll view and the
   drawn offset, the chrome and what its buttons do, the chrome theme, the menus and activation).
 - **And the desktop's own text is SUB-PIXEL ANTIALIASED**, which is the AppKit's half of a renderer change in
@@ -685,7 +689,7 @@ named at its door. The TABLE BLOCK is here
 side, rows as tall as their tallest cell. **AND THE BORDERS COLLAPSE** (`tests/text_table_collapse.m`): with
 `-collapsesBorders` an edge two cells share is drawn once, by whichever block's border there is heavier (a tie going to
 the min-side one), the table's own border competing with the outer cells on its four outer edges; and a cell's box is
-its CELL rather than its text. What is still owed for tables is a table that flows across containers. The input-method
+its CELL rather than its text, and a table that does not fit FLOWS into the next container at a row boundary. The input-method
 CONTEXT are named in the view's own header as what is still owed — the `NSTextInput`
 protocol is here and the view ANSWERS it (`tests/text_marked_text.m`), while the class that owns a composition across
 keystrokes and arranges a candidate window is the slice behind it. ATTACHMENTS draw (`tests/text_attachment.m`) with
