@@ -176,37 +176,57 @@ int main(void)
 	check(left + width / 2 > W / 2, "and its centre has travelled to the right half, which is what ON looks like");
 	[rep release];
 
-	/* 4. **AND THE PRELIGHT IS THE ACCENT LIGHTENED, WHICH IS THE SAMPLE'S OWN ANSWER FOR THIS CONTROL.** MEASURED in
-	 * the mockup: its prelight pill's track is `#E5E3FF` against the `#A49AFF` it lightens. This is the one control in
-	 * the tier whose prelight is NOT a step down the grey scale, and the reason is that there is no grey to step down
-	 * from when the track is the accent. */
-	[cell cg_setMouseInside:YES];
-	rep = draw(cell, view);
-	printf("  (note: ON + pointer -> track red %.2f green %.2f blue %.2f; the accent is %.2f/%.2f/%.2f and its "
-	       "prelight %.2f/%.2f/%.2f)\n", track_red(rep, 1), track_green(rep, 1), track_blue(rep, 1),
-	       [[NSColor cg_accentColor] redComponent], [[NSColor cg_accentColor] greenComponent],
-	       [[NSColor cg_accentColor] blueComponent], [[NSColor cg_accentPrelightColor] redComponent],
-	       [[NSColor cg_accentPrelightColor] greenComponent], [[NSColor cg_accentPrelightColor] blueComponent]);
-	check(near(track_red(rep, 1), [[NSColor cg_accentPrelightColor] redComponent])
-	      && near(track_blue(rep, 1), [[NSColor cg_accentPrelightColor] blueComponent]),
-	      "an ON switch under the pointer wears the accent LIGHTENED, as the sample's legend gives it");
-	check([[NSColor cg_accentPrelightColor] redComponent] > [[NSColor cg_accentColor] redComponent]
-	      && [[NSColor cg_accentPrelightColor] blueComponent] >= [[NSColor cg_accentColor] blueComponent],
-	      "which is lighter than the accent component by component, so the two read as one colour in two states");
-	[rep release];
+	/* 4. **AND THE TRACK DOES NOT CHANGE UNDER THE POINTER — A SWITCH DOES NOT PRELIGHT.** The sample draws a paler
+	 * accent for a switch the pointer rests on and this tier DEPARTS from it by the design owner's rule: a control does
+	 * not change colour under a person, and a switch says where the pointer is by nothing at all. The claim is made by
+	 * comparing the TWO drawings rather than by asserting a colour, because "the same as before" is what not prelighting
+	 * means. */
+	{
+		double at_rest;
+		double under_pointer;
 
-	/* 5. **AND AN OFF ONE STEPS DOWN THE GREY SCALE INSTEAD, WHICH IS THIS TIER'S RULE FOR A GREY FACE.** The sample
-	 * draws no prelight on an OFF switch, so the tier's own rule applies where the sample is silent. */
-	[cell setState:NSOffState];
-	rep = draw(cell, view);
-	check(near(track_red(rep, 0), [[NSColor cg_prelightControlFaceColor] redComponent]),
-	      "an OFF switch under the pointer takes the tier's PRELIGHT grey, one step under its rest");
-	/* **AND THE TWO PRELIGHT RULES ARE TELLABLE APART BY THE INK ITSELF, WHICH IS WHY BOTH ARE WORTH HAVING.** The
-	 * OFF one is a GREY — its three components are the same number — and the ON one is a TINT, because it is the
-	 * accent lightened. A check that both were greys would have been a tautology; this is the claim. */
-	check(near(track_red(rep, 0), track_green(rep, 0)) && near(track_green(rep, 0), track_blue(rep, 0)),
-	      "and that one is a GREY — one number three times — where the ON switch's prelight is a tint of the accent");
-	[rep release];
+		[cell setState:NSOnState];
+		[cell cg_setMouseInside:NO];
+		rep = draw(cell, view);
+		at_rest = track_red(rep, 1);
+		[rep release];
+
+		[cell cg_setMouseInside:YES];
+		rep = draw(cell, view);
+		under_pointer = track_red(rep, 1);
+		printf("  (note: an ON track reads %.2f at rest and %.2f under the pointer)\n", at_rest, under_pointer);
+		check(near(at_rest, under_pointer),
+		      "an ON track is the SAME under the pointer as at rest — a switch does not prelight");
+		check(near(under_pointer, [[NSColor cg_accentColor] redComponent]),
+		      "which is the accent, because the track says the VALUE and nothing else");
+		[rep release];
+	}
+
+	/* 5. **AND THE KNOB IS WHAT SHOWS THE PRESS, WHICH IS WHERE THE SAMPLE PUTS IT TOO.** Its pressed pill keeps the
+	 * track's own grey and turns the knob white, so a press is answered by the knob rather than by the track. */
+	{
+		double knob_at_rest;
+		double knob_pressed;
+
+		[cell setState:NSOffState];
+		[cell cg_setMouseInside:NO];
+		[cell setHighlighted:NO];
+		rep = draw(cell, view);
+		knob_at_rest = [[rep colorAtX:(W / 2 - 10) y:H / 2] redComponent];
+		[rep release];
+
+		[cell setHighlighted:YES];
+		rep = draw(cell, view);
+		knob_pressed = [[rep colorAtX:(W / 2 - 10) y:H / 2] redComponent];
+		printf("  (note: an OFF knob reads %.2f at rest and %.2f while held down)\n", knob_at_rest, knob_pressed);
+		check(knob_at_rest < knob_pressed,
+		      "an OFF knob is the track's grey at rest and WHITE while the switch is held down");
+		check(near([[rep colorAtX:W / 2 y:H / 2] redComponent], [[NSColor controlColor] redComponent]),
+		      "and the TRACK stays its own grey through the press, so the knob is where the press shows");
+		[rep release];
+		[cell setHighlighted:NO];
+	}
+
 	[cell cg_setMouseInside:NO];
 
 	/* 6. **AND BOTH PIECES ARE OUTLINED IN THE TIER'S BORDER GREY.** MEASURED on the sample and MISSED by the first pass

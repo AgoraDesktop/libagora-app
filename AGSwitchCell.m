@@ -53,19 +53,23 @@
 	(void)controlView;
 	track = [NSBezierPath bezierPathWithRoundedRect:trackRect xRadius:radius yRadius:radius];
 
-	/* **AND THE FILL IS THE STATE, IN THE SAMPLE'S OWN FOUR.** The ORDER matters and is the sample's: being out of
-	 * action wins over everything (a disabled switch does not prelight), and the pointer's shade only exists for a
-	 * switch that is ON — because that is the only fill the sample draws it against, and because an OFF track is a GREY,
-	 * where this tier's own rule applies instead: a grey-faced control the pointer rests on takes a step DOWN the same
-	 * scale, which is `+cg_prelightControlFaceColor`. THE PRESS CHANGES NOTHING, which is also the sample's answer: its
-	 * "Pressed" pill is the OFF track's own grey, so a press is acknowledged by the knob moving rather than by the track
-	 * changing under it. */
+	/* **AND THE FILL IS THE VALUE: THE ACCENT WHEN IT IS ON, THE CONTROL'S GREY WHEN IT IS OFF, AND THE OUT-OF-ACTION
+	 * GREY WHEN IT IS DISABLED.** That is the whole of it, and THE TRACK DOES NOT CHANGE UNDER THE POINTER — the design
+	 * owner's rule, and the same one every other control in this tier follows: a prelight is not a third state, and a
+	 * switch says where the pointer is by nothing at all, because where the CONTACT is is not a thing a switch has to
+	 * report.
+	 *
+	 * THE SAMPLE DRAWS A PRELIGHT AND THIS DEPARTS FROM IT, WHICH IS RECORDED RATHER THAN QUIETLY DROPPED: its pills
+	 * show a paler accent for a switch the pointer rests on, and `+cg_accentPrelightColor` existed for exactly that.
+	 * The door is gone with the state, because a colour with no readers is the same drift `NSColor.m` deletes greys
+	 * for. See `ARGENTUM.md`, where the prelight's section carries the rule and its history.
+	 *
+	 * AND THE PRESS STILL SHOWS, IN THE KNOB RATHER THAN THE TRACK — measured on the sample, whose pressed pill keeps
+	 * the track's own grey and turns the KNOB white. */
 	if (![self isEnabled]) {
 		fill = [NSColor cg_disabledControlFaceColor];
-	} else if (on) {
-		fill = [self cg_mouseIsInside] ? [NSColor cg_accentPrelightColor] : [NSColor cg_accentColor];
 	} else {
-		fill = [self cg_mouseIsInside] ? [NSColor cg_prelightControlFaceColor] : [NSColor controlColor];
+		fill = on ? [NSColor cg_accentColor] : [NSColor controlColor];
 	}
 	[fill setFill];
 	[track fill];
@@ -86,8 +90,10 @@
 
 	knobRect = NSMakeRect(on ? (NSMaxX(trackRect) - knobInset - knob) : (NSMinX(trackRect) + knobInset),
 			      NSMidY(cellFrame) - knob / 2.0, knob, knob);
-	knobFill = ([self isHighlighted] || (on && ![self cg_mouseIsInside]))
-		   ? [NSColor controlBackgroundColor] : [NSColor controlColor];
+	/* **AND THE KNOB IS WHITE WHENEVER THE SWITCH IS ON OR BEING PRESSED, AND THE TRACK'S GREY OTHERWISE.** With no
+	 * prelight there is no longer a state where an ON knob is grey, so this is the sample's rule with its one
+	 * unrepresentable case removed. */
+	knobFill = ([self isHighlighted] || on) ? [NSColor controlBackgroundColor] : [NSColor controlColor];
 	[knobFill setFill];
 	[[NSBezierPath bezierPathWithOvalInRect:knobRect] fill];
 	ring = [NSBezierPath bezierPathWithOvalInRect:NSInsetRect(knobRect, AG_SWITCH_OUTLINE / 2.0,

@@ -877,24 +877,6 @@ static void fn_cmyk_of(NSColor *self, CGFloat cmyk[4])
 	return fn_singleton(&s, 0.643, 0.604, 1.0, 1.0);
 }
 
-/* **THE ACCENT LIGHTENED TOWARD WHITE, WHICH IS A MEASURED RELATIONSHIP RATHER THAN A SECOND TRIPLE.** The sample's
- * legend gives a switch's prelight as `#E5E3FF`, which is what this relationship lands on, and the blend is kept so
- * that two states read as one control in two states rather than as two colours: a hand-picked triple would drift from
- * the accent the moment either moved. See the header for why a switch has this door and a grey-faced control does
- * not. */
-+ (NSColor *)cg_accentPrelightColor
-{
-	static NSColor *s;
-
-	if (s == nil) {
-		s = [[[self cg_accentColor] blendedColorWithFraction:0.45 ofColor:[NSColor whiteColor]] retain];
-		if (s == nil) {
-			s = [[NSColor colorWithDeviceRed:0.84 green:0.82 blue:1.0 alpha:1.0] retain];
-		}
-	}
-	return s;
-}
-
 + (NSColor *)selectedControlTextColor
 {
 	static NSColor *s;
