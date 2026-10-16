@@ -16,6 +16,7 @@
 #include <math.h>
 #import <AppKit/NSView.h>
 #import <AppKit/NSScrollView.h>
+#import <AppKit/NSClipView.h>
 #import <AppKit/NSCursor.h>
 #import <AppKit/NSGraphicsContext.h>
 #import <AppKit/NSWindow.h>
@@ -452,15 +453,76 @@ static NSRect fn_intersect(NSRect a, NSRect b)
  * that it did not scroll, `-adjustScroll:` hands back the rectangle it was given unchanged, and the two void doors
  * do nothing. Each says so where it stands rather than pretending a scroll happened. */
 
+/* **BOTH DOORS FIND THE CLOSEST ENCLOSING CLIP VIEW AND MOVE IT, WHICH IS APPLE'S OWN READING OF THEM.** A view does
+ * not scroll; a CLIP VIEW does — it is the one whose bounds origin is the visible window into a document — so the
+ * only thing a view can do with "make this visible" is hand the question up the superview chain. The walk stops at
+ * the first `NSClipView`, which is the same search `-enclosingScrollView` makes one class over for the scroll view
+ * that owns one. A view with no clip view above it answers NO rather than pretending: there is nowhere to scroll.
+ *
+ * **AND THE ARITHMETIC IS IN THE CLIP VIEW'S OWN COORDINATES, WHICH IS WHERE THE DOCUMENT LIVES.** Converting the
+ * rectangle into the clip view puts it in the same space as `-bounds`, and that rectangle IS the visible window — so
+ * "is it visible" is a containment test and "make it visible" is moving the origin JUST FAR ENOUGH. The far edge
+ * moves the origin so the rectangle's MAX edge meets the visible MAX edge rather than putting its minimum there,
+ * which is the difference between scrolling a caret into view and scrolling it to the top of the screen. The origin
+ * is handed to `-scrollToPoint:`, which CONSTRAINS it — so a rectangle below the document's end scrolls as far as
+ * there is and no further. */
+- (NSClipView *)fn_enclosingClipView
+{
+	NSView *view = _superview;
+
+	while (view != nil) {
+		if ([view isKindOfClass:[NSClipView class]]) {
+			return (NSClipView *)view;
+		}
+		view = [view superview];
+	}
+	return nil;
+}
+
 - (void)scrollPoint:(NSPoint)aPoint
 {
-	(void)aPoint;
+	NSClipView *clip = [self fn_enclosingClipView];
+
+	if (clip != nil) {
+		/* **THE POINT IS IN THE RECEIVER'S OWN COORDINATES, AND THE DOCUMENT'S FRAME IS ALREADY IN THE CLIP
+		 * VIEW'S** (it is a subview) — so the target origin is the point plus the document's frame origin, which is
+		 * the whole of the conversion this door needs. `-convertPoint:toView:` is NOT used here because the clip
+		 * view's own coordinate system is offset by the scroll it is performing, and expressing a scroll POSITION
+		 * through it would fold the current origin into the answer. */
+		NSRect frame = [self frame];
+
+		[clip scrollToPoint:NSMakePoint(aPoint.x + frame.origin.x, aPoint.y + frame.origin.y)];
+	}
 }
 
 - (BOOL)scrollRectToVisible:(NSRect)aRect
 {
-	(void)aRect;
-	return NO;
+	NSClipView *clip = [self fn_enclosingClipView];
+	NSRect visible;
+	NSRect target;
+	NSPoint origin;
+
+	if (clip == nil) {
+		return NO;
+	}
+	target = [self convertRect:aRect toView:clip];
+	visible = [clip bounds];
+	origin = visible.origin;
+	if (NSMinY(target) < NSMinY(visible)) {
+		origin.y = NSMinY(target);
+	} else if (NSMaxY(target) > NSMaxY(visible)) {
+		origin.y = NSMaxY(target) - NSHeight(visible);
+	}
+	if (NSMinX(target) < NSMinX(visible)) {
+		origin.x = NSMinX(target);
+	} else if (NSMaxX(target) > NSMaxX(visible)) {
+		origin.x = NSMaxX(target) - NSWidth(visible);
+	}
+	if (NSEqualPoints(origin, visible.origin)) {
+		return NO;
+	}
+	[clip scrollToPoint:origin];
+	return YES;
 }
 
 - (NSRect)adjustScroll:(NSRect)newVisible

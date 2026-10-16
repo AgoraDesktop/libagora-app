@@ -149,6 +149,14 @@ target_link_libraries(text_view_wrapping PRIVATE App m)
 add_test(NAME appkit-text-view-wrapping COMMAND text_view_wrapping)
 set_tests_properties(appkit-text-view-wrapping PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
 
+# **AND THE SLICE THAT PUTS IT IN A SCROLL VIEW.** `NSView -scrollRectToVisible:`/`-scrollPoint:` find the enclosing
+# clip view and move it; the text view settles its own height and turns a caret into a rectangle. Measured against a
+# REAL scroll view and read as the clip view's own `bounds` origin.
+add_executable(text_view_scrolling text_view_scrolling.m)
+target_link_libraries(text_view_scrolling PRIVATE App m)
+add_test(NAME appkit-text-view-scrolling COMMAND text_view_scrolling)
+set_tests_properties(appkit-text-view-scrolling PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
+
 # **AND THE INSIDE OF A SCROLL VIEW.** `NSClipView`'s arithmetic is "the whole of it" (its own header), and it is
 # checked in EXACT POINTS rather than by drawing: where a short document sits, where a long one stops, and the
 # notification wire that re-constrains the scroll when the document's own frame or bounds changes. Offscreen, so it

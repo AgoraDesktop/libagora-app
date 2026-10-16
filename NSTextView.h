@@ -15,8 +15,11 @@
  *        and the caret, the hit test, the selection and every movement walk those instead. `NSResponder.h`'s word
  *        correction already said a WORD is not a layout question; a VISUAL LINE is one, and this is where it is
  *        decided.
- *   III. SCROLLING, which is a clip view and a document height — and it is why slice I took the horizontal origin
- *        away from the base rather than pretending a document scrolls sideways.
+ *   III. SCROLLING (THIS SLICE). The two `NSView` doors that move an enclosing clip view, the text view settling its
+ *        own height so a clip view has something to scroll, and `-scrollRangeToVisible:` turning a caret into a
+ *        rectangle. **WHAT IS OWED IS THE DOCUMENT'S ORIENTATION**: Apple's text view is FLIPPED so its FIRST line
+ *        sits at the clip view's origin, and this class still measures y UP (the base's convention) — so the DOORS
+ *        are right either way and the orientation is the next slice.
  *   IV.  RICH TEXT, ATTACHMENTS AND PARAGRAPHS, which need the attributed store and the attribute vocabulary the
  *        `NSTextFieldAttributedStringMethods` note already names as travelling without being obeyed.
  *
@@ -49,6 +52,9 @@ NS_ASSUME_NONNULL_BEGIN
 	NSUInteger _cg_visualCapacity;
 	BOOL _cg_layoutValid;
 	CGFloat _cg_layoutWidth;
+	/* **AND WHETHER THIS VIEW IS TALL ENOUGH FOR ITS OWN LAYOUT.** Apple's default for a text view is YES — one inside
+	 * a scroll view grows and shrinks with its text — and a caller that gave the view a frame on purpose says NO. */
+	BOOL _cg_verticallyResizable;
 }
 
 /* ---- THE MODEL: A LINE IS A `\n`-TERMINATED RUN, AND NONE OF THIS DEPENDS ON THE VIEW'S WIDTH ---------------- */
@@ -65,6 +71,17 @@ NS_ASSUME_NONNULL_BEGIN
  * line is at the end of that range. */
 - (NSUInteger)cg_visualLineCount;
 - (NSRange)cg_visualLineRangeAtIndex:(NSUInteger)line;
+- (NSUInteger)cg_visualLineIndexForCharacterIndex:(NSUInteger)index;
+
+/* ---- AND WHO OWNS THE HEIGHT --------------------------------------------------------------------------------- */
+
+/* **A VERTICALLY RESIZABLE TEXT VIEW IS AS TALL AS ITS LAYOUT.** That is the default, because a document inside a
+ * scroll view has to be as tall as its text for the scroll view to have anything to scroll; a caller that gave the
+ * view a frame — a field, a label laid out by hand — sets NO and keeps the frame it chose. The height is settled
+ * after every edit and after a width change, because both RE-WRAP; `-sizeToFit` fits regardless, being an explicit
+ * request rather than an automatic one. */
+- (BOOL)isVerticallyResizable;
+- (void)setVerticallyResizable:(BOOL)flag;
 
 @end
 

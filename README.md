@@ -46,6 +46,7 @@ tests/
   text_word_movement.m          and its WORD granularity: Option+arrow and Option+Delete, over the string
   text_view_lines.m             and the first slice of the MULTI-LINE view: the line model, and what reads it
   text_view_wrapping.m          and the slice above it: the same model WRAPPED to the view's width
+  text_view_scrolling.m         and above that: the view in a SCROLL VIEW, and the doors that move it
   text_field_cell.m             a FIELD's cell: its string, its face, and one edit session end to end
   text_field_control.m          and the VIEW above it: a press that opens a session, and what commits it
   text_field_bezel.m            and its BORDER's two shapes, read out of the corner PIXELS
@@ -137,6 +138,19 @@ the compositor is really gone.
   **70.9** narrow). A layout is rebuilt on the next read after the text or the width changes, which is the three doors
   that can change either, and the trailing-whitespace rule (`-cg_textRangeOfVisualLine:`) is what makes the boundary
   between two wrapped lines one index rather than two.
+- **And SCROLLING, which is the slice above that** (`ctest`, against a REAL `NSScrollView`): `NSView -scrollRectToVisible:`
+  and `-scrollPoint:` find the closest enclosing CLIP VIEW, work in its coordinates and move the origin just far
+  enough — the far-edge case moving it so the rectangle's MAX edge meets the visible MAX edge rather than putting its
+  minimum there — and `NSTextView -scrollRangeToVisible:` turns a caret into the rectangle those two take. The height
+  is the other half: a text view settles its own height after every edit so a clip view has something to scroll
+  (`-isVerticallyResizable`, Apple's door, YES by default; a caller that owns the frame says NO). MEASURED: a
+  twenty-line document is **338.3** points in a 60-point clip view; `-scrollRectToVisible:` moves the origin from
+  **274.3** to **4.0** and answers NO when asked again for the same rectangle; a caret moved to the end is SCROLLED
+  into view; `-scrollPoint:` puts the origin at the point given and CONSTRAINS a point past the end to the far edge;
+  there is no horizontal origin at all (a wrapped document has nothing to scroll sideways); and an edit that adds a
+  line grows the document. **AND WHAT IS OWED IS NAMED**: the DOCUMENT'S ORIENTATION — Apple's text view is FLIPPED so
+  its first line sits at the clip view's origin, and this class still measures y up — so the DOORS are right either
+  way and the flip is the next slice.
 - **And the field, which is a cell under a view** (`ctest`, offscreen): `NSTextFieldCell` owns the string, the face
   and the three doors of an edit; `NSTextField` is the control above it, and it contributes the two things a cell
   cannot — a PRESS that opens a session with the WINDOW's field editor, and `-selectText:` for the same session with
@@ -267,11 +281,11 @@ the compositor is really gone.
   and the child clip is the child's FRAME region rather than its bounds rect — which was the same value only while the
   origin was zero. MEASURED: a mark at a document's own y 100..120 draws at 110 with the clip view at the top and at
   10 after a scroll of 100, in one run, through `-displayRect:`.
-- **`ctest`: 36 of 36 passed** (the keyboard and the seam, the AppKit and its input path, the controls and their
+- **`ctest`: 37 of 37 passed** (the keyboard and the seam, the AppKit and its input path, the controls and their
   metrics, the field control and its cell and its bezel and its placeholder and what it may hold, the text path and its
-  word granularity and the multi-line view and its wrapping, what a drag costs, the resize by edge, the tracking engine,
-  the clip view and the scroller and the scroll view and the drawn offset, the chrome and what its buttons do, the
-  chrome theme, the menus and activation).
+  word granularity and the multi-line view and its wrapping and its scrolling, what a drag costs, the resize by edge,
+  the tracking engine, the clip view and the scroller and the scroll view and the drawn offset, the chrome and what its
+  buttons do, the chrome theme, the menus and activation).
 - **And the desktop's own text is SUB-PIXEL ANTIALIASED**, which is the AppKit's half of a renderer change in
   CoreGraphics: a window's surface is OPAQUE (`kCGImageAlphaNoneSkipFirst`), and the destination's opacity is
   exactly what decides whether a glyph is rasterised in colour. MEASURED on the live session: the window title's
@@ -409,8 +423,9 @@ still absent (`-interpretKeyEvents:` does the direct mapping and says so), and t
 editor are named rather than guessed. The WORD commands are NOT in that list any more: `tests/text_word_movement.m`
 drives Option+arrow and Option+Delete, because a word is a run of the string's own characters and needs no layout
 model. And the MULTI-LINE TEXT VIEW has its FIRST SLICE: `NSTextView` holds many lines where `NSText` holds one
-(`tests/text_view_lines.m`), and WRAPPING is the slice above it (`tests/text_view_wrapping.m`) — with SCROLLING and
-rich text named in its own header as the slices still owed. Each absence is stated
+(`tests/text_view_lines.m`), and WRAPPING and SCROLLING are the slices above it (`tests/text_view_wrapping.m`,
+`tests/text_view_scrolling.m`) — with the DOCUMENT'S ORIENTATION (a text view is flipped so its first line sits at the
+clip view's origin) and rich text named in its own header as the slices still owed. Each absence is stated
 rather than stubbed, and the refusals name themselves.
 
 ## Build

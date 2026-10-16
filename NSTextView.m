@@ -37,6 +37,16 @@
 
 @implementation NSTextView
 
+- (instancetype)initWithFrame:(NSRect)frameRect
+{
+	self = [super initWithFrame:frameRect];
+	if (self != nil) {
+		/* APPLE'S DEFAULT FOR A TEXT VIEW, and the one a scroll view needs: the view is as tall as its text. */
+		_cg_verticallyResizable = YES;
+	}
+	return self;
+}
+
 - (void)dealloc
 {
 	free(_cg_visual);
@@ -373,21 +383,68 @@
  * which is the container's, or the caller's — and answers the height the wrapped layout needs at it. A view that set
  * its own width from its longest line would RE-WRAP ITSELF the next time it laid out, because that line may only be
  * the longest BECAUSE of the width; the height has no such circle. */
-- (void)sizeToFit
+/* **AND A TEXT VIEW IS AS TALL AS ITS LAYOUT, WHICH IS WHAT A CLIP VIEW NEEDS IN ORDER TO SCROLL ANYTHING** — unless
+ * the caller said otherwise. The height is settled after every edit and after a width change, because both re-wrap:
+ * a document that grew a line and kept its old frame would have the new line outside the scrollable area, and one
+ * that SHRANK would leave the clip view showing space the document no longer has. THE WIDTH IS NEVER TOUCHED — it is
+ * the caller's, and a view that set its own width from its longest line would RE-WRAP ITSELF on the next layout. */
+- (BOOL)isVerticallyResizable
 {
-	[self cg_ensureLayout];
-	[self setFrameSize:NSMakeSize([self frame].size.width,
-				      (CGFloat)_cg_visualCount * [self cg_lineHeight] + 2.0 * NS_TEXT_INSET)];
+	return _cg_verticallyResizable;
 }
 
-/* **AND A DOCUMENT VIEW DOES NOT CARRY ITS OWN HORIZONTAL ORIGIN, WHICH IS THE ONE THING THIS CLASS TAKES FROM ITS
- * BASE.** `NSText` side-scrolls its single line because it is a field with no clip view; a document's scrolling is the
- * clip view's, and this tier has not put one around a text view yet. So the origin is held at ZERO — a line wider than
- * the view is CLIPPED, and wrapping is what keeps that from happening — and SCROLLING IS SLICE III. */
+- (void)setVerticallyResizable:(BOOL)flag
+{
+	_cg_verticallyResizable = flag;
+	if (flag) {
+		[self cg_setHeightToLayout];
+	}
+}
+
+- (void)cg_setHeightToLayout
+{
+	CGFloat height;
+
+	[self cg_ensureLayout];
+	height = (CGFloat)_cg_visualCount * [self cg_lineHeight] + 2.0 * NS_TEXT_INSET;
+	if (height != [self frame].size.height) {
+		[super setFrameSize:NSMakeSize([self frame].size.width, height)];
+	}
+}
+
+- (void)cg_fitHeight
+{
+	if (_cg_verticallyResizable) {
+		[self cg_setHeightToLayout];
+	}
+}
+
+/* **AND `-sizeToFit` FITS REGARDLESS**, because it is an explicit request rather than the automatic height above: a
+ * caller that asks for the fit wants it whether or not the view is auto-sizing. */
+- (void)sizeToFit
+{
+	[self cg_setHeightToLayout];
+}
+
+/* **AND BRINGING A RANGE INTO VIEW IS ASKING THE CLIP VIEW, WHICH IS WHAT SLICE III IS.** The base carried its own
+ * horizontal origin because it is a FIELD with no clip view; a DOCUMENT is put inside one by its caller, and the
+ * scrolling is that clip view's — so this door computes the caret's RECTANGLE and hands it to
+ * `-scrollRectToVisible:`, which walks up to the clip view and moves it just far enough. With WRAPPING there is
+ * nothing to scroll sideways: every line is inside the width, so the question is vertical and the answer is a line. */
+- (NSRect)cg_rectForCharacterIndex:(NSUInteger)index
+{
+	NSFont *font = [self cg_font];
+	NSUInteger line = [self cg_visualLineIndexForCharacterIndex:index];
+	CGFloat baseline = [self cg_baselineForLine:line];
+
+	return NSMakeRect(NS_TEXT_INSET + [self cg_xForIndex:index], baseline + [font descender], 1.0,
+			  [font ascender] - [font descender]);
+}
+
 - (void)scrollRangeToVisible:(NSRange)range
 {
-	(void)range;
-	_originX = 0.0;
+	[self cg_ensureLayout];
+	[self scrollRectToVisible:[self cg_rectForCharacterIndex:range.location]];
 }
 
 /* ============================================================================================ *
@@ -403,20 +460,27 @@
 {
 	_cg_layoutValid = NO;
 	[super replaceCharactersInRange:range withString:string];
+	[self cg_fitHeight];
 }
 
 - (void)setString:(NSString *)string
 {
 	_cg_layoutValid = NO;
 	[super setString:string];
+	[self cg_fitHeight];
 }
 
 - (void)setFrameSize:(NSSize)newSize
 {
-	if (newSize.width != [self frame].size.width) {
+	BOOL widthChanged = (newSize.width != [self frame].size.width);
+
+	if (widthChanged) {
 		_cg_layoutValid = NO;
 	}
 	[super setFrameSize:newSize];
+	if (widthChanged) {
+		[self cg_fitHeight];
+	}
 }
 
 /* ============================================================================================ *

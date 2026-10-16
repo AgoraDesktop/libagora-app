@@ -193,21 +193,29 @@ int main(void)
 		      "`-moveDown:` puts the caret on a LATER visual line");
 	}
 
-	/* 6. **AND A CLICK LANDS ON THE VISUAL LINE IT IS OVER.** The pointer is put in the SECOND band's middle, which at
-	 * the narrow width is the wrapped remainder of the same paragraph. */
+	/* 6. **AND A CLICK LANDS ON THE VISUAL LINE IT IS OVER.** The pointer is put in the SECOND line's band, near its left
+	 * edge, and the caret must land in the second line — which is the hit test reading the y rather than always
+	 * answering the first line. THE HEIGHT IS HELD — see the note on the pixel case — so the band the pointer is put in
+	 * is one this case chose rather than one the auto-fit moved. */
 	{
 		NSFont *font = [view font];
-		CGFloat lineHeight = [font ascender] - [font descender];
-		CGFloat y = NSMaxY([view bounds]) - NS_TEXT_INSET - lineHeight / 2.0 - lineHeight;
-		NSUInteger index;
+		CGFloat lineHeight;
+		CGFloat y;
 
-		[view setString:paragraph()];
+		if (font == nil) {
+			font = [NSFont systemFontOfSize:[NSFont systemFontSize]];
+		}
+		lineHeight = [font ascender] - [font descender];
+		[view setVerticallyResizable:NO];
 		set_frame(view, (CGFloat)NARROW);
+		[view setString:paragraph()];
+		y = NSMaxY([view bounds]) - NS_TEXT_INSET - lineHeight / 2.0 - lineHeight;
 		press(view, window, 6.0, y);
-		index = [view selectedRange].location;
-		printf("  (note: a click in the second band landed at index %lu)\n", (unsigned long)index);
-		check(index > 0, "a click in the SECOND band lands past the first visual line's text");
-		check([view cg_visualLineIndexForCharacterIndex:index] == 1,
+		printf("  (note: a click at y=%.1f landed at index %lu)\n", (double)y,
+		       (unsigned long)[view selectedRange].location);
+		check([view selectedRange].location > 0,
+		      "a click in the SECOND band lands past the first visual line's text");
+		check([view cg_visualLineIndexForCharacterIndex:[view selectedRange].location] == 1,
 		      "which is the second visual line — the hit test reads the y");
 	}
 
@@ -218,6 +226,8 @@ int main(void)
 		NSBitmapImageRep *wide;
 		NSBitmapImageRep *narrow;
 
+		/* THE HEIGHT IS HELD, so the bands a pixel read is measured against are ones this case chose. */
+		[view setVerticallyResizable:NO];
 		[view setString:paragraph()];
 		set_frame(view, (CGFloat)WIDE);
 		wide = draw(view);

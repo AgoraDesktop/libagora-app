@@ -170,6 +170,13 @@ int main(void)
 		NSBitmapImageRep *two;
 		int topTwo, bottomTwo;
 
+		/* **THE HEIGHT IS HELD HERE, BECAUSE THE PIXEL AND POINTER CASES ARE ABOUT THE LAYOUT AND NOT ABOUT THE
+		 * AUTO-FIT.** A vertically resizable view (the default) is exactly as tall as its text, so a frame that a
+		 * pixel read is measured against would move under it; the flag is Apple's door for a caller that owns the
+		 * frame's height. */
+		[view setVerticallyResizable:NO];
+		[view setFrameSize:NSMakeSize((CGFloat)W, (CGFloat)H)];
+
 		[view setString:@"a\nb"];
 		two = draw(view);
 		topTwo = ink_in(two, 0, H / 2);
