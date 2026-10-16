@@ -15,14 +15,19 @@
  * `NSTextTabType`'s four values are `CTTextAlignment`'s four, which is why the initialiser that takes an alignment
  * and the one that takes a type agree.
  *
- * **WHAT IS NOT HERE, NAMED RATHER THAN STUBBED:** `+columnTerminatorsForLocale:` (it answers the characters that end
- * a decimal tab's column, which needs `NSLocale` and a per-locale table this tier has not got), and `-options` is
- * carried and answered and has no reader — Apple names no key for that dictionary anywhere in the era's headers.
+ * **AND THE COLUMN'S TERMINATORS ARE A LOCALE'S.** `+columnTerminatorsForLocale:` answers the characters that end a
+ * decimal tab's column — the locale's decimal separator, which `NSLocale -decimalSeparator` reads from ICU — and
+ * `NSTabColumnTerminatorsAttributeName` is the OPTIONS key that names them for one stop. WHAT IS STILL OWED IS
+ * POSITIONING, NOT THE VOCABULARY: Core Text's `CTTextAlignment` has no decimal edge, so a `NSDecimalTabStopType`
+ * stop is still carried into the engine as a LEFT stop and the terminators above are not yet read by the layout —
+ * aligning a number ON its point is the slice behind this one.
  */
 #ifndef APPKIT_NSTEXTAB_H
 #define APPKIT_NSTEXTAB_H
 
 #import <AppKit/NSText.h>
+
+@class NSLocale;
 
 NS_ASSUME_NONNULL_BEGIN
 
@@ -35,6 +40,11 @@ enum {
 	NSDecimalTabStopType = 3
 };
 typedef NSUInteger NSTextTabType;
+
+/* **THE OPTIONS KEY FOR A DECIMAL TAB'S COLUMN TERMINATORS.** Its value is an array of strings — the characters a
+ * number's point may be — and it rides in an `NSTextTab`'s `-options`; a stop with no entry uses
+ * `+columnTerminatorsForLocale:`. */
+extern NSString *const NSTabColumnTerminatorsAttributeName;
 
 @interface NSTextTab : NSObject <NSCopying>
 {
@@ -50,6 +60,11 @@ typedef NSUInteger NSTextTabType;
 			      options:(nullable NSDictionary *)options;
 - (instancetype)initWithType:(NSTextTabType)type location:(CGFloat)loc;
 
+/* **THE CHARACTERS THAT END A DECIMAL TAB'S COLUMN FOR A LOCALE.** The answer is that locale's decimal separator —
+ * "." in an English locale, "," in a German one — read from ICU through `NSLocale -decimalSeparator`; a nil locale
+ * means `+[NSLocale currentLocale]`. */
++ (NSArray<NSString *> *)columnTerminatorsForLocale:(nullable NSLocale *)aLocale;
+
 /* WHERE THE STOP IS ALONG THE LINE. */
 - (CGFloat)location;
 
@@ -57,7 +72,8 @@ typedef NSUInteger NSTextTabType;
 - (NSTextTabType)tabStopType;
 - (NSTextAlignment)alignment;
 
-/* THE OPTIONS AS THEY WERE GIVEN, borrowed rather than copied back — Apple names no key for them here. */
+/* THE OPTIONS AS THEY WERE GIVEN, borrowed rather than copied back. `NSTabColumnTerminatorsAttributeName` is the one
+ * key this tier names; any other key is carried and answered and nothing more. */
 - (nullable NSDictionary *)options;
 
 @end

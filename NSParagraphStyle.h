@@ -32,9 +32,10 @@
  *
  * WHAT IS STILL NOT HERE, AND ITS ROWS STAY OPEN: `NSTextTab` IS HERE NOW, and with it `-tabStops` — the stops are
  * the layout's (`CTTextTab` is what `CTLine` advances a `\t` to), so this class carries them and the engine walks
- * them. `-defaultTabInterval` is the fallback after the last stop and is read too. What remains owed is
- * `+[NSTextTab columnTerminatorsForLocale:]` (it needs `NSLocale` and a per-locale table) and
- * `NSTabColumnTerminatorsAttributeName`.
+ * them. `-defaultTabInterval` is the fallback after the last stop and is read too, and
+ * `+[NSTextTab columnTerminatorsForLocale:]` and `NSTabColumnTerminatorsAttributeName` are here. What remains owed is
+ * POSITIONING a decimal tab: Core Text has no decimal edge, so such a stop is carried as a LEFT one and the
+ * terminators above are not yet read.
  */
 #ifndef APPKIT_NSPARAGRAPHSTYLE_H
 #define APPKIT_NSPARAGRAPHSTYLE_H

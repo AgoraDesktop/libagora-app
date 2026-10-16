@@ -52,9 +52,9 @@
  * this view ANSWERS it, and the INPUT CONTEXT that owns a composition is here too (`NSTextInputContext.h`) — what is
  * still missing is an input METHOD behind it: the context has one stock keyboard and no composition engine, so it
  * reaches the standard key binding directly. ATTACHMENTS are drawn (`NSTextAttachment.h`, and the manager's run walk
- * draws the cell), but their INLINE ADVANCE is still the font's, because the engine has no attachment run — the flow
- * slice the attachment header names. The view's own `NSText`-inherited `_string` is a mirror (see above) rather than
- * the authority.
+ * draws the cell), and their INLINE ADVANCE IS THE ENGINE'S NOW: a `CTRunDelegate` over the attachment character makes
+ * Core Text reserve the box, so the text after an attachment flows PAST it rather than over it. The view's own
+ * `NSText`-inherited `_string` is a mirror (see above) rather than the authority.
  */
 #ifndef APPKIT_NSTEXTVIEW_H
 #define APPKIT_NSTEXTVIEW_H

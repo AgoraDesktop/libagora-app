@@ -365,10 +365,12 @@ the compositor is really gone.
   the layout manager copies them into the `CTParagraphStyle` it builds — so `CTLine` advances a `\t` to the next stop.
   MEASURED: stops at **50** and **100** over `a\tb\tc` put the characters after the tabs exactly at **50** and **100**;
   an empty list with a **40**-point interval puts them at **40** and **80** (the manager sets an EMPTY TabStops so
-  Core Text's own 28-point default does not win); and the view's `-insertTab:` puts the character in the store. **STILL
-  OWED AND NAMED**: `+[NSTextTab columnTerminatorsForLocale:]` (it needs `NSLocale` and a per-locale table), a decimal
-  tab is carried as a LEFT stop (Core Text's `CTTextAlignment` has no decimal edge), and `NSTextTab`'s `-options` is
-  carried and not read.
+  Core Text's own 28-point default does not win); and the view's `-insertTab:` puts the character in the store. **AND
+  THE COLUMN'S TERMINATORS ARE A LOCALE'S** (`ctest`): `+[NSTextTab columnTerminatorsForLocale:]` answers the locale's
+  decimal separator, read from ICU through `NSLocale -decimalSeparator` — `.` for en_US and `,` for de_DE — and
+  `NSTabColumnTerminatorsAttributeName` names them in a stop's `-options`. **STILL OWED AND NAMED**: POSITIONING a
+  decimal tab, because Core Text's `CTTextAlignment` has no decimal edge — such a stop is carried as a LEFT one and
+  the terminators are not yet read by the layout.
 - **And the MARKED TEXT, which is what an input method composes through** (`ctest`): `NSTextInput.h` declares the eleven
   doors an input system drives a text view through, `NSTextView` adopts the protocol, and the composition is an ordinary
   edit with a remembered range — the marked characters really go into the store, so the caret and the layout work as
@@ -673,8 +675,9 @@ STRIKETHROUGH keys the manager paints (`tests/text_layout_attributes.m`) and the
 by (`tests/text_paragraph_style.m`) and the GEOMETRY it lays out by (`tests/text_paragraph_geometry.m`) — the indents,
 the two spacings and the three line-height properties, all read as the manager's own fragment geometry. The property
 with no reader is the hyphenation factor (the engine does no hyphenation), the default tab interval (a tab stop needs
-`NSTextTab`) — `NSTextTab` IS here now (`tests/text_tab_stops.m`), and a tab goes to its stop; what is owed is
-`+columnTerminatorsForLocale:` and a decimal tab's edge — and the base writing direction (left-to-right only), each
+`NSTextTab`) — `NSTextTab` IS here now (`tests/text_tab_stops.m`), and a tab goes to its stop, with
+`+columnTerminatorsForLocale:` and `NSTabColumnTerminatorsAttributeName` beside it; what is owed is POSITIONING a
+decimal tab — and the base writing direction (left-to-right only), each
 named at its door. The TABLE BLOCK is here
 (`tests/text_table.m`), so a paragraph can carry a box with a ground and a border. **AND THE GRID IS HERE TOO**
 (`tests/text_table_grid.m`): the manager measures the columns, lays each cell inside them and places the cells side by

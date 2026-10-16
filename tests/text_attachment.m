@@ -10,9 +10,10 @@
  * picture gives an attachment a cell whose size is the picture's), draws the cell directly, and then draws a STORE
  * that has an attachment in it and reads the picture's own colour at the character's own x.
  *
- * **AND WHAT IS NOT CLAIMED IS NAMED IN THE HEADER.** The line's ADVANCE is still the font's placeholder glyph, because
- * this tier's engine has no attachment run; the probe puts the attachment alone on a line so the drawing it checks is
- * the drawing the manager makes and not an overlap.
+ * **AND THE LINE'S ADVANCE IS THE ENGINE'S NOW.** A `CTRunDelegate` over the attachment character makes Core Text
+ * reserve the cell's width, so the advance past the character IS the box and the text after it flows around rather
+ * than over it — `tests/text_attachment_flow.m` is the probe for that. This probe keeps its attachment alone on a line
+ * so the drawing it reads at the character's own x is the cell's and not a neighbour's.
  */
 #import <AppKit/NSLayoutManager.h>
 #import <AppKit/NSTextStorage.h>

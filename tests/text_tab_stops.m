@@ -8,7 +8,9 @@
  * a kind; the manager copies them into the `CTParagraphStyle` it builds; and `CTLine` advances a `\t` to the next stop
  * — so the character after the tab begins AT the stop. The probe reads the manager's own offsets: the two tabs of
  * `a\tb\tc` land at 50 and 100 when the style says so, and at 40 and 80 when the style has no stops but a
- * `-defaultTabInterval` of 40. And the tab draws no ink, which is what a box in the line means.
+ * `-defaultTabInterval` of 40. And the tab draws no ink, which is what a box in the line means. A fourth case reads
+ * the COLUMN TERMINATORS: `+[NSTextTab columnTerminatorsForLocale:]` is the locale's decimal separator, which ICU
+ * answers, and `NSTabColumnTerminatorsAttributeName` is the options key that names them.
  */
 #import <AppKit/NSLayoutManager.h>
 #import <AppKit/NSTextStorage.h>
@@ -103,6 +105,30 @@ int main(void)
 		[view insertTab:nil];
 		check([[view string] isEqualToString:@"a\t"], "`-insertTab:` puts a tab in the store");
 		[view release];
+	}
+
+	/* 4. **AND THE COLUMN'S TERMINATORS COME FROM THE LOCALE.** `+columnTerminatorsForLocale:` answers the locale's
+	 * decimal separator — ICU's data, read through `NSLocale -decimalSeparator` — and the options key names them. A
+	 * decimal STOP still carries its type and has no alignment to be, which is the half that remains owed. */
+	{
+		NSArray *us = [NSTextTab columnTerminatorsForLocale:[NSLocale localeWithLocaleIdentifier:@"en_US"]];
+		NSArray *de = [NSTextTab columnTerminatorsForLocale:[NSLocale localeWithLocaleIdentifier:@"de_DE"]];
+		NSArray *none = [NSTextTab columnTerminatorsForLocale:nil];
+		NSTextTab *decimal;
+
+		printf("  (note: en_US terminators %s, de_DE %s)\n",
+		       ([us count] > 0) ? [[us objectAtIndex:0] UTF8String] : "(none)",
+		       ([de count] > 0) ? [[de objectAtIndex:0] UTF8String] : "(none)");
+		check([us count] == 1 && [[us objectAtIndex:0] isEqualToString:@"."],
+		      "an English locale's decimal column is ended by a period");
+		check([de count] == 1 && [[de objectAtIndex:0] isEqualToString:@","],
+		      "a German one's by a comma — the separator is the LOCALE's, not a constant here");
+		check([none count] == 1, "and a nil locale falls back to the current one rather than answering nothing");
+		check([NSTabColumnTerminatorsAttributeName isEqualToString:@"NSTabColumnTerminators"],
+		      "the options key this tier names has its own spelling");
+		decimal = [[[NSTextTab alloc] initWithType:NSDecimalTabStopType location:120.0] autorelease];
+		check([decimal tabStopType] == NSDecimalTabStopType && [decimal alignment] == NSNaturalTextAlignment,
+		      "and a decimal stop keeps its type, with no alignment to be (it aligns on a point, not an edge)");
 	}
 
 	[pool release];
