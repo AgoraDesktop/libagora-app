@@ -10,7 +10,8 @@
  * `a\tb\tc` land at 50 and 100 when the style says so, and at 40 and 80 when the style has no stops but a
  * `-defaultTabInterval` of 40. And the tab draws no ink, which is what a box in the line means. A fourth case reads
  * the COLUMN TERMINATORS: `+[NSTextTab columnTerminatorsForLocale:]` is the locale's decimal separator, which ICU
- * answers, and `NSTabColumnTerminatorsAttributeName` is the options key that names them.
+ * answers, and `NSTabColumnTerminatorsAttributeName` is the options key that names them. A fifth puts a DECIMAL stop
+ * to work: the number's point lands AT the stop whatever the integer part's length, which a left stop cannot do.
  */
 #import <AppKit/NSLayoutManager.h>
 #import <AppKit/NSTextStorage.h>
@@ -129,6 +130,36 @@ int main(void)
 		decimal = [[[NSTextTab alloc] initWithType:NSDecimalTabStopType location:120.0] autorelease];
 		check([decimal tabStopType] == NSDecimalTabStopType && [decimal alignment] == NSNaturalTextAlignment,
 		      "and a decimal stop keeps its type, with no alignment to be (it aligns on a point, not an edge)");
+	}
+
+	/* 5. **AND A DECIMAL TAB ALIGNS THE NUMBER ON ITS POINT.** Core Text has no decimal edge, so the manager lays the
+	 * line out with the stop as a LEFT one and REBUILDS it with the stop moved left by the integer part's width — the
+	 * point then sits AT the stop whatever the integer part's length, which is the thing a left stop cannot do. */
+	{
+		NSTextStorage *store = [[NSTextStorage alloc] initWithString:@"x\t12.5\ny\t123.5"];
+		NSLayoutManager *manager = [[NSLayoutManager alloc] init];
+		NSTextContainer *container = [[NSTextContainer alloc] initWithContainerSize:NSMakeSize(300.0, 100.0)];
+		NSMutableParagraphStyle *style = [[NSParagraphStyle defaultParagraphStyle] mutableCopy];
+		NSTextTab *decimal = [[NSTextTab alloc] initWithType:NSDecimalTabStopType location:100.0];
+		CGFloat shortDot, longDot;
+
+		[style addTabStop:decimal];
+		[decimal release];
+		[container setLineFragmentPadding:0.0];
+		[store addLayoutManager:manager];
+		[manager addTextContainer:container];
+		[store addAttribute:NSParagraphStyleAttributeName value:style range:NSMakeRange(0, [store length])];
+		shortDot = [manager cg_offsetForGlyphAtIndex:4];
+		longDot = [manager cg_offsetForGlyphAtIndex:12];
+		printf("  (note: a decimal stop at 100 put `12.5`'s point at %g and `123.5`'s at %g)\n",
+		       (double)shortDot, (double)longDot);
+		check(fabs(shortDot - 100.0) < 0.01, "a decimal tab puts the point of `12.5` AT the stop");
+		check(fabs(longDot - 100.0) < 0.01,
+		      "and `123.5`'s at the SAME stop — the integer part grew, the point did not move");
+		[style release];
+		[container release];
+		[manager release];
+		[store release];
 	}
 
 	[pool release];

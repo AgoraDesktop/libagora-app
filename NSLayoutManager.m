@@ -23,6 +23,7 @@
 #import <AppKit/NSAttributedString.h>
 #import <Foundation/NSArray.h>
 #import <Foundation/NSValue.h>
+#import <Foundation/NSLocale.h>
 
 #include <CoreGraphics/CGContext.h>
 #include <CoreFoundation/CFAttributedString.h>
@@ -506,20 +507,18 @@ static CGFloat fn_attachment_width(void *refCon)
  * the mode it named. PER-PARAGRAPH STYLES are named rather than half-done: this reads the style at the START of the
  * store and applies it to every line, which is right for a document set in one paragraph style and is where the
  * run-by-run slice will start. */
-- (CTParagraphStyleRef)cg_createParagraphStyle
+/* **AND THE STYLE CORE TEXT IS GIVEN, WITH THE STOPS THE CALLER NAMES.** The global build passes the style's own
+ * `-tabStops`; the per-line decimal rebuild passes an array whose decimal stops have been moved. */
+- (CTParagraphStyleRef)cg_createParagraphStyleForStyle:(NSParagraphStyle *)style stops:(NSArray *)stopsOverride
 {
 	CTLineBreakMode mode = kCTLineBreakByWordWrapping;
 	CFMutableArrayRef tabs = NULL;
 	CGFloat interval = 0.0;
 	CTParagraphStyleSetting settings[3];
 	CFIndex count = 0;
-	NSParagraphStyle *style = nil;
 
-	if ([_textStorage length] > 0) {
-		style = [[_textStorage attributesAtIndex:0 effectiveRange:NULL] objectForKey:NSParagraphStyleAttributeName];
-	}
 	if (style != nil) {
-		NSArray *stops = [style tabStops];
+		NSArray *stops = (stopsOverride != nil) ? stopsOverride : [style tabStops];
 		NSUInteger i;
 
 		mode = (CTLineBreakMode)[style lineBreakMode];
@@ -578,6 +577,152 @@ static CGFloat fn_attachment_width(void *refCon)
 		}
 		return created;
 	}
+}
+
+/* **AND THE GLOBAL STYLE, WHICH IS THE ONE AT THE START OF THE STORE** — this tier applies one paragraph style to every
+ * line, so this is what the whole store is set in; the per-line decimal rebuild asks for the variant above instead. */
+- (CTParagraphStyleRef)cg_createParagraphStyle
+{
+	NSParagraphStyle *style = nil;
+
+	if ([_textStorage length] > 0) {
+		style = [[_textStorage attributesAtIndex:0 effectiveRange:NULL] objectForKey:NSParagraphStyleAttributeName];
+	}
+	return [self cg_createParagraphStyleForStyle:style stops:nil];
+}
+
+/* **AND THE STOPS A LINE WITH A DECIMAL TAB ACTUALLY NEEDS.** Core Text has no decimal alignment, so the provisional
+ * line lays a decimal tab out as a LEFT one and the number after it starts AT the stop. To put the number's POINT at
+ * the stop instead, that stop is moved LEFT by the width of what goes before the point — the integer part, or the
+ * whole number when it has no point — and the line is rebuilt with the moved stop, which is a LEFT one again. Each
+ * decimal tab is read from the PROVISIONAL line's own offsets, so this does not have to re-derive which stop a tab
+ * reached. A line with no decimal tab (or no tab at all) answers nil and is left exactly as the engine made it. */
+- (NSArray *)cg_adjustedStopsForStyle:(NSParagraphStyle *)style line:(CTLineRef)line range:(NSRange)range
+{
+	NSArray *stops = [style tabStops];
+	NSString *string = [_textStorage string];
+	NSMutableArray *adjusted = nil;
+	NSUInteger k;
+
+	if ([stops count] == 0 || line == NULL) {
+		return nil;
+	}
+	for (k = range.location; k < range.location + range.length; k++) {
+		CFIndex rel;
+		CGFloat landing;
+		NSUInteger si, usedIndex = NSNotFound;
+		NSTextTab *used = nil;
+		NSUInteger numStart, numEnd, termIndex = NSNotFound, q;
+		NSArray *terms;
+		CGFloat leftWidth, adjustedLocation;
+		NSTextTab *moved;
+
+		if ([string characterAtIndex:k] != '\t') {
+			continue;
+		}
+		rel = (CFIndex)(k - range.location);
+		/* THE CHARACTER AFTER THE TAB BEGINS AT THE STOP THE TAB REACHED. */
+		landing = (CGFloat)CTLineGetOffsetForStringIndex(line, rel + 1, NULL);
+		for (si = 0; si < [stops count]; si++) {
+			NSTextTab *stop = [stops objectAtIndex:si];
+
+			if (fabs([stop location] - landing) < 0.5) {
+				used = stop;
+				usedIndex = si;
+				break;
+			}
+		}
+		if (used == nil || [used tabStopType] != NSDecimalTabStopType) {
+			continue;
+		}
+		/* THE NUMBER: from the tab to the next tab or the end of the line. */
+		numStart = k + 1;
+		numEnd = numStart;
+		while (numEnd < range.location + range.length && [string characterAtIndex:numEnd] != '\t') {
+			numEnd++;
+		}
+		if (numEnd <= numStart) {
+			continue;
+		}
+		/* THE TERMINATOR: the stop's own options when it has them, the locale's otherwise. */
+		terms = [[used options] objectForKey:NSTabColumnTerminatorsAttributeName];
+		if (terms == nil) {
+			terms = [NSTextTab columnTerminatorsForLocale:[NSLocale currentLocale]];
+		}
+		for (q = numStart; q < numEnd; q++) {
+			NSString *ch = [string substringWithRange:NSMakeRange(q, 1)];
+
+			if ([terms containsObject:ch]) {
+				termIndex = q;
+				break;
+			}
+		}
+		{
+			CFIndex from = (CFIndex)(numStart - range.location);
+			CFIndex to = (CFIndex)(((termIndex != NSNotFound) ? termIndex : numEnd) - range.location);
+
+			leftWidth = (CGFloat)(CTLineGetOffsetForStringIndex(line, to, NULL)
+					      - CTLineGetOffsetForStringIndex(line, from, NULL));
+		}
+		adjustedLocation = [used location] - leftWidth;
+		if (adjustedLocation < 0.0) {
+			adjustedLocation = 0.0;
+		}
+		if (adjusted == nil) {
+			adjusted = [NSMutableArray arrayWithArray:stops];
+		}
+		moved = [[NSTextTab alloc] initWithType:NSLeftTabStopType location:adjustedLocation];
+		[adjusted replaceObjectAtIndex:usedIndex withObject:moved];
+		[moved release];
+	}
+	return adjusted;
+}
+
+/* **AND THE LINE A RANGE GETS, WITH A DECIMAL TAB ALIGNED ON ITS POINT WHEN ONE LANDS HERE.** The provisional line is
+ * the engine's own; if it has no decimal tab the provisional line IS the answer. Otherwise the adjusted stops are
+ * computed from it and the line is REBUILT from a SUBSTRING of the same attributed string — so the character
+ * attributes and the attachment run delegates travel with it — carrying a paragraph style with the moved stops. */
+- (CTLineRef)cg_createLineForRange:(NSRange)range style:(NSParagraphStyle *)style
+		attributedString:(CFAttributedStringRef)rich typesetter:(CTTypesetterRef)ts font:(NSFont *)font
+{
+	CTLineRef line = CTTypesetterCreateLine(ts, CFRangeMake(range.location, range.length));
+	NSArray *adjusted;
+
+	if (line == NULL) {
+		return [self cg_createLineForRange:range font:font];
+	}
+	if (rich == NULL) {
+		return line;
+	}
+	adjusted = [self cg_adjustedStopsForStyle:style line:line range:range];
+	if (adjusted != nil) {
+		CTParagraphStyleRef paragraphStyle = [self cg_createParagraphStyleForStyle:style stops:adjusted];
+		CFAttributedStringRef sub = CFAttributedStringCreateWithSubstring(kCFAllocatorDefault, rich,
+			CFRangeMake(range.location, range.length));
+		CFMutableAttributedStringRef mutable = (sub != NULL)
+			? CFAttributedStringCreateMutableCopy(kCFAllocatorDefault, 0, sub) : NULL;
+		CTLineRef rebuilt = NULL;
+
+		if (sub != NULL) {
+			CFRelease(sub);
+		}
+		if (mutable != NULL) {
+			if (paragraphStyle != NULL) {
+				CFAttributedStringSetAttribute(mutable, CFRangeMake(0, range.length),
+					kCTParagraphStyleAttributeName, paragraphStyle);
+			}
+			rebuilt = CTLineCreateWithAttributedString(mutable);
+			CFRelease(mutable);
+		}
+		if (paragraphStyle != NULL) {
+			CFRelease(paragraphStyle);
+		}
+		if (rebuilt != NULL) {
+			CFRelease(line);
+			line = rebuilt;
+		}
+	}
+	return line;
 }
 
 /* **AND THE BLOCK A LINE IS SET IN, WHICH IS THE FIRST `NSTextTableBlock` IN ITS PARAGRAPH STYLE — or the first plain
@@ -1122,7 +1267,8 @@ static BOOL fn_cell_owns_edge(CGFloat thisWidth, CGFloat otherWidth, BOOL tieGoe
  * its cells are placed. The leading gap is per-paragraph, so a cell of several paragraphs stacks them the same way
  * the document does. */
 - (CGFloat)cg_layOutCell:(NSTextTableBlock *)cell range:(NSRange)paraRange typesetter:(CTTypesetterRef)ts
-		    font:(NSFont *)font baseAscent:(CGFloat)baseAscent baseLineHeight:(CGFloat)baseLineHeight
+	    attributedString:(CFAttributedStringRef)rich font:(NSFont *)font
+	    baseAscent:(CGFloat)baseAscent baseLineHeight:(CGFloat)baseLineHeight
 		       x:(CGFloat)x width:(CGFloat)cellWidth into:(NSMutableArray *)out top:(CGFloat)top
 {
 	CFIndex start = (CFIndex)paraRange.location;
@@ -1183,10 +1329,7 @@ static BOOL fn_cell_owns_edge(CGFloat thisWidth, CGFloat otherWidth, BOOL tieGoe
 			count = end - start;
 		}
 		range = NSMakeRange((NSUInteger)start, (NSUInteger)count);
-		line = CTTypesetterCreateLine(ts, CFRangeMake(start, count));
-		if (line == NULL) {
-			line = [self cg_createLineForRange:range font:font];
-		}
+		line = [self cg_createLineForRange:range style:style attributedString:rich typesetter:ts font:font];
 		if (line != NULL) {
 			lineWidth = (CGFloat)CTLineGetTypographicBounds(line, NULL, NULL, NULL);
 			if (lineWidth > width) {
@@ -1234,7 +1377,8 @@ static BOOL fn_cell_owns_edge(CGFloat thisWidth, CGFloat otherWidth, BOOL tieGoe
 	     + [cell widthForLayer:NSTextBlockMargin edge:edge];
 }
 
-- (NSUInteger)cg_layOutTableStartingAt:(NSUInteger)start typesetter:(CTTypesetterRef)ts font:(NSFont *)font
+- (NSUInteger)cg_layOutTableStartingAt:(NSUInteger)start typesetter:(CTTypesetterRef)ts
+	attributedString:(CFAttributedStringRef)rich font:(NSFont *)font
 	baseAscent:(CGFloat)baseAscent baseLineHeight:(CGFloat)baseLineHeight
 	fragments:(NSMutableArray *)fragments container:(NSTextContainer *)container
 	y:(CGFloat *)yPtr glyphBase:(NSUInteger *)glyphBasePtr
@@ -1362,8 +1506,8 @@ static BOOL fn_cell_owns_edge(CGFloat thisWidth, CGFloat otherWidth, BOOL tieGoe
 					width = 1.0;
 				}
 			}
-			height = [self cg_layOutCell:cell range:r typesetter:ts font:font baseAscent:baseAscent
-				baseLineHeight:baseLineHeight x:x width:width into:nil top:0.0];
+			height = [self cg_layOutCell:cell range:r typesetter:ts attributedString:rich font:font
+				baseAscent:baseAscent baseLineHeight:baseLineHeight x:x width:width into:nil top:0.0];
 			/* **AND THE VERTICAL LAYERS ARE RESERVED IN THE ROW'S HEIGHT.** Without this the content starts at the
 			 * row's top and the box grows UPWARD from it, so two stacked cells' boxes OVERLAP by both their vertical
 			 * insets and no edge is shared. Adding the insets here and starting the content below the top one below
@@ -1405,8 +1549,8 @@ static BOOL fn_cell_owns_edge(CGFloat thisWidth, CGFloat otherWidth, BOOL tieGoe
 					width = 1.0;
 				}
 			}
-			[self cg_layOutCell:cell range:r typesetter:ts font:font baseAscent:baseAscent
-				baseLineHeight:baseLineHeight x:x width:width into:fragments
+			[self cg_layOutCell:cell range:r typesetter:ts attributedString:rich font:font
+				baseAscent:baseAscent baseLineHeight:baseLineHeight x:x width:width into:fragments
 				top:y + [self cg_tableCellInset:cell edge:NSTextBlockMinYEdge]];
 		}
 		y += rowHeight;
@@ -1527,9 +1671,6 @@ static BOOL fn_cell_owns_edge(CGFloat thisWidth, CGFloat otherWidth, BOOL tieGoe
 		}
 	}
 	ts = (s != NULL) ? CTTypesetterCreateWithAttributedString(s) : NULL;
-	if (s != NULL) {
-		CFRelease(s);
-	}
 	/* **AND A STORE THE TYPESETTER WILL NOT TAKE IS STILL LAID OUT**, as one fragment, so a glyph can be found and a
 	 * line drawn even when the engine refused the string. */
 	if (ts == NULL) {
@@ -1543,6 +1684,9 @@ static BOOL fn_cell_owns_edge(CGFloat thisWidth, CGFloat otherWidth, BOOL tieGoe
 				rect:NSMakeRect(0.0, 0.0, containerWidth, baseLineHeight)
 				usedRect:NSMakeRect(padding, 0.0, containerWidth - 2.0 * padding, baseLineHeight)
 				baseline:baseAscent line:line boxes:nil]];
+		if (s != NULL) {
+			CFRelease(s);
+		}
 		_invalidatedRange = NSMakeRange(NSNotFound, 0);
 		return;
 	}
@@ -1561,7 +1705,8 @@ static BOOL fn_cell_owns_edge(CGFloat thisWidth, CGFloat otherWidth, BOOL tieGoe
 			 * APPENDS its own fragments and advances `start` past the table. A paragraph without a cell falls through to
 			 * the ordinary one-line-at-a-time flow below, which is what every document that is not a table uses. */
 			if ([self cg_cellAtParagraphStart:(NSUInteger)start] != nil) {
-				start = (CFIndex)[self cg_layOutTableStartingAt:(NSUInteger)start typesetter:ts font:font
+				start = (CFIndex)[self cg_layOutTableStartingAt:(NSUInteger)start typesetter:ts
+					attributedString:s font:font
 					baseAscent:baseAscent baseLineHeight:baseLineHeight fragments:fragments
 					container:container y:&y glyphBase:&glyphBase];
 				previousStyle = [self cg_paragraphStyleAt:(start > 0) ? (NSUInteger)(start - 1) : 0];
@@ -1636,10 +1781,7 @@ static BOOL fn_cell_owns_edge(CGFloat thisWidth, CGFloat otherWidth, BOOL tieGoe
 				count = (CFIndex)n - start;
 			}
 			range = NSMakeRange((NSUInteger)start, (NSUInteger)count);
-			line = CTTypesetterCreateLine(ts, CFRangeMake(start, count));
-			if (line == NULL) {
-				line = [self cg_createLineForRange:range font:font];
-			}
+			line = [self cg_createLineForRange:range style:style attributedString:s typesetter:ts font:font];
 			if (line != NULL) {
 				lineWidth = (CGFloat)CTLineGetTypographicBounds(line, NULL, NULL, NULL);
 				if (lineWidth > width) {
@@ -1669,6 +1811,9 @@ static BOOL fn_cell_owns_edge(CGFloat thisWidth, CGFloat otherWidth, BOOL tieGoe
 			lastLineHeight = lineHeight;
 			firstFragment = NO;
 		}
+	}
+	if (s != NULL) {
+		CFRelease(s);
 	}
 	CFRelease(ts);
 	/* **AND A TRAILING NEWLINE OWES AN EMPTY LAST FRAGMENT IN THE CONTAINER THE TEXT ENDED IN.** */

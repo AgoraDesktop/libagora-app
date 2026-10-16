@@ -17,10 +17,11 @@
  *
  * **AND THE COLUMN'S TERMINATORS ARE A LOCALE'S.** `+columnTerminatorsForLocale:` answers the characters that end a
  * decimal tab's column — the locale's decimal separator, which `NSLocale -decimalSeparator` reads from ICU — and
- * `NSTabColumnTerminatorsAttributeName` is the OPTIONS key that names them for one stop. WHAT IS STILL OWED IS
- * POSITIONING, NOT THE VOCABULARY: Core Text's `CTTextAlignment` has no decimal edge, so a `NSDecimalTabStopType`
- * stop is still carried into the engine as a LEFT stop and the terminators above are not yet read by the layout —
- * aligning a number ON its point is the slice behind this one.
+ * `NSTabColumnTerminatorsAttributeName` is the OPTIONS key that names them for one stop. **AND THE POSITIONING IS THE
+ * LAYOUT'S NOW**: Core Text has no decimal edge, so the manager lays the line out with the stop as a LEFT one and
+ * REBUILDS it with the stop moved left by the width of what goes before the point, so the point lands AT the stop.
+ * WHAT REMAINS NAMED: the two initialisers cannot attach `-options` to a DECIMAL stop — the alignment door's
+ * vocabulary has no decimal — so the locale's separator is what a decimal tab uses today.
  */
 #ifndef APPKIT_NSTEXTAB_H
 #define APPKIT_NSTEXTAB_H

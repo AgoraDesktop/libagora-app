@@ -368,9 +368,10 @@ the compositor is really gone.
   Core Text's own 28-point default does not win); and the view's `-insertTab:` puts the character in the store. **AND
   THE COLUMN'S TERMINATORS ARE A LOCALE'S** (`ctest`): `+[NSTextTab columnTerminatorsForLocale:]` answers the locale's
   decimal separator, read from ICU through `NSLocale -decimalSeparator` — `.` for en_US and `,` for de_DE — and
-  `NSTabColumnTerminatorsAttributeName` names them in a stop's `-options`. **STILL OWED AND NAMED**: POSITIONING a
-  decimal tab, because Core Text's `CTTextAlignment` has no decimal edge — such a stop is carried as a LEFT one and
-  the terminators are not yet read by the layout.
+  `NSTabColumnTerminatorsAttributeName` names them in a stop's `-options`. **AND A DECIMAL TAB IS ALIGNED ON ITS POINT**
+  (`ctest`): Core Text has no decimal edge, so the manager lays the line out with the stop as a LEFT one and REBUILDS
+  it with the stop moved left by the integer part's width — MEASURED, a decimal stop at **100** puts the point of both
+  `12.5` and `123.5` at **100**, so the integer part grows and the point does not move, which a left stop cannot do.
 - **And the MARKED TEXT, which is what an input method composes through** (`ctest`): `NSTextInput.h` declares the eleven
   doors an input system drives a text view through, `NSTextView` adopts the protocol, and the composition is an ordinary
   edit with a remembered range — the marked characters really go into the store, so the caret and the layout work as
@@ -675,9 +676,9 @@ STRIKETHROUGH keys the manager paints (`tests/text_layout_attributes.m`) and the
 by (`tests/text_paragraph_style.m`) and the GEOMETRY it lays out by (`tests/text_paragraph_geometry.m`) — the indents,
 the two spacings and the three line-height properties, all read as the manager's own fragment geometry. The property
 with no reader is the hyphenation factor (the engine does no hyphenation), the default tab interval (a tab stop needs
-`NSTextTab`) — `NSTextTab` IS here now (`tests/text_tab_stops.m`), and a tab goes to its stop, with
-`+columnTerminatorsForLocale:` and `NSTabColumnTerminatorsAttributeName` beside it; what is owed is POSITIONING a
-decimal tab — and the base writing direction (left-to-right only), each
+`NSTextTab`) — `NSTextTab` IS here now (`tests/text_tab_stops.m`), and a tab goes to its stop, decimal tabs included,
+with `+columnTerminatorsForLocale:` and `NSTabColumnTerminatorsAttributeName` beside them — and the base writing
+direction (left-to-right only), each
 named at its door. The TABLE BLOCK is here
 (`tests/text_table.m`), so a paragraph can carry a box with a ground and a border. **AND THE GRID IS HERE TOO**
 (`tests/text_table_grid.m`): the manager measures the columns, lays each cell inside them and places the cells side by
