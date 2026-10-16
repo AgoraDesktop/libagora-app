@@ -13,7 +13,7 @@
  * AppKit has no window server". BOTH HALVES OF THAT ARE NOW FALSE and it is corrected here rather than left for a
  * reader to discover: this tier HAS a window server (a separate one that a window talks to over the seam), views are
  * drawn — the demonstration is nothing but views being drawn — and the substrate the paragraph was waiting to choose
- * is `-cacheDisplayInRect:toBitmapImageRep:`, which is named two paragraphs down and was always the answer. */
+ * is `-cacheDisplayInRect:toBitmapImageRep:`, which is named two paragraphs down and was always the answer.
  *
  * `-drawRect:` IS DECLARED IN THIS SLICE AND DOES NOTHING — which is also what Apple's plain `NSView`
  * does, since a view with no subclass draws nothing and the method exists to be OVERRIDDEN — **AND
