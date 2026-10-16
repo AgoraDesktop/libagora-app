@@ -200,11 +200,10 @@ NS_ASSUME_NONNULL_BEGIN
  * glyphs, which is what makes two backgrounds on one line two rectangles instead of a band. */
 - (void)drawBackgroundForGlyphRange:(NSRange)glyphsToShow atPoint:(NSPoint)origin;
 
-/* **AND WHAT IS STILL NOT HERE, NAMED AT THE DOOR THAT WOULD BE IT.** The STRIKETHROUGH doors are absent because
- * this tier's vocabulary has no strikethrough key — the underline half of `-drawGlyphsForGlyphRange:atPoint:` reads
- * `NSUnderlineStyleAttributeName` and `NSUnderlineColorAttributeName`, which now exist, and a strikethrough line is
- * the same arithmetic at the opposite offset with a key that does not. The MARKED RANGE and the temporary-attribute
- * question belong to the marked-text family and the drawing delegate, neither of which is here. */
+/* **AND WHAT IS STILL NOT HERE, NAMED AT THE DOOR THAT WOULD BE IT.** The MARKED RANGE and the temporary-attribute
+ * question belong to the marked-text family and the drawing delegate, neither of which is here: the marked range is the
+ * unconfirmed text an input method is composing, and a temporary attribute is a run the layout sees and the store does
+ * not. Both are the input-method slice's, and both are NAMED rather than half-drawn. */
 
 @end
 

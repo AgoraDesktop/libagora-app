@@ -1,5 +1,5 @@
 /*
- * text_layout_attributes.m — THE BACKGROUND AND THE UNDERLINE: THE TWO INK KEYS THE MANAGER NOW READS.
+ * text_layout_attributes.m — THE BACKGROUND, THE UNDERLINE AND THE STRIKETHROUGH: THE INK KEYS THE MANAGER NOW READS.
  *
  * Copyright © 2026 Kyle J. Cardoza. MIT licensed — see LICENSE.
  * SPDX-License-Identifier: MIT
@@ -7,7 +7,8 @@
  * **THE CLAIM IS A COLOUR IN A PIXEL, WHICH IS THE ONLY WAY AN ATTRIBUTE THAT DRAWS SOMETHING BESIDES GLYPHS CAN BE
  * SEEN.** A foreground colour is gleaned from the glyphs themselves; a BACKGROUND fills the space BETWEEN and BEHIND
  * them, and an UNDERLINE is a rule BELOW the baseline where no glyph need be. So the probe draws each one alone and
- * counts its colour: green behind the line, blue below it, and — for the two-run case — two colours on one line.
+ * counts its colour: green behind the line, blue below it, and blue THROUGH it for the strikethrough — which is a
+ * separate case because a door that read the underline keys would pass the underline and fail it.
  *
  * **AND THE RUN WALK IS WHAT MAKES THE TWO-RUN CASE THE POINT.** Before this slice the manager took ONE colour per
  * fragment; here a line whose text changes colour halfway, or changes background halfway, has to come out in BOTH —
@@ -175,6 +176,40 @@ int main(void)
 		check(doubleRule > single, "and a DOUBLE underline draws TWO rules — measurably more ink than one");
 		[store removeAttribute:NSUnderlineStyleAttributeName range:all];
 		[store removeAttribute:NSUnderlineColorAttributeName range:all];
+	}
+
+	/* 2b. **AND A STRIKETHROUGH IS THE SAME RULE AT A DIFFERENT OFFSET.** It spends the same style number under its own
+	 * key, so the arithmetic is the one above — but the ink sits THROUGH the run rather than below it, which is what a
+	 * separate probe is for: a door that read the underline keys would pass the underline case and fail this one. */
+	{
+		NSBitmapImageRep *plain = draw(manager, NO);
+		int none = count_bluish(plain);
+		int single, doubleRule;
+
+		[plain release];
+		[store addAttribute:NSStrikethroughColorAttributeName value:[NSColor blueColor] range:all];
+		[store addAttribute:NSStrikethroughStyleAttributeName value:[NSNumber numberWithInteger:NSUnderlineStyleSingle]
+			      range:all];
+		{
+			NSBitmapImageRep *rep = draw(manager, NO);
+
+			single = count_bluish(rep);
+			[rep release];
+		}
+		[store addAttribute:NSStrikethroughStyleAttributeName value:[NSNumber numberWithInteger:NSUnderlineStyleDouble]
+			      range:all];
+		{
+			NSBitmapImageRep *rep = draw(manager, NO);
+
+			doubleRule = count_bluish(rep);
+			[rep release];
+		}
+		printf("  (note: strike blue pixels — none %d, single %d, double %d)\n", none, single, doubleRule);
+		check(none == 0, "with no strikethrough attribute there is no rule through the run");
+		check(single > 0, "a SINGLE strikethrough draws a rule in the run's own colour");
+		check(doubleRule > single, "and a DOUBLE strikethrough draws TWO rules");
+		[store removeAttribute:NSStrikethroughStyleAttributeName range:all];
+		[store removeAttribute:NSStrikethroughColorAttributeName range:all];
 	}
 
 	/* 3. **AND TWO RUNS ON ONE LINE ARE TWO COLOURS, WHICH IS THE RUN WALK ITSELF.** The first two characters red, the

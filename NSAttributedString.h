@@ -12,10 +12,10 @@
  * **AND WHAT THIS HEADER CARRIES IS THE KEYS THE DRAWING DOORS READ, ARRIVING WITH THOSE DOORS.** Apple's era header
  * declares twenty of these (`NSParagraphStyleAttributeName`, `NSAttachmentAttributeName`, …) and each one is a claim
  * about a VALUE TYPE this tier may not have yet — a paragraph style, an attachment — so declaring them all would be
- * writing twenty promises to satisfy one unit. The five below are the ones a text layer can NAME TODAY: the font and
- * the foreground colour a `-drawAtPoint:withAttributes:` caller must have, and the background and the two underline
- * keys the layout manager's own ink reads (`-drawBackgroundForGlyphRange:atPoint:` and the underline half of
- * `-drawGlyphsForGlyphRange:atPoint:`). The rest arrive with the classes they name.
+ * writing twenty promises to satisfy one unit. The seven below are the ones a text layer can NAME TODAY: the font and
+ * the foreground colour a `-drawAtPoint:withAttributes:` caller must have, and the ink keys the layout manager's own
+ * door reads (`-drawBackgroundForGlyphRange:atPoint:` and the rule half of `-drawGlyphsForGlyphRange:atPoint:`) — a
+ * background, an underline and a strikethrough, each with its colour. The rest arrive with the classes they name.
  *
  * **THE LITERALS ARE OURS, AND THE REASON IS MEASURED RATHER THAN ASSUMED**: the era header annotates each name
  * with the VALUE'S TYPE and default (`// NSFont, default Helvetica 12`) and publishes no literal, so no era
@@ -44,6 +44,13 @@ extern NSString *NSForegroundColorAttributeName;
 extern NSString *NSBackgroundColorAttributeName;
 extern NSString *NSUnderlineStyleAttributeName;
 extern NSString *NSUnderlineColorAttributeName;
+
+/* **AND THE STRIKETHROUGH PAIR, WHICH SPENDS THE SAME STYLE NUMBER.** Apple's era header names no separate
+ * `NSStrikethroughStyle` type: `NSStrikethroughStyleAttributeName` carries an `NSUnderlineStyle` value — the four
+ * shapes and the pattern byte are the same vocabulary, and a line through the middle of a run is a line under it drawn
+ * at a different offset. So the two keys below arrive with the door that draws them and no new type is invented. */
+extern NSString *NSStrikethroughStyleAttributeName;
+extern NSString *NSStrikethroughColorAttributeName;
 
 /* **AND THE STYLE THE NUMBER SPELLS, WHICH IS ONE ENUM BECAUSE A STYLE AND ITS PATTERN OR-TOGETHER.** The four
  * shapes are the low bits and the patterns the high byte, which is what makes `NSUnderlineStyleSingle |

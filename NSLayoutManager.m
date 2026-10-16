@@ -893,72 +893,104 @@
 				CGContextRestoreGState(cg);
 				pos = runEnd;
 			}
-			/* AND THE UNDERLINE, IF ANY RUN CARRIES ONE. */
-			pos = drawn.location;
-			while (pos < drawn.location + drawn.length) {
-				NSRange runRange;
-				NSDictionary *attrs = [_textStorage attributesAtIndex:pos longestEffectiveRange:&runRange inRange:drawn];
-				NSNumber *styleNumber = [attrs objectForKey:NSUnderlineStyleAttributeName];
-				NSColor *underlineColour = [attrs objectForKey:NSUnderlineColorAttributeName];
-				NSInteger style = (styleNumber != nil) ? [styleNumber integerValue] : NSUnderlineStyleNone;
-				NSInteger shape = style & 0x0F;
-				NSInteger pattern = style & 0xFF00;
-				NSUInteger runEnd = runRange.location + runRange.length;
-
-				if (runEnd > drawn.location + drawn.length) {
-					runEnd = drawn.location + drawn.length;
-				}
-				if (runEnd <= pos) {
-					runEnd = pos + 1;
-				}
-				if (shape != NSUnderlineStyleNone) {
-					CFIndex a = (CFIndex)(pos - fragment->range.location);
-					CFIndex b = (CFIndex)(runEnd - fragment->range.location);
-					CGFloat x0 = origin.x + fragment->used.origin.x
-						+ (CGFloat)CTLineGetOffsetForStringIndex(fragment->line, a, NULL);
-					CGFloat x1 = origin.x + fragment->used.origin.x
-						+ (CGFloat)CTLineGetOffsetForStringIndex(fragment->line, b, NULL);
-					NSColor *colour = underlineColour;
-					CGFloat thickness = (shape == NSUnderlineStyleThick) ? 2.0 : 1.0;
-					CGFloat y = baselineY + 2.0;
-
-					if (colour == nil) {
-						colour = [attrs objectForKey:NSForegroundColorAttributeName];
-					}
-					if (colour == nil) {
-						colour = [NSColor controlTextColor];
-					}
-					if (pattern == NSUnderlinePatternSolid) {
-						[colour setFill];
-						if (shape == NSUnderlineStyleDouble) {
-							CGContextFillRect(cg, CGRectMake(x0, y, x1 - x0, 1.0));
-							CGContextFillRect(cg, CGRectMake(x0, y + 2.0, x1 - x0, 1.0));
-						} else {
-							CGContextFillRect(cg, CGRectMake(x0, y, x1 - x0, thickness));
-						}
-					} else {
-						CGFloat dash[2];
-						CGPoint points[2];
-
-						switch (pattern) {
-						case NSUnderlinePatternDot: dash[0] = 1.0; dash[1] = 1.0; break;
-						case NSUnderlinePatternDash: dash[0] = 3.0; dash[1] = 2.0; break;
-						case NSUnderlinePatternDashDot: dash[0] = 3.0; dash[1] = 2.0; break;
-						case NSUnderlinePatternDashDotDot: dash[0] = 3.0; dash[1] = 2.0; break;
-						default: dash[0] = 1.0; dash[1] = 1.0; break;
-						}
-						points[0] = CGPointMake(x0, y + thickness / 2.0);
-						points[1] = CGPointMake(x1, y + thickness / 2.0);
-						[colour setStroke];
-						CGContextSetLineWidth(cg, thickness);
-						CGContextSetLineDash(cg, 0.0, dash, 2);
-						CGContextStrokeLineSegments(cg, points, 2);
-						CGContextSetLineDash(cg, 0.0, NULL, 0);
-					}
-				}
-				pos = runEnd;
-			}
+			/* **AND THE TWO RULES BESIDE THE GLYPHS: THE UNDERLINE BELOW THE BASELINE AND THE STRIKETHROUGH THROUGH THE
+			 * MIDDLE OF THE X-HEIGHT.** They are the same run walk and the same arithmetic at two offsets, which is why both
+			 * are one helper below the loop. */
+			[self cg_drawRulesForFragment:fragment drawn:drawn styleKey:NSUnderlineStyleAttributeName
+				colorKey:NSUnderlineColorAttributeName defaultColour:[NSColor controlTextColor]
+				y:(baselineY - [font underlinePosition]) origin:origin context:cg];
+			[self cg_drawRulesForFragment:fragment drawn:drawn styleKey:NSStrikethroughStyleAttributeName
+				colorKey:NSStrikethroughColorAttributeName defaultColour:[NSColor controlTextColor]
+				y:(baselineY - [font xHeight] / 2.0) origin:origin context:cg];
 		}
+	}
+}
+
+/* **ONE RULE, DRAWN THE SAME WAY FOR AN UNDERLINE AND A STRIKETHROUGH.** The style's low nibble is the shape and its
+ * high byte the pattern; the caller says WHERE the rule sits, because that is the only thing the two differ in. A
+ * double rule is two hairlines, a dashed one is the same line stroked with a dash pattern, and a solid one is a fill. */
+- (void)cg_drawRuleFromX:(CGFloat)x0 toX:(CGFloat)x1 y:(CGFloat)y style:(NSInteger)style
+		  colour:(NSColor *)colour context:(CGContextRef)cg
+{
+	NSInteger shape = style & 0x0F;
+	NSInteger pattern = style & 0xFF00;
+	CGFloat thickness = (shape == NSUnderlineStyleThick) ? 2.0 : 1.0;
+
+	if (shape == NSUnderlineStyleNone) {
+		return;
+	}
+	if (pattern == NSUnderlinePatternSolid) {
+		[colour setFill];
+		if (shape == NSUnderlineStyleDouble) {
+			CGContextFillRect(cg, CGRectMake(x0, y, x1 - x0, 1.0));
+			CGContextFillRect(cg, CGRectMake(x0, y + 2.0, x1 - x0, 1.0));
+		} else {
+			CGContextFillRect(cg, CGRectMake(x0, y, x1 - x0, thickness));
+		}
+	} else {
+		CGFloat dash[2];
+		CGPoint points[2];
+
+		switch (pattern) {
+		case NSUnderlinePatternDot: dash[0] = 1.0; dash[1] = 1.0; break;
+		case NSUnderlinePatternDash: dash[0] = 3.0; dash[1] = 2.0; break;
+		case NSUnderlinePatternDashDot: dash[0] = 3.0; dash[1] = 2.0; break;
+		case NSUnderlinePatternDashDotDot: dash[0] = 3.0; dash[1] = 2.0; break;
+		default: dash[0] = 1.0; dash[1] = 1.0; break;
+		}
+		points[0] = CGPointMake(x0, y + thickness / 2.0);
+		points[1] = CGPointMake(x1, y + thickness / 2.0);
+		[colour setStroke];
+		CGContextSetLineWidth(cg, thickness);
+		CGContextSetLineDash(cg, 0.0, dash, 2);
+		CGContextStrokeLineSegments(cg, points, 2);
+		CGContextSetLineDash(cg, 0.0, NULL, 0);
+	}
+}
+
+/* **AND THE RUN WALK EITHER RULE DOOR USES.** The style and the colour are read per run — the keys are the caller's,
+ * so the same walk serves the underline pair and the strikethrough pair — and each run's rule spans the x its own
+ * glyphs occupy. A run with no colour falls back to the run's foreground and then to the caller's default. */
+- (void)cg_drawRulesForFragment:(FNFragment *)fragment drawn:(NSRange)drawn styleKey:(NSString *)styleKey
+		       colorKey:(NSString *)colorKey defaultColour:(NSColor *)defaultColour
+			    y:(CGFloat)y origin:(NSPoint)origin context:(CGContextRef)cg
+{
+	NSUInteger pos = drawn.location;
+
+	while (pos < drawn.location + drawn.length) {
+		NSRange runRange;
+		NSDictionary *attrs = [_textStorage attributesAtIndex:pos longestEffectiveRange:&runRange inRange:drawn];
+		NSNumber *styleNumber = [attrs objectForKey:styleKey];
+		NSColor *colour = [attrs objectForKey:colorKey];
+		NSInteger style = (styleNumber != nil) ? [styleNumber integerValue] : NSUnderlineStyleNone;
+		NSUInteger runEnd = runRange.location + runRange.length;
+		CFIndex a, b;
+		CGFloat x0, x1;
+
+		if (runEnd > drawn.location + drawn.length) {
+			runEnd = drawn.location + drawn.length;
+		}
+		if (runEnd <= pos) {
+			runEnd = pos + 1;
+		}
+		if ((style & 0x0F) == NSUnderlineStyleNone) {
+			pos = runEnd;
+			continue;
+		}
+		if (colour == nil) {
+			colour = [attrs objectForKey:NSForegroundColorAttributeName];
+		}
+		if (colour == nil) {
+			colour = defaultColour;
+		}
+		a = (CFIndex)(pos - fragment->range.location);
+		b = (CFIndex)(runEnd - fragment->range.location);
+		x0 = origin.x + fragment->used.origin.x
+			+ (CGFloat)CTLineGetOffsetForStringIndex(fragment->line, a, NULL);
+		x1 = origin.x + fragment->used.origin.x
+			+ (CGFloat)CTLineGetOffsetForStringIndex(fragment->line, b, NULL);
+		[self cg_drawRuleFromX:x0 toX:x1 y:y style:style colour:colour context:cg];
+		pos = runEnd;
 	}
 }
 
