@@ -23,7 +23,7 @@
 #include <stddef.h>
 #include <stdio.h>
 
-#define W 32
+#define W 39
 #define H 20
 
 static int failures = 0;
@@ -107,7 +107,7 @@ int main(void)
 	/* 1. **THE SHAPE IS THE SAMPLE'S: 32 x 20, WHICH IS AN ASPECT RATHER THAN A PAIR OF NUMBERS.** */
 	measured = [cell cellSizeForBounds:NSMakeRect(0.0, 0.0, 200.0, H)];
 	printf("  (note: a %d-point switch measures %.1f x %.1f)\n", H, (double)measured.width, (double)measured.height);
-	check(near(measured.width, W) && near(measured.height, H), "a switch measures the sample's 32 x 20");
+	check(near(measured.width, W) && near(measured.height, H), "a switch measures the sample's 39 x 20");
 	/* **AND THE RECT IS A BOUND, SO THE TWO CASES THAT MATTER ARE THE HUGE ONE AND THE TINY ONE.** MEASURED, the first
 	 * draft derived its height FROM the rect — and `-sizeToFit` reaches this door through `-cellSize`, which asks with
 	 * the NO-OPINION rectangle of 10000 x 10000, so the switch was fitted to 16000 points across and the demonstration
@@ -115,7 +115,7 @@ int main(void)
 	 * could not be fitted, which is why the 10000 is the FIRST of these checks. */
 	check(near([cell cellSizeForBounds:NSMakeRect(0.0, 0.0, 10000.0, 10000.0)].width, W)
 	      && near([cell cellSizeForBounds:NSMakeRect(0.0, 0.0, 10000.0, 10000.0)].height, H),
-	      "the NO-OPINION rect — which is what -sizeToFit and -cellSize ask with — gives the natural 32 x 20");
+	      "the NO-OPINION rect — which is what -sizeToFit and -cellSize ask with — gives the natural 39 x 20");
 	check(near([cell cellSizeForBounds:NSMakeRect(0.0, 0.0, 20.0, 10.0)].width, 20.0)
 	      && near([cell cellSizeForBounds:NSMakeRect(0.0, 0.0, 20.0, 10.0)].height, 10.0),
 	      "while a rect SMALLER than the natural size clamps it, which is what a bound means");
@@ -136,6 +136,23 @@ int main(void)
 	 * this check did. The white run is the right instrument exactly where there IS a contrast, and the ring is the
 	 * instrument everywhere; where a check needs one, it uses the one that can see. */
 	check(left < 0, "so the OFF knob is NOT white, which is the sample's own measurement rather than a miss");
+	/* **AND THE TRACK SHOWS AN EVEN BAND ALL ROUND THE KNOB, WHICH IS THE POINT OF THE INSET.** MEASURED on the sample:
+	 * its track is 39 wide and its knob 15 of that, so 2.5 of track shows beside the knob — the same as above and below
+	 * it. A knob flush with the end would put its own ring on the track's outline. */
+	{
+		int ringL = -1, ringR = -1, x;
+
+		for (x = 2; x < W / 2; x++) {
+			if (near([[rep colorAtX:x y:H / 2] redComponent], [[NSColor controlDarkShadowColor] redComponent])) {
+				if (ringL < 0) ringL = x; else ringR = x;
+			}
+		}
+		printf("  (note: the OFF knob's ring runs x=%d..%d, inside a track whose outline is at x=0 and x=%d)\n",
+		       ringL, ringR, W - 1);
+		check(ringL >= 2, "the knob is INSET from the track's edge, so a band of track shows beside it");
+		check(near(ringL, (H - 15.0) / 2.0 + 1.0) || ringL <= 4,
+		      "by about the same amount as the air above and below it, which is what an even band means");
+	}
 	[rep release];
 
 	/* 3. **ON: THE KNOB AT THE RIGHT AND THE TRACK THE ACCENT.** */
@@ -154,8 +171,8 @@ int main(void)
 	/* **AND THE WHITE RUN IS THE KNOB'S INSIDE, BECAUSE THE KNOB IS NOW RINGED.** MEASURED across a drawn switch: outline,
 	 * fill, a point of ring, white, a point of ring, outline — so a knob that is twelve across INCLUDING its ring shows a
 	 * white run of about ten. The claim is the knob's width, and the ring is part of it. */
-	check(width >= 8 && width <= 12,
-	      "the knob is 12 points across including its ring, so its white inside is about ten of them");
+	check(width >= 10 && width <= 14,
+	      "the knob is 15 across including its ring, so its white inside is about thirteen of them");
 	check(left + width / 2 > W / 2, "and its centre has travelled to the right half, which is what ON looks like");
 	[rep release];
 

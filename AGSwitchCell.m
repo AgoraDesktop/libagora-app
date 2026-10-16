@@ -10,10 +10,13 @@
 #import <AppKit/NSGraphicsContext.h>
 
 /* THE SAMPLE'S OWN MEASURES, as fractions of the track's HEIGHT so that a switch asked for at another size stays the
- * shape the sample draws: the knob is 12 of 20 points, and the air either side of it is the other 8. */
-#define AG_SWITCH_ASPECT       1.6	/* 32/20: the track's width against the cell's own height */
+ * shape the sample draws. MEASURED, and the first pass over the sample got BOTH of these wrong by taking the knob's
+ * edge for the track's: the track is 39 x 20 (its outline at x=752 and x=790 on one pill, x=799 and x=837 on the next),
+ * and the knob is 15 across INCLUDING its ring, which leaves 2.5 of track showing on every side — the same band above
+ * and below as beside. */
+#define AG_SWITCH_ASPECT       1.95	/* 39/20: the track's width against the cell's own height */
 #define AG_SWITCH_HEIGHT       20.0	/* the sample's 20 points tall, and the height the width is derived from */
-#define AG_SWITCH_KNOB_FRACTION 0.6	/* 12/20 of the track's height, and round */
+#define AG_SWITCH_KNOB_FRACTION 0.75	/* 15/20 of the track's height, INCLUDING the ring drawn round it */
 #define AG_SWITCH_OUTLINE      1.0	/* the track's edge and the knob's ring, both one point and both the border grey */
 
 @implementation AGSwitchCell
@@ -70,15 +73,18 @@
 	[track setLineWidth:AG_SWITCH_OUTLINE];
 	[track stroke];
 
-	/* **AND THE KNOB SITS AT THE END THE VALUE SAYS, WHICH IS THE WHOLE OF WHAT A SWITCH SHOWS.** There is no text and
-	 * no glyph: OFF is the knob at the left and ON is the knob at the right, and the two are the same circle a
+	/* **AND THE KNOB SITS AT THE END THE VALUE SAYS, WITH AN EVEN BAND OF TRACK SHOWING ALL ROUND IT.** There is no text
+	 * and no glyph: OFF is the knob at the left and ON is the knob at the right, and the two are the same circle a
 	 * fraction of the height across, so the control reads at any size.
 	 *
-	 * **AND IT IS FLUSH WITH THE END, WHICH IS WHAT THE SAMPLE MEASURES RATHER THAN WHAT LOOKS TIDY.** MEASURED on its
-	 * ON pill: the accent runs x=801..819 and the white knob x=822..833, so the track ENDS where the knob does and the
-	 * knob's only inset is the vertical one that comes from being smaller than the track. Putting air at the ends as
-	 * well would have been a guess, and the sample had an answer. */
-	knobRect = NSMakeRect(on ? (NSMaxX(cellFrame) - knob) : NSMinX(cellFrame),
+	 * **AND THE BAND IS THE SAME ON EVERY SIDE, WHICH IS WHAT THE SAMPLE MEASURES RATHER THAN WHAT FILLS THE ROOM.** The
+	 * first pass said the knob was FLUSH with its end, having taken the knob's edge for the track's; measuring the
+	 * outlines instead puts the track at 39 wide and the knob at 15 of it, so the air beside the knob is 2.5 — the same
+	 * as the air above and below, which comes from the knob being smaller than the track. A knob that touched the end
+	 * would have been a knob with its own outline sitting on the track's, which is what an even band avoids. */
+	CGFloat knobInset = (h - knob) / 2.0;
+
+	knobRect = NSMakeRect(on ? (NSMaxX(trackRect) - knobInset - knob) : (NSMinX(trackRect) + knobInset),
 			      NSMidY(cellFrame) - knob / 2.0, knob, knob);
 	knobFill = ([self isHighlighted] || (on && ![self cg_mouseIsInside]))
 		   ? [NSColor controlBackgroundColor] : [NSColor controlColor];
