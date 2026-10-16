@@ -14,23 +14,41 @@
 #define AG_SWITCH_ASPECT       1.6	/* 32/20: the track's width against the cell's own height */
 #define AG_SWITCH_HEIGHT       20.0	/* the sample's 20 points tall, and the height the width is derived from */
 #define AG_SWITCH_KNOB_FRACTION 0.6	/* 12/20 of the track's height, and round */
+#define AG_SWITCH_OUTLINE      1.0	/* the track's edge and the knob's ring, both one point and both the border grey */
 
 @implementation AGSwitchCell
 
 /* **AND THE TRACK IS A PILL BECAUSE ITS RADIUS IS DERIVED RATHER THAN CHOSEN.** MEASURED on the sample: 32 x 20 with
  * both ends round, which is a radius of ten — half the height. A constant here would be right at one size and wrong at
  * every other, and the sample gives the SHAPE rather than a number to copy. */
+/* **AND BOTH PIECES ARE OUTLINED, IN THE TIER'S ONE BORDER GREY.** MEASURED on the sample, and thrown away by the
+ * first pass over it: every scan that looked for runs of three pixels or more MISSED the outlines, which are one point
+ * wide — the track's at x=754 and x=789 and the tire height, the knob's at x=768, all `#BCBCBC`, which is
+ * `+controlDarkShadowColor` and the same grey a bezel, a field's edge and a checkbox's box are drawn in.
+ *
+ * **AND THE RING IS WHAT MAKES THE KNOB VISIBLE, WHICH IS WHY THE SAMPLE NEEDS IT.** The knob's own fill at rest is
+ * THE TRACK'S OWN COLOUR — `#E7E7E7` on `#E7E7E7`, measured — so a knob and a track of one grey are told apart by
+ * nothing but the circle around the knob. This tier's control grey is `+controlColor`, the same kind of grey, and the
+ * ring draws the knob rather than the fill doing it.
+ *
+ * **THE KNOB GOES WHITE WHEN IT IS DOING SOMETHING**: measured, the pressed pill's knob is `#FFFFFF` on a grey track,
+ * and the sample's accent-filled pill's knob is white too. So the fill is white while the switch is held down or while
+ * its track is the full accent, and the track's own grey otherwise. */
 - (void)drawWithFrame:(NSRect)cellFrame inView:(id)controlView
 {
 	BOOL on = ([self state] == NSOnState);
 	CGFloat h = NSHeight(cellFrame);
 	CGFloat radius = h / 2.0;
 	CGFloat knob = h * AG_SWITCH_KNOB_FRACTION;
-	NSBezierPath *track = [NSBezierPath bezierPathWithRoundedRect:cellFrame xRadius:radius yRadius:radius];
+	NSBezierPath *track;
+	NSBezierPath *ring;
 	NSRect knobRect;
+	NSRect trackRect = NSInsetRect(cellFrame, AG_SWITCH_OUTLINE / 2.0, AG_SWITCH_OUTLINE / 2.0);
 	NSColor *fill;
+	NSColor *knobFill;
 
 	(void)controlView;
+	track = [NSBezierPath bezierPathWithRoundedRect:trackRect xRadius:radius yRadius:radius];
 
 	/* **AND THE FILL IS THE STATE, IN THE SAMPLE'S OWN FOUR.** The ORDER matters and is the sample's: being out of
 	 * action wins over everything (a disabled switch does not prelight), and the pointer's shade only exists for a
@@ -48,6 +66,9 @@
 	}
 	[fill setFill];
 	[track fill];
+	[[NSColor controlDarkShadowColor] setStroke];
+	[track setLineWidth:AG_SWITCH_OUTLINE];
+	[track stroke];
 
 	/* **AND THE KNOB SITS AT THE END THE VALUE SAYS, WHICH IS THE WHOLE OF WHAT A SWITCH SHOWS.** There is no text and
 	 * no glyph: OFF is the knob at the left and ON is the knob at the right, and the two are the same circle a
@@ -59,8 +80,15 @@
 	 * well would have been a guess, and the sample had an answer. */
 	knobRect = NSMakeRect(on ? (NSMaxX(cellFrame) - knob) : NSMinX(cellFrame),
 			      NSMidY(cellFrame) - knob / 2.0, knob, knob);
-	[[NSColor controlBackgroundColor] setFill];
+	knobFill = ([self isHighlighted] || (on && ![self cg_mouseIsInside]))
+		   ? [NSColor controlBackgroundColor] : [NSColor controlColor];
+	[knobFill setFill];
 	[[NSBezierPath bezierPathWithOvalInRect:knobRect] fill];
+	ring = [NSBezierPath bezierPathWithOvalInRect:NSInsetRect(knobRect, AG_SWITCH_OUTLINE / 2.0,
+								  AG_SWITCH_OUTLINE / 2.0)];
+	[[NSColor controlDarkShadowColor] setStroke];
+	[ring setLineWidth:AG_SWITCH_OUTLINE];
+	[ring stroke];
 }
 
 /* **AND WHAT IT MEASURES IS THE SAMPLE'S 32 x 20, WITH THE CALLER'S RECT AS A BOUND RATHER THAN AS AN INPUT.** That is

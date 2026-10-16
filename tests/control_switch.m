@@ -130,8 +130,12 @@ int main(void)
 	       left, width, track_red(rep, 0));
 	check(near(track_red(rep, 0), [[NSColor controlColor] redComponent]),
 	      "an OFF track is the CONTROL's grey, which is the same face a button's bezel wears");
-	check(near(width, 12.0), "the knob is 12 points across, as the sample measures it");
-	check(left + width / 2 < W / 2, "and its CENTRE is in the left half, which is what OFF looks like");
+	/* **AND THE KNOB IS MEASURED ON THE ON SWITCH, BECAUSE THE OFF KNOB IS ITS TRACK'S OWN COLOUR.** MEASURED on the
+	 * sample: at rest the knob's fill and the track's are the same `#E7E7E7`, and the ring is the only thing that
+	 * tells them apart — so a probe looking for WHITE finds nothing on an OFF switch, which is what the first draft of
+	 * this check did. The white run is the right instrument exactly where there IS a contrast, and the ring is the
+	 * instrument everywhere; where a check needs one, it uses the one that can see. */
+	check(left < 0, "so the OFF knob is NOT white, which is the sample's own measurement rather than a miss");
 	[rep release];
 
 	/* 3. **ON: THE KNOB AT THE RIGHT AND THE TRACK THE ACCENT.** */
@@ -147,6 +151,11 @@ int main(void)
 	/* THE CENTRE, NOT AN EDGE: MEASURED, the ON knob's left edge lands exactly on the halfway point of a 32-point
 	 * track, so a check on the edge would call a perfectly correct switch wrong. What the value means is where the
 	 * knob IS, and its middle is that. */
+	/* **AND THE WHITE RUN IS THE KNOB'S INSIDE, BECAUSE THE KNOB IS NOW RINGED.** MEASURED across a drawn switch: outline,
+	 * fill, a point of ring, white, a point of ring, outline — so a knob that is twelve across INCLUDING its ring shows a
+	 * white run of about ten. The claim is the knob's width, and the ring is part of it. */
+	check(width >= 8 && width <= 12,
+	      "the knob is 12 points across including its ring, so its white inside is about ten of them");
 	check(left + width / 2 > W / 2, "and its centre has travelled to the right half, which is what ON looks like");
 	[rep release];
 
@@ -183,7 +192,36 @@ int main(void)
 	[rep release];
 	[cell cg_setMouseInside:NO];
 
-	/* 6. **AND OUT OF ACTION WINS OVER EVERYTHING.** */
+	/* 6. **AND BOTH PIECES ARE OUTLINED IN THE TIER'S BORDER GREY.** MEASURED on the sample and MISSED by the first pass
+	 * over it, because every scan that asked for runs of three pixels or more cannot see a line that is one point wide.
+	 * The track's edge and the knob's ring are both `+controlDarkShadowColor`, which is the same grey a bezel, a field's
+	 * edge and a checkbox's box are stroked in — and the ring is what makes the knob visible when its fill IS its
+	 * track's colour, which is what the sample measures. */
+	[cell setState:NSOffState];
+	[cell setEnabled:YES];
+	rep = draw(cell, view);
+	check(near([[rep colorAtX:0 y:H / 2] redComponent], [[NSColor controlDarkShadowColor] redComponent])
+	      && near([[rep colorAtX:W - 1 y:H / 2] redComponent], [[NSColor controlDarkShadowColor] redComponent]),
+	      "an OFF track is OUTLINED in the border grey, at both ends of the middle row");
+	/* AND THE KNOB'S RING, read on the row through the knob's widest part: a pixel of outline, then the fill. */
+	{
+		int ringAt = -1, x;
+
+		for (x = 2; x < 20; x++) {
+			if (near([[rep colorAtX:x y:H / 2] redComponent], [[NSColor controlDarkShadowColor] redComponent])) {
+				ringAt = x;
+				break;
+			}
+		}
+		printf("  (note: the knob's ring is at x=%d, and the knob's fill is %.2f on a track of %.2f)\n",
+		       ringAt, [[rep colorAtX:(ringAt + 4) y:H / 2] redComponent], [[NSColor controlColor] redComponent]);
+		check(ringAt > 0, "and the knob carries a RING of its own, which is how a knob is seen at all");
+		check(near([[rep colorAtX:(ringAt + 4) y:H / 2] redComponent], [[NSColor controlColor] redComponent]),
+		      "whose fill at rest is the TRACK's own grey, as the sample measures it — the ring is the only difference");
+	}
+	[rep release];
+
+	/* 7. **AND OUT OF ACTION WINS OVER EVERYTHING.** */
 	[cell setState:NSOnState];
 	[cell setEnabled:NO];
 	[cell cg_setMouseInside:YES];
