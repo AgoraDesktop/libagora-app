@@ -57,6 +57,7 @@ tests/
   text_view_wrapping.m          and the slice above it: the same model WRAPPED to the view's width
   text_view_scrolling.m         and above that: the view in a SCROLL VIEW, and the doors that move it
   text_view_store.m             and the VIEW reading the store through the manager, its own layout gone
+  text_marked_text.m            and the MARKED TEXT: the composition an input method drives through `NSTextInput`
   text_field_cell.m             a FIELD's cell: its string, its face, and one edit session end to end
   text_field_control.m          and the VIEW above it: a press that opens a session, and what commits it
   text_field_bezel.m            and its BORDER's two shapes, read out of the corner PIXELS
@@ -265,6 +266,18 @@ the compositor is really gone.
   `-removeAttribute:range:` edit their runs DIRECTLY, so `-addAttribute:` never reached `-setAttributes:range:` and
   announced nothing — a style put into a store that way never reached its manager. `NSTextStorage` now overrides both
   and announces, which is the exception its own header names.
+- **And the MARKED TEXT, which is what an input method composes through** (`ctest`): `NSTextInput.h` declares the eleven
+  doors an input system drives a text view through, `NSTextView` adopts the protocol, and the composition is an ordinary
+  edit with a remembered range — the marked characters really go into the store, so the caret and the layout work as
+  usual, and the view draws the composition rule because a character range cannot carry the fact that it is marked.
+  MEASURED: a fresh view has no marked text; the first keystroke of a composition marks one character in the store and
+  the next REPLACES it rather than appending; `-insertText:` confirms over the MARKED range (not the selection, which
+  sits inside the composition); `-unmarkText` takes a composition back; the candidate window's four questions answer
+  (the valid attributes, the substring, a caret rectangle that MOVES with the caret, and the point door landing near
+  it); and a composition draws measurably more ink than the same text unmarked. **AND THE PROBE FOUND ONE REAL
+  DEFECT**: a store's `-attributesAtIndex:` hands back the RUN'S OWN dictionary, so the inherited run held across the
+  edit that frees it was read after it was freed — MEASURED, a segfault on the second keystroke of a composition. The
+  inheritance retains it now.
 - **And the field, which is a cell under a view** (`ctest`, offscreen): `NSTextFieldCell` owns the string, the face
   and the three doors of an edit; `NSTextField` is the control above it, and it contributes the two things a cell
   cannot — a PRESS that opens a session with the WINDOW's field editor, and `-selectText:` for the same session with
@@ -395,7 +408,7 @@ the compositor is really gone.
   and the child clip is the child's FRAME region rather than its bounds rect — which was the same value only while the
   origin was zero. MEASURED: a mark at a document's own y 100..120 draws at 110 with the clip view at the top and at
   10 after a scroll of 100, in one run, through `-displayRect:`.
-- **`ctest`: 47 of 47 passed** (the keyboard and the seam, the AppKit and its input path, the controls and their
+- **`ctest`: 48 of 48 passed** (the keyboard and the seam, the AppKit and its input path, the controls and their
   metrics, the field control and its cell and its bezel and its placeholder and what it may hold, the text path and its
   word granularity and the multi-line view and its wrapping and its scrolling and its READING OF THE STORE, the STORE
   the rich-text slice is built on and the REGION it is laid out in and the WEB that ties the three together and the
@@ -539,9 +552,9 @@ the MINIMISE is
 still only a state the window marks and announces, because there is no Dock to put a miniaturized window in and no
 iconify in the protocol (Kestrel is parked). The chrome's toolbar pill is drawn and performs nothing, because
 there is no toolbar for it to toggle; the three symbols beside it ARE buttons now, and `tests/chrome_buttons.m`
-presses them. The input-method half of the text system is
-still absent (`-interpretKeyEvents:` does the direct mapping and says so), and the PARAGRAPH commands are named rather
-than guessed. **THE FIELD EDITOR IS NOT ON THAT LIST AND HAS NOT BEEN SINCE THE WINDOW LEARNED TO LEND ONE** —
+presses them. The `NSTextInput` PROTOCOL is here and `NSTextView` answers it (`tests/text_marked_text.m`), but the
+input-method CONTEXT is still absent (`-interpretKeyEvents:` does the direct mapping at the view and says so), and the
+PARAGRAPH commands are named rather than guessed. **THE FIELD EDITOR IS NOT ON THAT LIST AND HAS NOT BEEN SINCE THE WINDOW LEARNED TO LEND ONE** —
 `-fieldEditor:forObject:` is implemented and the field cells open their sessions with it, so what that clause used to
 defer is a door that exists. The WORD commands are NOT in that list any more: `tests/text_word_movement.m`
 drives Option+arrow and Option+Delete, because a word is a run of the string's own characters and needs no layout
@@ -555,7 +568,9 @@ STRIKETHROUGH keys the manager paints (`tests/text_layout_attributes.m`) and the
 by (`tests/text_paragraph_style.m`). The paragraph style is a value object whose geometry properties (indents, the two
 paragraph spacings, the three line-height properties, the hyphenation factor) are carried and answered and await their
 reader in the layout, which `NSParagraphStyle.h` names property by property. Attachments, tables, the marked-text
-family and the input-method half are named in the view's own header as what is still owed. Each absence is stated
+family and the input-method CONTEXT are named in the view's own header as what is still owed — the `NSTextInput`
+protocol is here and the view ANSWERS it (`tests/text_marked_text.m`), while the class that owns a composition across
+keystrokes and arranges a candidate window is the slice behind it. Each absence is stated
 rather than stubbed, and the refusals name themselves.
 
 ## Build

@@ -52,6 +52,7 @@ static void cg_announce(NSText *text, NSString *name, SEL delegateSelector)
 	if (self != nil) {
 		/* APPLE'S DEFAULT FOR A TEXT VIEW, and the one a scroll view needs: the view is as tall as its text. */
 		_cg_verticallyResizable = YES;
+		_cg_markedRange = NSMakeRange(NSNotFound, 0);
 		/* **AND THE TRIO IS BUILT HERE, IN THE ONE DIRECTION THAT CANNOT CYCLE.** The view retains the STORE, the
 		 * store retains the MANAGER, the manager retains the CONTAINER, and the container holds a BORROWED pointer
 		 * back to this view. The padding is the field's own inset, so the manager's lines start where every other
@@ -443,6 +444,11 @@ static void cg_announce(NSText *text, NSString *name, SEL delegateSelector)
 	NSUInteger length = [_cg_textStorage length];
 	NSDictionary *inherited = nil;
 
+	/* **A PLAIN EDIT ENDS A COMPOSITION, WHICH IS WHY THE MARK CLEARS HERE.** An input method re-marks on every
+	 * keystroke of a composition anyway (`-setMarkedText:` puts the new range back after calling this), so an edit that
+	 * is NOT part of a composition is exactly the case where the marked text should stop being marked. */
+	_cg_markedRange = NSMakeRange(NSNotFound, 0);
+
 	if (range.location > length) {
 		range.location = length;
 	}
@@ -450,11 +456,16 @@ static void cg_announce(NSText *text, NSString *name, SEL delegateSelector)
 		range.length = length - range.location;
 	}
 	if (length > 0 && range.location > 0) {
-		inherited = [_cg_textStorage attributesAtIndex:range.location - 1 effectiveRange:NULL];
+		/* **AND THE RUN IS RETAINED ACROSS THE EDIT, WHICH IS NOT TIDINESS.** A store's `-attributesAtIndex:` hands back
+		 * the RUN'S OWN dictionary rather than a copy, and the `-replaceCharactersInRange:` below can free that run — so a
+		 * dictionary read before the edit and applied after it (the inheritance this door is FOR) must own itself or it is
+		 * read after it is freed. MEASURED: not retaining it segfaulted on the second keystroke of a composition, inside
+		 * the very `-setAttributes:range:` that was applying it. */
+		inherited = [[_cg_textStorage attributesAtIndex:range.location - 1 effectiveRange:NULL] retain];
 	} else if (length > 0) {
-		inherited = [_cg_textStorage attributesAtIndex:0 effectiveRange:NULL];
+		inherited = [[_cg_textStorage attributesAtIndex:0 effectiveRange:NULL] retain];
 	} else if ([self font] != nil) {
-		inherited = [NSDictionary dictionaryWithObject:[self font] forKey:NSFontAttributeName];
+		inherited = [[NSDictionary dictionaryWithObject:[self font] forKey:NSFontAttributeName] retain];
 	}
 	[_cg_textStorage beginEditing];
 	[_cg_textStorage replaceCharactersInRange:range withString:text];
@@ -462,6 +473,7 @@ static void cg_announce(NSText *text, NSString *name, SEL delegateSelector)
 		[_cg_textStorage setAttributes:inherited range:NSMakeRange(range.location, [text length])];
 	}
 	[_cg_textStorage endEditing];
+	[inherited release];
 	[self setSelectedRange:NSMakeRange(range.location + [text length], 0)];
 	cg_announce(self, NSTextDidChangeNotification, @selector(textDidChange:));
 	[self setNeedsDisplay:YES];
@@ -474,6 +486,8 @@ static void cg_announce(NSText *text, NSString *name, SEL delegateSelector)
 {
 	NSString *text = (string != nil) ? string : @"";
 	id font = [self font];
+
+	_cg_markedRange = NSMakeRange(NSNotFound, 0);
 
 	[_cg_textStorage beginEditing];
 	[_cg_textStorage replaceCharactersInRange:NSMakeRange(0, [_cg_textStorage length]) withString:text];
@@ -605,6 +619,32 @@ static void cg_announce(NSText *text, NSString *name, SEL delegateSelector)
 	/* AND THE STORE'S OWN INK, WHICH IS THE MANAGER'S TO LAY DOWN — backgrounds first, then the glyphs and the rules. */
 	[_cg_layoutManager drawBackgroundForGlyphRange:NSMakeRange(0, n) atPoint:NSMakePoint(0.0, NS_TEXT_INSET)];
 	[_cg_layoutManager drawGlyphsForGlyphRange:NSMakeRange(0, n) atPoint:NSMakePoint(0.0, NS_TEXT_INSET)];
+	/* **AND THE MARKED TEXT'S COMPOSITION MARK, WHICH IS THE VIEW'S BECAUSE THE STORE CANNOT CARRY IT.** A one-point rule
+	 * below the baseline of every visual line the marked range covers, clipped to the range the way the selection band is
+	 * — so a composition split across a wrap is underlined on both lines and a trailing space carries nothing. */
+	if ([self hasMarkedText]) {
+		NSUInteger markStart = _cg_markedRange.location;
+		NSUInteger markEnd = markStart + _cg_markedRange.length;
+		NSUInteger count = [self cg_visualLineCount];
+		NSUInteger i;
+
+		for (i = 0; i < count; i++) {
+			NSRange lr = [self cg_visualLineRangeAtIndex:i];
+			NSRange tr = [self cg_textRangeOfVisualLine:i];
+			NSUInteger lineEnd = tr.location + tr.length;
+			NSUInteger lo = (markStart > lr.location) ? markStart : lr.location;
+			NSUInteger hi = (markEnd < lineEnd) ? markEnd : lineEnd;
+
+			if (lo < hi) {
+				CGFloat baseline = [self cg_baselineForLine:i];
+				CGFloat x0 = NS_TEXT_INSET + [self cg_xForIndex:lo];
+				CGFloat x1 = NS_TEXT_INSET + [self cg_xForIndex:hi];
+
+				[[NSColor controlTextColor] setFill];
+				[[NSBezierPath bezierPathWithRect:NSMakeRect(x0, baseline + 2.0, x1 - x0, 1.0)] fill];
+			}
+		}
+	}
 	/* AND THE CARET, ON WHICHEVER VISUAL LINE IT IS ON — which is the LAST line that starts at or before it, so a caret
 	 * just after a hard break sits on the empty line it opened. */
 	if (_editing && [self isEditable]) {
@@ -655,16 +695,22 @@ static void cg_announce(NSText *text, NSString *name, SEL delegateSelector)
 
 /* **A NEWLINE IS TEXT HERE, WHICH IS THE ONE REFUSAL THIS CLASS OVERTURNS.** `NSText -insertText:` drops a newline by
  * name because it holds one line; a text view's whole point is that the break is a character like any other, so the
- * edit goes through this class's own primitive — which edits the STORE — and the layout follows. */
+ * edit goes through this class's own primitive — which edits the STORE — and the layout follows.
+ *
+ * **AND AN INSERT THAT CONFIRMS A COMPOSITION REPLACES THE MARKED RANGE RATHER THAN THE SELECTION.** An input method
+ * commits what it was composing by calling this door, and the caret sits INSIDE the mark while it does — so replacing
+ * the selection would splice the confirmed text into the middle of the composition instead of over it. */
 - (void)insertText:(id)insertString
 {
 	NSString *text = ([insertString isKindOfClass:[NSAttributedString class]])
 			 ? [(NSAttributedString *)insertString string] : (NSString *)insertString;
+	NSRange target;
 
 	if (![self isEditable] || text == nil) {
 		return;
 	}
-	[self replaceCharactersInRange:_selectedRange withString:text];
+	target = [self hasMarkedText] ? _cg_markedRange : _selectedRange;
+	[self replaceCharactersInRange:target withString:text];
 }
 
 /* **AND THE TWO KEYS THAT MEANT "I AM DONE WITH THIS FIELD" NOW MEAN "PUT A BREAK HERE" AND "PUT A TAB HERE".** */
@@ -678,6 +724,100 @@ static void cg_announce(NSText *text, NSString *name, SEL delegateSelector)
 {
 	(void)sender;
 	[self insertText:@"\t"];
+}
+
+/* ============================================================================================ *
+ * THE MARKED TEXT: WHAT AN INPUT METHOD IS COMPOSING, SAID IN `NSTextInput.h`                     *
+ * ============================================================================================ */
+
+/* **THE MARKED CHARACTERS ARE REALLY IN THE STORE**, which is what makes a composition an ordinary edit with an
+ * ordinary caret: an input method replaces its marked range on every keystroke, the layout re-wraps, and the caret is
+ * placed inside the composition by the range it was told. WHAT IS NOT IN THE STORE IS THE FACT THAT THEY ARE MARKED — a
+ * character range cannot carry its own temporary state — so the RANGE lives here and the view draws the composition
+ * mark itself (see `-drawRect:`). That is the same division the selection uses: the store holds text and attributes,
+ * the view holds the transient facts about it. */
+- (BOOL)hasMarkedText
+{
+	return _cg_markedRange.location != NSNotFound;
+}
+
+- (NSRange)markedRange
+{
+	return (_cg_markedRange.location != NSNotFound) ? _cg_markedRange : NSMakeRange(NSNotFound, 0);
+}
+
+/* **EVERY KEYSTROKE OF A COMPOSITION IS ONE CALL, AND THE STRING IS THE WHOLE COMPOSITION SO FAR.** The target is the
+ * marked range when there is one — a composition grows by replacing itself — and the SELECTION otherwise, which is how
+ * the first keystroke starts one. An EMPTY string clears the marked text, which is the input method taking a
+ * composition back. */
+- (void)setMarkedText:(id)string selectedRange:(NSRange)selectedRange
+{
+	NSString *text = ([string isKindOfClass:[NSAttributedString class]])
+			 ? [(NSAttributedString *)string string] : (NSString *)string;
+	NSRange target = [self hasMarkedText] ? _cg_markedRange : _selectedRange;
+	NSUInteger location = target.location;
+
+	if (text == nil) {
+		text = @"";
+	}
+	[self replaceCharactersInRange:target withString:text];
+	if ([text length] > 0) {
+		_cg_markedRange = NSMakeRange(location, [text length]);
+		[self setSelectedRange:NSMakeRange(location + selectedRange.location, selectedRange.length)];
+	} else {
+		_cg_markedRange = NSMakeRange(NSNotFound, 0);
+	}
+	[self setNeedsDisplay:YES];
+}
+
+- (void)unmarkText
+{
+	_cg_markedRange = NSMakeRange(NSNotFound, 0);
+	[self setNeedsDisplay:YES];
+}
+
+/* THE ATTRIBUTES AN INPUT METHOD MAY SET ON WHAT IT INSERTS. This view can draw a foreground, a background and the two
+ * rules, so those are what it offers; a view that supported nothing beyond plain text would answer an empty array. */
+- (NSArray *)validAttributesForMarkedText
+{
+	return [NSArray arrayWithObjects:NSUnderlineStyleAttributeName, NSUnderlineColorAttributeName,
+			NSBackgroundColorAttributeName, NSForegroundColorAttributeName, nil];
+}
+
+- (NSAttributedString *)attributedSubstringFromRange:(NSRange)range
+{
+	NSUInteger n = [_cg_textStorage length];
+
+	if (range.location > n) {
+		range.location = n;
+	}
+	if (range.location + range.length > n) {
+		range.length = n - range.location;
+	}
+	return [_cg_textStorage attributedSubstringFromRange:range];
+}
+
+/* **AND THE TWO SCREEN QUESTIONS A CANDIDATE WINDOW ASKS.** `-firstRectForCharacterRange:` is the caret's own rectangle
+ * moved into SCREEN coordinates — the view's rectangle, into the window's, plus the window's frame origin — and
+ * `-characterIndexForPoint:` is that conversion run backwards. THE CONVERSION IS THE WINDOW'S FRAME ORIGIN because this
+ * tier has no `-convertRectToScreen:`; a window on Agora's own server is placed where its frame says, so the origin is
+ * the whole of the transformation this tier owns. */
+- (NSRect)firstRectForCharacterRange:(NSRange)range
+{
+	NSRect rect = [self cg_rectForCharacterIndex:range.location];
+	NSRect inWindow = [self convertRect:rect toView:nil];
+	NSRect frame = [[self window] frame];
+
+	return NSMakeRect(inWindow.origin.x + frame.origin.x, inWindow.origin.y + frame.origin.y,
+			  inWindow.size.width, inWindow.size.height);
+}
+
+- (NSUInteger)characterIndexForPoint:(NSPoint)point
+{
+	NSRect frame = [[self window] frame];
+	NSPoint inWindow = NSMakePoint(point.x - frame.origin.x, point.y - frame.origin.y);
+
+	return [self cg_indexForPoint:[self convertPoint:inWindow fromView:nil]];
 }
 
 /* ============================================================================================ *

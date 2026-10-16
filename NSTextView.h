@@ -43,14 +43,18 @@
  * and there can be several per model line; the `cg_visualLine…` doors read the MANAGER, and they change every time
  * the text or the width does. A caller that wants "how many lines" has to say which.
  *
- * **WHAT IS STILL NOT HERE, NAMED RATHER THAN STUBBED:** attachments, tables, the paragraph commands, the marked-text
- * family, the input-method half, and a glyph map that is not the one-to-one Core Text produces. The view's own
- * `NSText`-inherited `_string` is a mirror (see above) rather than the authority.
+ * **WHAT IS STILL NOT HERE, NAMED RATHER THAN STUBBED:** attachments, tables, the paragraph commands (the
+ * `-alignLeft:` family, as opposed to the `-setAlignment:` that moves the glyphs), and the INPUT CONTEXT — the class
+ * that owns a composition across keystrokes and arranges a candidate window. The `NSTextInput` PROTOCOL is here and
+ * this view ANSWERS it (`NSTextInput.h`), so a caller can drive a composition by hand; what no class in this tier does
+ * yet is call those doors itself. The view's own `NSText`-inherited `_string` is a mirror (see above) rather than the
+ * authority.
  */
 #ifndef APPKIT_NSTEXTVIEW_H
 #define APPKIT_NSTEXTVIEW_H
 
 #import <AppKit/NSText.h>
+#import <AppKit/NSTextInput.h>
 
 @class NSTextStorage;
 @class NSLayoutManager;
@@ -58,7 +62,7 @@
 
 NS_ASSUME_NONNULL_BEGIN
 
-@interface NSTextView : NSText
+@interface NSTextView : NSText <NSTextInput>
 {
 	/* **THE TRIO, AND THE VIEW OWNS THE FIRST TWO.** The store is RETAINED here and it retains the MANAGER (its own
 	 * list does); the manager retains the CONTAINER (its array does) and the container holds a BORROWED pointer back
@@ -70,6 +74,11 @@ NS_ASSUME_NONNULL_BEGIN
 	/* **AND WHETHER THIS VIEW IS TALL ENOUGH FOR ITS OWN LAYOUT.** Apple's default for a text view is YES — one inside
 	 * a scroll view grows and shrinks with its text — and a caller that gave the view a frame on purpose says NO. */
 	BOOL _cg_verticallyResizable;
+	/* **AND THE MARKED TEXT, WHICH IS THE UNCONFIRMED HALF OF A COMPOSITION.** It is a RANGE IN THE STORE — the marked
+	 * characters are really there, so the caret, the layout and an edit all work as usual — and it is remembered here
+	 * because the STORE cannot say which of its runs are still being composed. `NSNotFound` means nothing is marked,
+	 * which is the state of every view no input method has touched. */
+	NSRange _cg_markedRange;
 }
 
 /* ---- THE TRIO, WHICH A CALLER REACHES TO PUT RUNS IN ------------------------------------------------ */
