@@ -255,6 +255,14 @@ target_link_libraries(text_input_context PRIVATE App m)
 add_test(NAME appkit-text-input-context COMMAND text_input_context)
 set_tests_properties(appkit-text-input-context PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
 
+# **AND THE EDITING COMMANDS THE RESPONDER NAMED AS OWED**: `-transpose:` (pure string arithmetic over a position) and
+# the `IgnoringFieldEditor` insertions plus the paragraph separator, checked across a view that holds a break and a
+# field that refuses one.
+add_executable(text_editing_commands text_editing_commands.m)
+target_link_libraries(text_editing_commands PRIVATE App m)
+add_test(NAME appkit-text-editing-commands COMMAND text_editing_commands)
+set_tests_properties(appkit-text-editing-commands PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
+
 # **AND THE PARAGRAPH STYLE'S GEOMETRY, WHICH IS NOW READ.** The indents place a line and narrow it, the spacings open
 # gaps between lines and across paragraph boundaries, and the line-height multiple and clamps set the band — each read as
 # the manager's own geometry, with the defaults pinned unmoved by the first case.

@@ -195,8 +195,11 @@ typedef NSUInteger NSInterfaceStyle;
  * nowhere to move TO; `NSTextView` implements them against its line model, and the arrow keys are  *
  * mapped to them there. THE ALIGNMENT COMMANDS HAVE SINCE LEFT THIS LIST: `NSText` declares          *
  * `-alignLeft:` and its three siblings and they set the alignment, which `NSTextView` now moves     *
- * glyphs for. `-transpose:` and the substitution and container-break insertions stay NAMED rather  *
- * than guessed — each needs a model (a position, a substitution) this tier has not built.          *
+ * glyphs for. AND `-transpose:` HAS LEFT IT TOO: a position and two characters are arithmetic over  *
+ * the string, which this tier has always had (see the commands block below). What still stays NAMED is  *
+ * the SOFT break (`-insertLineBreak:`, U+2028), the CONTAINER break and the substitution insertions  *
+ * — each needs a model (a break the engine honours, a container, a substitution) this tier has not   *
+ * built.                                                                                          *
  * ============================================================================================ */
 
 /* INSERTION: what an input context, or a key binding, produces. */
@@ -250,6 +253,18 @@ typedef NSUInteger NSInterfaceStyle;
 - (void)insertTab:(nullable id)sender;
 - (void)insertBacktab:(nullable id)sender;
 - (void)cancelOperation:(nullable id)sender;
+
+/* **AND THE ONE COMMAND THAT EDITS AROUND A POSITION, AND THE THREE INSERTIONS A FIELD EDITOR IS TOLD TO IGNORE ITS
+ * ROLE FOR.** `-transpose:` swaps the characters around the insertion point — pure string arithmetic over a position,
+ * which is why it needs no layout. The `IgnoringFieldEditor` pair is how a caller says "put a newline/tab here even if
+ * this surface would end the session instead", and `-insertParagraphSeparator:` is the paragraph break spelled as a
+ * command rather than as a keystroke. `-insertLineBreak:` (a SOFT break, U+2028) and `-insertContainerBreak:` (a
+ * page/column break) STAY NAMED rather than guessed: this tier's breaker does not treat U+2028 as a break, and a
+ * container break needs the container model a table would bring. */
+- (void)transpose:(nullable id)sender;
+- (void)insertParagraphSeparator:(nullable id)sender;
+- (void)insertNewlineIgnoringFieldEditor:(nullable id)sender;
+- (void)insertTabIgnoringFieldEditor:(nullable id)sender;
 
 /* THE FIVE AN EDIT MENU'S ITEMS CARRY, each sent to a nil target so the chain finds the editor. */
 - (void)selectAll:(nullable id)sender;

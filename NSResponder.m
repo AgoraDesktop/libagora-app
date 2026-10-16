@@ -485,6 +485,10 @@
 - (void)insertNewline:(id)sender			{ [[self nextResponder] insertNewline:sender]; }
 - (void)insertTab:(id)sender				{ [[self nextResponder] insertTab:sender]; }
 - (void)insertBacktab:(id)sender			{ [[self nextResponder] insertBacktab:sender]; }
+- (void)transpose:(id)sender				{ [[self nextResponder] transpose:sender]; }
+- (void)insertParagraphSeparator:(id)sender		{ [[self nextResponder] insertParagraphSeparator:sender]; }
+- (void)insertNewlineIgnoringFieldEditor:(id)sender	{ [[self nextResponder] insertNewlineIgnoringFieldEditor:sender]; }
+- (void)insertTabIgnoringFieldEditor:(id)sender		{ [[self nextResponder] insertTabIgnoringFieldEditor:sender]; }
 - (void)cancelOperation:(id)sender			{ [[self nextResponder] cancelOperation:sender]; }
 - (void)selectAll:(id)sender				{ [[self nextResponder] selectAll:sender]; }
 - (void)copy:(id)sender					{ [[self nextResponder] copy:sender]; }

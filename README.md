@@ -55,6 +55,7 @@ tests/
   text_paragraph_geometry.m     and its GEOMETRY: the indents, the spacings and the line heights the layout reads
   text_attachment.m             and the ATTACHMENT: a character that stands for a picture, and the cell that draws it
   text_input_context.m          and the INPUT CONTEXT: where a key goes before the view, and where a composition lives
+  text_editing_commands.m       and `-transpose:` plus the insertions that ignore a field's role
   text_word_movement.m          and its WORD granularity: Option+arrow and Option+Delete, over the string
   text_view_lines.m             and the first slice of the MULTI-LINE view: the line model, and what reads it
   text_view_wrapping.m          and the slice above it: the same model WRAPPED to the view's width
@@ -291,6 +292,13 @@ the compositor is really gone.
   doors name the one stock keyboard; and `-discardMarkedText` ends a composition through its client. **AND THE INPUT
   METHOD ITSELF IS STILL ABSENT**: the context has one keyboard and no composition engine, which its own header says —
   what landed is the DOOR a real source would be inserted at.
+- **And `-transpose:` AND THE FIELD-ROLE INSERTIONS** (`ctest`): the one command in the responder's named list that
+  needed no model this tier was missing — a position and two characters are arithmetic over the string. MEASURED:
+  transposing at index **2** of `abcd` gives `acbd` with the caret at **3**; a selection of two swaps exactly those
+  two; at either END the last two are the pair; one character is left alone; `-insertParagraphSeparator:` is a break a
+  text view holds and a one-line field refuses at its insert door; and the `IgnoringFieldEditor` pair inserts a newline
+  and a tab in the view. `-insertLineBreak:` (U+2028), `-insertContainerBreak:` and the substitution insertions stay
+  named with the models they need.
 - **And the ATTACHMENT, which is a character that stands for a picture** (`ctest`): `NSTextAttachment.h` declares
   `NSAttachmentCharacter` (U+FFFC), the `NSTextAttachmentCell` protocol and class, and the attachment itself, with
   `NSAttachmentAttributeName` carrying it; the layout manager's run walk asks the cell for its size and calls
@@ -443,7 +451,7 @@ the compositor is really gone.
   and the child clip is the child's FRAME region rather than its bounds rect — which was the same value only while the
   origin was zero. MEASURED: a mark at a document's own y 100..120 draws at 110 with the clip view at the top and at
   10 after a scroll of 100, in one run, through `-displayRect:`.
-- **`ctest`: 51 of 51 passed** (the keyboard and the seam, the AppKit and its input path, the controls and their
+- **`ctest`: 52 of 52 passed** (the keyboard and the seam, the AppKit and its input path, the controls and their
   metrics, the field control and its cell and its bezel and its placeholder and what it may hold, the text path and its
   word granularity and the multi-line view and its wrapping and its scrolling and its READING OF THE STORE, the STORE
   the rich-text slice is built on and the REGION it is laid out in and the WEB that ties the three together and the

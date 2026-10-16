@@ -1130,6 +1130,63 @@ static void fn_announce(NSText *text, NSString *name, SEL delegateSelector)
 	[[self window] selectPreviousKeyView:self];
 }
 
+/* **AND THE INSERTION THAT IGNORES THE FIELD ROLE: A PARAGRAPH SEPARATOR.** A plain Return ENDS a session in a field,
+ * so a caller that wants the CHARACTER asks for it explicitly — and `-insertText:` is what decides whether this
+ * surface can hold one, which for a one-line field is "no" and is said there. The view inherits the same command and
+ * inserts, because its `-insertText:` accepts a break. */
+- (void)insertParagraphSeparator:(id)sender
+{
+	(void)sender;
+	[self insertText:@"\n"];
+}
+
+- (void)insertNewlineIgnoringFieldEditor:(id)sender
+{
+	(void)sender;
+	[self insertText:@"\n"];
+}
+
+- (void)insertTabIgnoringFieldEditor:(id)sender
+{
+	(void)sender;
+	[self insertText:@"\t"];
+}
+
+/* **AND `-transpose:`, WHICH IS PURE STRING ARITHMETIC OVER A POSITION.** The two characters around the insertion point
+ * change places; a selection of exactly two IS that pair; and at either end the LAST two are the pair, because there
+ * are not two on the far side. The caret ends after the pair, which is where a second transpose would act next. */
+- (void)transpose:(id)sender
+{
+	NSUInteger i;
+	unichar a, b;
+
+	(void)sender;
+	if (![self isEditable]) {
+		return;
+	}
+	if (_selectedRange.length == 2) {
+		/* THE SELECTION IS THE PAIR, so the second index is one into it and the swap range is the selection. */
+		i = _selectedRange.location + 1;
+	} else {
+		if (_selectedRange.length > 0) {
+			[self setSelectedRange:NSMakeRange(_selectedRange.location + _selectedRange.length, 0)];
+		}
+		i = _selectedRange.location;
+		if (i == 0) {
+			i = 1;
+		} else if (i >= [_string length]) {
+			i = [_string length] - 1;
+		}
+	}
+	if ([_string length] < 2 || i == 0) {
+		return;
+	}
+	a = [_string characterAtIndex:i - 1];
+	b = [_string characterAtIndex:i];
+	[self replaceCharactersInRange:NSMakeRange(i - 1, 2) withString:[NSString stringWithFormat:@"%C%C", b, a]];
+	[self setSelectedRange:NSMakeRange(i + 1, 0)];
+}
+
 - (void)cancelOperation:(id)sender
 {
 	(void)sender;
