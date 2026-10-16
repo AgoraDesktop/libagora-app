@@ -64,13 +64,8 @@ int main(void)
 		printf("  (note: a range running past the store came back (%lu,%lu))\n",
 		       (unsigned long)glyphs.location, (unsigned long)glyphs.length);
 		check(range_is(glyphs, 11, 2), "a range past the store is CLAMPED to it rather than answered as asked");
-		{
-			NSRange back = [manager characterRangeForGlyphRange:NSMakeRange(4, 3) actualGlyphRange:NULL];
-
-			printf("  (dbg inverse of (4,3) is (%lu,%lu))\n", (unsigned long)back.location,
-			       (unsigned long)back.length);
-			check(range_is(back, 4, 3), "and the inverse door is the same identity");
-		}
+		check(range_is([manager characterRangeForGlyphRange:NSMakeRange(4, 3) actualGlyphRange:NULL], 4, 3),
+		      "and the inverse door is the same identity");
 	}
 
 	/* 2. **AND THE LAYOUT IS ONE FRAGMENT PER LINE THE CONTAINER GIVES.** A 300-point container and a store with two

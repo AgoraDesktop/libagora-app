@@ -132,11 +132,13 @@ NS_ASSUME_NONNULL_BEGIN
 
 /* ---- THE CHARACTER-TO-GLYPH MAP, WHICH WALKS THE GLYPH STORE ----------------------------------------- */
 
-/* **THE MAP IS COMPUTED FROM THE STORED GLYPHS, AND IT COMES OUT ONE TO ONE.** Apple's two doors exist because a glyph
- * store can hold FEWER or MORE glyphs than there are characters — a ligature is two characters and one glyph, a
- * precomposed character may be two. This tier's `CTLine` maps every character to exactly one glyph through
- * `CTFontGetGlyphsForCharacters`, so the arithmetic below finds the fragment a character is in, adds the glyphs of the
- * fragments before it, and answers a range the same length — which is the identity ARRIVED AT rather than assumed. */
+/* **THE MAP IS THE LINE'S OWN, AND IT IS NOT ONE TO ONE.** Apple's two doors exist because a glyph store can hold
+ * FEWER or MORE glyphs than there are characters — a ligature is three characters and one glyph, a composed mark is
+ * one character and one, and a hyphenated line has a glyph the text does not — and both are true of this tier now:
+ * `CTLine` SHAPES, through HarfBuzz. So the manager's glyph space is built from the glyph count of each line it lays
+ * out, and both doors translate through the runs' own string indices (`CTRunGetStringIndices`) rather than by
+ * arithmetic. A fragment with no line — an empty one a trailing newline opened — has no glyphs and no map, and is the
+ * one case answered arithmetically. */
 - (NSUInteger)numberOfGlyphs;
 - (NSRange)glyphRangeForCharacterRange:(NSRange)charRange actualCharacterRange:(nullable NSRangePointer)actualCharRange;
 - (NSRange)characterRangeForGlyphRange:(NSRange)glyphRange actualGlyphRange:(nullable NSRangePointer)actualGlyphRange;

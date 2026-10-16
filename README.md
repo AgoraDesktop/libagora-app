@@ -733,3 +733,30 @@ against the protocol on the machine.
 
 MIT — see [`LICENSE`](LICENSE). The seam is Agora's own. The AppKit classes are the Fiwix AppKit's,
 imported and then changed — the changes are recorded in [`PROVENANCE.md`](PROVENANCE.md).
+- **AND THE MANAGER'S GLYPH SPACE IS THE LINE'S NOW, WHICH IS THE SHAPER'S AND NOT THE TEXT'S.** It was built ONE
+  GLYPH PER CHARACTER: `cg_layOut` advanced its glyph base by the range's LENGTH and every fragment recorded that
+  count, so the two mapping doors were arithmetic and the shape of the space was a convention of this class rather
+  than a fact about the layout. With `CTLine` shaping, that convention was wrong — a ligature is three characters on
+  one glyph and a hyphenated line has a glyph the text does not — so the base is advanced by
+  **`CTLineGetGlyphCount`** and both doors translate through the run's own string indices
+  (`CTRunGetStringIndices`), which is the rule the line's own caret doors already use. **AND THE END OF A RANGE IS
+  MAPPED IN ITS OWN FRAGMENT**, because a range can span the break: mapping only the start and reporting the
+  character length was right while the space was contiguous, and comes back short by whatever the two fragments'
+  glyph counts differ by.
+  MEASURED, and the whole slice is the difference between two numbers that used to be the same: a hyphenated
+  twenty-three-character line reports **24** glyphs — the line HAS the `U+2010` its last fragment draws, and the store
+  is still 23 characters — a three-row table's single-container glyph range is **(0,4)** and its next container's
+  **(4,2)** where the old string-location convention gave 5, 6 and 2, and a seven-character store's inverse door
+  answers `(4,3)` for `(4,3)` where it first answered `(4,7)`.
+  **AND THREE OF THE FINDINGS ON THE WAY WERE THIS CLASS'S OWN, FOUND BECAUSE THE SUITE IS THE ONLY THING THAT
+  MEASURES IT**: `-characterRangeForGlyphRange:` broke at the FIRST fragment holding a boundary index where every
+  other door in the class lets the LAST one win; the map helper answered with a line's ABSOLUTE string range where
+  every other answer it gives is line-relative, so a three-character range came back as five; and a table cell
+  recorded its PARAGRAPH'S STRING INDEX as a glyph index, which was never this class's glyph space and only ever
+  looked like it. MEASURED: `100% tests passed, 0 tests failed out of 63` — including `window-headless`, which had been
+  failing on a headless Wayland compositor and passes now that it is there.
+- **AND ONE TRAP IS WRITTEN DOWN, BECAUSE IT COST THE WHOLE SLICE'S MEASUREMENTS ONCE.** This suite's `ctest` sets
+  `LD_LIBRARY_PATH` to the INSTALL PREFIX, and that takes precedence over the binary's own RUNPATH — so `ctest` tests
+  the INSTALLED library and a `cmake --build` alone leaves it testing the previous one. **`cmake --install build`
+  BEFORE `ctest`**, or the numbers are the numbers of the commit before. It is the same arrangement `libagora-text`'s
+  suite has, and it presents as a plausible wrong measurement rather than as an error.

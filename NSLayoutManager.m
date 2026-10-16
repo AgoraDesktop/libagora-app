@@ -460,15 +460,16 @@ static NSUInteger fn_characterForGlyphOffsetInLine(CTLineRef line, NSUInteger gl
 			walked++;
 		}
 	}
-	/* PAST THE LAST GLYPH THE LINE HAD: one character past the last one it stood for. */
+	/* **PAST THE LAST GLYPH THE LINE HAD, AND IN THE SAME COORDINATES AS EVERY OTHER ANSWER HERE.** The clusters this
+	 * walk reads are LINE-RELATIVE — the shaper's indices into the characters it was given — so the answer for an
+	 * offset past the end must be the line's CHARACTER COUNT and not the index the line's range ends at in the string.
+	 * MEASURED, and it is the bug this comment replaces: returning `stringRange.location + length` made a range reach
+	 * one line past the fragment answer with the NEXT line's characters, so a range of three characters came back as
+	 * five. */
 	if (line == NULL) {
 		return 0;
 	}
-	{
-		CFRange span = CTLineGetStringRange(line);
-
-		return (NSUInteger)(span.location + span.length);
-	}
+	return (NSUInteger)CTLineGetStringRange(line).length;
 }
 
 - (NSRange)glyphRangeForCharacterRange:(NSRange)charRange actualCharacterRange:(NSRange *)actualCharRange

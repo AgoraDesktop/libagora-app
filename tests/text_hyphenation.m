@@ -242,17 +242,23 @@ int main(void)
 		/* THE WORD BEGINS AT 3, SO A BREAK "INSIDE" IT IS A BREAK AT 3 < x < 3 + 20. */
 		inside = (frags[0].length > 3) && (frags[0].length < 3 + 20);
 		check(inside, "and the cut is INSIDE `internationalization` rather than past it");
-		/* **AND THE GLYPH SPACE IS UNMOVED.** One glyph per character of the store, in both layouts: the hyphen is
-		 * drawn ink and not a character, so `-numberOfGlyphs` must not have grown with it. */
+		/* **AND THE GLYPH SPACE IS THE LINE'S, WHICH IS ONE GLYPH MORE THAN THE TEXT HAS.** This used to assert that
+		 * the count did NOT grow, and that was the reading of a manager whose glyph space was one glyph per
+		 * character by construction. It is the LINE's space now (see `NSLayoutManager.m`), and a hyphenated line's
+		 * line HAS the hyphen: 23 characters and the one `U+2010` its last fragment draws is 24 glyphs. What the
+		 * case still holds is that the TEXT did not change — the store is 23 characters — because the hyphen is not
+		 * in the store, which is what makes it drawn ink rather than an inserted character. */
 		{
 			glyphs = [manager glyphRangeForCharacterRange:NSMakeRange(0, [[store string] length])
 							       actualCharacterRange:NULL];
 
 			printf("  (note: %lu characters, %lu glyphs)\n", (unsigned long)[[store string] length],
 			       (unsigned long)glyphs.length);
-			check(glyphs.length == [[store string] length],
-			      "the hyphen is NOT in the glyph space: one glyph per character, %lu for %lu",
+			check(glyphs.length == [[store string] length] + 1,
+			      "the glyph space is the LINE's: %lu glyphs for %lu characters plus the drawn hyphen",
 			      (unsigned long)glyphs.length, (unsigned long)[[store string] length]);
+			check([[store string] length] == 23,
+			      "and the STORE is unchanged at 23 characters, because the hyphen is not in the text");
 		}
 		/* **AND THE HYPHEN IS DRAWN.** The first line's used rect says how much room the layout reserved, the ink
 		 * says how much was painted, and a hyphen reserved but not painted would leave a hyphen's width between

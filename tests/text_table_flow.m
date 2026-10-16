@@ -108,10 +108,20 @@ int main(void)
 		       (unsigned long)countFirst, (unsigned long)countSecond, (double)thirdRow.origin.y);
 		check(countFirst == 2, "a table taller than its container breaks at a ROW boundary — two rows fit");
 		check(countSecond == 1, "and the third row is laid into the NEXT container");
-		check(rangeFirst.location == 0 && rangeFirst.length == 5,
+		/* **THE NUMBERS ARE THE LINES' GLYPH COUNTS NOW, AND THEY ARE CONTIGUOUS.** They used to be string
+		 * LOCATIONS — 0 and 5, then 6 — because the table path wrote a paragraph's character index into a glyph
+		 * base, which was never this class's glyph space. A cell's line is its paragraph WITHOUT the separator, so
+		 * three rows of `aa`, `bb`, `cc` are 2 + 2 + 2 glyphs: the first container holds the first two (0,4) and the
+		 * next holds the third (4,2). */
+		printf("  (note: the containers' glyphs are (%lu,%lu) and (%lu,%lu); %lu in all)\n",
+		       (unsigned long)rangeFirst.location, (unsigned long)rangeFirst.length,
+		       (unsigned long)rangeSecond.location, (unsigned long)rangeSecond.length,
+		       (unsigned long)[manager numberOfGlyphs]);
+		check(rangeFirst.location == 0 && rangeFirst.length == 4,
 		      "the first container's glyphs are the first two rows");
-		check(rangeSecond.location == 6 && rangeSecond.length == 2,
+		check(rangeSecond.location == 4 && rangeSecond.length == 2,
 		      "and the next container's are the third row alone");
+		check([manager numberOfGlyphs] == 6, "six glyphs for the three rows, which is the lines' own count");
 		check(fabs(thirdRow.origin.y) < 0.01, "which starts at the TOP of the new container, not below the old one");
 		[first release];
 		[second release];
@@ -143,8 +153,12 @@ int main(void)
 		[store addLayoutManager:manager];
 		[manager addTextContainer:first];
 		[manager addTextContainer:second];
-		row0col1 = [manager lineFragmentUsedRectForGlyphAtIndex:7 effectiveRange:NULL];
-		row1col1 = [manager lineFragmentUsedRectForGlyphAtIndex:11 effectiveRange:NULL];
+		/* **AND THE GLYPH INDICES ARE THE LINES' OWN NOW, NOT THE PARAGRAPHS' STRING LOCATIONS.** The cells of the
+		 * first row are `wwwwww` and `x`, so column two's fragment begins at glyph SIX; the dropped row's cells are
+		 * `a` and `b`, so that column's fragment begins at glyph EIGHT. The old 7 and 11 were the paragraph starts in
+		 * the STRING, which is a different index space and was only the same while a glyph was a character. */
+		row0col1 = [manager lineFragmentUsedRectForGlyphAtIndex:6 effectiveRange:NULL];
+		row1col1 = [manager lineFragmentUsedRectForGlyphAtIndex:8 effectiveRange:NULL];
 		printf("  (note: column two starts at x=%g in container one and x=%g after the resume)\n",
 		       (double)row0col1.origin.x, (double)row1col1.origin.x);
 		check(fabs(row0col1.origin.x - row1col1.origin.x) < 0.01,
@@ -183,7 +197,7 @@ int main(void)
 		printf("  (note: 3 rows over two 20-point containers gave %lu + %lu fragment(s))\n",
 		       (unsigned long)countFirst, (unsigned long)countSecond);
 		check(countFirst == 1 && countSecond == 1, "a table taller than both containers gives each one row");
-		check(rangeSecond.location == 3 && rangeSecond.length == 2,
+		check(rangeSecond.location == 2 && rangeSecond.length == 2,
 		      "the last container holds the SECOND row, and the third is dropped");
 		[first release];
 		[second release];
