@@ -24,8 +24,9 @@
  *        `CTLine` are GONE from this class, and the one copy of that arithmetic is in `NSLayoutManager`. It also
  *        means the view DRAWS RUNS rather than one style — a foreground colour, a background colour, the two rules and
  *        an attachment's cell are the manager's — and the PARAGRAPH STYLE's alignment, line-break mode and geometry
- *        are the layout's. What is left is a table's `-collapsesBorders` and its flow across containers, and the
- *        inline flow an attachment's advance still needs.
+ *        are the layout's. What is left is a table's `-collapsesBorders` and its flow across containers; an
+ *        attachment's inline flow is HERE — the manager reserves a box of the cell's width and shifts the text after
+ *        it.
  *
  * **AND THE MIRROR IS HOW THE BASE CLASS STILL WORKS.** `NSText` holds a `NSMutableString` and its movement and word
  * commands read it directly; so the view keeps that string as a MIRROR of the store, refreshed by the store's own

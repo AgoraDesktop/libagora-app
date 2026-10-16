@@ -40,6 +40,43 @@
  * than rebuilt per draw, and counting one glyph per character because that is what this tier's `CTLine` maps. A
  * tiny object rather than a struct because the fragments live in an `NSMutableArray` and an array of PODs would be a
  * second lifetime to manage by hand. */
+/* **AND THE ONE THING A FRAGMENT CAN CARRY THAT IS NOT A GLYPH: A BOX.** An attachment is a character that stands for
+ * something of a FIXED SIZE, and this tier's engine lays out one run of ordinary glyphs — so the width a box occupies,
+ * and the amount by which it DIFFERS from the placeholder glyph the engine measured, are recorded here and applied
+ * wherever an x is asked for. `engineAdvance` is what the glyph it replaces advanced; the extra is
+ * `width - engineAdvance`, and it shifts every glyph after the box. THE SHARED HOME FOR THIS IS CORE TEXT'S OWN
+ * `CTRunDelegate` / `kCTRunDelegateAttributeName`, which puts the box in the ENGINE so the line breaker, the glyph map
+ * and every consumer agree without arithmetic like this; that is the engine slice this one does not carry. */
+@interface FNBox : NSObject
+{
+@public
+	NSUInteger index;	/* the character index in the STORE */
+	CGFloat width;		/* what the box occupies */
+	CGFloat engineAdvance;	/* what the glyph it replaces advanced */
+	CGFloat ascent;
+	CGFloat descent;
+	id content;		/* the attachment, BORROWED */
+}
++ (id)boxWithIndex:(NSUInteger)anIndex width:(CGFloat)aWidth engineAdvance:(CGFloat)anAdvance
+	    ascent:(CGFloat)anAscent descent:(CGFloat)aDescent content:(id)someContent;
+@end
+
+@implementation FNBox
++ (id)boxWithIndex:(NSUInteger)anIndex width:(CGFloat)aWidth engineAdvance:(CGFloat)anAdvance
+	    ascent:(CGFloat)anAscent descent:(CGFloat)aDescent content:(id)someContent
+{
+	FNBox *box = [[[FNBox alloc] init] autorelease];
+
+	box->index = anIndex;
+	box->width = aWidth;
+	box->engineAdvance = anAdvance;
+	box->ascent = anAscent;
+	box->descent = aDescent;
+	box->content = someContent;
+	return box;
+}
+@end
+
 @interface FNFragment : NSObject
 {
 @public
@@ -49,12 +86,13 @@
 	NSRect used;		/* the text band: where the glyphs sit, after the indents and the alignment */
 	CGFloat baseline;	/* the baseline's y in the CONTAINER's coordinates */
 	CTLineRef line;		/* the glyph store; OWNED, and NULL for an empty fragment */
+	NSArray *boxes;		/* RETAINED; FNBox objects sorted by character index, or nil */
 }
-+ (id)fragmentWithRange:(NSRange)aRange glyphRange:(NSRange)aGlyphRange rect:(NSRect)aRect usedRect:(NSRect)aUsedRect baseline:(CGFloat)aBaseline line:(CTLineRef)aLine;
++ (id)fragmentWithRange:(NSRange)aRange glyphRange:(NSRange)aGlyphRange rect:(NSRect)aRect usedRect:(NSRect)aUsedRect baseline:(CGFloat)aBaseline line:(CTLineRef)aLine boxes:(NSArray *)someBoxes;
 @end
 
 @implementation FNFragment
-+ (id)fragmentWithRange:(NSRange)aRange glyphRange:(NSRange)aGlyphRange rect:(NSRect)aRect usedRect:(NSRect)aUsedRect baseline:(CGFloat)aBaseline line:(CTLineRef)aLine
++ (id)fragmentWithRange:(NSRange)aRange glyphRange:(NSRange)aGlyphRange rect:(NSRect)aRect usedRect:(NSRect)aUsedRect baseline:(CGFloat)aBaseline line:(CTLineRef)aLine boxes:(NSArray *)someBoxes
 {
 	FNFragment *fragment = [[[FNFragment alloc] init] autorelease];
 
@@ -64,15 +102,17 @@
 	fragment->used = aUsedRect;
 	fragment->baseline = aBaseline;
 	fragment->line = aLine;		/* ownership transferred to the fragment */
+	fragment->boxes = [someBoxes retain];
 	return fragment;
 }
 
-/* THE LINE IS THE ONLY THING HERE THAT IS NOT A SCALAR, so it is the only thing dealloc has to release. */
+/* THE LINE AND THE BOXES ARE THE ONLY THINGS HERE THAT ARE NOT SCALARS, so they are what dealloc releases. */
 - (void)dealloc
 {
 	if (line != NULL) {
 		CFRelease(line);
 	}
+	[boxes release];
 	[super dealloc];
 }
 @end
@@ -635,6 +675,103 @@
 	return width;
 }
 
+/* **THE BOXES A RANGE CARRIES: ONE PER ATTACHMENT CHARACTER, WITH THE WIDTH IT OCCUPIES.** The engine measured a
+ * placeholder glyph for the character, so both numbers are recorded — the box's width and the advance the glyph had —
+ * and the difference is what shifts everything after it. A range with no attachment answers nil, which is the common
+ * case. */
+- (NSArray *)cg_boxesForRange:(NSRange)range line:(CTLineRef)line
+{
+	NSMutableArray *boxes = nil;
+	NSUInteger pos = range.location;
+	NSUInteger end = range.location + range.length;
+
+	while (pos < end) {
+		NSRange runRange;
+		NSDictionary *attrs = [_textStorage attributesAtIndex:pos longestEffectiveRange:&runRange inRange:range];
+		NSTextAttachment *attachment = [attrs objectForKey:NSAttachmentAttributeName];
+		NSUInteger runEnd = runRange.location + runRange.length;
+
+		if (runEnd > end) {
+			runEnd = end;
+		}
+		if (runEnd <= pos) {
+			runEnd = pos + 1;
+		}
+		if (attachment != nil && line != NULL) {
+			NSCell<NSTextAttachmentCell> *cell = [attachment attachmentCell];
+			NSSize size = (cell != nil) ? [cell cellSize] : NSZeroSize;
+
+			if (size.width > 0.0) {
+				NSUInteger k;
+
+				for (k = pos; k < runEnd; k++) {
+					CFIndex rel = (CFIndex)(k - range.location);
+					CGFloat advance = (CGFloat)(CTLineGetOffsetForStringIndex(line, rel + 1, NULL)
+								   - CTLineGetOffsetForStringIndex(line, rel, NULL));
+
+					if (boxes == nil) {
+						boxes = [NSMutableArray array];
+					}
+					[boxes addObject:[FNBox boxWithIndex:k width:size.width engineAdvance:advance
+						ascent:size.height descent:0.0 content:attachment]];
+				}
+			}
+		}
+		pos = runEnd;
+	}
+	return boxes;
+}
+
+/* THE WIDTH A RANGE'S BOXES ADD beyond what the engine measured. */
+- (CGFloat)cg_boxExtra:(NSArray *)boxes
+{
+	CGFloat extra = 0.0;
+	NSUInteger i;
+
+	for (i = 0; i < [boxes count]; i++) {
+		FNBox *box = [boxes objectAtIndex:i];
+
+		extra += box->width - box->engineAdvance;
+	}
+	return extra;
+}
+
+/* AND THE PART OF THAT EXTRA THAT LIES BEFORE A CHARACTER: the shift every x at or after it takes. */
+- (CGFloat)cg_boxExtraBeforeIndex:(NSUInteger)index inFragment:(FNFragment *)fragment
+{
+	CGFloat extra = 0.0;
+	NSUInteger i;
+
+	for (i = 0; i < [fragment->boxes count]; i++) {
+		FNBox *box = [fragment->boxes objectAtIndex:i];
+
+		if (box->index >= index) {
+			break;
+		}
+		extra += box->width - box->engineAdvance;
+	}
+	return extra;
+}
+
+/* **AND THE x OF A CHARACTER, WHICH IS THE ENGINE'S OFFSET PLUS THE BOXES BEFORE IT.** Every caller that draws or
+ * places by an x comes through here, so the shift cannot be applied in one place and forgotten in another. */
+- (CGFloat)cg_xInFragment:(FNFragment *)fragment forCharacterIndex:(NSUInteger)index
+{
+	CFIndex rel = (CFIndex)(index - fragment->range.location);
+	CGFloat x = fragment->used.origin.x + [self cg_boxExtraBeforeIndex:index inFragment:fragment];
+
+	if (fragment->line != NULL) {
+		if (rel < 0) {
+			rel = 0;
+		}
+		if ((NSUInteger)rel > fragment->range.length) {
+			rel = (CFIndex)fragment->range.length;
+		}
+		x += (CGFloat)CTLineGetOffsetForStringIndex(fragment->line, rel, NULL);
+	}
+	return x;
+}
+
 /* **ONE CELL'S PARAGRAPH, LAID OUT INSIDE ITS COLUMN'S CONTENT WIDTH.** The line geometry is the paragraph style's,
  * exactly as a normal paragraph's is; the only difference is that the available width is the CELL's. A NIL `out` is a
  * MEASUREMENT — the height is the return value and no fragment is made — which is how a row's height is found before
@@ -716,12 +853,13 @@
 			CGFloat textTop = y + leading;
 			CGFloat baseline = textTop + lineAscent;
 			CGFloat alignOffset = [self cg_alignmentOffsetForLine:line alignment:[style alignment] width:width];
+			NSArray *boxes = [self cg_boxesForRange:range line:line];
 
 			[out addObject:[FNFragment fragmentWithRange:range
 				glyphRange:NSMakeRange(range.location, range.length)
 				rect:NSMakeRect(x, y, cellWidth, leading + lineHeight)
-				usedRect:NSMakeRect(leadingEdge + alignOffset, textTop, lineWidth, lineHeight)
-				baseline:baseline line:line]];
+				usedRect:NSMakeRect(leadingEdge + alignOffset, textTop, lineWidth + [self cg_boxExtra:boxes], lineHeight)
+				baseline:baseline line:line boxes:boxes]];
 		} else if (line != NULL) {
 			CFRelease(line);
 		}
@@ -936,7 +1074,7 @@
 			[FNFragment fragmentWithRange:NSMakeRange(0, 0) glyphRange:NSMakeRange(0, 0)
 				rect:NSMakeRect(0.0, 0.0, [container containerSize].width, baseLineHeight)
 				usedRect:NSMakeRect([container lineFragmentPadding], 0.0, 0.0, baseLineHeight)
-				baseline:baseAscent line:NULL]];
+				baseline:baseAscent line:NULL boxes:nil]];
 		_invalidatedRange = NSMakeRange(NSNotFound, 0);
 		return;
 	}
@@ -974,7 +1112,7 @@
 			[FNFragment fragmentWithRange:NSMakeRange(0, n) glyphRange:NSMakeRange(0, n)
 				rect:NSMakeRect(0.0, 0.0, containerWidth, baseLineHeight)
 				usedRect:NSMakeRect(padding, 0.0, containerWidth - 2.0 * padding, baseLineHeight)
-				baseline:baseAscent line:line]];
+				baseline:baseAscent line:line boxes:nil]];
 		_invalidatedRange = NSMakeRange(NSNotFound, 0);
 		return;
 	}
@@ -1083,12 +1221,13 @@
 				CGFloat baseline = textTop + lineAscent;
 				CGFloat alignOffset = [self cg_alignmentOffsetForLine:line
 						alignment:[style alignment] width:width];
+				NSArray *boxes = [self cg_boxesForRange:range line:line];
 
 				[fragments addObject:[FNFragment fragmentWithRange:range
 					glyphRange:NSMakeRange(glyphBase, (NSUInteger)count)
 					rect:NSMakeRect(0.0, y, containerWidth, leading + lineHeight)
-					usedRect:NSMakeRect(leadingEdge + alignOffset, textTop, lineWidth, lineHeight)
-					baseline:baseline line:line]];
+					usedRect:NSMakeRect(leadingEdge + alignOffset, textTop, lineWidth + [self cg_boxExtra:boxes], lineHeight)
+					baseline:baseline line:line boxes:boxes]];
 				y = textTop + lineHeight;
 			}
 			glyphBase += (NSUInteger)count;
@@ -1110,7 +1249,7 @@
 			[FNFragment fragmentWithRange:NSMakeRange(n, 0) glyphRange:NSMakeRange(glyphBase, 0)
 				rect:NSMakeRect(0.0, lastY, [container containerSize].width, lastLineHeight)
 				usedRect:NSMakeRect([container lineFragmentPadding], lastY, 0.0, lastLineHeight)
-				baseline:(lastY + lastAscent) line:NULL]];
+				baseline:(lastY + lastAscent) line:NULL boxes:nil]];
 	}
 	_invalidatedRange = NSMakeRange(NSNotFound, 0);
 }
@@ -1291,22 +1430,11 @@
 - (CGFloat)cg_offsetForGlyphAtIndex:(NSUInteger)glyphIndex
 {
 	FNFragment *fragment = [self cg_fragmentForGlyphAtIndex:glyphIndex effectiveRange:NULL];
-	CFIndex relative;
 
 	if (fragment == nil) {
 		return 0.0;
 	}
-	if (fragment->line == NULL) {
-		return fragment->used.origin.x;
-	}
-	relative = (CFIndex)(glyphIndex - fragment->range.location);
-	if (relative < 0) {
-		relative = 0;
-	}
-	if ((NSUInteger)relative > fragment->range.length) {
-		relative = (CFIndex)fragment->range.length;
-	}
-	return fragment->used.origin.x + (CGFloat)CTLineGetOffsetForStringIndex(fragment->line, relative, NULL);
+	return [self cg_xInFragment:fragment forCharacterIndex:glyphIndex];
 }
 
 /* **AND THE INVERSE: THE GLYPH NEAREST A POINT**, which is what a click asks. The FRAGMENT is chosen by WALKING the
@@ -1344,9 +1472,31 @@
 			fragment = candidate;
 		}
 	}
-	if (fragment->line != NULL) {
-		index = CTLineGetStringIndexForPosition(fragment->line,
-			CGPointMake(point.x - fragment->used.origin.x, 0.0));
+	/* **AND A BOX IS HIT BY ITS OWN FACE, NOT BY THE PLACEHOLDER GLYPH's OFFSET.** The point's x is walked past the
+	 * boxes in order: inside one answers that box's character, and past it the x loses the box's extra so the engine can
+	 * answer for the glyphs beyond. */
+	{
+		CGFloat localX = point.x - fragment->used.origin.x;
+		CGFloat extraBefore = 0.0;
+		NSUInteger b;
+
+		for (b = 0; b < [fragment->boxes count]; b++) {
+			FNBox *box = [fragment->boxes objectAtIndex:b];
+			CGFloat rel = (CGFloat)(box->index - fragment->range.location);
+			CGFloat boxX = (fragment->line != NULL)
+				? (CGFloat)CTLineGetOffsetForStringIndex(fragment->line, (CFIndex)rel, NULL) : 0.0;
+
+			if (localX >= boxX + extraBefore && localX < boxX + extraBefore + box->width) {
+				return box->index;
+			}
+			if (boxX + extraBefore + box->width <= localX) {
+				extraBefore += box->width - box->engineAdvance;
+			}
+		}
+		localX -= extraBefore;
+		if (fragment->line != NULL) {
+			index = CTLineGetStringIndexForPosition(fragment->line, CGPointMake(localX, 0.0));
+		}
 	}
 	if (index < 0) {
 		index = 0;
@@ -1487,20 +1637,19 @@
 				}
 				a = (CFIndex)(pos - fragment->range.location);
 				b = (CFIndex)(runEnd - fragment->range.location);
-				/* **AND AN ATTACHMENT IS DRAWN WHERE ITS CHARACTER IS, INSTEAD OF THE GLYPHS.** The run carries
+				/* **AND AN ATTACHMENT IS DRAWN WHERE ITS BOX IS, INSTEAD OF THE GLYPHS.** The run carries
 				 * `NSAttachmentAttributeName`, so the manager asks the attachment's cell for its size and calls
-				 * `-drawWithFrame:inView:` at the character's own x with the frame ABOVE the baseline; the glyphs of that run
-				 * are skipped because the picture stands in their place. THE FRAME IS IN THE CONTAINER's y-DOWN SPACE, so
-				 * "above the baseline" is the smaller y. THE LINE's ADVANCE IS STILL THE FONT's — the cell's width is not
-				 * reserved here, which the header names as the inline-flow slice this one does not carry. */
+				 * `-drawWithFrame:inView:` at the character's own SHIFTED x with the frame ABOVE the baseline; the glyphs of that
+				 * run are skipped because the picture stands in their place. THE FRAME IS IN THE CONTAINER's y-DOWN SPACE, so
+				 * "above the baseline" is the smaller y. AND THE BOX's WIDTH IS RESERVED — `cg_boxesForRange:` recorded it and
+				 * every x after it is shifted by the difference — so the text flows around the picture. */
 				if ([attrs objectForKey:NSAttachmentAttributeName] != nil) {
 					NSTextAttachment *attachment = [attrs objectForKey:NSAttachmentAttributeName];
 					NSCell<NSTextAttachmentCell> *cell = [attachment attachmentCell];
 					NSSize size = (cell != nil) ? [cell cellSize] : NSZeroSize;
 
 					if (cell != nil && size.width > 0.0 && size.height > 0.0) {
-						CGFloat x = origin.x + fragment->used.origin.x
-							+ (CGFloat)CTLineGetOffsetForStringIndex(fragment->line, a, NULL);
+						CGFloat x = origin.x + [self cg_xInFragment:fragment forCharacterIndex:pos];
 						NSRect frame = NSMakeRect(x, baselineY - size.height, size.width, size.height);
 						NSView *view = (i < [_textContainers count])
 							? (NSView *)[[_textContainers objectAtIndex:i] textView] : nil;
@@ -1512,9 +1661,11 @@
 				}
 				[(colour != nil) ? colour : [NSColor controlTextColor] setFill];
 				/* **AND THE CONTEXT IS MIRRORED ABOUT THE BASELINE, WHICH IS WHAT A FLIPPED CONTAINER NEEDS.** The fragments
-				 * are y-DOWN — a container's coordinates are a text view's — and Core Text's own run UP from the baseline. */
+				 * are y-DOWN — a container's coordinates are a text view's — and Core Text's own run UP from the baseline. THE x IS
+				 * SHIFTED BY EVERY BOX BEFORE THIS RUN, which is what keeps text after an attachment off its face. */
 				CGContextSaveGState(cg);
-				CGContextTranslateCTM(cg, origin.x + fragment->used.origin.x, baselineY);
+				CGContextTranslateCTM(cg, origin.x + fragment->used.origin.x
+					+ [self cg_boxExtraBeforeIndex:pos inFragment:fragment], baselineY);
 				CGContextScaleCTM(cg, 1.0, -1.0);
 				CGContextSetTextPosition(cg, 0.0, 0.0);
 				if (runs != NULL && CFArrayGetCount(runs) > 0 && a < b) {
@@ -1615,10 +1766,10 @@
 		}
 		a = (CFIndex)(pos - fragment->range.location);
 		b = (CFIndex)(runEnd - fragment->range.location);
-		x0 = origin.x + fragment->used.origin.x
-			+ (CGFloat)CTLineGetOffsetForStringIndex(fragment->line, a, NULL);
-		x1 = origin.x + fragment->used.origin.x
-			+ (CGFloat)CTLineGetOffsetForStringIndex(fragment->line, b, NULL);
+		x0 = origin.x + [self cg_xInFragment:fragment forCharacterIndex:pos];
+		x1 = origin.x + [self cg_xInFragment:fragment forCharacterIndex:runEnd];
+		(void)a;
+		(void)b;
 		[self cg_drawRuleFromX:x0 toX:x1 y:y style:style colour:colour context:cg];
 		pos = runEnd;
 	}
@@ -1678,12 +1829,8 @@
 					runEnd = pos + 1;
 				}
 				if (background != nil) {
-					CFIndex a = (CFIndex)(pos - fragment->range.location);
-					CFIndex b = (CFIndex)(runEnd - fragment->range.location);
-					CGFloat x0 = origin.x + fragment->used.origin.x
-						+ (CGFloat)CTLineGetOffsetForStringIndex(fragment->line, a, NULL);
-					CGFloat x1 = origin.x + fragment->used.origin.x
-						+ (CGFloat)CTLineGetOffsetForStringIndex(fragment->line, b, NULL);
+					CGFloat x0 = origin.x + [self cg_xInFragment:fragment forCharacterIndex:pos];
+					CGFloat x1 = origin.x + [self cg_xInFragment:fragment forCharacterIndex:runEnd];
 
 					[background setFill];
 					CGContextFillRect(cg, CGRectMake(x0, origin.y + fragment->used.origin.y, x1 - x0,

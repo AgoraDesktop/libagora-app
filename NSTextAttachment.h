@@ -12,11 +12,13 @@
  *
  * **AND THE CELL IS WHERE A SIZE AND A DRAWING COME FROM.** `NSTextAttachmentCell` is the object the layout asks "how
  * big are you" and "draw yourself here"; `NSTextAttachment` holds one, and an `NSImage` attached to a fresh cell is
- * the common case the convenience door covers. THIS TIER'S READER IS THE LAYOUT MANAGER'S DRAW: at a run carrying
- * `NSAttachmentAttributeName` it asks the cell for its size and calls `-drawWithFrame:inView:` instead of setting the
- * glyphs. THE LINE'S ADVANCE IS STILL THE FONT'S, WHICH IS NAMED RATHER THAN HIDDEN: this tier's engine lays out one
- * run of ordinary text and has no attachment run, so an attachment wider than its placeholder glyph overlaps what
- * follows it. Reserving the cell's own advance — the inline-flow slice — is the work this one does not carry.
+ * the common case the convenience door covers. THIS TIER'S READER IS THE LAYOUT MANAGER: at a run carrying
+ * `NSAttachmentAttributeName` it asks the cell for its size, reserves a BOX of that width in the line, and calls
+ * `-drawWithFrame:inView:` at the box's x instead of setting the glyphs — so the text after an attachment flows past
+ * it rather than over it. THE BOX IS THE MANAGER'S TODAY: `NSLayoutManager` records the difference between the box's
+ * width and the placeholder glyph's advance and shifts every x after it. THE SHARED HOME FOR THAT IS CORE TEXT'S OWN
+ * `CTRunDelegate` / `kCTRunDelegateAttributeName`, which puts the box in the engine so the line breaker, the glyph
+ * map and every consumer agree without that arithmetic; moving it there is the engine slice still owed.
  *
  * **WHAT IS NOT HERE, AND ITS ROWS STAY OPEN:** `-fileWrapper` and `-initWithFileWrapper:` (they name `NSFileWrapper`,
  * a class this tier has not got), and the tracking half of the cell protocol (`-wantsToTrackMouse`, `-highlight:…`,

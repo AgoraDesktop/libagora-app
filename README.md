@@ -59,6 +59,7 @@ tests/
   text_table.m                  and the TABLE BLOCK: the box a paragraph is set in, drawn by the manager
   text_rtf.m                    and the RTF READER: control words into the AppKit's attribute keys
   text_table_grid.m             and the GRID: cells side by side, columns measured, rows as tall as their tallest cell
+  text_attachment_flow.m        and the attachment's BOX: a fixed-size run the text flows around
   text_word_movement.m          and its WORD granularity: Option+arrow and Option+Delete, over the string
   text_view_lines.m             and the first slice of the MULTI-LINE view: the line model, and what reads it
   text_view_wrapping.m          and the slice above it: the same model WRAPPED to the view's width
@@ -337,9 +338,12 @@ the compositor is really gone.
   `-drawWithFrame:inView:` at the character's own x instead of setting that run's glyphs. MEASURED: a 12x12 picture
   gives `+textAttachmentWithImage:` an attachment whose cell is **12x12**; the cell draws the picture into the frame it
   is given; and a store carrying one attachment character draws the picture — read as the picture's colour in a pixel.
-  **WHAT IS NAMED RATHER THAN HIDDEN**: the line's ADVANCE is still the font's placeholder glyph, because this tier's
-  engine has no attachment run, so an attachment wider than its placeholder overlaps what follows — the inline-flow
-  slice the attachment header names. `-fileWrapper`, `-initWithFileWrapper:` and the cell's tracking family are owed
+  **AND THE INLINE FLOW IS HERE NOW**: the manager records the difference between the box's width and the placeholder
+  glyph's advance, reserves it in the line's used rect, shifts every x after it and hit-tests a point inside the box to
+  the attachment's own character — MEASURED in `tests/text_attachment_flow.m` (the character after an attachment is one
+  box width past it, and the picture is drawn where the box is). THE SHARED HOME FOR THE BOX IS CORE TEXT'S OWN
+  `CTRunDelegate` / `kCTRunDelegateAttributeName`, which would put it in the engine so the line breaker and the glyph
+  map agree without the manager's arithmetic; moving it there is the engine slice still owed. `-fileWrapper`, `-initWithFileWrapper:` and the cell's tracking family are owed
   with the classes they name.
 - **And the MARKED TEXT, which is what an input method composes through** (`ctest`): `NSTextInput.h` declares the eleven
   doors an input system drives a text view through, `NSTextView` adopts the protocol, and the composition is an ordinary
@@ -483,7 +487,7 @@ the compositor is really gone.
   and the child clip is the child's FRAME region rather than its bounds rect — which was the same value only while the
   origin was zero. MEASURED: a mark at a document's own y 100..120 draws at 110 with the clip view at the top and at
   10 after a scroll of 100, in one run, through `-displayRect:`.
-- **`ctest`: 55 of 55 passed** (the keyboard and the seam, the AppKit and its input path, the controls and their
+- **`ctest`: 56 of 56 passed** (the keyboard and the seam, the AppKit and its input path, the controls and their
   metrics, the field control and its cell and its bezel and its placeholder and what it may hold, the text path and its
   word granularity and the multi-line view and its wrapping and its scrolling and its READING OF THE STORE, the STORE
   the rich-text slice is built on and the REGION it is laid out in and the WEB that ties the three together and the

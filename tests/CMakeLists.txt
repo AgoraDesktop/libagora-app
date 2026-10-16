@@ -287,6 +287,14 @@ target_link_libraries(text_table_grid PRIVATE App m)
 add_test(NAME appkit-text-table-grid COMMAND text_table_grid)
 set_tests_properties(appkit-text-table-grid PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
 
+# **AND THE ATTACHMENT'S INLINE FLOW: A FIXED-SIZE BOX THE TEXT FLOWS AROUND.** The manager records the difference
+# between the box's width and the placeholder glyph's advance, so the character after an attachment is one box width
+# past it, a point inside the box hit-tests to the attachment, and the picture is drawn where the box is.
+add_executable(text_attachment_flow text_attachment_flow.m)
+target_link_libraries(text_attachment_flow PRIVATE App m)
+add_test(NAME appkit-text-attachment-flow COMMAND text_attachment_flow)
+set_tests_properties(appkit-text-attachment-flow PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
+
 # **AND THE PARAGRAPH STYLE'S GEOMETRY, WHICH IS NOW READ.** The indents place a line and narrow it, the spacings open
 # gaps between lines and across paragraph boundaries, and the line-height multiple and clamps set the band — each read as
 # the manager's own geometry, with the defaults pinned unmoved by the first case.
