@@ -16,7 +16,8 @@
  * its MINIMUM and MAXIMUM set the band. WHAT IT STILL DOES NOT READ is the HYPHENATION FACTOR — and the reason is
  * the ENGINE's, not this class's: the tier's Core Text has no hyphenation setting to carry it into, so there is nothing
  * to tune — and THE BASE WRITING DIRECTION is read only so far as NATURAL ALIGNMENT: it decides which edge "natural"
- * means, while reordering the glyphs of a right-to-left SCRIPT is the engine's (it reads no writing direction). Each is
+ * means, while reordering the glyphs of a right-to-left SCRIPT is the engine's (it now READS the direction — the line
+ * hands it to the run, `CTRunGetStatus` — but does not reorder yet). Each is
  * named at its door below.
  *
  * **AND THE STYLE'S CONSUMER IS THE LAYOUT, NOT FOUR SEPARATE DOORS.** A paragraph style could have been four
@@ -122,8 +123,8 @@ typedef NSUInteger NSLineBreakMode;
 /* **THE DIRECTION THE RUN READS, WHICH DECIDES WHAT NATURAL ALIGNMENT MEANS.** `NSWritingDirectionNatural` is the
  * Unicode algorithm's (resolved through `+defaultWritingDirectionForLanguage:`), and the LAYOUT reads this field THAT
  * far: a natural paragraph in a right-to-left direction aligns RIGHT. REORDERING THE GLYPHS of a right-to-left SCRIPT
- * is the ENGINE's, and the tier's Core Text reads no writing direction, so a mixed-direction run is not this door's to
- * fix — named rather than left to look done. */
+ * is the ENGINE's: its Core Text now READS the direction (the line hands it to the run, `CTRunGetStatus`) but does not
+ * reorder yet, so a mixed-direction run is not this door's to fix — named rather than left to look done. */
 - (NSWritingDirection)baseWritingDirection;
 
 /* ---- THE GEOMETRY, WHICH THE LAYOUT NOW READS ---------------------------------------------------------- */
