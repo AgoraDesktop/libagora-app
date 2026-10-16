@@ -12,7 +12,7 @@
  * **AND WHAT THIS HEADER CARRIES IS THE KEYS THE TEXT LAYER READS, ARRIVING WITH THOSE READERS.** Apple's era header
  * declares twenty of these (`NSAttachmentAttributeName`, …) and each one is a claim about a VALUE TYPE this tier may
  * not have yet — an attachment, a marked range — so declaring them all would be writing twenty promises to satisfy one
- * unit. The eight below are the ones a caller can NAME TODAY: the font and the foreground colour a
+ * unit. The nine below are the ones a caller can NAME TODAY: the font and the foreground colour a
  * `-drawAtPoint:withAttributes:` caller must have, the ink keys the layout manager's own doors read
  * (`-drawBackgroundForGlyphRange:atPoint:` and the rule half of `-drawGlyphsForGlyphRange:atPoint:`) — a background, an
  * underline and a strikethrough, each with its colour — and the paragraph style whose alignment and line-break mode it
@@ -57,6 +57,11 @@ extern NSString *NSStrikethroughColorAttributeName;
  * layout reads TODAY is the alignment and the line-break mode; see `NSParagraphStyle.h` for the property-by-property
  * account of what is carried and what has a reader. */
 extern NSString *NSParagraphStyleAttributeName;
+
+/* **AND THE OBJECT THAT STANDS IN FOR A PICTURE.** The value is an `NSTextAttachment`, and the character it is set
+ * over is `NSAttachmentCharacter` (U+FFFC) — so an attachment travels with the run it sits in, and this key is what the
+ * manager reads to know to draw a cell instead of the glyphs at that character. */
+extern NSString *NSAttachmentAttributeName;
 
 /* **AND THE STYLE THE NUMBER SPELLS, WHICH IS ONE ENUM BECAUSE A STYLE AND ITS PATTERN OR-TOGETHER.** The four
  * shapes are the low bits and the patterns the high byte, which is what makes `NSUnderlineStyleSingle |

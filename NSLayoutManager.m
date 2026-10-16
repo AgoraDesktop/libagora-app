@@ -15,6 +15,8 @@
 #import <AppKit/NSFont.h>
 #import <AppKit/NSColor.h>
 #import <AppKit/NSParagraphStyle.h>
+#import <AppKit/NSTextAttachment.h>
+#import <AppKit/NSTextView.h>
 #import <AppKit/NSGraphicsContext.h>
 #import <AppKit/NSAttributedString.h>
 #import <Foundation/NSArray.h>
@@ -1053,6 +1055,29 @@
 				}
 				a = (CFIndex)(pos - fragment->range.location);
 				b = (CFIndex)(runEnd - fragment->range.location);
+				/* **AND AN ATTACHMENT IS DRAWN WHERE ITS CHARACTER IS, INSTEAD OF THE GLYPHS.** The run carries
+				 * `NSAttachmentAttributeName`, so the manager asks the attachment's cell for its size and calls
+				 * `-drawWithFrame:inView:` at the character's own x with the frame ABOVE the baseline; the glyphs of that run
+				 * are skipped because the picture stands in their place. THE FRAME IS IN THE CONTAINER's y-DOWN SPACE, so
+				 * "above the baseline" is the smaller y. THE LINE's ADVANCE IS STILL THE FONT's — the cell's width is not
+				 * reserved here, which the header names as the inline-flow slice this one does not carry. */
+				if ([attrs objectForKey:NSAttachmentAttributeName] != nil) {
+					NSTextAttachment *attachment = [attrs objectForKey:NSAttachmentAttributeName];
+					NSCell<NSTextAttachmentCell> *cell = [attachment attachmentCell];
+					NSSize size = (cell != nil) ? [cell cellSize] : NSZeroSize;
+
+					if (cell != nil && size.width > 0.0 && size.height > 0.0) {
+						CGFloat x = origin.x + fragment->used.origin.x
+							+ (CGFloat)CTLineGetOffsetForStringIndex(fragment->line, a, NULL);
+						NSRect frame = NSMakeRect(x, baselineY - size.height, size.width, size.height);
+						NSView *view = (i < [_textContainers count])
+							? (NSView *)[[_textContainers objectAtIndex:i] textView] : nil;
+
+						[cell drawWithFrame:frame inView:view];
+					}
+					pos = runEnd;
+					continue;
+				}
 				[(colour != nil) ? colour : [NSColor controlTextColor] setFill];
 				/* **AND THE CONTEXT IS MIRRORED ABOUT THE BASELINE, WHICH IS WHAT A FLIPPED CONTAINER NEEDS.** The fragments
 				 * are y-DOWN — a container's coordinates are a text view's — and Core Text's own run UP from the baseline. */

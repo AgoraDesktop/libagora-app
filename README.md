@@ -53,6 +53,7 @@ tests/
   text_layout_glyphs.m          and the GLYPH STORE: the generated lines, and the four reverse lookups
   text_paragraph_style.m        and the PARAGRAPH STYLE: the value object, and the alignment and line-break mode
   text_paragraph_geometry.m     and its GEOMETRY: the indents, the spacings and the line heights the layout reads
+  text_attachment.m             and the ATTACHMENT: a character that stands for a picture, and the cell that draws it
   text_word_movement.m          and its WORD granularity: Option+arrow and Option+Delete, over the string
   text_view_lines.m             and the first slice of the MULTI-LINE view: the line model, and what reads it
   text_view_wrapping.m          and the slice above it: the same model WRAPPED to the view's width
@@ -280,6 +281,16 @@ the compositor is really gone.
   lines; and a two-times multiple, a minimum and a maximum set the band to **2*base**, **base+12** and **base-4**. The
   hyphenation factor, the default tab interval and the base writing direction are the three the layout still does not
   read, each named at its door.
+- **And the ATTACHMENT, which is a character that stands for a picture** (`ctest`): `NSTextAttachment.h` declares
+  `NSAttachmentCharacter` (U+FFFC), the `NSTextAttachmentCell` protocol and class, and the attachment itself, with
+  `NSAttachmentAttributeName` carrying it; the layout manager's run walk asks the cell for its size and calls
+  `-drawWithFrame:inView:` at the character's own x instead of setting that run's glyphs. MEASURED: a 12x12 picture
+  gives `+textAttachmentWithImage:` an attachment whose cell is **12x12**; the cell draws the picture into the frame it
+  is given; and a store carrying one attachment character draws the picture — read as the picture's colour in a pixel.
+  **WHAT IS NAMED RATHER THAN HIDDEN**: the line's ADVANCE is still the font's placeholder glyph, because this tier's
+  engine has no attachment run, so an attachment wider than its placeholder overlaps what follows — the inline-flow
+  slice the attachment header names. `-fileWrapper`, `-initWithFileWrapper:` and the cell's tracking family are owed
+  with the classes they name.
 - **And the MARKED TEXT, which is what an input method composes through** (`ctest`): `NSTextInput.h` declares the eleven
   doors an input system drives a text view through, `NSTextView` adopts the protocol, and the composition is an ordinary
   edit with a remembered range — the marked characters really go into the store, so the caret and the layout work as
@@ -422,7 +433,7 @@ the compositor is really gone.
   and the child clip is the child's FRAME region rather than its bounds rect — which was the same value only while the
   origin was zero. MEASURED: a mark at a document's own y 100..120 draws at 110 with the clip view at the top and at
   10 after a scroll of 100, in one run, through `-displayRect:`.
-- **`ctest`: 49 of 49 passed** (the keyboard and the seam, the AppKit and its input path, the controls and their
+- **`ctest`: 50 of 50 passed** (the keyboard and the seam, the AppKit and its input path, the controls and their
   metrics, the field control and its cell and its bezel and its placeholder and what it may hold, the text path and its
   word granularity and the multi-line view and its wrapping and its scrolling and its READING OF THE STORE, the STORE
   the rich-text slice is built on and the REGION it is laid out in and the WEB that ties the three together and the
@@ -583,10 +594,11 @@ STRIKETHROUGH keys the manager paints (`tests/text_layout_attributes.m`) and the
 by (`tests/text_paragraph_style.m`) and the GEOMETRY it lays out by (`tests/text_paragraph_geometry.m`) — the indents,
 the two spacings and the three line-height properties, all read as the manager's own fragment geometry. The property
 with no reader is the hyphenation factor (the engine does no hyphenation), the default tab interval (a tab stop needs
-`NSTextTab`) and the base writing direction (left-to-right only), each named at its door. Attachments, tables and the
-input-method CONTEXT are named in the view's own header as what is still owed — the `NSTextInput`
+`NSTextTab`) and the base writing direction (left-to-right only), each named at its door. TABLES and the input-method
+CONTEXT are named in the view's own header as what is still owed — the `NSTextInput`
 protocol is here and the view ANSWERS it (`tests/text_marked_text.m`), while the class that owns a composition across
-keystrokes and arranges a candidate window is the slice behind it. Each absence is stated
+keystrokes and arranges a candidate window is the slice behind it. ATTACHMENTS draw (`tests/text_attachment.m`) with
+their inline advance named as the flow slice still owed. Each absence is stated
 rather than stubbed, and the refusals name themselves.
 
 ## Build

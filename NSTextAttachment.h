@@ -1,0 +1,79 @@
+/*
+ * NSTextAttachment.h — THE OBJECT AN ATTRIBUTED STRING CARRIES WHERE A PICTURE GOES.
+ *
+ * Copyright © 2026 Kyle J. Cardoza. MIT licensed — see LICENSE.
+ * SPDX-License-Identifier: MIT
+ *
+ * **AN ATTACHMENT IS A CHARACTER THAT STANDS FOR SOMETHING ELSE.** Apple's model is one character of
+ * `NSAttachmentCharacter` (U+FFFC, the OBJECT REPLACEMENT CHARACTER) in the string, with an `NSTextAttachment` as
+ * the value of `NSAttachmentAttributeName` over that character; the character is what the caret, the selection and
+ * every range count, and the attachment is what is DRAWN there instead of a glyph. So a picture is not a special case
+ * of the text — it is a character the text already has, with an attribute saying what to put in its place.
+ *
+ * **AND THE CELL IS WHERE A SIZE AND A DRAWING COME FROM.** `NSTextAttachmentCell` is the object the layout asks "how
+ * big are you" and "draw yourself here"; `NSTextAttachment` holds one, and an `NSImage` attached to a fresh cell is
+ * the common case the convenience door covers. THIS TIER'S READER IS THE LAYOUT MANAGER'S DRAW: at a run carrying
+ * `NSAttachmentAttributeName` it asks the cell for its size and calls `-drawWithFrame:inView:` instead of setting the
+ * glyphs. THE LINE'S ADVANCE IS STILL THE FONT'S, WHICH IS NAMED RATHER THAN HIDDEN: this tier's engine lays out one
+ * run of ordinary text and has no attachment run, so an attachment wider than its placeholder glyph overlaps what
+ * follows it. Reserving the cell's own advance — the inline-flow slice — is the work this one does not carry.
+ *
+ * **WHAT IS NOT HERE, AND ITS ROWS STAY OPEN:** `-fileWrapper` and `-initWithFileWrapper:` (they name `NSFileWrapper`,
+ * a class this tier has not got), and the tracking half of the cell protocol (`-wantsToTrackMouse`, `-highlight:…`,
+ * `-trackMouse:…`) — a picture in a document is not draggable here yet.
+ */
+#ifndef APPKIT_NSTEXTATTACHMENT_H
+#define APPKIT_NSTEXTATTACHMENT_H
+
+#import <AppKit/NSCell.h>
+
+@class NSImage;
+@class NSView;
+@class NSFileWrapper;
+
+NS_ASSUME_NONNULL_BEGIN
+
+/* **THE CHARACTER THAT STANDS FOR AN ATTACHMENT**, U+FFFC — "OBJECT REPLACEMENT CHARACTER" in Unicode's own words,
+ * which is exactly what this is: a place in the text where an object goes. Apple spells it as a value of this name
+ * rather than a bare literal so a caller writing `NSAttachmentCharacter` and a reader seeing `0xFFFC` cannot drift. */
+enum {
+	NSAttachmentCharacter = 0xFFFC
+};
+
+/* **WHAT THE LAYOUT ASKS A CELL.** Three doors of Apple's protocol are here — the size, the baseline's place in the
+ * cell, and the drawing — and the tracking family is named as owed above. The `characterIndex:` variants exist so a
+ * cell that wants to know WHICH attachment it is drawing can; this tier's manager calls the plain one. */
+@protocol NSTextAttachmentCell <NSObject>
+- (NSSize)cellSize;
+- (NSPoint)cellBaselineOffset;
+- (void)drawWithFrame:(NSRect)cellFrame inView:(nullable NSView *)controlView;
+- (void)drawWithFrame:(NSRect)cellFrame inView:(nullable NSView *)controlView characterIndex:(NSUInteger)charIndex;
+@end
+
+/* **AND THE CELL THAT HOLDS A PICTURE, WHICH IS WHAT A FRESH ATTACHMENT GETS.** It is an `NSCell` because Apple's is,
+ * and it draws its image into the frame it is given; `-cellSize` is the image's own size. */
+@interface NSTextAttachmentCell : NSCell <NSTextAttachmentCell>
+@end
+
+/* **AND THE ATTACHMENT: A VALUE A RUN CARRIES, WITH A CELL THAT KNOWS HOW TO DRAW IT.** The image doors are the ones
+ * this tier can honour; the file-wrapper pair is named as owed. `-setImage:` also gives the attachment a
+ * `NSTextAttachmentCell` holding that image if it has none, which is the convenience Apple's own `-setImage:` is. */
+@interface NSTextAttachment : NSObject
+{
+	NSImage *_image;				/* RETAINED */
+	NSCell<NSTextAttachmentCell> *_attachmentCell;	/* RETAINED */
+}
+
++ (NSTextAttachment *)textAttachmentWithImage:(NSImage *)image;
+
+- (nullable NSImage *)image;
+- (void)setImage:(nullable NSImage *)image;
+
+- (nullable NSCell<NSTextAttachmentCell> *)attachmentCell;
+- (void)setAttachmentCell:(nullable NSCell<NSTextAttachmentCell> *)cell;
+
+@end
+
+NS_ASSUME_NONNULL_END
+
+#endif /* APPKIT_NSTEXTATTACHMENT_H */

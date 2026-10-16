@@ -254,6 +254,14 @@ target_link_libraries(text_paragraph_geometry PRIVATE App m)
 add_test(NAME appkit-text-paragraph-geometry COMMAND text_paragraph_geometry)
 set_tests_properties(appkit-text-paragraph-geometry PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
 
+# **AND AN ATTACHMENT, WHICH IS A CHARACTER THAT STANDS FOR A PICTURE.** The value object (a picture gives an attachment
+# a cell sized to it), the cell's own drawing, and the layout manager drawing the cell at the attachment character's
+# place in a store — all read as the picture's colour in a pixel.
+add_executable(text_attachment text_attachment.m)
+target_link_libraries(text_attachment PRIVATE App m)
+add_test(NAME appkit-text-attachment COMMAND text_attachment)
+set_tests_properties(appkit-text-attachment PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
+
 # **AND THE INSIDE OF A SCROLL VIEW.** `NSClipView`'s arithmetic is "the whole of it" (its own header), and it is
 # checked in EXACT POINTS rather than by drawing: where a short document sits, where a long one stops, and the
 # notification wire that re-constrains the scroll when the document's own frame or bounds changes. Offscreen, so it
