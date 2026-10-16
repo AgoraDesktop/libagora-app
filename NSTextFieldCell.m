@@ -316,7 +316,20 @@
 	[textObj setString:(string != nil ? string : @"")];
 	[textObj setDelegate:self];
 	[controlView addSubview:textObj];
-	[[controlView window] makeFirstResponder:textObj];
+	/* **AND A SESSION THAT WAS REFUSED LEAVES NOTHING STANDING.** The editor's own `-becomeFirstResponder` asks THIS
+	 * cell, and this cell passes the question to the caller — so a delegate that answers NO to
+	 * `-control:textShouldBeginEditing:` is a form saying "not yet". By the time the answer comes back the editor has
+	 * been put in the view and every session flag is set, so the refusal has to be UNDONE here: otherwise a field
+	 * nobody is allowed to edit would still show a caret in a view and answer `-currentEditor` with it. MEASURED, the
+	 * window's `-makeFirstResponder:` fails in exactly this case and its answer is the signal. */
+	if (![[controlView window] makeFirstResponder:textObj]) {
+		[textObj setDelegate:nil];
+		[textObj removeFromSuperview];
+		_editorDelegate = nil;
+		_cg_editor = nil;
+		_cg_textEditing = NO;
+		return;
+	}
 	[textObj setSelectedRange:NSMakeRange((NSUInteger)selStart, (NSUInteger)selLength)];
 }
 
@@ -419,6 +432,49 @@
 		[self fn_finishEditing:editor keep:NO movement:NSTextMovementCancel];
 	}
 	return YES;
+}
+
+/* **AND THE FOUR SESSION EVENTS THE CELL PASSES STRAIGHT THROUGH, BECAUSE THE OBJECT A CALLER WANTS TOLD IS THE
+ * CONTROL.** `NSText` sends these to ITS delegate, and the editor's delegate is the CELL — it owns the string and
+ * reads it back. But a caller set a target and writes a handler against the CONTROL, so the cell is a RELAY for the
+ * four that are about the session rather than about the string, and the caller passes the answer back up: the two
+ * `Should` questions are where a delegate refuses, and the refusal is only meaningful if it survives the hop. */
+- (BOOL)textShouldBeginEditing:(NSText *)textObject
+{
+	id caller = _editorDelegate;
+
+	if (caller != nil && [caller respondsToSelector:@selector(textShouldBeginEditing:)]) {
+		return [caller textShouldBeginEditing:textObject];
+	}
+	return YES;
+}
+
+- (void)textDidBeginEditing:(NSNotification *)notification
+{
+	id caller = _editorDelegate;
+
+	if (caller != nil && [caller respondsToSelector:@selector(textDidBeginEditing:)]) {
+		[caller textDidBeginEditing:notification];
+	}
+}
+
+- (BOOL)textShouldEndEditing:(NSText *)textObject
+{
+	id caller = _editorDelegate;
+
+	if (caller != nil && [caller respondsToSelector:@selector(textShouldEndEditing:)]) {
+		return [caller textShouldEndEditing:textObject];
+	}
+	return YES;
+}
+
+- (void)textDidChange:(NSNotification *)notification
+{
+	id caller = _editorDelegate;
+
+	if (caller != nil && [caller respondsToSelector:@selector(textDidChange:)]) {
+		[caller textDidChange:notification];
+	}
 }
 
 /* **AND THIS IS HOW THE CELL HEARS THAT A SESSION IS OVER, AND WHY.** The editor is this cell's delegate while one is

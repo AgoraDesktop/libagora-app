@@ -21,16 +21,24 @@
  * `-currentEditor` and `-abortEditing` — are declared below and answered by the cell that owns it. `-selectText:` is
  * NOT among them: Apple declares it on `NSTextField` rather than here, and it lives there now.
  *
- * WHAT IS NOT HERE: the formatter-driven validation and its delegate family (`-validateEditing`, and the
- * `NSControlTextEditingDelegate` protocol with the `NSControlSubclassNotifications` category behind it); the
- * attributed-string value pair (`-attributedStringValue` and its setter); and any `-sizeToFit` arithmetic beyond the
- * cell's own measurement. Each is absent rather than stubbed.
+ * **AND THE DELEGATE FAMILY IS AT THE FOOT OF THIS FILE NOW**, which is the second thing the list named: the
+ * `NSControlTextEditingDelegate` protocol, the `NSControlSubclassNotifications` category an object that would rather
+ * LISTEN than conform is declared on, and the three published notification names. What is not here is what a control
+ * that does not edit text owes: the attributed-string value pair (`-attributedStringValue` and its setter),
+ * `-validateEditing`, and `-sizeToFit` arithmetic beyond the cell's own measurement. Each is absent rather than
+ * stubbed.
  */
 #ifndef APPKIT_NSCONTROL_H
 #define APPKIT_NSCONTROL_H
 
 #import <AppKit/NSView.h>
 #import <AppKit/NSCell.h>
+
+/* **AND ONE CLASS THAT DOES NOT EXIST YET, FORWARD DECLARED BECAUSE APPLE'S PROTOCOL NAMES IT.** Two methods of
+ * `NSControlTextEditingDelegate` below take an `NSTextView` — Apple's multi-line text view, which this tier has not
+ * written — and the blanket rule is "match Apple, including the types its header writes". So the name is declared and
+ * the two methods are DECLARED BUT NEVER ASKED: nothing here produces an `NSTextView` to hand them. See their note. */
+@class NSTextView;
 
 NS_ASSUME_NONNULL_BEGIN
 
@@ -124,6 +132,67 @@ NS_ASSUME_NONNULL_BEGIN
 - (void)mouseExited:(nullable NSEvent *)event;
 
 @end
+
+/* ============================================================================================ *
+ * AND THE THREE THINGS A CONTROL THAT EDITS TEXT PUBLISHES: A CATEGORY TO LISTEN THROUGH, A     *
+ * DELEGATE PROTOCOL TO CONFORM TO, AND THE NAMES THE NOTIFICATIONS ARRIVE UNDER.                 *
+ * ============================================================================================ */
+
+/* **THE LISTENER'S HALF IS A CATEGORY ON `NSOBJECT`, WHICH IS HOW APPLE SPELLS "ANY OBJECT MAY HEAR THIS".** A
+ * delegate conforms to a protocol; an object that would rather REGISTER FOR THE NOTIFICATIONS conforms to nothing at
+ * all and is simply sent these three. Declaring them on `NSObject` is what makes that a real, checkable interface
+ * rather than a convention — and it is why they are not protocol methods: a listener need not be the control's
+ * delegate, and the delegate need not listen.
+ *
+ * THE OBJECT OF EVERY ONE IS THE CONTROL, because the control is what a listener registered against and what owns the
+ * value; the field editor travels in the `userInfo` under the key below, because it is a DIFFERENT object from the
+ * control and a listener that wants to reach the editor (to ask its selection, or to read what is half-typed) has no
+ * other way to it. */
+@interface NSObject (NSControlSubclassNotifications)
+- (void)controlTextDidBeginEditing:(NSNotification *)obj;
+- (void)controlTextDidEndEditing:(NSNotification *)obj;
+- (void)controlTextDidChange:(NSNotification *)obj;
+@end
+
+/* **AND THE DELEGATE IS THE SAME THREE QUESTIONS ASKED AS METHODS, PLUS THE TWO THAT CAN REFUSE AND THE TWO THAT
+ * REACH THE EDITOR'S OWN MACHINERY.** The five names below split three ways and it is worth saying which is which:
+ *
+ *   * THE `Should` PAIR IS ASKED AND ANSWERED. `-control:textShouldBeginEditing:` and `-control:textShouldEndEditing:`
+ *     return a BOOL, and NO is honoured — a session is not opened, or is not closed, which is how a form refuses a
+ *     field it will not let be edited yet. These are the two this tier calls.
+ *   * THE FORMATTER TRIO (`-control:didFailToFormatString:errorDescription:`,
+ *     `-control:didFailToValidatePartialString:errorDescription:`, `-control:isValidObject:`) belongs to the
+ *     formatter-driven validation a cell runs when a value is written through `-setObjectValue:`. THIS TIER HAS NO
+ *     SUCH PATH — no cell calls them — so they are DECLARED AND NEVER ASKED, stated here rather than left for a
+ *     conformer to discover by implementing one and watching nothing happen.
+ *   * THE `textView:` PAIR (`-control:textView:doCommandBySelector:` and its `completions:…` sibling) is how a delegate
+ *     intercepts a key BEFORE the text system handles it, and how it offers completions. Both take an `NSTextView`,
+ *     which this tier has not written, and command interception is a seam `NSText` does not have — so these two are
+ *     DECLARED AND NEVER ASKED for the same reason, and the class they name is forward declared above.
+ *
+ * EVERY METHOD IS `@optional`, which is what a delegate that only wants to know relies on: a conformer implements the
+ * one door it cares about and the control asks `-respondsToSelector:` for the rest. */
+@protocol NSControlTextEditingDelegate <NSObject>
+@optional
+- (BOOL)control:(NSControl *)control textShouldBeginEditing:(NSText *)fieldEditor;
+- (BOOL)control:(NSControl *)control textShouldEndEditing:(NSText *)fieldEditor;
+- (BOOL)control:(NSControl *)control didFailToFormatString:(NSString *)string errorDescription:(nullable NSString *)error;
+- (void)control:(NSControl *)control didFailToValidatePartialString:(NSString *)string errorDescription:(nullable NSString *)error;
+- (BOOL)control:(NSControl *)control isValidObject:(nullable id)obj;
+- (BOOL)control:(NSControl *)control textView:(NSTextView *)textView doCommandBySelector:(SEL)commandSelector;
+- (nullable NSArray *)control:(NSControl *)control textView:(NSTextView *)textView completions:(NSArray *)words
+	forPartialWordRange:(NSRange)charRange indexOfSelectedItem:(nullable NSInteger *)index;
+@end
+
+/* **AND THE THREE NAMES, WHICH ARE WHAT A LISTENER REGISTERS FOR.** The value of each is the era's own string, so a
+ * listener keyed to Apple's literal still finds it. **AND THE FIELD-EDITOR KEY IS THE ONE FACT THE NOTIFICATION CARRIES
+ * THAT THE NOTIFICATION ITSELF CANNOT**: Apple annotates these three names with the literal `@"NSFieldEditor"` and
+ * never publishes a constant for it, so this tier gives it a name for the same reason `NSTextMovementUserInfoKey` has
+ * one — a key spelled as a literal at every site is a key nobody can be told they got wrong. */
+extern NSString *NSControlTextDidBeginEditingNotification;
+extern NSString *NSControlTextDidEndEditingNotification;
+extern NSString *NSControlTextDidChangeNotification;
+extern NSString *NSFieldEditorUserInfoKey;
 
 NS_ASSUME_NONNULL_END
 

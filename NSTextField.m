@@ -214,4 +214,104 @@
 	[self setNeedsDisplay:YES];
 }
 
+/* ============================================================================================ *
+ * THE DELEGATE: THE CELL'S REPORTS, RE-HOMED TO THE CONTROL AND PASSED ON                        *
+ * ============================================================================================ */
+
+- (id <NSTextFieldDelegate>)delegate
+{
+	return _delegate;
+}
+
+- (void)setDelegate:(id <NSTextFieldDelegate>)anObject
+{
+	/* NOT RETAINED, and not released on the way out: this tree's rule for every delegate. A field that retained its
+	 * delegate would own whatever owned it. */
+	_delegate = anObject;
+}
+
+/* **THE TWO QUESTIONS ARE ASKED AND ANSWERED, AND NO IS HONOURED.** `-textShouldBeginEditing:` is reached from the
+ * editor's `-becomeFirstResponder` (through the cell, which is the editor's delegate), so a NO leaves the session
+ * UNOPENED — and the cell's session door tears the half-built session down rather than leaving an editor nobody is
+ * typing into. `-textShouldEndEditing:` is reached from `-resignFirstResponder`, so a NO keeps the editor exactly
+ * where it is: the caret stays and the value is not committed. A delegate that does not implement them says YES by not
+ * answering, which is what `@optional` on the protocol and the `-respondsToSelector:` below are for. */
+- (BOOL)textShouldBeginEditing:(NSText *)textObject
+{
+	if (_delegate != nil && [_delegate respondsToSelector:@selector(control:textShouldBeginEditing:)]) {
+		return [_delegate control:self textShouldBeginEditing:textObject];
+	}
+	return YES;
+}
+
+- (BOOL)textShouldEndEditing:(NSText *)textObject
+{
+	if (_delegate != nil && [_delegate respondsToSelector:@selector(control:textShouldEndEditing:)]) {
+		return [_delegate control:self textShouldEndEditing:textObject];
+	}
+	return YES;
+}
+
+/* **AND EVERY ANNOUNCEMENT GOES OUT TWICE, WHICH IS APPLE'S DESIGN AND NOT A DUPLICATION.** A delegate that CONFORMS
+ * is told as a method; an object that would rather not conform registers for the NOTIFICATION and is told by the
+ * center. Both carry the same facts — the notification's OBJECT is the CONTROL, never the editor, and its `userInfo`
+ * names the field editor under `NSFieldEditorUserInfoKey` — so a listener gets the editor without conforming, and a
+ * delegate gets it as an argument rather than through a dictionary. A conformer that does BOTH is told twice, which is
+ * Apple's behaviour and the caller's own business. */
+- (void)textDidBeginEditing:(NSNotification *)notification
+{
+	NSDictionary *info = [NSDictionary dictionaryWithObject:[notification object] forKey:NSFieldEditorUserInfoKey];
+	NSNotification *note = [NSNotification notificationWithName:NSControlTextDidBeginEditingNotification
+							     object:self userInfo:info];
+
+	[[NSNotificationCenter defaultCenter] postNotification:note];
+	if (_delegate != nil && [_delegate respondsToSelector:@selector(controlTextDidBeginEditing:)]) {
+		[_delegate controlTextDidBeginEditing:note];
+	}
+}
+
+- (void)textDidChange:(NSNotification *)notification
+{
+	NSDictionary *info = [NSDictionary dictionaryWithObject:[notification object] forKey:NSFieldEditorUserInfoKey];
+	NSNotification *note = [NSNotification notificationWithName:NSControlTextDidChangeNotification
+							     object:self userInfo:info];
+
+	[[NSNotificationCenter defaultCenter] postNotification:note];
+	if (_delegate != nil && [_delegate respondsToSelector:@selector(controlTextDidChange:)]) {
+		[_delegate controlTextDidChange:note];
+	}
+}
+
+/* **AND THE END OF AN EDIT IS TWO PIECES OF WORK AT ONE DOOR: THE DELEGATE IS TOLD, AND A COMMITTED VALUE SENDS THIS
+ * CONTROL'S ACTION.** The rule about the action moved HERE from `NSControl` with the class that made it meaningful — a
+ * control with no field editor has no session to end — and it is unchanged: a field's value is committed by ending its
+ * session, and the control that owns the value is what a caller set a target on. So Return and Tab send; ESCAPE DOES
+ * NOT, because `NSTextMovementCancel` means the session was thrown away, and a control that sent its action there
+ * would tell a caller that a value the model never accepted had been entered. MEASURED, before the movement existed:
+ * Escape committed, because nothing distinguished it from a click away.
+ *
+ * THE SENDER IS THE CONTROL rather than the editor, because a caller's handler is written against the CONTROL — the
+ * thing with a value and a cell — and an editor is a view the window happens to be lending. The movement travels on to
+ * the delegate in the notification's `userInfo`, so a listener can tell a commit from a cancel without asking
+ * anything. */
+- (void)textDidEndEditing:(NSNotification *)notification
+{
+	id editor = [notification object];
+	id raw = [[notification userInfo] objectForKey:NSTextMovementUserInfoKey];
+	NSTextMovement movement = (raw != nil) ? (NSTextMovement)[raw integerValue] : NSTextMovementOther;
+	NSDictionary *info = [NSDictionary dictionaryWithObjectsAndKeys:
+		editor, NSFieldEditorUserInfoKey,
+		[NSNumber numberWithInteger:(NSInteger)movement], NSTextMovementUserInfoKey, nil];
+	NSNotification *note = [NSNotification notificationWithName:NSControlTextDidEndEditingNotification
+							     object:self userInfo:info];
+
+	[[NSNotificationCenter defaultCenter] postNotification:note];
+	if (_delegate != nil && [_delegate respondsToSelector:@selector(controlTextDidEndEditing:)]) {
+		[_delegate controlTextDidEndEditing:note];
+	}
+	if (movement == NSTextMovementReturn || movement == NSTextMovementTab || movement == NSTextMovementBacktab) {
+		[[NSApplication sharedApplication] sendAction:[self action] to:[self target] from:self];
+	}
+}
+
 @end

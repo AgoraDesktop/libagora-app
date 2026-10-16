@@ -106,12 +106,22 @@ the compositor is really gone.
   cannot — a PRESS that opens a session with the WINDOW's field editor, and `-selectText:` for the same session with
   no pointer. The editor is put in the FIELD at the field's own text rect and made the window's FIRST RESPONDER, so
   the keyboard goes to the editor rather than to the field, and a committed session reaches a caller's action through
-  `NSControl -textDidEndEditing:`. MEASURED: Return COMMITS the typed value into the field and sends the action ONCE;
+  `NSTextField -textDidEndEditing:`. MEASURED: Return COMMITS the typed value into the field and sends the action ONCE;
   Escape DISCARDS it and sends nothing; `-abortEditing` is that same discard through a door (and answers NO when no
   session is running); a press on a field that is not editable opens NOTHING; and focusing the field (`-makeFirstResponder:`)
   opens its session, leaving the EDITOR as the responder. `NSComboBox` now derives from `NSTextField` — Apple's own
   hierarchy, which its header had named as the row this control would close — so its press is the base's press and the
   chip is the only thing it adds.
+- **And the field's delegate family** (`ctest`, offscreen): a control that edits text owes the THREE things Apple
+  declares in `NSControl.h` — the `NSControlTextEditingDelegate` protocol (seven optional methods), the
+  `NSControlSubclassNotifications` category that an object preferring to LISTEN is declared on, and three published
+  notification names. The field's delegate is told with the `control…` spellings and can REFUSE two of them: NO to
+  `-control:textShouldBeginEditing:` opens NO session (and the half-built one is torn down rather than left showing a
+  caret), and NO to `-control:textShouldEndEditing:` keeps the caret exactly where it is. MEASURED: one session tells
+  the delegate BEGIN once, CHANGE on an edit, and END once carrying the key's reason; every notification's object is
+  the CONTROL, never the editor, and its `userInfo` names the editor under `NSFieldEditorUserInfoKey`; and a listener
+  that conforms to NOTHING is told the same three by registering. The formatter trio and the two `NSTextView` methods
+  are DECLARED AND NEVER ASKED, each named for what it needs (formatter-driven validation, and command interception).
 - **The chrome** (`ctest`, offscreen): the title bar's symbols are SHAPES in pixels — ink on both diagonals of
   the X, a thick stroke across the minus, and a pill rounded at both caps — the title is centred and bold, and
   each symbol appears only for the style-mask bit that asks for it.

@@ -24,6 +24,7 @@
 #import <AppKit/NSEvent.h>
 #import <AppKit/NSResponder.h>
 #import <Foundation/NSAutoreleasePool.h>
+#import <Foundation/NSNotification.h>
 #include <stdio.h>
 
 static int failures = 0;
@@ -51,6 +52,102 @@ static void check(int ok, const char *what)
 {
 	(void)sender;
 	actions++;
+}
+@end
+
+/* **A DELEGATE THAT CONFORMS, WITH THE TWO REFUSALS MADE SETTABLE.** It is one object rather than five because the
+ * claim is that ONE delegate is told about every event of ONE session in Apple's own spelling; the two flags are what
+ * let the same object answer YES for the ordinary cases and NO for the two that can refuse. */
+@interface FieldWatcher : NSObject
+{
+@public
+	int began;
+	int changed;
+	int ended;
+	NSTextMovement movement;
+	BOOL refuseBegin;
+	BOOL refuseEnd;
+	id lastControl;
+	id lastEditor;
+}
+- (BOOL)control:(NSControl *)control textShouldBeginEditing:(NSText *)fieldEditor;
+- (BOOL)control:(NSControl *)control textShouldEndEditing:(NSText *)fieldEditor;
+@end
+
+@implementation FieldWatcher
+- (BOOL)control:(NSControl *)control textShouldBeginEditing:(NSText *)fieldEditor
+{
+	(void)control;
+	(void)fieldEditor;
+	return !refuseBegin;
+}
+
+- (BOOL)control:(NSControl *)control textShouldEndEditing:(NSText *)fieldEditor
+{
+	(void)control;
+	(void)fieldEditor;
+	return !refuseEnd;
+}
+
+- (void)controlTextDidBeginEditing:(NSNotification *)note
+{
+	began++;
+	lastControl = [note object];
+	lastEditor = [[note userInfo] objectForKey:NSFieldEditorUserInfoKey];
+}
+
+- (void)controlTextDidChange:(NSNotification *)note
+{
+	(void)note;
+	changed++;
+}
+
+- (void)controlTextDidEndEditing:(NSNotification *)note
+{
+	id raw = [[note userInfo] objectForKey:NSTextMovementUserInfoKey];
+
+	ended++;
+	lastControl = [note object];
+	lastEditor = [[note userInfo] objectForKey:NSFieldEditorUserInfoKey];
+	movement = (raw != nil) ? (NSTextMovement)[raw integerValue] : NSTextMovementOther;
+}
+@end
+
+/* **AND A LISTENER THAT CONFORMS TO NOTHING AND REGISTERS INSTEAD**, which is the other half of Apple's design and the
+ * reason the three questions are an `NSObject` category rather than protocol methods. */
+@interface NoteListener : NSObject
+{
+@public
+	int began;
+	int changed;
+	int ended;
+	NSTextMovement movement;
+	id lastObject;
+	id lastEditor;
+}
+@end
+
+@implementation NoteListener
+- (void)controlTextDidBeginEditing:(NSNotification *)note
+{
+	began++;
+	lastObject = [note object];
+	lastEditor = [[note userInfo] objectForKey:NSFieldEditorUserInfoKey];
+}
+
+- (void)controlTextDidChange:(NSNotification *)note
+{
+	(void)note;
+	changed++;
+}
+
+- (void)controlTextDidEndEditing:(NSNotification *)note
+{
+	id raw = [[note userInfo] objectForKey:NSTextMovementUserInfoKey];
+
+	ended++;
+	lastObject = [note object];
+	movement = (raw != nil) ? (NSTextMovement)[raw integerValue] : NSTextMovementOther;
 }
 @end
 
@@ -232,6 +329,88 @@ int main(void)
 		check([[field stringValue] isEqualToString:@"ended by the window"],
 		      "and the edit is committed, because it is the ending a click elsewhere performs");
 		check([editor superview] == nil, "and the editor leaves the view it was lent to");
+	}
+
+	/* 12. **AND THE FIELD'S DELEGATE IS TOLD ABOUT EVERY SESSION, IN APPLE'S OWN SPELLING.** The editor's delegate is
+	 * the cell; the cell relays to the control; the control reports to the caller's delegate with the `control…` names
+	 * `NSControlTextEditingDelegate` declares. The two `Should` doors are the ones that can REFUSE a session, and a
+	 * refusal that did not survive those two hops would be a form that cannot say "not yet". */
+	{
+		FieldWatcher *watcher = [[FieldWatcher alloc] init];
+
+		[field setDelegate:(id <NSTextFieldDelegate>)watcher];
+		check([field delegate] == (id)watcher, "the field answers the delegate it was given");
+
+		[field setStringValue:@"delegate me"];
+		[field selectText:nil];
+		editor = (NSText *)[field currentEditor];
+		check(watcher->began == 1, "opening a session tells the delegate `-controlTextDidBeginEditing:` once");
+		check(watcher->lastControl == field, "with the CONTROL as the notification's object, never the editor");
+		check(watcher->lastEditor == (id)editor, "and the field editor in the userInfo, under its own key");
+
+		[editor replaceCharactersInRange:NSMakeRange(0, [[editor string] length]) withString:@"edited"];
+		check(watcher->changed >= 1, "editing tells the delegate `-controlTextDidChange:`");
+
+		[editor insertNewline:nil];
+		check(watcher->ended == 1, "ending the session tells the delegate `-controlTextDidEndEditing:` once");
+		check(watcher->movement == NSTextMovementReturn, "carrying the reason the key gave");
+		check([[field stringValue] isEqualToString:@"edited"], "and the value is committed as before");
+
+		/* **THE TWO REFUSALS, WHICH ARE THE WHOLE POINT OF THE `Should` PAIR.** */
+		watcher->refuseBegin = YES;
+		[field setStringValue:@"no edit"];
+		[field selectText:nil];
+		check([field currentEditor] == nil,
+		      "a delegate that refuses `-control:textShouldBeginEditing:` opens NO session");
+		check([editor superview] == nil, "and the half-built session left NO editor in the view");
+		watcher->refuseBegin = NO;
+
+		watcher->refuseEnd = YES;
+		[field selectText:nil];
+		editor = (NSText *)[field currentEditor];
+		check(editor != nil, "a session opens when only the END may be refused");
+		[editor insertNewline:nil];
+		check([field currentEditor] != nil,
+		      "and a delegate that refuses `-control:textShouldEndEditing:` KEEPS it open — the caret stays");
+		watcher->refuseEnd = NO;
+		[field abortEditing];
+		check([field currentEditor] == nil, "and once it stops refusing, the session ends");
+
+		[field setDelegate:nil];
+		[watcher release];
+	}
+
+	/* 13. **AND A LISTENER THAT CONFORMS TO NOTHING IS TOLD THE SAME THREE, WHICH IS THE OTHER HALF OF APPLE'S DESIGN.**
+	 * The three questions are an `NSObject` CATEGORY, not protocol methods, precisely so an object can register for the
+	 * notifications without becoming the delegate. The object is the CONTROL and the userInfo names the editor, exactly
+	 * as on the delegate side — one fact, two ways to hear it. */
+	{
+		NoteListener *listener = [[NoteListener alloc] init];
+		NSNotificationCenter *center = [NSNotificationCenter defaultCenter];
+
+		[center addObserver:listener selector:@selector(controlTextDidBeginEditing:)
+			       name:NSControlTextDidBeginEditingNotification object:nil];
+		[center addObserver:listener selector:@selector(controlTextDidChange:)
+			       name:NSControlTextDidChangeNotification object:nil];
+		[center addObserver:listener selector:@selector(controlTextDidEndEditing:)
+			       name:NSControlTextDidEndEditingNotification object:nil];
+
+		[field setStringValue:@"listen to me"];
+		[field selectText:nil];
+		editor = (NSText *)[field currentEditor];
+		check(listener->began == 1, "a registered listener hears the BEGIN notification");
+		check(listener->lastObject == field, "whose object is the CONTROL");
+		check(listener->lastEditor == (id)editor, "and whose userInfo names the field editor");
+
+		[editor replaceCharactersInRange:NSMakeRange(0, [[editor string] length]) withString:@"listened"];
+		check(listener->changed >= 1, "and hears the CHANGE notification");
+
+		[editor insertNewline:nil];
+		check(listener->ended == 1, "and the END notification");
+		check(listener->movement == NSTextMovementReturn, "carrying which key ended the session");
+
+		[center removeObserver:listener];
+		[listener release];
 	}
 
 	[counter release];

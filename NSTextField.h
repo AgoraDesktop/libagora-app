@@ -23,14 +23,10 @@
  *
  * WHAT IS DELIBERATELY NOT HERE, EACH FOR ITS OWN REASON AND NAMED RATHER THAN GUESSED:
  *
- *   * THE FIELD'S OWN DELEGATE, `-delegate`/`-setDelegate:`, AND THE `-text…` RECEIVERS THAT WOULD RELAY TO IT.
- *     Apple's `NSTextFieldDelegate` is not one method: it inherits `NSControlTextEditingDelegate` (seven optional
- *     methods, declared in `NSControl.h`), and the notifications a delegate can watch instead are an `NSObject`
- *     category, `NSControlSubclassNotifications`, with three `controlTextDid…` doors and three published names. That
- *     is a protocol FAMILY and not a door, so it is its own unit's, and this header names it so a reader does not
- *     look for it here. **THE ACTION A CALLER WAITS FOR IS NOT PART OF THAT GAP:** `NSControl -textDidEndEditing:`
- *     already turns a committed session into this control's action, so a field with a target and an action works
- *     today.
+ *   * `NSUserInterfaceValidations` CONFORMANCE, `-validateUserInterfaceItem:`, AND THE `-errorAction` FAMILY. Apple
+ *     declares `NSTextField : NSControl <NSUserInterfaceValidations>` and keeps a separate action for a value a
+ *     formatter REJECTED; this tier has neither that protocol nor a formatter-driven editing path, so both are named
+ *     rather than half-declared.
  *   * `-bezelStyle`/`-setBezelStyle:` AND THE `NSTextFieldBezelStyle` VOCABULARY. Its two cases place a field's
  *     border square or rounded, which is a DRAWING decision the cell makes — so it belongs with the cell's
  *     `-drawWithFrame:`, which draws one rounded shape today. Shipping the vocabulary without the branch would be a
@@ -52,9 +48,22 @@
 @class NSColor;
 @class NSEvent;
 
+/* **AND ONE PROTOCOL FORWARD DECLARED, BECAUSE THE DELEGATE'S TYPE NAMES IT BEFORE ITS OWN DECLARATION BELOW.**
+ * `NSTextFieldDelegate` adds nothing to `NSControlTextEditingDelegate` and is defined at the foot of this file; Apple
+ * declares it the same way, for the same reason — a header that lists a class's doors in Apple's order reaches the
+ * delegate property before the protocol it names. */
+@protocol NSTextFieldDelegate;
+
 NS_ASSUME_NONNULL_BEGIN
 
 @interface NSTextField : NSControl
+{
+	/* **THE DELEGATE IS THE FIELD'S OWN, WHICH IS WHY IT IS HERE AND NOT ON `NSControl`.** Not every control edits text
+	 * — a button has no session to be told about — so a delegate is a fact about the controls that do, and Apple keeps
+	 * it on `NSTextField` for exactly that reason. NOT RETAINED, this tree's rule for every delegate: a field that
+	 * retained its delegate would be an owner cycle whenever the delegate owned the field. */
+	id _delegate;		/* NOT RETAINED */
+}
 
 /* **THE DESIGNATED INITIALISER IS THE INHERITED ONE, AND IT MAKES A FIELD CELL RATHER THAN A PLAIN ONE.** Apple's
  * `NSControl -initWithFrame:` makes a cell with no idea what it is; a text field needs the one that owns a face, a
@@ -113,6 +122,29 @@ NS_ASSUME_NONNULL_BEGIN
 - (void)mouseDown:(nullable NSEvent *)event;
 - (void)selectText:(nullable id)sender;
 
+/* ---- THE DELEGATE, WHICH IS TOLD ABOUT EVERY SESSION AND MAY REFUSE TWO OF THEM --------------------- */
+
+/* **THE DELEGATE IS TYPED, AND THE FIVE RECEIVERS BELOW ARE THE `NSText` PROTOCOL'S — ONE CABLED THROUGH THIS
+ * CONTROL.** The editor's delegate is the CELL (it owns the string and reads it back); the cell reports every
+ * session event through THIS control, because a caller set a TARGET on the control and writes its handler against the
+ * control. So these five are what the cell calls, and they are Apple's own five doors on this class — which is the
+ * reason they are declared rather than kept private: a subclass that wants to watch the session overrides them. */
+- (nullable id <NSTextFieldDelegate>)delegate;
+- (void)setDelegate:(nullable id <NSTextFieldDelegate>)anObject;
+- (BOOL)textShouldBeginEditing:(NSText *)textObject;
+- (BOOL)textShouldEndEditing:(NSText *)textObject;
+- (void)textDidBeginEditing:(NSNotification *)notification;
+- (void)textDidEndEditing:(NSNotification *)notification;
+- (void)textDidChange:(NSNotification *)notification;
+
+@end
+
+/* **AND THE PROTOCOL ITSELF, WHICH IS EMPTY, AND THAT IS APPLE'S OWN SHAPE.** `NSTextFieldDelegate` adds nothing to
+ * `NSControlTextEditingDelegate` — Apple's declaration is literally `<NSControlTextEditingDelegate> @end` — and the
+ * empty sub-protocol is the point: a caller writing `id <NSTextFieldDelegate>` says "a delegate for a TEXT FIELD",
+ * which is a narrower and truer statement than re-listing seven methods that already exist one header over. It is
+ * declared HERE because Apple declares it here, which is the rule the whole tree follows. */
+@protocol NSTextFieldDelegate <NSControlTextEditingDelegate>
 @end
 
 NS_ASSUME_NONNULL_END

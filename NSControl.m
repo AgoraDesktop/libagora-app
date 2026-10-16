@@ -23,6 +23,16 @@
 #import <AppKit/NSEvent.h>
 #import <AppKit/NSTrackingArea.h>
 
+/* **THE FOUR NAMES A CONTROL THAT EDITS TEXT PUBLISHES, DEFINED WHERE THE HEADER DECLARES THEM.** The three
+ * notification names are the era's own strings; `NSFieldEditorUserInfoKey` is this tier's name for the key Apple
+ * writes as a literal, and its VALUE is Apple's literal so a listener keyed to that still finds it. Nothing here
+ * posts them — `NSTextField` does, because it is the class that hears an editor — and the definitions live in this
+ * file because this is the header that declares them. */
+NSString *NSControlTextDidBeginEditingNotification = @"NSControlTextDidBeginEditingNotification";
+NSString *NSControlTextDidEndEditingNotification = @"NSControlTextDidEndEditingNotification";
+NSString *NSControlTextDidChangeNotification = @"NSControlTextDidChangeNotification";
+NSString *NSFieldEditorUserInfoKey = @"NSFieldEditor";
+
 @implementation NSControl
 
 - (instancetype)initWithFrame:(NSRect)frameRect
@@ -486,31 +496,6 @@
 - (BOOL)abortEditing
 {
 	return [_cell cg_abortEditing];
-}
-
-
-/* ---- AND THE END OF AN EDIT, WHICH IS THE FIRST THING THIS CLASS HEARS FROM A FIELD ---------------- */
-
-/* **A COMMITTED EDIT SENDS THIS CONTROL'S ACTION, AND A CANCELLED ONE DOES NOT.** That is the whole of the rule, and it
- * is here rather than in each field control because it is not a fact about any one of them: a field's value is committed
- * by ending its session, and the control that owns the value is what a caller set a target on. So the cell tells its
- * caller's delegate — which is the control, because that is who lent the editor — and the control turns Return and Tab
- * into the action a caller is waiting for.
- *
- * ESCAPE IS THE ONE THAT DOES NOT. `NSTextMovementCancel` means the session was thrown away, and a control that sent its
- * action there would tell a caller that a value the model never accepted had been entered. MEASURED, that is exactly
- * what happened before the movement existed: Escape committed, because nothing distinguished it from a click away.
- *
- * THE SENDER IS THE CONTROL rather than the editor, because a caller's handler is written against the CONTROL — the
- * thing with a value and a cell — and an editor is a view the window happens to be lending. */
-- (void)textDidEndEditing:(NSNotification *)notification
-{
-	id raw = [[notification userInfo] objectForKey:NSTextMovementUserInfoKey];
-	NSTextMovement movement = (raw != nil) ? (NSTextMovement)[raw integerValue] : NSTextMovementOther;
-
-	if (movement == NSTextMovementReturn || movement == NSTextMovementTab || movement == NSTextMovementBacktab) {
-		[[NSApplication sharedApplication] sendAction:[self action] to:[self target] from:self];
-	}
 }
 
 @end
