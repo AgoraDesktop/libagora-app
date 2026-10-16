@@ -135,13 +135,15 @@ typedef NSUInteger NSSelectionDirection;
  * ============================================================================================ */
 
 /* **AND WHAT THE VALUES ARE IS THE INTERESTING PART: APPLE DOES NOT DEFINE THEM.** Its 10.6 header writes each of
- * these as a macro over `CGWindowLevelForKey` — a CoreGraphics function this tree's CG does not have — and Apple's
+ * these as a macro over `CGWindowLevelForKey` — a function this tree's Core Graphics NOW publishes, in
+ * `CGWindowLevel.h` — and Apple's
  * own engineering discussion of the area says the Cocoa specification DOES NOT PIN THE NUMBERS and that code must
  * rely on the SYMBOLIC NAMES AND THEIR RELATIVE ORDER. Two published sources disagree with each other, even: the
  * older CGWindowLevel.h comments put the dock at 10, the main menu at 20 and the status level at 21, while the
  * modern mapped set has 20, 24 and 25.
  *
- * SO THE VALUES BELOW ARE **OURS, STATED** — the tree's rule for a value Apple publishes none of — and they are the
+ * SO THE VALUES BELOW ARE **OURS, STATED** — and `CGWindowLevel.c` states the same ones, so the two frameworks
+ * cannot differ — and they are the
  * MODERN MAPPED SET rather than the older comments, because that is the one whose ORDER matches what these levels
  * mean. WHAT A CALLER MAY RELY ON IS THE ORDER, and the probe asserts the order rather than the numbers:
  *
