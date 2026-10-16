@@ -20,11 +20,12 @@
  * way out but the same one with a different exit. What is MISSING from them is said where they are implemented:
  * the mode is passed and not routed by, and there is no dock for a request for the user's attention to bounce.
  *
- * WHAT IS NOT HERE, AND WHY, so the open rows are a decision rather than an omission: the SHEETS (`-beginSheet:`,
- * `-endSheet:returnCode:`) attach a window to a parent and need the attachment and the reply-callback dance, which
- * is its own later slice — each of those doors is absent rather than half-implemented; the standard PANELS (about,
- * colour, font, page layout), the SERVICES menu and the HELP/Toolbar/StatusBar plumbing need the frameworks of
- * stages E through I; and the scripting doors need an OSA this tree does not have. Each is a later stage's.
+ * **THE SHEETS ARE HERE NOW, AND THE SENTENCE THAT SAID THEY WERE NOT IS CORRECTED RATHER THAN DELETED** — the note
+ * above about the modal sessions is the same correction a slice earlier. `-beginSheet:modalForWindow:...` and
+ * `-endSheet:returnCode:` attach a window to a parent, announce the session (Will and Did) and run the reply dance,
+ * which is exactly what this list used to defer. WHAT IS STILL NOT HERE: the standard PANELS (about, colour, font,
+ * page layout), the SERVICES menu and the HELP/Toolbar/StatusBar plumbing, which need the frameworks of stages E
+ * through I; and the scripting doors, which need an OSA this tree does not have. Each is a later stage's.
  */
 
 #import <AppKit/NSResponder.h>

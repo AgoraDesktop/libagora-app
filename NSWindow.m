@@ -29,11 +29,12 @@
  * made on demand, at the first door that needs one, and `-windowNumber` answers -1 until then — which is
  * Apple's own answer for a window with no window number.
  *
- * WHAT IS NOT HERE, AND WHY, so the open rows are a decision rather than an omission: the SHEETS, the
- * TOOLBAR, the DRAWER, the frame-autosave strings, the script-command handling, the cursor-rect
- * invalidation and the child-window list all need subsystems this stage has not reached; the
- * minimisable/closable BUTTONS are a window manager's (Kestrel is parked); and the real screen/zone
- * placement needs `NSScreen`, which is its own row. Each is absent rather than stubbed.
+ * **WHAT IS NOT HERE, AND WHY — CORRECTED, BECAUSE FOUR OF THESE ARRIVED AFTER THE LIST WAS WRITTEN.** The SHEETS
+ * (their state is this file's; `-beginSheet:modalForWindow:...` and `-endSheet:returnCode:` are `NSApplication`'s),
+ * the FRAME-AUTOSAVE strings, the CURSOR-RECT invalidation and the CHILD-WINDOW list are all implemented now, and
+ * the screen is `NSScreen`'s own row and is measured with it. What remains absent: the TOOLBAR, the DRAWER (the
+ * class) and the SCRIPT-COMMAND handling, which refuses by name. The minimisable/closable BUTTONS are a window
+ * manager's (Kestrel is parked). Each of those is absent rather than stubbed.
  */
 #include "AGWindowServer.h"
 #import "AGChromeTheme.h"	/* the chrome's control graphics, when an XFWM theme resolves */

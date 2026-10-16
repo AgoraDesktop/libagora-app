@@ -23,11 +23,16 @@
  * doors that used to ask the X server for those (`-setFrameOrigin:`, `-orderOut:`, `-miniaturize:`,
  * `-orderBack:`) change THIS OBJECT's state and not the screen's, each with its reason written at the door.
  *
- * WHAT IS NOT HERE, AND WHY, so the ledger's open rows are a decision rather than an omission: the sheets,
- * the toolbar, the drawer, the frame-autosave strings, the script-command doors, the cursor-rect
- * invalidation and the child-window list each need a subsystem this stage has not reached; the window's
- * BUTTONS are a window manager's business (Kestrel, which will draw them, is parked); and screen and zone
- * placement needs `NSScreen`, which is its own row. Each is absent rather than stubbed.
+ * **WHAT IS NOT HERE, AND WHY — CORRECTED, BECAUSE FOUR OF THESE ARRIVED AFTER THE LIST WAS WRITTEN.** THE SHEETS
+ * (`-isSheet`/`-attachedSheet` here, `-beginSheet:...`/`-endSheet:returnCode:` on the application), THE
+ * FRAME-AUTOSAVE STRINGS (`-setFrameAutosaveName:` and the pair of `…UsingName:` doors, saved when the window
+ * closes), THE CURSOR-RECT INVALIDATION (`-addCursorRect:cursor:` on the view, resolved against the pointer by this
+ * class) and THE CHILD-WINDOW LIST (`-addChildWindow:ordered:`, `-childWindows`, `-parentWindow`) are all
+ * IMPLEMENTED; so is the screen measurement, which is `NSScreen`'s own row and is used (`+mainScreen`). WHAT REMAINS
+ * ABSENT: the TOOLBAR (there is no `NSToolbar`), the DRAWER (the CLASS — this class answers `-drawers` with an empty
+ * array, which is Apple's own contract for a window without one) and the SCRIPT-COMMAND DOORS, which are declared
+ * and REFUSE by name because the scripting suite is not here. The window's BUTTONS are a window manager's business
+ * (Kestrel, which will draw them, is parked). Each of those is absent rather than stubbed.
  */
 
 #import <AppKit/NSGraphicsContext.h>
@@ -1379,9 +1384,12 @@ extern NSString *NSWindowDidChangeScreenProfileNotification;
  * that is newer than the pins: a protocol that declared them would be promising a feature      *
  * this tier has not reached.                                                                   *
  *                                                                                                *
- * AND NOT ALL OF THESE ARE SENT YET, WHICH IS STATED RATHER THAN LEFT TO BE DISCOVERED: the     *
- * sheet, live-resize and screen callbacks arrive with the features that produce them. What is  *
- * wired is every callback this window can actually cause.                                      *
+ * AND NOT ALL OF THESE ARE SENT YET, WHICH IS STATED RATHER THAN LEFT TO BE DISCOVERED: the LIVE-RESIZE and SCREEN *
+ * callbacks arrive with the features that produce them. **THE SHEET PAIR USED TO BE ON THAT LIST AND IS OFF IT** — *
+ * `-windowWillBeginSheet:` and `-windowDidEndSheet:` ARE announced, by `NSApplication` where the session is run (it *
+ * posts `NSWindowWillBeginSheetNotification` and `NSWindowDidEndSheetNotification`), which is the file that owns the *
+ * doors; the ATTACHMENT those announcements describe is this class's. What is wired is every callback this window  *
+ * can actually cause.                                                                                          *
  * ============================================================================================ */
 @protocol NSWindowDelegate <NSObject>
 @optional

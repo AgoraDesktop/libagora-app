@@ -426,15 +426,21 @@ no test about pixels can see.
 
 ### Still absent, and why
 
-The sheets, the drawer, the frame-autosave strings, the script-command doors, the cursor-rect invalidation and
-the child-window list all need subsystems this stage has not reached; what the window's close, minimise and zoom
-buttons DO is now this tier's — each goes through the `-perform…` door its menu item sends — but the MINIMISE is
+**FOUR THINGS THAT USED TO BE ON THIS LIST ARE NOT ANY MORE, AND THE LIST IS CORRECTED RATHER THAN QUIETLY SHRUNK:**
+the SHEETS (`NSApplication -beginSheet:modalForWindow:…` and `-endSheet:returnCode:`, with the attachment and the
+reply dance on `NSWindow`), the FRAME-AUTOSAVE strings, the CURSOR-RECT invalidation and the CHILD-WINDOW list are all
+implemented. What is still absent is the DRAWER (the class — `-drawers` answers an empty array, which is Apple's own
+contract), the TOOLBAR, and the script-command doors, which are declared and REFUSE by name; what the window's close,
+minimise and zoom buttons DO is now this tier's — each goes through the `-perform…` door its menu item sends — but
+the MINIMISE is
 still only a state the window marks and announces, because there is no Dock to put a miniaturized window in and no
 iconify in the protocol (Kestrel is parked). The chrome's toolbar pill is drawn and performs nothing, because
 there is no toolbar for it to toggle; the three symbols beside it ARE buttons now, and `tests/chrome_buttons.m`
 presses them. The input-method half of the text system is
-still absent (`-interpretKeyEvents:` does the direct mapping and says so), and the PARAGRAPH commands and the field
-editor are named rather than guessed. The WORD commands are NOT in that list any more: `tests/text_word_movement.m`
+still absent (`-interpretKeyEvents:` does the direct mapping and says so), and the PARAGRAPH commands are named rather
+than guessed. **THE FIELD EDITOR IS NOT ON THAT LIST AND HAS NOT BEEN SINCE THE WINDOW LEARNED TO LEND ONE** —
+`-fieldEditor:forObject:` is implemented and the field cells open their sessions with it, so what that clause used to
+defer is a door that exists. The WORD commands are NOT in that list any more: `tests/text_word_movement.m`
 drives Option+arrow and Option+Delete, because a word is a run of the string's own characters and needs no layout
 model. And the MULTI-LINE TEXT VIEW has its FIRST SLICE: `NSTextView` holds many lines where `NSText` holds one
 (`tests/text_view_lines.m`), and WRAPPING and SCROLLING are the slices above it (`tests/text_view_wrapping.m`,
