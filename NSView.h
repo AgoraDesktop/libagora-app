@@ -5,13 +5,15 @@
 /*
  * NSView.h — A RECTANGLE IN A TREE, and the coordinate systems that tree implies (C8.14).
  *
- * THIS SLICE IS THE GEOMETRY, NOT THE DRAWING, and the split is deliberate rather than a stop halfway:
- * almost everything a view does — where it is, what is inside it, which subview a click landed on, what
- * part of it is visible — is answered by the TREE and nothing else. None of that needs a display server,
- * so all of it is provable now. The drawing (`-drawRect:` being called, and being called with a context
- * to draw into) is the next slice, because THAT is where a substrate has to be chosen: this AppKit has
- * no window server, so the honest answer is an offscreen one, and that decision deserves its own turn
- * rather than a guess smuggled in with the geometry.
+ * THIS SLICE WAS THE GEOMETRY RATHER THAN THE DRAWING, AND THE DRAWING HAS SINCE ARRIVED. The split was deliberate
+ * and not a stop halfway: almost everything a view does — where it is, what is inside it, which subview a click
+ * landed on, what part of it is visible — is answered by the TREE and nothing else, and none of that needs a display
+ * server, so all of it was provable then. What this paragraph USED TO SAY is that the drawing — `-drawRect:` being
+ * called, with a context to draw into — "is the next slice, because THAT is where a substrate has to be chosen: this
+ * AppKit has no window server". BOTH HALVES OF THAT ARE NOW FALSE and it is corrected here rather than left for a
+ * reader to discover: this tier HAS a window server (a separate one that a window talks to over the seam), views are
+ * drawn — the demonstration is nothing but views being drawn — and the substrate the paragraph was waiting to choose
+ * is `-cacheDisplayInRect:toBitmapImageRep:`, which is named two paragraphs down and was always the answer. */
  *
  * `-drawRect:` IS DECLARED IN THIS SLICE AND DOES NOTHING — which is also what Apple's plain `NSView`
  * does, since a view with no subclass draws nothing and the method exists to be OVERRIDDEN — **AND
@@ -33,10 +35,14 @@
  * visible as a mirrored drawing rather than as an error, which is why the probe checks a FLIPPED
  * SUPERVIEW against an UNFLIPPED CHILD rather than only the easy case.
  *
- * WHAT IS NOT HERE, AND WHY: `window`, and everything that needs one (`-display`,
- * `-displayIfNeeded`, `-viewDidMoveToWindow`, the layer and backing-scale members
- * `-convertPointToBacking:`/`-convertPointToLayer:` and their siblings) — there is no window server, and
- * a scale factor needs a screen to ask. `-graphicsContext`, `-lockFocus`, `-unlockFocus`,
+ * WHAT IS NOT HERE, AND WHY — CORRECTED, BECAUSE TWO OF THE FOUR IT USED TO NAME HAVE SINCE ARRIVED. It said
+ * "`window`, and everything that needs one (`-display`, `-displayIfNeeded`, `-viewDidMoveToWindow`, the layer and
+ * backing-scale members) — there is no window server". MEASURED: `-window` is implemented and used all over the tier
+ * (a text view asks it to take the keyboard), `-viewDidMoveToWindow` is implemented, and the `…InRect` display family
+ * is implemented — while the WINDOW SERVER the sentence denied exists and is what draws any of this. WHAT IS STILL
+ * ABSENT is the layer and backing-scale family: `-convertPointToBacking:`, `-convertPointToLayer:` and
+ * `-backingScaleFactor` have no implementation here, and a scale factor is a thing a screen would have to be asked
+ * for. A DEFERRAL WHOSE REASON HAS EXPIRED IS WORSE THAN NO NOTE AT ALL, because the next reader trusts it. */ `-graphicsContext`, `-lockFocus`, `-unlockFocus`,
  * `-lockFocusIfCanDraw` and the `…ToBase`/`…FromBase` conversions are ABSENT BECAUSE THEY ARE `struck`
  * ROWS: deprecated at this tree's pinned vintage, and the modern replacements
  * (`-cacheDisplayInRect:toBitmapImageRep:`, `-convertPoint:fromView:`) are the ones a caller should
