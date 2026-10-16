@@ -19,8 +19,9 @@
  *        view's origin and the origin grows as a reader moves DOWN; the two `NSView` doors move an enclosing clip
  *        view; the view settles its own height so there is something to scroll; and `-scrollRangeToVisible:` turns a
  *        caret into a rectangle.
- *   IV.  RICH TEXT, ATTACHMENTS AND PARAGRAPHS, which need the attributed store and the attribute vocabulary the
- *        `NSTextFieldAttributedStringMethods` note already names as travelling without being obeyed.
+ *   IV.  RICH TEXT, ATTACHMENTS AND PARAGRAPHS (STARTED). `NSTextStorage` — an attributed string that announces its
+ *        own edits — is here (`NSTextStorage.h`); what is left is the `NSLayoutManager`/`NSTextContainer` pair that
+ *        lays it out, and this view reading RUNS rather than one plain string.
  *
  * **AND THE FLIP IS WHY THE LAYOUT BELOW IS y-DOWN.** A flipped view measures y from the TOP — that is what flipping
  * MEANS — so `-cg_baselineForLine:` counts downward and a band is drawn ABOVE its baseline. THE ONE PLACE IT SHOWS is
@@ -33,9 +34,10 @@
  * and there can be several per model line; the two `cg_visualLine…` doors are that layout, and they change every time
  * the text or the width does. A caller that wants "how many lines" has to say which.
  *
- * **WHAT THE SLICES ABOVE STILL HAVE NOT GOT, NAMED RATHER THAN STUBBED:** the
- * `NSTextStorage`/`NSLayoutManager`/`NSTextContainer` trio and the door names that come with it, attachments, tables,
- * the paragraph commands, the marked-text family and the input-method half.
+ * **WHAT THE SLICES ABOVE STILL HAVE NOT GOT, NAMED RATHER THAN STUBBED:** the `NSLayoutManager`/`NSTextContainer`
+ * pair and the door names that come with it — **THE STORE HAS ARRIVED** (`NSTextStorage.h`), and what this view reads
+ * is still a PLAIN string — plus attachments, tables, the paragraph commands, the marked-text family and the
+ * input-method half.
  */
 #ifndef APPKIT_NSTEXTVIEW_H
 #define APPKIT_NSTEXTVIEW_H

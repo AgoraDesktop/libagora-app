@@ -125,6 +125,14 @@ target_link_libraries(text_input PRIVATE App m)
 add_test(NAME appkit-text-input COMMAND text_input)
 set_tests_properties(appkit-text-input PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
 
+# **AND THE STORE THE RICH-TEXT SLICE IS BUILT ON.** `NSTextStorage` is an attributed string that announces its own
+# edits: the two primitives record a mask, a range and a length change; `-beginEditing`/`-endEditing` coalesce a group
+# into ONE announcement; and an edit made through a door the store never overrode is announced by DISPATCH.
+add_executable(text_storage text_storage.m)
+target_link_libraries(text_storage PRIVATE App)
+add_test(NAME appkit-text-storage COMMAND text_storage)
+set_tests_properties(appkit-text-storage PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
+
 # **AND THE WORD GRANULARITY OF THE SAME KEYS.** Option+arrow moves by the word and Option+Delete deletes one, which
 # is arithmetic over the string's own characters and needs no layout model — the correction `NSResponder.h` carries.
 # Driven as KEYS, so the mapping is under test as well as the walk.

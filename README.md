@@ -43,6 +43,7 @@ tests/
   slider_ink.m                  a control whose VALUE is a POSITION: the knob and its inverse
   tracking_area.m               an AREA's region, owner and SCOPE — and a control's own hover area
   text_input.m                  the first slice of the text system, driven a keystroke at a time
+  text_storage.m                and the STORE the rich-text slice is built on: an attributed string that announces edits
   text_word_movement.m          and its WORD granularity: Option+arrow and Option+Delete, over the string
   text_view_lines.m             and the first slice of the MULTI-LINE view: the line model, and what reads it
   text_view_wrapping.m          and the slice above it: the same model WRAPPED to the view's width
@@ -152,6 +153,18 @@ the compositor is really gone.
   view is FLIPPED, so its FIRST line sits at the clip view's origin and the origin grows as a reader moves DOWN the
   document — MEASURED, with the origin at 0 the first line is on screen, and the caret moved to the end leaves the
   origin at **258.6**.
+- **And the STORE the rich-text slice is built on** (`ctest`): `NSTextStorage` is an `NSMutableAttributedString` that
+  ANNOUNCES ITS OWN EDITS — the two primitives (`-replaceCharactersInRange:withString:`, `-setAttributes:range:`)
+  record a mask, a range and a length change, `-beginEditing`/`-endEditing` coalesce a group into ONE
+  `-processEditing`, and the announcement reaches a delegate and a listener registered for the name. MEASURED: a fresh
+  store's edited range is `NSNotFound` — NOT zero, which is a real place in the string; inserting six characters
+  reports the mask **Characters**, the range **(5,0)** in the ORIGINAL string and the delta **+6**; an attribute edit
+  reports **Attributes** with a zero delta; two edits inside a group produce ONE announcement over their UNION — and a
+  group of `-1` then `+2` reports delta **1**, with the second range brought back to the original's coordinates before
+  the union, which is the arithmetic a naive accumulator gets wrong; and `-insertAttributedString:atIndex:`, a door
+  the store NEVER OVERRODE, is announced anyway — the routing, by dispatch. **WHAT IS OWED AND NAMED IN ITS HEADER**:
+  the layout-manager trio (`NSLayoutManager` does not exist here), the scripting category, and lazy attribute fixing
+  (there is nothing to defer).
 - **And the field, which is a cell under a view** (`ctest`, offscreen): `NSTextFieldCell` owns the string, the face
   and the three doors of an edit; `NSTextField` is the control above it, and it contributes the two things a cell
   cannot — a PRESS that opens a session with the WINDOW's field editor, and `-selectText:` for the same session with
@@ -282,11 +295,11 @@ the compositor is really gone.
   and the child clip is the child's FRAME region rather than its bounds rect — which was the same value only while the
   origin was zero. MEASURED: a mark at a document's own y 100..120 draws at 110 with the clip view at the top and at
   10 after a scroll of 100, in one run, through `-displayRect:`.
-- **`ctest`: 37 of 37 passed** (the keyboard and the seam, the AppKit and its input path, the controls and their
+- **`ctest`: 38 of 38 passed** (the keyboard and the seam, the AppKit and its input path, the controls and their
   metrics, the field control and its cell and its bezel and its placeholder and what it may hold, the text path and its
-  word granularity and the multi-line view and its wrapping and its scrolling, what a drag costs, the resize by edge,
-  the tracking engine, the clip view and the scroller and the scroll view and the drawn offset, the chrome and what its
-  buttons do, the chrome theme, the menus and activation).
+  word granularity and the multi-line view and its wrapping and its scrolling, and the STORE the rich-text slice is
+  built on, what a drag costs, the resize by edge, the tracking engine, the clip view and the scroller and the scroll
+  view and the drawn offset, the chrome and what its buttons do, the chrome theme, the menus and activation).
 - **And the desktop's own text is SUB-PIXEL ANTIALIASED**, which is the AppKit's half of a renderer change in
   CoreGraphics: a window's surface is OPAQUE (`kCGImageAlphaNoneSkipFirst`), and the destination's opacity is
   exactly what decides whether a glyph is rasterised in colour. MEASURED on the live session: the window title's
