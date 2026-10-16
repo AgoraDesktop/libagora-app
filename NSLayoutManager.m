@@ -401,6 +401,22 @@ static CGFloat fn_attachment_width(void *refCon)
 	return total;
 }
 
+/* **AND THE MANAGER'S OWN GLYPH SPACE IS ONE GLYPH PER CHARACTER, WHICH IS NOW A CONVENTION RATHER THAN A FACT.**
+ * Both mapping doors below translate between a character range and a glyph range by ARITHMETIC — `location` minus the
+ * fragment's start — and that was exactly right for as long as the engine gave one glyph per character. **IT IS NOT
+ * RIGHT ANY MORE**: `CTLine` shapes now, so a face with an `ffi` ligature sets three characters in one glyph and a
+ * composed mark sets one character in one, and the two doors are one glyph out for every ligature before the point.
+ *
+ * **THEY ARE LEFT AS ARITHMETIC ON PURPOSE, AND WHAT IS LEFT IS NAMED HERE RATHER THAN LEFT TO BE FOUND.** The
+ * manager's glyph space is built CHARACTER BY CHARACTER — `cg_layOut` advances `glyphBase` by the range's LENGTH, and
+ * every fragment records `glyphs:NSMakeRange(glyphBase, count)` where `count` is a character count — so the manager's
+ * two doors are INVERSES OF EACH OTHER and stay consistent with the glyph space they define. Making that space the
+ * LINE's instead means (a) advancing `glyphBase` by the line's own glyph count, (b) recording the shaped count on
+ * every fragment, and (c) translating through `CTRunGetStringIndices` in both doors, which is what the line's own
+ * caret doors already do. That is the next slice, and until it lands THE SHAPED GLYPH COUNT IS NOT VISIBLE THROUGH
+ * THIS CLASS: a caller asking `-numberOfGlyphs` is told the character count. Nothing is drawn wrong by it — the ink
+ * comes from the line, which knows the truth — and a selection is off by the ligatures before it, which is why this
+ * is stated in the class that would have to change rather than in a commit message. */
 - (NSRange)glyphRangeForCharacterRange:(NSRange)charRange actualCharacterRange:(NSRange *)actualCharRange
 {
 	NSUInteger n = [_textStorage length];
