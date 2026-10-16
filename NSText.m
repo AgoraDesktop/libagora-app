@@ -34,6 +34,7 @@
 #import <Foundation/NSNotification.h>
 #import <Foundation/NSNotificationCenter.h>
 #import <Foundation/NSArray.h>
+#import <Foundation/NSCharacterSet.h>
 
 #include <CoreGraphics/CGContext.h>
 #include <CoreText/CTLine.h>
@@ -760,6 +761,46 @@ static void fn_announce(NSText *text, NSString *name, SEL delegateSelector)
 	[self replaceCharactersInRange:_selectedRange withString:text];
 }
 
+/* **AND WHAT A WORD IS, WHICH IS THE ONE THING THE WORD COMMANDS BELOW HAVE TO DECIDE.** A word is a run of
+ * `+alphanumericCharacterSet` members and everything between two runs is not one, so the two doors take an index and
+ * walk to the boundary on that side — LEFT first past the NON-word characters and then past the word, RIGHT the same
+ * in the other direction. That order is what makes them the same arithmetic a person expects: Option+Left from the
+ * MIDDLE of a word goes to ITS start (there were no non-word characters to skip), and from the START of a word goes
+ * past the whitespace to the start of the previous one.
+ *
+ * **IT IS ARITHMETIC OVER THE STRING AND NOT A LAYOUT QUESTION**, which is why it can live in a one-line field: the
+ * character set is the STRING's, and no glyph position is consulted. `NSResponder.h` used to name the word commands
+ * among the family that "need[s] a LAYOUT MODEL"; that was written about the PARAGRAPH and DOCUMENT commands, whose
+ * several lines this class genuinely has not got, and the word pair does not belong in the list. */
+- (NSUInteger)fn_wordBoundaryLeftOf:(NSUInteger)index
+{
+	NSCharacterSet *word = [NSCharacterSet alphanumericCharacterSet];
+	NSUInteger i = index;
+
+	while (i > 0 && ![word characterIsMember:[_string characterAtIndex:i - 1]]) {
+		i--;
+	}
+	while (i > 0 && [word characterIsMember:[_string characterAtIndex:i - 1]]) {
+		i--;
+	}
+	return i;
+}
+
+- (NSUInteger)fn_wordBoundaryRightOf:(NSUInteger)index
+{
+	NSCharacterSet *word = [NSCharacterSet alphanumericCharacterSet];
+	NSUInteger n = [_string length];
+	NSUInteger i = index;
+
+	while (i < n && ![word characterIsMember:[_string characterAtIndex:i]]) {
+		i++;
+	}
+	while (i < n && [word characterIsMember:[_string characterAtIndex:i]]) {
+		i++;
+	}
+	return i;
+}
+
 - (void)moveLeft:(id)sender
 {
 	(void)sender;
@@ -824,6 +865,57 @@ static void fn_announce(NSText *text, NSString *name, SEL delegateSelector)
 	[self setSelectedRange:NSMakeRange(_selectedRange.location, [_string length] - _selectedRange.location)];
 }
 
+/* **AND THE WORD COMMANDS, WHICH ARE THE SAME SHAPE ONE GRANULARITY UP.** Each collapses a selection the way its
+ * character counterpart does and otherwise walks to the boundary `-fn_wordBoundaryLeftOf:`/`…RightOf:` answers; the two
+ * `AndModifySelection:` forms move only the end the drag has been moving, which is why the left one rewrites the
+ * LOCATION and the right one the LENGTH. */
+- (void)moveWordLeft:(id)sender
+{
+	(void)sender;
+	if (_selectedRange.length > 0) {
+		[self setSelectedRange:NSMakeRange(_selectedRange.location, 0)];
+	} else if (_selectedRange.location > 0) {
+		[self setSelectedRange:NSMakeRange([self fn_wordBoundaryLeftOf:_selectedRange.location], 0)];
+	}
+}
+
+- (void)moveWordRight:(id)sender
+{
+	(void)sender;
+	if (_selectedRange.length > 0) {
+		[self setSelectedRange:NSMakeRange(_selectedRange.location + _selectedRange.length, 0)];
+	} else if (_selectedRange.location < [_string length]) {
+		[self setSelectedRange:NSMakeRange([self fn_wordBoundaryRightOf:_selectedRange.location], 0)];
+	}
+}
+
+- (void)moveWordLeftAndModifySelection:(id)sender
+{
+	NSUInteger end = _selectedRange.location + _selectedRange.length;
+	NSUInteger target;
+
+	(void)sender;
+	if (_selectedRange.location == 0) {
+		return;
+	}
+	target = [self fn_wordBoundaryLeftOf:_selectedRange.location];
+	[self setSelectedRange:NSMakeRange(target, end - target)];
+}
+
+- (void)moveWordRightAndModifySelection:(id)sender
+{
+	NSUInteger start = _selectedRange.location;
+	NSUInteger end = start + _selectedRange.length;
+	NSUInteger target;
+
+	(void)sender;
+	if (end >= [_string length]) {
+		return;
+	}
+	target = [self fn_wordBoundaryRightOf:end];
+	[self setSelectedRange:NSMakeRange(start, target - start)];
+}
+
 - (void)deleteBackward:(id)sender
 {
 	(void)sender;
@@ -847,6 +939,41 @@ static void fn_announce(NSText *text, NSString *name, SEL delegateSelector)
 		[self replaceCharactersInRange:_selectedRange withString:@""];
 	} else if (_selectedRange.location < [_string length]) {
 		[self replaceCharactersInRange:NSMakeRange(_selectedRange.location, 1) withString:@""];
+	}
+}
+
+/* **AND DELETING A WORD DELETES EXACTLY WHAT MOVING BY ONE WOULD HAVE CROSSED**, which is the rule that keeps the two
+ * halves from disagreeing: `-deleteWordBackward:` removes the range `-moveWordLeft:` would have stepped over and
+ * `-deleteWordForward:` the range `-moveWordRight:` would have. A SELECTION IS DELETED WHOLE first, the same as every
+ * other deletion here, because a person who has selected something and pressed a delete key means the selection. */
+- (void)deleteWordBackward:(id)sender
+{
+	(void)sender;
+	if (![self isEditable]) {
+		return;
+	}
+	if (_selectedRange.length > 0) {
+		[self replaceCharactersInRange:_selectedRange withString:@""];
+	} else if (_selectedRange.location > 0) {
+		NSUInteger from = [self fn_wordBoundaryLeftOf:_selectedRange.location];
+
+		[self replaceCharactersInRange:NSMakeRange(from, _selectedRange.location - from) withString:@""];
+	}
+}
+
+- (void)deleteWordForward:(id)sender
+{
+	(void)sender;
+	if (![self isEditable]) {
+		return;
+	}
+	if (_selectedRange.length > 0) {
+		[self replaceCharactersInRange:_selectedRange withString:@""];
+	} else if (_selectedRange.location < [_string length]) {
+		NSUInteger to = [self fn_wordBoundaryRightOf:_selectedRange.location];
+
+		[self replaceCharactersInRange:NSMakeRange(_selectedRange.location, to - _selectedRange.location)
+				    withString:@""];
 	}
 }
 

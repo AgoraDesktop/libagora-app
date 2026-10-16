@@ -451,8 +451,14 @@
 {
 	[[self nextResponder] moveToEndOfLineAndModifySelection:sender];
 }
+- (void)moveWordLeft:(id)sender				{ [[self nextResponder] moveWordLeft:sender]; }
+- (void)moveWordRight:(id)sender				{ [[self nextResponder] moveWordRight:sender]; }
+- (void)moveWordLeftAndModifySelection:(id)sender	{ [[self nextResponder] moveWordLeftAndModifySelection:sender]; }
+- (void)moveWordRightAndModifySelection:(id)sender	{ [[self nextResponder] moveWordRightAndModifySelection:sender]; }
 - (void)deleteBackward:(id)sender			{ [[self nextResponder] deleteBackward:sender]; }
 - (void)deleteForward:(id)sender			{ [[self nextResponder] deleteForward:sender]; }
+- (void)deleteWordBackward:(id)sender			{ [[self nextResponder] deleteWordBackward:sender]; }
+- (void)deleteWordForward:(id)sender			{ [[self nextResponder] deleteWordForward:sender]; }
 - (void)deleteToBeginningOfLine:(id)sender		{ [[self nextResponder] deleteToBeginningOfLine:sender]; }
 - (void)deleteToEndOfLine:(id)sender			{ [[self nextResponder] deleteToEndOfLine:sender]; }
 - (void)insertNewline:(id)sender			{ [[self nextResponder] insertNewline:sender]; }
@@ -495,6 +501,7 @@
 		NSString *chars = [event characters];
 		NSUInteger flags = [event modifierFlags];
 		BOOL shift;
+		BOOL alt;
 		unichar c;
 		SEL command = NULL;
 
@@ -505,6 +512,7 @@
 			continue;	/* a key equivalent belongs to the menu bar, not to this */
 		}
 		shift = ((flags & NSShiftKeyMask) != 0);
+		alt = ((flags & NSAlternateKeyMask) != 0);
 		c = [chars characterAtIndex:0];
 
 		switch (c) {
@@ -516,10 +524,21 @@
 			 * a line, which would be inventing a document model this class does not have. */
 			break;
 		case NSLeftArrowFunctionKey:
-			command = shift ? @selector(moveLeftAndModifySelection:) : @selector(moveLeft:);
+			/* **AND OPTION IS THE WORD GRANULARITY OF THE SAME KEY**, which is one decision rather than a second
+			 * command: the key and the direction are unchanged, and Option asks for the boundary a WORD away instead of
+			 * the character one. Shift still extends, so the four spellings are the two-by-two of the same pair. */
+			if (alt) {
+				command = shift ? @selector(moveWordLeftAndModifySelection:) : @selector(moveWordLeft:);
+			} else {
+				command = shift ? @selector(moveLeftAndModifySelection:) : @selector(moveLeft:);
+			}
 			break;
 		case NSRightArrowFunctionKey:
-			command = shift ? @selector(moveRightAndModifySelection:) : @selector(moveRight:);
+			if (alt) {
+				command = shift ? @selector(moveWordRightAndModifySelection:) : @selector(moveWordRight:);
+			} else {
+				command = shift ? @selector(moveRightAndModifySelection:) : @selector(moveRight:);
+			}
 			break;
 		case NSHomeFunctionKey:
 			command = shift ? @selector(moveToBeginningOfLineAndModifySelection:)
@@ -529,12 +548,12 @@
 			command = shift ? @selector(moveToEndOfLineAndModifySelection:) : @selector(moveToEndOfLine:);
 			break;
 		case NSDeleteFunctionKey:
-			command = @selector(deleteForward:);
+			command = alt ? @selector(deleteWordForward:) : @selector(deleteForward:);
 			break;
 		case NSBackspaceCharacter:
 		case NSDeleteCharacter:
 			/* BOTH ARE BACKWARD DELETE, which is the keymap difference the constants above record. */
-			command = @selector(deleteBackward:);
+			command = alt ? @selector(deleteWordBackward:) : @selector(deleteBackward:);
 			break;
 		case NSNewlineCharacter:
 		case NSCarriageReturnCharacter:

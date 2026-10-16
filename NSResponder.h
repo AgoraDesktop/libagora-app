@@ -181,12 +181,15 @@ typedef NSUInteger NSInterfaceStyle;
  * has not been asked to handle it yet, and the chain's end in this tier is silent because there   *
  * is no beep to give it.                                                                          *
  *                                                                                                *
- * THIS IS THE SUBSET A SINGLE-LINE FIELD NEEDS, AND THE REST OF APPLE'S FAMILY IS NAMED RATHER   *
- * THAN GUESSED: the word-granularity commands (`-moveWordLeft:`, `-deleteWordForward:`), the      *
- * paragraph and document commands, `-yank:`, `-transpose:`, `-complete:`, `-setMark:` and the    *
- * three that go with it, and the substitution and container-break insertions all need a LAYOUT    *
- * MODEL — words, paragraphs, several lines — that one line of text does not have. Adding them    *
- * later is adding methods; adding them now would be adding guesses.                               *
+ * THIS WAS THE SUBSET A SINGLE-LINE FIELD NEEDED, AND THE WORD COMMANDS HAVE SINCE JOINED IT.     *
+ * The header used to name `-moveWordLeft:` and `-deleteWordForward:` among the family that        *
+ * "need[s] a LAYOUT MODEL — words, paragraphs, several lines — that one line of text does not     *
+ * have". THAT REASON WAS WRONG FOR THE WORD COMMANDS AND IS CORRECTED HERE: a WORD is a run of    *
+ * the STRING's own characters, so a word command is arithmetic over the text a one-line field     *
+ * already holds, and it needs no layout at all. What genuinely does need a layout model is the    *
+ * REST of that list — the PARAGRAPH and DOCUMENT commands (several lines), `-transpose:` and the  *
+ * marked-text family (a position model), and the substitution and container-break insertions —    *
+ * and those stay named rather than guessed.                                                        *
  * ============================================================================================ */
 
 /* INSERTION: what an input context, or a key binding, produces. */
@@ -206,11 +209,21 @@ typedef NSUInteger NSInterfaceStyle;
 - (void)moveToBeginningOfLineAndModifySelection:(nullable id)sender;
 - (void)moveToEndOfLineAndModifySelection:(nullable id)sender;
 
+/* **AND THE WORD-GRANULARITY PAIR, WHICH IS THE SAME KIND OF MOVEMENT ONE GRANULARITY UP.** A word is a run of the
+ * string's OWN characters (see `NSText` for the two walks), so these need nothing the four lines above do not — which
+ * is the correction the block comment records. */
+- (void)moveWordLeft:(nullable id)sender;
+- (void)moveWordLeftAndModifySelection:(nullable id)sender;
+- (void)moveWordRight:(nullable id)sender;
+- (void)moveWordRightAndModifySelection:(nullable id)sender;
+
 /* DELETION. */
 - (void)deleteBackward:(nullable id)sender;
 - (void)deleteForward:(nullable id)sender;
 - (void)deleteToBeginningOfLine:(nullable id)sender;
 - (void)deleteToEndOfLine:(nullable id)sender;
+- (void)deleteWordBackward:(nullable id)sender;
+- (void)deleteWordForward:(nullable id)sender;
 
 /* AND THE FOUR WHOSE ARGUMENT IS A POSITION OR A STRUCTURE RATHER THAN A DIRECTION. */
 - (void)insertNewline:(nullable id)sender;

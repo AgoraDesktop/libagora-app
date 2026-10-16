@@ -43,6 +43,7 @@ tests/
   slider_ink.m                  a control whose VALUE is a POSITION: the knob and its inverse
   tracking_area.m               an AREA's region, owner and SCOPE — and a control's own hover area
   text_input.m                  the first slice of the text system, driven a keystroke at a time
+  text_word_movement.m          and its WORD granularity: Option+arrow and Option+Delete, over the string
   text_field_cell.m             a FIELD's cell: its string, its face, and one edit session end to end
   text_field_control.m          and the VIEW above it: a press that opens a session, and what commits it
   text_field_bezel.m            and its BORDER's two shapes, read out of the corner PIXELS
@@ -103,6 +104,15 @@ the compositor is really gone.
 - **The text path** (`ctest`): a key is built as an `NSEvent`, `-interpretKeyEvents:` turns it into a command,
   and the command edits the string — typing, both Backspace spellings, movement, Shift-extension, and the
   notification and its delegate both firing for one edit.
+- **And its word granularity** (`ctest`): Option+arrow moves to the WORD boundary and Option+Delete deletes one, and
+  the reason `NSResponder.h` gave for leaving them out — that the family "need[s] a LAYOUT MODEL — words, paragraphs,
+  several lines" — WAS WRONG FOR THESE, because a word is a run of the STRING's own characters (`+alphanumericCharacterSet`)
+  and needs no layout at all. The correction is in that header; what the probe holds is the arithmetic. MEASURED: from
+  `one two three` Option+Left lands at the start of `three` (8) and then `two` (4), and Option+Right crosses `one` (3)
+  then `two` (7); the same keys from INSIDE a word go to that word's own boundary; digits belong to their word
+  (`abc123` is one) and punctuation does not (`a...b` is two with three non-word characters between); a SELECTION
+  collapses to its near end like any movement; Shift extends by the word (four characters, not one); and Option+Delete
+  removes a word — or a selection WHOLE, word key or not — while Option+ForwardDelete removes the one after the caret.
 - **And the field, which is a cell under a view** (`ctest`, offscreen): `NSTextFieldCell` owns the string, the face
   and the three doors of an edit; `NSTextField` is the control above it, and it contributes the two things a cell
   cannot — a PRESS that opens a session with the WINDOW's field editor, and `-selectText:` for the same session with
@@ -224,10 +234,10 @@ the compositor is really gone.
   and the child clip is the child's FRAME region rather than its bounds rect — which was the same value only while the
   origin was zero. MEASURED: a mark at a document's own y 100..120 draws at 110 with the clip view at the top and at
   10 after a scroll of 100, in one run, through `-displayRect:`.
-- **`ctest`: 32 of 32 passed** (the keyboard and the seam, the AppKit and its input path, the controls and their
-  metrics, the field control and its cell and its bezel and its placeholder, what a drag costs, the resize by edge, the
-  tracking engine, the text path, the clip view and the scroller and the scroll view and the drawn offset, the chrome
-  and what its buttons do, the chrome theme, the menus and activation).
+- **`ctest`: 33 of 33 passed** (the keyboard and the seam, the AppKit and its input path, the controls and their
+  metrics, the field control and its cell and its bezel and its placeholder, the text path and its word granularity,
+  what a drag costs, the resize by edge, the tracking engine, the clip view and the scroller and the scroll view and
+  the drawn offset, the chrome and what its buttons do, the chrome theme, the menus and activation).
 - **And the desktop's own text is SUB-PIXEL ANTIALIASED**, which is the AppKit's half of a renderer change in
   CoreGraphics: a window's surface is OPAQUE (`kCGImageAlphaNoneSkipFirst`), and the destination's opacity is
   exactly what decides whether a glyph is rasterised in colour. MEASURED on the live session: the window title's
@@ -362,7 +372,9 @@ iconify in the protocol (Kestrel is parked). The chrome's toolbar pill is drawn 
 there is no toolbar for it to toggle; the three symbols beside it ARE buttons now, and `tests/chrome_buttons.m`
 presses them. The input-method half of the text system is
 still absent (`-interpretKeyEvents:` does the direct mapping and says so), and the multi-line text view, the
-word-granularity movement commands and the field editor are named rather than guessed. Each absence is stated
+PARAGRAPH and DOCUMENT commands and the field editor are named rather than guessed. The WORD commands are NOT in
+that list any more: `tests/text_word_movement.m` drives Option+arrow and Option+Delete, because a word is a run of
+the string's own characters and needs no layout model — which the responder header now says. Each absence is stated
 rather than stubbed, and the refusals name themselves.
 
 ## Build

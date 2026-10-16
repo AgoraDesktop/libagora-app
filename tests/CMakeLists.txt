@@ -125,6 +125,14 @@ target_link_libraries(text_input PRIVATE App m)
 add_test(NAME appkit-text-input COMMAND text_input)
 set_tests_properties(appkit-text-input PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
 
+# **AND THE WORD GRANULARITY OF THE SAME KEYS.** Option+arrow moves by the word and Option+Delete deletes one, which
+# is arithmetic over the string's own characters and needs no layout model — the correction `NSResponder.h` carries.
+# Driven as KEYS, so the mapping is under test as well as the walk.
+add_executable(text_word_movement text_word_movement.m)
+target_link_libraries(text_word_movement PRIVATE App m)
+add_test(NAME appkit-text-word-movement COMMAND text_word_movement)
+set_tests_properties(appkit-text-word-movement PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
+
 # **AND THE INSIDE OF A SCROLL VIEW.** `NSClipView`'s arithmetic is "the whole of it" (its own header), and it is
 # checked in EXACT POINTS rather than by drawing: where a short document sits, where a long one stops, and the
 # notification wire that re-constrains the scroll when the document's own frame or bounds changes. Offscreen, so it
