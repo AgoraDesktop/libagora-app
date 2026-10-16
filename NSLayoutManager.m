@@ -678,33 +678,69 @@ static BOOL fn_spans_overlap(CGFloat a0, CGFloat a1, CGFloat b0, CGFloat b1)
 	return (a0 < b1 - 0.01) && (b0 < a1 - 0.01);
 }
 
+/* **WHICH OF TWO CELLS THAT SHARE AN EDGE DRAWS IT.** The WIDER border wins, so the collapsed edge comes out as heavy
+ * as the heaviest of the two — and it is that cell's own colour, because the cell that owns the edge draws it. WHEN
+ * THE WIDTHS ARE EQUAL the cell on the MIN side (left or top) keeps it, which is the rule this tier had before and
+ * keeps the choice stable and symmetric. Both cells reach the same answer from their own side, because the comparison
+ * and the tie-break are the same viewed from either. */
+static BOOL fn_cell_owns_edge(CGFloat thisWidth, CGFloat otherWidth, BOOL tieGoesToThisCell)
+{
+	if (thisWidth > otherWidth) {
+		return YES;
+	}
+	if (otherWidth > thisWidth) {
+		return NO;
+	}
+	return tieGoesToThisCell;
+}
+
 /* **AND WHICH OF A CELL'S FOUR EDGES IT DRAWS WHEN THE BORDERS COLLAPSE.** A cell's box shares an edge with a
  * neighbour when the neighbour's OPPOSITE edge lies on it and their bands overlap: the neighbour to the LEFT shares
- * this cell's MinX, the one ABOVE shares its MinY. THE MIN-SIDE CELL OWNS A SHARED EDGE — it draws its MaxX/MaxY, and
- * the cell on the other side suppresses its MinX/MinY — so this cell drops MinX when something is to its left and
- * MinY when something is above it, and always keeps MaxX and MaxY. The test is by GEOMETRY rather than by row and
- * column, so two boxes that do NOT actually meet (a short cell above a tall one) keep both their edges rather than
- * collapsing a line they do not share. */
+ * this cell's MinX, the one to the RIGHT its MaxX, the one ABOVE its MinY and the one BELOW its MaxY. EACH SHARED
+ * EDGE IS AWARDED to one of the two cells — the wider border, ties to the min-side cell — and the cell that LOSES it
+ * suppresses that one edge while keeping the other three. The test is by GEOMETRY rather than by row and column, so
+ * two boxes that do NOT actually meet (a short cell above a tall one) keep both their edges rather than collapsing a
+ * line they do not share. */
 - (NSTextBlockEdge)cg_edgesForCell:(FNCellBox *)cell inCells:(NSMutableArray *)cells
 {
 	NSTextBlockEdge edges = (NSTextBlockMinXEdge | NSTextBlockMaxXEdge | NSTextBlockMinYEdge | NSTextBlockMaxYEdge);
+	CGFloat left = cell->frame.origin.x, right = NSMaxX(cell->frame);
+	CGFloat top = cell->frame.origin.y, bottom = NSMaxY(cell->frame);
 	NSUInteger k;
 
 	for (k = 0; k < [cells count]; k++) {
 		FNCellBox *other = [cells objectAtIndex:k];
+		BOOL vertical, horizontal;
 
 		if (other == cell) {
 			continue;
 		}
-		if (fabs(cell->frame.origin.x - (other->frame.origin.x + other->frame.size.width)) < 0.01
-		    && fn_spans_overlap(cell->frame.origin.y, cell->frame.origin.y + cell->frame.size.height,
-					other->frame.origin.y, other->frame.origin.y + other->frame.size.height)) {
+		vertical = fn_spans_overlap(top, bottom, other->frame.origin.y, NSMaxY(other->frame));
+		horizontal = fn_spans_overlap(left, right, other->frame.origin.x, NSMaxX(other->frame));
+
+		/* THE LEFT NEIGHBOUR'S MaxX AND THIS CELL'S MinX ARE ONE EDGE, and the LEFT cell is the min side. */
+		if (vertical && fabs(left - NSMaxX(other->frame)) < 0.01
+		    && !fn_cell_owns_edge([cell->block widthForLayer:NSTextBlockBorder edge:NSTextBlockMinXEdge],
+					  [other->block widthForLayer:NSTextBlockBorder edge:NSTextBlockMaxXEdge], NO)) {
 			edges &= ~NSTextBlockMinXEdge;
 		}
-		if (fabs(cell->frame.origin.y - (other->frame.origin.y + other->frame.size.height)) < 0.01
-		    && fn_spans_overlap(cell->frame.origin.x, cell->frame.origin.x + cell->frame.size.width,
-					other->frame.origin.x, other->frame.origin.x + other->frame.size.width)) {
+		/* THE RIGHT NEIGHBOUR'S MinX AND THIS CELL'S MaxX ARE ONE EDGE, and THIS cell is the min side. */
+		if (vertical && fabs(right - other->frame.origin.x) < 0.01
+		    && !fn_cell_owns_edge([cell->block widthForLayer:NSTextBlockBorder edge:NSTextBlockMaxXEdge],
+					  [other->block widthForLayer:NSTextBlockBorder edge:NSTextBlockMinXEdge], YES)) {
+			edges &= ~NSTextBlockMaxXEdge;
+		}
+		/* THE NEIGHBOUR ABOVE'S MaxY AND THIS CELL'S MinY ARE ONE EDGE, and the ABOVE cell is the min side. */
+		if (horizontal && fabs(top - NSMaxY(other->frame)) < 0.01
+		    && !fn_cell_owns_edge([cell->block widthForLayer:NSTextBlockBorder edge:NSTextBlockMinYEdge],
+					  [other->block widthForLayer:NSTextBlockBorder edge:NSTextBlockMaxYEdge], NO)) {
 			edges &= ~NSTextBlockMinYEdge;
+		}
+		/* THE NEIGHBOUR BELOW'S MinY AND THIS CELL'S MaxY ARE ONE EDGE, and THIS cell is the min side. */
+		if (horizontal && fabs(bottom - other->frame.origin.y) < 0.01
+		    && !fn_cell_owns_edge([cell->block widthForLayer:NSTextBlockBorder edge:NSTextBlockMaxYEdge],
+					  [other->block widthForLayer:NSTextBlockBorder edge:NSTextBlockMinYEdge], YES)) {
+			edges &= ~NSTextBlockMaxYEdge;
 		}
 	}
 	return edges;
@@ -721,11 +757,18 @@ static BOOL fn_spans_overlap(CGFloat a0, CGFloat a1, CGFloat b0, CGFloat b1)
 
 	[self cg_drawBlock:table union:tableUnion containerIndex:tableContainer origin:origin characterRange:tableRange];
 	if ([table collapsesBorders]) {
+		/* **EVERY FRAME FIRST, THEN EVERY EDGE.** An edge is awarded by comparing the two boxes that meet on it, so a
+		 * cell's neighbour must already have its frame when the comparison runs — computing a frame and an edge in one
+		 * pass leaves the neighbour at the zero rect and no shared edge is ever seen. */
 		for (k = 0; k < [cells count]; k++) {
 			FNCellBox *cell = [cells objectAtIndex:k];
 
 			cell->frame = [self cg_frameForBlock:cell->block union:cell->content
 				containerIndex:cell->containerIndex origin:origin characterRange:cell->range];
+		}
+		for (k = 0; k < [cells count]; k++) {
+			FNCellBox *cell = [cells objectAtIndex:k];
+
 			cell->edges = [self cg_edgesForCell:cell inCells:cells];
 		}
 		for (k = 0; k < [cells count]; k++) {

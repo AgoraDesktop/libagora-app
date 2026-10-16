@@ -10,7 +10,9 @@
  * undrawn, so the doubled seam becomes a single one. The probe draws the same table twice, with the flag off and on,
  * and looks at the columns either side of the seam: the left side must carry the edge in both drawings, and the right
  * side must carry it ONLY when the borders are not collapsed. The outer edge is checked to be untouched, and a lone
- * cell (nothing to share a border with) must come out identical either way.
+ * cell (nothing to share a border with) must come out identical either way. A fourth case gives the two cells
+ * DIFFERENT border weights and colours and reads which one owns the shared edge: the HEAVIER cell's, not simply the
+ * left cell's.
  *
  * THE GEOMETRY IS FIXED LAYOUT ON PURPOSE: two equal columns make every column boundary an integer, so the seam is a
  * pixel column and not a fraction its fill would antialias across.
@@ -107,10 +109,15 @@ static NSBitmapImageRep *draw(NSLayoutManager *manager, NSUInteger length)
 	return rep;
 }
 
+static int is_pure(NSColor *c, CGFloat r, CGFloat g, CGFloat b)
+{
+	return c != nil && fabs([c redComponent] - r) < 0.2 && fabs([c greenComponent] - g) < 0.2
+		&& fabs([c blueComponent] - b) < 0.2;
+}
+
 static int is_red(NSColor *c)
 {
-	return c != nil && fabs([c redComponent] - 1.0) < 0.2 && fabs([c greenComponent] - 0.0) < 0.2
-		&& fabs([c blueComponent] - 0.0) < 0.2;
+	return is_pure(c, 1.0, 0.0, 0.0);
 }
 
 static int count_red(NSBitmapImageRep *rep)
@@ -127,8 +134,8 @@ static int count_red(NSBitmapImageRep *rep)
 	return count;
 }
 
-/* THE PIXELS THE VERTICAL LINE THE CELLS MEET ON CARRIES, which is the whole subject of the row case. */
-static int count_red_in_column(NSBitmapImageRep *rep, int column)
+/* THE PIXELS A VERTICAL LINE CARRIES, in a named colour — which is the whole subject of the row cases. */
+static int count_pure_in_column(NSBitmapImageRep *rep, int column, CGFloat r, CGFloat g, CGFloat b)
 {
 	int y, count = 0;
 
@@ -136,11 +143,16 @@ static int count_red_in_column(NSBitmapImageRep *rep, int column)
 		return 0;
 	}
 	for (y = 0; y < H; y++) {
-		if (is_red([rep colorAtX:column y:y])) {
+		if (is_pure([rep colorAtX:column y:y], r, g, b)) {
 			count++;
 		}
 	}
 	return count;
+}
+
+static int count_red_in_column(NSBitmapImageRep *rep, int column)
+{
+	return count_pure_in_column(rep, column, 1.0, 0.0, 0.0);
 }
 
 int main(void)
@@ -305,6 +317,67 @@ int main(void)
 		printf("  (note: lone cell — flat %d, collapsed %d)\n", flatTotal, collapsedTotal);
 		check(flatTotal > 0, "a lone cell draws its four edges");
 		check(flatTotal == collapsedTotal, "and collapsing a table with nothing to share leaves every edge alone");
+
+		[flat release];
+		[collapsed release];
+		[container release];
+		[manager release];
+		[store release];
+		[table release];
+	}
+
+	/* 4. **AND A SHARED EDGE FOLLOWS THE HEAVIER BORDER, NOT JUST THE LEFT CELL.** The left cell's shared edge is 2
+	 * points and the right cell's is 6, so the RIGHT cell is the one that owns the collapsed edge — 6 points wide and
+	 * in ITS colour — and the left cell's 2-point edge is the one suppressed. With the flag off both are drawn, which
+	 * is what makes the suppression legible. */
+	{
+		NSTextTable *table = [[NSTextTable alloc] init];
+		NSTextTableBlock *left;
+		NSTextTableBlock *right;
+		NSTextStorage *store;
+		NSLayoutManager *manager = [[NSLayoutManager alloc] init];
+		NSTextContainer *container = [[NSTextContainer alloc] initWithContainerSize:NSMakeSize(200.0, 300.0)];
+		NSBitmapImageRep *flat;
+		NSBitmapImageRep *collapsed;
+		int blueLeftFlat, blueLeftCollapsed, redSeam, redSeamWidth = 1;
+		int x;
+
+		[table setNumberOfColumns:2];
+		[table setLayoutAlgorithm:NSTextTableFixedLayoutAlgorithm];
+		left = cell(table, 0, 0);
+		right = cell(table, 0, 1);
+		[left setWidth:2.0 type:NSTextBlockAbsoluteValueType forLayer:NSTextBlockBorder
+			 edge:(NSTextBlockMinXEdge | NSTextBlockMaxXEdge)];
+		[right setWidth:2.0 type:NSTextBlockAbsoluteValueType forLayer:NSTextBlockBorder edge:NSTextBlockMaxXEdge];
+		[right setWidth:6.0 type:NSTextBlockAbsoluteValueType forLayer:NSTextBlockBorder edge:NSTextBlockMinXEdge];
+		[left setBorderColor:[NSColor blueColor] forEdge:(NSTextBlockMinXEdge | NSTextBlockMaxXEdge)];
+		[right setBorderColor:[NSColor blueColor] forEdge:NSTextBlockMaxXEdge];
+		[right setBorderColor:[NSColor redColor] forEdge:NSTextBlockMinXEdge];
+		store = new_table_store([NSArray arrayWithObjects:@"aaaa", @"bbbb", nil],
+					[NSArray arrayWithObjects:left, right, nil], 0.0);
+		[store addLayoutManager:manager];
+		[manager addTextContainer:container];
+
+		flat = draw(manager, [store length]);
+		[table setCollapsesBorders:YES];
+		collapsed = draw(manager, [store length]);
+
+		/* The fixed two-column layout puts the boundary at column 100: the left cell's 2-point MaxX border sits just
+		 * left of it and the right cell's 6-point MinX border runs to its right. */
+		blueLeftFlat = count_pure_in_column(flat, 99, 0.0, 0.0, 1.0);
+		blueLeftCollapsed = count_pure_in_column(collapsed, 99, 0.0, 0.0, 1.0);
+		redSeam = count_red_in_column(collapsed, 100);
+		for (x = 0; x < 6; x++) {
+			if (count_red_in_column(collapsed, 100 + x) == 0) {
+				redSeamWidth = 0;
+			}
+		}
+		printf("  (note: unequal — left blue at x=99 is %d flat / %d collapsed; red seam at x=100 is %d)\n",
+		       blueLeftFlat, blueLeftCollapsed, redSeam);
+		check(blueLeftFlat > 0, "without collapse the left cell draws its own 2-point edge");
+		check(blueLeftCollapsed == 0,
+		      "with collapse the heavier RIGHT cell owns the edge, so the left cell's is suppressed");
+		check(redSeam > 0 && redSeamWidth, "and the shared edge is the right cell's 6-point red border, not the left's blue");
 
 		[flat release];
 		[collapsed release];

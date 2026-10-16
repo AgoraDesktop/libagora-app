@@ -336,9 +336,11 @@ the compositor is really gone.
   `-collapsesBorders` YES, an edge two cells SHARE is drawn once — the min-side cell (left or top) keeps its MaxX/MaxY
   and the neighbour's MinX/MinY is suppressed — and a cell's box is its CELL rather than its text, so a short cell's
   edge still reaches its column; the vertical layers are reserved in the row's height so stacked cells' boxes meet. A
-  lone cell is unchanged. **STILL OWED AND NAMED**: a table that flows across containers, the TABLE's own border
-  collapsed with its outer cells', and a shared edge whose two cells set DIFFERENT widths or colours (the min-side
-  cell's border is the one drawn).
+  lone cell is unchanged. **AND A SHARED EDGE FOLLOWS THE HEAVIER BORDER** (`ctest`): the two cells' border weights on a
+  shared edge are compared and the WIDER one draws it — in its own colour — with a tie going to the min-side cell, so a
+  2-point edge beside a 6-point one collapses to the 6-point one and the light edge is the one suppressed. **STILL OWED
+  AND NAMED**: a table that flows across containers, and the TABLE's own border collapsed with its outer cells' (only
+  cell-to-cell edges collapse today).
 - **And the ATTACHMENT, which is a character that stands for a picture** (`ctest`): `NSTextAttachment.h` declares
   `NSAttachmentCharacter` (U+FFFC), the `NSTextAttachmentCell` protocol and class, and the attachment itself, with
   `NSAttachmentAttributeName` carrying it; the layout manager's run walk asks the cell for its size and calls
@@ -673,9 +675,9 @@ named at its door. The TABLE BLOCK is here
 (`tests/text_table.m`), so a paragraph can carry a box with a ground and a border. **AND THE GRID IS HERE TOO**
 (`tests/text_table_grid.m`): the manager measures the columns, lays each cell inside them and places the cells side by
 side, rows as tall as their tallest cell. **AND THE BORDERS COLLAPSE** (`tests/text_table_collapse.m`): with
-`-collapsesBorders` an edge two cells share is drawn once, by the min-side cell, and a cell's box is its CELL rather
-than its text. What is still owed for tables is a table that flows across containers, the table's own border collapsed
-with its outer cells', and a shared edge whose two cells set different widths or colours. The input-method
+`-collapsesBorders` an edge two cells share is drawn once, by whichever cell's border there is heavier (a tie going to
+the min-side cell), and a cell's box is its CELL rather than its text. What is still owed for tables is a table that
+flows across containers and the table's own border collapsed with its outer cells'. The input-method
 CONTEXT are named in the view's own header as what is still owed — the `NSTextInput`
 protocol is here and the view ANSWERS it (`tests/text_marked_text.m`), while the class that owns a composition across
 keystrokes and arranges a candidate window is the slice behind it. ATTACHMENTS draw (`tests/text_attachment.m`) with
