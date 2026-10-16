@@ -1101,11 +1101,19 @@ static BOOL fn_cell_owns_edge(CGFloat thisWidth, CGFloat otherWidth, BOOL tieGoe
 			objectForKey:NSParagraphStyleAttributeName];
 }
 
-/* **THE ALIGNMENT OF THE PARAGRAPH A LINE STARTS IN, WHICH IS THE PARAGRAPH'S OWN AND NOT THE LINE'S.** Natural and left
- * both answer the left factor, which is why this tier's left-to-right layout can treat them alike. */
+/* **THE ALIGNMENT OF THE PARAGRAPH A LINE STARTS IN, WHICH IS THE PARAGRAPH'S OWN AND NOT THE LINE'S.** NATURAL is
+ * resolved HERE, because it is not an edge of its own: it is the edge the BASE WRITING DIRECTION names — left for a
+ * left-to-right paragraph, RIGHT for a right-to-left one — so the direction has a reader and the three EXPLICIT
+ * alignments are untouched by it. */
 - (NSTextAlignment)cg_alignmentForParagraphAt:(NSUInteger)start
 {
-	return [[self cg_paragraphStyleAt:start] alignment];
+	NSParagraphStyle *style = [self cg_paragraphStyleAt:start];
+	NSTextAlignment alignment = [style alignment];
+
+	if (alignment == NSNaturalTextAlignment && [style baseWritingDirection] == NSWritingDirectionRightToLeft) {
+		return NSRightTextAlignment;
+	}
+	return alignment;
 }
 
 /* **AND THE FLOAT IS THE LINE'S PLACE INSIDE THE WIDTH IT WAS GIVEN** — 0 for left, 1 for right, 0.5 for centre, and the
@@ -1339,7 +1347,8 @@ static BOOL fn_cell_owns_edge(CGFloat thisWidth, CGFloat otherWidth, BOOL tieGoe
 		if (out != nil) {
 			CGFloat textTop = y + leading;
 			CGFloat baseline = textTop + lineAscent;
-			CGFloat alignOffset = [self cg_alignmentOffsetForLine:line alignment:[style alignment] width:width];
+			CGFloat alignOffset = [self cg_alignmentOffsetForLine:line
+				alignment:[self cg_alignmentForParagraphAt:(NSUInteger)start] width:width];
 			NSArray *boxes = [self cg_boxesForRange:range line:line];
 
 			[out addObject:[FNFragment fragmentWithRange:range
@@ -1866,7 +1875,7 @@ static BOOL fn_cell_owns_edge(CGFloat thisWidth, CGFloat otherWidth, BOOL tieGoe
 				CGFloat textTop = y + leading;
 				CGFloat baseline = textTop + lineAscent;
 				CGFloat alignOffset = [self cg_alignmentOffsetForLine:line
-						alignment:[style alignment] width:width];
+						alignment:[self cg_alignmentForParagraphAt:(NSUInteger)start] width:width];
 				NSArray *boxes = [self cg_boxesForRange:range line:line];
 
 				[fragments addObject:[FNFragment fragmentWithRange:range

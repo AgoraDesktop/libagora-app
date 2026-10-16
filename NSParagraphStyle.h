@@ -13,9 +13,11 @@
  * width the container gave it; the LINE-BREAK MODE goes into the attributed string the typesetter obeys; the two HEAD
  * INDENTS place the first line and the wrapped ones; the TAIL INDENT takes width off the line; `-lineSpacing` and the
  * two PARAGRAPH SPACINGS are the gaps between lines and across paragraph boundaries; and the LINE-HEIGHT MULTIPLE with
- * its MINIMUM and MAXIMUM set the band. WHAT IT STILL DOES NOT READ is the HYPHENATION FACTOR (the engine does no
- * hyphenation, so there is nothing to tune), the DEFAULT TAB INTERVAL (a tab stop needs `NSTextTab`), and the BASE
- * WRITING DIRECTION (this tier lays out left-to-right only) — each named at its door below.
+ * its MINIMUM and MAXIMUM set the band. WHAT IT STILL DOES NOT READ is the HYPHENATION FACTOR — and the reason is
+ * the ENGINE's, not this class's: the tier's Core Text has no hyphenation setting to carry it into, so there is nothing
+ * to tune — and THE BASE WRITING DIRECTION is read only so far as NATURAL ALIGNMENT: it decides which edge "natural"
+ * means, while reordering the glyphs of a right-to-left SCRIPT is the engine's (it reads no writing direction). Each is
+ * named at its door below.
  *
  * **AND THE STYLE'S CONSUMER IS THE LAYOUT, NOT FOUR SEPARATE DOORS.** A paragraph style could have been four
  * properties on the view, and instead it is one object the store carries — which is what lets a run of text and the
@@ -98,10 +100,17 @@ typedef NSUInteger NSLineBreakMode;
  * one asks for `-mutableCopy` rather than rewriting the shared instance. */
 + (NSParagraphStyle *)defaultParagraphStyle;
 
-/* **THE ALIGNMENT, WHICH THE LAYOUT MANAGER READS.** `NSNaturalTextAlignment` means "left" here because this tier
- * lays out left-to-right only; the other three are left, right and centre as the line sits inside the container's
- * width. JUSTIFICATION is a fourth value the type carries and the layout does NOT stretch lines for yet — it draws a
- * justified paragraph left-aligned, which is named rather than silently wrong. */
+/* **THE DEFAULT DIRECTION FOR A LANGUAGE, WHICH IS WHAT A NATURAL DIRECTION READS.** "ar" and "he" answer
+ * right-to-left, "en" and "fr" left-to-right — the language's OWN direction rather than a guess from the text — and a
+ * nil language asks the current locale's. It is a class method because a caller consults it to RESOLVE a natural
+ * direction before setting one. */
++ (NSWritingDirection)defaultWritingDirectionForLanguage:(nullable NSString *)languageName;
+
+/* **THE ALIGNMENT, WHICH THE LAYOUT MANAGER READS.** `NSNaturalTextAlignment` means the edge the BASE WRITING
+ * DIRECTION names — left for a left-to-right paragraph, right for a right-to-left one — so it is RESOLVED rather than
+ * fixed; the other three are left, right and centre as the line sits inside the container's width. JUSTIFICATION is a
+ * fourth value the type carries and the layout does NOT stretch lines for yet — it draws a justified paragraph
+ * left-aligned, which is named rather than silently wrong. */
 - (NSTextAlignment)alignment;
 
 /* **AND THE LINE-BREAK MODE, WHICH THE LAYOUT MANAGER READS.** It travels into the attributed string the TYPESETTER
@@ -109,8 +118,11 @@ typedef NSUInteger NSLineBreakMode;
  * typesetter as "do not wrap" and the ellipsis is the drawing slice's, named there. */
 - (NSLineBreakMode)lineBreakMode;
 
-/* THE DIRECTION THE RUN READS. Natural is the Unicode algorithm's; `-baseWritingDirectionForLanguage:` is the door that
- * would consult it, and this tier lays out left-to-right so the value is carried and not yet consulted. */
+/* **THE DIRECTION THE RUN READS, WHICH DECIDES WHAT NATURAL ALIGNMENT MEANS.** `NSWritingDirectionNatural` is the
+ * Unicode algorithm's (resolved through `+defaultWritingDirectionForLanguage:`), and the LAYOUT reads this field THAT
+ * far: a natural paragraph in a right-to-left direction aligns RIGHT. REORDERING THE GLYPHS of a right-to-left SCRIPT
+ * is the ENGINE's, and the tier's Core Text reads no writing direction, so a mixed-direction run is not this door's to
+ * fix — named rather than left to look done. */
 - (NSWritingDirection)baseWritingDirection;
 
 /* ---- THE GEOMETRY, WHICH THE LAYOUT NOW READS ---------------------------------------------------------- */

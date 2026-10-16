@@ -14,6 +14,7 @@
  */
 #import <AppKit/NSParagraphStyle.h>
 #import <Foundation/NSObject.h>
+#import <Foundation/NSLocale.h>
 
 /* THE ONE SHARED DEFAULT, made on first ask and held for the life of the process — the same shape this tree's other
  * shared values use. It is IMMUTABLE, so the sharing is safe. */
@@ -34,6 +35,24 @@ static NSParagraphStyle *fn_defaultParagraphStyle = nil;
 		fn_defaultParagraphStyle = [[NSParagraphStyle alloc] init];
 	}
 	return fn_defaultParagraphStyle;
+}
+
+/* **AND THE LANGUAGE'S OWN DIRECTION, WHICH IS WHAT A NATURAL DIRECTION MEANS.** `NSLocale` answers the character
+ * direction for a language code (ICU's data), and only one of its four cases is a direction this tier's layout can
+ * express as a paragraph: RIGHT-TO-LEFT is right-to-left, and everything else — left-to-right, and the two vertical
+ * script directions — is answered left-to-right, which is the tier's own default and the honest answer for a value it
+ * cannot lay out. A nil language asks the CURRENT LOCALE's language, which is the only language this process knows. */
++ (NSWritingDirection)defaultWritingDirectionForLanguage:(NSString *)languageName
+{
+	NSLocaleLanguageDirection direction;
+	NSString *code = languageName;
+
+	if (code == nil) {
+		code = [[NSLocale currentLocale] languageCode];
+	}
+	direction = [NSLocale characterDirectionForLanguage:code];
+	return (direction == NSLocaleLanguageDirectionRightToLeft) ? NSWritingDirectionRightToLeft
+								   : NSWritingDirectionLeftToRight;
 }
 
 /* THE DEFAULTS ARE THE ERA'S, and the two that are not zero are worth stating: the alignment is NATURAL (which this

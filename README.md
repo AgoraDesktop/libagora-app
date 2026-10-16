@@ -57,6 +57,7 @@ tests/
   text_input_context.m          and the INPUT CONTEXT: where a key goes before the view, and where a composition lives
   text_input_method.m           and the METHOD: a dead key composes with the next keystroke, marked until it does
   text_candidate_list.m         and the CANDIDATE LIST: a letter's readings, the window under the caret, and the pick
+  text_writing_direction.m      and the BASE DIRECTION: what NATURAL alignment means, and the locale's language direction
   text_editing_commands.m       and `-transpose:` plus the insertions that ignore a field's role
   text_table.m                  and the TABLE BLOCK: the box a paragraph is set in, drawn by the manager
   text_rtf.m                    and RTF: the reader's control words, and an AppKit-aware WRITER beside it
@@ -290,8 +291,9 @@ the compositor is really gone.
   `-paragraphSpacingBefore:4` add **10** at each paragraph boundary; a first-line indent of **20** and a head indent of
   **8** put line 0 at x=**30** and line 1 at x=**18**; a tail indent of **60** wraps the same paragraph into more
   lines; and a two-times multiple, a minimum and a maximum set the band to **2*base**, **base+12** and **base-4**. The
-  hyphenation factor, the default tab interval and the base writing direction are the three the layout still does not
-  read, each named at its door.
+  hyphenation factor is the one the layout CANNOT read, and the reason is the ENGINE's — the tier's Core Text has no
+  hyphenation setting to carry it into; the BASE WRITING DIRECTION is read as far as NATURAL ALIGNMENT (right for a
+  right-to-left paragraph), while reordering a right-to-left script's glyphs is the engine's, named at its door.
 - **And the INPUT CONTEXT, where a key goes before the text view** (`ctest`): `NSTextInputContext` is the object
   `NSResponder -interpretKeyEvents:` hands each event to, and the STANDARD KEY BINDING MOVED THERE FROM THE RESPONDER — the
   responder now only finds the receiver's context. MEASURED: a text view answers an input context whose client is the
@@ -520,14 +522,15 @@ the compositor is really gone.
   and the child clip is the child's FRAME region rather than its bounds rect — which was the same value only while the
   origin was zero. MEASURED: a mark at a document's own y 100..120 draws at 110 with the clip view at the top and at
   10 after a scroll of 100, in one run, through `-displayRect:`.
-- **`ctest`: 61 of 61 passed** (the keyboard and the seam, the AppKit and its input path, the controls and their
+- **`ctest`: 62 of 62 passed** (the keyboard and the seam, the AppKit and its input path, the controls and their
   metrics, the field control and its cell and its bezel and its placeholder and what it may hold, the text path and its
   word granularity and the multi-line view and its wrapping and its scrolling and its READING OF THE STORE, the STORE
   the rich-text slice is built on and the REGION it is laid out in and the WEB that ties the three together and the
   FRAGMENTS it produces and the GLYPH STORE it keeps and the INK it draws and the BACKGROUND, UNDERLINE and
   STRIKETHROUGH it paints and the SECOND CONTAINER it overflows into and the PARAGRAPH STYLE it aligns and breaks by
   and the TABLE GRID whose shared borders collapse and whose rows flow into the next container and the INPUT METHOD
-  whose dead key composes with the next keystroke and the CANDIDATE LIST a variants method shows under the caret,
+  whose dead key composes with the next keystroke and the CANDIDATE LIST a variants method shows under the caret and the
+  BASE DIRECTION that decides what natural alignment means,
   what a drag costs, the resize by edge, the tracking engine, the clip view and the scroller and the scroll view and the
   drawn offset, the chrome and what its buttons do, the chrome theme, the menus and activation).
 - **And the desktop's own text is SUB-PIXEL ANTIALIASED**, which is the AppKit's half of a renderer change in
@@ -684,11 +687,10 @@ in the store is the ink it draws — which is the rich-text half of the slice, w
 STRIKETHROUGH keys the manager paints (`tests/text_layout_attributes.m`) and the PARAGRAPH STYLE it aligns and breaks
 by (`tests/text_paragraph_style.m`) and the GEOMETRY it lays out by (`tests/text_paragraph_geometry.m`) — the indents,
 the two spacings and the three line-height properties, all read as the manager's own fragment geometry. The property
-with no reader is the hyphenation factor (the engine does no hyphenation), the default tab interval (a tab stop needs
-`NSTextTab`) — `NSTextTab` IS here now (`tests/text_tab_stops.m`), and a tab goes to its stop, decimal tabs included,
-with `+columnTerminatorsForLocale:` and `NSTabColumnTerminatorsAttributeName` beside them — and the base writing
-direction (left-to-right only), each
-named at its door. The TABLE BLOCK is here
+with no reader is the hyphenation factor — and the reason is the ENGINE's: the tier's Core Text has no hyphenation
+setting to carry it into. The BASE WRITING DIRECTION has a reader now (`tests/text_writing_direction.m`):
+`+defaultWritingDirectionForLanguage:` asks the locale, and a natural paragraph in a right-to-left direction aligns
+RIGHT; reordering a right-to-left script's glyphs stays the engine's, named at its door. The TABLE BLOCK is here
 (`tests/text_table.m`), so a paragraph can carry a box with a ground and a border. **AND THE GRID IS HERE TOO**
 (`tests/text_table_grid.m`): the manager measures the columns, lays each cell inside them and places the cells side by
 side, rows as tall as their tallest cell. **AND THE BORDERS COLLAPSE** (`tests/text_table_collapse.m`): with

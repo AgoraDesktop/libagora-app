@@ -272,6 +272,14 @@ target_link_libraries(text_candidate_list PRIVATE App m)
 add_test(NAME appkit-text-candidate-list COMMAND text_candidate_list)
 set_tests_properties(appkit-text-candidate-list PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
 
+# **AND THE BASE WRITING DIRECTION, WHICH DECIDES WHAT NATURAL ALIGNMENT MEANS.** `+defaultWritingDirectionForLanguage:`
+# asks the locale, and the layout manager resolves `NSNaturalTextAlignment` through the direction — right for a
+# right-to-left paragraph — while the three EXPLICIT alignments are untouched. Glyph reordering is the engine's, named.
+add_executable(text_writing_direction text_writing_direction.m)
+target_link_libraries(text_writing_direction PRIVATE App m)
+add_test(NAME appkit-text-writing-direction COMMAND text_writing_direction)
+set_tests_properties(appkit-text-writing-direction PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
+
 # **AND THE EDITING COMMANDS THE RESPONDER NAMED AS OWED**: `-transpose:` (pure string arithmetic over a position) and
 # the `IgnoringFieldEditor` insertions plus the paragraph separator, checked across a view that holds a break and a
 # field that refuses one.
