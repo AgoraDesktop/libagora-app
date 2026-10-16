@@ -47,6 +47,16 @@
 	return self;
 }
 
+/* **AND A TEXT VIEW IS FLIPPED, WHICH IS APPLE'S OWN ANSWER AND THE ONE SCROLLING NEEDS.** y runs DOWN from the top,
+ * so the FIRST line sits at the clip view's origin and grows downward as a reader expects. The base, `NSText`, is a
+ * y-up single-line field and stays one; what this class flips is ITS OWN coordinates, and every measurement below is
+ * written in them. THE ONE PLACE THE FLIP IS VISIBLE IS THE TEXT: Core Text's own coordinates run UP from the
+ * baseline, so a line is set inside a translate-and-mirror about its baseline — see `-drawRect:`. */
+- (BOOL)isFlipped
+{
+	return YES;
+}
+
 - (void)dealloc
 {
 	free(_cg_visual);
@@ -285,7 +295,7 @@
 {
 	NSFont *font = [self cg_font];
 
-	return NSMaxY([self bounds]) - NS_TEXT_INSET - [font ascender] - (CGFloat)line * [self cg_lineHeight];
+	return NS_TEXT_INSET + [font ascender] + (CGFloat)line * [self cg_lineHeight];
 }
 
 /* **A `CTLine` IS BUILT FOR A RANGE RATHER THAN FOR THE WHOLE STRING**, because a `CTLine` lays the string it is given
@@ -343,8 +353,7 @@
 - (NSUInteger)cg_indexForPoint:(NSPoint)point
 {
 	CGFloat lineHeight = [self cg_lineHeight];
-	CGFloat top = NSMaxY([self bounds]) - NS_TEXT_INSET;
-	CGFloat offset = top - point.y;
+	CGFloat offset = point.y - NS_TEXT_INSET;
 	NSUInteger line, count;
 	NSRange range;
 	CTLineRef ctline;
@@ -437,7 +446,7 @@
 	NSUInteger line = [self cg_visualLineIndexForCharacterIndex:index];
 	CGFloat baseline = [self cg_baselineForLine:line];
 
-	return NSMakeRect(NS_TEXT_INSET + [self cg_xForIndex:index], baseline + [font descender], 1.0,
+	return NSMakeRect(NS_TEXT_INSET + [self cg_xForIndex:index], baseline - [font ascender], 1.0,
 			  [font ascender] - [font descender]);
 }
 
@@ -528,23 +537,36 @@
 			CGFloat x0 = NS_TEXT_INSET + [self cg_xForIndex:lo];
 			CGFloat x1 = NS_TEXT_INSET + [self cg_xForIndex:hi];
 
-			band = NSMakeRect(x0, baseline + [font descender], x1 - x0, bandHeight);
+			band = NSMakeRect(x0, baseline - [font ascender], x1 - x0, bandHeight);
 			hasBand = YES;
 			[[NSColor cg_accentColor] setFill];
 			[[NSBezierPath bezierPathWithRect:band] fill];
 		}
 		if (line != NULL) {
+			/* **AND THE TEXT IS SET IN ITS OWN y-UP FRAME, BECAUSE A FLIPPED VIEW'S IS y-DOWN.** That is what flipping
+			 * MEANS, and Core Text's own coordinates run UP from the baseline — so the line is set inside a
+			 * translate-then-mirror ABOUT THE BASELINE, which is the standard AppKit idiom for text in a flipped view
+			 * and the reason `-cg_baselineForLine:` can be a y-down measurement. WITHOUT it every glyph comes out upside
+			 * down, which is exactly what a first attempt at a flip produces. */
 			[[NSColor controlTextColor] setFill];
-			CGContextSetTextPosition(cg, NS_TEXT_INSET, baseline);
+			CGContextSaveGState(cg);
+			CGContextTranslateCTM(cg, 0.0, baseline);
+			CGContextScaleCTM(cg, 1.0, -1.0);
+			CGContextSetTextPosition(cg, NS_TEXT_INSET, 0.0);
 			CTLineDraw(line, cg);
+			CGContextRestoreGState(cg);
 			/* AND THE GLYPHS THE BAND COVERS ARE DRAWN AGAIN IN WHITE THROUGH A CLIP — the base's second pass, for
 			 * the same reason (selected text is drawn in the surface colour) and with the same limitation: this view
-			 * holds ONE run, so the whole line is redrawn and the clip does the splitting. */
+			 * holds ONE run, so the whole line is redrawn and the clip does the splitting. THE CLIP IS SET IN THE VIEW'S
+			 * OWN SPACE BEFORE the context is mirrored, because a clip is a region of the surface rather than a
+			 * coordinate. */
 			if (hasBand) {
 				CGContextSaveGState(cg);
 				CGContextClipToRect(cg, band);
 				[[NSColor whiteColor] setFill];
-				CGContextSetTextPosition(cg, NS_TEXT_INSET, baseline);
+				CGContextTranslateCTM(cg, 0.0, baseline);
+				CGContextScaleCTM(cg, 1.0, -1.0);
+				CGContextSetTextPosition(cg, NS_TEXT_INSET, 0.0);
 				CTLineDraw(line, cg);
 				CGContextRestoreGState(cg);
 			}
@@ -559,7 +581,7 @@
 		CGFloat x = NS_TEXT_INSET + [self cg_xForIndex:_selectedRange.location];
 
 		[[NSColor controlTextColor] setFill];
-		[[NSBezierPath bezierPathWithRect:NSMakeRect(x, baseline + [font descender], 1.0, bandHeight)] fill];
+		[[NSBezierPath bezierPathWithRect:NSMakeRect(x, baseline - [font ascender], 1.0, bandHeight)] fill];
 	}
 }
 

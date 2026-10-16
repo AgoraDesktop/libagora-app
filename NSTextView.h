@@ -11,17 +11,21 @@
  *   I.   THE LINE MODEL (shipped). The string is broken at its EXPLICIT newlines; a line is drawn per line; a click
  *        lands on the line it is over; the caret sits on its own line; and the movement a one-line field had no
  *        answer for (`-moveUp:`, `-moveDown:`, the document ends) is real.
- *   II.  WRAPPING (THIS SLICE). The model gains a WIDTH: a line too wide for the view becomes several VISUAL LINES,
+ *   II.  WRAPPING (shipped). The model gains a WIDTH: a line too wide for the view becomes several VISUAL LINES,
  *        and the caret, the hit test, the selection and every movement walk those instead. `NSResponder.h`'s word
  *        correction already said a WORD is not a layout question; a VISUAL LINE is one, and this is where it is
  *        decided.
- *   III. SCROLLING (THIS SLICE). The two `NSView` doors that move an enclosing clip view, the text view settling its
- *        own height so a clip view has something to scroll, and `-scrollRangeToVisible:` turning a caret into a
- *        rectangle. **WHAT IS OWED IS THE DOCUMENT'S ORIENTATION**: Apple's text view is FLIPPED so its FIRST line
- *        sits at the clip view's origin, and this class still measures y UP (the base's convention) — so the DOORS
- *        are right either way and the orientation is the next slice.
+ *   III. SCROLLING AND THE DOCUMENT'S ORIENTATION (shipped). The view is FLIPPED, so its FIRST line sits at the clip
+ *        view's origin and the origin grows as a reader moves DOWN; the two `NSView` doors move an enclosing clip
+ *        view; the view settles its own height so there is something to scroll; and `-scrollRangeToVisible:` turns a
+ *        caret into a rectangle.
  *   IV.  RICH TEXT, ATTACHMENTS AND PARAGRAPHS, which need the attributed store and the attribute vocabulary the
  *        `NSTextFieldAttributedStringMethods` note already names as travelling without being obeyed.
+ *
+ * **AND THE FLIP IS WHY THE LAYOUT BELOW IS y-DOWN.** A flipped view measures y from the TOP — that is what flipping
+ * MEANS — so `-cg_baselineForLine:` counts downward and a band is drawn ABOVE its baseline. THE ONE PLACE IT SHOWS is
+ * the text: Core Text's own coordinates run UP from the baseline, so a line is set inside a translate-and-mirror about
+ * its baseline (`-drawRect:`). The base, `NSText`, is a y-up single-line field and is left one.
  *
  * **THE TWO UNITS ARE NOT THE SAME THING AND BOTH KEEP THEIR OWN NAME.** A MODEL LINE — a paragraph, in Apple's
  * vocabulary — is a `\n`-terminated run, and the three `cg_…OfLine:` doors below are that model: they are facts about
@@ -29,7 +33,7 @@
  * and there can be several per model line; the two `cg_visualLine…` doors are that layout, and they change every time
  * the text or the width does. A caller that wants "how many lines" has to say which.
  *
- * **WHAT THE SLICES ABOVE STILL HAVE NOT GOT, NAMED RATHER THAN STUBBED:** scrolling and the clip view, the
+ * **WHAT THE SLICES ABOVE STILL HAVE NOT GOT, NAMED RATHER THAN STUBBED:** the
  * `NSTextStorage`/`NSLayoutManager`/`NSTextContainer` trio and the door names that come with it, attachments, tables,
  * the paragraph commands, the marked-text family and the input-method half.
  */

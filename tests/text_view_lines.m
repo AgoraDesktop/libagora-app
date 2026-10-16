@@ -21,6 +21,7 @@
 #import <AppKit/NSColor.h>
 #import <AppKit/NSFont.h>
 #import <Foundation/Foundation.h>
+#include <CoreGraphics/CGContext.h>
 #include <stdio.h>
 
 #define W 200
@@ -54,28 +55,49 @@ static NSBitmapImageRep *draw(NSTextView *view)
 	NSBitmapImageRep *rep = [[NSBitmapImageRep alloc] initWithBitmapDataPlanes:NULL pixelsWide:W pixelsHigh:H
 		bitsPerSample:8 samplesPerPixel:4 hasAlpha:YES isPlanar:NO
 		colorSpaceName:NSCalibratedRGBColorSpace bytesPerRow:W * 4 bitsPerPixel:32];
+	NSGraphicsContext *ctx;
+	CGContextRef cg;
 
 	[NSGraphicsContext setCurrentContext:[NSGraphicsContext graphicsContextWithBitmapImageRep:rep]];
+	ctx = [NSGraphicsContext currentContext];
+	cg = (CGContextRef)[ctx graphicsPort];
 	[[NSColor whiteColor] setFill];
 	[[NSBezierPath bezierPathWithRect:NSMakeRect(0.0, 0.0, (CGFloat)W, (CGFloat)H)] fill];
+	/* **AND THE VIEW IS ENTERED THE WAY A SUPERVIEW WOULD ENTER IT.** `NSTextView` is FLIPPED (y down) and this rep's
+	 * context is not, so the mirror `NSView -displayRect:` applies to a child that differs from it is applied here —
+	 * the same translate-then-scale, in the same order. WITHOUT it the view's first line lands at the rep's BOTTOM,
+	 * which is what "the document is upside down" looks like from a probe. */
+	CGContextTranslateCTM(cg, 0.0, (CGFloat)H);
+	CGContextScaleCTM(cg, 1.0, -1.0);
 	[view drawRect:[view bounds]];
 	return rep;
 }
 
-static int ink_in(NSBitmapImageRep *rep, int y0, int y1)
+/* **THE NUMBER OF BANDS OF INK, WHICH IS A CLAIM A FLIPPED VIEW CANNOT SPOIL.** Counting rows in a fixed half would
+ * depend on which end of the rep a row is counted from — and `colorAtX:y:` and a flipped view do not have to agree
+ * about that. Counting RUNS does not: one line of text is one band of rows wherever it is, and two lines are two,
+ * separated by the line gap. A view that drew its whole string as one line would leave one band where two are asked
+ * for, which is the defect this holds. */
+static int ink_bands(NSBitmapImageRep *rep)
 {
-	int x, y, n = 0;
+	int y, bands = 0, inRun = 0;
 
-	for (y = y0; y < y1; y++) {
-		for (x = 0; x < W; x++) {
+	for (y = 0; y < H; y++) {
+		int x, has = 0;
+
+		for (x = 0; x < W && !has; x++) {
 			NSColor *c = [rep colorAtX:x y:y];
 
-			if (c != nil && [c redComponent] < 0.5) {
-				n++;
-			}
+			has = (c != nil && [c redComponent] < 0.5);
+		}
+		if (has && !inRun) {
+			bands++;
+			inRun = 1;
+		} else if (!has) {
+			inRun = 0;
 		}
 	}
-	return n;
+	return bands;
 }
 
 int main(void)
@@ -168,29 +190,23 @@ int main(void)
 	 * ink in the top band, which is exactly what this pair rules out. */
 	{
 		NSBitmapImageRep *two;
-		int topTwo, bottomTwo;
 
-		/* **THE HEIGHT IS HELD HERE, BECAUSE THE PIXEL AND POINTER CASES ARE ABOUT THE LAYOUT AND NOT ABOUT THE
-		 * AUTO-FIT.** A vertically resizable view (the default) is exactly as tall as its text, so a frame that a
-		 * pixel read is measured against would move under it; the flag is Apple's door for a caller that owns the
-		 * frame's height. */
+		/* **THE HEIGHT IS HELD HERE, BECAUSE THE PIXEL CASE IS ABOUT THE LAYOUT AND NOT ABOUT THE AUTO-FIT.** A
+		 * vertically resizable view (the default) is exactly as tall as its text, so a frame a pixel read is measured
+		 * against would move under it; the flag is Apple's door for a caller that owns the frame's height. */
 		[view setVerticallyResizable:NO];
 		[view setFrameSize:NSMakeSize((CGFloat)W, (CGFloat)H)];
 
 		[view setString:@"a\nb"];
 		two = draw(view);
-		topTwo = ink_in(two, 0, H / 2);
-		bottomTwo = ink_in(two, H / 2, H);
-		printf("  (note: two lines — ink above the middle %d, below it %d)\n", topTwo, bottomTwo);
-		check(topTwo > 0 && bottomTwo > 0,
-		      "TWO lines write ink in two bands — one above the middle of the view and one below");
+		printf("  (note: two lines — %d band(s) of ink)\n", ink_bands(two));
+		check(ink_bands(two) == 2, "TWO lines write TWO bands of ink");
 		[two release];
 
 		[view setString:@"a"];
 		two = draw(view);
-		bottomTwo = ink_in(two, H / 2, H);
-		printf("  (note: one line — ink below the middle %d)\n", bottomTwo);
-		check(bottomTwo == 0, "while ONE line writes nothing below the first band");
+		printf("  (note: one line — %d band(s) of ink)\n", ink_bands(two));
+		check(ink_bands(two) == 1, "while ONE line writes ONE band");
 		[two release];
 	}
 
@@ -198,8 +214,8 @@ int main(void)
 	 * edge, and the caret must land in the second line — which is the hit test reading the y rather than always
 	 * answering the first line. */
 	{
-		/* THE SECOND LINE'S BAND, IN THE VIEW'S OWN y-UP COORDINATES: the top line is the highest band, so a point
-		 * just below it is in line 1. */
+		/* THE SECOND LINE'S BAND, IN THE VIEW'S OWN (FLIPPED) COORDINATES: the first line is the TOP band, so a point
+		 * one line down from it is in line 1. */
 		NSFont *font = [view font];
 		CGFloat lineHeight;
 		CGFloat y;
@@ -208,7 +224,7 @@ int main(void)
 			font = [NSFont systemFontOfSize:[NSFont systemFontSize]];
 		}
 		lineHeight = [font ascender] - [font descender];
-		y = NSMaxY([view bounds]) - NS_TEXT_INSET - lineHeight / 2.0 - lineHeight;
+		y = NS_TEXT_INSET + lineHeight / 2.0 + lineHeight;
 		[view setString:@"one\ntwo"];
 		[view mouseDown:[NSEvent mouseEventWithType:NSLeftMouseDown location:NSMakePoint(6.0, y)
 						 modifierFlags:0 timestamp:0.0 windowNumber:[window windowNumber]

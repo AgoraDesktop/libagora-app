@@ -25,6 +25,7 @@
 #import <AppKit/NSColor.h>
 #import <AppKit/NSFont.h>
 #import <Foundation/Foundation.h>
+#include <CoreGraphics/CGContext.h>
 #include <stdio.h>
 
 #define REPW 220
@@ -71,28 +72,45 @@ static NSBitmapImageRep *draw(NSTextView *view)
 	NSBitmapImageRep *rep = [[NSBitmapImageRep alloc] initWithBitmapDataPlanes:NULL pixelsWide:REPW pixelsHigh:REPH
 		bitsPerSample:8 samplesPerPixel:4 hasAlpha:YES isPlanar:NO
 		colorSpaceName:NSCalibratedRGBColorSpace bytesPerRow:REPW * 4 bitsPerPixel:32];
+	NSGraphicsContext *ctx;
+	CGContextRef cg;
 
 	[NSGraphicsContext setCurrentContext:[NSGraphicsContext graphicsContextWithBitmapImageRep:rep]];
+	ctx = [NSGraphicsContext currentContext];
+	cg = (CGContextRef)[ctx graphicsPort];
 	[[NSColor whiteColor] setFill];
 	[[NSBezierPath bezierPathWithRect:NSMakeRect(0.0, 0.0, (CGFloat)REPW, (CGFloat)REPH)] fill];
+	/* AND THE VIEW IS ENTERED THE WAY A SUPERVIEW WOULD — it is FLIPPED and this context is not; see the same helper
+	 * in `text_view_lines.m`. */
+	CGContextTranslateCTM(cg, 0.0, (CGFloat)REPH);
+	CGContextScaleCTM(cg, 1.0, -1.0);
 	[view drawRect:[view bounds]];
 	return rep;
 }
 
-static int ink_in(NSBitmapImageRep *rep, int y0, int y1)
+/* **THE NUMBER OF BANDS OF INK**, which is the claim a FLIPPED view can be held to without a probe having to know
+ * which end of the rep a row is counted from: one line is one band wherever it is, two lines are two, and a view that
+ * drew its whole string as one line would leave one where two are asked for. */
+static int ink_bands(NSBitmapImageRep *rep)
 {
-	int x, y, n = 0;
+	int y, bands = 0, inRun = 0;
 
-	for (y = y0; y < y1; y++) {
-		for (x = 0; x < REPW; x++) {
+	for (y = 0; y < REPH; y++) {
+		int x, has = 0;
+
+		for (x = 0; x < REPW && !has; x++) {
 			NSColor *c = [rep colorAtX:x y:y];
 
-			if (c != nil && [c redComponent] < 0.5) {
-				n++;
-			}
+			has = (c != nil && [c redComponent] < 0.5);
+		}
+		if (has && !inRun) {
+			bands++;
+			inRun = 1;
+		} else if (!has) {
+			inRun = 0;
 		}
 	}
-	return n;
+	return bands;
 }
 
 int main(void)
@@ -209,7 +227,7 @@ int main(void)
 		[view setVerticallyResizable:NO];
 		set_frame(view, (CGFloat)NARROW);
 		[view setString:paragraph()];
-		y = NSMaxY([view bounds]) - NS_TEXT_INSET - lineHeight / 2.0 - lineHeight;
+		y = NS_TEXT_INSET + lineHeight / 2.0 + lineHeight;
 		press(view, window, 6.0, y);
 		printf("  (note: a click at y=%.1f landed at index %lu)\n", (double)y,
 		       (unsigned long)[view selectedRange].location);
@@ -233,12 +251,10 @@ int main(void)
 		wide = draw(view);
 		set_frame(view, (CGFloat)NARROW);
 		narrow = draw(view);
-		printf("  (note: ink in the second band — wide %d, narrow %d)\n",
-		       ink_in(wide, REPH / 3, 2 * REPH / 3), ink_in(narrow, REPH / 3, 2 * REPH / 3));
-		check(ink_in(wide, 0, REPH / 3) > 0 && ink_in(wide, REPH / 3, REPH) == 0,
-		      "at the WIDE width every glyph is in the first band");
-		check(ink_in(narrow, REPH / 3, 2 * REPH / 3) > 0,
-		      "and at the NARROW one the second band has ink — the wrap is DRAWN, not just counted");
+		printf("  (note: %d band(s) of ink — wide, then narrow)\n", ink_bands(wide));
+		check(ink_bands(wide) == 1, "at the WIDE width the paragraph is ONE band of ink");
+		check(ink_bands(narrow) > 1,
+		      "and at the NARROW one it is MORE THAN ONE — the wrap is DRAWN, not just counted");
 		[wide release];
 		[narrow release];
 	}

@@ -148,9 +148,10 @@ the compositor is really gone.
   **274.3** to **4.0** and answers NO when asked again for the same rectangle; a caret moved to the end is SCROLLED
   into view; `-scrollPoint:` puts the origin at the point given and CONSTRAINS a point past the end to the far edge;
   there is no horizontal origin at all (a wrapped document has nothing to scroll sideways); and an edit that adds a
-  line grows the document. **AND WHAT IS OWED IS NAMED**: the DOCUMENT'S ORIENTATION — Apple's text view is FLIPPED so
-  its first line sits at the clip view's origin, and this class still measures y up — so the DOORS are right either
-  way and the flip is the next slice.
+  line grows the document. **AND THE DOCUMENT'S ORIENTATION IS PART OF THE SLICE RATHER THAN AN AFTERTHOUGHT**: a text
+  view is FLIPPED, so its FIRST line sits at the clip view's origin and the origin grows as a reader moves DOWN the
+  document — MEASURED, with the origin at 0 the first line is on screen, and the caret moved to the end leaves the
+  origin at **258.6**.
 - **And the field, which is a cell under a view** (`ctest`, offscreen): `NSTextFieldCell` owns the string, the face
   and the three doors of an edit; `NSTextField` is the control above it, and it contributes the two things a cell
   cannot — a PRESS that opens a session with the WINDOW's field editor, and `-selectText:` for the same session with
@@ -424,8 +425,8 @@ editor are named rather than guessed. The WORD commands are NOT in that list any
 drives Option+arrow and Option+Delete, because a word is a run of the string's own characters and needs no layout
 model. And the MULTI-LINE TEXT VIEW has its FIRST SLICE: `NSTextView` holds many lines where `NSText` holds one
 (`tests/text_view_lines.m`), and WRAPPING and SCROLLING are the slices above it (`tests/text_view_wrapping.m`,
-`tests/text_view_scrolling.m`) — with the DOCUMENT'S ORIENTATION (a text view is flipped so its first line sits at the
-clip view's origin) and rich text named in its own header as the slices still owed. Each absence is stated
+`tests/text_view_scrolling.m` — the second including the FLIP that puts a document's first line at the clip view's
+origin) — with RICH TEXT, attachments and paragraphs named in its own header as the slice still owed. Each absence is stated
 rather than stubbed, and the refusals name themselves.
 
 ## Build

@@ -14,10 +14,10 @@
  * it, so the text view settles its own height after every edit (`-isVerticallyResizable`, YES by default) — and a
  * view whose caller owns the frame says NO and keeps it.
  *
- * WHAT IS NOT HERE, AND IT IS THE NEXT SLICE: THE DOCUMENT'S ORIENTATION. A text view is FLIPPED in Apple's stack so
- * that its FIRST line sits at the clip view's origin; this class still measures y UP (the base's own convention), so
- * the clip view's origin 0 shows the document's LAST lines and the orientation is owed. The DOORS are correct either
- * way — bringing a rectangle into view is containment and a small move — which is what this probe holds.
+ * **AND THE DOCUMENT'S ORIENTATION IS PART OF IT RATHER THAN AN AFTERTHOUGHT.** A text view is FLIPPED, so its FIRST
+ * line sits at the clip view's origin and the origin grows as a reader moves DOWN the document — which is what makes
+ * a scroller's knob mean what it looks like it means. That is checked here, because it is the one claim the doors
+ * cannot make on their own.
  */
 #import <AppKit/NSTextView.h>
 #import <AppKit/NSText.h>
@@ -89,7 +89,16 @@ int main(void)
 		[fixed release];
 	}
 
-	/* 3. **AND BRINGING A RECTANGLE INTO VIEW IS THE CLIP VIEW MOVING.** A rectangle near the document's FAR end in
+	/* 3. **AND THE DOCUMENT READS FROM THE TOP, WHICH IS WHAT THE FLIP IS FOR.** A text view is FLIPPED, so line 0 is
+	 * at the clip view's origin: with the origin at 0 the FIRST line is on screen, and moving the caret to the END
+	 * scrolls the origin DOWN the document. Before the flip, origin 0 showed the document's LAST lines — a document
+	 * scrolled upside down. */
+	check([view isFlipped], "a text view is FLIPPED — its first line sits at the clip view's origin");
+	[view scrollPoint:NSMakePoint(0.0, 0.0)];
+	check(visible(view, clip, NSMakeRect(NS_TEXT_INSET, NS_TEXT_INSET, 1.0, lineHeight)),
+	      "with the origin at 0 the FIRST line is visible");
+
+	/* 4. **AND BRINGING A RECTANGLE INTO VIEW IS THE CLIP VIEW MOVING.** A rectangle near the document's FAR end in
 	 * this class's own (y-up) coordinates is outside the visible rectangle at the origin and inside it afterwards —
 	 * which is what "scrolled into view" means, and it is read as `-bounds`, not as a redraw. */
 	{
@@ -105,7 +114,7 @@ int main(void)
 		      "asking again for the SAME rectangle answers NO — it is already visible");
 	}
 
-	/* 4. **AND THE CARET IS BROUGHT INTO VIEW BY THE SAME DOOR.** `-setSelectedRange:` ends in
+	/* 5. **AND THE CARET IS BROUGHT INTO VIEW BY THE SAME DOOR.** `-setSelectedRange:` ends in
 	 * `-scrollRangeToVisible:`, which turns the caret into a rectangle; a caret at the document's far end must end up
 	 * visible, and that is an assertion about the clip view rather than about the selection. */
 	{
@@ -121,15 +130,16 @@ int main(void)
 		 * the caret is on. */
 		{
 			NSUInteger line = [t cg_visualLineIndexForCharacterIndex:n - 1];
-			CGFloat baseline = NSMaxY([t bounds]) - NS_TEXT_INSET - [font ascender]
-				- (CGFloat)line * lineHeight;
+			/* THE CARET'S OWN RECTANGLE, built the way `-scrollRangeToVisible:` builds it: a point wide, on the visual
+			 * line the caret is on, in a FLIPPED view's y-down coordinates. */
+			CGFloat baseline = NS_TEXT_INSET + [font ascender] + (CGFloat)line * lineHeight;
 
-			caret = NSMakeRect(NS_TEXT_INSET, baseline + [font descender], 1.0, lineHeight);
+			caret = NSMakeRect(NS_TEXT_INSET, baseline - [font ascender], 1.0, lineHeight);
 		}
 		check(visible(t, clip, caret), "a caret moved to the end of the document is SCROLLED into view");
 	}
 
-	/* 5. **AND `-scrollPoint:` PUTS THE ORIGIN WHERE IT IS TOLD, WITHIN WHAT THERE IS.** It constrains rather than
+	/* 6. **AND `-scrollPoint:` PUTS THE ORIGIN WHERE IT IS TOLD, WITHIN WHAT THERE IS.** It constrains rather than
 	 * refusing, so a point past the end is the far edge and not blank space. */
 	{
 		CGFloat maxOrigin = [view frame].size.height - 60.0;
@@ -144,7 +154,7 @@ int main(void)
 		      "with no horizontal origin at all — a wrapped document has nothing to scroll sideways");
 	}
 
-	/* 6. **AND A GROWING DOCUMENT GROWS THE ORIGIN'S RANGE WITH IT**, which is the auto-fit and the clip view's
+	/* 7. **AND A GROWING DOCUMENT GROWS THE ORIGIN'S RANGE WITH IT**, which is the auto-fit and the clip view's
 	 * re-constrain meeting: the view is taller after an edit and the clip view can therefore scroll further. */
 	{
 		CGFloat before = [view frame].size.height;
