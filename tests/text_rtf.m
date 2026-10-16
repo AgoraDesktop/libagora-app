@@ -92,6 +92,67 @@ int main(void)
 		[none release];
 	}
 
+	/* 3. **AND THE WRITER, WHICH IS THE SAME CODEC THE OTHER WAY.** An AppKit-attributed string with a font, an ink, a
+	 * ground, the two rules and a centred paragraph is written and read back, and the two agree — which is what "keyed
+	 * on the APPKIT's attributes" has to mean. The bytes are checked for the tables and the control words too, so a
+	 * writer that wrote nothing readable would fail even if a later reader invented the attributes. */
+	{
+		NSMutableAttributedString *rich;
+		NSMutableParagraphStyle *centre = [[NSParagraphStyle defaultParagraphStyle] mutableCopy];
+		NSFont *font = [NSFont systemFontOfSize:12.0];
+		NSData *written;
+		NSAttributedString *back;
+		NSString *bytes;
+		NSUInteger len;
+
+		[centre setAlignment:NSCenterTextAlignment];
+		rich = [[NSMutableAttributedString alloc] initWithString:@"ab\tcd\n\u00e9w"];
+		len = [rich length];
+		[rich addAttribute:NSFontAttributeName value:font range:NSMakeRange(0, len)];
+		[rich addAttribute:NSParagraphStyleAttributeName value:centre range:NSMakeRange(0, len)];
+		[rich addAttribute:NSForegroundColorAttributeName value:[NSColor redColor] range:NSMakeRange(0, 2)];
+		[rich addAttribute:NSBackgroundColorAttributeName value:[NSColor greenColor] range:NSMakeRange(0, 2)];
+		[rich addAttribute:NSUnderlineStyleAttributeName value:[NSNumber numberWithInteger:NSUnderlineStyleSingle]
+			    range:NSMakeRange(0, 2)];
+		[rich addAttribute:NSStrikethroughStyleAttributeName value:[NSNumber numberWithInteger:NSUnderlineStyleSingle]
+			    range:NSMakeRange(3, 2)];
+		written = [rich RTFRepresentation];
+		bytes = [[[NSString alloc] initWithData:written encoding:NSUTF8StringEncoding] autorelease];
+		printf("  (note: the writer produced %lu byte(s))\n", (unsigned long)[written length]);
+		check(written != nil && [written length] > 0, "`-RTFRepresentation` writes bytes");
+		check(bytes != nil && [bytes rangeOfString:@"\\rtf1"].location != NSNotFound
+		      && [bytes rangeOfString:@"\\fonttbl"].location != NSNotFound
+		      && [bytes rangeOfString:@"\\colortbl"].location != NSNotFound,
+		      "with an RTF header, a font table and a colour table");
+		check([bytes rangeOfString:@"\\ul "].location != NSNotFound
+		      && [bytes rangeOfString:@"\\qc "].location != NSNotFound
+		      && [bytes rangeOfString:@"\\tab "].location != NSNotFound,
+		      "and the control words for the rule, the alignment and the tab");
+
+		back = [[NSAttributedString alloc] initWithRTF:written documentAttributes:NULL];
+		check(back != nil, "and the READER takes it back");
+		if (back != nil) {
+			NSDictionary *first = [back attributesAtIndex:0 effectiveRange:NULL];
+			NSDictionary *struck = [back attributesAtIndex:3 effectiveRange:NULL];
+			NSFont *fontBack = [first objectForKey:NSFontAttributeName];
+			NSParagraphStyle *styleBack = [first objectForKey:NSParagraphStyleAttributeName];
+
+			printf("  (note: the round trip gave `%s`)\n", [[back string] UTF8String]);
+			check([[back string] isEqualToString:[rich string]],
+			      "the text, the break, the tab and the non-ASCII character survive");
+			check(fontBack != nil && fabs([fontBack pointSize] - 12.0) < 0.01, "`\\fs` gives the size back");
+			check(colour_is([first objectForKey:NSForegroundColorAttributeName], 1.0, 0.0, 0.0)
+			      && colour_is([first objectForKey:NSBackgroundColorAttributeName], 0.0, 1.0, 0.0),
+			      "the ink and the ground come back");
+			check([first objectForKey:NSUnderlineStyleAttributeName] != nil, "the underline comes back");
+			check([struck objectForKey:NSStrikethroughStyleAttributeName] != nil, "and the strikethrough");
+			check(styleBack != nil && [styleBack alignment] == NSCenterTextAlignment, "and the alignment");
+		}
+		[back release];
+		[rich release];
+		[centre release];
+	}
+
 	[pool release];
 	printf("text_rtf: %d case(s) failed\n", failures);
 	return failures == 0 ? 0 : 1;

@@ -91,9 +91,9 @@ typedef NSInteger NSUnderlineStyle;
  * which is exactly the vocabulary Foundation does not have. So the reader lives here, in the file   *
  * Apple declares the RTF category in, and it understands the subset this tier can draw: the font    *
  * table and `\f`/`\fs`, the colour table and `\cf`/`\highlight`, `\ul`/`\strike`, and the     *
- * paragraph alignments. AN APPKIT-AWARE WRITER — one that encodes NSFont/NSColor/the two rules and  *
- * the paragraph style, rather than Foundation's intent bits — is NAMED AS OWED and would be a door   *
- * beside this one, because `-RTFFromRange:` is already implemented below in the stack.              *
+ * paragraph alignments. **AND THE APPKIT-AWARE WRITER IS HERE BESIDE IT**: `-RTFRepresentation` encodes            *
+ * NSFont/NSColor/the two rules and the paragraph style — rather than Foundation's intent bits — so a              *
+ * document this tier built is written and read back by the reader above.                                             *
  * ============================================================================================ */
 
 @interface NSAttributedString (NSAttributedStringKitAdditions)
@@ -102,6 +102,12 @@ typedef NSInteger NSUnderlineStyle;
  * which are not RTF should be able to tell. `documentAttributes` is filled with the document's own facts (the
  * character encoding), which is the one key this tier has an answer for. */
 - (nullable instancetype)initWithRTF:(NSData *)data documentAttributes:(NSDictionary **)dict;
+
+/* **AND THE WRITER, WHICH IS THE SAME CODEC THE OTHER WAY.** Foundation already writes RTF, but keyed on ITS
+ * presentation-intent bits; this door encodes the APPKIT's own attributes — `NSFontAttributeName`,
+ * `NSForegroundColorAttributeName`, `NSBackgroundColorAttributeName`, the two rules and the paragraph alignment —
+ * building the font and colour tables `-initWithRTF:` reads, so a document this tier built survives a round trip. */
+- (nullable NSData *)RTFRepresentation;
 
 @end
 

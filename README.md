@@ -57,7 +57,7 @@ tests/
   text_input_context.m          and the INPUT CONTEXT: where a key goes before the view, and where a composition lives
   text_editing_commands.m       and `-transpose:` plus the insertions that ignore a field's role
   text_table.m                  and the TABLE BLOCK: the box a paragraph is set in, drawn by the manager
-  text_rtf.m                    and the RTF READER: control words into the AppKit's attribute keys
+  text_rtf.m                    and RTF: the reader's control words, and an AppKit-aware WRITER beside it
   text_table_grid.m             and the GRID: cells side by side, columns measured, rows as tall as their tallest cell
   text_table_collapse.m         and `-collapsesBorders`: an edge two cells share is drawn once, by the min-side cell
   text_attachment_flow.m        and the attachment's BOX: a fixed-size run the text flows around
@@ -322,9 +322,13 @@ the compositor is really gone.
   `\ul`, the alignment by `\qc`, and a second paragraph that says `\ulnone`/`\cf0` is neither underlined nor coloured;
   a document with no RTF header answers **nil** rather than an empty string. **A FACE THIS TIER CANNOT RESOLVE IS
   SUBSTITUTED** (the size is kept, which is what the layout measures with) — which is what an RTF reader is supposed
-  to do. **AN APPKIT-AWARE WRITER IS NAMED AS OWED**: Foundation's writer is keyed on its own presentation-intent
-  bits, so it does not encode NSFont/NSColor/the two rules/the paragraph style, and `-RTFFromRange:` is already
-  implemented below in the stack.
+  to do. **AND THE APPKIT-AWARE WRITER IS HERE BESIDE IT** (`ctest`): Foundation's writer is keyed on its own
+  presentation-intent bits and does not encode NSFont/NSColor/the two rules or the paragraph style, so
+  `-RTFRepresentation` writes the vocabulary the reader understands — a font table and a colour table built in a first
+  pass, then the runs, emitting a control word only where the state changes, escaping the three literals and writing
+  anything non-ASCII as `\uN?`. MEASURED: an attributed string with a font, a red ink, a green ground, an underline, a
+  strikethrough, a centred paragraph, a tab and a non-ASCII character writes and reads back to itself — **226** bytes
+  carrying `\fonttbl`, `\colortbl`, `\ul`, `\qc` and `\tab`.
 - **And the TABLE GRID, which is where cells stop being a stack and become a grid** (`ctest`): the layout manager reads
   the `NSTextTableBlock` each cell-paragraph's style carries, MEASURES the columns (automatic: the widest cell in each
   column, its span divided out, scaled to fit the container; fixed: equal shares), lays each cell's text out inside its
@@ -423,8 +427,7 @@ the compositor is really gone.
   subclass with an editor of its own overrides one method. The probe checks the chain at all three objects: a flag set
   on the CONTROL reaches the CELL, and the NEXT session's EDITOR is configured from it — while a field with the flags
   OFF gets a plain editor, so the check cannot pass against an editor that is always rich. What still does not happen
-  is named rather than implied: no AppKit-aware RTF WRITER (the RTF READER is here, `tests/text_rtf.m`, and Foundation
-  writes RTF instead), and no paragraph model in the cell — so the flags travel and nothing obeys them yet.
+  is named rather than implied: no paragraph model in the cell — so the flags travel and nothing obeys them yet.
 - **The chrome** (`ctest`, offscreen): the title bar's symbols are SHAPES in pixels — ink on both diagonals of
   the X, a thick stroke across the minus, and a pill rounded at both caps — the title is centred and bold, and
   each symbol appears only for the style-mask bit that asks for it.

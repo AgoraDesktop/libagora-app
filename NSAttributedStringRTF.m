@@ -18,6 +18,52 @@
 #import <AppKit/NSColor.h>
 #import <AppKit/NSParagraphStyle.h>
 #import <Foundation/Foundation.h>
+#include <math.h>
+#include <stdint.h>
+
+/* ============================================================================================ *
+ * AND THE WRITER, WHICH IS THE SAME CODEC THE OTHER WAY                                            *
+ * ============================================================================================ */
+
+/* A CONTROL WORD RUNS UNTIL A NON-ALPHABETIC, so one followed by text needs a delimiting space — which is the space
+ * the reader eats rather than putting into the text. */
+static void fn_emit_word(NSMutableString *out, NSString *word)
+{
+	[out appendString:word];
+	[out appendString:@" "];
+}
+
+/* THE FONT TABLE'S INDEX FOR A NAME, adding it when the run names a face not seen yet. */
+static NSInteger fn_font_index(NSMutableArray *names, NSString *name)
+{
+	NSUInteger k;
+
+	for (k = 0; k < [names count]; k++) {
+		if ([[names objectAtIndex:k] isEqualToString:name]) {
+			return (NSInteger)k;
+		}
+	}
+	[names addObject:name];
+	return (NSInteger)[names count] - 1;
+}
+
+/* THE COLOUR TABLE STARTS WITH RTF'S "auto" AT 0, so a colour stored at index k in the array is written at k + 1. */
+static NSInteger fn_colour_index(NSMutableArray *colours, NSColor *colour)
+{
+	NSUInteger k;
+
+	for (k = 0; k < [colours count]; k++) {
+		NSColor *c = [colours objectAtIndex:k];
+
+		if (fabs([c redComponent] - [colour redComponent]) < 0.002
+		    && fabs([c greenComponent] - [colour greenComponent]) < 0.002
+		    && fabs([c blueComponent] - [colour blueComponent]) < 0.002) {
+			return (NSInteger)k + 1;
+		}
+	}
+	[colours addObject:colour];
+	return (NSInteger)[colours count];
+}
 
 @implementation NSAttributedString (NSAttributedStringKitAdditions)
 
@@ -312,6 +358,143 @@
 	[source release];
 	#undef FN_PUSH_MARK
 	return self;
+}
+
+/* **AND THE WRITER.** The tables are built in a FIRST pass so every face and colour an index is written for is already
+ * declared; the body then walks the string and emits a control word only when the state CHANGES, which is what makes
+ * the output small and what the reader's mark mechanism expects. Alignment is a PARAGRAPH property, so it is written
+ * where each paragraph starts; every other state is a run's and is written at the character where it changes. The
+ * subset is the reader's, which is the point: what this writes, `-initWithRTF:` reads back. */
+- (NSData *)RTFRepresentation
+{
+	NSString *string = [self string];
+	NSUInteger n = [string length];
+	NSMutableArray *fontNames = [NSMutableArray array];
+	NSMutableArray *colours = [NSMutableArray array];
+	NSMutableString *out = [NSMutableString string];
+	NSInteger curFont = -1, curFg = -1, curBg = -1, curHalf = -1;
+	BOOL curUnder = NO, curStrike = NO;
+	NSUInteger i;
+
+	for (i = 0; i < n; i++) {
+		NSDictionary *a = [self attributesAtIndex:i effectiveRange:NULL];
+		NSFont *font = [a objectForKey:NSFontAttributeName];
+		NSColor *fg = [a objectForKey:NSForegroundColorAttributeName];
+		NSColor *bg = [a objectForKey:NSBackgroundColorAttributeName];
+
+		if (font != nil) {
+			fn_font_index(fontNames, [font fontName]);
+		}
+		if (fg != nil) {
+			fn_colour_index(colours, fg);
+		}
+		if (bg != nil) {
+			fn_colour_index(colours, bg);
+		}
+	}
+
+	[out appendString:@"{\\rtf1\\ansi\\ansicpg1252\\deff0\n"];
+	[out appendString:@"{\\fonttbl"];
+	for (i = 0; i < [fontNames count]; i++) {
+		[out appendFormat:@"{\\f%lu %@;}", (unsigned long)i, [fontNames objectAtIndex:i]];
+	}
+	[out appendString:@"}\n{\\colortbl;"];
+	for (i = 0; i < [colours count]; i++) {
+		NSColor *c = [colours objectAtIndex:i];
+
+		[out appendFormat:@"\\red%ld\\green%ld\\blue%ld;",
+			(long)lround([c redComponent] * 255.0), (long)lround([c greenComponent] * 255.0),
+			(long)lround([c blueComponent] * 255.0)];
+	}
+	[out appendString:@"}\n\\pard "];
+
+	for (i = 0; i < n; i++) {
+		unichar c = [string characterAtIndex:i];
+		NSDictionary *a;
+		NSFont *font;
+		NSColor *fg, *bg;
+		NSNumber *under, *strike;
+
+		if (i == 0 || [string characterAtIndex:i - 1] == '\n') {
+			NSParagraphStyle *ps = [[self attributesAtIndex:i effectiveRange:NULL]
+				objectForKey:NSParagraphStyleAttributeName];
+			NSInteger align = (ps != nil) ? [ps alignment] : NSLeftTextAlignment;
+
+			fn_emit_word(out, (align == NSCenterTextAlignment) ? @"\\qc"
+				: (align == NSRightTextAlignment) ? @"\\qr"
+				: (align == NSJustifiedTextAlignment) ? @"\\qj" : @"\\ql");
+		}
+		if (c == '\n') {
+			[out appendString:@"\\par\n"];
+			continue;
+		}
+		if (c == '\t') {
+			[out appendString:@"\\tab "];
+			continue;
+		}
+		a = [self attributesAtIndex:i effectiveRange:NULL];
+		font = [a objectForKey:NSFontAttributeName];
+		if (font != nil) {
+			NSInteger idx = fn_font_index(fontNames, [font fontName]);
+			NSInteger half = (NSInteger)lround([font pointSize] * 2.0);
+
+			if (idx != curFont) {
+				fn_emit_word(out, [NSString stringWithFormat:@"\\f%ld", (long)idx]);
+				curFont = idx;
+			}
+			if (half != curHalf) {
+				fn_emit_word(out, [NSString stringWithFormat:@"\\fs%ld", (long)half]);
+				curHalf = half;
+			}
+		}
+		fg = [a objectForKey:NSForegroundColorAttributeName];
+		{
+			NSInteger idx = (fg != nil) ? fn_colour_index(colours, fg) : 0;
+
+			if (idx != curFg) {
+				fn_emit_word(out, [NSString stringWithFormat:@"\\cf%ld", (long)idx]);
+				curFg = idx;
+			}
+		}
+		bg = [a objectForKey:NSBackgroundColorAttributeName];
+		{
+			NSInteger idx = (bg != nil) ? fn_colour_index(colours, bg) : 0;
+
+			if (idx != curBg) {
+				fn_emit_word(out, [NSString stringWithFormat:@"\\highlight%ld", (long)idx]);
+				curBg = idx;
+			}
+		}
+		under = [a objectForKey:NSUnderlineStyleAttributeName];
+		{
+			BOOL on = (under != nil && [under integerValue] != NSUnderlineStyleNone);
+
+			if (on != curUnder) {
+				fn_emit_word(out, on ? @"\\ul" : @"\\ulnone");
+				curUnder = on;
+			}
+		}
+		strike = [a objectForKey:NSStrikethroughStyleAttributeName];
+		{
+			BOOL on = (strike != nil && [strike integerValue] != NSUnderlineStyleNone);
+
+			if (on != curStrike) {
+				fn_emit_word(out, on ? @"\\strike" : @"\\strike0");
+				curStrike = on;
+			}
+		}
+		/* THE THREE LITERAL ESCAPES, the printable ASCII as itself, and everything else as `\uN?` — the reader's own
+		 * Unicode control word, with the `?` as the substitution character a parser that cannot do Unicode would take. */
+		if (c == '\\' || c == '{' || c == '}') {
+			[out appendFormat:@"\\%C", c];
+		} else if (c >= 0x20 && c < 0x7F) {
+			[out appendFormat:@"%C", c];
+		} else {
+			[out appendFormat:@"\\u%ld?", (long)(int16_t)c];
+		}
+	}
+	[out appendString:@"}\n"];
+	return [out dataUsingEncoding:NSUTF8StringEncoding];
 }
 
 @end
