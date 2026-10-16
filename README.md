@@ -55,6 +55,7 @@ tests/
   text_paragraph_geometry.m     and its GEOMETRY: the indents, the spacings and the line heights the layout reads
   text_attachment.m             and the ATTACHMENT: a character that stands for a picture, and the cell that draws it
   text_input_context.m          and the INPUT CONTEXT: where a key goes before the view, and where a composition lives
+  text_input_method.m           and the METHOD: a dead key composes with the next keystroke, marked until it does
   text_editing_commands.m       and `-transpose:` plus the insertions that ignore a field's role
   text_table.m                  and the TABLE BLOCK: the box a paragraph is set in, drawn by the manager
   text_rtf.m                    and RTF: the reader's control words, and an AppKit-aware WRITER beside it
@@ -297,8 +298,9 @@ the compositor is really gone.
   a movement and a printable character to an insertion (and leaves a Command-modified key to the menu bar);
   `+currentInputContext` is nil until `-activate`, the context while active, and nil after `-deactivate`; the source
   doors name the one stock keyboard; and `-discardMarkedText` ends a composition through its client. **AND THE INPUT
-  METHOD ITSELF IS STILL ABSENT**: the context has one keyboard and no composition engine, which its own header says —
-  what landed is the DOOR a real source would be inserted at.
+  METHOD IS HERE TOO** (`ctest`, `tests/text_input_method.m`): `-setInputSource:` installs an `NSTextInputSource` and
+  every key is sent to it FIRST — `AGInputMethod` is a dead-key table that holds the accent as MARKED text and composes
+  it with the next letter, and a key it does not own is DECLINED and reaches the standard binding.
 - **And `-transpose:` AND THE FIELD-ROLE INSERTIONS** (`ctest`): the one command in the responder's named list that
   needed no model this tier was missing — a position and two characters are arithmetic over the string. MEASURED:
   transposing at index **2** of `abcd` gives `acbd` with the caret at **3**; a selection of two swaps exactly those
@@ -517,13 +519,14 @@ the compositor is really gone.
   and the child clip is the child's FRAME region rather than its bounds rect — which was the same value only while the
   origin was zero. MEASURED: a mark at a document's own y 100..120 draws at 110 with the clip view at the top and at
   10 after a scroll of 100, in one run, through `-displayRect:`.
-- **`ctest`: 59 of 59 passed** (the keyboard and the seam, the AppKit and its input path, the controls and their
+- **`ctest`: 60 of 60 passed** (the keyboard and the seam, the AppKit and its input path, the controls and their
   metrics, the field control and its cell and its bezel and its placeholder and what it may hold, the text path and its
   word granularity and the multi-line view and its wrapping and its scrolling and its READING OF THE STORE, the STORE
   the rich-text slice is built on and the REGION it is laid out in and the WEB that ties the three together and the
   FRAGMENTS it produces and the GLYPH STORE it keeps and the INK it draws and the BACKGROUND, UNDERLINE and
   STRIKETHROUGH it paints and the SECOND CONTAINER it overflows into and the PARAGRAPH STYLE it aligns and breaks by
-  and the TABLE GRID whose shared borders collapse and whose rows flow into the next container,
+  and the TABLE GRID whose shared borders collapse and whose rows flow into the next container and the INPUT METHOD
+  whose dead key composes with the next keystroke,
   what a drag costs, the resize by edge, the tracking engine, the clip view and the scroller and the scroll view and the
   drawn offset, the chrome and what its buttons do, the chrome theme, the menus and activation).
 - **And the desktop's own text is SUB-PIXEL ANTIALIASED**, which is the AppKit's half of a renderer change in
@@ -663,8 +666,9 @@ still only a state the window marks and announces, because there is no Dock to p
 iconify in the protocol (Kestrel is parked). The chrome's toolbar pill is drawn and performs nothing, because
 there is no toolbar for it to toggle; the three symbols beside it ARE buttons now, and `tests/chrome_buttons.m`
 presses them. The `NSTextInput` PROTOCOL is here and `NSTextView` answers it (`tests/text_marked_text.m`), and the
-input-method CONTEXT is here too (`tests/text_input_context.m`), so the DOOR an input method is inserted at exists;
-what is still absent is the METHOD itself — the context has one stock keyboard and no composition engine. And the
+input-method CONTEXT is here too (`tests/text_input_context.m`), and SO IS THE METHOD (`tests/text_input_method.m`):
+`AGInputMethod` is a dead-key table the context sends keys to first. What is still owed is the CANDIDATE LIST, for a
+method that offers several readings. And the
 ALIGNMENT COMMANDS are NOT absent: `NSText` declares `-alignLeft:` and its three siblings and each is one `-setAlignment:`,
 which the view moves glyphs for. **THE FIELD EDITOR IS NOT ON THAT LIST AND HAS NOT BEEN SINCE THE WINDOW LEARNED TO LEND ONE** —
 `-fieldEditor:forObject:` is implemented and the field cells open their sessions with it, so what that clause used to
@@ -691,8 +695,9 @@ side, rows as tall as their tallest cell. **AND THE BORDERS COLLAPSE** (`tests/t
 the min-side one), the table's own border competing with the outer cells on its four outer edges; and a cell's box is
 its CELL rather than its text, and a table that does not fit FLOWS into the next container at a row boundary. The input-method
 CONTEXT are named in the view's own header as what is still owed — the `NSTextInput`
-protocol is here and the view ANSWERS it (`tests/text_marked_text.m`), while the class that owns a composition across
-keystrokes and arranges a candidate window is the slice behind it. ATTACHMENTS draw (`tests/text_attachment.m`) with
+protocol is here, the view ANSWERS it (`tests/text_marked_text.m`), and the class that owns a composition across
+keystrokes is here too (`AGInputMethod`); what remains is the candidate LIST — a method with several readings needs a
+window, which this tier places but does not draw. ATTACHMENTS draw (`tests/text_attachment.m`) with
 their inline advance named as the flow slice still owed. Each absence is stated
 rather than stubbed, and the refusals name themselves.
 

@@ -12,12 +12,11 @@
  * screen rectangle looks like, and it is TOLD what to insert and what is currently MARKED (the unconfirmed text a
  * composition is building, which the person can still see and edit before it is committed).
  *
- * **AND THE TIER'S HONESTY IS ABOUT WHERE THE CALLS COME FROM.** `NSResponder -interpretKeyEvents:` in this tier maps a
- * key straight to a command with NO input context between them (`NSResponder.h` and `-inputContext` both say so), so
- * nothing in the tier CALLS these doors yet — an application, or an input method wired in by one, is what will. The
- * protocol is here because the view CAN answer it, and the marked-text half is implemented in `NSTextView` because a
- * caller composed of a model and a keyboard can drive it directly. WHAT IS NOT HERE is the input CONTEXT: the class
- * that owns a composition across keystrokes and arranges a candidate window, which is a slice of its own.
+ * **AND THE CALLER IS THE TIER'S OWN INPUT METHOD NOW.** `NSResponder -interpretKeyEvents:` hands each key to the
+ * view's INPUT CONTEXT, and the context sends it to its input source FIRST — so the doors below are CALLED: the marked
+ * text by `AGInputMethod`'s dead-key table, and the candidate questions by whatever method needs them. The protocol is
+ * still what an application's own method would implement. WHAT IS NOT HERE is the candidate LIST — a method that offers
+ * several readings needs a window, and this tier answers where it would go without drawing one.
  */
 #ifndef APPKIT_NSTEXTINPUT_H
 #define APPKIT_NSTEXTINPUT_H

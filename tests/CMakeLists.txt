@@ -255,6 +255,15 @@ target_link_libraries(text_input_context PRIVATE App m)
 add_test(NAME appkit-text-input-context COMMAND text_input_context)
 set_tests_properties(appkit-text-input-context PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
 
+# **AND THE INPUT METHOD ITSELF: A DEAD KEY COMPOSED WITH THE NEXT KEYSTROKE.** The context is handed an
+# `AGInputMethod`; the accent goes into the store MARKED, and the next letter either composes over it or the accent
+# stands alone. A key the method does not own — a plain letter, a movement — is DECLINED and reaches the standard
+# binding, which is what makes a source safe to install.
+add_executable(text_input_method text_input_method.m)
+target_link_libraries(text_input_method PRIVATE App m)
+add_test(NAME appkit-text-input-method COMMAND text_input_method)
+set_tests_properties(appkit-text-input-method PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
+
 # **AND THE EDITING COMMANDS THE RESPONDER NAMED AS OWED**: `-transpose:` (pure string arithmetic over a position) and
 # the `IgnoringFieldEditor` insertions plus the paragraph separator, checked across a view that holds a break and a
 # field that refuses one.

@@ -48,9 +48,10 @@
  *   CONTEXT, and the answers come back as `-insertText:` and `-doCommandBySelector:`. THE CONTEXT EXISTS NOW
  *   (`NSTextInputContext.h`): `NSView -inputContext` answers one for a text input client, the door hands the event
  *   over, and THE STANDARD KEY BINDING LIVES THERE — a key that types becomes `-insertText:` and a key that commands
- *   becomes `-doCommandBySelector:` with the selector the binding names. WHAT IS STILL ABSENT IS AN INPUT METHOD: the
- *   context has one stock keyboard and no composition engine, so the binding is reached directly, and the door that a
- *   real source would be inserted at is the context's. (Apple's informal protocol for the commands is declared below.)
+ *   becomes `-doCommandBySelector:` with the selector the binding names. AND THE INPUT METHOD IS HERE: a caller
+ *   installs an `NSTextInputSource` on the context with `-setInputSource:` and every key is sent to it FIRST — the tier
+ *   ships `AGInputMethod`, a dead-key table — and only what it DECLINES reaches the binding. (Apple's informal protocol
+ *   for the commands is declared below.)
  *
  * AND TWO DECLARATIONS ARE SPELLED `id` FOR A REASON THAT HAS NOTHING TO DO WITH THIS CLASS: `-menu` and
  * `-setMenu:` hold an `NSMenu`, which is a class this tier does not ship — naming it, even forward, would

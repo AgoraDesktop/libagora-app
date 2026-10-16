@@ -5,11 +5,11 @@
  * SPDX-License-Identifier: MIT
  *
  * **THE STANDARD KEY BINDING MOVED HERE FROM `NSResponder`, AND THAT MOVE IS THE WHOLE POINT.** A key arrives, the
- * context sends it to the input source, and — with no source to compose through — what is left is the mapping a US
- * keyboard needs: a function key or a control character becomes the command it names, and anything else printable
- * becomes `-insertText:` on the CLIENT. The client is what the responder used to be, so the behavior is unchanged;
- * what changed is that an input method now has a door to stand in front of it. The mapping is the ERA's and its
- * refusals are named where they stand — no page movement, Command keys belong to the menu bar.
+ * context sends it to the input source, and — when the source declines — what is left is the mapping a US keyboard
+ * needs: a function key or a control character becomes the command it names, and anything else printable becomes
+ * `-insertText:` on the CLIENT. The client is what the responder used to be, so the behavior is unchanged; what
+ * changed is that an input method now has a door to stand in front of it — and the tier SHIPS one, `AGInputMethod`,
+ * whose dead-key table consumes an accent and the letter after it.
  */
 #import <AppKit/NSTextInputContext.h>
 #import <AppKit/NSTextInput.h>
@@ -43,6 +43,29 @@ static NSString *const FNInputSourceIdentifier = @"AgoraKeyboard";
 	return _client;
 }
 
+- (void)dealloc
+{
+	[_inputSource release];
+	[super dealloc];
+}
+
+/* **AND THE SOURCE, WHICH IS RETAINED.** A context with none does the standard key binding directly, which is what a
+ * stock keyboard is; one with a source sends every key to it first. */
+- (void)setInputSource:(id <NSTextInputSource>)source
+{
+	if (source != _inputSource) {
+		id held = [source retain];
+
+		[_inputSource release];
+		_inputSource = held;
+	}
+}
+
+- (id <NSTextInputSource>)inputSource
+{
+	return _inputSource;
+}
+
 /* **THE KEY, MAPPED.** This is the direct binding the responder used to do, and the only reason it is here rather
  * than there is that an input method belongs BETWEEN the two — a source that composes would consume the event first
  * and call the client's marked-text doors, and only what it declined would reach this mapping. */
@@ -56,6 +79,11 @@ static NSString *const FNInputSourceIdentifier = @"AgoraKeyboard";
 	SEL command = NULL;
 
 	if (_client == nil || event == nil || [event type] != NSKeyDown) {
+		return;
+	}
+	/* **AND THE INPUT SOURCE SEES IT FIRST.** A source that consumes the event — composing through the client — ends
+	 * the call; what it DECLINES falls through to the mapping below. */
+	if (_inputSource != nil && [_inputSource handleEvent:event context:self]) {
 		return;
 	}
 	chars = [event characters];
@@ -141,6 +169,9 @@ static NSString *const FNInputSourceIdentifier = @"AgoraKeyboard";
  * text. */
 - (void)discardMarkedText
 {
+	if (_inputSource != nil && [_inputSource respondsToSelector:@selector(discardComposition)]) {
+		[_inputSource discardComposition];
+	}
 	if (_client != nil) {
 		[_client unmarkText];
 	}
@@ -153,14 +184,20 @@ static NSString *const FNInputSourceIdentifier = @"AgoraKeyboard";
 {
 }
 
-/* ONE STOCK KEYBOARD, AND IT IS THE SELECTED ONE. */
+/* ONE STOCK KEYBOARD WHEN NOTHING IS INSTALLED, AND THE INSTALLED METHOD WHEN ONE IS. */
 - (NSArray *)textInputSources
 {
+	if (_inputSource != nil) {
+		return [NSArray arrayWithObject:[_inputSource inputSourceIdentifier]];
+	}
 	return [NSArray arrayWithObject:FNInputSourceIdentifier];
 }
 
 - (id)selectedInputSource
 {
+	if (_inputSource != nil) {
+		return [_inputSource inputSourceIdentifier];
+	}
 	return FNInputSourceIdentifier;
 }
 
