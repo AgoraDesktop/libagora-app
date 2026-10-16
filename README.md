@@ -261,8 +261,10 @@ the compositor is really gone.
   the ink follow) and the LINE-BREAK MODE (it travels into the attributed string as a `CTParagraphStyle`, so the
   typesetter obeys it). MEASURED: glyph 0's x is **10** left-aligned, larger centred and larger still right-aligned;
   the same paragraph is word-wrapped with its first line ending on a space, char-wrapped ending mid-word and holding at
-  least as much, and CLIPPED at **1** fragment; and the view's `-setAlignment:` writes the style into its store while
-  `-alignment` reads it back. **AND THE PROBE FOUND ONE REAL DEFECT**: Foundation's `-addAttributes:range:` and
+  least as much, and CLIPPED at **1** fragment; the view's `-setAlignment:` writes the style into its store while
+  `-alignment` reads it back; and the PARAGRAPH COMMANDS (`-alignLeft:`/`-alignRight:`/`-alignCenter:`/`-alignJustified:`,
+  declared on `NSText`) are one `-setAlignment:` each, so the view moves glyphs for them too. **AND THE PROBE FOUND ONE
+  REAL DEFECT**: Foundation's `-addAttributes:range:` and
   `-removeAttribute:range:` edit their runs DIRECTLY, so `-addAttribute:` never reached `-setAttributes:range:` and
   announced nothing — a style put into a store that way never reached its manager. `NSTextStorage` now overrides both
   and announces, which is the exception its own header names.
@@ -554,7 +556,8 @@ iconify in the protocol (Kestrel is parked). The chrome's toolbar pill is drawn 
 there is no toolbar for it to toggle; the three symbols beside it ARE buttons now, and `tests/chrome_buttons.m`
 presses them. The `NSTextInput` PROTOCOL is here and `NSTextView` answers it (`tests/text_marked_text.m`), but the
 input-method CONTEXT is still absent (`-interpretKeyEvents:` does the direct mapping at the view and says so), and the
-PARAGRAPH commands are named rather than guessed. **THE FIELD EDITOR IS NOT ON THAT LIST AND HAS NOT BEEN SINCE THE WINDOW LEARNED TO LEND ONE** —
+ALIGNMENT COMMANDS are NOT: `NSText` declares `-alignLeft:` and its three siblings and each is one `-setAlignment:`,
+which the view moves glyphs for. **THE FIELD EDITOR IS NOT ON THAT LIST AND HAS NOT BEEN SINCE THE WINDOW LEARNED TO LEND ONE** —
 `-fieldEditor:forObject:` is implemented and the field cells open their sessions with it, so what that clause used to
 defer is a door that exists. The WORD commands are NOT in that list any more: `tests/text_word_movement.m`
 drives Option+arrow and Option+Delete, because a word is a run of the string's own characters and needs no layout

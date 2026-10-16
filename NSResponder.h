@@ -192,9 +192,10 @@ typedef NSUInteger NSInterfaceStyle;
  * WHAT GENUINELY NEEDS A LAYOUT IS THE VERTICAL PAIR AND THE PARAGRAPH FAMILY. `-moveUp:` and      *
  * `-moveDown:` are declared here and left UNIMPLEMENTED by a one-line field because it has        *
  * nowhere to move TO; `NSTextView` implements them against its line model, and the arrow keys are  *
- * mapped to them there. The PARAGRAPH commands, `-transpose:`, the marked-text family and the      *
- * substitution and container-break insertions stay NAMED rather than guessed — each needs a model  *
- * (paragraphs, a position, a marked range) this tier has not built.                                *
+ * mapped to them there. THE ALIGNMENT COMMANDS HAVE SINCE LEFT THIS LIST: `NSText` declares          *
+ * `-alignLeft:` and its three siblings and they set the alignment, which `NSTextView` now moves     *
+ * glyphs for. `-transpose:` and the substitution and container-break insertions stay NAMED rather  *
+ * than guessed — each needs a model (a position, a substitution) this tier has not built.          *
  * ============================================================================================ */
 
 /* INSERTION: what an input context, or a key binding, produces. */

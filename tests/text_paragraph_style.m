@@ -159,6 +159,11 @@ int main(void)
 		check(inStore != nil && [inStore alignment] == NSCenterTextAlignment,
 		      "`-setAlignment:` on the view writes a paragraph style into the store");
 		check([view alignment] == NSCenterTextAlignment, "and `-alignment` reads it back from the store");
+		[view alignRight:nil];
+		check([view alignment] == NSRightTextAlignment,
+		      "and `-alignRight:` — a PARAGRAPH command — is the same door by another name");
+		[view alignJustified:nil];
+		check([view alignment] == NSJustifiedTextAlignment, "as is `-alignJustified:`");
 		[view release];
 	}
 

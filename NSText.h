@@ -192,6 +192,15 @@ typedef NSInteger NSTextMovement;
 - (void)setFont:(nullable id)font;
 - (NSTextAlignment)alignment;
 - (void)setAlignment:(NSTextAlignment)alignment;
+
+/* **AND THE FOUR COMMANDS THAT SET IT, WHICH ARE `NSText`'S OWN IN APPLE AND ARE THE PARAGRAPH FAMILY'S FIRST REAL
+ * MEMBERS.** Each is one `-setAlignment:`, so the property is where the behaviour lives and the command is the key
+ * binding a caller (or an input context) reaches for. `-alignJustified:` sets the justified case, which the layout
+ * DRAWS as left until the slice that stretches a line — named in `NSParagraphStyle.h` rather than pretended. */
+- (void)alignLeft:(nullable id)sender;
+- (void)alignRight:(nullable id)sender;
+- (void)alignCenter:(nullable id)sender;
+- (void)alignJustified:(nullable id)sender;
 - (BOOL)drawsBackground;
 - (void)setDrawsBackground:(BOOL)flag;
 - (nullable NSColor *)backgroundColor;

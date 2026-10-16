@@ -43,8 +43,7 @@
  * and there can be several per model line; the `cg_visualLine…` doors read the MANAGER, and they change every time
  * the text or the width does. A caller that wants "how many lines" has to say which.
  *
- * **WHAT IS STILL NOT HERE, NAMED RATHER THAN STUBBED:** attachments, tables, the paragraph commands (the
- * `-alignLeft:` family, as opposed to the `-setAlignment:` that moves the glyphs), and the INPUT CONTEXT — the class
+ * **WHAT IS STILL NOT HERE, NAMED RATHER THAN STUBBED:** attachments, tables, and the INPUT CONTEXT — the class
  * that owns a composition across keystrokes and arranges a candidate window. The `NSTextInput` PROTOCOL is here and
  * this view ANSWERS it (`NSTextInput.h`), so a caller can drive a composition by hand; what no class in this tier does
  * yet is call those doors itself. The view's own `NSText`-inherited `_string` is a mirror (see above) rather than the

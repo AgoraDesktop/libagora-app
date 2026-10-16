@@ -397,8 +397,36 @@ static void fn_announce(NSText *text, NSString *name, SEL delegateSelector)
 	/* APPKIT-REFUSE: the alignment is STORED and ANSWERED and does not move the glyphs, because moving them needs a
 	 * width to align WITHIN and this view's width is whatever its frame says — one line, drawn from the inset. The
 	 * three non-default cases are the ones this leaves undone, and saying so is the difference between a door with a
-	 * far side and a door that quietly draws the wrong thing. */
+	 * far side and a door that quietly draws the wrong thing. `NSTextView` OVERRIDES THIS DOOR and does move them,
+	 * because the manager gave it a width to align within. */
 	[self setNeedsDisplay:YES];
+}
+
+/* **AND THE FOUR COMMANDS, WHICH ARE ONE LINE EACH BECAUSE THE PROPERTY IS WHERE THE BEHAVIOUR LIVES.** A key binding
+ * (or an input context) reaches for the command; the command sets the alignment; the alignment is the fact a caller
+ * reads back. Keeping them apart is what lets a subclass change WHAT aligning does without shadowing four selectors. */
+- (void)alignLeft:(id)sender
+{
+	(void)sender;
+	[self setAlignment:NSLeftTextAlignment];
+}
+
+- (void)alignRight:(id)sender
+{
+	(void)sender;
+	[self setAlignment:NSRightTextAlignment];
+}
+
+- (void)alignCenter:(id)sender
+{
+	(void)sender;
+	[self setAlignment:NSCenterTextAlignment];
+}
+
+- (void)alignJustified:(id)sender
+{
+	(void)sender;
+	[self setAlignment:NSJustifiedTextAlignment];
 }
 
 - (BOOL)drawsBackground
