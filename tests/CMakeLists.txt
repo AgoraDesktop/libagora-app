@@ -279,6 +279,14 @@ target_link_libraries(text_rtf PRIVATE App m)
 add_test(NAME appkit-text-rtf COMMAND text_rtf)
 set_tests_properties(appkit-text-rtf PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
 
+# **AND THE TABLE GRID: CELLS SIDE BY SIDE.** The layout manager lays a table's cells out as a grid — each inside its
+# own columns' width — so the probe reads where a glyph in each cell lands: a row shares a y, a column shares an x, an
+# overflowing row is scaled and wraps, and a fixed table divides the width equally.
+add_executable(text_table_grid text_table_grid.m)
+target_link_libraries(text_table_grid PRIVATE App m)
+add_test(NAME appkit-text-table-grid COMMAND text_table_grid)
+set_tests_properties(appkit-text-table-grid PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
+
 # **AND THE PARAGRAPH STYLE'S GEOMETRY, WHICH IS NOW READ.** The indents place a line and narrow it, the spacings open
 # gaps between lines and across paragraph boundaries, and the line-height multiple and clamps set the band — each read as
 # the manager's own geometry, with the defaults pinned unmoved by the first case.

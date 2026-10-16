@@ -58,6 +58,7 @@ tests/
   text_editing_commands.m       and `-transpose:` plus the insertions that ignore a field's role
   text_table.m                  and the TABLE BLOCK: the box a paragraph is set in, drawn by the manager
   text_rtf.m                    and the RTF READER: control words into the AppKit's attribute keys
+  text_table_grid.m             and the GRID: cells side by side, columns measured, rows as tall as their tallest cell
   text_word_movement.m          and its WORD granularity: Option+arrow and Option+Delete, over the string
   text_view_lines.m             and the first slice of the MULTI-LINE view: the line model, and what reads it
   text_view_wrapping.m          and the slice above it: the same model WRAPPED to the view's width
@@ -321,6 +322,15 @@ the compositor is really gone.
   to do. **AN APPKIT-AWARE WRITER IS NAMED AS OWED**: Foundation's writer is keyed on its own presentation-intent
   bits, so it does not encode NSFont/NSColor/the two rules/the paragraph style, and `-RTFFromRange:` is already
   implemented below in the stack.
+- **And the TABLE GRID, which is where cells stop being a stack and become a grid** (`ctest`): the layout manager reads
+  the `NSTextTableBlock` each cell-paragraph's style carries, MEASURES the columns (automatic: the widest cell in each
+  column, its span divided out, scaled to fit the container; fixed: equal shares), lays each cell's text out inside its
+  own columns' width, and PLACES it at its column's x. Rows are as tall as their tallest cell, and the table's own box
+  (with each cell's) is drawn behind the cells. MEASURED: two cells in one row share a y and differ in x; two cells in
+  one column share an x and differ in y; a row of two long cells whose natural widths together exceed the container is
+  SCALED and each cell wraps (more than the two one-line fragments); and a FIXED table's first column starts at the
+  padding (**10**) with the second at padding plus half the table's width. **STILL OWED AND NAMED**: `-collapsesBorders`
+  (shared edges drawn once) and a table that flows across containers.
 - **And the ATTACHMENT, which is a character that stands for a picture** (`ctest`): `NSTextAttachment.h` declares
   `NSAttachmentCharacter` (U+FFFC), the `NSTextAttachmentCell` protocol and class, and the attachment itself, with
   `NSAttachmentAttributeName` carrying it; the layout manager's run walk asks the cell for its size and calls
@@ -473,7 +483,7 @@ the compositor is really gone.
   and the child clip is the child's FRAME region rather than its bounds rect — which was the same value only while the
   origin was zero. MEASURED: a mark at a document's own y 100..120 draws at 110 with the clip view at the top and at
   10 after a scroll of 100, in one run, through `-displayRect:`.
-- **`ctest`: 54 of 54 passed** (the keyboard and the seam, the AppKit and its input path, the controls and their
+- **`ctest`: 55 of 55 passed** (the keyboard and the seam, the AppKit and its input path, the controls and their
   metrics, the field control and its cell and its bezel and its placeholder and what it may hold, the text path and its
   word granularity and the multi-line view and its wrapping and its scrolling and its READING OF THE STORE, the STORE
   the rich-text slice is built on and the REGION it is laid out in and the WEB that ties the three together and the
@@ -636,8 +646,10 @@ by (`tests/text_paragraph_style.m`) and the GEOMETRY it lays out by (`tests/text
 the two spacings and the three line-height properties, all read as the manager's own fragment geometry. The property
 with no reader is the hyphenation factor (the engine does no hyphenation), the default tab interval (a tab stop needs
 `NSTextTab`) and the base writing direction (left-to-right only), each named at its door. The TABLE BLOCK is here
-(`tests/text_table.m`), so a paragraph can carry a box with a ground and a border; what is still owed is the GRID —
-shared column widths and rows across spanning cells. The input-method
+(`tests/text_table.m`), so a paragraph can carry a box with a ground and a border. **AND THE GRID IS HERE TOO**
+(`tests/text_table_grid.m`): the manager measures the columns, lays each cell inside them and places the cells side by
+side, rows as tall as their tallest cell. What is still owed for tables is `-collapsesBorders` and a table that flows
+across containers. The input-method
 CONTEXT are named in the view's own header as what is still owed — the `NSTextInput`
 protocol is here and the view ANSWERS it (`tests/text_marked_text.m`), while the class that owns a composition across
 keystrokes and arranges a candidate window is the slice behind it. ATTACHMENTS draw (`tests/text_attachment.m`) with

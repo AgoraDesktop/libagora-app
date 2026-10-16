@@ -21,6 +21,7 @@
 #import <AppKit/NSGraphicsContext.h>
 #import <AppKit/NSAttributedString.h>
 #import <Foundation/NSArray.h>
+#import <Foundation/NSValue.h>
 
 #include <CoreGraphics/CGContext.h>
 #include <CoreFoundation/CFAttributedString.h>
@@ -29,6 +30,7 @@
 #include <CoreText/CTRun.h>
 #include <CoreText/CTStringAttributes.h>
 #include <CoreText/CTTypesetter.h>
+#include <stdlib.h>
 
 /* **THE ONE PIECE OF STATE A FRAGMENT IS: TWO RANGES, TWO RECTS AND THE GLYPHS THEMSELVES.** Apple distinguishes
  * the FRAGMENT rect — the whole width the container gives a line — from the USED rect, which is the part the glyphs
@@ -466,16 +468,22 @@
 	[block drawBackgroundWithFrame:frame inView:[container textView] characterRange:charRange layoutManager:self];
 }
 
-/* **AND THE PASS THAT GROUPS CONSECUTIVE LINES BY THEIR BLOCK.** A run of fragments sharing the same block object is
- * one box; a fragment with no block closes the one in flight. The pass is separate from the run walk because a block
- * is BEHIND every run background, so it is drawn first. */
+/* **AND THE PASS THAT GROUPS CONSECUTIVE LINES BY THEIR BLOCK — AND BY THEIR TABLE, WHICH IS BEHIND IT.** A run of
+ * fragments sharing the same block object is one box; a run sharing the same `NSTextTable` is the table's own box,
+ * drawn FIRST so every cell's ground sits on it and every border frames it. A fragment with no block closes both runs
+ * in flight. The pass is separate from the run walk because a box is BEHIND every run background. */
 - (void)cg_drawBlocksForGlyphRange:(NSRange)glyphsToShow atPoint:(NSPoint)origin
 {
 	NSTextBlock *current = nil;
+	NSTextTable *currentTable = nil;
 	NSRect unionRect = NSZeroRect;
+	NSRect tableUnion = NSZeroRect;
 	NSUInteger containerForBlock = 0;
+	NSUInteger containerForTable = 0;
 	NSRange range = NSMakeRange(0, 0);
+	NSRange tableRange = NSMakeRange(0, 0);
 	BOOL haveUnion = NO;
+	BOOL haveTable = NO;
 	NSUInteger i, j;
 
 	(void)glyphsToShow;
@@ -485,7 +493,28 @@
 		for (j = 0; j < [fragments count]; j++) {
 			FNFragment *fragment = [fragments objectAtIndex:j];
 			NSTextBlock *block = [self cg_blockForFragment:fragment];
+			NSTextTable *table = [block isKindOfClass:[NSTextTableBlock class]]
+				? [(NSTextTableBlock *)block table] : nil;
 
+			/* THE TABLE'S OWN BOX. */
+			if (table != currentTable) {
+				if (haveTable) {
+					[self cg_drawBlock:currentTable union:tableUnion containerIndex:containerForTable origin:origin
+						characterRange:tableRange];
+					haveTable = NO;
+				}
+				if (table != nil) {
+					tableUnion = fragment->used;
+					tableRange = fragment->range;
+					containerForTable = i;
+					haveTable = YES;
+				}
+				currentTable = table;
+			} else if (haveTable) {
+				tableUnion = NSUnionRect(tableUnion, fragment->used);
+				tableRange.length = (fragment->range.location + fragment->range.length) - tableRange.location;
+			}
+			/* AND EACH CELL'S (or plain block's) BOX. */
 			if (block == nil) {
 				if (haveUnion) {
 					[self cg_drawBlock:current union:unionRect containerIndex:containerForBlock origin:origin
@@ -514,6 +543,10 @@
 	if (haveUnion) {
 		[self cg_drawBlock:current union:unionRect containerIndex:containerForBlock origin:origin
 			characterRange:range];
+	}
+	if (haveTable) {
+		[self cg_drawBlock:currentTable union:tableUnion containerIndex:containerForTable origin:origin
+			characterRange:tableRange];
 	}
 }
 
@@ -565,6 +598,299 @@
 	}
 	offset = (CGFloat)CTLineGetPenOffsetForFlush(line, factor, (double)width);
 	return (offset > 0.0) ? offset : 0.0;
+}
+
+/* ============================================================================================ *
+ * THE TABLE GRID, WHICH IS A SECOND LAYOUT MODE                                                       *
+ * ============================================================================================ */
+
+/* **THE CELL A PARAGRAPH IS IN, OR NIL.** A table cell is a `NSTextTableBlock` in the paragraph's style, which is
+ * where Apple attaches it; a paragraph with a plain block but no cell answers nil, because a plain block is drawn
+ * around a single paragraph and has no grid to belong to. */
+- (NSTextTableBlock *)cg_cellAtParagraphStart:(NSUInteger)index
+{
+	NSArray *blocks = [[self cg_paragraphStyleAt:index] textBlocks];
+	NSUInteger i;
+
+	for (i = 0; i < [blocks count]; i++) {
+		id block = [blocks objectAtIndex:i];
+
+		if ([block isKindOfClass:[NSTextTableBlock class]]) {
+			return block;
+		}
+	}
+	return nil;
+}
+
+/* THE WIDTH A RANGE WANTS WHEN IT IS SET AS ONE LINE, which is how an AUTOMATIC column measures its content. */
+- (CGFloat)cg_naturalWidthOfRange:(NSRange)range font:(NSFont *)font
+{
+	CTLineRef line = [self cg_createLineForRange:range font:font];
+	CGFloat width = 0.0;
+
+	if (line != NULL) {
+		width = (CGFloat)CTLineGetTypographicBounds(line, NULL, NULL, NULL);
+		CFRelease(line);
+	}
+	return width;
+}
+
+/* **ONE CELL'S PARAGRAPH, LAID OUT INSIDE ITS COLUMN'S CONTENT WIDTH.** The line geometry is the paragraph style's,
+ * exactly as a normal paragraph's is; the only difference is that the available width is the CELL's. A NIL `out` is a
+ * MEASUREMENT — the height is the return value and no fragment is made — which is how a row's height is found before
+ * its cells are placed. The leading gap is per-paragraph, so a cell of several paragraphs stacks them the same way
+ * the document does. */
+- (CGFloat)cg_layOutCell:(NSTextTableBlock *)cell range:(NSRange)paraRange typesetter:(CTTypesetterRef)ts
+		    font:(NSFont *)font baseAscent:(CGFloat)baseAscent baseLineHeight:(CGFloat)baseLineHeight
+		       x:(CGFloat)x width:(CGFloat)cellWidth into:(NSMutableArray *)out top:(CGFloat)top
+{
+	CFIndex start = (CFIndex)paraRange.location;
+	CFIndex end = (CFIndex)(paraRange.location + paraRange.length);
+	CGFloat y = top;
+	BOOL first = YES;
+	NSParagraphStyle *previous = nil;
+
+	while (start < end) {
+		NSParagraphStyle *style = [self cg_paragraphStyleAt:(NSUInteger)start];
+		BOOL paragraphStart = (start == (CFIndex)paraRange.location);
+		CGFloat indent = paragraphStart ? [style firstLineHeadIndent] : [style headIndent];
+		CGFloat tailIndent = [style tailIndent];
+		CGFloat leadingEdge = x + indent;
+		CGFloat trailingEdge = (tailIndent >= 0.0) ? (x + cellWidth - tailIndent) : (x - tailIndent);
+		CGFloat width = trailingEdge - leadingEdge;
+		CGFloat multiple = [style lineHeightMultiple];
+		CGFloat lineHeight;
+		CGFloat lineAscent;
+		CGFloat leading;
+		CFIndex count;
+		CTLineRef line = NULL;
+		CGFloat lineWidth = 0.0;
+		NSRange range;
+
+		if (width < 1.0) {
+			width = 1.0;
+		}
+		if (multiple <= 0.0) {
+			multiple = 1.0;
+		}
+		lineHeight = baseLineHeight * multiple;
+		if ([style minimumLineHeight] > 0.0 && lineHeight < [style minimumLineHeight]) {
+			lineHeight = [style minimumLineHeight];
+		}
+		if ([style maximumLineHeight] > 0.0 && lineHeight > [style maximumLineHeight]) {
+			lineHeight = [style maximumLineHeight];
+		}
+		lineAscent = baseAscent * multiple;
+		if (lineAscent > lineHeight) {
+			lineAscent = lineHeight;
+		}
+		if (lineAscent < 0.0) {
+			lineAscent = 0.0;
+		}
+		if (first) {
+			leading = 0.0;
+		} else if (paragraphStart) {
+			leading = [previous paragraphSpacing] + [style paragraphSpacingBefore];
+		} else {
+			leading = [style lineSpacing];
+		}
+		count = CTTypesetterSuggestLineBreak(ts, start, (double)width);
+		if (count <= 0) {
+			count = 1;
+		}
+		if (start + count > end) {
+			count = end - start;
+		}
+		range = NSMakeRange((NSUInteger)start, (NSUInteger)count);
+		line = CTTypesetterCreateLine(ts, CFRangeMake(start, count));
+		if (line == NULL) {
+			line = [self cg_createLineForRange:range font:font];
+		}
+		if (line != NULL) {
+			lineWidth = (CGFloat)CTLineGetTypographicBounds(line, NULL, NULL, NULL);
+			if (lineWidth > width) {
+				lineWidth = width;
+			}
+		}
+		if (out != nil) {
+			CGFloat textTop = y + leading;
+			CGFloat baseline = textTop + lineAscent;
+			CGFloat alignOffset = [self cg_alignmentOffsetForLine:line alignment:[style alignment] width:width];
+
+			[out addObject:[FNFragment fragmentWithRange:range
+				glyphRange:NSMakeRange(range.location, range.length)
+				rect:NSMakeRect(x, y, cellWidth, leading + lineHeight)
+				usedRect:NSMakeRect(leadingEdge + alignOffset, textTop, lineWidth, lineHeight)
+				baseline:baseline line:line]];
+		} else if (line != NULL) {
+			CFRelease(line);
+		}
+		y = y + leading + lineHeight;
+		previous = style;
+		first = NO;
+		start += count;
+	}
+	return y - top;
+}
+
+/* **AND THE GRID ITSELF.** The table's character range is the run of consecutive paragraphs whose cells belong to the
+ * SAME table; its columns are measured (automatic: the widest cell in each column, its span divided out, scaled to fit
+ * the container) or fixed (equal shares); and its rows are as tall as the tallest cell in them. Each cell's content is
+ * laid out inside its own columns' width and PLACED at its column's x, so cells in one row sit side by side. THE
+ * GLYPH MAP IS THE IDENTITY HERE — a cell's glyph range is its character range — because the cells are in character
+ * order, which is what keeps `-glyphRangeForCharacterRange:` a walk of the fragment list. A table lays out WHOLE in
+ * one container; flowing it across containers is named as owed. */
+- (NSUInteger)cg_layOutTableStartingAt:(NSUInteger)start typesetter:(CTTypesetterRef)ts font:(NSFont *)font
+	baseAscent:(CGFloat)baseAscent baseLineHeight:(CGFloat)baseLineHeight
+	fragments:(NSMutableArray *)fragments container:(NSTextContainer *)container
+	y:(CGFloat *)yPtr glyphBase:(NSUInteger *)glyphBasePtr
+{
+	NSString *string = [_textStorage string];
+	NSUInteger n = [string length];
+	NSTextTable *table = [[self cg_cellAtParagraphStart:start] table];
+	NSMutableArray *cells = [NSMutableArray array];
+	NSMutableArray *ranges = [NSMutableArray array];
+	NSUInteger p = start;
+	NSUInteger tableEnd;
+	NSInteger rows = 0, columns = 0;
+	CGFloat padding = [container lineFragmentPadding];
+	CGFloat containerWidth = [container containerSize].width;
+	CGFloat available = containerWidth - 2.0 * padding;
+	CGFloat *widths;
+	CGFloat y = *yPtr;
+	NSInteger row, column;
+
+	while (p < n) {
+		NSTextTableBlock *cell = [self cg_cellAtParagraphStart:p];
+		NSUInteger paraEnd;
+
+		if (cell == nil || [cell table] != table) {
+			break;
+		}
+		paraEnd = p;
+		while (paraEnd < n && [string characterAtIndex:paraEnd] != '\n') {
+			paraEnd++;
+		}
+		[cells addObject:cell];
+		[ranges addObject:[NSValue valueWithRange:NSMakeRange(p, paraEnd - p)]];
+		if ([cell startingRow] + [cell rowSpan] > rows) {
+			rows = [cell startingRow] + [cell rowSpan];
+		}
+		if ([cell startingColumn] + [cell columnSpan] > columns) {
+			columns = [cell startingColumn] + [cell columnSpan];
+		}
+		p = (paraEnd < n) ? paraEnd + 1 : paraEnd;
+	}
+	tableEnd = p;
+	if ([cells count] == 0) {
+		return start;
+	}
+	if (columns < 1) {
+		columns = 1;
+	}
+	if (rows < 1) {
+		rows = 1;
+	}
+	widths = (CGFloat *)malloc((size_t)columns * sizeof(CGFloat));
+	for (column = 0; column < columns; column++) {
+		widths[column] = 0.0;
+	}
+	if ([table layoutAlgorithm] == NSTextTableFixedLayoutAlgorithm) {
+		for (column = 0; column < columns; column++) {
+			widths[column] = available / (CGFloat)columns;
+		}
+	} else {
+		NSUInteger ci;
+		CGFloat total = 0.0;
+
+		for (ci = 0; ci < [cells count]; ci++) {
+			NSTextTableBlock *cell = [cells objectAtIndex:ci];
+			NSRange r = [[ranges objectAtIndex:ci] rangeValue];
+			CGFloat natural = [self cg_naturalWidthOfRange:r font:font];
+			NSInteger span = [cell columnSpan];
+			NSInteger c;
+
+			if (span < 1) {
+				span = 1;
+			}
+			for (c = [cell startingColumn]; c < [cell startingColumn] + span && c < columns; c++) {
+				if (natural / (CGFloat)span > widths[c]) {
+					widths[c] = natural / (CGFloat)span;
+				}
+			}
+		}
+		for (column = 0; column < columns; column++) {
+			total += widths[column];
+		}
+		if (total > available && total > 0.0) {
+			for (column = 0; column < columns; column++) {
+				widths[column] *= available / total;
+			}
+		} else if (total <= 0.0) {
+			for (column = 0; column < columns; column++) {
+				widths[column] = available / (CGFloat)columns;
+			}
+		}
+	}
+
+	for (row = 0; row < rows; row++) {
+		CGFloat rowHeight = 0.0;
+		NSUInteger ci;
+
+		/* MEASURE THE ROW: the tallest cell sets it. */
+		for (ci = 0; ci < [cells count]; ci++) {
+			NSTextTableBlock *cell = [cells objectAtIndex:ci];
+			NSRange r;
+			CGFloat x, width, height;
+
+			if ([cell startingRow] != row) {
+				continue;
+			}
+			r = [[ranges objectAtIndex:ci] rangeValue];
+			x = padding;
+			width = 0.0;
+			for (column = 0; column < [cell startingColumn] && column < columns; column++) {
+				x += widths[column];
+			}
+			for (column = [cell startingColumn]; column < [cell startingColumn] + [cell columnSpan] && column < columns; column++) {
+				width += widths[column];
+			}
+			height = [self cg_layOutCell:cell range:r typesetter:ts font:font baseAscent:baseAscent
+				baseLineHeight:baseLineHeight x:x width:width into:nil top:0.0];
+			if (height > rowHeight) {
+				rowHeight = height;
+			}
+		}
+		if (rowHeight <= 0.0) {
+			rowHeight = baseLineHeight;
+		}
+		/* PLACE THE ROW: every cell starts at the row's top, at its own columns' x. */
+		for (ci = 0; ci < [cells count]; ci++) {
+			NSTextTableBlock *cell = [cells objectAtIndex:ci];
+			NSRange r;
+			CGFloat x, width;
+
+			if ([cell startingRow] != row) {
+				continue;
+			}
+			r = [[ranges objectAtIndex:ci] rangeValue];
+			x = padding;
+			width = 0.0;
+			for (column = 0; column < [cell startingColumn] && column < columns; column++) {
+				x += widths[column];
+			}
+			for (column = [cell startingColumn]; column < [cell startingColumn] + [cell columnSpan] && column < columns; column++) {
+				width += widths[column];
+			}
+			[self cg_layOutCell:cell range:r typesetter:ts font:font baseAscent:baseAscent
+				baseLineHeight:baseLineHeight x:x width:width into:fragments top:y];
+		}
+		y += rowHeight;
+	}
+	free(widths);
+	*yPtr = y;
+	*glyphBasePtr = tableEnd;
+	return tableEnd;
 }
 
 - (void)cg_ensureLayout
@@ -662,6 +988,22 @@
 		CGFloat y = 0.0;
 
 		while (start < (CFIndex)n) {
+			/* **A TABLE IS A SECOND LAYOUT MODE, AND IT IS ASKED FIRST.** A paragraph whose style carries a
+			 * `NSTextTableBlock` is a CELL, and the whole table — every cell's paragraphs — lays out as one grid that
+			 * APPENDS its own fragments and advances `start` past the table. A paragraph without a cell falls through to
+			 * the ordinary one-line-at-a-time flow below, which is what every document that is not a table uses. */
+			if ([self cg_cellAtParagraphStart:(NSUInteger)start] != nil) {
+				start = (CFIndex)[self cg_layOutTableStartingAt:(NSUInteger)start typesetter:ts font:font
+					baseAscent:baseAscent baseLineHeight:baseLineHeight fragments:fragments
+					container:container y:&y glyphBase:&glyphBase];
+				previousStyle = [self cg_paragraphStyleAt:(start > 0) ? (NSUInteger)(start - 1) : 0];
+				firstFragment = NO;
+				lastContainer = i;
+				lastY = y;
+				lastAscent = baseAscent;
+				lastLineHeight = baseLineHeight;
+				continue;
+			}
 			/* **THE PARAGRAPH'S OWN GEOMETRY, READ AT THE PARAGRAPH'S START.** A nil style answers zero for every
 			 * scalar and `NSLeftTextAlignment` for the alignment, which IS the default style, so a store with no style
 			 * takes the same path as one set in `+defaultParagraphStyle`. */

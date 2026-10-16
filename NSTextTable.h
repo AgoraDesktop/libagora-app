@@ -14,9 +14,12 @@
  * style, finds the block, and draws the box around the lines that carry it. So a table is not a second document — it
  * is paragraphs whose boxes interlock, which is the same design the rest of this tier's text uses.
  *
- * **WHAT THIS SLICE DOES NOT DO IS THE GRID'S OWN LAYOUT** — shared column widths, rows measured across cells that
- * span several, and the border collapsing `-collapsesBorders` names. Those need the column arithmetic a real table
- * layout is; what is here is the CLASS SURFACE and the per-cell box, which the manager draws.
+ * **AND THE GRID'S OWN LAYOUT IS THE LAYOUT MANAGER'S.** A table's cells are the paragraphs whose styles carry a
+ * `NSTextTableBlock`, and the manager lays them out as a grid: columns are MEASURED — automatically from the widest
+ * cell in each column, its span divided out, scaled to fit the container, or equally for a fixed table — and each cell
+ * lays its text out inside its own columns' width and is PLACED at its column's x. A row is as tall as its tallest
+ * cell. WHAT IS STILL OWED IS NAMED WHERE IT WOULD BE: `-collapsesBorders` (shared edges drawn once) and a table that
+ * FLOWS across containers; a cell of several paragraphs lays out, and its row is the tallest cell's height.
  */
 #ifndef APPKIT_NSTEXTTABLE_H
 #define APPKIT_NSTEXTTABLE_H
