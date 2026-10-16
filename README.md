@@ -44,6 +44,7 @@ tests/
   tracking_area.m               an AREA's region, owner and SCOPE — and a control's own hover area
   text_input.m                  the first slice of the text system, driven a keystroke at a time
   text_storage.m                and the STORE the rich-text slice is built on: an attributed string that announces edits
+  text_container.m              and the REGION that store is laid out in: a size, a padding, and the fragments that fit
   text_word_movement.m          and its WORD granularity: Option+arrow and Option+Delete, over the string
   text_view_lines.m             and the first slice of the MULTI-LINE view: the line model, and what reads it
   text_view_wrapping.m          and the slice above it: the same model WRAPPED to the view's width
@@ -165,6 +166,16 @@ the compositor is really gone.
   the store NEVER OVERRODE, is announced anyway — the routing, by dispatch. **WHAT IS OWED AND NAMED IN ITS HEADER**:
   the layout-manager trio (`NSLayoutManager` does not exist here), the scripting category, and lazy attribute fixing
   (there is nothing to defer).
+- **And the REGION that store is laid out in** (`ctest`): `NSTextContainer` is the middle of the trio and the smallest
+  — four facts (a size, a line-fragment padding, two flags about tracking a view, and the view itself) and ONE
+  computation: given a proposed line fragment, the part of it that falls inside. MEASURED: the size is what it was
+  made with, the padding default is **10** points, both tracking flags are off and it says it is a SIMPLE RECTANGLE; a
+  fragment inside the region answers itself and leaves `remainingRect` EMPTY (a rectangle has no holes); one running
+  50 points past the right edge comes back **50** wide; one entirely past the region is EMPTY when the line may not
+  move and is CARRIED to the region's near edge — **(200,10 100x20)** — when it may; and a fragment ABOVE the region
+  is carried DOWN to its top edge, because a text view's y grows downward. **WHAT IS OWED AND NAMED IN ITS HEADER**:
+  the layout-manager end of the web (`-layoutManager`, `-setLayoutManager:`, `-replaceLayoutManager:` name a class
+  this tier has not built), and the non-rectangular regions a subclass declares.
 - **And the field, which is a cell under a view** (`ctest`, offscreen): `NSTextFieldCell` owns the string, the face
   and the three doors of an edit; `NSTextField` is the control above it, and it contributes the two things a cell
   cannot — a PRESS that opens a session with the WINDOW's field editor, and `-selectText:` for the same session with
@@ -295,11 +306,12 @@ the compositor is really gone.
   and the child clip is the child's FRAME region rather than its bounds rect — which was the same value only while the
   origin was zero. MEASURED: a mark at a document's own y 100..120 draws at 110 with the clip view at the top and at
   10 after a scroll of 100, in one run, through `-displayRect:`.
-- **`ctest`: 38 of 38 passed** (the keyboard and the seam, the AppKit and its input path, the controls and their
+- **`ctest`: 39 of 39 passed** (the keyboard and the seam, the AppKit and its input path, the controls and their
   metrics, the field control and its cell and its bezel and its placeholder and what it may hold, the text path and its
-  word granularity and the multi-line view and its wrapping and its scrolling, and the STORE the rich-text slice is
-  built on, what a drag costs, the resize by edge, the tracking engine, the clip view and the scroller and the scroll
-  view and the drawn offset, the chrome and what its buttons do, the chrome theme, the menus and activation).
+  word granularity and the multi-line view and its wrapping and its scrolling, the STORE the rich-text slice is built
+  on and the REGION it is laid out in, what a drag costs, the resize by edge, the tracking engine, the clip view and
+  the scroller and the scroll view and the drawn offset, the chrome and what its buttons do, the chrome theme, the
+  menus and activation).
 - **And the desktop's own text is SUB-PIXEL ANTIALIASED**, which is the AppKit's half of a renderer change in
   CoreGraphics: a window's surface is OPAQUE (`kCGImageAlphaNoneSkipFirst`), and the destination's opacity is
   exactly what decides whether a glyph is rasterised in colour. MEASURED on the live session: the window title's

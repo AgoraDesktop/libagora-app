@@ -133,6 +133,14 @@ target_link_libraries(text_storage PRIVATE App)
 add_test(NAME appkit-text-storage COMMAND text_storage)
 set_tests_properties(appkit-text-storage PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
 
+# **AND THE REGION THE STORE GETS LAID OUT IN.** `NSTextContainer` holds four facts (a size, a fragment padding, two
+# tracking flags) and one computation: given a proposed line fragment, the part of it that falls inside — with the
+# carry-back a typesetter asks for when a line misses the region entirely.
+add_executable(text_container text_container.m)
+target_link_libraries(text_container PRIVATE App)
+add_test(NAME appkit-text-container COMMAND text_container)
+set_tests_properties(appkit-text-container PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
+
 # **AND THE WORD GRANULARITY OF THE SAME KEYS.** Option+arrow moves by the word and Option+Delete deletes one, which
 # is arithmetic over the string's own characters and needs no layout model — the correction `NSResponder.h` carries.
 # Driven as KEYS, so the mapping is under test as well as the walk.
