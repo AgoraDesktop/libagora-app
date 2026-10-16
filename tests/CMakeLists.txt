@@ -180,6 +180,13 @@ set_tests_properties(appkit-combo-box PROPERTIES ENVIRONMENT "${_agora_app_test_
 # **AND THE EDIT SESSION ITSELF.** A window lends an editor, a cell begins a session with it, a string is EDITED through
 # the primitive a keystroke uses, and the cell takes it back — the round trip that makes a field a field, driven
 # offscreen with no event loop.
+# **AND THE SWITCH, WHICH IS THE FIRST CONTROL HERE THAT NEEDS NO FONT AT ALL.** Its value is where the knob is and its
+# state is what the track is filled with, so every claim about it is a pixel this probe reads out of a bitmap.
+add_executable(control_switch control_switch.m)
+target_link_libraries(control_switch PRIVATE App)
+add_test(NAME appkit-control-switch COMMAND control_switch)
+set_tests_properties(appkit-control-switch PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
+
 add_executable(text_field_cell text_field_cell.m)
 target_link_libraries(text_field_cell PRIVATE App)
 add_test(NAME appkit-text-field-cell COMMAND text_field_cell)

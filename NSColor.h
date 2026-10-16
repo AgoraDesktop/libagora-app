@@ -274,11 +274,17 @@ extern NSString *NSSystemColorsDidChangeNotification;
  * mark for a door the tier adds, and it is defined ONCE — the menu's selection chip and every control that
  * highlights now read the same two numbers instead of each carrying its own copy of them.
  *
- * AND IT IS NAMED FOR THE PRESS, WHICH IS THE ONLY STATE THAT WEARS IT. There used to be a second door beside it —
- * the same hue LIGHTENED, for the face of a control the pointer was only resting on — and that door is gone, because
- * a prelight is a step DOWN the grey scale rather than a second colour (see `+cg_prelightControlFaceColor` below).
- * The accent now means one thing: this control is being used. */
+ * AND IT IS NAMED FOR THE PRESS ON EVERY CONTROL WHOSE FACE IS A GREY. What a control the pointer merely rests on
+ * wears is a step DOWN the grey scale rather than a second colour (see `+cg_prelightControlFaceColor` below), so a
+ * BUTTON's accent means one thing: this control is being used.
+ *
+ * **AND THE SECOND DOOR IS BACK, BECAUSE A SWITCH IS NOT A GREY-FACED CONTROL.** The same hue LIGHTENED is what the
+ * sample's own four-state legend gives for a switch's PRELIGHT — `#E5E3FF` against the `#A49AFF` it lightens, MEASURED
+ * in `Argentum Mockup.png` beside the pills — and a switch's track IS the accent when it is ON, so "a step down the
+ * grey scale" has nowhere to go: there is no grey to step down FROM. So the door is restored for that one control,
+ * and the rule it departed from is left exactly as it was for the controls the rule was about. */
 + (NSColor *)cg_accentColor;
++ (NSColor *)cg_accentPrelightColor;
 /* **AND THE ONE FACE THE ERA'S OWN NAMES DO NOT COVER.** `+controlColor` is a raised control, `+controlBackgroundColor`
  * is the surface a control shows THROUGH (a field's white), and a DISABLED control's face is neither: the era dims the
  * title and leaves the face alone, which is a face that still says "press me". So it is named `cg_` with the accent,
