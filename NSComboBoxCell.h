@@ -107,19 +107,23 @@ NS_ASSUME_NONNULL_BEGIN
 /* AND `-isEditable` / `-setEditable:` ARE INHERITED FROM `NSCell` rather than redeclared: this class does not change
  * what they do, so a caller reads the base's answer and there is one implementation of it. */
 
-/* ---- THE INK ---------------------------------------------------------------------------------------- */
+/* ---- THE INK, WHICH IS THE BASE'S IN EVERY STATE ---------------------------------------------------- */
 
-/* **THE INK THAT CLEARS THIS CELL'S FACE, WHICH IS THE ONE THING ABOUT THE FACE THIS CLASS CHANGES.** The base's rule
- * is three answers — a colour a caller set, the era's dimmed grey when disabled, the control's text colour otherwise —
- * and a combo box's field can take the ACCENT, which is a fourth: white. Overriding the INK rather than the drawing is
- * what makes the string and the chip agree, because `NSTextFieldCell -drawInteriorWithFrame:` inks the words through
- * this door and `-cg_drawChipInFrame:` inks the triangle white for the same reason. */
-- (nullable id)cg_inkColor;
-
-/* **AND THE FACE IS INHERITED; ONLY ITS FILL IS THIS CONTROL'S.** The border, the radius and the margin come from
- * `NSTextFieldCell`, so a combo box and the field beside it cannot disagree about where their border is — and a
- * control's field answers the pointer and the session, which is the one thing a fill has to say. */
-- (nullable NSColor *)cg_fieldFillColor;
+/* **AND THIS CLASS OVERRIDES NEITHER THE INK NOR THE FILL, WHICH IS A DECISION RATHER THAN AN OMISSION.** Both were
+ * declared here once — the ink to put white words on an accent field, the fill to answer the accent while the list was
+ * open and the prelight grey under the pointer, copying the POP-UP because the sample draws the two controls as a pair.
+ * A POP-UP IS A CONTROL and a COMBO BOX IS A FIELD: a value is typed into it, and a field does not change colour
+ * because a person is near it or typing in it. The IMPLEMENTATIONS went in the commit that settled that — the field is
+ * white in every state — and the DECLARATIONS were left behind, so this header asked for two methods no `.m` defined
+ * and the compiler said so on every build until this line removed them. What they were for is named rather than
+ * silently dropped: the combo box no longer says "my list is open" by taking the accent. If that signal is wanted back
+ * it is one method returning `+cg_accentColor` when `-isHighlighted`, and the LIST it belongs to is the thing that
+ * should carry it.
+ *
+ * SO THE FACE — border, radius, margin, fill and ink — is `NSTextFieldCell`'s in every state, which is what makes a
+ * combo box and the plain field beside it impossible to tell apart but for the chip. The one thing this class still
+ * draws OVER that face is the chip, and the triangle knocked out of it is white because the CHIP is the accent and not
+ * because the field is. */
 - (void)drawInteriorWithFrame:(NSRect)cellFrame inView:(nullable id)controlView;
 
 /* **AND THE RECT THE WORDS GET STOPS WHERE THE CHIP BEGINS.** Overridden rather than clipped because an edit session

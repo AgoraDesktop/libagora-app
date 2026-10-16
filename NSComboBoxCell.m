@@ -261,10 +261,10 @@
 }
 
 /* **AND THE WORDS ARE THE BASE'S, WITH THE CHIP PUT ON AFTER THEM.** `NSTextFieldCell` draws the string left-aligned
- * at the text rect in the ink `-cg_inkColor` answers — which is why this class overrides THAT door and not the
- * drawing — so a combo box's title is drawn by the same code the field cell uses and cannot come out differently from
- * another field's. What is this class's own is the chip, and it goes on top because it is drawn over the field's
- * right end rather than beside the text. */
+ * at the text rect in the ink its own `-cg_inkColor` answers, and this class now leaves both the drawing AND the ink
+ * alone — so a combo box's title is drawn by the same code the field cell uses and cannot come out differently from
+ * another field's. What is this class's own is the chip, and it goes on top because it is drawn over the field's right
+ * end rather than beside the text. */
 - (void)drawInteriorWithFrame:(NSRect)cellFrame inView:(id)controlView
 {
 	[super drawInteriorWithFrame:cellFrame inView:controlView];
