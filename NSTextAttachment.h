@@ -13,12 +13,10 @@
  * **AND THE CELL IS WHERE A SIZE AND A DRAWING COME FROM.** `NSTextAttachmentCell` is the object the layout asks "how
  * big are you" and "draw yourself here"; `NSTextAttachment` holds one, and an `NSImage` attached to a fresh cell is
  * the common case the convenience door covers. THIS TIER'S READER IS THE LAYOUT MANAGER: at a run carrying
- * `NSAttachmentAttributeName` it asks the cell for its size, reserves a BOX of that width in the line, and calls
- * `-drawWithFrame:inView:` at the box's x instead of setting the glyphs — so the text after an attachment flows past
- * it rather than over it. THE BOX IS THE MANAGER'S TODAY: `NSLayoutManager` records the difference between the box's
- * width and the placeholder glyph's advance and shifts every x after it. THE SHARED HOME FOR THAT IS CORE TEXT'S OWN
- * `CTRunDelegate` / `kCTRunDelegateAttributeName`, which puts the box in the engine so the line breaker, the glyph
- * map and every consumer agree without that arithmetic; moving it there is the engine slice still owed.
+ * `NSAttachmentAttributeName` it asks the cell for its size, sets a CORE TEXT RUN DELEGATE of that size over the
+ * character, and calls `-drawWithFrame:inView:` at the box's x instead of setting the glyphs — so the ENGINE reserves
+ * the width and the text after an attachment flows past it rather than over it. See `CTRunDelegate.h` for the box
+ * itself.
  *
  * **WHAT IS NOT HERE, AND ITS ROWS STAY OPEN:** `-fileWrapper` and `-initWithFileWrapper:` (they name `NSFileWrapper`,
  * a class this tier has not got), and the tracking half of the cell protocol (`-wantsToTrackMouse`, `-highlight:…`,

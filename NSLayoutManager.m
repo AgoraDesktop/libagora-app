@@ -28,6 +28,7 @@
 #include <CoreText/CTLine.h>
 #include <CoreText/CTParagraphStyle.h>
 #include <CoreText/CTRun.h>
+#include <CoreText/CTRunDelegate.h>
 #include <CoreText/CTStringAttributes.h>
 #include <CoreText/CTTypesetter.h>
 #include <stdlib.h>
@@ -41,12 +42,12 @@
  * tiny object rather than a struct because the fragments live in an `NSMutableArray` and an array of PODs would be a
  * second lifetime to manage by hand. */
 /* **AND THE ONE THING A FRAGMENT CAN CARRY THAT IS NOT A GLYPH: A BOX.** An attachment is a character that stands for
- * something of a FIXED SIZE, and this tier's engine lays out one run of ordinary glyphs — so the width a box occupies,
- * and the amount by which it DIFFERS from the placeholder glyph the engine measured, are recorded here and applied
- * wherever an x is asked for. `engineAdvance` is what the glyph it replaces advanced; the extra is
- * `width - engineAdvance`, and it shifts every glyph after the box. THE SHARED HOME FOR THIS IS CORE TEXT'S OWN
- * `CTRunDelegate` / `kCTRunDelegateAttributeName`, which puts the box in the ENGINE so the line breaker, the glyph map
- * and every consumer agree without arithmetic like this; that is the engine slice this one does not carry. */
+ * something of a FIXED SIZE, and THE ENGINE RESERVES ITS WIDTH NOW — a `CTRunDelegate` set on the character (see
+ * `-cg_attributedStringByAddingRunDelegates:`) makes `CTLine` and `CTTypesetter` measure the box, so the offsets the
+ * line answers already include it and `engineAdvance` here IS the width. This object is what the MANAGER still keeps:
+ * which character the box belongs to, what to draw at it (the attachment), and the numbers the hit test and the draw
+ * need. THE EXTRA (`width - engineAdvance`) is therefore zero when the engine did the reservation, and the arithmetic
+ * that adds it is kept because it is what makes the manager correct if ever it must place a box the engine did not. */
 @interface FNBox : NSObject
 {
 @public
@@ -118,6 +119,36 @@
 @end
 
 @implementation NSLayoutManager
+
+/* ============================================================================================ *
+ * THE BOXES, AS RUN DELEGATES: THE ENGINE RESERVES THE WIDTH NOW                                      *
+ * ============================================================================================ */
+
+/* **THE THREE ANSWERS A DELEGATE GIVES, TAKEN FROM THE ATTACHMENT'S OWN CELL.** The `refCon` IS the attachment, which
+ * the store's attribute retains, so the delegate outlives the line that reads it. A cell that has gone away answers a
+ * box of no width rather than a crash. */
+static NSSize fn_attachment_size(void *refCon)
+{
+	NSTextAttachment *attachment = (NSTextAttachment *)refCon;
+	NSCell<NSTextAttachmentCell> *cell = [attachment attachmentCell];
+
+	return (cell != nil) ? [cell cellSize] : NSZeroSize;
+}
+
+static CGFloat fn_attachment_ascent(void *refCon)
+{
+	return fn_attachment_size(refCon).height;
+}
+
+static CGFloat fn_attachment_descent(void *refCon)
+{
+	return 0.0;
+}
+
+static CGFloat fn_attachment_width(void *refCon)
+{
+	return fn_attachment_size(refCon).width;
+}
 
 - (instancetype)init
 {
@@ -1031,6 +1062,45 @@
 	return tableEnd;
 }
 
+/* **AND THE BOXES, SET AS RUN DELEGATES SO THE ENGINE — NOT THIS CLASS — RESERVES THEIR WIDTH.** Every attachment's
+ * character range gets a `CTRunDelegate` whose three answers come from the attachment's own cell, so the typesetter
+ * measures the box and the line's offsets already include it; the manager's own `FNBox` arithmetic then sees an
+ * `engineAdvance` equal to the width and adds nothing. THE DELEGATE IS RELEASED AFTER BEING SET because the mutable
+ * string retains it, and it is kept alive by the attributed string the typesetter and the line retain. */
+- (CFAttributedStringRef)cg_attributedStringByAddingRunDelegates:(CFAttributedStringRef)base
+{
+	CFMutableAttributedStringRef mutable = CFAttributedStringCreateMutableCopy(kCFAllocatorDefault, 0, base);
+	NSUInteger n = [_textStorage length];
+	NSUInteger pos = 0;
+
+	if (mutable == NULL) {
+		return NULL;
+	}
+	while (pos < n) {
+		NSRange runRange;
+		NSDictionary *attrs = [_textStorage attributesAtIndex:pos longestEffectiveRange:&runRange
+								  inRange:NSMakeRange(0, n)];
+		NSTextAttachment *attachment = [attrs objectForKey:NSAttachmentAttributeName];
+
+		if (attachment != nil) {
+			CTRunDelegateCallbacks callbacks = { 0, fn_attachment_ascent, fn_attachment_descent,
+							     fn_attachment_width };
+			CTRunDelegateRef delegate = CTRunDelegateCreate(&callbacks, attachment);
+
+			if (delegate != NULL) {
+				CFAttributedStringSetAttribute(mutable, CFRangeMake(runRange.location, runRange.length),
+							       kCTRunDelegateAttributeName, delegate);
+				CFRelease(delegate);
+			}
+		}
+		pos = runRange.location + runRange.length;
+		if (pos <= runRange.location) {
+			break;
+		}
+	}
+	return mutable;
+}
+
 - (void)cg_ensureLayout
 {
 	NSString *string;
@@ -1082,18 +1152,23 @@
 			&kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
 	CFDictionarySetValue(attributes, kCTFontAttributeName, ((NSFont *)font)->_font);
 	{
-		/* **AND THE PARAGRAPH STYLE, WHICH IS WHAT MAKES THE TYPESETTER OBEY A LINE-BREAK MODE.** It is put in the
-		 * dictionary the attributed string is made with, so the breaker sees it for every character; a store with no
-		 * style gets word wrapping, which is what the typesetter already defaulted to. */
 		CTParagraphStyleRef paragraphStyle = [self cg_createParagraphStyle];
+		CFAttributedStringRef plain;
 
 		if (paragraphStyle != NULL) {
 			CFDictionarySetValue(attributes, kCTParagraphStyleAttributeName, paragraphStyle);
 		}
-		s = CFAttributedStringCreate(kCFAllocatorDefault, (CFStringRef)string, attributes);
+		plain = CFAttributedStringCreate(kCFAllocatorDefault, (CFStringRef)string, attributes);
 		CFRelease(attributes);
 		if (paragraphStyle != NULL) {
 			CFRelease(paragraphStyle);
+		}
+		/* **AND THE BOXES, ON THE STRING THE ENGINE READS**: the delegates are set here, so the TYPESETTER measures
+		 * each attachment's width and the LINE's offsets already include it — the reservation is Core Text's, and this
+		 * class's `FNBox` arithmetic below finds an advance that IS the width and adds nothing. */
+		s = (plain != NULL) ? [self cg_attributedStringByAddingRunDelegates:plain] : NULL;
+		if (plain != NULL) {
+			CFRelease(plain);
 		}
 	}
 	ts = (s != NULL) ? CTTypesetterCreateWithAttributedString(s) : NULL;

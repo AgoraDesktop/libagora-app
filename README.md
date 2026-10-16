@@ -339,11 +339,12 @@ the compositor is really gone.
   gives `+textAttachmentWithImage:` an attachment whose cell is **12x12**; the cell draws the picture into the frame it
   is given; and a store carrying one attachment character draws the picture — read as the picture's colour in a pixel.
   **AND THE INLINE FLOW IS HERE NOW**: the manager records the difference between the box's width and the placeholder
-  glyph's advance, reserves it in the line's used rect, shifts every x after it and hit-tests a point inside the box to
-  the attachment's own character — MEASURED in `tests/text_attachment_flow.m` (the character after an attachment is one
-  box width past it, and the picture is drawn where the box is). THE SHARED HOME FOR THE BOX IS CORE TEXT'S OWN
-  `CTRunDelegate` / `kCTRunDelegateAttributeName`, which would put it in the engine so the line breaker and the glyph
-  map agree without the manager's arithmetic; moving it there is the engine slice still owed. `-fileWrapper`, `-initWithFileWrapper:` and the cell's tracking family are owed
+  glyph's advance, and hit-tests a point inside the box to the attachment's own character — MEASURED in
+  `tests/text_attachment_flow.m` (the character after an attachment is one box width past it, and the picture is drawn
+  where the box is). **AND THE BOX IS THE ENGINE'S NOW**: the manager sets CORE TEXT'S `CTRunDelegate`
+  (`kCTRunDelegateAttributeName`) over the attachment character, so `CTLine` and `CTTypesetter` reserve the width
+  themselves — the manager's own `FNBox` arithmetic sees an advance that already IS the width and adds nothing. See
+  `libagora-text`'s `CTRunDelegate.h`. `-fileWrapper`, `-initWithFileWrapper:` and the cell's tracking family are owed
   with the classes they name.
 - **And the MARKED TEXT, which is what an input method composes through** (`ctest`): `NSTextInput.h` declares the eleven
   doors an input system drives a text view through, `NSTextView` adopts the protocol, and the composition is an ordinary
