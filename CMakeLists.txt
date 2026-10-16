@@ -31,6 +31,13 @@ if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
   set(CMAKE_BUILD_TYPE Release CACHE STRING "" FORCE)
 endif()
 
+# THE LIBRARY IS BUILT WITH ITS INSTALL RPATH ALREADY IN IT, so `cmake --install` COPIES it rather than
+# RELINKING it. MEASURED, and found by the first consumer to install this library rather than build it in-tree:
+# the install-time relink asked for a `CMakeFiles/CMakeRelink.dir/libagora-app.so` it never produced, and the
+# install failed on the missing file while the headers installed fine. Every library in this tree is consumed
+# from the prefix, so the install rpath is the right one for the build tree too, and the relink buys nothing.
+set(CMAKE_BUILD_WITH_INSTALL_RPATH ON)
+
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(WAYLAND_CLIENT REQUIRED IMPORTED_TARGET wayland-client)
 pkg_check_modules(XKBCOMMON REQUIRED IMPORTED_TARGET xkbcommon)

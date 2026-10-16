@@ -86,7 +86,7 @@
 {
 @public
 	NSRange range;		/* characters: what the breaker decided, trailing whitespace and all */
-	NSRange glyphs;		/* the same span in the manager's glyph space */
+	NSRange glyphs;		/* the same span in the LINE's glyph space, which is the SHAPER's count and not the text's */
 	NSRect rect;		/* the whole flow band: any LEADING space (line or paragraph) plus the line */
 	NSRect used;		/* the text band: where the glyphs sit, after the indents and the alignment */
 	CGFloat baseline;	/* the baseline's y in the CONTAINER's coordinates */
@@ -401,22 +401,76 @@ static CGFloat fn_attachment_width(void *refCon)
 	return total;
 }
 
-/* **AND THE MANAGER'S OWN GLYPH SPACE IS ONE GLYPH PER CHARACTER, WHICH IS NOW A CONVENTION RATHER THAN A FACT.**
- * Both mapping doors below translate between a character range and a glyph range by ARITHMETIC — `location` minus the
- * fragment's start — and that was exactly right for as long as the engine gave one glyph per character. **IT IS NOT
- * RIGHT ANY MORE**: `CTLine` shapes now, so a face with an `ffi` ligature sets three characters in one glyph and a
- * composed mark sets one character in one, and the two doors are one glyph out for every ligature before the point.
+/* **AND THE MANAGER'S GLYPH SPACE IS THE LINE'S, WHICH IS THE SHAPER'S AND NOT THE TEXT'S.** `cg_layOut` advances its
+ * glyph base by the GLYPH COUNT of the line it just made, and every fragment records that span — so the space is the
+ * one `CTLine` defines, where a ligature is three characters and one glyph and a composed mark is one character and
+ * one. The two doors below therefore cannot translate by arithmetic: `location` minus the fragment's start is the
+ * IDENTITY map's answer, and it is out by one for every ligature before the point.
  *
- * **THEY ARE LEFT AS ARITHMETIC ON PURPOSE, AND WHAT IS LEFT IS NAMED HERE RATHER THAN LEFT TO BE FOUND.** The
- * manager's glyph space is built CHARACTER BY CHARACTER — `cg_layOut` advances `glyphBase` by the range's LENGTH, and
- * every fragment records `glyphs:NSMakeRange(glyphBase, count)` where `count` is a character count — so the manager's
- * two doors are INVERSES OF EACH OTHER and stay consistent with the glyph space they define. Making that space the
- * LINE's instead means (a) advancing `glyphBase` by the line's own glyph count, (b) recording the shaped count on
- * every fragment, and (c) translating through `CTRunGetStringIndices` in both doors, which is what the line's own
- * caret doors already do. That is the next slice, and until it lands THE SHAPED GLYPH COUNT IS NOT VISIBLE THROUGH
- * THIS CLASS: a caller asking `-numberOfGlyphs` is told the character count. Nothing is drawn wrong by it — the ink
- * comes from the line, which knows the truth — and a selection is off by the ligatures before it, which is why this
- * is stated in the class that would have to change rather than in a commit message. */
+ * **THE MAP IS THE RUN'S OWN STRING INDICES.** `CTRunGetStringIndices` is the cluster the shaper answered with,
+ * counted from the line's own range, so walking a fragment's runs gives both directions: the glyph before a character
+ * is a count of glyphs walked, and the character a glyph belongs to is that index. **THE WALK IS OVER EVERY RUN IN
+ * ORDER**, because a fragment can hold several faces and a glyph offset is only meaningful across all of them. */
+static NSUInteger fn_glyphOffsetForCharacterInLine(CTLineRef line, NSUInteger charOffset)
+{
+	CFArrayRef runs = (line != NULL) ? CTLineGetGlyphRuns(line) : NULL;
+	CFIndex r, runCount = (runs != NULL) ? CFArrayGetCount(runs) : 0;
+	NSUInteger walked = 0;
+
+	for (r = 0; r < runCount; r++) {
+		CTRunRef run = (CTRunRef)CFArrayGetValueAtIndex(runs, r);
+		CFIndex glyphs = CTRunGetGlyphCount(run);
+		const CFIndex *indices = CTRunGetStringIndicesPtr(run);
+		CFIndex k;
+
+		for (k = 0; k < glyphs; k++) {
+			if (indices != NULL && indices[k] >= (CFIndex)charOffset) {
+				return walked;
+			}
+			walked++;
+		}
+	}
+	return walked;
+}
+
+/* THE OTHER DIRECTION, CLAMPED TO THE CHARACTERS THE LINE HAS: a glyph with no character of its own — the hyphen a
+ * hyphenated line draws, which IS one of the line's glyphs — answers with the index one past the last character
+ * rather than inventing one. That is what keeps `-characterRangeForGlyphRange:` from ever reporting more characters
+ * than the text has. */
+static NSUInteger fn_characterForGlyphOffsetInLine(CTLineRef line, NSUInteger glyphOffset)
+{
+	CFArrayRef runs = (line != NULL) ? CTLineGetGlyphRuns(line) : NULL;
+	CFIndex r, runCount = (runs != NULL) ? CFArrayGetCount(runs) : 0;
+	NSUInteger walked = 0;
+	NSUInteger last = 0;
+
+	for (r = 0; r < runCount; r++) {
+		CTRunRef run = (CTRunRef)CFArrayGetValueAtIndex(runs, r);
+		CFIndex glyphs = CTRunGetGlyphCount(run);
+		const CFIndex *indices = CTRunGetStringIndicesPtr(run);
+		CFIndex k;
+
+		for (k = 0; k < glyphs; k++) {
+			if (indices != NULL) {
+				last = (NSUInteger)indices[k];
+			}
+			if (walked == glyphOffset) {
+				return last;
+			}
+			walked++;
+		}
+	}
+	/* PAST THE LAST GLYPH THE LINE HAD: one character past the last one it stood for. */
+	if (line == NULL) {
+		return 0;
+	}
+	{
+		CFRange span = CTLineGetStringRange(line);
+
+		return (NSUInteger)(span.location + span.length);
+	}
+}
+
 - (NSRange)glyphRangeForCharacterRange:(NSRange)charRange actualCharacterRange:(NSRange *)actualCharRange
 {
 	NSUInteger n = [_textStorage length];
@@ -449,8 +503,41 @@ static CGFloat fn_attachment_width(void *refCon)
 	if (fragment == nil) {
 		return charRange;
 	}
-	return NSMakeRange(fragment->glyphs.location + (charRange.location - fragment->range.location),
-			   charRange.length);
+	/* **AND THE END IS MAPPED IN ITS OWN FRAGMENT, BECAUSE A RANGE CAN SPAN THE BREAK.** Mapping only the start and
+	 * reporting the character length was right while a glyph was a character and the space was contiguous; now a
+	 * range that runs into the next line has to find that line's base for its end, or the length comes back short by
+	 * whatever the two fragments' glyph counts differ by. */
+	{
+		FNFragment *endFragment = nil;
+		NSUInteger endChar = charRange.location + charRange.length;
+		NSUInteger glyphStart, glyphEnd;
+
+		for (i = 0; i < [_fragments count] && endFragment == nil; i++) {
+			NSMutableArray *fragments = [_fragments objectAtIndex:i];
+
+			for (j = 0; j < [fragments count]; j++) {
+				FNFragment *f = [fragments objectAtIndex:j];
+
+				if (endChar >= f->range.location && endChar <= f->range.location + f->range.length) {
+					endFragment = f;
+					break;
+				}
+			}
+		}
+		if (endFragment == nil) {
+			endFragment = fragment;
+		}
+		glyphStart = fragment->glyphs.location
+			+ ((fragment->line != NULL)
+			   ? fn_glyphOffsetForCharacterInLine(fragment->line,
+							      charRange.location - fragment->range.location)
+			   : (charRange.location - fragment->range.location));
+		glyphEnd = endFragment->glyphs.location
+			+ ((endFragment->line != NULL)
+			   ? fn_glyphOffsetForCharacterInLine(endFragment->line, endChar - endFragment->range.location)
+			   : (endChar - endFragment->range.location));
+		return NSMakeRange(glyphStart, (glyphEnd > glyphStart) ? (glyphEnd - glyphStart) : 0);
+	}
 }
 
 - (NSRange)characterRangeForGlyphRange:(NSRange)glyphRange actualGlyphRange:(NSRange *)actualGlyphRange
@@ -462,7 +549,11 @@ static CGFloat fn_attachment_width(void *refCon)
 		*actualGlyphRange = glyphRange;
 	}
 	[self cg_ensureLayout];
-	for (i = 0; i < [_fragments count] && fragment == nil; i++) {
+	/* **THE LAST FRAGMENT HOLDING THE INDEX WINS, WHICH IS THIS CLASS'S OWN RULE EVERYWHERE ELSE** — contiguous
+	 * fragments share their boundary glyph, and a glyph at the end of one line is the start of the next. Breaking at
+	 * the FIRST match was survivable while the mapping was arithmetic, because the offset came out the same either
+	 * way; with the LINE's map it is not, and the walk has to agree with `cg_fragmentForGlyphAtIndex:`. */
+	for (i = 0; i < [_fragments count]; i++) {
 		NSMutableArray *fragments = [_fragments objectAtIndex:i];
 
 		for (j = 0; j < [fragments count]; j++) {
@@ -471,15 +562,24 @@ static CGFloat fn_attachment_width(void *refCon)
 			if (glyphRange.location >= f->glyphs.location
 			    && glyphRange.location <= f->glyphs.location + f->glyphs.length) {
 				fragment = f;
-				break;
 			}
 		}
 	}
 	if (fragment == nil) {
 		return glyphRange;
 	}
-	return NSMakeRange(fragment->range.location + (glyphRange.location - fragment->glyphs.location),
-			   glyphRange.length);
+	/* AND THE SAME WALK BACKWARDS, with both ends clamped to the characters the line has. */
+	{
+		NSUInteger at = glyphRange.location - fragment->glyphs.location;
+		NSUInteger start, end;
+
+		if (fragment->line != NULL) {
+			start = fn_characterForGlyphOffsetInLine(fragment->line, at);
+			end = fn_characterForGlyphOffsetInLine(fragment->line, at + glyphRange.length);
+			return NSMakeRange(fragment->range.location + start, (end > start) ? (end - start) : 0);
+		}
+		return NSMakeRange(fragment->range.location + at, glyphRange.length);
+	}
 }
 
 /* ============================================================================================ *
@@ -1400,6 +1500,7 @@ static BOOL fn_cell_owns_edge(CGFloat thisWidth, CGFloat otherWidth, BOOL tieGoe
 	    attributedString:(CFAttributedStringRef)rich font:(NSFont *)font
 	    baseAscent:(CGFloat)baseAscent baseLineHeight:(CGFloat)baseLineHeight
 		       x:(CGFloat)x width:(CGFloat)cellWidth into:(NSMutableArray *)out top:(CGFloat)top
+	   glyphBase:(NSUInteger *)glyphBasePtr
 {
 	CFIndex start = (CFIndex)paraRange.location;
 	CFIndex end = (CFIndex)(paraRange.location + paraRange.length);
@@ -1473,11 +1574,21 @@ static BOOL fn_cell_owns_edge(CGFloat thisWidth, CGFloat otherWidth, BOOL tieGoe
 				alignment:[self cg_alignmentForParagraphAt:(NSUInteger)start] width:width];
 			NSArray *boxes = [self cg_boxesForRange:range line:line];
 
+			/* **AND A CELL'S LINE OCCUPIES THE GLYPHS ITS LINE HAS, FROM ONE RUNNING BASE.** This used to record
+			 * `range.location` — the string's own index — as a GLYPH index, which was never the manager's glyph
+			 * space and is further from it now that a line's glyph count is the shaper's. The base is threaded in
+			 * from the layout that appends the fragments, so the space stays contiguous across a table. */
+			NSUInteger cellGlyphs = (line != NULL) ? (NSUInteger)CTLineGetGlyphCount(line) : 0;
+			NSUInteger cellBase = (glyphBasePtr != NULL) ? *glyphBasePtr : 0;
+
 			[out addObject:[FNFragment fragmentWithRange:range
-				glyphRange:NSMakeRange(range.location, range.length)
+				glyphRange:NSMakeRange(cellBase, cellGlyphs)
 				rect:NSMakeRect(x, y, cellWidth, leading + lineHeight)
 				usedRect:NSMakeRect(leadingEdge + alignOffset, textTop, lineWidth + [self cg_boxExtra:boxes], lineHeight)
 				baseline:baseline line:line boxes:boxes]];
+			if (glyphBasePtr != NULL) {
+				*glyphBasePtr = cellBase + cellGlyphs;
+			}
 		} else if (line != NULL) {
 			CFRelease(line);
 		}
@@ -1685,7 +1796,8 @@ static BOOL fn_cell_owns_edge(CGFloat thisWidth, CGFloat otherWidth, BOOL tieGoe
 				}
 			}
 			height = [self cg_layOutCell:cell range:r typesetter:ts attributedString:rich font:font
-				baseAscent:baseAscent baseLineHeight:baseLineHeight x:x width:width into:nil top:0.0];
+				baseAscent:baseAscent baseLineHeight:baseLineHeight x:x width:width into:nil top:0.0
+				glyphBase:NULL];
 			/* **AND THE VERTICAL LAYERS ARE RESERVED IN THE ROW'S HEIGHT.** Without this the content starts at the
 			 * row's top and the box grows UPWARD from it, so two stacked cells' boxes OVERLAP by both their vertical
 			 * insets and no edge is shared. Adding the insets here and starting the content below the top one below
@@ -1743,18 +1855,21 @@ static BOOL fn_cell_owns_edge(CGFloat thisWidth, CGFloat otherWidth, BOOL tieGoe
 			}
 			[self cg_layOutCell:cell range:r typesetter:ts attributedString:rich font:font
 				baseAscent:baseAscent baseLineHeight:baseLineHeight x:x width:width into:fragments
-				top:y + [self cg_tableCellInset:cell edge:NSTextBlockMinYEdge]];
+				top:y + [self cg_tableCellInset:cell edge:NSTextBlockMinYEdge]
+				glyphBase:glyphBasePtr];
 		}
 		placed = YES;
 		y += rowHeight;
 	}
 	free(widths);
 	*yPtr = y;
+	/* **THE GLYPH BASE IS NOT TOUCHED HERE, AND THAT IS THE POINT.** It is advanced by each line the cells appended
+	 * (`cg_layOutCell`), so it is already the glyph end of everything this table laid out; the two assignments that
+	 * used to stand here wrote a CHARACTER index — `resume`, `tableEnd` — into a GLYPH base, which was wrong as soon
+	 * as a line's glyph count stopped being its character count. */
 	if (resume != NSNotFound) {
-		*glyphBasePtr = resume;
 		return resume;
 	}
-	*glyphBasePtr = tableEnd;
 	return tableEnd;
 }
 
@@ -2020,8 +2135,10 @@ static BOOL fn_cell_owns_edge(CGFloat thisWidth, CGFloat otherWidth, BOOL tieGoe
 				CGFloat alignOffset = [self cg_alignmentOffsetForLine:line
 						alignment:[self cg_alignmentForParagraphAt:(NSUInteger)start] width:width];
 				NSArray *boxes = [self cg_boxesForRange:range line:line];
+				/* **THE FRAGMENT OCCUPIES THE GLYPHS ITS LINE HAS, WHICH IS THE SHAPER'S COUNT.** */
+				NSUInteger lineGlyphs = (line != NULL) ? (NSUInteger)CTLineGetGlyphCount(line) : 0;
 				FNFragment *made = [FNFragment fragmentWithRange:range
-					glyphRange:NSMakeRange(glyphBase, (NSUInteger)count)
+					glyphRange:NSMakeRange(glyphBase, lineGlyphs)
 					rect:NSMakeRect(0.0, y, containerWidth, leading + lineHeight)
 					usedRect:NSMakeRect(leadingEdge + alignOffset, textTop, lineWidth + [self cg_boxExtra:boxes], lineHeight)
 					baseline:baseline line:line boxes:boxes];
@@ -2029,8 +2146,8 @@ static BOOL fn_cell_owns_edge(CGFloat thisWidth, CGFloat otherWidth, BOOL tieGoe
 				made->hyphenated = hyphenated;
 				[fragments addObject:made];
 				y = textTop + lineHeight;
+				glyphBase += lineGlyphs;
 			}
-			glyphBase += (NSUInteger)count;
 			start += count;
 			previousStyle = style;
 			lastContainer = i;
@@ -2152,7 +2269,10 @@ static BOOL fn_cell_owns_edge(CGFloat thisWidth, CGFloat otherWidth, BOOL tieGoe
 		}
 	}
 	if (found != nil && effectiveGlyphRange != NULL) {
-		*effectiveGlyphRange = found->range;
+		/* **AND THE RANGE IT REPORTS IS A GLYPH RANGE**, which is what the caller asked for and what the door's own
+		 * name promises. It used to report the fragment's CHARACTER range, which was the same numbers only while a
+		 * glyph was a character. */
+		*effectiveGlyphRange = found->glyphs;
 	}
 	return found;
 }
