@@ -1,0 +1,30 @@
+@PACKAGE_INIT@
+
+# Consume the Application Kit (libagora-app), Agora's AppKit.
+#
+# ITS DEPENDENCIES ARE FOUND BECAUSE THEY ARE IN THE INTERFACE. The AppKit headers
+# name Foundation, Core Graphics and Core Text types -- NSColor.h includes
+# CoreGraphics, NSFont.h names CTFontRef -- so a consumer of <AppKit/...> reaches
+# all three itself. And this is an Objective-C library, so a consumer with
+# Objective-C of its own needs the runtime, `libobjc`, on ITS link line.
+#
+# THE WINDOW SERVER IS NOT FOUND HERE. libagora-app generates its `agora-shell`
+# client bindings from window-server's protocol, but that is a build-time
+# generation of this library, not something a consumer links against or includes.
+
+include(CMakeFindDependencyMacro)
+
+find_dependency(libobjc CONFIG)
+find_dependency(Foundation CONFIG)
+find_dependency(AgoraDrawing CONFIG)
+find_dependency(AgoraText CONFIG)
+
+if(CMAKE_C_COMPILER_ID STREQUAL "GNU")
+  message(FATAL_ERROR
+    "libagora-app's interface brings Core Foundation's headers, which need -fblocks. This tree "
+    "builds with clang; configure with -DCMAKE_C_COMPILER=/usr/bin/clang-19.")
+endif()
+
+include("${CMAKE_CURRENT_LIST_DIR}/AgoraAppTargets.cmake")
+
+check_required_components(AgoraApp)

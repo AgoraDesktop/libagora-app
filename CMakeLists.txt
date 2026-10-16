@@ -148,3 +148,50 @@ target_link_libraries(App
 
 enable_testing()
 add_subdirectory(tests)
+
+# ---------------------------------------------------------------------------
+# Install rules: the library, its headers, its data, and a CMake package
+#
+# libagora-app INSTALLED NOTHING, so the release build had nothing to stage for
+# it and no package could carry the Application Kit. This is one component with
+# one target; the shape is libagora-drawing's, so a consumer learns one idiom.
+# ---------------------------------------------------------------------------
+
+file(GLOB APP_PUBLIC_HEADERS CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/*.h")
+
+install(FILES ${APP_PUBLIC_HEADERS}
+    DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/AppKit)
+install(DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/platform/"
+    DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/AppKit/platform
+    FILES_MATCHING PATTERN "*.h")
+
+install(TARGETS App
+    EXPORT AgoraAppTargets
+    ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
+    LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
+    RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+
+include(CMakePackageConfigHelpers)
+
+install(EXPORT AgoraAppTargets
+    FILE AgoraAppTargets.cmake
+    NAMESPACE AgoraApp::
+    DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/AgoraApp)
+
+configure_package_config_file(cmake/AgoraAppConfig.cmake.in
+    ${CMAKE_CURRENT_BINARY_DIR}/AgoraAppConfig.cmake
+    INSTALL_DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/AgoraApp)
+write_basic_package_version_file(
+    ${CMAKE_CURRENT_BINARY_DIR}/AgoraAppConfigVersion.cmake
+    VERSION 1.0.0
+    COMPATIBILITY SameMajorVersion)
+install(FILES
+    ${CMAKE_CURRENT_BINARY_DIR}/AgoraAppConfig.cmake
+    ${CMAKE_CURRENT_BINARY_DIR}/AgoraAppConfigVersion.cmake
+    DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/AgoraApp)
+
+# THE CHROME THEME IS DELIBERATELY NOT INSTALLED. A theme is external work under
+# its own licence -- the one this was built against is GPL -- and this tree
+# excludes GPL, so `themes/` is gitignored and never ships. libagora-app reads a
+# theme from $AGORA_CHROME_THEME or the user's XDG data directory, and falls back
+# to the marks NSWindow draws when there is none.
