@@ -14,8 +14,10 @@
  * INDENTS place the first line and the wrapped ones; the TAIL INDENT takes width off the line; `-lineSpacing` and the
  * two PARAGRAPH SPACINGS are the gaps between lines and across paragraph boundaries; and the LINE-HEIGHT MULTIPLE with
  * its MINIMUM and MAXIMUM set the band. WHAT IT STILL DOES NOT READ is the HYPHENATION FACTOR — and the reason is
- * the ENGINE's, not this class's: the tier's Core Text has no hyphenation setting to carry it into, so there is nothing
- * to tune — and THE BASE WRITING DIRECTION is read only so far as NATURAL ALIGNMENT: it decides which edge "natural"
+ * NO LONGER THE ENGINE'S: the RESOURCE arrived, in `libagora-core/CFHyphenation.c`, which answers Core Foundation's
+ * `CFStringGetHyphenationLocationBeforeIndex` — the very door platform AppKit reads this factor through — so the
+ * factor is READABLE now and having the layout manager read it is what is owed — and THE BASE WRITING DIRECTION is
+ * read only so far as NATURAL ALIGNMENT: it decides which edge "natural"
  * means, while reordering the glyphs of a right-to-left SCRIPT is the engine's (it now READS the direction — the line
  * hands it to the run, `CTRunGetStatus` — but does not reorder yet). Each is
  * named at its door below.
