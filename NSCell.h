@@ -206,6 +206,12 @@ typedef NSUInteger NSControlSize;
  * already taken before a subclass's rect begins. Two points, and one name. */
 #define NS_CELL_BORDER_INSET   2.0
 
+/* **AND THE AIR INSIDE THAT BORDER, WHICH `NSCell` ADDS TO A TEXT CELL'S MEASUREMENT.** It lived in `NSCell.m` until a
+ * second class needed it, the same move `NS_CELL_BORDER_INSET` records one paragraph up: a field cell measuring an
+ * EMPTY field has to add back the padding the base paid for no text at all, and a number it cannot see is a number it
+ * would have to guess. Three points, and one name. */
+#define NS_CELL_CONTENT_PADDING 3.0
+
 /* ============================================================================================ *
  * AND THE FIELD-WITH-A-CHIP'S FIVE NUMBERS, WHICH TWO CONTROLS DRAW AND ONE OF THEM DOUBLES.       *
  *                                                                                                *

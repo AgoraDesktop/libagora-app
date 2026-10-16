@@ -67,6 +67,14 @@ typedef NSUInteger NSTextFieldBezelStyle;
 	 * ROUNDED is the default, which is Apple's for a text field — and it is SET rather than left to the zeroing,
 	 * because zero is SQUARE here: the opposite of the button family, where zero is not a bezel style at all. */
 	NSTextFieldBezelStyle _bezelStyle;
+	/* **AND WHAT AN EMPTY FIELD SAYS IT IS FOR, WHICH IS THE CELL'S RATHER THAN THE CONTROL'S.** Apple declares the
+	 * pair on `NSTextFieldCell`; the control's own `-placeholderString` is a 10.10 addition and stays out with the rest
+	 * of the after-10.6 surface, so a caller reaches through the cell — which is what the demo does. BOTH ARE COPIES,
+	 * the same rule `NSButtonCell` records for its attributed strings: a placeholder is what the field SHOWS, so a
+	 * caller who mutates the string it handed over must not be able to change the field underneath. The attributed
+	 * one WINS when both are set, being the more specific answer to "what does this say". */
+	NSString *_placeholderString;			/* RETAINED (a copy) */
+	NSAttributedString *_placeholderAttributedString;	/* RETAINED (a copy) */
 	/* **THE CALLER'S DELEGATE FOR THE SESSION IN FLIGHT, WHICH IS NOT THE SAME THING AS THE CELL'S OWN.** This cell
 	 * IS the editor's delegate while an edit is running — it has to be, because reading the string back is its job —
 	 * so the delegate a caller handed to `-selectWithFrame:...` is kept HERE and told what happened afterwards. NOT
@@ -96,6 +104,30 @@ typedef NSUInteger NSTextFieldBezelStyle;
  * answer is the LABEL, which is what a button or a menu item wants; a field overrides it, and from that one override
  * follow the measurement's size, the drawn words, and the answer an editor is opened with. */
 - (nullable NSString *)cg_contentText;
+
+/* ---- WHAT AN EMPTY FIELD SAYS IT IS FOR ----------------------------------------------------------------- */
+
+/* **A PLACEHOLDER IS DRAWN WHEN THE FIELD HAS NO TEXT, IN PLACE OF THE STRING RATHER THAN BESIDE IT.** It is the
+ * field's own caption for itself — "type here", a search field's "Search" — and it is NOT a value: it never becomes
+ * the field's string, it is not what an edit session is opened with, and ending a session does not commit it. What it
+ * IS is drawn in a grey that says so (see the implementation), so a person reading a form can tell a hint from a
+ * value at a glance.
+ *
+ * **AND "EMPTY" MEANS THE LIVE TEXT, WHICH IS WHY A SESSION MATTERS HERE.** With no session running the live text is
+ * the cell's own value; while one IS running the words on screen are the EDITOR's, so it is the editor's string that
+ * decides. That is what keeps the placeholder on an empty field the moment it is clicked into — Apple's behaviour,
+ * and the reason this is not simply "draw it when `-cg_contentText` is nil". A field that empties WHILE being typed in
+ * gets its placeholder back for the same reason, which the control makes true by redrawing itself on every edit. */
+- (nullable NSString *)placeholderString;
+- (void)setPlaceholderString:(nullable NSString *)string;
+- (nullable NSAttributedString *)placeholderAttributedString;
+- (void)setPlaceholderAttributedString:(nullable NSAttributedString *)string;
+
+/* **AND THE GREY A PLACEHOLDER IS DRAWN IN, WHICH IS A DOOR BECAUSE A SUBCLASS MAY OWE A DIFFERENT ONE.** The era
+ * publishes NO placeholder colour — Apple's `+placeholderTextColor` is a 10.10 addition — so this tier answers the
+ * closest era colour it has, `+disabledControlTextColor`, and says so rather than inventing a value: a placeholder is
+ * text that is NOT the field's value, which is exactly the distinction "disabled" grey already draws. */
+- (NSColor *)cg_placeholderColor;
 
 /* ---- THE FACE ---------------------------------------------------------------------------------------- */
 

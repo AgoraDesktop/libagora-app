@@ -46,6 +46,7 @@ tests/
   text_field_cell.m             a FIELD's cell: its string, its face, and one edit session end to end
   text_field_control.m          and the VIEW above it: a press that opens a session, and what commits it
   text_field_bezel.m            and its BORDER's two shapes, read out of the corner PIXELS
+  text_field_placeholder.m      and what an EMPTY field says it is for: a hint, drawn DIMMER than a value
   clip_view.m                   the INSIDE of a scroll view: the arithmetic, and the wire that re-runs it
   scroller.m                    and its BAR: a fraction into a knob, a point into a part, a drag back into a value
   scroll_view.m                 and the FRAME that joins them: the tiling, the loop, and -enclosingScrollView
@@ -130,6 +131,17 @@ the compositor is really gone.
   because zero is SQUARE here: the opposite of the button family, where zero is not a bezel style at all. The whole
   thing is one path constructor with a radius that is `NS_CELL_BEZEL_RADIUS` or zero, so a square field is not a
   second drawing path — just this one with its corners not cut.
+- **And what an empty field says it is for** (`ctest`, offscreen + one real session): a placeholder is drawn when the
+  field has no text, and the claims are read out of the ink — an empty field with NO placeholder writes NOTHING, one
+  WITH a placeholder writes a hint whose floor is **0.50** grey where the same words as a VALUE floor at **0.00**, and
+  both begin in the same column (x=4), so a hint and a value are not two layouts. An ATTRIBUTED placeholder is drawn
+  with its own attributes (a red one is measurably red, which the darkness threshold cannot even see). And the hint is
+  a claim about the LIVE text, not the cell's value: it survives a click into an empty field, vanishes the moment the
+  editor has a character, and comes back when the editor is emptied. **THE PROBE ALSO FOUND A MEASUREMENT GAP**: an
+  empty field measured only its two padding bands — **6.00** points against **21.73** for the same field holding a
+  value — so `-sizeToFit` on the empty field a placeholder implies handed back something with no room in it. A field's
+  height is its font's line whatever it holds, and `NSTextFieldCell -cellSizeForBounds:` now measures the line when the
+  text is empty (the width is left as the base computed it).
 - **The chrome** (`ctest`, offscreen): the title bar's symbols are SHAPES in pixels — ink on both diagonals of
   the X, a thick stroke across the minus, and a pill rounded at both caps — the title is centred and bold, and
   each symbol appears only for the style-mask bit that asks for it.
@@ -212,10 +224,10 @@ the compositor is really gone.
   and the child clip is the child's FRAME region rather than its bounds rect — which was the same value only while the
   origin was zero. MEASURED: a mark at a document's own y 100..120 draws at 110 with the clip view at the top and at
   10 after a scroll of 100, in one run, through `-displayRect:`.
-- **`ctest`: 31 of 31 passed** (the keyboard and the seam, the AppKit and its input path, the controls and their
-  metrics, the field control and its cell and its bezel, what a drag costs, the resize by edge, the tracking engine, the
-  text path, the clip view and the scroller and the scroll view and the drawn offset, the chrome and what its buttons
-  do, the chrome theme, the menus and activation).
+- **`ctest`: 32 of 32 passed** (the keyboard and the seam, the AppKit and its input path, the controls and their
+  metrics, the field control and its cell and its bezel and its placeholder, what a drag costs, the resize by edge, the
+  tracking engine, the text path, the clip view and the scroller and the scroll view and the drawn offset, the chrome
+  and what its buttons do, the chrome theme, the menus and activation).
 - **And the desktop's own text is SUB-PIXEL ANTIALIASED**, which is the AppKit's half of a renderer change in
   CoreGraphics: a window's surface is OPAQUE (`kCGImageAlphaNoneSkipFirst`), and the destination's opacity is
   exactly what decides whether a glyph is rasterised in colour. MEASURED on the live session: the window title's

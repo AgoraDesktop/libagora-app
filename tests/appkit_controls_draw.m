@@ -384,11 +384,11 @@ int main(int argc, char **argv)
 		[plain setDoubleValue:25.0];
 		[plain setTarget:controller];
 		[plain setAction:@selector(sliderMoved:)];
-		/* **THE FIELD SHOWS A WHITE SURFACE BY DEFAULT, WHICH IS THE CELL'S OWN CHOICE RATHER THAN A CALLER'S.** A field
-		 * is a hole in the surface a value is written on, so its face is white where a button's is grey; the class sets
-		 * that up, so this line only gives it the string it opens with. Focusing the field selects the WHOLE line, which
-		 * is Apple's rule for a field that has just been given the keyboard — so the first keystroke replaces the hint. */
-		[field setStringValue:@"Type here — focusing selects the whole line, ready to replace"];
+		/* **THE FIELD SHOWS A WHITE SURFACE BY DEFAULT, WHICH IS THE CELL'S OWN CHOICE RATHER THAN A CALLER'S**, and it
+		 * opens EMPTY with a PLACEHOLDER: a hint drawn in grey where a value would go, which is what a field has to say
+		 * about itself while it holds nothing. `-placeholderString` is the CELL's door in the era — Apple's control-level
+		 * one is a 10.10 addition — so the demonstration reaches through the cell, exactly as a 10.6 caller would. */
+		[(NSTextFieldCell *)[field cell] setPlaceholderString:@"Type here — this is a hint, not a value"];
 		/* **AND IT IS SIZED TO ITS OWN TEXT RATHER THAN TO A NUMBER SOMEBODY WROTE DOWN.** `-sizeToFit`'s height is the
 		 * FONT'S BAND plus this class's own padding — so the frame follows `NS_TEXT_INSET`, which is what the field
 		 * beside it (a combo box) already does, and what a frame of twenty-two written by hand does NOT: MEASURED on

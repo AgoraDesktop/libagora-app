@@ -28,9 +28,9 @@
 /* **THE CELL'S OWN MEASURES, WHICH APPLE DOES NOT PUBLISH AND THIS TIER THEREFORE OWNS.** The three rect doors are
  * "slightly inset" and "a small offset" in Apple's prose and nothing more, so here is the number: a bordered cell
  * insets its drawing rect by `NS_CELL_BORDER_INSET`, and the content inside takes `NS_CELL_CONTENT_PADDING` of air.
- * ONE PLACE, so a subclass that wants different arithmetic OVERRIDES A DOOR rather than chasing a constant. They are
- * at the top because `-cellSizeForBounds:` measures with them and a macro is not visible below its own #define. */
-#define NS_CELL_CONTENT_PADDING 3.0
+ * ONE PLACE, so a subclass that wants different arithmetic OVERRIDES A DOOR rather than chasing a constant. BOTH
+ * numbers are declared in `NSCell.h` now — each moved there when a second class needed it — and the head of the file
+ * is where a macro this door measures with has to be visible. */
 /* AND THE ONE IMPORT THIS FILE'S LAST DOOR NEEDED — `NSCursor`, for the cursor a text cell declares over itself. It
  * stands here rather than beside the door for the reason §A10aw measured: a header that declares its own types would
  * collide with the tree's, and the head of the file is where an import belongs. `NSView.h` only FORWARD-declares

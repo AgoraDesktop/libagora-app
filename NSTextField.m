@@ -290,6 +290,12 @@
 	NSNotification *note = [NSNotification notificationWithName:NSControlTextDidChangeNotification
 							     object:self userInfo:info];
 
+	/* **AND THE CONTROL REDRAWS ITSELF ON EVERY EDIT, WHICH IS THE PLACEHOLDER'S REQUIREMENT RATHER THAN THE TEXT'S.**
+	 * During a session the words are the EDITOR's and the editor redraws itself; what the CELL still draws is the
+	 * PLACEHOLDER, and whether that belongs on screen depends on whether the editor is EMPTY — a fact that changes with
+	 * the first character typed and the last one deleted. Without this line the placeholder would appear and disappear
+	 * only when something else happened to ask the window to repaint. */
+	[self setNeedsDisplay:YES];
 	[[NSNotificationCenter defaultCenter] postNotification:note];
 	if (_delegate != nil && [_delegate respondsToSelector:@selector(controlTextDidChange:)]) {
 		[_delegate controlTextDidChange:note];

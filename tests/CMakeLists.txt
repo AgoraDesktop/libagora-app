@@ -209,6 +209,15 @@ target_link_libraries(text_field_bezel PRIVATE App m)
 add_test(NAME appkit-text-field-bezel COMMAND text_field_bezel)
 set_tests_properties(appkit-text-field-bezel PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
 
+# **AND WHAT AN EMPTY FIELD SAYS IT IS FOR, WHICH IS A CLAIM ABOUT INK AND ABOUT A SESSION.** An empty field with a
+# placeholder draws a hint DIMMER than a value; one without draws nothing; an attributed placeholder is drawn with its
+# own attributes; and the hint survives a click into an empty field and leaves when a character arrives. Offscreen,
+# into a bitmap rep, plus one real session on a real window for the live-text half.
+add_executable(text_field_placeholder text_field_placeholder.m)
+target_link_libraries(text_field_placeholder PRIVATE App m)
+add_test(NAME appkit-text-field-placeholder COMMAND text_field_placeholder)
+set_tests_properties(appkit-text-field-placeholder PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
+
 # **AND THE DISPLAY PATH.** The ink tests are all offscreen; this one puts a menu's window on a headless
 # compositor and reads the COMPOSITOR'S OWN FRAMEBUFFER back, which is the only place the present can be seen.
 # It skips when there is no window server, so a component's tests still do not need a sibling's build.

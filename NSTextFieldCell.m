@@ -44,6 +44,8 @@
 {
 	[_backgroundColor release];
 	[_textColor release];
+	[_placeholderString release];
+	[_placeholderAttributedString release];
 	[super dealloc];
 }
 
@@ -110,6 +112,70 @@
 	NSString *value = [self stringValue];
 
 	return (value != nil) ? value : [super cg_contentText];
+}
+
+/* ---- WHAT AN EMPTY FIELD SAYS IT IS FOR -------------------------------------------------------------- */
+
+- (NSString *)placeholderString
+{
+	return _placeholderString;
+}
+
+/* **A COPY, SO A CALLER CANNOT CHANGE THE FIELD BY KEEPING ITS OWN MUTABLE STRING.** The same rule `NSButtonCell`
+ * records for its attributed strings, and it costs nothing for an immutable one (`-copy` answers self). */
+- (void)setPlaceholderString:(NSString *)string
+{
+	if (string != _placeholderString) {
+		NSString *copy = [string copy];
+
+		[_placeholderString release];
+		_placeholderString = copy;
+	}
+}
+
+- (NSAttributedString *)placeholderAttributedString
+{
+	return _placeholderAttributedString;
+}
+
+- (void)setPlaceholderAttributedString:(NSAttributedString *)string
+{
+	if (string != _placeholderAttributedString) {
+		NSAttributedString *copy = [string copy];
+
+		[_placeholderAttributedString release];
+		_placeholderAttributedString = copy;
+	}
+}
+
+/* **AND THE GREY A PLACEHOLDER IS DRAWN IN, WHICH IS A DOOR BECAUSE A SUBCLASS MAY OWE A DIFFERENT ONE.** See the
+ * header: the era publishes no placeholder colour, so this is the closest era colour rather than an invented value. */
+- (NSColor *)cg_placeholderColor
+{
+	return [NSColor disabledControlTextColor];
+}
+
+/* **AND WHAT IS ACTUALLY DRAWN, WHICH IS THE ATTRIBUTED FORM IF THERE IS ONE AND THE PLAIN FORM BUILT INTO THAT SAME
+ * KIND OF OBJECT OTHERWISE.** Building the plain one into an `NSAttributedString` is what gives the drawing and the
+ * MEASUREMENT one path instead of two that could disagree about where the words sit — and the font is the CELL's own,
+ * because a placeholder is the field's text in a different colour and not a different typeface. */
+- (NSAttributedString *)cg_placeholderText
+{
+	NSFont *font;
+
+	if (_placeholderAttributedString != nil) {
+		return _placeholderAttributedString;
+	}
+	if (_placeholderString == nil || [_placeholderString length] == 0) {
+		return nil;
+	}
+	font = (NSFont *)[self font];
+	if (font == nil) {
+		font = [NSFont systemFontOfSize:[NSFont systemFontSize]];
+	}
+	return [[[NSAttributedString alloc] initWithString:_placeholderString
+		attributes:[NSDictionary dictionaryWithObjectsAndKeys:font, NSFontAttributeName,
+			[self cg_placeholderColor], NSForegroundColorAttributeName, nil]] autorelease];
 }
 
 /* ---- THE FACE ---------------------------------------------------------------------------------------- */
@@ -227,6 +293,30 @@
 	[self drawInteriorWithFrame:cellFrame inView:controlView];
 }
 
+/* **AND THE PLACEHOLDER IS DRAWN THE WAY THE STRING IS, BECAUSE IT IS THE SAME SORT OF THING.** Same text rect, same
+ * left edge, same vertical centring on the field, same clip — so a hint and a value cannot sit at different heights in
+ * the same box, which is the bug a second placement path always grows. What differs is the COLOUR, and that is the
+ * whole point of a placeholder. */
+- (void)cg_drawPlaceholderInFrame:(NSRect)cellFrame
+{
+	NSAttributedString *text = [self cg_placeholderText];
+	NSRect room = [self drawingRectForBounds:cellFrame];
+	NSSize size;
+
+	if (text == nil) {
+		return;
+	}
+	size = [text size];
+	if (size.width <= 0.0 || size.height <= 0.0 || NSWidth(room) <= 0.0) {
+		return;
+	}
+	room = NSMakeRect(NSMinX(room), NSMidY(cellFrame) - size.height / 2.0, NSWidth(room), size.height);
+	[NSGraphicsContext saveGraphicsState];
+	[[NSBezierPath bezierPathWithRect:room] setClip];
+	[text drawInRect:room];
+	[NSGraphicsContext restoreGraphicsState];
+}
+
 /* **AND THE WORDS ARE LEFT-ALIGNED AND CLIPPED TO THE ROOM THE FIELD GIVES THEM.** `NSActionCell` draws nothing, so
  * everything here is this class's: the string is taken at its own height, placed at the text rect's left edge and
  * centred vertically on the field, and the drawing is clipped to the rect — so a string longer than its field stops
@@ -237,14 +327,21 @@
 	 * and drew its label would be a field whose frame and whose words disagreed, which is the shape of every bug this
 	 * door exists to end. */
 	NSString *string = [self cg_contentText];
+	/* **AND WHETHER THIS FIELD IS EMPTY IS A QUESTION ABOUT THE LIVE TEXT, NOT ABOUT THE CELL'S VALUE.** While a
+	 * session runs the words on screen are the EDITOR's, so an empty editor is an empty field even when the cell still
+	 * holds the value the session began with. See the header for why that distinction is the point. */
+	NSString *live = _cg_textEditing ? [(NSText *)_cg_editor string] : string;
 	NSFont *font = (NSFont *)[self font];
 	NSDictionary *attributes;
 	NSRect room = [self drawingRectForBounds:cellFrame];
 	NSSize tsize;
 
 	(void)controlView;
-	if (string == nil || [string length] == 0) {
-		/* NOTHING TO SAY: an empty field is its face and its border, which is a state a field starts in. */
+	if (live == nil || [live length] == 0) {
+		/* **AN EMPTY FIELD SHOWS ITS PLACEHOLDER, WHICH IS THE ONE THING THAT GOES WHERE THE WORDS WOULD.** With no
+		 * placeholder set the door draws NOTHING at all, so an empty field is its face and its border — which is what
+		 * it always was. */
+		[self cg_drawPlaceholderInFrame:cellFrame];
 		return;
 	}
 	/* **AND WHILE AN EDITOR IS UP, THE TEXT IS THE EDITOR'S.** Two objects drawing one string is two strings on
@@ -298,7 +395,33 @@
 	 * and 95.67 bordered, so `NSCell` pays a bordered cell's margin once. This class draws the text INSIDE the field
 	 * at the same margin, so the two agree without a second addition — which is the defect `NSPopUpButtonCell`'s
 	 * version of this door shipped once and records. */
-	(void)aRect;
+	/* **AND AN EMPTY FIELD IS STILL ONE LINE TALL, WHICH IS THE HEIGHT A PLACEHOLDER IS READ IN.** `NSCell` measures the
+	 * cell's TEXT, and an empty string has no LINE in it — MEASURED, an empty field comes back 6.00 points high (the
+	 * two padding bands and nothing else) against 21.73 for the same field holding a value. That is not a fact about a
+	 * field: a field's height is its FONT's line, whether or not it happens to hold anything, and a field sized while
+	 * empty is the NATURAL shape when a placeholder is what it opens with. So the line is measured and the height
+	 * raised to it; the WIDTH is left as the base computed it, because "as wide as nothing" is what sizing to an empty
+	 * string honestly means. */
+	if ([[self cg_contentText] length] == 0) {
+		CGFloat pad = NS_CELL_CONTENT_PADDING + (([self isBordered] || [self isBezeled]) ? NS_CELL_BORDER_INSET : 0.0);
+		NSFont *font = (NSFont *)[self font];
+		CGFloat want;
+		NSSize line;
+
+		if (font == nil) {
+			font = [NSFont systemFontOfSize:[NSFont systemFontSize]];
+		}
+		line = [@" " sizeWithAttributes:[NSDictionary dictionaryWithObject:font forKey:NSFontAttributeName]];
+		want = line.height + 2.0 * pad;
+		/* **AND THE SAME CLAMP THE BASE PUTS ON ITS OWN ANSWER**: a cell measures its CONTENTS and the caller's rectangle
+		 * bounds them, so a line taller than the rect given is the rect. */
+		if (want > aRect.size.height) {
+			want = aRect.size.height;
+		}
+		if (size.height < want) {
+			size.height = want;
+		}
+	}
 	return size;
 }
 
