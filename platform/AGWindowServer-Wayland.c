@@ -207,6 +207,9 @@ static void ag_server_error(AGWindowServer *server, const char *what)
 	snprintf(server->error, sizeof server->error, "%s: %s", what, strerror(errno));
 }
 
+/* Defined below, and used by the commit path above it. */
+static int ag_flush_drain(AGWindowServer *server, int timeout_ms);
+
 static void ag_window_deliver(AGWindow *window, const AGEvent *event)
 {
 	if (window != NULL && window->event_fn != NULL) {
@@ -452,6 +455,10 @@ void AGWindowEndFrame(AGWindow *window)
 	if (window == NULL || !window->begun) {
 		return;
 	}
+	/* **AND THE BUFFER IS DRAINED BEFORE A COMMIT IS QUEUED INTO IT.** This is where a frame becomes three or four
+	 * requests, and the one place a burst can arrive while the buffer is still full — so it is the place that has to
+	 * ask. A drain here is free when there is nothing to send and bounded when there is. */
+	ag_flush_drain(window->server, 50);
 	window->begun = 0;
 	if (window->frame_cb == NULL) {
 		/* REQUESTED BEFORE THE COMMIT IT IS MEANT TO FOLLOW, which is what the protocol requires. */
@@ -472,7 +479,7 @@ void AGWindowEndFrame(AGWindow *window)
 	/* WHEN THE CALLER CAME HERE FROM `AGWindowShow`, THE FLUSH ALREADY HAPPENED — before the frame was asked
 	 * for and therefore before this commit. Flushing here means the frame just handed over does not wait for
 	 * something else to push it out. */
-	wl_display_flush(window->server->display);
+	ag_flush_drain(window->server, 50);
 }
 
 /* ---------------------------------------------------------------------------------------------------
@@ -1201,6 +1208,42 @@ int AGWindowServerDispatchTimeout(AGWindowServer *server, int timeout_ms)
 	return 1;
 }
 
+/* **A FLUSH THAT CANNOT PUSH EVERYTHING WAITS FOR THE SOCKET INSTEAD OF KEEPING THE REMAINDER.** libwayland holds
+ * the unsent bytes in a FIXED 4 KB buffer, and the request that does not fit in what is left CLOSES THE CONNECTION:
+ * "Data too big for buffer (4096 + 20 > 4096), error in client communication", MEASURED — it took a whole session
+ * down when the About window was opened over a menu that was repainting, and the desktop went with it.
+ *
+ * So every flush in this file drains: if `wl_display_flush` answers `EAGAIN` the descriptor is polled for writability
+ * and the flush is tried again, a few times, for a bounded time. The bound is what keeps a compositor that has
+ * stopped reading from becoming a client that hangs — after it, the caller is told the buffer is still full and can
+ * decide, rather than queueing into it and dying.
+ */
+static int ag_flush_drain(AGWindowServer *server, int timeout_ms)
+{
+	int attempt;
+
+	if (server == NULL || server->display == NULL) {
+		return 0;
+	}
+	for (attempt = 0; attempt < 4; attempt++) {
+		struct pollfd pfd;
+
+		if (wl_display_flush(server->display) >= 0) {
+			return 1;	/* everything is out */
+		}
+		if (errno != EAGAIN && errno != EWOULDBLOCK) {
+			return 0;	/* a real failure; the caller's own error path owns it */
+		}
+		pfd.fd = wl_display_get_fd(server->display);
+		pfd.events = POLLOUT;
+		pfd.revents = 0;
+		if (poll(&pfd, 1, timeout_ms) <= 0) {
+			return 0;
+		}
+	}
+	return 0;
+}
+
 int AGWindowServerCanWrite(AGWindowServer *server)
 {
 	/* **A FLUSH THAT COULD NOT PUSH EVERYTHING MEANS THE NEXT REQUEST MIGHT NOT FIT — AND THAT IS FATAL.**
@@ -1209,20 +1252,12 @@ int AGWindowServerCanWrite(AGWindowServer *server)
 	 * which MEASURED took a whole session down: the desktop vanished mid-click. So a caller with an expensive
 	 * frame to hand over asks this first and waits for the output rather than queueing into a full buffer. The
 	 * flush here is the question as well as the answer: it either empties the buffer or tells us it is full. */
-	if (server == NULL || server->display == NULL) {
-		return 0;
-	}
-	if (wl_display_flush(server->display) < 0) {
-		return errno != EAGAIN && errno != EWOULDBLOCK;
-	}
-	return 1;
+	return ag_flush_drain(server, 50);
 }
 
 void AGWindowServerFlush(AGWindowServer *server)
 {
-	if (server != NULL) {
-		wl_display_flush(server->display);
-	}
+	ag_flush_drain(server, 50);
 }
 
 const char *AGWindowServerLastError(AGWindowServer *server)
