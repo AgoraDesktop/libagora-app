@@ -131,7 +131,30 @@ static NSColor *fn_item_ink(BOOL enabled, BOOL highlighted);
 		return nil;
 	}
 	c = [key characterAtIndex:0];
+	/* **THE FUNCTION KEYS ARE DRAWN AS SYMBOLS, NOT AS THEIR CODE POINTS.** A menu writes Command-Up as the single
+	 * code point U+F700 — the UP ARROW FUNCTION KEY — and that code point lives in the PRIVATE USE AREA, so a font
+	 * is not expected to have a glyph for it: drawing it asks the font for something that is not there, MIENTRAS
+	 * macOS draws the arrow itself. This tier now does the same, and the symbols below are ordinary characters
+	 * (`\u2191` and friends) that every face has.
+	 *
+	 * MEASURED, and this is what made the Go menu unusable: drawing U+F700 took **8.2 seconds** per draw and inked
+	 * the wrong glyph, because the fallback walked every installed font looking for a face to cover a code point
+	 * that means nothing outside the font that defines it. `CTFontCreateForString` no longer cascades into the
+	 * Private Use Area (see `libagora-text/CTFont.c`), so the same character would now draw `.notdef` quickly —
+	 * but the RIGHT answer for a menu is the symbol, which is what this table is. */
 	switch (c) {
+	case 0xF700: return @"\u2318\u2191";	/* ⌘↑ the up arrow FUNCTION KEY */
+	case 0xF701: return @"\u2318\u2193";	/* ⌘↓ */
+	case 0xF702: return @"\u2318\u2190";	/* ⌘← */
+	case 0xF703: return @"\u2318\u2192";	/* ⌘→ */
+	case 0xF704: return @"\u2318\u21de";	/* ⌘⇞ page up */
+	case 0xF705: return @"\u2318\u21df";	/* ⌘⇟ page down */
+	case 0xF728: return @"\u2318\u2196";	/* ⌘↖ home */
+	case 0xF729: return @"\u2318\u2198";	/* ⌘↘ end */
+	case 0xF72B: return @"\u2318\u232b";	/* ⌘⌫ forward delete */
+	case 0xF72C: return @"\u2318\u2327";	/* ⌘⌧ clear */
+	case 0xF72D: return @"\u2318\u21a9";	/* ⌘↩ enter */
+	case 0xF72E: return @"\u2318\u238b";	/* ⌘⎋ escape (the function key, not 0x1b) */
 	case '\r':
 		return @"\u21a9";	/* ↩ */
 	case '\t':
