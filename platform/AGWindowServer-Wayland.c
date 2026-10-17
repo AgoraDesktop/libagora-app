@@ -78,6 +78,9 @@ struct AGWindow {
 	int frame_height;
 	int has_frame;
 	int level;
+	/* **WHETHER THIS WINDOW'S PIXELS CARRY ALPHA**, which decides the shm buffer's FORMAT: ARGB8888 when set,
+	 * XRGB8888 when not. The compositor blends a transparent buffer over what is behind it. */
+	int transparent;
 	/* Non-zero when this window is a STATUS ITEM: the width the server places it in, and the reason a later
 	 * `AGWindowSetFrame` is remembered but not allowed to move it. */
 	int status_length;
@@ -354,7 +357,7 @@ static void ag_window_resize(AGWindow *window, int width, int height)
 	}
 	pool = wl_shm_create_pool(window->server->shm, fd, (int32_t)size);
 	window->buffer.buffer = wl_shm_pool_create_buffer(pool, 0, width, height, stride,
-							  WL_SHM_FORMAT_XRGB8888);
+							  window->transparent ? WL_SHM_FORMAT_ARGB8888 : WL_SHM_FORMAT_XRGB8888);
 	wl_shm_pool_destroy(pool);
 	close(fd);
 
@@ -1385,6 +1388,33 @@ void AGWindowSetLevel(AGWindow *window, int level)
 	if (window->agora != NULL) {
 		agora_window_set_level(window->agora, level);
 		wl_display_flush(window->server->display);
+	}
+}
+
+/* **THE FORMAT IS CHOSEN WHEN THE BUFFER IS MADE, SO A BUFFER ALREADY MADE HAS TO GO.** A BUSY one is on screen
+ * and is left alone — a window that flips transparency mid-life keeps its old buffer until the next one is made,
+ * said here rather than assumed — but in practice this is called before the first frame, when there is none. */
+void AGWindowSetTransparent(AGWindow *window, int transparent)
+{
+	int wanted = (transparent != 0);
+
+	if (window == NULL || window->transparent == wanted) {
+		return;
+	}
+	window->transparent = wanted;
+	/* **A BUFFER ALREADY MADE HAS THE OLD FORMAT, so it is let go AND REMADE.** MEASURED: the version that only let
+	 * it go left the window with NO buffer at all, and `AGWindowBeginFrame` then refused to paint it for ever —
+	 * which is what made an icon window show nothing. The remake is the same path a resize takes, so a window whose
+	 * size is not yet known is remade by the frame set that follows. */
+	if (window->buffer.buffer != NULL && !window->buffer.busy) {
+		int width = window->width;
+		int height = window->height;
+
+		ag_buffer_dispose(&window->buffer);
+		memset(&window->buffer, 0, sizeof window->buffer);
+		if (width > 0 && height > 0) {
+			ag_window_resize(window, width, height);
+		}
 	}
 }
 

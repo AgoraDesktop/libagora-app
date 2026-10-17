@@ -101,6 +101,21 @@ are changes to imported behaviour rather than additions.
 - `platform/AGKeyboard.h`, `platform/AGKeyboard.c` — evdev codes to text and modifiers through xkbcommon.
 - `tests/` — the seam's tests, the keymap test, and `appkit_window.m`, which drives a real `NSWindow`.
 
+## 6. Transparent windows
+
+The seam's buffers were `XRGB8888` — no alpha — and `NSWindow` forced its backing store opaque
+(`kCGImageAlphaNoneSkipFirst`) and OR'd `0xFF000000` into every pixel on the way out. That makes every window
+opaque, which the desktop's icon layer cannot be: it must show the WALLPAPER through. So:
+
+- **`AGWindowSetTransparent`** (the seam) chooses `WL_SHM_FORMAT_ARGB8888` — and the compositor ALREADY blends such
+  a buffer source-over (`window-server/src/output.c`), so nothing on the server side changed;
+- **`NSWindow`** picks `kCGImageAlphaPremultipliedFirst` for a non-opaque window, CLEARS its pixels to alpha zero
+  before the tree draws instead of filling them, and copies the alpha byte out instead of setting it.
+
+**MEASURED, and one bug found by the probe:** `AGWindowSetTransparent` first LET the old buffer go without
+remaking it, and `AGWindowBeginFrame` then refused to paint the window for ever — an icon window that showed
+nothing at all. It now remakes the buffer through the same path a resize takes.
+
 ## Keeping in sync
 
 The Fiwix AppKit is the origin and this repository has now diverged from it in the seam. A fix made there

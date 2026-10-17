@@ -1238,6 +1238,10 @@ static void fn_draw_chrome(CGContextRef c, NSWindow *w, NSRect content)
 		return NO;
 	}
 	_agwindow = AGWindowCreate(server, w, h, _title != nil ? [_title UTF8String] : NULL);
+	/* **THE SEAM IS TOLD BEFORE THE FIRST FRAME**, because a transparent window's shm buffer must be ARGB8888 and
+	 * the format is decided when the buffer is made. An opaque window says so too, so the two states are always
+	 * stated rather than defaulted into. */
+	AGWindowSetTransparent(_agwindow, _opaque ? 0 : 1);
 	if (_agwindow == NULL) {
 		fprintf(stderr, "APPKIT-REFUSE: NSWindow could not create a window: %s\n",
 			AGWindowServerLastError(server));
@@ -2693,8 +2697,14 @@ static CGFloat fn_clamp_axis(CGFloat v, CGFloat lo, CGFloat hi)
 		return NO;
 	}
 	cs = CGColorSpaceCreateDeviceRGB();
+	/* **A TRANSPARENT WINDOW'S SURFACE CARRIES ALPHA AND AN OPAQUE ONE'S DOES NOT**, and the two are the same word
+	 * with the fourth byte treated differently. `NoneSkipFirst` is what lets CoreGraphics smooth text — an alpha
+	 * channel switches sub-pixel coverage off — so an opaque window keeps it; `PremultipliedFirst` is what a
+	 * transparent window's pixels must be, because the compositor BLENDS them (source-over) and premultiplied BGRA
+	 * is exactly what ARGB8888 little-endian holds. */
 	_surface = CGBitmapContextCreate(_pixels, (size_t)w, (size_t)h, 8, (size_t)w * 4u, cs,
-					 (uint32_t)(kCGImageAlphaNoneSkipFirst | kCGBitmapByteOrder32Little));
+					 _opaque ? (uint32_t)(kCGImageAlphaNoneSkipFirst | kCGBitmapByteOrder32Little)
+						 : (uint32_t)(kCGImageAlphaPremultipliedFirst | kCGBitmapByteOrder32Little));
 	CGColorSpaceRelease(cs);
 	if (_surface == NULL) {
 		free(_pixels);
@@ -2936,8 +2946,14 @@ static CGFloat fn_clamp_axis(CGFloat v, CGFloat lo, CGFloat hi)
 	 * `content.size.height` rows, where the view tree draws at the origin it has always drawn at, and the CHROME is
 	 * the strip above them — which this method paints because nothing else will (appkit-plan §6 D6). There are no
 	 * rows without an author, which is what the white stripe this file once carried was. */
-	CGContextSetFillColorWithColor(c, [[self backgroundColor] CGColor]);
-	CGContextFillRect(c, CGRectMake(0.0, 0.0, content.size.width, content.size.height));
+	if (_opaque) {
+		CGContextSetFillColorWithColor(c, [[self backgroundColor] CGColor]);
+		CGContextFillRect(c, CGRectMake(0.0, 0.0, content.size.width, content.size.height));
+	} else {
+		/* **A TRANSPARENT WINDOW'S PIXELS START AT ALPHA ZERO.** Filling them with the background colour would paint
+		 * OVER what is behind the window, which is the one thing a transparent window must not do. */
+		memset(_pixels, 0, (size_t)_surfaceWidth * (size_t)_surfaceHeight * 4u);
+	}
 	if (_contentView != nil) {
 		g = [NSGraphicsContext graphicsContextWithCGContext:_surface flipped:NO];
 		prev = [[NSGraphicsContext currentContext] retain];
@@ -2965,8 +2981,15 @@ static CGFloat fn_clamp_axis(CGFloat v, CGFloat lo, CGFloat hi)
 		 * PROMISE IS NOT A PROMISE. A window is opaque, and this is where its pixels are handed over, so this is
 		 * where that is said: the copy is a copy with the alpha set, and it costs a word-at-a-time loop where it
 		 * used to be a `memcpy` — the same pass over the same bytes, with the top byte decided instead of copied. */
-		for (x = 0; x < _surfaceWidth; x++) {
-			row[x] = source[x] | 0xFF000000u;
+		if (_opaque) {
+			for (x = 0; x < _surfaceWidth; x++) {
+				row[x] = source[x] | 0xFF000000u;
+			}
+		} else {
+			/* **A TRANSPARENT WINDOW'S COPY IS A COPY.** Premultiplied BGRA is exactly what ARGB8888 little-endian
+			 * holds, so the alpha byte is the pixel's own and setting it would make the window opaque — that byte is
+			 * the window's transparency, and the compositor blends on it. */
+			memcpy(row, source, (size_t)_surfaceWidth * 4u);
 		}
 	}
 	AGWindowEndFrame(_agwindow);
@@ -4029,7 +4052,21 @@ static NSUInteger fn_edge_index(NSRectEdge edge)
 
 - (void)setOpaque:(BOOL)opaque
 {
+	if (_opaque == opaque) {
+		return;
+	}
 	_opaque = opaque;
+	/* THE SEAM IS TOLD: an ARGB buffer for a transparent window, an XRGB one for an opaque. */
+	AGWindowSetTransparent(_agwindow, _opaque ? 0 : 1);
+	/* AND THE BACKING STORE'S FORMAT FOLLOWS OPACITY, so a live surface of the other kind is dropped and the next
+	 * draw remakes it — the same path a resize takes. */
+	if (_surface != NULL) {
+		CGContextRelease(_surface);
+		_surface = NULL;
+		free(_pixels);
+		_pixels = NULL;
+	}
+	[self setNeedsDisplay:YES];
 }
 
 - (BOOL)isOpaque

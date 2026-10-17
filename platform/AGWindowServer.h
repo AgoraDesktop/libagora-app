@@ -31,8 +31,9 @@
  * and `AGWindowSetFrameHandler` says when the next frame may begin — which is what makes an animation
  * loop rather than a single paint.
  *
- * COLOUR. Pixels are 0x00RRGGBB. The alpha byte is ignored by the format this first implementation uses,
- * which is what AppKit's own drawing hands over (`libagora-drawing` produces an opaque 32-bit buffer).
+ * COLOUR. Pixels are 0x00RRGGBB for an OPAQUE window and 0xAARRGGBB (PREMULTIPLIED) for a TRANSPARENT one — see
+ * `AGWindowSetTransparent`. An opaque window's alpha byte is ignored; a transparent window's IS the window's
+ * transparency, and the compositor blends on it.
  *
  * EVENTS. Nothing here is an `NSEvent`. This layer reports what the compositor said — an evdev key code, a
  * pointer position, a UTF-8 string already translated through the compositor's own keymap — and NSEvent
@@ -204,6 +205,12 @@ void AGWindowSetFrame(AGWindow *window, int x, int y, int width, int height);
  * that a menu window and a status item and the Dock can be ordered against each other without this layer having
  * anticipated any of them. */
 void AGWindowSetLevel(AGWindow *window, int level);
+
+/* **WHETHER THIS WINDOW'S PIXELS CARRY ALPHA.** A transparent window's shm buffer is ARGB8888 and the compositor
+ * blends it over what is behind (source-over, in `window-server/src/output.c`); an opaque window's is XRGB8888 and
+ * is copied. Set it BEFORE the first frame, because the buffer's FORMAT is decided when the buffer is made; a
+ * window that changes afterwards keeps its old buffer until the next one is made. */
+void AGWindowSetTransparent(AGWindow *window, int transparent);
 
 /* **TAKE THE POINTER WHEN IT IS OVER NO SURFACE AT ALL.** A Wayland compositor sends pointer events to the surface
  * under the pointer and to nobody when the pointer is over the desktop, so a popup could not hear the click that
