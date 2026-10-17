@@ -132,6 +132,32 @@ one, which is how the bug was found: an application with a main menu, a running 
 loop passes through — `-run`'s, the modal loop's and any application's own. It is a one-off: the guard is
 `_mainMenu != nil && _menuBarWindow == nil`, so once the window exists it costs a nil test per event.
 
+## 8. A release no longer ends a menu bar's session
+
+**MEASURED BUG, found by putting a real menu bar in front of this tier's own diagnostic (`APPKIT_MENU_DIAG=1`) and
+clicking the application menu once.** `NSMenuView -mouseDown:` begins a session and drives it, and it ended that
+session on EVERY release after the opening one — so the menu was up for a frame and then gone. The trace, from one
+click:
+
+```
+DIAG bar: type 1 win 2 at (44,12) -> item 0, current 0    the press that opened it
+DIAG bar: type 6 ...            -> item 0, current 0    its drag
+DIAG bar: type 2 ...            -> item 0, current 0    its release (consumed)
+DIAG bar: type 5 ...            -> item 0, current 0    a move
+DIAG bar: type 1 ...            -> item 0, current 0    a second press
+DIAG bar: type 2 ...            -> item 0, current 0    ENDING the session here
+```
+
+The rule — "a release with no menu under it ends the session" — was written for a menu that OWNS its tracking loop,
+where the next thing the loop sees after the press is that press's release. A BAR's loop does not own the events: it
+drains every window's queue, so it sees the DOWN, the DRAG and the UP of the opening gesture and then whatever the
+compositor sends next. On the Mac a RELEASE is inert; what dismisses a bar's menu is a PRESS somewhere else, and
+what moves it to another title is a MOVE.
+
+**FIX:** a release is skipped; a move, a drag, or a press over another title moves the session; a press that hits no
+title ends it. The `APPKIT_MENU_DIAG` line also prints the point and the item it hit now, because "the session
+ended" says nothing about why — that line is what made this findable.
+
 ## Keeping in sync
 
 The Fiwix AppKit is the origin and this repository has now diverged from it in the seam. A fix made there

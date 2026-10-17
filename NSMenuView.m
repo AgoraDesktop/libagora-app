@@ -295,7 +295,6 @@ static void apk_fill_vertical_gradient(NSRect rect, CGFloat radius,
 			 * menu of its own. */
 			{
 				NSApplication *app = [NSApplication sharedApplication];
-				BOOL consume_release = YES;	/* the release of the press that opened this menu */
 				BOOL ended = NO;
 
 				while (!ended) {
@@ -345,20 +344,29 @@ static void apk_fill_vertical_gradient(NSRect rect, CGFloat radius,
 							NSPoint at = [self convertPoint:[next locationInWindow] fromView:nil];
 							NSInteger hit = [self cg_indexOfItemAtPoint:at];
 
+						/* **WHICH EVENT, WHERE, AND WHAT IT HIT** — added because "the session ended on a move" says
+						 * nothing about WHY, and the two numbers that decide it are the point in this view's space and
+						 * the item it landed on. */
+						if (getenv("APPKIT_MENU_DIAG") != NULL) {
+							fprintf(stderr, "  DIAG bar: type %lu win %ld at (%.0f,%.0f) -> item %ld, current %ld\n",
+								(unsigned long)type, (long)[next windowNumber], (double)at.x,
+								(double)at.y, (long)hit, (long)current);
+						}
+
+							/* **A RELEASE NEVER ENDS A MENU BAR'S SESSION, AND THAT IS THE FIX.** The rule that every release
+							 * after the opening one dismissed the menu was written for a menu that owns its own tracking loop,
+							 * where the next thing the loop sees after the press IS its release. A BAR does not own one: the
+							 * loop here drains EVERY window's queue, so it sees the DOWN, the DRAG and the UP of the opening
+							 * gesture, and then whatever the compositor sends next — and MEASURED, with the AppKit's own
+							 * `APPKIT_MENU_DIAG` on and one click on the application menu: the session ended on a `type 2`
+							 * three times running, so the menu was up for a frame and gone. On the Mac a release is inert —
+							 * what dismisses a menu bar's menu is a PRESS somewhere else, which is the next branch down, and
+							 * what moves it to another title is a MOVE. */
 							if (type == NSLeftMouseUp) {
-								if (consume_release) {
-									consume_release = NO;	/* the press that opened it, coming up */
-									continue;
-								}
-								if (getenv("APPKIT_MENU_DIAG") != NULL) {
-									fprintf(stderr, "  DIAG bar: ENDING the session here (event type %ld)\n",
-										(long)type);
-								}
-								[open cancelTracking];
-								ended = YES;
 								continue;
 							}
-							if (hit >= 0 && hit != current) {
+							if ((type == NSMouseMoved || type == NSLeftMouseDragged || type == NSLeftMouseDown) &&
+							    hit >= 0 && hit != current) {
 								/* **THE POINTER MOVED TO ANOTHER TITLE AND THE SESSION FOLLOWS IT** — the
 								 * gesture that could not work while the menu owned its own loop. */
 								if (getenv("APPKIT_MENU_DIAG") != NULL) {
