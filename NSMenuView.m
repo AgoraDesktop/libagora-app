@@ -252,6 +252,14 @@ static void apk_fill_vertical_gradient(NSRect rect, CGFloat radius,
 	NSInteger i, count;
 	NSInteger current;
 
+	/* **WHETHER THE CLICK REACHED THIS VIEW AT ALL**, printed BEFORE the guards below so that a bar that
+	 * declines the press and a bar that never heard of it read differently in the log. */
+	if (getenv("APPKIT_MENU_DIAG") != NULL) {
+		fprintf(stderr, "  DIAG bar: mouseDown in the view at (%.0f,%.0f), horizontal %d, menu %s\n",
+			(double)[event locationInWindow].x, (double)[event locationInWindow].y, (int)_horizontal,
+			(_shownMenu != nil) ? "set" : "nil");
+	}
+
 	if (!_horizontal || _shownMenu == nil) {
 		[super mouseDown:event];	/* a dropdown is tracked by NSMenu, not by clicking its rows */
 		return;
