@@ -311,6 +311,67 @@ int main(void)
 		[manager release];
 	}
 
+	/* 4. **AND THE FACTOR IS A PARAGRAPH'S, WHICH IS WHY THE LAYOUT MANAGER HYPHENATES ITSELF.** The engine can
+	 * hyphenate now (`kCTTypesetterOptionHyphenationFactor`), and the obvious-looking tidy-up — pass the factor to the
+	 * typesetter instead of testing it here — is WRONG, for a reason this case measures: **THE MANAGER MAKES ONE
+	 * TYPESETTER FOR THE WHOLE STORE AND READS THE FACTOR FROM EACH PARAGRAPH'S OWN STYLE.** An option is fixed when
+	 * the typesetter is made, so one typesetter cannot carry two paragraphs' factors, and making one per paragraph
+	 * would re-typeset the whole string per paragraph — the typesetter's own contract is that "the whole string is
+	 * typeset once", which is what makes its doors cheap.
+	 *
+	 * SO THE MEASUREMENT IS TWO PARAGRAPHS WITH DIFFERENT FACTORS, and the claim is that each is laid out by ITS OWN:
+	 * the first is not hyphenated and breaks at the space, the second is and reaches into the word. A single factor
+	 * applied to the typesetter could only get one of them right. */
+	{
+		NSTextStorage *store = [[NSTextStorage alloc] init];
+		NSLayoutManager *manager = [[NSLayoutManager alloc] init];
+		NSTextContainer *container = [[NSTextContainer alloc] initWithContainerSize:NSMakeSize(width, 400.0)];
+		NSMutableParagraphStyle *plain = [[NSParagraphStyle defaultParagraphStyle] mutableCopy];
+		NSMutableParagraphStyle *hyphenating = [[NSParagraphStyle defaultParagraphStyle] mutableCopy];
+		NSFont *font = [NSFont systemFontOfSize:[NSFont systemFontSize]];
+		NSString *two = @"go internationalization\ngo internationalization";
+		NSRange frags[16];
+		NSUInteger count = 0, i, secondStart = 23 + 1;
+
+		[plain setHyphenationFactor:0.0f];
+		[hyphenating setHyphenationFactor:1.0f];
+		[store replaceCharactersInRange:NSMakeRange(0, [store length]) withString:two];
+		[store addAttribute:NSFontAttributeName value:font range:NSMakeRange(0, [store length])];
+		[store addAttribute:NSParagraphStyleAttributeName value:plain range:NSMakeRange(0, 23)];
+		[store addAttribute:NSParagraphStyleAttributeName value:hyphenating
+			     range:NSMakeRange(24, [[store string] length] - 24)];
+		[store addLayoutManager:manager];
+		[manager addTextContainer:container];
+		ranges(manager, container, frags, &count, 16);
+		printf("  (note: two paragraphs, factors 0.0 and 1.0, gave %lu fragment(s):", (unsigned long)count);
+		for (i = 0; i < count && i < 8; i++) {
+			printf(" (%lu,%lu)", (unsigned long)frags[i].location, (unsigned long)frags[i].length);
+		}
+		printf(")\n");
+		check(count >= 2, "the two-paragraph store laid out");
+		check(frags[0].location == 0 && frags[0].length == 3,
+		      "the paragraph with factor 0.0 stops at the space, as it did before hyphenation existed");
+		{
+			NSUInteger b = 0;
+
+			for (i = 0; i < count; i++) {
+				if (frags[i].location == secondStart) {
+					b = i;
+				}
+			}
+			check(b > 0 && frags[b].length > 3,
+			      "and the paragraph with factor 1.0 reaches INTO the word — its first fragment is %lu "
+			      "characters, so one store's two paragraphs were laid out by two different factors",
+			      (unsigned long)((b > 0) ? frags[b].length : 0));
+			if (b > 0) {
+				printf("  (note: the second paragraph's first fragment is (%lu,%lu))\n",
+				       (unsigned long)frags[b].location, (unsigned long)frags[b].length);
+			}
+		}
+		[store release];
+		[manager release];
+	}
+
 	printf("\ntext_hyphenation: %d failure(s)\n", failures);
 	[pool release];
 	return failures == 0 ? 0 : 1;

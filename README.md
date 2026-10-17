@@ -760,3 +760,19 @@ imported and then changed — the changes are recorded in [`PROVENANCE.md`](PROV
   the INSTALLED library and a `cmake --build` alone leaves it testing the previous one. **`cmake --install build`
   BEFORE `ctest`**, or the numbers are the numbers of the commit before. It is the same arrangement `libagora-text`'s
   suite has, and it presents as a plausible wrong measurement rather than as an error.
+- **AND THE FACTOR IS A PARAGRAPH'S, WHICH IS WHY THIS LAYOUT MANAGER HYPHENATES ITSELF.** The engine learned to
+  hyphenate in the previous slice (`kCTTypesetterOptionHyphenationFactor`), and the obvious tidy-up — pass the factor
+  to the typesetter and delete `cg_hyphenatedLineForRange:` — is WRONG: **THIS CLASS MAKES ONE TYPESETTER FOR THE
+  WHOLE STORE AND READS `hyphenationFactor` FROM EACH PARAGRAPH'S OWN STYLE.** An option is fixed when the typesetter
+  is made, so one typesetter cannot carry two paragraphs' factors, and one per paragraph would re-typeset the whole
+  string per paragraph. MEASURED, in `tests/text_hyphenation.m`: one store, two paragraphs, factors **0.0** and
+  **1.0** — the first breaks at its space and the second reaches into its word, so one factor could only have got one
+  of them right.
+- **AND THAT CASE FOUND A BUG IN THE ENGINE'S TYPESETTER THAT NOTHING ELSE HAD SEEN.** Its first paragraph is
+  `go internationalization\n` in a 74.7-point container, and it came back as **ONE 24-character fragment**: the
+  typesetter returned the distance to the first newline WHATEVER the width was, so a paragraph longer than its
+  container that ends in a newline was laid out as a single overflowing line. Apple's own sentence lists two triggers
+  — "either by a hard break character in the stream or by FILLING THE SPECIFIED WIDTH" — and the fix compares them
+  rather than ordering them. MEASURED after it: **8 fragments where there had been 1**, the first four
+  `(0,3) (3,9) (12,9) (21,3)`. Every case in the engine's suite that involved a newline used a line short enough to
+  fit, which is why it survived; the engine's suite now holds both sides of the rule.
