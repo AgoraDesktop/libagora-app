@@ -116,6 +116,22 @@ opaque, which the desktop's icon layer cannot be: it must show the WALLPAPER thr
 remaking it, and `AGWindowBeginFrame` then refused to paint the window for ever — an icon window that showed
 nothing at all. It now remakes the buffer through the same path a resize takes.
 
+## 7. The menu bar's window needs a second chance at a door every loop passes
+
+**MEASURED BUG, and it was a RACE.** `-[NSApplication setMainMenu:]` measures the bar's window from the MENU-BAR
+REGION the compositor sends (`AGWindowServerMenuBarArea`), and a region that has not arrived yet is a region of no
+width — so it returned early and **created no window at all**. The region arrives asynchronously with the rest of
+the connection's first events, so whether it was known at `-setMainMenu:` time came down to timing: *the same
+program against the same compositor produced a menu bar in one run and not in the next*.
+
+`-run` already re-measures once for exactly this reason — its own comment says "a main menu set before the
+connection existed has nowhere to go" — but a loop of its own never goes through `-run`. Workspace's W0 loop is
+one, which is how the bug was found: an application with a main menu, a running loop, and no bar.
+
+**FIX:** the re-measure now also happens at the top of `-nextEventMatchingMask:…`, which is the ONE door every
+loop passes through — `-run`'s, the modal loop's and any application's own. It is a one-off: the guard is
+`_mainMenu != nil && _menuBarWindow == nil`, so once the window exists it costs a nil test per event.
+
 ## Keeping in sync
 
 The Fiwix AppKit is the origin and this repository has now diverged from it in the seam. A fix made there

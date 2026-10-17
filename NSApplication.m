@@ -612,6 +612,18 @@ static double s_last_report;
 			   dequeue:(BOOL)deqFlag
 {
 	(void)mode;
+	/* **THE MENU BAR'S SECOND CHANCE, AT THE DOOR EVERY LOOP PASSES THROUGH.** `-setMainMenu:` measures its window
+	 * from the MENU-BAR REGION the compositor sends, and an application that set its main menu BEFORE that region
+	 * was read has a menu and no window to put it in. MEASURED: the region arrives asynchronously, so whether it is
+	 * known at `-setMainMenu:` time is a RACE — the same program against the same compositor produced a bar window
+	 * in one run and not in the next, which is exactly the shape of bug a `-run`-only fix cannot catch.
+	 *
+	 * `-run` re-measures once for the stated reason, but a loop of its own never goes through `-run` — W0's
+	 * `-runForSeconds:` is one — so the re-measure belongs where EVERY loop passes: the first event read. The guard
+	 * makes it a one-off: once the window exists this is a nil test per event. */
+	if (_mainMenu != nil && _menuBarWindow == nil) {
+		[self cg_updateMenuBarWindow];
+	}
 	for (;;) {
 		NSUInteger i;
 
