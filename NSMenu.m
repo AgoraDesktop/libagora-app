@@ -1010,6 +1010,11 @@ static const CGFloat NSMenuStateColumnWidth = 20.0;
 	}
 	DIAG("  DIAG open: the tracking WINDOW (with its socket and buffer) took %.1f ms\n",
 	     ([NSDate timeIntervalSinceReferenceDate] - t0) * 1000.0);
+	/* **A MENU PANEL IS AT THE POP-UP MENU LEVEL, ABOVE THE MENU BAR.** It opens at the bar's bottom edge, and the
+	 * bar is composited at its own level now (`AWS_MENU_BAR_LEVEL`) — at the DEFAULT level a menu would be drawn
+	 * BEFORE the bar, and the bar's SHADOW would fall across the menu's top rows. MEASURED: the panel came out one
+	 * row tall, which is how a menu test found it. */
+	[_trackingWindow setLevel:NSPopUpMenuWindowLevel];
 	[_trackingWindow setContentView:_menuView];
 	[_trackingWindow orderFrontRegardless];
 	/* **AND IT TAKES THE POINTER'S FALLBACK, so a click outside it — on the desktop, which has no surface — still
