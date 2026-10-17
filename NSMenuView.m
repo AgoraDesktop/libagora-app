@@ -373,8 +373,19 @@ static void apk_fill_vertical_gradient(NSRect rect, CGFloat radius,
 							if (type == NSLeftMouseUp) {
 								continue;
 							}
-							if ((type == NSMouseMoved || type == NSLeftMouseDragged || type == NSLeftMouseDown) &&
-							    hit >= 0 && hit != current) {
+							/* **ONLY A DELIBERATE GESTURE MOVES THE SESSION: A DRAG, OR A PRESS ON ANOTHER TITLE.** It used to
+							 * move on a bare MOVE as well, and MEASURED, with the AppKit's own diagnostic on and a person
+							 * clicking the application menu: the hand drifting from (63,18) to (101,6) crossed a title
+							 * boundary and the session was CANCELLED AND REBUILT — a new tracking window, whose own cost was
+							 * measured at 3 ms once and at 8052 ms another time — and then the next jitter did it again. The
+							 * menu never appeared; "I click File and nothing happens" is what that looks like from outside.
+							 *
+							 * The Mac does follow a hover across the bar, but it moves ONE session; this tier rebuilds one, so
+							 * a hover that costs a window per boundary is a menu that cannot be used. Correctness first: a
+							 * press on another title still moves (and a drag still moves), which is the deliberate version of
+							 * the same gesture. */
+							if ((type == NSLeftMouseDragged || type == NSLeftMouseDown) && hit >= 0 &&
+							    hit != current) {
 								/* **THE POINTER MOVED TO ANOTHER TITLE AND THE SESSION FOLLOWS IT** — the
 								 * gesture that could not work while the menu owned its own loop. */
 								if (getenv("APPKIT_MENU_DIAG") != NULL) {
