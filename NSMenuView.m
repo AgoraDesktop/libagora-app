@@ -5,6 +5,7 @@
  */
 
 #include <stdlib.h>
+#include <time.h>
 #import "NSMenuView.h"
 #import "NSWindow.h"
 #import "NSMenu.h"
@@ -24,6 +25,18 @@ const CGFloat NSMenuRowHeight = 22.0;
  * on the panel's behalf — and it is a SHARED number (`NSMenuView.h`) because `NSMenu` sizes the window with it and
  * this view insets the rows by it. */
 const CGFloat NSMenuPanelPadding = 2.0;
+
+/* **A WALL-CLOCK MILLISECOND, SO THIS LOG CAN BE LINED UP WITH THE COMPOSITOR'S.** Two logs that each say a click
+ * happened cannot be compared without a clock in both, and the question — how long did the press wait before this
+ * view saw it — is exactly the difference between the two. MEASURED because a person reported the menu taking five
+ * seconds while this file's own timings said 3 ms + 63 ms: something between the two is where that time goes. */
+static long long ag_menu_diag_ms(void)
+{
+	struct timespec ts;
+
+	clock_gettime(CLOCK_REALTIME, &ts);
+	return (long long)ts.tv_sec * 1000LL + (long long)(ts.tv_nsec / 1000000L);
+}
 
 /* A BAR'S ITEM IS ITS TITLE PLUS THE AIR EITHER SIDE OF IT, and a floor so that a one-letter title is still a
  * target a person can hit. Both are the bar's own measures, so they live beside the bar's drawing. */
@@ -255,9 +268,9 @@ static void apk_fill_vertical_gradient(NSRect rect, CGFloat radius,
 	/* **WHETHER THE CLICK REACHED THIS VIEW AT ALL**, printed BEFORE the guards below so that a bar that
 	 * declines the press and a bar that never heard of it read differently in the log. */
 	if (getenv("APPKIT_MENU_DIAG") != NULL) {
-		fprintf(stderr, "  DIAG bar: mouseDown in the view at (%.0f,%.0f), horizontal %d, menu %s\n",
-			(double)[event locationInWindow].x, (double)[event locationInWindow].y, (int)_horizontal,
-			(_shownMenu != nil) ? "set" : "nil");
+		fprintf(stderr, "  DIAG bar %lld: mouseDown in the view at (%.0f,%.0f), horizontal %d, menu %s\n",
+			ag_menu_diag_ms(), (double)[event locationInWindow].x, (double)[event locationInWindow].y,
+			(int)_horizontal, (_shownMenu != nil) ? "set" : "nil");
 	}
 
 	if (!_horizontal || _shownMenu == nil) {

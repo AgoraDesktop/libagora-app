@@ -750,6 +750,20 @@ static void pointer_button(void *data, struct wl_pointer *pointer, uint32_t seri
 		event.has_global = 1;
 	}
 	ag_window_deliver(server->pointer_focus, &event);
+
+	/* **WHEN THE CLIENT ACTUALLY READ THE BUTTON.** The compositor stamps a press when it FORWARDS one; this
+	 * stamps it when this client's socket delivered it, so the gap between the two is the transport and the gap
+	 * between THIS and the view's `-mouseDown:` is the client's own queue. MEASURED once: 3302 ms from the
+	 * compositor to the view with the run loop turning at 58 passes a second — a delay that has to live in one of
+	 * those two halves, and this line is what tells them apart. */
+	if (getenv("APPKIT_MENU_DIAG") != NULL) {
+		struct timespec ts;
+
+		clock_gettime(CLOCK_REALTIME, &ts);
+		fprintf(stderr, "  DIAG platform %lld: button %u %s at (%d,%d)\n",
+			(long long)ts.tv_sec * 1000LL + (long long)(ts.tv_nsec / 1000000L),
+			(unsigned)button, event.pressed ? "pressed" : "released", event.x, event.y);
+	}
 }
 
 static void pointer_axis(void *data, struct wl_pointer *pointer, uint32_t time, uint32_t axis, wl_fixed_t value)
@@ -1183,6 +1197,23 @@ int AGWindowServerDispatchTimeout(AGWindowServer *server, int timeout_ms)
 	if (wl_display_dispatch_pending(server->display) < 0) {
 		ag_server_error(server, "wl_display_dispatch_pending");
 		return -1;
+	}
+	return 1;
+}
+
+int AGWindowServerCanWrite(AGWindowServer *server)
+{
+	/* **A FLUSH THAT COULD NOT PUSH EVERYTHING MEANS THE NEXT REQUEST MIGHT NOT FIT — AND THAT IS FATAL.**
+	 * libwayland keeps the unsent remainder in a fixed 4 KB buffer and closes the connection when a request does
+	 * not fit in what is left ("Data too big for buffer (4096 + 8 > 4096), error in client communication"),
+	 * which MEASURED took a whole session down: the desktop vanished mid-click. So a caller with an expensive
+	 * frame to hand over asks this first and waits for the output rather than queueing into a full buffer. The
+	 * flush here is the question as well as the answer: it either empties the buffer or tells us it is full. */
+	if (server == NULL || server->display == NULL) {
+		return 0;
+	}
+	if (wl_display_flush(server->display) < 0) {
+		return errno != EAGAIN && errno != EWOULDBLOCK;
 	}
 	return 1;
 }

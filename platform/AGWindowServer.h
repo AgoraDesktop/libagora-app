@@ -138,6 +138,13 @@ int AGWindowServerDispatchTimeout(AGWindowServer *server, int timeout_ms);
 /* Send anything buffered. */
 void AGWindowServerFlush(AGWindowServer *server);
 
+/* **WHETHER ANOTHER REQUEST WOULD FIT, WHICH IS HOW A CLIENT AVOIDS KILLING ITSELF.** A `wl_display_flush` that
+ * cannot push everything answers `EAGAIN` and KEEPS the remainder in a fixed 4 KB buffer; a client that goes on
+ * making requests then overflows it and libwayland closes the connection — "Data too big for buffer (4096 + 8 >
+ * 4096), error in client communication", MEASURED, and it took a whole session down with it. 1 when there is
+ * room, so a caller that has something expensive to say can wait for the output instead of dying. */
+int AGWindowServerCanWrite(AGWindowServer *server);
+
 /* A human-readable description of why the connection failed, for the caller's log. */
 const char *AGWindowServerLastError(AGWindowServer *server);
 

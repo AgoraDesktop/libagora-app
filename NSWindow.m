@@ -2917,6 +2917,14 @@ static CGFloat fn_clamp_axis(CGFloat v, CGFloat lo, CGFloat hi)
 	if (_agwindow == NULL || ![self cg_ensureSurface]) {
 		return;
 	}
+	/* **AND NOBODY DRAWS INTO A CONNECTION THAT CANNOT TAKE IT.** A window drawn faster than the output can absorb
+	 * fills libwayland's fixed 4 KB request buffer, and the request after that CLOSES THE CONNECTION — MEASURED:
+	 * "Data too big for buffer (4096 + 8 > 4096), error in client communication", in the middle of a menu, after
+	 * which the whole desktop was gone. A frame is expensive to make, so the question is asked BEFORE it is
+	 * begun; refusing here leaves `_viewsNeedDisplay` set, and the next pass that CAN write draws it. */
+	if (!AGWindowServerCanWrite(fn_server())) {
+		return;
+	}
 	/* **AND THE COMPOSITOR IS ASKED FOR THE FRAME BEFORE A SINGLE PIXEL IS DRAWN.** `AGWindowBeginFrame` answers
 	 * NULL while the compositor still owns the previous frame — THE ORDINARY CASE FOR A WINDOW BEING DRAWN FASTER
 	 * THAN THE OUTPUT CAN TAKE IT, which is exactly when a frame is most expensive to waste. Asking AFTER the drawing
