@@ -61,6 +61,52 @@ static NSBitmapImageRep *draw(NSLayoutManager *manager, NSUInteger length)
 	return rep;
 }
 
+/* **AND A TABLE THAT MOVES ITS CELLS**, the third delegation door. */
+@interface FNShiftingTable : NSTextTable
+@end
+
+@implementation FNShiftingTable
+- (NSRect)rectForBlock:(NSTextTableBlock *)block layoutAtPoint:(NSPoint)startingPoint inRect:(NSRect)rect
+	 textContainer:(NSTextContainer *)textContainer characterRange:(NSRange)charRange
+{
+	NSRect content = [super rectForBlock:block layoutAtPoint:startingPoint inRect:rect
+			      textContainer:textContainer characterRange:charRange];
+
+	return NSMakeRect(content.origin.x + 12.0, content.origin.y, content.size.width, content.size.height);
+}
+@end
+
+/* WHERE THE CELL'S TEXT LANDS, read from the manager's fragment — the placing pass is what this door governs, so the
+ * fragment's x IS the door's answer. */
+static CGFloat cell_text_x(NSTextTable *table)
+{
+	NSTextTableBlock *only = [[[NSTextTableBlock alloc] initWithTable:table startingRow:0 rowSpan:1
+							    startingColumn:0 columnSpan:1] autorelease];
+	NSMutableParagraphStyle *style = [[NSParagraphStyle defaultParagraphStyle] mutableCopy];
+	NSTextStorage *store;
+	NSTextContainer *container;
+	NSLayoutManager *manager;
+	CGFloat x;
+
+	[table setNumberOfColumns:1];
+	[style addTextBlock:only];
+	[style setMinimumLineHeight:20.0];
+	[style setMaximumLineHeight:20.0];
+	store = [[NSTextStorage alloc] initWithString:@"ab"];
+	[store addAttribute:NSParagraphStyleAttributeName value:style range:NSMakeRange(0, 2)];
+	container = [[NSTextContainer alloc] initWithContainerSize:NSMakeSize((CGFloat)W, (CGFloat)H)];
+	manager = [[NSLayoutManager alloc] init];
+	[manager addTextContainer:container];
+	[store addLayoutManager:manager];
+	[manager ensureLayoutForTextContainer:container];
+	x = [manager lineFragmentRectForGlyphAtIndex:0 effectiveRange:NULL].origin.x;
+	[manager release];
+	[container release];
+	[store release];
+	[style release];
+	return x;
+}
+
 static int count_of(NSBitmapImageRep *rep, CGFloat r, CGFloat g, CGFloat b)
 {
 	int count = 0, x, y;
@@ -170,6 +216,19 @@ int main(void)
 	check(count_of(plainRep, 0.0, 1.0, 0.0) > 0, "the plain table's cell has a ground");
 	check(count_of(growingRep, 0.0, 1.0, 0.0) > count_of(plainRep, 0.0, 1.0, 0.0),
 	      "and the table that GREW its cell's bounds drew a bigger ground");
+
+	/* **AND THE RECT DOOR: the same cell, moved twelve points right by the table.** */
+	{
+		NSTextTable *plainAgain = [[[NSTextTable alloc] init] autorelease];
+		FNShiftingTable *shifting = [[[FNShiftingTable alloc] init] autorelease];
+		CGFloat plainX = cell_text_x(plainAgain);
+		CGFloat shiftedX = cell_text_x(shifting);
+
+		printf("  (the cell's text is laid out at x=%.2f through the plain table and %.2f through the shifting one)\n",
+		       (double)plainX, (double)shiftedX);
+		check(fabs((shiftedX - plainX) - 12.0) < 0.5,
+		      "and the table's RECT override moved its cell the twelve points it asked for");
+	}
 
 	[painted release];
 	[plainRep release];

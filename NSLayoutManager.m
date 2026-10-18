@@ -18,6 +18,7 @@
 #import <AppKit/NSTextTab.h>
 #import <AppKit/NSTextAttachment.h>
 #import <AppKit/NSTextTable.h>
+#import "NSTextTable_internal.h"
 #import <AppKit/NSTextView.h>
 #import <AppKit/NSGraphicsContext.h>
 #import <AppKit/NSAttributedString.h>
@@ -1667,6 +1668,7 @@ static BOOL fn_cell_owns_edge(CGFloat thisWidth, CGFloat otherWidth, BOOL tieGoe
 	CGFloat containerWidth = [container containerSize].width;
 	CGFloat containerHeight = [container containerSize].height;
 	CGFloat available = containerWidth - 2.0 * padding;
+	NSRect containerBounds = NSMakeRect(0.0, 0.0, containerWidth, containerHeight);
 	CGFloat *widths;
 	CGFloat y = *yPtr;
 	BOOL placed = NO;
@@ -1759,6 +1761,10 @@ static BOOL fn_cell_owns_edge(CGFloat thisWidth, CGFloat otherWidth, BOOL tieGoe
 			}
 		}
 	}
+	/* **AND THE GRID IS PUBLISHED TO THE TABLE**, so that a cell's content rect can be ASKED OF IT rather than computed
+	 * here: `-rectForBlock:layoutAtPoint:inRect:textContainer:characterRange:` is Apple's delegation door for exactly this
+	 * arithmetic, and a subclass that overrides it moves its cells. ONE measurement, one place to override. */
+	[table _setColumnWidths:widths count:columns padding:padding];
 
 	for (row = 0; row < rows; row++) {
 		CGFloat rowHeight = 0.0;
@@ -1777,24 +1783,16 @@ static BOOL fn_cell_owns_edge(CGFloat thisWidth, CGFloat otherWidth, BOOL tieGoe
 				continue;
 			}
 			r = [[ranges objectAtIndex:ci] rangeValue];
-			x = padding;
-			width = 0.0;
-			for (column = 0; column < [cell startingColumn] && column < columns; column++) {
-				x += widths[column];
-			}
-			for (column = [cell startingColumn]; column < [cell startingColumn] + [cell columnSpan] && column < columns; column++) {
-				width += widths[column];
-			}
-			/* THE CELL'S LAYERS FRAME ITS CONTENT: the content moves in by the left inset and loses both. */
+			/* **THE CELL'S CONTENT RECT IS THE TABLE'S ANSWER**, through the delegation door the rest of the block's
+			 * geometry already goes through: the default reproduces the arithmetic this loop used to do inline. */
 			{
-				CGFloat left = [self cg_tableCellInset:cell edge:NSTextBlockMinXEdge];
-				CGFloat right = [self cg_tableCellInset:cell edge:NSTextBlockMaxXEdge];
+				/* THE POINT IS THE TABLE'S ORIGIN, not the first column's: `-rectForBlock:layoutAtPoint:...` adds the
+				 * table's own padding, so passing the padding here would count it twice. */
+				NSRect content = [cell rectForLayoutAtPoint:NSMakePoint(0.0, 0.0) inRect:containerBounds
+							     textContainer:container characterRange:r];
 
-				x += left;
-				width -= left + right;
-				if (width < 1.0) {
-					width = 1.0;
-				}
+				x = content.origin.x;
+				width = content.size.width;
 			}
 			height = [self cg_layOutCell:cell range:r typesetter:ts attributedString:rich font:font
 				baseAscent:baseAscent baseLineHeight:baseLineHeight x:x width:width into:nil top:0.0
@@ -1836,23 +1834,18 @@ static BOOL fn_cell_owns_edge(CGFloat thisWidth, CGFloat otherWidth, BOOL tieGoe
 				continue;
 			}
 			r = [[ranges objectAtIndex:ci] rangeValue];
-			x = padding;
-			width = 0.0;
-			for (column = 0; column < [cell startingColumn] && column < columns; column++) {
-				x += widths[column];
-			}
-			for (column = [cell startingColumn]; column < [cell startingColumn] + [cell columnSpan] && column < columns; column++) {
-				width += widths[column];
-			}
+			/* **AND THE PLACING PASS ASKS THE SAME DOOR**, which is what makes an override take effect: the measuring pass
+			 * decides a row's HEIGHT, and this one decides WHERE the cell's text goes. With only the first asking, a
+			 * subclass could change the height a cell reserved and not the place it was drawn — MEASURED, which is why
+			 * this site exists as a second call rather than a shared variable. */
 			{
-				CGFloat left = [self cg_tableCellInset:cell edge:NSTextBlockMinXEdge];
-				CGFloat right = [self cg_tableCellInset:cell edge:NSTextBlockMaxXEdge];
+				/* THE POINT IS THE TABLE'S ORIGIN, not the first column's: `-rectForBlock:layoutAtPoint:...` adds the
+				 * table's own padding, so passing the padding here would count it twice. */
+				NSRect content = [cell rectForLayoutAtPoint:NSMakePoint(0.0, 0.0) inRect:containerBounds
+							     textContainer:container characterRange:r];
 
-				x += left;
-				width -= left + right;
-				if (width < 1.0) {
-					width = 1.0;
-				}
+				x = content.origin.x;
+				width = content.size.width;
 			}
 			[self cg_layOutCell:cell range:r typesetter:ts attributedString:rich font:font
 				baseAscent:baseAscent baseLineHeight:baseLineHeight x:x width:width into:fragments

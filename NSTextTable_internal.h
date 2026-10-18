@@ -19,6 +19,11 @@
 		characterRange:(NSRange)charRange layoutManager:(nullable NSLayoutManager *)layoutManager
 			 edges:(NSTextBlockEdge)edges;
 - (NSTextBlockEdge)_drawingEdges;
+/* **THE GRID THE MANAGER MEASURED**, published so `-rectForBlock:layoutAtPoint:...` can answer: one width per column and
+ * the container's line-fragment padding, which is where column zero begins. The table COPIES the widths, because the
+ * manager's array is freed when its pass ends and a table outlives its layout. */
+- (void)_setColumnWidths:(const CGFloat *)widths count:(NSInteger)count padding:(CGFloat)padding;
+- (BOOL)_hasColumnGeometry;
 @end
 
 #endif /* APPKIT_NSTEXTTABLE_INTERNAL_H */

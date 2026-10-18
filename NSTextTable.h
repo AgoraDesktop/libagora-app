@@ -53,6 +53,13 @@ typedef NSInteger NSTextTableLayoutAlgorithm;
 	 * travels THROUGH `-drawBackgroundForBlock:...` so a subclass overrides one door and still sees what the manager handed
 	 * down. All four edges otherwise. */
 	NSTextBlockEdge _drawingEdges;
+	/* **AND THE COLUMN GEOMETRY THE RECT DOOR NEEDS.** A cell's rect is a function of where its columns begin and how wide
+	 * they are, and that arithmetic is measured across EVERY cell — which is the layout manager's pass, not the table's.
+	 * So the manager PUBLISHES the widths it measured and this door reads them: one measurement, one place to override. A
+	 * column count of 0 means no grid has been published yet. */
+	CGFloat *_columnWidths;	/* malloc'd, _columnCount entries */
+	NSInteger _columnCount;
+	CGFloat _tablePadding;
 }
 
 - (NSUInteger)numberOfColumns;
@@ -74,6 +81,13 @@ typedef NSInteger NSTextTableLayoutAlgorithm;
  * box drawn AND measured, because the manager asks this door for the frame it paints into. */
 - (NSRect)boundsRectForBlock:(NSTextTableBlock *)block contentRect:(NSRect)contentRect inRect:(NSRect)rect
 	       textContainer:(nullable NSTextContainer *)textContainer characterRange:(NSRange)charRange;
+
+/* **AND THE THIRD: WHERE A CELL'S CONTENT GOES**, given the point the table is being laid out at. The default is the
+ * arithmetic the manager used to do inline — the columns before the cell, the columns it spans, its own layers — so a
+ * subclass that overrides this one door moves its cells and the manager follows, because the manager ASKS this door for
+ * the rect it then places the cell's text in. */
+- (NSRect)rectForBlock:(NSTextTableBlock *)block layoutAtPoint:(NSPoint)startingPoint inRect:(NSRect)rect
+	 textContainer:(nullable NSTextContainer *)textContainer characterRange:(NSRange)charRange;
 
 @end
 

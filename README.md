@@ -340,17 +340,20 @@ the compositor is really gone.
   that forwards here does not recurse), and `NSTextTableBlock` forwards its `-boundsRectForContentRect:...` to its table.
   MEASURED in the same probe: the identical cell is drawn through a plain table and through a subclass that grows the box
   eight points on each side, and the ground goes from **300 green pixels to 868** — the table's growth is honoured.
-- **AND ONE OF THE THREE IS STILL OWED, AND ITS CAUSE IS NOW KNOWN RATHER THAN GUESSED.**
-  `-rectForBlock:layoutAtPoint:inRect:textContainer:characterRange:` was IMPLEMENTED and wired — the table published the
-  column widths the manager measured, the door computed a cell's content rect from them, the block forwarded to its table,
-  and the manager asked the door instead of doing the arithmetic inline — and then REVERTED, which is the finding rather
-  than a setback. THE FOUR TABLE PROBES PASSED WITH IT IN, so the default reproduced the old geometry exactly; what failed
-  was the OVERRIDE: a subclass that moved its cells twelve points right changed nothing that could be observed. Measured
-  three ways — the manager's fragment rect for the cell (`lineFragmentRectForGlyphAtIndex:`, which reports CONTAINER-LOCAL
-  coordinates so the cell's x is invisible in it), the drawn ground's left edge, and the drawn INK's left edge (11 in both
-  the plain and the shifted table). A cell's text is laid out in a CELL-LOCAL container and that container's origin is not
-  carried into the drawing, so an x the door answers is dropped downstream. THAT is the refactor the door needs: the
-  placement path has to USE the rect it asks for, which is the same pass that decides row heights.
+- **AND THE THIRD DELEGATION DOOR IS DONE, WHICH TOOK A SECOND ATTEMPT AND TWO FINDINGS.**
+  `-rectForBlock:layoutAtPoint:inRect:textContainer:characterRange:` is wired: the table is PUBLISHED the column widths the
+  manager measured (`-_setColumnWidths:count:padding:`) and answers a cell's content rect from them, `NSTextTableBlock`
+  forwards to its table, and the manager asks the door instead of computing the arithmetic inline. MEASURED: the same cell
+  is laid out at **x=10.00** through a plain table and **x=22.00** through a subclass that adds twelve — so an override
+  moves its cells and the manager follows.
+- **AND THE FIRST ATTEMPT WAS REVERTED BECAUSE IT WAS HALF-EFFECTIVE, WHICH IS WHERE THE TWO FINDINGS CAME FROM.** The
+  four existing table probes passed with it in — the default reproduced the old geometry — but a subclass's override
+  changed NOTHING observable: the layout, the drawn ground and the drawn ink all measured identically. **THE MANAGER HAS
+  TWO PASSES AND ONLY ONE WAS ASKING THE DOOR**: a row's HEIGHT is measured in the first and the cell's text is PLACED in
+  the second, so an override changed how much room a cell reserved and not where it was drawn. And the second finding is
+  arithmetic: `-rectForBlock:layoutAtPoint:...` adds the table's own PADDING, so the manager must pass the table's ORIGIN
+  — passing the padding counted it twice and put every cell ten points right, which the grid and collapse probes caught
+  immediately.
 - **AND THE FIRST ATTEMPT AT THIS WAS REVERTED BEFORE IT WAS RETRIED, WHICH IS WHY IT IS TWO SLICES.** The internal
   painter, the block's forwarding and a probe were written once and the probe failed: its table subclass never saw the
   override. The cause turned out to be two things — **`-copy` on `NSTextTable` and on `NSTextTableBlock` HARD-CODED ITS
