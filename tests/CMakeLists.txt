@@ -90,6 +90,13 @@ target_link_libraries(menu_validation PRIVATE App)
 add_test(NAME appkit-menu-validation COMMAND menu_validation)
 set_tests_properties(appkit-menu-validation PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
 
+# **THE TABLE: A DATA SOURCE'S ROWS, COLUMNS, HEADER, SELECTION AND INK.** Offscreen: a scroll view, a table and a
+# header are geometry and drawing, and the one window in the probe only supplies a coordinate root for the events.
+add_executable(table_view table_view.m)
+target_link_libraries(table_view PRIVATE App m)
+add_test(NAME appkit-table-view COMMAND table_view)
+set_tests_properties(appkit-table-view PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
+
 # **THE TOOLBAR: A DELEGATE'S ITEMS, THE BAND THEY TAKE, THE INK THEY DRAW AND THE CLICK THEY ANSWER.** Offscreen,
 # like the chrome: the frame arithmetic and the view's own context need no compositor.
 add_executable(toolbar toolbar.m)

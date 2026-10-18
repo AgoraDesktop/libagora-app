@@ -42,6 +42,10 @@ NS_ASSUME_NONNULL_BEGIN
 	 * the tree already keeps. The clip view is the exception to "the scroll view owns its content": it is the
 	 * container the document is put INTO, and the document is a subview of IT. */
 	NSClipView *_contentView;
+	/* **THE TABLE HEADER, WHEN THERE IS ONE.** RETAINED here as well as by the table, because a scroll view that
+	 * keeps a header must own it while it lays it out; `-cg_setHeaderView:` is the private seam in the internal
+	 * header. A plain scroll view has none. */
+	NSView *_headerView;
 	NSScroller *_vScroller;
 	NSScroller *_hScroller;
 	NSBorderType _borderType;

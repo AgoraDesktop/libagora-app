@@ -12,7 +12,8 @@ directory (`../README.md`). `libagora-app` is the top of its stack: above it the
 window and view classes there is now a cell and control layer (buttons, switches and sliders), a tracking-area
 engine, one line of editable text with the standard key bindings, a title bar the client DRAWS itself, the menu
 subsystem — validation, a selection chip, and a pointer grab that lets a popup be dismissed by clicking away —
-and a TOOLBAR: items from a delegate, in a band the window reserves between its chrome and its content.
+a TOOLBAR: items from a delegate, in a band the window reserves between its chrome and its content, and a
+CELL-BASED TABLE: columns, rows, a scrolling header and a selection.
 
 The classes here come from the Fiwix AppKit (same author, same licence — see `PROVENANCE.md`), and they
 talked to an X server: `NSWindow.m` called `XOpenDisplay`, `XCreateSimpleWindow`, `XMapWindow`, `XPutImage`
@@ -90,6 +91,7 @@ tests/
   chrome_theme.m                the THEME: an XFWM `.xpm` set becomes the chrome's buttons, 1:1
   chrome_buttons.m              and what a chrome button DOES: a click through the seam, and what happened
   toolbar.m                     the TOOLBAR: the delegate's items, the band, the ink and the click
+  table_view.m                  the TABLE: columns, rows, the header, selection, the divider drag and the ink
   control_drag.m                and what a DRAG costs: forty motions, and how many frames the window committed
   run-*-headless.sh             ctest: a compositor with a virtual monitor (no desktop input involved)
   run-*-nested.sh, inspect.py   the PIXEL tests, and they are OPT-IN: `gnome-shell --nested` is a whole
@@ -763,13 +765,45 @@ clicks an item through the view and reads the selection, round-trips the configu
 into a bitmap to find its ground, its baseline and a label. `tests/chrome_buttons.m` still presses the pill on a window
 with NO toolbar, where the door is correctly quiet.
 
+### The table view, and the header that stays put
+
+**`NSTableView` IS HERE AS A CELL-BASED CORE, WHICH IS THE 10.6 SHAPE.** The era draws a row through an `NSCell` per
+column, not through the later `NSTableCellView`; the data source answers the row count and each cell's object value,
+and the table sets that value immediately before drawing the cell. So a column owns ONE data cell that every row
+lends, and one column carries one row's face — the model is never copied. The geometry is the table's: `-rectOfRow:`,
+`-rectOfColumn:`, `-frameOfCellAtColumn:row:`, `-rowAtPoint:` and `-columnAtPoint:` are all derived from the row
+height, the intercell spacing and the columns' widths.
+
+**THE TABLE IS FLIPPED, SO ROW 0 IS THE TOP.** The enclosing `NSClipView` is flipped too, so a scroll down is a
+larger y. That is what lets the table be a scroll view's document without a second coordinate system: the clip view's
+top-left is the document's top-left, and `-rectOfRow:` needs no mirror.
+
+**THE HEADER IS A SIBLING OF THE CLIP VIEW, NOT A SUBVIEW OF THE TABLE.** Rows scroll and headers do not. The table
+installs its `NSTableHeaderView` through the scroll view's private header seam; the scroll view gives it the top
+strip of the content area, follows the clip view's horizontal offset, and leaves it alone vertically. A header's
+divider drag resizes the column within its min/max; a click on a column with a sort prototype makes a descriptor and
+tells the data source. `-showsBaselineSeparator` is the toolbar's switch for the black line at the content's top, not
+the header's.
+
+**WHAT THIS SLICE DOES NOT DO.** Editing through the field editor, drag and drop, type-select, variable row heights,
+column reordering and autosave are not here; the header can resize a column but not yet drag it to another place.
+`-editedRow`/`-editedColumn` answer -1 for the same reason. `NSOutlineView` is the next slice and subclasses this
+class; `NSSplitView`, `NSSegmentedControl` and `NSPathControl` are the rest of the Finder shell's prerequisites.
+
+`tests/table_view.m` is the probe: it puts a three-column table in a scroll view, measures the columns, rows and
+cells, exercises a delegate that refuses one row, drives the header's divider and sort click through real events,
+and draws the table and the header into bitmaps to find their ink. It also checks the window fix this slice needed:
+a content view now follows EVERY frame set, not only one carrying a toolbar.
+
 ### Still absent, and why
 
 **FOUR THINGS THAT USED TO BE ON THIS LIST ARE NOT ANY MORE, AND THE LIST IS CORRECTED RATHER THAN QUIETLY SHRUNK:**
 the SHEETS (`NSApplication -beginSheet:modalForWindow:…` and `-endSheet:returnCode:`, with the attachment and the
 reply dance on `NSWindow`), the FRAME-AUTOSAVE strings, the CURSOR-RECT invalidation and the CHILD-WINDOW list are all
 implemented. What is still absent is the DRAWER (the class — `-drawers` answers an empty array, which is Apple's own
-contract), the TOOLBAR'S CUSTOMIZATION PALETTE (the toolbar itself is here; the palette refuses by name), and the
+contract), the TOOLBAR'S CUSTOMIZATION PALETTE (the toolbar itself is here; the palette refuses by name), the TABLE'S
+EDITING, DRAG AND DROP, TYPE-SELECT, VARIABLE ROW HEIGHTS, COLUMN REORDERING AND AUTOSAVE (the cell-based core is
+here), `NSOutlineView`, `NSSplitView`, `NSSegmentedControl` and `NSPathControl` (the rest of the Finder shell), and the
 script-command doors, which are declared and REFUSE by name; what the window's close,
 minimise and zoom buttons DO is now this tier's — each goes through the `-perform…` door its menu item sends — but
 the MINIMISE is

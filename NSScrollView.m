@@ -96,6 +96,7 @@ static CGFloat fn_border_width(NSBorderType type)
 
 - (void)dealloc
 {
+	[_headerView release];
 	[_backgroundColor release];
 	[super dealloc];
 }
@@ -229,6 +230,15 @@ static CGFloat fn_border_width(NSBorderType type)
 
 /* ---- THE LAYOUT ----------------------------------------------------------------------------------------- */
 
+/* **A FRAME CHANGE RE-TILES, WHICH IS WHAT MAKES A HEADER AND THE BARS FOLLOW A RESIZE.** `-tile` is the one layout
+ * pass and a scroll view is the one view whose whole face is that pass; leaving it to the caller meant a resize moved
+ * the frame and not its contents. */
+- (void)setFrame:(NSRect)frameRect
+{
+	[super setFrame:frameRect];
+	[self tile];
+}
+
 /* **THE CONTENT IS TOP-LEFT AND EVERYTHING ELSE IS INSIDE THE REST.** A vertical scroller runs down the right from
  * above the horizontal scroller to the top; a horizontal one runs along the bottom from the left to the vertical
  * one; and the content takes what is left inside the border. The frame is read in the SCROLL VIEW's own coordinates
@@ -240,6 +250,7 @@ static CGFloat fn_border_width(NSBorderType type)
 	CGFloat border = fn_border_width(_borderType);
 	CGFloat vw = 0.0;
 	CGFloat hh = 0.0;
+	CGFloat headerHeight = 0.0;
 	NSRect content;
 
 	if (_vScroller != nil) {
@@ -254,8 +265,15 @@ static CGFloat fn_border_width(NSBorderType type)
 			hh = [NSScroller scrollerWidth];
 		}
 	}
-	content = NSMakeRect(NSMinX(frame) + border, NSMinY(frame) + border + hh,
-			     NSWidth(frame) - 2.0 * border - vw, NSHeight(frame) - 2.0 * border - hh);
+	if (_headerView != nil) {
+		headerHeight = NSHeight([_headerView frame]);
+		if (headerHeight < 0.0) {
+			headerHeight = 0.0;
+		}
+	}
+	content = NSMakeRect(NSMinX(frame) + border, NSMinY(frame) + border + hh + headerHeight,
+			     NSWidth(frame) - 2.0 * border - vw,
+			     NSHeight(frame) - 2.0 * border - hh - headerHeight);
 	if (content.size.width < 0.0) {
 		content.size.width = 0.0;
 	}
@@ -263,6 +281,14 @@ static CGFloat fn_border_width(NSBorderType type)
 		content.size.height = 0.0;
 	}
 	[_contentView setFrame:content];
+	if (_headerView != nil) {
+		NSRect header = NSMakeRect(NSMinX(content), NSMaxY(content), NSWidth(content), headerHeight);
+
+		if ([_headerView superview] != self) {
+			[self addSubview:_headerView];
+		}
+		[_headerView setFrame:header];
+	}
 	if (_vScroller != nil) {
 		[_vScroller setFrame:NSMakeRect(NSMaxX(frame) - border - vw, NSMinY(frame) + border + hh,
 						vw, NSHeight(frame) - 2.0 * border - hh)];
@@ -290,6 +316,27 @@ static CGFloat fn_border_width(NSBorderType type)
 		return NSZeroRect;
 	}
 	return [_contentView documentVisibleRect];
+}
+
+/* ---- THE TABLE HEADER ------------------------------------------------------------------------------------ */
+
+- (void)cg_setHeaderView:(NSView *)headerView
+{
+	if (headerView == _headerView) {
+		return;
+	}
+	[_headerView removeFromSuperview];
+	[_headerView release];
+	_headerView = [headerView retain];
+	if (_headerView != nil) {
+		[self addSubview:_headerView];
+	}
+	[self tile];
+}
+
+- (NSView *)cg_headerView
+{
+	return _headerView;
 }
 
 /* ---- THE BORDER AND THE GROUND -------------------------------------------------------------------------- */
@@ -385,6 +432,13 @@ static CGFloat fn_border_width(NSBorderType type)
 {
 	if (aClipView == nil || aClipView != _contentView) {
 		return;
+	}
+	/* THE HEADER FOLLOWS THE HORIZONTAL OFFSET AND NOT THE VERTICAL ONE. */
+	if (_headerView != nil) {
+		NSPoint origin = [_headerView bounds].origin;
+
+		origin.x = [aClipView bounds].origin.x;
+		[_headerView setBoundsOrigin:origin];
 	}
 	[self cg_syncScroller:_vScroller vertical:YES];
 	[self cg_syncScroller:_hScroller vertical:NO];

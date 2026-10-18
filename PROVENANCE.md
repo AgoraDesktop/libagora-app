@@ -177,6 +177,26 @@ The window's side — the band's height in `-contentRectForFrameRect:`, the tool
 top edge, and the chrome pill's `-toggleToolbarShown:` — is likewise this repository's, and `tests/toolbar.m` holds
 the geometry, the ink, the click and the configuration round trip.
 
+## 10. The table view is written from the SDK headers, not imported
+
+**`NSTableView`, `NSTableColumn`, `NSTableHeaderView` and `NSTableHeaderCell` are this repository's own code**, written
+against the declarations in the MacOSX10.6 SDK rather than copied from the Fiwix tree (which has no table). They follow
+the era's cell-based shape: a column owns one data cell that each row lends, the data source supplies the value, and
+the table supplies the geometry and the selection.
+
+Two pieces are this tier's rather than the SDK's, and both are recorded where they live:
+
+- **the header is installed through a private `NSScrollView` seam** (`-cg_setHeaderView:` in
+  `NSScrollView_internal.h`). Apple's 10.6 scroll view keeps a private header clip view; this tier keeps the header as
+  a plain subview in the top strip, which is the same relationship with one less object. The scroll view's public
+  surface is unchanged.
+- **the table class is FLIPPED**, as Apple's is, and the enclosing clip view already was. That is why the row geometry
+  needs no second coordinate system.
+
+The first slice is cell-based and deliberately does not do editing, drag and drop, type-select, variable row heights,
+column reordering or autosave; `NSTableView.h` names the omissions. `tests/table_view.m` holds the geometry, the
+header gesture and the ink.
+
 ## Keeping in sync
 
 The Fiwix AppKit is the origin and this repository has now diverged from it in the seam. A fix made there

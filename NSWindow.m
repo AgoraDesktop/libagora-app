@@ -723,6 +723,9 @@ static void fn_ag_frame(void *context, uint32_t time_ms)
 	[_cg_registeredDraggedTypes release];
 	[_keyViewLoop release];
 	[_fieldEditor release];
+	/* AND THE CONTENT VIEW, WHICH THE WINDOW RETAINED WHEN IT WAS SET. It was leaked here while the window owned it:
+	 * a window is the content view's only owner, so nothing else can release it. */
+	[_contentView release];
 	/* AND THE TOOLBAR, WHICH THE WINDOW OWNS. Its own `-cg_setWindow:nil` is what takes its view out of the content
 	 * tree; releasing it here is safe because nothing else retains it after this window goes. */
 	[_toolbar release];
@@ -1517,10 +1520,12 @@ static CGFloat fn_clamp_axis(CGFloat v, CGFloat lo, CGFloat hi)
 	if (resized) {
 		fn_announce(self, NSWindowDidResizeNotification, @selector(windowDidResize:));
 	}
-	/* THE CONTENT VIEW AND THE TOOLBAR FOLLOW THE FRAME WHEN THERE IS A BAND TO PLACE. Without a toolbar the content
-	 * view keeps the historical behaviour (it is laid out when it is set); with one, a resize or a visibility change
-	 * has to move both, and this is the one door every such change ends in. */
-	if (_toolbar != nil) {
+	/* **A RESIZE RE-LAYS THE CONTENT VIEW, WITH OR WITHOUT A TOOLBAR; A MOVE DOES NOT NEED TO.** A window's content
+	 * view is the view the frame describes, so a resize that leaves it at its old size is a window whose document is
+	 * the wrong shape — MEASURED on a scroll view and again on a table, where the clip view changed and the view
+	 * inside it did not. A move changes no content rectangle, and marking the window stale for one would repaint a
+	 * surface that did not move. */
+	if (resized) {
 		[self cg_toolbarLayoutChanged];
 	}
 	(void)flag;
@@ -1994,11 +1999,9 @@ static CGFloat fn_clamp_axis(CGFloat v, CGFloat lo, CGFloat hi)
 		 * the window's content view and had nothing to start from. */
 		[_contentView cg_setWindow:self];
 	}
-	/* THE TOOLBAR'S VIEW MOVES WITH THE CONTENT VIEW: `-addSubview:` takes it out of the previous content view, and
-	 * `-cg_toolbarLayoutChanged` is the one place that adoption happens. */
-	if (_toolbar != nil) {
-		[self cg_toolbarLayoutChanged];
-	}
+	/* THE CONTENT VIEW — AND THE TOOLBAR'S VIEW WITH IT — IS LAID OUT HERE. `-addSubview:` takes the toolbar out of
+	 * the previous content view, and this call is the one place both the content rect and that adoption are computed. */
+	[self cg_toolbarLayoutChanged];
 	/* **AND THE FIRST RESPONDER MOVES THROUGH THE REAL DOOR RATHER THAN BY ASSIGNMENT.** This used to write
 	 * `_firstResponder` straight, which made the new content view the first responder WITHOUT EVER ASKING IT —
 	 * neither `-acceptsFirstResponder` nor `-becomeFirstResponder` — and without telling the one it displaced.
