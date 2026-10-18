@@ -232,6 +232,28 @@ static NSString *fn_marker_body(NSString *markerFormat, NSInteger itemNum)
 	return fn_marker_body(_markerFormat, itemNum);
 }
 
+/* **THE ARCHIVE DOORS.** The keys are this tier's own — Apple publishes no key set for this class, and the strings are
+ * named after what they carry the way `NSTrackingArea`'s are (`@"NSRect"`, `@"NSOptions"`). A DECODE WITH NO FORMAT, or
+ * with an empty one, is refused through the designated initialiser, so an archive whose format key is missing cannot
+ * become a list with no marker. */
+- (void)encodeWithCoder:(NSCoder *)coder
+{
+	[coder encodeObject:_markerFormat forKey:@"NSMarkerFormat"];
+	[coder encodeInteger:(NSInteger)_listOptions forKey:@"NSListOptions"];
+	[coder encodeInteger:_startingItemNumber forKey:@"NSStartingItemNumber"];
+}
+
+- (instancetype)initWithCoder:(NSCoder *)coder
+{
+	NSString *format = [coder decodeObjectForKey:@"NSMarkerFormat"];
+	NSInteger options = [coder decodeIntegerForKey:@"NSListOptions"];
+	NSInteger starting = [coder decodeIntegerForKey:@"NSStartingItemNumber"];
+	NSTextList *list = [self initWithMarkerFormat:format options:(NSUInteger)options];
+
+	[list setStartingItemNumber:starting];
+	return list;
+}
+
 /* **`-copy` AND NOT `-copyWithZone:`, BECAUSE THIS TREE HAS NO ZONES** — `NSZone` is deliberately absent, exactly as
  * `NSColor.m` records for its own copy, so the door a caller uses is the one Cocoa spells `-copy`. The list is a value:
  * the format is immutable, so the copy shares nothing that could change under it. */

@@ -788,6 +788,22 @@ imported and then changed — the changes are recorded in [`PROVENANCE.md`](PROV
   backslashes, so the group had the right shape and no control words at all — and the probe caught it only because it
   looks for `{\\pict` rather than for the word. A case that asserted "the RTF mentions a picture" would have passed.
   Same lesson as the level array indexed by the wrong number: the check has to be about the thing that can be wrong.
+- **AND BOTH VALUES ARCHIVE NOW, WHICH CORRECTED A CLAIM THIS README HAD BEEN MAKING.** `NSTextList` and `NSTextBlock`
+  declare `<NSCoding, NSCopying>` in the 10.6 SDK — the list in its own header, the block in `NSTextTable.h`, which is
+  where the SDK keeps it (its own header does not exist at 10.6, which a fetch proved) — and the note that said "no class
+  in this layer archives" was simply false: `libagora-base` carries `NSCoder`, `NSArchiver`, `NSKeyedArchiver` and
+  `NSUnarchiver`, and `NSArray`, `NSAttributedString`, `NSTrackingArea` and `NSFontDescriptor` already implement the pair.
+  A list was one of the ones that had not.
+- **AND WHAT EACH ARCHIVE CARRIES, AND WHAT IT MUST NOT.** A list carries its three facts and **NOT its enclosing list**,
+  because that is a fact about the paragraph style's STACK rather than about the list: a decoded list is a LEVEL, and the
+  style that receives it links it again. MEASURED — a linked list whose marker reads `3c` archives to a list whose marker
+  reads `c`. A block carries its ground, its four edge colours, its twelve widths and its twelve value types, the widths
+  and types as FLAT POSITIONAL arrays (layer-major) so a decoded block cannot disagree with itself about which width
+  belongs to which edge.
+- **AND A BLOCK'S COLOURS GO AS FOUR COMPONENTS, WHICH IS A DEVIATION WITH A REASON.** This layer's `NSColor` conforms to
+  `NSCopying` and NOT to `NSCoding`, so archiving the OBJECT would produce an archive this tree could not read back. The
+  components are what a colour IS, so a decoded block answers the same colour — and the day `NSColor` archives, that key
+  can carry the object with old archives still decoding.
 - **AND `NSTextListPrependEnclosingMarker` IS APPLIED, WHICH NEEDED A FACT NO PUBLIC API CARRIES.** The option means an
   item in a nested list is numbered `2a` rather than `a`, and applying it needs the ENCLOSING LIST — which 10.6 gives no
   setter for, because Apple keeps it in the private `_listSecondary` ivar its own header declares and fills it from the

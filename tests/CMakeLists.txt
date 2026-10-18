@@ -627,3 +627,10 @@ target_link_libraries(text_rtf_lists PRIVATE App)
 
 add_test(NAME appkit-text-rtf-lists COMMAND text_rtf_lists)
 set_tests_properties(appkit-text-rtf-lists PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
+
+# NSCoding on the text-layout values: an archived list and an archived block, round-tripped.
+add_executable(text_coding text_coding.m)
+target_link_libraries(text_coding PRIVATE App)
+
+add_test(NAME appkit-text-coding COMMAND text_coding)
+set_tests_properties(appkit-text-coding PROPERTIES ENVIRONMENT "${_agora_app_test_env}")

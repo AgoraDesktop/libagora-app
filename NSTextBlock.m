@@ -38,6 +38,32 @@ static NSInteger fn_edgeColumn(NSTextBlockEdge edge)
 	return -1;
 }
 
+/* **A COLOUR AS FOUR NUMBERS**, since `NSColor` has no archive of its own — see the header. NSNull stands for "no
+ * colour", which is how an edge that is not drawn survives the trip. */
+static NSArray *fn_colour_components(NSColor *colour)
+{
+	if (colour == nil) {
+		return nil;
+	}
+	return [NSArray arrayWithObjects:[NSNumber numberWithDouble:[colour redComponent]],
+					 [NSNumber numberWithDouble:[colour greenComponent]],
+					 [NSNumber numberWithDouble:[colour blueComponent]],
+					 [NSNumber numberWithDouble:[colour alphaComponent]], nil];
+}
+
+static NSColor *fn_colour_from_components(id stored)
+{
+	NSArray *parts = ([stored isKindOfClass:[NSArray class]]) ? stored : nil;
+
+	if (parts == nil || [parts count] != 4) {
+		return nil;
+	}
+	return [NSColor colorWithCalibratedRed:(CGFloat)[[parts objectAtIndex:0] doubleValue]
+					green:(CGFloat)[[parts objectAtIndex:1] doubleValue]
+					 blue:(CGFloat)[[parts objectAtIndex:2] doubleValue]
+					alpha:(CGFloat)[[parts objectAtIndex:3] doubleValue]];
+}
+
 @implementation NSTextBlock
 
 - (instancetype)init
@@ -140,6 +166,74 @@ static NSInteger fn_edgeColumn(NSTextBlockEdge edge)
 		return 0.0;
 	}
 	return _widths[row][column];
+}
+
+/* **THE ARCHIVE DOORS.** The keys are this tier's own, named after what they carry. The arrays are FLAT and positional:
+ * twelve widths and twelve value types, layer-major, so a decoded block cannot disagree with itself about which width
+ * belongs to which edge — the layout is the loop's, in one place, rather than a key per cell. */
+- (void)encodeWithCoder:(NSCoder *)coder
+{
+	NSMutableArray *widths = [NSMutableArray array];
+	NSMutableArray *types = [NSMutableArray array];
+	NSMutableArray *edges = [NSMutableArray array];
+	int layer, edge;
+
+	[coder encodeObject:fn_colour_components(_backgroundColor) forKey:@"NSBackgroundColor"];
+	for (edge = 0; edge < 4; edge++) {
+		NSArray *components = fn_colour_components([self borderColorForEdge:(NSTextBlockEdge)(1u << edge)]);
+
+		[edges addObject:(components != nil) ? (id)components : (id)[NSNull null]];
+	}
+	[coder encodeObject:edges forKey:@"NSBorderColors"];
+	for (layer = 0; layer < 3; layer++) {
+		for (edge = 0; edge < 4; edge++) {
+			[widths addObject:[NSNumber numberWithDouble:(double)_widths[layer][edge]]];
+			[types addObject:[NSNumber numberWithUnsignedInteger:(NSUInteger)_valueTypes[layer][edge]]];
+		}
+	}
+	[coder encodeObject:widths forKey:@"NSWidths"];
+	[coder encodeObject:types forKey:@"NSValueTypes"];
+}
+
+- (instancetype)initWithCoder:(NSCoder *)coder
+{
+	self = [super init];
+	if (self == nil) {
+		return nil;
+	}
+	_backgroundColor = [fn_colour_from_components([coder decodeObjectForKey:@"NSBackgroundColor"]) retain];
+	_borderColors = [[NSMutableDictionary alloc] init];
+	{
+		NSArray *edges = [coder decodeObjectForKey:@"NSBorderColors"];
+		NSArray *widths = [coder decodeObjectForKey:@"NSWidths"];
+		NSArray *types = [coder decodeObjectForKey:@"NSValueTypes"];
+		int layer, edge;
+
+		if ([edges isKindOfClass:[NSArray class]]) {
+			for (edge = 0; edge < 4 && (NSUInteger)edge < [edges count]; edge++) {
+				NSColor *colour = fn_colour_from_components([edges objectAtIndex:(NSUInteger)edge]);
+
+				if (colour != nil) {
+					[_borderColors setObject:colour
+							  forKey:[NSNumber numberWithUnsignedInteger:(NSUInteger)(1u << edge)]];
+				}
+			}
+		}
+		for (layer = 0; layer < 3; layer++) {
+			for (edge = 0; edge < 4; edge++) {
+				NSUInteger slot = (NSUInteger)(layer * 4 + edge);
+
+				if ([widths isKindOfClass:[NSArray class]] && slot < [widths count]) {
+					_widths[layer][edge] = (CGFloat)[[widths objectAtIndex:slot] doubleValue];
+				}
+				if ([types isKindOfClass:[NSArray class]] && slot < [types count]) {
+					_valueTypes[layer][edge] =
+						(NSTextBlockValueType)[[types objectAtIndex:slot] unsignedIntegerValue];
+				}
+			}
+		}
+	}
+	return self;
 }
 
 - (NSTextBlockValueType)valueTypeForLayer:(NSTextBlockLayer)layer edge:(NSTextBlockEdge)edge

@@ -58,7 +58,7 @@ enum {
 };
 typedef NSUInteger NSTextBlockEdge;
 
-@interface NSTextBlock : NSObject <NSCopying>
+@interface NSTextBlock : NSObject <NSCoding, NSCopying>
 {
 	NSColor *_backgroundColor;			/* RETAINED */
 	NSMutableDictionary *_borderColors;		/* RETAINED; edge bit -> NSColor */
@@ -76,6 +76,18 @@ typedef NSUInteger NSTextBlockEdge;
 
 /* AND THE WIDTHS, PER LAYER AND EDGE. The per-layer door sets all four edges at once, which is the common case. */
 - (void)setWidth:(CGFloat)width type:(NSTextBlockValueType)type forLayer:(NSTextBlockLayer)layer edge:(NSTextBlockEdge)edge;
+
+/* **AND THE ARCHIVE DOORS, WHICH 10.6 DECLARES IN `NSTextTable.h`**: `@interface NSTextBlock : NSObject <NSCoding,
+ * NSCopying>` — note that the SDK keeps this class in the TABLE's header rather than its own, which is where the
+ * declaration was checked. What an archive carries is the ground, the four edge colours, the twelve widths and the
+ * twelve value types.
+ *
+ * **AND A COLOUR IS WRITTEN AS ITS FOUR COMPONENTS**, which is a deviation with a reason rather than a shortcut: this
+ * layer's `NSColor` conforms to `NSCopying` and NOT to `NSCoding`, so archiving the OBJECT would produce an archive this
+ * tree could not read back. The components are what a colour IS, so a decoded block answers the same colour — and the
+ * day `NSColor` archives, this key can carry the object instead and old archives will still decode. */
+- (void)encodeWithCoder:(NSCoder *)coder;
+- (nullable instancetype)initWithCoder:(NSCoder *)coder;
 - (CGFloat)widthForLayer:(NSTextBlockLayer)layer edge:(NSTextBlockEdge)edge;
 - (NSTextBlockValueType)valueTypeForLayer:(NSTextBlockLayer)layer edge:(NSTextBlockEdge)edge;
 - (void)setWidth:(CGFloat)width type:(NSTextBlockValueType)type forLayer:(NSTextBlockLayer)layer;

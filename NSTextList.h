@@ -28,8 +28,10 @@
  * the options ask. The tie is NOT carried by RTF, which has no such option: a round trip through a document loses it,
  * and that boundary is stated rather than discovered.
  *
- * **AND WHAT IS NOT HERE IS NAMED**: `NSCoding` is declared by 10.6 and is not implemented (no class in this layer
- * implements it — the archive format is its own subject).
+ * **AND `NSCoding` IS IMPLEMENTED NOW**, which corrected a claim in this very comment: it said no class in this layer
+ * archives, and the truth is the opposite — `libagora-base` carries the whole family (`NSCoder`, `NSArchiver`,
+ * `NSKeyedArchiver`, `NSUnarchiver`) and `NSArray`, `NSAttributedString`, `NSTrackingArea` and `NSFontDescriptor` all
+ * implement the pair. A list was simply one of the ones that had not.
  */
 #ifndef APPKIT_NSTEXTLIST_H
 #define APPKIT_NSTEXTLIST_H
@@ -41,7 +43,7 @@ enum {
 	NSTextListPrependEnclosingMarker = (1 << 0)
 };
 
-@interface NSTextList : NSObject <NSCopying>
+@interface NSTextList : NSObject <NSCoding, NSCopying>
 {
 	NSString *_markerFormat;	/* RETAINED */
 	NSUInteger _listOptions;
@@ -64,6 +66,14 @@ enum {
  * item rather than the count). An unknown format is refused by name and answered in decimal, which is what a caller
  * with a format from a newer era can still act on. */
 - (NSString *)markerForItemNumber:(NSInteger)itemNum;
+
+/* **THE ARCHIVE DOORS, WHICH 10.6 DECLARES BY CONFORMANCE** — `NSTextList : NSObject <NSCoding, NSCopying>` in the SDK's
+ * own header. What an archive carries is the three facts a list IS: its marker format, its options and its starting
+ * number. **AND IT DOES NOT CARRY THE ENCLOSING LIST**, which is not a fact about this list at all — it is a fact about
+ * the paragraph style's STACK (`NSTextList_internal.h`), so a decoded list is a level of a stack rather than a stack,
+ * and the style that receives it links it again. */
+- (void)encodeWithCoder:(NSCoder *)coder;
+- (nullable instancetype)initWithCoder:(NSCoder *)coder;
 
 /* 10.6 AND LATER, which is this tier's era for this class. Default 1. */
 - (void)setStartingItemNumber:(NSInteger)itemNum;
