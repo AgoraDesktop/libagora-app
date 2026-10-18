@@ -19,9 +19,9 @@
  * itself.
  *
  * **WHAT IS NOT HERE, AND ITS ROWS STAY OPEN — AND ONE OF THE TWO GROUNDS HAS EXPIRED.** `NSFileWrapper` IS here now
- * (`libagora-base`), so `-fileWrapper` and `-initWithFileWrapper:` are owed for a DIFFERENT reason than this note used
- * to give — **THE ENCODER EXISTS NOW** (`NSBitmapImageRep` writes PNG through Core Graphics' `CGImageDestination`), so
- * what is missing is the WRAPPER, not the way to make the bytes.
+ * and **THE WRAPPER PAIR IS HERE NOW**: `NSFileWrapper` has lived in `libagora-base` all along, the PNG encoder exists
+ * (`NSBitmapImageRep` writes through Core Graphics' `CGImageDestination`), and `-fileWrapper`/`-initWithFileWrapper:`
+ * are what an RTFD package is built out of.
  * to give: the READ half is decodable (the tree reads PNG and JPEG), but the WRITE half has no image ENCODER to turn
  * the attachment's picture back into bytes, so the pair cannot round-trip and it lands with the ENCODER rather than
  * with the wrapper. AND THE TRACKING FAMILY (`-wantsToTrackMouse`, `-highlight:…`, `-trackMouse:…`) IS OWED WITH
@@ -68,6 +68,7 @@ enum {
 @interface NSTextAttachment : NSObject
 {
 	NSImage *_image;				/* RETAINED */
+	NSFileWrapper *_fileWrapper;			/* RETAINED */
 	NSCell<NSTextAttachmentCell> *_attachmentCell;	/* RETAINED */
 }
 
@@ -75,6 +76,16 @@ enum {
 
 - (nullable NSImage *)image;
 - (void)setImage:(nullable NSImage *)image;
+
+/* **THE FILE WRAPPER, WHICH IS THE HALF RTFD NEEDS AND THE PICTURE HALF NEVER DID.** An attachment in a *package*
+ * document is not a picture pasted into the text: it is a FILE in the package, and the document refers to it by name.
+ * `-fileWrapper` is that file — `NSFileWrapper` is `libagora-base`'s, and this is the pair Apple declares over it. The
+ * designated initialiser of Apple's class is `-initWithFileWrapper:`; `-init` is the same as an empty wrapper here, and
+ * the image is a SEPARATE fact, so an attachment can carry one, the other, or both (a wrapper whose bytes happen to be
+ * a picture is still just a wrapper to this class — the two are not derived from each other). */
+- (nullable NSFileWrapper *)fileWrapper;
+- (instancetype)initWithFileWrapper:(nullable NSFileWrapper *)fileWrapper;
+- (void)setFileWrapper:(nullable NSFileWrapper *)fileWrapper;
 
 - (nullable NSCell<NSTextAttachmentCell> *)attachmentCell;
 - (void)setAttachmentCell:(nullable NSCell<NSTextAttachmentCell> *)cell;

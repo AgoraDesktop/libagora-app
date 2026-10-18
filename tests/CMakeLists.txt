@@ -586,3 +586,10 @@ target_link_libraries(appkit_bitmap_encode PRIVATE App)
 
 add_test(NAME appkit-bitmap-encode COMMAND appkit_bitmap_encode)
 set_tests_properties(appkit-bitmap-encode PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
+
+# The package form of the RTF document: TXT.rtf plus one file per attachment, and the reference between them.
+add_executable(text_rtfd text_rtfd.m)
+target_link_libraries(text_rtfd PRIVATE App)
+
+add_test(NAME appkit-text-rtfd COMMAND text_rtfd)
+set_tests_properties(appkit-text-rtfd PROPERTIES ENVIRONMENT "${_agora_app_test_env}")

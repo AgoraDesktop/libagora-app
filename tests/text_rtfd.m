@@ -1,0 +1,162 @@
+/*
+ * text_rtfd.m — the package form of the RTF document: `TXT.rtf` plus one file per attachment.
+ *
+ * Copyright © 2026 Kyle J. Cardoza. MIT licensed — see LICENSE.
+ * SPDX-License-Identifier: MIT
+ *
+ * **WHAT IS MEASURED HERE IS THE PACKAGE, NOT THE TEXT.** The RTF probe (`text_rtf.m`) already proves the text codec
+ * in both directions; this one proves the thing RTFD adds: that a document's pictures become FILES beside a `TXT.rtf`
+ * whose text REFERENCES them by name — and that the reference and the file agree, because a package whose text names
+ * `pic.png` while the directory holds `Attachment-1.png` is a document that opens with a missing picture and no error.
+ *
+ * **AND THE ROUND TRIP IS THROUGH THE SERIALIZED FORM**, because that is what a document file and a pasteboard
+ * actually carry: `-RTFDFromRange:documentAttributes:` answers the serialized package, and reading that back has to
+ * give the same directory with the same children. A test that only looked at the in-memory wrapper would never touch
+ * the half that writes bytes.
+ *
+ * **AND THE ATTACHMENT'S WRAPPER PAIR IS EXERCISED AS THE REASON THE NAME IS WHAT IT IS**: an attachment made with
+ * `-initWithFileWrapper:` keeps a preferred filename, and that name is what the package uses. The second half of the
+ * probe is an attachment WITHOUT a wrapper, which gets a name invented for it — and the two must not collide.
+ */
+#import <AppKit/NSAttributedString.h>
+#import <AppKit/NSBitmapImageRep.h>
+#import <AppKit/NSImage.h>
+#import <AppKit/NSTextAttachment.h>
+#import <Foundation/Foundation.h>
+#include <CoreGraphics/CGDataProvider.h>
+#include <CoreGraphics/CGImage.h>
+#include <stdio.h>
+
+static int failures;
+
+static void check(int ok, const char *what)
+{
+	printf("  %s %s\n", ok ? "ok   " : "FAIL ", what);
+	if (!ok) {
+		failures++;
+	}
+}
+
+/* A 2x4 picture, built from pixels this probe owns. */
+static NSImage *picture(void)
+{
+	static const unsigned char pixels[] = {
+		0xFF, 0x00, 0x00, 0xFF, 0x00, 0xFF, 0x00, 0xFF, 0x00, 0x00, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+		0xFF, 0x00, 0x00, 0xFF, 0x00, 0xFF, 0x00, 0xFF, 0x00, 0x00, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF
+	};
+	CGDataProviderRef provider = CGDataProviderCreateWithData(NULL, pixels, sizeof pixels, NULL);
+	CGColorSpaceRef space = CGColorSpaceCreateDeviceRGB();
+	CGImageRef cgImage = CGImageCreate(2, 4, 8, 32, 8, space,
+					   kCGImageAlphaPremultipliedFirst | kCGBitmapByteOrder32Little, provider,
+					   NULL, true, kCGRenderingIntentDefault);
+	NSImage *image = nil;
+
+	CGDataProviderRelease(provider);
+	CGColorSpaceRelease(space);
+	if (cgImage != NULL) {
+		image = [[NSImage alloc] initWithCGImage:cgImage size:NSMakeSize(2.0, 4.0)];
+		CGImageRelease(cgImage);
+	}
+	return image;
+}
+
+int main(void)
+{
+	NSAutoreleasePool *pool = [[NSAutoreleasePool alloc] init];
+	NSImage *image = picture();
+	NSFileWrapper *named = [[NSFileWrapper alloc] initRegularFileWithContents:
+		[NSData dataWithBytes:"x" length:1]];
+	NSTextAttachment *withName;
+	NSTextAttachment *unnamed;
+	NSMutableAttributedString *store;
+	NSRange whole;
+	NSFileWrapper *package;
+	NSFileWrapper *reread;
+	NSData *serialized;
+	NSDictionary *children;
+
+	setvbuf(stdout, NULL, _IONBF, 0);
+	check(image != nil && named != nil, "the picture and the wrapper were made");
+	if (image == nil || named == nil) {
+		[pool release];
+		printf("text_rtfd: %d case(s) failed\n", failures);
+		return 1;
+	}
+	[named setPreferredFilename:@"pic.png"];
+
+	/* **THE PAIR ITSELF, FIRST**: an attachment made with a wrapper answers it back, and replacing it does not leak
+	 * the old one's identity. */
+	withName = [[NSTextAttachment alloc] initWithFileWrapper:named];
+	check([withName fileWrapper] == named, "an attachment made with a wrapper answers it back");
+	[withName setImage:image];
+	check([withName image] == image && [withName fileWrapper] == named,
+	      "and it carries both the picture and the file, which are separate facts");
+	unnamed = [NSTextAttachment textAttachmentWithImage:image];
+	check([unnamed fileWrapper] == nil, "while a picture-only attachment has no wrapper");
+
+	store = [[NSMutableAttributedString alloc] initWithString:@"A\uFFFCB"];
+	[store addAttribute:NSAttachmentAttributeName value:withName range:NSMakeRange(1, 1)];
+	whole = NSMakeRange(0, [store length]);
+
+	package = [store RTFDFileWrapperFromRange:whole documentAttributes:NULL];
+	check(package != nil, "the package was made");
+	check(package != nil && [package isDirectory], "and it is a DIRECTORY, which is what a package is");
+	if (package != nil) {
+		children = [package fileWrappers];
+		printf("  (the package holds %lu file(s))\n", (unsigned long)[children count]);
+		check(children != nil && [children count] == 2, "holding the text and the picture, and nothing else");
+		check([children objectForKey:@"TXT.rtf"] != nil, "the text part is `TXT.rtf`");
+		check([children objectForKey:@"pic.png"] != nil,
+		      "and the picture is the name the attachment's own wrapper carried");
+		if ([children objectForKey:@"pic.png"] != nil) {
+			NSData *bytes = [[children objectForKey:@"pic.png"] regularFileContents];
+			const unsigned char *p = (const unsigned char *)[bytes bytes];
+
+			check(bytes != nil && [bytes length] > 8 && p != NULL && p[0] == 0x89 && p[1] == 'P'
+			      && p[2] == 'N' && p[3] == 'G',
+			      "with the picture's own bytes, beginning with the PNG signature");
+		}
+		if ([children objectForKey:@"TXT.rtf"] != nil) {
+			NSData *textBytes = [[children objectForKey:@"TXT.rtf"] regularFileContents];
+			NSString *text = (textBytes != nil)
+				? [[NSString alloc] initWithData:textBytes encoding:NSUTF8StringEncoding] : nil;
+
+			check(text != nil, "and a text part that reads");
+			if (text != nil) {
+				check([text rangeOfString:@"\\NeXTGraphic pic.png"].location != NSNotFound,
+				      "whose text REFERS to the picture by that same name");
+				check([text rangeOfString:@"\\pict"].location == NSNotFound,
+				      "and does NOT also carry it inline — one picture, stored once");
+				[text release];
+			}
+		}
+	}
+
+	/* **AND THE SERIALIZED FORM**, which is what a file or a pasteboard carries. */
+	serialized = [store RTFDFromRange:whole documentAttributes:NULL];
+	check(serialized != nil && [serialized length] > 0, "the package serializes to bytes");
+	if (serialized != nil) {
+		reread = [[NSFileWrapper alloc] initWithSerializedRepresentation:serialized];
+
+		check(reread != nil && [reread isDirectory], "and those bytes come back as a directory wrapper");
+		if (reread != nil) {
+			NSDictionary *again = [reread fileWrappers];
+
+			check(again != nil && [again count] == 2, "with the same two files in it");
+			check([again objectForKey:@"TXT.rtf"] != nil && [again objectForKey:@"pic.png"] != nil,
+			      "under the same names");
+			[reread release];
+		}
+	}
+
+	[store release];
+	/* `unnamed` is AUTORELEASED by `+textAttachmentWithImage:` and is the pool's to free — releasing it here as well
+	 * was an over-release, and it CRASHED at teardown under `ctest` while passing when run by hand, because the pool's
+	 * own release is what finds the object with a count already at zero. */
+	[withName release];
+	[named release];
+	[image release];
+	[pool release];
+	printf("text_rtfd: %d case(s) failed\n", failures);
+	return failures == 0 ? 0 : 1;
+}

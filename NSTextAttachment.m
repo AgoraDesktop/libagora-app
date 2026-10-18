@@ -12,6 +12,7 @@
 #import <AppKit/NSTextAttachment.h>
 #import <AppKit/NSImage.h>
 #import <AppKit/NSView.h>
+#import <Foundation/NSFileWrapper.h>
 
 @implementation NSTextAttachmentCell
 
@@ -57,11 +58,43 @@
 	return attachment;
 }
 
+/* **THE WRAPPER IS THE DESIGNATED INITIALISER'S ARGUMENT, which is Apple's own arrangement**: `-initWithFileWrapper:`
+ * is what a package document calls with the file it found, and `-init` is that with nothing. */
+- (instancetype)init
+{
+	return [self initWithFileWrapper:nil];
+}
+
+- (instancetype)initWithFileWrapper:(NSFileWrapper *)fileWrapper
+{
+	self = [super init];
+	if (self != nil) {
+		_fileWrapper = [fileWrapper retain];
+	}
+	return self;
+}
+
 - (void)dealloc
 {
 	[_image release];
+	[_fileWrapper release];
 	[_attachmentCell release];
 	[super dealloc];
+}
+
+- (NSFileWrapper *)fileWrapper
+{
+	return _fileWrapper;
+}
+
+- (void)setFileWrapper:(NSFileWrapper *)fileWrapper
+{
+	if (fileWrapper != _fileWrapper) {
+		id held = [fileWrapper retain];
+
+		[_fileWrapper release];
+		_fileWrapper = held;
+	}
 }
 
 - (NSImage *)image

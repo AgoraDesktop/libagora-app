@@ -792,3 +792,28 @@ imported and then changed — the changes are recorded in [`PROVENANCE.md`](PROV
   an `APPKIT-REFUSE` line rather than drawn as nothing; `-fileWrapper`/`-initWithFileWrapper:` remain owed on
   `NSTextAttachment` (the WRAPPER pair, not the bytes — `NSFileWrapper` exists in libagora-base and the encoder exists
   here); and the tracking family still waits on the modal loop `NSCell.h` refuses by name.
+- **AND RTFD WRITES NOW — THE PACKAGE FORM — WHICH NEEDED TWO THINGS THAT DID NOT EXIST TOGETHER UNTIL THIS SLICE.**
+  RTFD is not a different codec: it is the SAME RTF document, with its pictures stored as FILES beside it and its text
+  REFERRING to them (`{\\NeXTGraphic <name> \\width<tw>\\height<tw>}`). So the RTF writer grew a SINK — `fn_rtf_text`
+  (`NSAttributedStringRTF_internal.h`): with none it writes `{\\pict\\pngblip…}` inline as it always did, with one it
+  writes the reference and hands back the bytes — and `NSAttributedStringRTFD.m` is the package around it. Two writers
+  would be two chances for `TXT.rtf` to disagree with `-RTFRepresentation`, and a reader would have to guess.
+  MEASURED, `tests/text_rtfd.m`: a store of `A`, an attachment and `B` makes a package that is a DIRECTORY holding
+  exactly **2 files** — `TXT.rtf` and `pic.png`, the name the attachment's OWN FILE WRAPPER carried — whose text names
+  `\\NeXTGraphic pic.png` and does **not** also carry the picture inline, whose picture file begins with the PNG
+  signature, and whose SERIALIZED form reads back as the same directory with the same two names.
+- **AND `NSTextAttachment` HAS THE FILE-WRAPPER PAIR AT LAST** (`-fileWrapper`, `-initWithFileWrapper:`,
+  `-setFileWrapper:`), which is what a package document is built out of — the picture and the file are SEPARATE facts
+  on one object, and the probe checks both. `-initWithFileWrapper:` is the designated initialiser, which is Apple's
+  arrangement.
+- **AND FOUNDATION HAD TO LEARN TO DEFER, WHICH THE FIRST ATTEMPT GOT WRONG.** `libagora-base` refuses RTFD because it
+  has no attachment class — true, and still true. The obvious override is an AppKit CATEGORY on `NSAttributedString`
+  implementing the same selectors, which is exactly how `-initWithRTF:` works (Foundation only DECLARES that one) —
+  and it is MEASURED LOSING: the class's own method is what resolves, so the probe printed Foundation's refusal and no
+  category method ran. The fix is a SEAM in Foundation — one function pointer, installed by the AppKit from a
+  CONSTRUCTOR (this tree's recorded choice over `+load`, for loader ordering) — and `-RTFDFromRange:` serializes
+  whatever the installed writer returns, so the two doors cannot disagree.
+- **AND READING A PACKAGE BACK IS THE NEXT CUT, NAMED**: `-initWithRTFD:documentAttributes:` and
+  `-initWithRTFDFileWrapper:documentAttributes:` need the RTF reader to understand `\\NeXTGraphic` and to be handed the
+  package's files; today a written package is measured by its CONTENTS and its serialized round trip, not by reopening
+  it into an attributed string.

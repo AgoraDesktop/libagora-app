@@ -13,6 +13,7 @@
  * `\\` the literal escapes. ANY OTHER CONTROL WORD IS IGNORED, which is the boundary of a codec for a vocabulary
  * this tier actually has; a document carrying bold or italic survives with those bits dropped rather than wrong.
  */
+#import "NSAttributedStringRTF_internal.h"
 #import <AppKit/NSAttributedString.h>
 #import <AppKit/NSFont.h>
 #import <AppKit/NSColor.h>
@@ -66,6 +67,250 @@ static NSInteger fn_colour_index(NSMutableArray *colours, NSColor *colour)
 	}
 	[colours addObject:colour];
 	return (NSInteger)[colours count];
+}
+
+/* **A PICTURE, WRITTEN AS RTF's OWN GROUP.** `{\pict\pngblip\picw<px>\pich<px>\picwgoal<tw>\pichgoal<tw> <hex>}` is
+ * the shape every RTF writer emits for a PNG, and the bytes come from `NSBitmapImageRep`'s encoder — which is Core
+ * Graphics' `CGImageDestination` — so this method has no image code in it either. THE PIXEL SIZE AND THE GOAL SIZE ARE
+ * BOTH WRITTEN because they say different things: `\picw`/`\pich` are the picture's own pixels, `\picwgoal`/
+ * `\pichgoal` are how big to draw it in TWIPS (1/1440 inch), and the goal is the pixel size at 72 dpi — twenty twips to
+ * the pixel — which is the same size a rep drawn at its natural size has.
+ *
+ * FALSE MEANS "NOTHING WAS WRITTEN", and the caller then writes the character itself: an attachment with no image is a
+ * character that draws nothing, and dropping it from the document would lose the caller's text. */
+static BOOL fn_emit_picture(NSMutableString *out, NSTextAttachment *attachment)
+{
+	NSImage *image = [attachment image];
+	NSData *png = nil;
+	NSSize size;
+	NSImageRep *rep;
+	long width = 0, height = 0;
+	const unsigned char *bytes;
+	NSUInteger k;
+
+	if (image == nil) {
+		return NO;
+	}
+	size = [image size];
+	rep = [image bestRepresentationForRect:NSMakeRect(0, 0, size.width, size.height) context:nil hints:nil];
+	if (![rep isKindOfClass:[NSBitmapImageRep class]]) {
+		return NO;
+	}
+	png = [(NSBitmapImageRep *)rep representationUsingType:NSPNGFileType properties:nil];
+	if (png == nil || [png length] == 0) {
+		return NO;
+	}
+	width = (long)[(NSBitmapImageRep *)rep pixelsWide];
+	height = (long)[(NSBitmapImageRep *)rep pixelsHigh];
+	if (width <= 0 || height <= 0) {
+		return NO;
+	}
+	[out appendString:@"{\\pict\\pngblip"];
+	[out appendFormat:@"\\picw%ld\\pich%ld\\picwgoal%ld\\pichgoal%ld ", width, height, width * 20, height * 20];
+	bytes = (const unsigned char *)[png bytes];
+	for (k = 0; k < [png length]; k++) {
+		[out appendFormat:@"%02X", bytes[k]];
+	}
+	[out appendString:@"}"];
+	return YES;
+}
+
+/* **AND A PICTURE AS A FILE RATHER THAN AS BYTES, WHICH IS WHAT A PACKAGE DOCUMENT IS.** RTFD keeps each attachment in
+ * its own file beside the text and has the text REFER to it, so this writes the format's own reference —
+ * `{\NeXTGraphic <filename> \width<twips>\height<twips>}` — and hands the bytes to the caller to put in the package.
+ * The filename is the attachment's own preferred name when it has one, so a document that was read from a package
+ * writes back with the same names; otherwise a numbered one is invented, and the dictionary returned through
+ * `attachmentFiles` is what the package is built from. THE FILE IS NAMED BEFORE THE BYTES ARE MADE, because the name
+ * is what the text says and the two must not be able to disagree. */
+static BOOL fn_emit_attachment_reference(NSMutableString *out, NSTextAttachment *attachment,
+					 NSMutableDictionary *attachmentFiles)
+{
+	NSImage *image = [attachment image];
+	NSData *png = nil;
+	NSString *name = nil;
+	NSSize size;
+	NSImageRep *rep;
+	long width, height;
+
+	if (image == nil) {
+		return NO;
+	}
+	size = [image size];
+	rep = [image bestRepresentationForRect:NSMakeRect(0, 0, size.width, size.height) context:nil hints:nil];
+	if (![rep isKindOfClass:[NSBitmapImageRep class]]) {
+		return NO;
+	}
+	width = (long)[(NSBitmapImageRep *)rep pixelsWide];
+	height = (long)[(NSBitmapImageRep *)rep pixelsHigh];
+	if (width <= 0 || height <= 0) {
+		return NO;
+	}
+	{
+		NSFileWrapper *wrapper = [attachment fileWrapper];
+		NSString *preferred = [wrapper preferredFilename];
+
+		if (preferred != nil && [preferred length] > 0) {
+			name = preferred;
+		} else {
+			name = [NSString stringWithFormat:@"Attachment-%lu.png",
+							 (unsigned long)([attachmentFiles count] + 1)];
+		}
+	}
+	png = [(NSBitmapImageRep *)rep representationUsingType:NSPNGFileType properties:nil];
+	if (png == nil || [png length] == 0) {
+		return NO;
+	}
+	[attachmentFiles setObject:png forKey:name];
+	[out appendFormat:@"{\\NeXTGraphic %@ \\width%ld\\height%ld}", name, width * 20, height * 20];
+	return YES;
+}
+
+NSString *fn_rtf_text(NSAttributedString *source, NSMutableDictionary *attachmentFiles)
+{
+	NSString *string = [source string];
+	NSUInteger n = [string length];
+	NSMutableArray *fontNames = [NSMutableArray array];
+	NSMutableArray *colours = [NSMutableArray array];
+	NSMutableString *out = [NSMutableString string];
+	NSInteger curFont = -1, curFg = -1, curBg = -1, curHalf = -1;
+	BOOL curUnder = NO, curStrike = NO;
+	NSUInteger i;
+
+	for (i = 0; i < n; i++) {
+		NSDictionary *a = [source attributesAtIndex:i effectiveRange:NULL];
+		NSFont *font = [a objectForKey:NSFontAttributeName];
+		NSColor *fg = [a objectForKey:NSForegroundColorAttributeName];
+		NSColor *bg = [a objectForKey:NSBackgroundColorAttributeName];
+
+		if (font != nil) {
+			fn_font_index(fontNames, [font fontName]);
+		}
+		if (fg != nil) {
+			fn_colour_index(colours, fg);
+		}
+		if (bg != nil) {
+			fn_colour_index(colours, bg);
+		}
+	}
+
+	[out appendString:@"{\\rtf1\\ansi\\ansicpg1252\\deff0\n"];
+	[out appendString:@"{\\fonttbl"];
+	for (i = 0; i < [fontNames count]; i++) {
+		[out appendFormat:@"{\\f%lu %@;}", (unsigned long)i, [fontNames objectAtIndex:i]];
+	}
+	[out appendString:@"}\n{\\colortbl;"];
+	for (i = 0; i < [colours count]; i++) {
+		NSColor *c = [colours objectAtIndex:i];
+
+		[out appendFormat:@"\\red%ld\\green%ld\\blue%ld;",
+			(long)lround([c redComponent] * 255.0), (long)lround([c greenComponent] * 255.0),
+			(long)lround([c blueComponent] * 255.0)];
+	}
+	[out appendString:@"}\n\\pard "];
+
+	for (i = 0; i < n; i++) {
+		unichar c = [string characterAtIndex:i];
+		NSDictionary *a;
+		NSFont *font;
+		NSColor *fg, *bg;
+		NSNumber *under, *strike;
+
+		if (i == 0 || [string characterAtIndex:i - 1] == '\n') {
+			NSParagraphStyle *ps = [[source attributesAtIndex:i effectiveRange:NULL]
+				objectForKey:NSParagraphStyleAttributeName];
+			NSInteger align = (ps != nil) ? [ps alignment] : NSLeftTextAlignment;
+
+			fn_emit_word(out, (align == NSCenterTextAlignment) ? @"\\qc"
+				: (align == NSRightTextAlignment) ? @"\\qr"
+				: (align == NSJustifiedTextAlignment) ? @"\\qj" : @"\\ql");
+		}
+		if (c == '\n') {
+			[out appendString:@"\\par\n"];
+			continue;
+		}
+		if (c == '\t') {
+			[out appendString:@"\\tab "];
+			continue;
+		}
+		if (c == (unichar)NSAttachmentCharacter) {
+			/* **AN ATTACHMENT WITH A PICTURE IS A PICTURE GROUP, NOT A CHARACTER.** One without a picture is
+			 * written as the character it is, because dropping it would lose the caller's text. */
+			NSTextAttachment *attachment = [[source attributesAtIndex:i effectiveRange:NULL]
+				objectForKey:NSAttachmentAttributeName];
+
+			if (attachment != nil) {
+				BOOL emitted = (attachmentFiles == nil)
+					? fn_emit_picture(out, attachment)
+					: fn_emit_attachment_reference(out, attachment, attachmentFiles);
+
+				if (emitted) {
+					continue;
+				}
+			}
+		}
+		a = [source attributesAtIndex:i effectiveRange:NULL];
+		font = [a objectForKey:NSFontAttributeName];
+		if (font != nil) {
+			NSInteger idx = fn_font_index(fontNames, [font fontName]);
+			NSInteger half = (NSInteger)lround([font pointSize] * 2.0);
+
+			if (idx != curFont) {
+				fn_emit_word(out, [NSString stringWithFormat:@"\\f%ld", (long)idx]);
+				curFont = idx;
+			}
+			if (half != curHalf) {
+				fn_emit_word(out, [NSString stringWithFormat:@"\\fs%ld", (long)half]);
+				curHalf = half;
+			}
+		}
+		fg = [a objectForKey:NSForegroundColorAttributeName];
+		{
+			NSInteger idx = (fg != nil) ? fn_colour_index(colours, fg) : 0;
+
+			if (idx != curFg) {
+				fn_emit_word(out, [NSString stringWithFormat:@"\\cf%ld", (long)idx]);
+				curFg = idx;
+			}
+		}
+		bg = [a objectForKey:NSBackgroundColorAttributeName];
+		{
+			NSInteger idx = (bg != nil) ? fn_colour_index(colours, bg) : 0;
+
+			if (idx != curBg) {
+				fn_emit_word(out, [NSString stringWithFormat:@"\\highlight%ld", (long)idx]);
+				curBg = idx;
+			}
+		}
+		under = [a objectForKey:NSUnderlineStyleAttributeName];
+		{
+			BOOL on = (under != nil && [under integerValue] != NSUnderlineStyleNone);
+
+			if (on != curUnder) {
+				fn_emit_word(out, on ? @"\\ul" : @"\\ulnone");
+				curUnder = on;
+			}
+		}
+		strike = [a objectForKey:NSStrikethroughStyleAttributeName];
+		{
+			BOOL on = (strike != nil && [strike integerValue] != NSUnderlineStyleNone);
+
+			if (on != curStrike) {
+				fn_emit_word(out, on ? @"\\strike" : @"\\strike0");
+				curStrike = on;
+			}
+		}
+		/* THE THREE LITERAL ESCAPES, the printable ASCII as itself, and everything else as `\uN?` — the reader's own
+		 * Unicode control word, with the `?` as the substitution character a parser that cannot do Unicode would take. */
+		if (c == '\\' || c == '{' || c == '}') {
+			[out appendFormat:@"\\%C", c];
+		} else if (c >= 0x20 && c < 0x7F) {
+			[out appendFormat:@"%C", c];
+		} else {
+			[out appendFormat:@"\\u%ld?", (long)(int16_t)c];
+		}
+	}
+	[out appendString:@"}\n"];
+	return out;
 }
 
 @implementation NSAttributedString (NSAttributedStringKitAdditions)
@@ -424,51 +669,6 @@ static NSInteger fn_colour_index(NSMutableArray *colours, NSColor *colour)
 	return self;
 }
 
-/* **A PICTURE, WRITTEN AS RTF's OWN GROUP.** `{\pict\pngblip\picw<px>\pich<px>\picwgoal<tw>\pichgoal<tw> <hex>}` is
- * the shape every RTF writer emits for a PNG, and the bytes come from `NSBitmapImageRep`'s encoder — which is Core
- * Graphics' `CGImageDestination` — so this method has no image code in it either. THE PIXEL SIZE AND THE GOAL SIZE ARE
- * BOTH WRITTEN because they say different things: `\picw`/`\pich` are the picture's own pixels, `\picwgoal`/
- * `\pichgoal` are how big to draw it in TWIPS (1/1440 inch), and the goal is the pixel size at 72 dpi — twenty twips to
- * the pixel — which is the same size a rep drawn at its natural size has.
- *
- * FALSE MEANS "NOTHING WAS WRITTEN", and the caller then writes the character itself: an attachment with no image is a
- * character that draws nothing, and dropping it from the document would lose the caller's text. */
-static BOOL fn_emit_picture(NSMutableString *out, NSTextAttachment *attachment)
-{
-	NSImage *image = [attachment image];
-	NSData *png = nil;
-	NSSize size;
-	NSImageRep *rep;
-	long width = 0, height = 0;
-	const unsigned char *bytes;
-	NSUInteger k;
-
-	if (image == nil) {
-		return NO;
-	}
-	size = [image size];
-	rep = [image bestRepresentationForRect:NSMakeRect(0, 0, size.width, size.height) context:nil hints:nil];
-	if (![rep isKindOfClass:[NSBitmapImageRep class]]) {
-		return NO;
-	}
-	png = [(NSBitmapImageRep *)rep representationUsingType:NSPNGFileType properties:nil];
-	if (png == nil || [png length] == 0) {
-		return NO;
-	}
-	width = (long)[(NSBitmapImageRep *)rep pixelsWide];
-	height = (long)[(NSBitmapImageRep *)rep pixelsHigh];
-	if (width <= 0 || height <= 0) {
-		return NO;
-	}
-	[out appendString:@"{\\pict\\pngblip"];
-	[out appendFormat:@"\\picw%ld\\pich%ld\\picwgoal%ld\\pichgoal%ld ", width, height, width * 20, height * 20];
-	bytes = (const unsigned char *)[png bytes];
-	for (k = 0; k < [png length]; k++) {
-		[out appendFormat:@"%02X", bytes[k]];
-	}
-	[out appendString:@"}"];
-	return YES;
-}
 
 /* **AND THE WRITER.** The tables are built in a FIRST pass so every face and colour an index is written for is already
  * declared; the body then walks the string and emits a control word only when the state CHANGES, which is what makes
@@ -477,144 +677,9 @@ static BOOL fn_emit_picture(NSMutableString *out, NSTextAttachment *attachment)
  * subset is the reader's, which is the point: what this writes, `-initWithRTF:` reads back. */
 - (NSData *)RTFRepresentation
 {
-	NSString *string = [self string];
-	NSUInteger n = [string length];
-	NSMutableArray *fontNames = [NSMutableArray array];
-	NSMutableArray *colours = [NSMutableArray array];
-	NSMutableString *out = [NSMutableString string];
-	NSInteger curFont = -1, curFg = -1, curBg = -1, curHalf = -1;
-	BOOL curUnder = NO, curStrike = NO;
-	NSUInteger i;
+	NSString *text = fn_rtf_text(self, nil);
 
-	for (i = 0; i < n; i++) {
-		NSDictionary *a = [self attributesAtIndex:i effectiveRange:NULL];
-		NSFont *font = [a objectForKey:NSFontAttributeName];
-		NSColor *fg = [a objectForKey:NSForegroundColorAttributeName];
-		NSColor *bg = [a objectForKey:NSBackgroundColorAttributeName];
-
-		if (font != nil) {
-			fn_font_index(fontNames, [font fontName]);
-		}
-		if (fg != nil) {
-			fn_colour_index(colours, fg);
-		}
-		if (bg != nil) {
-			fn_colour_index(colours, bg);
-		}
-	}
-
-	[out appendString:@"{\\rtf1\\ansi\\ansicpg1252\\deff0\n"];
-	[out appendString:@"{\\fonttbl"];
-	for (i = 0; i < [fontNames count]; i++) {
-		[out appendFormat:@"{\\f%lu %@;}", (unsigned long)i, [fontNames objectAtIndex:i]];
-	}
-	[out appendString:@"}\n{\\colortbl;"];
-	for (i = 0; i < [colours count]; i++) {
-		NSColor *c = [colours objectAtIndex:i];
-
-		[out appendFormat:@"\\red%ld\\green%ld\\blue%ld;",
-			(long)lround([c redComponent] * 255.0), (long)lround([c greenComponent] * 255.0),
-			(long)lround([c blueComponent] * 255.0)];
-	}
-	[out appendString:@"}\n\\pard "];
-
-	for (i = 0; i < n; i++) {
-		unichar c = [string characterAtIndex:i];
-		NSDictionary *a;
-		NSFont *font;
-		NSColor *fg, *bg;
-		NSNumber *under, *strike;
-
-		if (i == 0 || [string characterAtIndex:i - 1] == '\n') {
-			NSParagraphStyle *ps = [[self attributesAtIndex:i effectiveRange:NULL]
-				objectForKey:NSParagraphStyleAttributeName];
-			NSInteger align = (ps != nil) ? [ps alignment] : NSLeftTextAlignment;
-
-			fn_emit_word(out, (align == NSCenterTextAlignment) ? @"\\qc"
-				: (align == NSRightTextAlignment) ? @"\\qr"
-				: (align == NSJustifiedTextAlignment) ? @"\\qj" : @"\\ql");
-		}
-		if (c == '\n') {
-			[out appendString:@"\\par\n"];
-			continue;
-		}
-		if (c == '\t') {
-			[out appendString:@"\\tab "];
-			continue;
-		}
-		if (c == (unichar)NSAttachmentCharacter) {
-			/* **AN ATTACHMENT WITH A PICTURE IS A PICTURE GROUP, NOT A CHARACTER.** One without a picture is
-			 * written as the character it is, because dropping it would lose the caller's text. */
-			NSTextAttachment *attachment = [[self attributesAtIndex:i effectiveRange:NULL]
-				objectForKey:NSAttachmentAttributeName];
-
-			if (attachment != nil && fn_emit_picture(out, attachment)) {
-				continue;
-			}
-		}
-		a = [self attributesAtIndex:i effectiveRange:NULL];
-		font = [a objectForKey:NSFontAttributeName];
-		if (font != nil) {
-			NSInteger idx = fn_font_index(fontNames, [font fontName]);
-			NSInteger half = (NSInteger)lround([font pointSize] * 2.0);
-
-			if (idx != curFont) {
-				fn_emit_word(out, [NSString stringWithFormat:@"\\f%ld", (long)idx]);
-				curFont = idx;
-			}
-			if (half != curHalf) {
-				fn_emit_word(out, [NSString stringWithFormat:@"\\fs%ld", (long)half]);
-				curHalf = half;
-			}
-		}
-		fg = [a objectForKey:NSForegroundColorAttributeName];
-		{
-			NSInteger idx = (fg != nil) ? fn_colour_index(colours, fg) : 0;
-
-			if (idx != curFg) {
-				fn_emit_word(out, [NSString stringWithFormat:@"\\cf%ld", (long)idx]);
-				curFg = idx;
-			}
-		}
-		bg = [a objectForKey:NSBackgroundColorAttributeName];
-		{
-			NSInteger idx = (bg != nil) ? fn_colour_index(colours, bg) : 0;
-
-			if (idx != curBg) {
-				fn_emit_word(out, [NSString stringWithFormat:@"\\highlight%ld", (long)idx]);
-				curBg = idx;
-			}
-		}
-		under = [a objectForKey:NSUnderlineStyleAttributeName];
-		{
-			BOOL on = (under != nil && [under integerValue] != NSUnderlineStyleNone);
-
-			if (on != curUnder) {
-				fn_emit_word(out, on ? @"\\ul" : @"\\ulnone");
-				curUnder = on;
-			}
-		}
-		strike = [a objectForKey:NSStrikethroughStyleAttributeName];
-		{
-			BOOL on = (strike != nil && [strike integerValue] != NSUnderlineStyleNone);
-
-			if (on != curStrike) {
-				fn_emit_word(out, on ? @"\\strike" : @"\\strike0");
-				curStrike = on;
-			}
-		}
-		/* THE THREE LITERAL ESCAPES, the printable ASCII as itself, and everything else as `\uN?` — the reader's own
-		 * Unicode control word, with the `?` as the substitution character a parser that cannot do Unicode would take. */
-		if (c == '\\' || c == '{' || c == '}') {
-			[out appendFormat:@"\\%C", c];
-		} else if (c >= 0x20 && c < 0x7F) {
-			[out appendFormat:@"%C", c];
-		} else {
-			[out appendFormat:@"\\u%ld?", (long)(int16_t)c];
-		}
-	}
-	[out appendString:@"}\n"];
-	return [out dataUsingEncoding:NSUTF8StringEncoding];
+	return (text != nil) ? [text dataUsingEncoding:NSUTF8StringEncoding] : nil;
 }
 
 @end
