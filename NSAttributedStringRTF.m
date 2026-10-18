@@ -296,6 +296,15 @@ NSString *fn_rtf_text(NSAttributedString *source, NSMutableDictionary *attachmen
 		? [documentAttributes objectForKey:NSDefaultTabIntervalDocumentAttribute] : nil;
 	long deftabTwips = ([tabValue isKindOfClass:[NSNumber class]])
 		? lround([tabValue doubleValue] * 20.0) : 0;
+	/* **AND THE TWO SWITCH-LIKE FACTS.** The view mode writes RTF's own two named kinds — 1 is Page Layout, 4 is
+	 * Normal on `\viewkind`'s table — and the hyphenation factor becomes the on/off `\hyphauto`, because RTF has a
+	 * switch and a hot zone rather than a 0..1 factor. A wrong-typed value writes nothing, like the tab interval. */
+	id viewValue = (documentAttributes != nil)
+		? [documentAttributes objectForKey:NSViewModeDocumentAttribute] : nil;
+	id hyphenValue = (documentAttributes != nil)
+		? [documentAttributes objectForKey:NSHyphenationFactorDocumentAttribute] : nil;
+	BOOL hasView = [viewValue isKindOfClass:[NSNumber class]];
+	BOOL hasHyphen = [hyphenValue isKindOfClass:[NSNumber class]];
 	NSUInteger i;
 
 	for (i = 0; i < n; i++) {
@@ -334,6 +343,12 @@ NSString *fn_rtf_text(NSAttributedString *source, NSMutableDictionary *attachmen
 	[out appendString:@"{\\rtf1\\ansi\\ansicpg1252\\deff0"];
 	if (deftabTwips > 0) {
 		[out appendFormat:@"\\deftab%ld", deftabTwips];
+	}
+	if (hasView) {
+		[out appendFormat:@"\\viewkind%ld", ([viewValue integerValue] != 0) ? 1L : 4L];
+	}
+	if (hasHyphen) {
+		[out appendFormat:@"\\hyphauto%ld", ([hyphenValue doubleValue] > 0.0) ? 1L : 0L];
 	}
 	[out appendString:@"\n"];
 	[out appendString:@"{\\fonttbl"];
@@ -525,6 +540,11 @@ NSString *fn_rtf_text(NSAttributedString *source, NSMutableDictionary *attachmen
 	 * interval must carry a style even when it has no other paragraph property — and it is reported in the document
 	 * attributes, so the fact survives into a caller's hands as well as into the layout. */
 	CGFloat documentTabInterval = 0.0;
+	/* **AND THE OTHER TWO DOCUMENT FACTS THE WRITER CAN EMBED.** The view mode is -1 until `\viewkind` says, because
+	 * an absent attribute and "normal" are different facts; the hyphenation factor is -1 until `\hyphauto` says, for
+	 * the same reason (`\hyphauto0` is an EXPLICIT off). */
+	NSInteger documentViewMode = -1;
+	CGFloat documentHyphenationFactor = -1.0f;
 	NSInteger destination = 0;	/* 0 body, 1 font table, 2 colour table, 3 picture, 4 graphic, 5 list table */
 	/* **AND THE LISTS**: the definitions the header declares, keyed by RTF's list id, and the id and depth the
 	 * paragraph being read is in. A paragraph's `-textLists` is a STACK of those definitions, which is why the depth is
@@ -586,12 +606,13 @@ NSString *fn_rtf_text(NSAttributedString *source, NSMutableDictionary *attachmen
 		if (curStrike) { [a setObject:[NSNumber numberWithInteger:NSUnderlineStyleSingle] forKey:NSStrikethroughStyleAttributeName]; } \
 		if (pendingAttachment != nil) { [a setObject:pendingAttachment forKey:NSAttachmentAttributeName]; } \
 		if (curAlign != NSLeftTextAlignment || [fn_lists_for_depth(listDefinitions, currentListId, currentLevel) count] > 0 \
-		    || documentTabInterval > 0.0) { \
+		    || documentTabInterval > 0.0 || documentHyphenationFactor > 0.0f) { \
 			NSMutableParagraphStyle *ps = [[NSParagraphStyle defaultParagraphStyle] mutableCopy]; \
 			NSArray *paragraphLists = fn_lists_for_depth(listDefinitions, currentListId, currentLevel); \
 			[ps setAlignment:curAlign]; \
 			if ([paragraphLists count] > 0) { [ps setTextLists:paragraphLists]; } \
 			if (documentTabInterval > 0.0) { [ps setDefaultTabInterval:documentTabInterval]; } \
+			if (documentHyphenationFactor > 0.0f) { [ps setHyphenationFactor:(float)documentHyphenationFactor]; } \
 			[a setObject:ps forKey:NSParagraphStyleAttributeName]; \
 			[ps release]; \
 		} \
@@ -774,6 +795,7 @@ NSString *fn_rtf_text(NSAttributedString *source, NSMutableDictionary *attachmen
 			NSUInteger k = start;
 			NSInteger param = 0;
 			BOOL negative = NO;
+			BOOL hasParam = NO;
 			NSString *word;
 
 			while (k < n) {
@@ -795,6 +817,7 @@ NSString *fn_rtf_text(NSAttributedString *source, NSMutableDictionary *attachmen
 
 				if (d >= '0' && d <= '9') {
 					param = param * 10 + (d - '0');
+					hasParam = YES;
 					k++;
 				} else {
 					break;
@@ -848,6 +871,21 @@ NSString *fn_rtf_text(NSAttributedString *source, NSMutableDictionary *attachmen
 				 * destination is not the document's and is ignored. */
 				if (destination == 0 && param > 0) {
 					documentTabInterval = (CGFloat)param / 20.0;
+					FN_PUSH_MARK();
+				}
+			} else if ([word isEqualToString:@"viewkind"]) {
+				/* THE SPEC'S TWO NAMED KINDS: 1 is Page Layout, 4 is Normal. The ATTRIBUTE has only two states (0 normal,
+				 * 1 page layout), so any other view kind — outline, master document, online — reads as "not page
+				 * layout", which is the honest collapse rather than a third state the attribute cannot carry. */
+				if (destination == 0) {
+					documentViewMode = (param == 1) ? 1 : 0;
+				}
+			} else if ([word isEqualToString:@"hyphauto"]) {
+				/* **THE SWITCH, INCLUDING THE SPEC'S "LEAVE THE WORD BY ITSELF" FORM.** `\hyphauto` with no parameter is
+				 * ON, `\hyphauto1` is on and `\hyphauto0` is off; the factor cannot carry a magnitude, so the reader
+				 * answers 1.0 for on — the same loss the writer states. */
+				if (destination == 0) {
+					documentHyphenationFactor = (!hasParam || param != 0) ? 1.0f : 0.0f;
 					FN_PUSH_MARK();
 				}
 			} else if ([word isEqualToString:@"fonttbl"]) {
@@ -968,6 +1006,14 @@ NSString *fn_rtf_text(NSAttributedString *source, NSMutableDictionary *attachmen
 			if (documentTabInterval > 0.0) {
 				[facts setObject:[NSNumber numberWithDouble:documentTabInterval]
 					  forKey:NSDefaultTabIntervalDocumentAttribute];
+			}
+			if (documentViewMode >= 0) {
+				[facts setObject:[NSNumber numberWithInteger:documentViewMode]
+					  forKey:NSViewModeDocumentAttribute];
+			}
+			if (documentHyphenationFactor >= 0.0f) {
+				[facts setObject:[NSNumber numberWithFloat:(float)documentHyphenationFactor]
+					  forKey:NSHyphenationFactorDocumentAttribute];
 			}
 			*dict = facts;
 		}

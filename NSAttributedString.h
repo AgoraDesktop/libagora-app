@@ -113,6 +113,22 @@ extern NSString *NSCharacterEncodingDocumentAttribute;
  * APPLIES it to the paragraphs it builds, which is what makes it a round trip rather than a label. */
 extern NSString *NSDefaultTabIntervalDocumentAttribute;
 
+/* **AND THE TWO MORE THE WRITER CAN EMBED, EACH WITH ITS RTF CONTROL WORD READ OUT OF THE FETCHED SPEC.**
+ * `NSViewModeDocumentAttribute` is "ViewMode", an `NSNumber` integer where 0 is normal and 1 is page layout, and
+ * `\viewkindN`'s own table says **1 is Page Layout view** and **4 is Normal view** — so those are the two values
+ * written, and the reader collapses any other view kind to 0 (not page layout), because the attribute has only two
+ * states. `NSHyphenationFactorDocumentAttribute` is "HyphenationFactor", an `NSNumber` float from 0 to 1, and RTF's
+ * `\hyphauto` is a SWITCH ("append 1 or leave the word by itself to toggle on; append 0 to turn it off") — so the
+ * switch is written and THE MAGNITUDE IS LOST above zero, which is stated rather than hidden.
+ *
+ * AND THE TWO THE WRITER DOES NOT TAKE ARE NAMED HERE RATHER THAN GUESSED: the 1.5/1.6 specs fetched for this tier
+ * define `\cb` as a CHARACTER background colour (the document page background is a `\background` shape destination
+ * this codec neither reads nor writes), and they publish no READ-ONLY document control word at all — only the
+ * mutually exclusive `\formprot`/`\revprot`/`\annotprot`, none of which means "read only". A guessed control word
+ * would be a wrong document rather than an absent fact, so those two keys are not written. */
+extern NSString *NSViewModeDocumentAttribute;
+extern NSString *NSHyphenationFactorDocumentAttribute;
+
 /* ============================================================================================ *
  * AND THE DOOR THAT READS RICH TEXT FORMAT (RTF), WHICH IS THE HALF THIS TIER'S FOUNDATION DOES *
  * NOT HAVE. `libagora-base` already WRITES RTF — its `-RTFFromRange:documentAttributes:` is a real   *
@@ -132,7 +148,9 @@ extern NSString *NSDefaultTabIntervalDocumentAttribute;
  * which are not RTF should be able to tell. `documentAttributes` is filled with the document's own facts:
  * `NSDocumentTypeDocumentAttribute` (`NSRTFTextDocumentType` here, `NSRTFDTextDocumentType` through the package
  * doors) and `NSCharacterEncodingDocumentAttribute`, an `NSNumber` holding `NSUTF8StringEncoding` — the one encoding
- * this reader decodes. A FAILED PARSE LEAVES THE DICTIONARY UNTOUCHED, because there is no document to describe. */
+ * this reader decodes — plus, when the document names them, `NSDefaultTabIntervalDocumentAttribute`,
+ * `NSViewModeDocumentAttribute` and `NSHyphenationFactorDocumentAttribute` (the last as RTF's on/off switch, so its
+ * magnitude is lost). A FAILED PARSE LEAVES THE DICTIONARY UNTOUCHED, because there is no document to describe. */
 - (nullable instancetype)initWithRTF:(NSData *)data documentAttributes:(NSDictionary **)dict;
 
 /* **AND THE PACKAGE FORM OF THE SAME READER**, which is RTFD: an RTF document whose pictures are FILES beside it,

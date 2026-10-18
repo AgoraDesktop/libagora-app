@@ -77,7 +77,7 @@ int main(void)
 	NSData *serialized;
 	NSDictionary *children;
 	NSDictionary *docAttrs = nil;
-	NSDictionary *writeAttrs;
+	NSMutableDictionary *writeAttrs;
 
 	setvbuf(stdout, NULL, _IONBF, 0);
 	check(image != nil && named != nil, "the picture and the wrapper were made");
@@ -102,10 +102,14 @@ int main(void)
 	[store addAttribute:NSAttachmentAttributeName value:withName range:NSMakeRange(1, 1)];
 	whole = NSMakeRange(0, [store length]);
 
-	/* **AND A DOCUMENT ATTRIBUTE THE WRITER CONSUMES**, so the package's text carries the fact rather than only the
-	 * caller's dictionary: 36 points is `\deftab720` (twips). */
-	writeAttrs = [NSDictionary dictionaryWithObject:[NSNumber numberWithDouble:36.0]
-						forKey:NSDefaultTabIntervalDocumentAttribute];
+	/* **AND THE DOCUMENT ATTRIBUTES THE WRITER CONSUMES**, so the package's text carries the facts rather than only
+	 * the caller's dictionary: 36 points is `\deftab720` (twips), page layout is `\viewkind1`, and a positive
+	 * hyphenation factor is the on/off `\hyphauto1` — RTF has a switch, so 0.5 becomes ON and that loss is measured
+	 * on the way back. */
+	writeAttrs = [NSMutableDictionary dictionary];
+	[writeAttrs setObject:[NSNumber numberWithDouble:36.0] forKey:NSDefaultTabIntervalDocumentAttribute];
+	[writeAttrs setObject:[NSNumber numberWithInteger:1] forKey:NSViewModeDocumentAttribute];
+	[writeAttrs setObject:[NSNumber numberWithDouble:0.5] forKey:NSHyphenationFactorDocumentAttribute];
 	package = [store RTFDFileWrapperFromRange:whole documentAttributes:writeAttrs];
 	check(package != nil, "the package was made");
 	check(package != nil && [package isDirectory], "and it is a DIRECTORY, which is what a package is");
@@ -135,6 +139,10 @@ int main(void)
 				      "whose text REFERS to the picture by that same name");
 				check([text rangeOfString:@"\\deftab720"].location != NSNotFound,
 				      "and carries the default tab interval the writer was asked for, in twips");
+				check([text rangeOfString:@"\\viewkind1"].location != NSNotFound,
+				      "and the page-layout view mode, as `\\viewkind1`");
+				check([text rangeOfString:@"\\hyphauto1"].location != NSNotFound,
+				      "and the hyphenation switch, as `\\hyphauto1`");
 				check([text rangeOfString:@"\\pict"].location == NSNotFound,
 				      "and does NOT also carry it inline — one picture, stored once");
 				[text release];
@@ -177,6 +185,10 @@ int main(void)
 		      "with the character encoding as an NSNumber holding UTF-8");
 		check(fabs([[docAttrs objectForKey:NSDefaultTabIntervalDocumentAttribute] doubleValue] - 36.0) < 0.01,
 		      "and the default tab interval comes back as 36 points from the package's own text");
+		check([[docAttrs objectForKey:NSViewModeDocumentAttribute] integerValue] == 1,
+		      "and the view mode comes back as page layout (1)");
+		check([[docAttrs objectForKey:NSHyphenationFactorDocumentAttribute] doubleValue] == 1.0,
+		      "and the hyphenation factor comes back as ON (1.0) — the 0.5 magnitude is the stated loss");
 		if (back != nil) {
 			check([back length] == 3, "with the same three characters");
 			printf("  (the package gave %lu character(s))\n", (unsigned long)[back length]);

@@ -30,11 +30,14 @@
  * **AND THE READERS REPORT THE DOCUMENT, WHICH THEY DID NOT BEFORE**: `NSDocumentTypeDocumentAttribute` names
  * `NSRTFDTextDocumentType` through these doors (the plain RTF reader names `NSRTFTextDocumentType`), and
  * `NSCharacterEncodingDocumentAttribute` is the UTF-8 integer — the only encoding either reader decodes. AND THE
- * WRITERS CONSUME ONE DOCUMENT ATTRIBUTE NOW: `NSDefaultTabIntervalDocumentAttribute` is written as RTF's
- * `\deftabN` in twips and read back as a paragraph style's `-defaultTabInterval`, which is what the layout reads. WHAT
- * IS STILL NOT EMBEDDED IS STATED RATHER THAN GLOSSED: a document background colour and the read-only/view-mode
- * flags need control words this tier would have to guess, and the hyphenation factor is a 0..1 number where RTF
- * carries an on/off switch — so those three keys are not written.
+ * WRITERS CONSUME THREE DOCUMENT ATTRIBUTES NOW: `NSDefaultTabIntervalDocumentAttribute` (RTF's `\deftabN`, twips),
+ * `NSViewModeDocumentAttribute` (`\viewkind1` page layout / `\viewkind4` normal, the spec's own two kinds) and
+ * `NSHyphenationFactorDocumentAttribute` (the on/off `\hyphautoN`). The tab interval and the hyphenation switch are
+ * read back into the paragraph style the layout uses, not merely reported. TWO KEYS ARE STILL NOT WRITTEN AND ARE
+ * NAMED RATHER THAN GUESSED: a document background colour (`\cbN` is a CHARACTER background in the fetched specs;
+ * the page background is a `\background` shape destination this codec does not implement) and the read-only flag
+ * (the specs publish `\formprot`/`\revprot`/`\annotprot` and no read-only document control word). The hyphenation
+ * factor's MAGNITUDE above zero is lost, because RTF carries a switch rather than a 0..1 number.
  */
 #import "NSAttributedStringRTF_internal.h"
 

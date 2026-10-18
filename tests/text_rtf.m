@@ -129,6 +129,60 @@ int main(void)
 		[tabbedBack release];
 	}
 
+	/* **AND THE VIEW MODE AND THE HYPHENATION SWITCH, EACH WITH ITS OWN TWO-SIDED MAP.** `\viewkind1` is Page Layout
+	 * (the attribute's 1) and `\viewkind4` is Normal (0); `\hyphauto` is ON whether it is bare or carries 1, and
+	 * `\hyphauto0` is the explicit off. The last of those is why the reader keeps an "unset" sentinel. */
+	{
+		NSString *factsText = @"{\\rtf1\\ansi\\viewkind1\\hyphauto1\\pard\\ql a\\par}";
+		NSData *factsData = [factsText dataUsingEncoding:NSUTF8StringEncoding];
+		NSDictionary *facts = nil;
+		NSAttributedString *factsBack = [[NSAttributedString alloc] initWithRTF:factsData
+							      documentAttributes:&facts];
+
+		check(factsBack != nil, "a document with a view mode and hyphenation parses");
+		check([facts objectForKey:NSViewModeDocumentAttribute] != nil
+		      && [[facts objectForKey:NSViewModeDocumentAttribute] integerValue] == 1,
+		      "`\\viewkind1` reports page layout (1)");
+		check([facts objectForKey:NSHyphenationFactorDocumentAttribute] != nil
+		      && [[facts objectForKey:NSHyphenationFactorDocumentAttribute] doubleValue] == 1.0,
+		      "and `\\hyphauto1` reports hyphenation on");
+		if ([factsBack length] > 0) {
+			NSParagraphStyle *ps = [[factsBack attributesAtIndex:0 effectiveRange:NULL]
+				objectForKey:NSParagraphStyleAttributeName];
+
+			check(ps != nil && [ps hyphenationFactor] > 0.0f,
+			      "and the paragraph style carries the factor, which is what the layout reads");
+		}
+		[factsBack release];
+	}
+	{
+		NSString *plainView = @"{\\rtf1\\ansi\\viewkind4\\hyphauto0\\pard\\ql a\\par}";
+		NSData *plainData = [plainView dataUsingEncoding:NSUTF8StringEncoding];
+		NSDictionary *facts = nil;
+		NSAttributedString *plainBack = [[NSAttributedString alloc] initWithRTF:plainData
+							      documentAttributes:&facts];
+
+		check([facts objectForKey:NSViewModeDocumentAttribute] != nil
+		      && [[facts objectForKey:NSViewModeDocumentAttribute] integerValue] == 0,
+		      "`\\viewkind4` reports normal (0)");
+		check([facts objectForKey:NSHyphenationFactorDocumentAttribute] != nil
+		      && [[facts objectForKey:NSHyphenationFactorDocumentAttribute] doubleValue] == 0.0,
+		      "and `\\hyphauto0` reports the explicit off");
+		[plainBack release];
+	}
+	{
+		NSString *bare = @"{\\rtf1\\ansi\\hyphauto\\pard\\ql a\\par}";
+		NSData *bareData = [bare dataUsingEncoding:NSUTF8StringEncoding];
+		NSDictionary *facts = nil;
+		NSAttributedString *bareBack = [[NSAttributedString alloc] initWithRTF:bareData
+							      documentAttributes:&facts];
+
+		check([facts objectForKey:NSHyphenationFactorDocumentAttribute] != nil
+		      && [[facts objectForKey:NSHyphenationFactorDocumentAttribute] doubleValue] == 1.0,
+		      "and a BARE `\\hyphauto` is the spec's own way of saying on");
+		[bareBack release];
+	}
+
 	/* 2. **AND A DOCUMENT THAT IS NOT RTF ANSWERS NIL**, not an empty string. */
 	{
 		NSData *junk = [@"not an rtf document" dataUsingEncoding:NSUTF8StringEncoding];

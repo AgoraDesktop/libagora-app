@@ -21,9 +21,11 @@
  *   else  — write a REFERENCE to a file in the package (`{\NeXTGraphic <name> …}`) and put the bytes under that name
  *           in the dictionary, which is what RTFD is.
  *
- * `documentAttributes` is the writer's INPUT dictionary, or nil. The one key it consumes today is
- * `NSDefaultTabIntervalDocumentAttribute`, written as RTF's `\deftabN` (twips); a nil dictionary writes exactly the
- * bytes this function wrote before the key existed, so `-RTFRepresentation` stays byte-identical.
+ * `documentAttributes` is the writer's INPUT dictionary, or nil. The keys it consumes today are
+ * `NSDefaultTabIntervalDocumentAttribute` (RTF's `\deftabN`, twips), `NSViewModeDocumentAttribute` (`\viewkind1`
+ * for page layout, `\viewkind4` for normal) and `NSHyphenationFactorDocumentAttribute` (the on/off `\hyphauto`, with
+ * the magnitude lost above zero). A nil dictionary, or a key whose value has the wrong type, writes exactly the bytes
+ * this function wrote before that key existed — so `-RTFRepresentation`, which passes nil, stays byte-identical.
  *
  * The answer is autoreleased, and nil only when the source is nil. */
 extern NSString *fn_rtf_text(NSAttributedString *source, NSMutableDictionary *attachmentFiles,

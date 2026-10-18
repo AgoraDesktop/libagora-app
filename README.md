@@ -944,17 +944,25 @@ imported and then changed — the changes are recorded in [`PROVENANCE.md`](PROV
   `tests/text_rtf.m` and `tests/text_rtfd.m`: the plain parse reports type **`NSRTF`** and encoding **4**; both package
   doors report **`NSRTFD`** with the same integer; and a FAILED parse leaves the dictionary UNTOUCHED rather than
   describing a document that is not there. **AND THE WRITERS' SIDE IS NO LONGER EMPTY**, which the next bullet is.
-- **AND THE WRITERS CONSUME ONE OF THOSE FACTS NOW — THE DEFAULT TAB INTERVAL.** `fn_rtf_text` takes the writer's
-  document-attributes dictionary and the RTFD doors pass theirs through, so `NSDefaultTabIntervalDocumentAttribute`
-  is written as RTF's `\deftabN` in TWIPS (twenty to the point). THE READER DOES NOT MERELY REPORT IT: `\deftabN`
-  becomes a `NSParagraphStyle` with `-defaultTabInterval` set, because Core Text's own default is twelve stops at 28
-  points — a document that names an interval has to carry a style or the layout never sees it. MEASURED: 36 points
-  writes `\deftab720`; a literal `\deftab720` parses to **36.0** and the paragraph style applies **36.0**; the
-  package's own `TXT.rtf` carries the control word and both package doors read it back as **36.0** with the style
-  applied. `-RTFRepresentation` takes no dictionary, so its bytes are unchanged. WHAT IS STILL NOT EMBEDDED IS NAMED
-  RATHER THAN GLOSSED: a document background colour (`\cb` is a run/paragraph property too, so the tier would have
-  to guess which meaning an occurrence has), the read-only and view-mode flags (no control word in this tier's
-  vocabulary), and the hyphenation factor (a 0..1 number where RTF carries an on/off switch).
+- **AND THE WRITERS CONSUME THREE DOCUMENT FACTS NOW — THE TAB INTERVAL, THE VIEW MODE AND THE HYPHENATION SWITCH.**
+  `fn_rtf_text` takes the writer's document-attributes dictionary and the RTFD doors pass theirs through.
+  `NSDefaultTabIntervalDocumentAttribute` is RTF's `\deftabN` in TWIPS (twenty to the point);
+  `NSViewModeDocumentAttribute` is `\viewkindN` — the spec's own table says **1 is Page Layout** and **4 is Normal**,
+  which are the attribute's two states; and `NSHyphenationFactorDocumentAttribute` is the on/off `\hyphautoN`.
+  THE READER DOES NOT MERELY REPORT THEM: `\deftabN` becomes a `NSParagraphStyle` with `-defaultTabInterval` set and
+  `\hyphauto` sets its `-hyphenationFactor`, because those are what the layout reads — Core Text's own default is
+  twelve stops at 28 points, and a paragraph with no style would silently ignore both. MEASURED: 36 points writes
+  `\deftab720` and reads back as **36.0** and applies **36.0**; page layout writes `\viewkind1`, normal writes
+  `\viewkind4`, and **1**/**0** come back; a factor of **0.5** writes `\hyphauto1` and comes back as **1.0**, because
+  RTF carries a switch rather than the 0..1 factor — THE MAGNITUDE ABOVE ZERO IS LOST, and that is stated here and at
+  the key. A bare `\hyphauto` is the spec's own form of ON and reads as 1.0. `-RTFRepresentation` takes no dictionary,
+  so its bytes are unchanged.
+- **AND THE TWO THAT CANNOT BE WRITTEN HONESTLY ARE STILL NAMED.** A DOCUMENT BACKGROUND COLOUR is not written: the
+  fetched 1.5/1.6 specs define `\cbN` as a CHARACTER background colour (the page background is a `\background` shape
+  destination this codec neither reads nor writes), so mapping the document attribute onto `\cb` would paint every run
+  and mean something else. And THE READ-ONLY FLAG is not written: those specs publish `\formprot`, `\revprot` and
+  `\annotprot` — mutually exclusive protections for forms, revisions and annotations — and no read-only document
+  control word at all; a guessed word would be a wrong document rather than an absent fact.
 - **AND THE REFUSAL CENSUS IS A TEST NOW, NOT 129 PROSE CLAIMS.** This layer holds 129 `APPKIT-REFUSE` sites across 24
   files, and until this slice nothing watched them: a door quietly acquiring a real implementation was an improvement
   nobody recorded, and a real door quietly degrading into a refusal was a regression nobody saw. `tests/refusal_census.txt`
