@@ -21,6 +21,7 @@
 #import <AppKit/NSBitmapImageRep.h>
 #import <AppKit/NSImage.h>
 #import <AppKit/NSTextAttachment.h>
+#import <AppKit/NSTextList.h>
 #import <Foundation/Foundation.h>
 #include <math.h>
 #include <stdint.h>
@@ -165,6 +166,67 @@ static BOOL fn_emit_attachment_reference(NSMutableString *out, NSTextAttachment 
 	return YES;
 }
 
+/* **AND RTF's OWN NUMBER FOR A MARKER FORMAT.** A list definition says what its levels look like with `\levelnfc`,
+ * whose values are Word's: 0 decimal, 1 upper roman, 2 lower roman, 3 upper alpha, 4 lower alpha, 23 bullet. That
+ * mapping is the whole of what this writer knows about lists, and a format outside it is REFUSED BY NAME rather than
+ * written as a decimal — a document whose numbering silently became decimal is worse than one that says why.
+ *
+ * **AND `\leveltext`/`\levelnumbers` ARE NOT WRITTEN**, which is a boundary stated rather than an omission: those two
+ * carry the PLACEHOLDER TEXT a reader draws a marker from (`\'02\'00.` and the number's offset in it), and this tier
+ * draws markers from `NSTextList` instead — which is what the format in the list definition is for. A reader that
+ * renders markers out of RTF's placeholder text is a different reader from this one. */
+static NSInteger fn_level_format(NSString *markerFormat)
+{
+	if ([markerFormat isEqualToString:@"{decimal}"]) {
+		return 0;
+	}
+	if ([markerFormat isEqualToString:@"{upper-roman}"]) {
+		return 1;
+	}
+	if ([markerFormat isEqualToString:@"{lower-roman}"]) {
+		return 2;
+	}
+	if ([markerFormat isEqualToString:@"{upper-alpha}"] || [markerFormat isEqualToString:@"{upper-latin}"]) {
+		return 3;
+	}
+	if ([markerFormat isEqualToString:@"{lower-alpha}"] || [markerFormat isEqualToString:@"{lower-latin}"]) {
+		return 4;
+	}
+	/* THE BULLETS ARE THE SEVEN FORMATS THAT IGNORE THEIR NUMBER, named here rather than borrowed from the class: the
+	 * mapping is RTF's, and this file is where RTF's vocabulary belongs. */
+	if ([markerFormat isEqualToString:@"{disc}"] || [markerFormat isEqualToString:@"{circle}"]
+	    || [markerFormat isEqualToString:@"{square}"] || [markerFormat isEqualToString:@"{box}"]
+	    || [markerFormat isEqualToString:@"{check}"] || [markerFormat isEqualToString:@"{diamond}"]
+	    || [markerFormat isEqualToString:@"{hyphen}"]) {
+		return 23;
+	}
+	fprintf(stderr, "APPKIT-REFUSE: -RTFRepresentation does not know a list marker format `%s`, and writes it as "
+			"decimal\n", [markerFormat UTF8String]);
+	return 0;
+}
+
+/* THE STACK A PARAGRAPH SITS IN, AS A KEY: a paragraph inside two lists is identified by BOTH formats, outermost
+ * first, because two paragraphs with the same inner bullet under different outers are different lists to a reader. */
+static NSString *fn_lists_signature(NSArray *lists)
+{
+	NSMutableString *signature = [NSMutableString string];
+	NSUInteger k;
+
+	for (k = 0; k < [lists count]; k++) {
+		[signature appendFormat:@"%@%@", (k == 0) ? @"" : @"|", [[lists objectAtIndex:k] markerFormat]];
+	}
+	return signature;
+}
+
+/* THE PARAGRAPH'S STACK OF LISTS, or nil — the one place that reads it, so the pre-pass and the body cannot disagree. */
+static NSArray *fn_paragraph_lists(NSAttributedString *source, NSUInteger index)
+{
+	NSParagraphStyle *style = [[source attributesAtIndex:index effectiveRange:NULL]
+		objectForKey:NSParagraphStyleAttributeName];
+
+	return (style != nil) ? [style textLists] : nil;
+}
+
 NSString *fn_rtf_text(NSAttributedString *source, NSMutableDictionary *attachmentFiles)
 {
 	NSString *string = [source string];
@@ -172,6 +234,8 @@ NSString *fn_rtf_text(NSAttributedString *source, NSMutableDictionary *attachmen
 	NSMutableArray *fontNames = [NSMutableArray array];
 	NSMutableArray *colours = [NSMutableArray array];
 	NSMutableString *out = [NSMutableString string];
+	NSMutableDictionary *listIds = [NSMutableDictionary dictionary];	/* signature → @(id) */
+	NSMutableArray *listStacks = [NSMutableArray array];			/* id - 1 → that stack */
 	NSInteger curFont = -1, curFg = -1, curBg = -1, curHalf = -1;
 	BOOL curUnder = NO, curStrike = NO;
 	NSUInteger i;
@@ -191,6 +255,22 @@ NSString *fn_rtf_text(NSAttributedString *source, NSMutableDictionary *attachmen
 		if (bg != nil) {
 			fn_colour_index(colours, bg);
 		}
+		/* **AND THE LISTS ARE COLLECTED HERE**, in the same pass that numbers the faces and the colours, because the
+		 * table has to be complete in the header and the body only refers to it. A stack is identified by its formats;
+		 * ids are handed out in the order the stacks first appear, so the table reads in document order. */
+		if (i == 0 || [string characterAtIndex:i - 1] == '\n') {
+			NSArray *lists = fn_paragraph_lists(source, i);
+
+			if (lists != nil && [lists count] > 0) {
+				NSString *signature = fn_lists_signature(lists);
+
+				if ([listIds objectForKey:signature] == nil) {
+					[listIds setObject:[NSNumber numberWithUnsignedInteger:[listStacks count] + 1]
+						    forKey:signature];
+					[listStacks addObject:lists];
+				}
+			}
+		}
 	}
 
 	[out appendString:@"{\\rtf1\\ansi\\ansicpg1252\\deff0\n"];
@@ -206,7 +286,32 @@ NSString *fn_rtf_text(NSAttributedString *source, NSMutableDictionary *attachmen
 			(long)lround([c redComponent] * 255.0), (long)lround([c greenComponent] * 255.0),
 			(long)lround([c blueComponent] * 255.0)];
 	}
-	[out appendString:@"}\n\\pard "];
+	[out appendString:@"}\n"];
+	/* **THE LIST TABLE, WHERE RTF PUTS IT**: before the body, after the other tables, one `{\list}` per stack. Each
+	 * level states its number format, its justification and its starting number — which is `-startingItemNumber`, the
+	 * 10.6 door that exists precisely so a list may begin at five. */
+	if ([listStacks count] > 0) {
+		NSUInteger k;
+
+		[out appendString:@"{\\listtable "];
+		for (k = 0; k < [listStacks count]; k++) {
+			NSArray *lists = [listStacks objectAtIndex:k];
+			NSUInteger level;
+
+			[out appendFormat:@"{\\list\\listtemplateid%lu\\listhybrid", (unsigned long)(k + 1)];
+			for (level = 0; level < [lists count]; level++) {
+				NSTextList *list = [lists objectAtIndex:level];
+				NSInteger nfc = fn_level_format([list markerFormat]);
+
+				[out appendFormat:@"{\\listlevel\\levelnfc%ld\\levelnfcn%ld\\leveljc0"
+						 "\\levelstartat%ld}", (long)nfc, (long)nfc,
+					(long)[list startingItemNumber]];
+			}
+			[out appendFormat:@"\\listid%lu}", (unsigned long)(k + 1)];
+		}
+		[out appendString:@"}\n"];
+	}
+	[out appendString:@"\\pard "];
 
 	for (i = 0; i < n; i++) {
 		unichar c = [string characterAtIndex:i];
@@ -220,9 +325,23 @@ NSString *fn_rtf_text(NSAttributedString *source, NSMutableDictionary *attachmen
 				objectForKey:NSParagraphStyleAttributeName];
 			NSInteger align = (ps != nil) ? [ps alignment] : NSLeftTextAlignment;
 
+			NSArray *lists = [ps textLists];
+
 			fn_emit_word(out, (align == NSCenterTextAlignment) ? @"\\qc"
 				: (align == NSRightTextAlignment) ? @"\\qr"
 				: (align == NSJustifiedTextAlignment) ? @"\\qj" : @"\\ql");
+			/* **AND WHICH LIST THE PARAGRAPH IS IN**: `\ls` names the list and `\ilvl` the depth, with the innermost
+			 * list's index as the level. A paragraph with no lists writes neither, which is what a plain document's
+			 * RTF looks like and why this changes nothing for one. */
+			if (lists != nil && [lists count] > 0) {
+				NSNumber *identifier = [listIds objectForKey:fn_lists_signature(lists)];
+
+				if (identifier != nil) {
+					fn_emit_word(out, [NSString stringWithFormat:@"\\ls%ld\\ilvl%lu",
+							   (long)[identifier integerValue],
+							   (unsigned long)([lists count] - 1)]);
+				}
+			}
 		}
 		if (c == '\n') {
 			[out appendString:@"\\par\n"];

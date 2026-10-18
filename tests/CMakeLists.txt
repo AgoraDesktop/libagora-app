@@ -620,3 +620,10 @@ target_link_libraries(text_list PRIVATE App)
 
 add_test(NAME appkit-text-list COMMAND text_list)
 set_tests_properties(appkit-text-list PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
+
+# Lists in the RTF writer: the list table, the paragraph's \ls/\ilvl, and no marker text in the string.
+add_executable(text_rtf_lists text_rtf_lists.m)
+target_link_libraries(text_rtf_lists PRIVATE App)
+
+add_test(NAME appkit-text-rtf-lists COMMAND text_rtf_lists)
+set_tests_properties(appkit-text-rtf-lists PROPERTIES ENVIRONMENT "${_agora_app_test_env}")

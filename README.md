@@ -874,3 +874,24 @@ imported and then changed — the changes are recorded in [`PROVENANCE.md`](PROV
   made `appkit-refusal-census` fail with `NSTextList.m: the census says 0, the source has 2` and
   `the census says 129 in total, the sources have 131`, so recording them was a deliberate edit with a diff rather than
   a side effect. That is exactly the drift the census exists to make visible, caught on its first real opportunity.
+- **AND LISTS REACH RTF NOW, ON THE WRITING SIDE, WHICH IS THE HALF THAT MAKES THE CLASS USEFUL.** The writer emits the
+  format's own three-part shape: a `{\listtable}` in the header with ONE `{\list}` per distinct *stack* of lists (a
+  paragraph in two lists is identified by both formats, because the same inner bullet under different outers is a
+  different list to a reader), each level stating its number format with `\levelnfc` — **0 decimal, 1/2 roman, 3/4
+  alpha, 23 bullet**, which is Word's numbering and the only thing that survives the trip into `NSTextList` — and its
+  start with `\levelstartat`, which is `-startingItemNumber`. Each paragraph then names its list with `\ls` and its depth
+  with `\ilvl`. MEASURED: two stacks over three paragraphs produce a table with `\listid1`/`\listid2`, `\levelnfc0` and
+  `\levelnfc23`, `\levelstartat5` for a list that begins at 5, and exactly TWO `\ls` — so the unlisted third paragraph
+  stayed unlisted.
+- **AND NOTHING IS INJECTED INTO THE TEXT, WHICH IS ASSERTED BECAUSE IT WOULD LOOK CORRECT HERE.** The marker is drawn
+  from the paragraph style, so a writer that also wrote `5.` into the string would double the marker in every reader that
+  honours the style — and would pass any check that only asked whether the text survived. The probe checks for the
+  ABSENCE of marker text as well as the presence of the paragraphs.
+- **AND `\leveltext`/`\levelnumbers` ARE NOT WRITTEN, WHICH IS A BOUNDARY RATHER THAN AN OMISSION**: those carry the
+  placeholder text a reader uses to draw a marker *out of the file*, and this tier draws markers from `NSTextList`
+  instead. A reader that renders markers from RTF's placeholders is a different reader from this one, and the READING
+  HALF IS THE NEXT CUT — it will parse `{\listtable}`, `\levelnfc` and `\ls`/`\ilvl` back into `-textLists`, which is
+  what closes the loop the way the picture slice did.
+- **AND THE REFUSAL CENSUS CAUGHT THIS SLICE TOO** — the unknown-format refusal made it fail with
+  `NSAttributedStringRTF.m: the census says 2, the source has 3` and `the census says 131 in total, the sources have
+  132`, so recording it was again a deliberate edit.
