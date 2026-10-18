@@ -31,6 +31,7 @@
 #import <AppKit/AGChromeTheme.h>
 
 #include <stdio.h>
+#include <math.h>
 
 /* THE CHROME-BUTTON DOOR IS PRIVATE TO NSWindow.m; the test redeclares it, the tree's pattern for a second caller. */
 @interface NSWindow (AGToolbarTestDoor)
@@ -60,6 +61,14 @@ static NSBitmapImageRep *new_rep(int w, int h)
 static double lum(NSColor *c)
 {
 	return c == nil ? 2.0 : ([c redComponent] + [c greenComponent] + [c blueComponent]) / 3.0;
+}
+
+static int same_colour(NSColor *a, NSColor *b, double tol)
+{
+	return a != nil && b != nil
+		&& fabs([a redComponent] - [b redComponent]) < tol
+		&& fabs([a greenComponent] - [b greenComponent]) < tol
+		&& fabs([a blueComponent] - [b blueComponent]) < tol;
 }
 
 /* THE TARGET THAT VALIDATES. It counts the questions, answers what it was told, and MAY CHANGE THE ITEM WHILE IT
@@ -342,10 +351,12 @@ int main(void)
 		 * defect: the band drew correctly when asked for its own rect, and the content tree's walk never reached it. */
 		[window cg_drawToolbarInContext:ctx];
 		[window cg_drawChromeInContext:ctx];
-		check(lum([rep colorAtX:2 y:bandTop + 8]) < 0.99,
-		      "the toolbar band is filled with a ground, not left white");
-		check(lum([rep colorAtX:2 y:bandBottom]) < lum([rep colorAtX:2 y:bandTop + 8]),
-		      "the baseline row is darker than the strip above it");
+		check(same_colour([rep colorAtX:2 y:bandTop + 8], [NSColor windowFrameColor], 0.02),
+		      "the toolbar band is filled with the chrome's own windowFrameColor");
+		/* THE HAIRLINE IS THE CONTENT'S TOP ROW, one row BELOW the band — the chrome painter draws it, not the
+		 * toolbar's own view, because the band is part of the chrome. */
+		check(lum([rep colorAtX:2 y:bandBottom + 1]) < lum([rep colorAtX:2 y:bandTop + 8]),
+		      "the black hairline is at the content's top edge, below the band");
 		for (i = 0; i < TW; i++) {
 			int y;
 
@@ -358,8 +369,9 @@ int main(void)
 			}
 		}
 		check(ink > 0, "an item's label is drawn as ink inside the band");
-		check(lum([rep colorAtX:2 y:6]) < lum([rep colorAtX:2 y:bandTop + 8]),
-		      "the title bar is painted above the band, in the chrome's own colour");
+		check(same_colour([rep colorAtX:2 y:6], [NSColor windowFrameColor], 0.02)
+		      && same_colour([rep colorAtX:2 y:6], [rep colorAtX:2 y:bandTop + 8], 0.02),
+		      "the title bar above it is the SAME chrome ground, so the band is part of the chrome");
 	}
 
 	/* **AND THE SAME BAND THROUGH THE WINDOW'S OWN CONTENT WALK.** This is the path a live window uses, and it is

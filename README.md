@@ -701,12 +701,10 @@ with the drag, so the pointer's place in the world is the frame's origin PLUS th
 under it is that sum minus the grab — one subtraction, with no accumulated delta to drift. `-isMovable` decides
 whether it happens; a borderless window has no chrome and so no handle.
 
-**AND ONE DARK GREY POINT DIVIDES THE CHROME FROM THE CONTENT.** A title bar and a content view are two surfaces,
-and with nothing between them the boundary is wherever the reader guesses it is — so one 0.45-grey row runs the
-full width across the top of the CONTENT (the chrome's bottom edge as a person reads the window), drawn last so a
-theme's buttons cannot paint over it. It is GRAY rather than black on the ground `+controlDarkShadowColor` stands
-on: a black line reads as something drawn ON the window, where a dark grey reads as the shadow of the surface
-above it. A borderless window has no chrome and gets no line.
+**AND ONE BLACK POINT DIVIDES THE CHROME FROM THE CONTENT, BELOW THE TOOLBAR WHEN THERE IS ONE.** The title bar and
+the toolbar are ONE surface — the toolbar fills with `+windowFrameColor`, the ground the title bar is drawn on — so
+the boundary is at the top of the CONTENT, not between the title bar and the band. One black row runs the full width
+there, drawn last so a theme's buttons cannot paint over it. A borderless window has no chrome and gets no line.
 
 **A THEME IS NOT PART OF THIS LIBRARY AND MUST NOT BE.** It is somebody else's work under somebody else's
 licence — the one this was built against is GPL — and reading it from disk is not linking it, so Agora's MIT is
@@ -735,6 +733,12 @@ window's frame by the band's height — 52 points regular, 38 small — and leav
 gives that height back. `-contentRectForFrameRect:` is the one place that knows, so the content view, the min/max
 constraint conversion and the title bar all agree on where the content ends and the chrome begins. The chrome's pill
 sends `-toggleToolbarShown:`, the same door a menu item would send and the same one the toolbar's own visibility uses.
+
+**THE BAND IS THE CHROME, NOT A CONTROL PANEL UNDER IT.** It fills with `+windowFrameColor`: the title bar and the
+toolbar are one surface, and the black hairline is at the CONTENT's top edge, below the band — so the document starts
+under one line and the toolbar reads as the chrome continuing downward. `-setShowsBaselineSeparator:` is the toolbar's
+switch for that line; the window's chrome painter draws it, so there is exactly one rule and no seam between the title
+bar and the band.
 
 **THE TOOLBAR IS A REAL VIEW AT THE CONTENT'S TOP EDGE.** It is a subview whose frame sits above its superview's
 bounds, which works because `NSView` clips a child to its OWN frame rather than its parent's — the same fact the

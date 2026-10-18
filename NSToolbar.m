@@ -18,10 +18,12 @@
  * eight points of air on either side. Items that do not fit are CLIPPED rather than moved into an overflow menu;
  * there is no toolbar overflow menu in this tier and `-visibleItems` is the honest answer to what is on screen.
  *
- * **THE BAND IS PAINTED BY THIS FILE, NOT BY THE THEME.** The title bar's colours come from an XFWM theme because
- * that is where a window manager's chrome graphics live; a toolbar is the APPLICATION's surface, so it uses
- * `+controlBackgroundColor` and the standard control inks. A theme that wants to recolour a toolbar would be
- * recolouring a client's content, which is not the theme's job.
+ * **THE BAND IS PART OF THE CHROME, SO IT WEARS THE CHROME'S COLOUR.** It fills with `+windowFrameColor`, the same
+ * ground the title bar is drawn on, and the window's black hairline is at the CONTENT's top edge — below the band —
+ * rather than between the title bar and it. That is what makes the toolbar read as the chrome continuing downward:
+ * the title bar and the strip are one surface, and the document starts under the one black line. The control inks
+ * (and the selected item's chip) are still the application's, because the items are the application's even when the
+ * surface they sit on is the window's.
  */
 #import "NSToolbar.h"
 #import "NSToolbarItem.h"
@@ -469,13 +471,11 @@ static CGFloat fn_standard_width(NSToolbarItem *item, NSToolbarDisplayMode displ
 	if (c == NULL) {
 		return;
 	}
-	/* THE STRIP'S OWN GROUND. A toolbar is a control surface, so it is the control background rather than the
-	 * window's, and the baseline below is the seam between the two. */
-	/* **THE STRIP IS A CONTROL SURFACE, ONE STEP BELOW THE WINDOW AND ABOVE THE TITLE BAR.** The window is 0.93 and
-	 * a control's face is 0.90, so the toolbar takes the control's grey: a toolbar that matched the content would read
-	 * as more content, and one that matched the chrome would read as part of the title bar. The baseline below is what
-	 * gives the bottom edge its line. */
-	CGContextSetFillColorWithColor(c, [[NSColor controlColor] CGColor]);
+	/* **THE BAND IS THE CHROME'S GROUND.** `+windowFrameColor` is the colour the title bar is drawn on, so the strip
+	 * reads as that surface continuing downward rather than as a control panel placed under it. The line that ends
+	 * the chrome is `NSWindow`'s black hairline at the content's top edge, drawn by the chrome painter — not here,
+	 * because it belongs to the whole chrome and not to this view. */
+	CGContextSetFillColorWithColor(c, [[NSColor windowFrameColor] CGColor]);
 	CGContextFillRect(c, CGRectMake(0.0, 0.0, bounds.size.width, bounds.size.height));
 
 	for (i = 0; i < [_layoutItems count]; i++) {
@@ -550,12 +550,9 @@ static CGFloat fn_standard_width(NSToolbarItem *item, NSToolbarDisplayMode displ
 		}
 	}
 
-	/* THE BASELINE, LAST AND ONLY WHEN ASKED. It is the one row that separates the strip from the content below, and
-	 * `-setShowsBaselineSeparator:` exists precisely to let a caller remove it. */
-	if ([_toolbar showsBaselineSeparator] && bounds.size.height >= 1.0) {
-		CGContextSetFillColorWithColor(c, [[NSColor controlShadowColor] CGColor]);
-		CGContextFillRect(c, CGRectMake(0.0, 0.0, bounds.size.width, 1.0));
-	}
+	/* **NO BASELINE HERE: THE WINDOW'S CHROME PAINTER OWNS THAT LINE.** It is the black hairline at the CONTENT's top
+	 * edge, drawn with the rest of the chrome, and `-showsBaselineSeparator` is read there. Drawing a second line on
+	 * this view's bottom row would put a two-point rule under the band and split the chrome from itself. */
 }
 
 /* ---- THE POINTER -------------------------------------------------------------------------------- */
@@ -990,6 +987,8 @@ static CGFloat fn_standard_width(NSToolbarItem *item, NSToolbarDisplayMode displ
 
 - (void)setShowsBaselineSeparator:(BOOL)flag
 {
+	/* THE WINDOW'S CHROME PAINTER IS THE READER: the line is at the content's top edge, below this band, and this
+	 * flag decides whether it is drawn. The layout call is what makes the window repaint when the flag moves. */
 	_showsBaselineSeparator = flag ? YES : NO;
 	[self cg_layoutChanged];
 }

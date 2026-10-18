@@ -204,14 +204,13 @@ static const CGFloat fn_PILL_WIDTH = 19.5;	/* the toolbar pill, HORIZONTAL: wide
  * property the height was never allowed to change. */
 static const CGFloat fn_PILL_HEIGHT = 7.0;
 
-/* **AND THE HAIRLINE BETWEEN THE CHROME AND THE CONTENT.** A title bar and a content view are two surfaces, and
- * with nothing between them the boundary is wherever the reader happens to guess it is — so one dark grey point
- * runs the full width at the top of the CONTENT, which is the chrome's bottom edge as a person reads the window.
- * IT IS DRAWN LAST, so a theme's buttons — which fill the strip's height — cannot paint over it, and it is a MID
- * GREY rather than black, on the same ground `+controlDarkShadowColor` stands on: a black line reads as something
- * DRAWN onto the window, where a grey reads as the edge OF it. 0.45 rather than the 0.32 it began at, because at
- * that weight the line was doing the separating on its own where the two surfaces either side already do it. */
-static const CGFloat fn_CHROME_HAIRLINE = 0.45;
+/* **AND THE HAIRLINE BETWEEN THE CHROME AND THE CONTENT IS BLACK, AND IT SITS AT THE CONTENT'S TOP EDGE.** The
+ * chrome now includes the TOOLBAR when a window has one, so the boundary is below the band and not between the title
+ * bar and it: one black point across the full width separates everything the window owns from the document it holds.
+ * It was a 0.45 grey while the chrome and the content were the two surfaces it divided; with the toolbar in the
+ * chrome the user asked for black, and black is what makes the band read as the chrome's bottom rather than as a
+ * second surface with a border of its own. IT IS DRAWN LAST, so a theme's buttons cannot paint over it. */
+static const CGFloat fn_CHROME_HAIRLINE = 0.0;
 
 /* ============================================================================================ *
  * THE CHROME'S THEME, AND WHY THE HEIGHT IS A FUNCTION NOW.                                     *
@@ -1212,13 +1211,18 @@ static void fn_draw_chrome(CGContextRef c, NSWindow *w, NSRect content)
 		}
 	}
 
-	/* **AND THE HAIRLINE, LAST SO NOTHING IN THE BAR CAN COVER IT.** It is the TOP ROW OF THE CONTENT rather than
-	 * the strip's own bottom row, because a theme's buttons fill the bar and a line on the last row would cut
-	 * across their bottoms. A borderless window has no chrome and so gets no line. */
-	if (layout.height > 0.0 && top >= 1.0) {
-		CGContextSetFillColorWithColor(c,
-			[[NSColor colorWithCalibratedWhite:fn_CHROME_HAIRLINE alpha:1.0] CGColor]);
-		CGContextFillRect(c, CGRectMake(0.0, top - 1.0, content.size.width, 1.0));
+	/* **AND THE HAIRLINE, LAST SO NOTHING IN THE CHROME CAN COVER IT.** It is the TOP ROW OF THE CONTENT, which is
+	 * BELOW the toolbar when there is one — the band belongs to the chrome, and this is the line where the chrome
+	 * ends. `-showsBaselineSeparator` is the toolbar's switch for it, because Apple gives the toolbar that control;
+	 * a window with no toolbar keeps the line it always had. A borderless window has no chrome and gets no line. */
+	if (layout.height > 0.0 && content.size.height >= 1.0) {
+		NSToolbar *toolbar = [w toolbar];
+
+		if (toolbar == nil || ![toolbar isVisible] || [toolbar showsBaselineSeparator]) {
+			CGContextSetFillColorWithColor(c,
+				[[NSColor colorWithCalibratedWhite:fn_CHROME_HAIRLINE alpha:1.0] CGColor]);
+			CGContextFillRect(c, CGRectMake(0.0, content.size.height - 1.0, content.size.width, 1.0));
+		}
 	}
 }
 

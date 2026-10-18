@@ -280,18 +280,18 @@ int main(void)
 				[rep release];
 			}
 
-			/* 8. **AND THE HAIRLINE BETWEEN THE CHROME AND THE CONTENT.** One dark grey point along the TOP row of the
-			 * CONTENT, full width — which is the chrome's bottom edge as a person reads the window. It is the row
-			 * BELOW the strip because a theme's buttons fill the strip, so a line on its last row would cut across
-			 * the buttons' bottoms. */
+			/* 8. **AND THE BLACK HAIRLINE AT THE CONTENT'S TOP.** One black point along the TOP row of the CONTENT,
+			 * full width — the line where the chrome ends. It is the row BELOW the strip because a theme's buttons fill
+			 * the strip, so a line on its last row would cut across the buttons' bottoms; with a toolbar attached the
+			 * same row is below the BAND, which is why the chrome and the toolbar are one surface. */
 			{
 				NSBitmapImageRep *rep = draw_chrome(w);
 
-				check(is_rgb(at_win(rep, 5, CH - 1), 0.45, 0.45, 0.45)
-				      && is_rgb(at_win(rep, 50, CH - 1), 0.45, 0.45, 0.45)
-				      && is_rgb(at_win(rep, CW - 5, CH - 1), 0.45, 0.45, 0.45),
-				      "a grey HAIRLINE runs the full width between the chrome and the content");
-				check(!is_rgb(at_win(rep, 50, CH - 2), 0.45, 0.45, 0.45),
+				check(is_rgb(at_win(rep, 5, CH - 1), 0.0, 0.0, 0.0)
+				      && is_rgb(at_win(rep, 50, CH - 1), 0.0, 0.0, 0.0)
+				      && is_rgb(at_win(rep, CW - 5, CH - 1), 0.0, 0.0, 0.0),
+				      "a BLACK HAIRLINE runs the full width at the content's top edge");
+				check(!is_rgb(at_win(rep, 50, CH - 2), 0.0, 0.0, 0.0),
 				      "and it is one point, not a band");
 				[rep release];
 			}
