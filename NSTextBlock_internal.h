@@ -17,6 +17,11 @@
 #import <AppKit/NSLayoutManager.h>
 
 @interface NSTextBlock (NSTextBlockInternal)
+/* **AND THE GROWTH**, for the same reason as the painter: `NSTextTable`'s `-boundsRectForBlock:...` default must grow the
+ * block's content rect, and reaching that through the block's public door would land in `NSTextTableBlock`'s forwarding
+ * override and recurse. */
+- (NSRect)_boundsRectForContentRect:(NSRect)contentRect inRect:(NSRect)rect
+		      textContainer:(nullable NSTextContainer *)textContainer characterRange:(NSRange)charRange;
 - (void)_drawBackgroundWithFrame:(NSRect)frame inView:(nullable NSView *)view
 		  characterRange:(NSRange)charRange layoutManager:(nullable NSLayoutManager *)layoutManager
 			   edges:(NSTextBlockEdge)edges;

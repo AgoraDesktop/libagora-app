@@ -284,6 +284,13 @@ static NSColor *fn_colour_from_components(id stored)
 - (NSRect)boundsRectForContentRect:(NSRect)contentRect inRect:(NSRect)rect
 		    textContainer:(NSTextContainer *)textContainer characterRange:(NSRange)charRange
 {
+	return [self _boundsRectForContentRect:contentRect inRect:rect textContainer:textContainer
+		       characterRange:charRange];
+}
+
+- (NSRect)_boundsRectForContentRect:(NSRect)contentRect inRect:(NSRect)rect
+		      textContainer:(NSTextContainer *)textContainer characterRange:(NSRange)charRange
+{
 	CGFloat left = [self cg_insetForEdge:NSTextBlockMinXEdge inRect:rect];
 	CGFloat right = [self cg_insetForEdge:NSTextBlockMaxXEdge inRect:rect];
 	CGFloat top = [self cg_insetForEdge:NSTextBlockMinYEdge inRect:rect];

@@ -69,6 +69,12 @@ typedef NSInteger NSTextTableLayoutAlgorithm;
 - (void)drawBackgroundForBlock:(NSTextTableBlock *)block withFrame:(NSRect)frameRect inView:(nullable NSView *)controlView
 		characterRange:(NSRange)charRange layoutManager:(nullable NSLayoutManager *)layoutManager;
 
+/* **AND THE SECOND OF THE THREE**: how far outside its text a cell's box reaches, which is the growth by the block's own
+ * three layers. The default grows the content rect as the block does; a subclass that returns something else gets that
+ * box drawn AND measured, because the manager asks this door for the frame it paints into. */
+- (NSRect)boundsRectForBlock:(NSTextTableBlock *)block contentRect:(NSRect)contentRect inRect:(NSRect)rect
+	       textContainer:(nullable NSTextContainer *)textContainer characterRange:(NSRange)charRange;
+
 @end
 
 @interface NSTextTableBlock : NSTextBlock

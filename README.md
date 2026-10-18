@@ -333,12 +333,15 @@ the compositor is really gone.
   door and still sees what the manager handed down. MEASURED, `tests/text_table_delegation.m`, and the probe reads pixels
   rather than existence: the cell's own ground is GREEN, a table subclass paints BLUE over the frame it is handed, and the
   result is **300 blue pixels and 0 green** — the block never drew.
-- **AND THE TWO OTHER DELEGATION DOORS ARE STILL OWED, WITH THE REASON EACH.** `-rectForBlock:layoutAtPoint:inRect:
-  textContainer:characterRange:` needs the COLUMN GEOMETRY, which the layout manager computes across every cell of the
-  table (that is what makes a column as wide as its widest cell and its x stable across a container break) — moving that
-  into the table is the grid itself, not a delegation. `-boundsRectForBlock:contentRect:inRect:textContainer:
-  characterRange:` is the smaller one: the growth it describes is a function of the block's layers and the content rect,
-  which the manager computes inline today, and routing it is a cut of its own.
+- **AND THE BOUNDS DOOR IS IMPLEMENTED AND MEASURED TOO**, by the same arrangement: `-boundsRectForBlock:contentRect:
+  inRect:textContainer:characterRange:` defaults to the BLOCK's own growth (reached through an internal door, so a block
+  that forwards here does not recurse), and `NSTextTableBlock` forwards its `-boundsRectForContentRect:...` to its table.
+  MEASURED in the same probe: the identical cell is drawn through a plain table and through a subclass that grows the box
+  eight points on each side, and the ground goes from **300 green pixels to 868** — the table's growth is honoured.
+- **AND ONE OF THE THREE IS STILL OWED, WITH ITS REASON.** `-rectForBlock:layoutAtPoint:inRect:textContainer:
+  characterRange:` needs the COLUMN GEOMETRY, which the layout manager computes across every cell of the table (that is
+  what makes a column as wide as its widest cell and its x stable across a container break) — moving that into the table
+  is the grid itself, not a delegation.
 - **AND THE FIRST ATTEMPT AT THIS WAS REVERTED BEFORE IT WAS RETRIED, WHICH IS WHY IT IS TWO SLICES.** The internal
   painter, the block's forwarding and a probe were written once and the probe failed: its table subclass never saw the
   override. The cause turned out to be two things — **`-copy` on `NSTextTable` and on `NSTextTableBlock` HARD-CODED ITS

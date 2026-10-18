@@ -94,10 +94,25 @@ static int count_of(NSBitmapImageRep *rep, CGFloat r, CGFloat g, CGFloat b)
 }
 @end
 
-int main(void)
+/* **AND A TABLE THAT TAKES MORE ROOM FOR ITS CELLS THAN THE BLOCK'S OWN LAYERS DO** — the second delegation door. */
+@interface FNGrowingTable : NSTextTable
+@end
+
+@implementation FNGrowingTable
+- (NSRect)boundsRectForBlock:(NSTextTableBlock *)block contentRect:(NSRect)contentRect inRect:(NSRect)rect
+	       textContainer:(NSTextContainer *)textContainer characterRange:(NSRange)charRange
 {
-	NSAutoreleasePool *pool = [[NSAutoreleasePool alloc] init];
-	FNPaintingTable *table = [[FNPaintingTable alloc] init];
+	NSRect bounds = [super boundsRectForBlock:block contentRect:contentRect inRect:rect
+				textContainer:textContainer characterRange:charRange];
+
+	return NSInsetRect(bounds, -8.0, -8.0);
+}
+@end
+
+
+/* ONE CELL IN ONE TABLE, drawn: the same store every time, so the two tables differ in nothing but their class. */
+static NSBitmapImageRep *draw_table(NSTextTable *table)
+{
 	NSTextTableBlock *only = [[[NSTextTableBlock alloc] initWithTable:table startingRow:0 rowSpan:1
 							    startingColumn:0 columnSpan:1] autorelease];
 	NSMutableParagraphStyle *style = [[NSParagraphStyle defaultParagraphStyle] mutableCopy];
@@ -105,12 +120,9 @@ int main(void)
 	NSTextContainer *container;
 	NSLayoutManager *manager;
 	NSBitmapImageRep *painted;
-	int blue, green;
 
-	setvbuf(stdout, NULL, _IONBF, 0);
 	[table setNumberOfColumns:1];
 	[only setBackgroundColor:[NSColor greenColor]];
-
 	[style addTextBlock:only];
 	[style setMinimumLineHeight:20.0];
 	[style setMaximumLineHeight:20.0];
@@ -120,20 +132,51 @@ int main(void)
 	manager = [[NSLayoutManager alloc] init];
 	[manager addTextContainer:container];
 	[store addLayoutManager:manager];
-
 	painted = draw(manager, [store length]);
-	blue = count_of(painted, 0.0, 0.0, 1.0);
-	green = count_of(painted, 0.0, 1.0, 0.0);
-	printf("  (the cell's frame came out %d blue pixel(s) and %d green)\n", blue, green);
-	check(blue > 100, "the TABLE's override painted the cell, so a table subclass is reachable");
-	check(green == 0, "and the block's own green ground was never drawn");
-
-	[painted release];
 	[manager release];
 	[container release];
 	[store release];
 	[style release];
-	[table release];
+	return painted;
+}
+
+int main(void)
+{
+	NSAutoreleasePool *pool = [[NSAutoreleasePool alloc] init];
+	FNPaintingTable *painting = [[FNPaintingTable alloc] init];
+	FNGrowingTable *growing;
+	NSTextTable *plain;
+	NSBitmapImageRep *painted;
+	NSBitmapImageRep *plainRep;
+	NSBitmapImageRep *growingRep;
+
+	setvbuf(stdout, NULL, _IONBF, 0);
+
+	/* THE DRAWING DOOR: the cell's own ground is green, the subclass paints blue. */
+	painted = draw_table(painting);
+	printf("  (the painting table's cell: %d blue pixel(s), %d green)\n",
+	       count_of(painted, 0.0, 0.0, 1.0), count_of(painted, 0.0, 1.0, 0.0));
+	check(count_of(painted, 0.0, 0.0, 1.0) > 100,
+	      "the TABLE's drawing override painted the cell, so a table subclass is reachable");
+	check(count_of(painted, 0.0, 1.0, 0.0) == 0, "and the block's own green ground was never drawn");
+
+	/* THE BOUNDS DOOR: the same cell, grown eight points on each side by the table. */
+	plain = [[NSTextTable alloc] init];
+	growing = [[FNGrowingTable alloc] init];
+	plainRep = draw_table(plain);
+	growingRep = draw_table(growing);
+	printf("  (plain table: %d green pixel(s); growing table: %d)\n",
+	       count_of(plainRep, 0.0, 1.0, 0.0), count_of(growingRep, 0.0, 1.0, 0.0));
+	check(count_of(plainRep, 0.0, 1.0, 0.0) > 0, "the plain table's cell has a ground");
+	check(count_of(growingRep, 0.0, 1.0, 0.0) > count_of(plainRep, 0.0, 1.0, 0.0),
+	      "and the table that GREW its cell's bounds drew a bigger ground");
+
+	[painted release];
+	[plainRep release];
+	[growingRep release];
+	[plain release];
+	[growing release];
+	[painting release];
 	[pool release];
 	printf("text_table_delegation: %d case(s) failed\n", failures);
 	return failures == 0 ? 0 : 1;

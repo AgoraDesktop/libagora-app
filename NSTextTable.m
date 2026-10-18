@@ -51,6 +51,15 @@
 	_drawingEdges = saved;
 }
 
+/* **THE BOUNDS DELEGATION**: the default is the BLOCK's own growth, reached through the internal door so a block that
+ * forwards here does not recurse. */
+- (NSRect)boundsRectForBlock:(NSTextTableBlock *)block contentRect:(NSRect)contentRect inRect:(NSRect)rect
+	       textContainer:(NSTextContainer *)textContainer characterRange:(NSRange)charRange
+{
+	return [block _boundsRectForContentRect:contentRect inRect:rect textContainer:textContainer
+		       characterRange:charRange];
+}
+
 - (NSTextBlockEdge)_drawingEdges
 {
 	return _drawingEdges;
@@ -167,6 +176,19 @@
 {
 	[self drawBackgroundWithFrame:frame inView:view characterRange:charRange layoutManager:layoutManager
 		edges:(NSTextBlockMinXEdge | NSTextBlockMaxXEdge | NSTextBlockMinYEdge | NSTextBlockMaxYEdge)];
+}
+
+/* **AND THE BLOCK FORWARDS ITS GEOMETRY THE SAME WAY IT FORWARDS ITS DRAWING**: a caller who subclasses the TABLE changes
+ * how much room its cells take, without touching the block. A block outside a table grows itself. */
+- (NSRect)boundsRectForContentRect:(NSRect)contentRect inRect:(NSRect)rect
+		    textContainer:(NSTextContainer *)textContainer characterRange:(NSRange)charRange
+{
+	if (_table != nil) {
+		return [_table boundsRectForBlock:self contentRect:contentRect inRect:rect
+			       textContainer:textContainer characterRange:charRange];
+	}
+	return [self _boundsRectForContentRect:contentRect inRect:rect textContainer:textContainer
+		       characterRange:charRange];
 }
 
 - (NSTextTable *)table
