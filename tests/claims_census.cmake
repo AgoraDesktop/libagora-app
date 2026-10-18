@@ -1,6 +1,16 @@
-# The refusal census, checked in both directions.
+# The claims census, checked in both directions — one script, two kinds of claim.
 #
-# usage: cmake -DSOURCE_DIR=<dir> -DCENSUS=<file> -P refusal_census.cmake
+# usage: cmake -DSOURCE_DIR=<dir> -DCENSUS=<file> -DEXTENSION=<.m|.h> -DNEEDLE=<regex> -P claims_census.cmake
+#
+# **TWO KINDS OF CLAIM, ONE INSTRUMENT.** A REFUSAL is a place the library says "not this" and returns, marked
+# `APPKIT-REFUSE` in the sources; an OWED NOTE is a place the header says what this layer does not do yet, marked with
+# the word OWED. Both are claims about the same subject — what this layer cannot do — and both drift the same way, so
+# both are counted per file and compared in both directions.
+#
+# **AND THE NEEDLE IS A REGEX RATHER THAN A WORD, WHICH THE FIRST VERSION OF THIS FILE LEARNED THE HARD WAY.** The owed
+# notes were first counted as the substring `OWED`, which matched inside `MAC_OS_X_VERSION_MAX_ALLOWED` and `BORROWED`
+# — TWENTY-ONE of the thirty-eight hits were parts of other words, and the census was inflated by more than half before
+# it existed. The instrument has to be about the thing it claims to measure.
 #
 # A CENSUS RATHER THAN A CEILING, because a count that may only fall says nothing about WHERE a refusal is: moving one
 # from a class that needed it to a class that did not would pass. So the census is per FILE, and it is compared both
@@ -13,11 +23,11 @@
 # `nm` answers for C symbols, and every door here is an Objective-C METHOD, which is dispatched dynamically and appears
 # in no symbol table — so this counts the SITES instead, which is the census the prose actually makes.
 
-if(NOT SOURCE_DIR OR NOT CENSUS)
-  message(FATAL_ERROR "refusal_census.cmake needs -DSOURCE_DIR and -DCENSUS")
+if(NOT SOURCE_DIR OR NOT CENSUS OR NOT EXTENSION OR NOT NEEDLE)
+  message(FATAL_ERROR "claims_census.cmake needs -DSOURCE_DIR, -DCENSUS, -DEXTENSION and -DNEEDLE")
 endif()
 
-file(GLOB sources "${SOURCE_DIR}/*.m")
+file(GLOB sources "${SOURCE_DIR}/*${EXTENSION}")
 file(READ "${CENSUS}" census_text)
 
 # THE TOTAL IS ITSELF A LINE IN THE FILE, as a comment, so the sum is checked against a number a reader can see.
@@ -51,7 +61,7 @@ set(offenders "")
 foreach(source IN LISTS sources)
   get_filename_component(name "${source}" NAME)
   file(READ "${source}" text)
-  string(REGEX MATCHALL "APPKIT-REFUSE" sites "${text}")
+  string(REGEX MATCHALL "${NEEDLE}" sites "${text}")
   list(LENGTH sites actual)
   math(EXPR actual_total "${actual_total} + ${actual}")
   set(recorded 0)
@@ -76,6 +86,6 @@ endif()
 
 if(offenders)
   string(REPLACE ";" "\n    " report "${offenders}")
-  message(FATAL_ERROR "the refusal census and the sources disagree:\n    ${report}")
+  message(FATAL_ERROR "the census (${NEEDLE} in *${EXTENSION}) and the sources disagree:\n    ${report}")
 endif()
-message(STATUS "refusal census: ${actual_total} refusal site(s) over ${sources} file(s), exactly as recorded")
+message(STATUS "census (${EXTENSION}, ${NEEDLE}): ${actual_total} claim(s) over the recorded files, exactly as recorded")

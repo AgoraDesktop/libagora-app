@@ -601,4 +601,15 @@ add_test(NAME appkit-refusal-census
     COMMAND "${CMAKE_COMMAND}"
             "-DSOURCE_DIR=${CMAKE_CURRENT_SOURCE_DIR}/.."
             "-DCENSUS=${CMAKE_CURRENT_SOURCE_DIR}/refusal_census.txt"
-            -P "${CMAKE_CURRENT_SOURCE_DIR}/refusal_census.cmake")
+            "-DEXTENSION=.m"
+            "-DNEEDLE=APPKIT-REFUSE"
+            -P "${CMAKE_CURRENT_SOURCE_DIR}/claims_census.cmake")
+
+# And the same instrument over the HEADERS, counting the OWED claims — as a WORD, so `ALLOWED` does not count.
+add_test(NAME appkit-owed-census
+    COMMAND "${CMAKE_COMMAND}"
+            "-DSOURCE_DIR=${CMAKE_CURRENT_SOURCE_DIR}/.."
+            "-DCENSUS=${CMAKE_CURRENT_SOURCE_DIR}/owed_census.txt"
+            "-DEXTENSION=.h"
+            "-DNEEDLE=(^|[^A-Za-z_])OWED"
+            -P "${CMAKE_CURRENT_SOURCE_DIR}/claims_census.cmake")

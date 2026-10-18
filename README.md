@@ -835,3 +835,18 @@ imported and then changed — the changes are recorded in [`PROVENANCE.md`](PROV
   EXTRACTOR, NOT THE LIBRARY**: a declared-and-undefined check that does not skip inline definitions reports a hole
   where the header meant a function. The same check on Objective-C is impossible at all, because a method is dispatched
   dynamically and appears in no symbol table — which is why this half needed a census instead of an allowlist.
+- **AND THE OWED NOTES ARE HELD THE SAME WAY, AND COUNTING THEM CORRECTED A NUMBER THIS README USED.** A refusal is what
+  the IMPLEMENTATION says it cannot do; an owed note is what the HEADER says it does not do yet — the same kind of claim,
+  drifting the same way. `claims_census.cmake` is now ONE script with two instantiations: `refusal_census.txt` (`.m`,
+  `APPKIT-REFUSE`, **129 sites over 24 files**) and `owed_census.txt` (`.h`, the word OWED, **17 claims over 10 files**),
+  each compared per file and in total, in both directions.
+- **AND THE NUMBER FOR THE OWED NOTES HAD BEEN WRONG THE WHOLE TIME: 38 WAS A SUBSTRING, 17 IS THE COUNT.** The first
+  count matched `OWED` anywhere — including inside `MAC_OS_X_VERSION_MAX_ALLOWED` and `BORROWED` — and **21 of the 38
+  hits were parts of other words**, so the figure this README quoted was more than double the truth. The census counts a
+  WORD now, and the instrument was proved to be about the thing it measures: appending
+  `MAC_OS_X_VERSION_MAX_ALLOWED and BORROWED` to a header leaves the census passing, while appending one real
+  `OWED` claim fails it with `NSView.h: the census says 0, the source has 1` and `the census says 17 in total, the
+  sources have 18`.
+- **AND WHAT THE MARKER DOES NOT COVER IS SAID RATHER THAN IMPLIED**: claims phrased "refuses by name" or "stays ABSENT"
+  are the same kind of statement and carry no marker, so they are not counted. The census holds what the marker marks —
+  the emphatic form this tree writes its owes in — and says so in its own header.

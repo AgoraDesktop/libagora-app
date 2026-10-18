@@ -1,0 +1,32 @@
+# THE OWED CENSUS — every `OWED` claim in this library's headers, by file.
+#
+# Copyright © 2026 Kyle J. Cardoza. MIT licensed — see LICENSE.
+# SPDX-License-Identifier: MIT
+#
+# The companion of `refusal_census.txt`: a refusal is what the IMPLEMENTATION says it cannot do, and an owed note is
+# what the HEADER says it does not do yet. Both are claims, both drift, and `claims_census.cmake` holds both the same
+# way.
+#
+# **AND THE NUMBER THIS FILE REPLACES WAS WRONG, WHICH IS WHY IT IS WRITTEN DOWN HERE.** The owed notes were first
+# counted as the SUBSTRING `OWED`, which reads THIRTY-EIGHT — and twenty-one of those hits are parts of other words:
+# `MAC_OS_X_VERSION_MAX_ALLOWED` and `BORROWED`. Counted as a WORD it is seventeen, which is the number below, and the
+# count is over WORD-BOUNDARY matches for exactly that reason.
+#
+# A CLAIM PHRASED WITHOUT THIS WORD IS NOT COUNTED, and that is stated rather than implied: "refuses by name" and
+# "stays ABSENT" are the same kind of claim in this tree's prose and do not carry the marker. The census holds what the
+# marker marks, which is the emphatic form the tree writes its owes in.
+#
+# THE FORMAT IS `file count`, one per line, and `# total:` is the sum.
+
+NSApplication.h                      1
+NSBezierPath.h                       3
+NSButtonCell.h                       1
+NSCell.h                             3
+NSEvent.h                            1
+NSGraphicsContext.h                  1
+NSMenu.h                             4
+NSPasteboard.h                       1
+NSResponder.h                        1
+NSTextAttachment.h                   1
+
+# total: 17
