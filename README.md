@@ -788,6 +788,24 @@ imported and then changed — the changes are recorded in [`PROVENANCE.md`](PROV
   backslashes, so the group had the right shape and no control words at all — and the probe caught it only because it
   looks for `{\\pict` rather than for the word. A case that asserted "the RTF mentions a picture" would have passed.
   Same lesson as the level array indexed by the wrong number: the check has to be about the thing that can be wrong.
+- **AND THE APP HAS HAD ITS SANITIZER SWEEP NOW, WHICH FOUND NO MEMORY DEFECT IN ITS OWN CODE.** `libagora-app` was
+  rebuilt with `-fsanitize=address,undefined` (clang-19, `CMAKE_OBJC_FLAGS` as well as `CMAKE_C_FLAGS` — a purely C
+  build would have left 71 of the 73 sources uninstrumented) and the whole suite re-run: **55 of the 68 test binaries
+  clean, ZERO sanitizer reports**. The instrumented library was CONFIRMED to be the one loaded (`ldd` resolves
+  `libagora-app.so` to the sanitizer build), because a sweep that silently ran the installed library would report
+  nothing and mean nothing.
+- **AND THE 13 THAT EXIT NON-ZERO ARE THE ENVIRONMENT, NOT THE SANITIZER — WHICH IS THE CONTROL THE RESULT NEEDS.**
+  Each one was run a second time against the NORMAL build and exits IDENTICALLY (1, or 77 for the one that skips, or
+  124 for the two that wait forever on a compositor this machine does not have). Same number, both builds, so they are
+  not exercised rather than not passing — and saying so keeps "0 sanitizer reports" from quietly meaning "most tests
+  never ran".
+- **AND THE SWEEP MEASURED THE ONE COST THIS TREE HAS BEEN CARRYING, MUCH MORE SHARPLY THAN BEFORE.**
+  `text_hyphenation` ran for **more than 280 seconds without finishing** under the sanitizer, and the stack showed why:
+  per-character font fallback inside `fn_create_name_in_directory` → `fread`, the FONT-DIRECTORY WALK, which ASan makes
+  an order of magnitude slower. With `FN_FONT_PATH` pointed at a single directory the same test finishes in **0
+  seconds** with zero reports. So the defect recorded earlier as "a repeated miss still costs 7 ms" is worth far more
+  than that on a real corpus, and the number now on the record is the honest one: a suite that takes NO MEASURABLE TIME
+  with the walk bounded takes MINUTES without it.
 - **AND BOTH VALUES ARCHIVE NOW, WHICH CORRECTED A CLAIM THIS README HAD BEEN MAKING.** `NSTextList` and `NSTextBlock`
   declare `<NSCoding, NSCopying>` in the 10.6 SDK — the list in its own header, the block in `NSTextTable.h`, which is
   where the SDK keeps it (its own header does not exist at 10.6, which a fetch proved) — and the note that said "no class
@@ -937,3 +955,12 @@ imported and then changed — the changes are recorded in [`PROVENANCE.md`](PROV
   `NSAttributedStringRTF.m: the census says 2, the source has 3` and `the census says 131 in total, the sources have
   132` — and the reader's own unknown-format refusal did it again one slice later (`4` and `133`), so recording it was
   again a deliberate edit.
+- **AND THE COST THE SWEEP MEASURED IS FIXED, WHICH IS WHAT A MEASUREMENT IS FOR.** Two halves, and the numbers separated
+  them: `CTFontMatchingCopyAvailableDescriptors` built the whole installed-font list — opening EVERY font file — on every
+  call, and per-character fallback calls it once per character, so it is now built once per font set and keyed on TWO
+  generations (the font set's own, and the matching layer's VISIBILITY state — **a one-generation cache was tried first
+  and the engine's own suite refuted it in one case**, because a disabled face left the list and the cache kept offering
+  it); and `libagora-drawing`'s name cache was sized for a CADENCE of 64 when a fallback search walks a whole font set
+  (154 faces here), evicting its own entries, so it is 512 now. MEASURED: a repeated fallback miss **0.0001 s against
+  0.0070 s**, and `text_hyphenation` under the sanitizer **13 SECONDS against MORE THAN 280** — zero reports either way,
+  because the cost was pure file I/O and never a memory defect.
