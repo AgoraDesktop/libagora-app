@@ -11,6 +11,7 @@
  * reaches. Everything else is a setter or a getter.
  */
 #import <AppKit/NSTextBlock.h>
+#import "NSTextBlock_internal.h"
 #import <AppKit/NSColor.h>
 #import <AppKit/NSBezierPath.h>
 
@@ -330,6 +331,15 @@ static NSColor *fn_colour_from_components(id stored)
 /* **AND THE EDGE MASK, WHICH IS ALL THE DIFFERENCE.** The ground is unconditional; an edge is skipped when its bit is
  * not set, which is how one of two cells sharing a border leaves that border to the other. */
 - (void)drawBackgroundWithFrame:(NSRect)frame inView:(NSView *)view characterRange:(NSRange)charRange
+		  layoutManager:(NSLayoutManager *)layoutManager edges:(NSTextBlockEdge)edges
+{
+	[self _drawBackgroundWithFrame:frame inView:view characterRange:charRange layoutManager:layoutManager
+		edges:edges];
+}
+
+/* **THE PAINTER ITSELF**, reachable by `NSTextTable`'s default hook without re-entering an override — see
+ * `NSTextBlock_internal.h`. */
+- (void)_drawBackgroundWithFrame:(NSRect)frame inView:(NSView *)view characterRange:(NSRange)charRange
 		  layoutManager:(NSLayoutManager *)layoutManager edges:(NSTextBlockEdge)edges
 {
 	NSUInteger i;

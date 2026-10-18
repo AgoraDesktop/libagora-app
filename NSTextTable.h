@@ -30,6 +30,10 @@
 
 #import <AppKit/NSTextBlock.h>
 
+@class NSTextTableBlock;
+@class NSLayoutManager;
+@class NSView;
+
 NS_ASSUME_NONNULL_BEGIN
 
 /* HOW THE COLUMNS ARE MEASURED: from the widest cell (the default) or from the table's own width. */
@@ -45,6 +49,10 @@ typedef NSInteger NSTextTableLayoutAlgorithm;
 	NSTextTableLayoutAlgorithm _layoutAlgorithm;
 	BOOL _collapsesBorders;
 	BOOL _hidesEmptyCells;
+	/* **AND THE EDGE MASK BEING DRAWN**, which Apple's signature has no room for and a collapsing table needs: the mask
+	 * travels THROUGH `-drawBackgroundForBlock:...` so a subclass overrides one door and still sees what the manager handed
+	 * down. All four edges otherwise. */
+	NSTextBlockEdge _drawingEdges;
 }
 
 - (NSUInteger)numberOfColumns;
@@ -55,6 +63,11 @@ typedef NSInteger NSTextTableLayoutAlgorithm;
 - (void)setCollapsesBorders:(BOOL)flag;
 - (BOOL)hidesEmptyCells;
 - (void)setHidesEmptyCells:(BOOL)flag;
+
+/* **THE DOOR A TABLE SUBCLASS OVERRIDES TO DRAW ITS OWN CELLS** — 10.6 declares it on `NSTextTable`, and
+ * `NSTextTableBlock` is documented as forwarding to it. The default draws the block: its ground and its edges. */
+- (void)drawBackgroundForBlock:(NSTextTableBlock *)block withFrame:(NSRect)frameRect inView:(nullable NSView *)controlView
+		characterRange:(NSRange)charRange layoutManager:(nullable NSLayoutManager *)layoutManager;
 
 @end
 

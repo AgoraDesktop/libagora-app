@@ -634,3 +634,10 @@ target_link_libraries(text_coding PRIVATE App)
 
 add_test(NAME appkit-text-coding COMMAND text_coding)
 set_tests_properties(appkit-text-coding PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
+
+# The table's delegation doors: a subclass of NSTextTable paints its own cells.
+add_executable(text_table_delegation text_table_delegation.m)
+target_link_libraries(text_table_delegation PRIVATE App)
+
+add_test(NAME appkit-text-table-delegation COMMAND text_table_delegation)
+set_tests_properties(appkit-text-table-delegation PROPERTIES ENVIRONMENT "${_agora_app_test_env}")

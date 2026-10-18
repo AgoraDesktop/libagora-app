@@ -327,14 +327,24 @@ the compositor is really gone.
   share an x, a row of long cells is measured and wrapped), columns re-measured across a container break so a cell keeps
   its x (`text_table_flow.m`), and `-collapsesBorders` (`text_table_collapse.m`: the shared edge drawn ONCE, owned by the
   HEAVIER cell rather than by the left one, with the table's own border joining the collapse on its outer edges).
-  **WHAT IS GENUINELY OWED OF THAT FAMILY IS THE THREE DELEGATION DOORS** on `NSTextTable` that 10.6 declares —
-  `-rectForBlock:layoutAtPoint:inRect:textContainer:characterRange:`,
-  `-boundsRectForBlock:contentRect:inRect:textContainer:characterRange:` and
-  `-drawBackgroundForBlock:withFrame:inView:characterRange:layoutManager:` — which are what makes subclassing a table the
-  way to customise one. **AND AN ATTEMPT AT THE DRAWING ONE WAS REVERTED RATHER THAN SHIPPED**: the internal painter and
-  the block's forwarding worked (the block's door was reached with its table intact), but a probe whose table subclass
-  overrode the Apple-shaped door never saw the override called from the manager's path, and the cause was not isolated.
-  A half-wired extension point is worse than a named absence, so the doors stay owed and the probe is not in the suite.
+  **AND THE DRAWING DOOR OF THAT FAMILY IS IMPLEMENTED AND MEASURED NOW**: `-drawBackgroundForBlock:withFrame:inView:
+  characterRange:layoutManager:` is 10.6's hook, `NSTextTableBlock` forwards both of its drawing doors to its table, and
+  the mask that Apple's signature has no room for travels THROUGH the hook in a private ivar so a subclass overrides ONE
+  door and still sees what the manager handed down. MEASURED, `tests/text_table_delegation.m`, and the probe reads pixels
+  rather than existence: the cell's own ground is GREEN, a table subclass paints BLUE over the frame it is handed, and the
+  result is **300 blue pixels and 0 green** — the block never drew.
+- **AND THE TWO OTHER DELEGATION DOORS ARE STILL OWED, WITH THE REASON EACH.** `-rectForBlock:layoutAtPoint:inRect:
+  textContainer:characterRange:` needs the COLUMN GEOMETRY, which the layout manager computes across every cell of the
+  table (that is what makes a column as wide as its widest cell and its x stable across a container break) — moving that
+  into the table is the grid itself, not a delegation. `-boundsRectForBlock:contentRect:inRect:textContainer:
+  characterRange:` is the smaller one: the growth it describes is a function of the block's layers and the content rect,
+  which the manager computes inline today, and routing it is a cut of its own.
+- **AND THE FIRST ATTEMPT AT THIS WAS REVERTED BEFORE IT WAS RETRIED, WHICH IS WHY IT IS TWO SLICES.** The internal
+  painter, the block's forwarding and a probe were written once and the probe failed: its table subclass never saw the
+  override. The cause turned out to be two things — **`-copy` on `NSTextTable` and on `NSTextTableBlock` HARD-CODED ITS
+  CLASS**, so a subclassed table became a plain one the moment a paragraph style copied its `-textBlocks`, which is every
+  cell's path; and the mask needed to travel through the hook rather than around it. A half-wired extension point is worse
+  than a named absence, so the first attempt was reverted rather than shipped, and the second one is measured.
 - **And the RTF READER, which is the half Foundation does not have** (`ctest`): `libagora-base` already WRITES RTF (`-RTFFromRange:documentAttributes:`), but a reader has to turn control words into the APPKIT's attribute keys —
   `NSFontAttributeName`, `NSForegroundColorAttributeName`, … — which Foundation has no vocabulary for. MEASURED: a
   literal RTF document with a font table, a colour table, a centred underlined red paragraph and a plain one parses to

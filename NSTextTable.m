@@ -10,6 +10,8 @@
  * border.
  */
 #import <AppKit/NSTextTable.h>
+#import "NSTextBlock_internal.h"
+#import "NSTextTable_internal.h"
 
 @implementation NSTextTable
 
@@ -20,8 +22,38 @@
 	if (self != nil) {
 		_numberOfColumns = 1;
 		_layoutAlgorithm = NSTextTableAutomaticLayoutAlgorithm;
+		/* THE MASK A TABLE DRAWS WITH UNLESS THE MANAGER SAYS OTHERWISE: all four edges, which is what a table that does
+		 * not collapse its borders means. */
+		_drawingEdges = (NSTextBlockMinXEdge | NSTextBlockMaxXEdge | NSTextBlockMinYEdge | NSTextBlockMaxYEdge);
 	}
 	return self;
+}
+
+/* **THE HOOK**, whose default paints the block with the mask in force. A subclass overriding it takes over entirely. */
+- (void)drawBackgroundForBlock:(NSTextTableBlock *)block withFrame:(NSRect)frameRect inView:(NSView *)controlView
+		characterRange:(NSRange)charRange layoutManager:(NSLayoutManager *)layoutManager
+{
+	[block _drawBackgroundWithFrame:frameRect inView:controlView characterRange:charRange
+			 layoutManager:layoutManager edges:_drawingEdges];
+}
+
+/* **AND THE MASK-CARRYING VARIANT**, which is what `NSTextTableBlock` forwards to: it carries the mask through the hook
+ * so that ONE override point exists whether or not the manager is collapsing. */
+- (void)drawBackgroundForBlock:(NSTextTableBlock *)block withFrame:(NSRect)frameRect inView:(NSView *)controlView
+		characterRange:(NSRange)charRange layoutManager:(NSLayoutManager *)layoutManager
+			 edges:(NSTextBlockEdge)edges
+{
+	NSTextBlockEdge saved = _drawingEdges;
+
+	_drawingEdges = edges;
+	[self drawBackgroundForBlock:block withFrame:frameRect inView:controlView characterRange:charRange
+		     layoutManager:layoutManager];
+	_drawingEdges = saved;
+}
+
+- (NSTextBlockEdge)_drawingEdges
+{
+	return _drawingEdges;
 }
 
 - (NSUInteger)numberOfColumns
@@ -92,7 +124,7 @@
  * is copied by the superclass; the table and the four integers are this class's addition. */
 - (id)copy
 {
-	NSTextTableBlock *copy = [[NSTextTableBlock alloc] initWithTable:_table startingRow:_startingRow
+	NSTextTableBlock *copy = [[[self class] alloc] initWithTable:_table startingRow:_startingRow
 				  rowSpan:_rowSpan startingColumn:_startingColumn columnSpan:_columnSpan];
 	NSInteger layer;
 
@@ -113,6 +145,28 @@
 	[copy setBorderColor:[self borderColorForEdge:NSTextBlockMinYEdge] forEdge:NSTextBlockMinYEdge];
 	[copy setBorderColor:[self borderColorForEdge:NSTextBlockMaxYEdge] forEdge:NSTextBlockMaxYEdge];
 	return copy;
+}
+
+/* **AND THE BLOCK FORWARDS ITS DRAWING TO ITS TABLE** — Apple's arrangement, and the reason the table's doors exist: a
+ * caller who subclasses the TABLE changes how its cells are drawn without touching the block. A block with no table
+ * (one used outside a table) paints itself. */
+- (void)drawBackgroundWithFrame:(NSRect)frame inView:(NSView *)view characterRange:(NSRange)charRange
+		  layoutManager:(NSLayoutManager *)layoutManager edges:(NSTextBlockEdge)edges
+{
+	if (_table != nil) {
+		[_table drawBackgroundForBlock:self withFrame:frame inView:view characterRange:charRange
+			     layoutManager:layoutManager edges:edges];
+		return;
+	}
+	[self _drawBackgroundWithFrame:frame inView:view characterRange:charRange layoutManager:layoutManager
+		edges:edges];
+}
+
+- (void)drawBackgroundWithFrame:(NSRect)frame inView:(NSView *)view characterRange:(NSRange)charRange
+		  layoutManager:(NSLayoutManager *)layoutManager
+{
+	[self drawBackgroundWithFrame:frame inView:view characterRange:charRange layoutManager:layoutManager
+		edges:(NSTextBlockMinXEdge | NSTextBlockMaxXEdge | NSTextBlockMinYEdge | NSTextBlockMaxYEdge)];
 }
 
 - (NSTextTable *)table
