@@ -21,10 +21,15 @@
  * a caller with a format this tier does not know should get a numbered marker and a message rather than an empty string.
  * A reader can therefore tell which half of this class is transcribed and which is a reading of the documentation.
  *
+ * **AND `NSTextListPrependEnclosingMarker` IS APPLIED NOW**, which needed the one fact no public API carries: which list
+ * ENCLOSES this one. 10.6's own header declares the private `_listSecondary` slot for exactly that, and
+ * `NSParagraphStyle`'s `-setTextLists:` is what fills it — the array IS the nesting ("nested from outermost to
+ * innermost"), so the style links each list to the one outside it and `-markerForItemNumber:` walks outwards as far as
+ * the options ask. The tie is NOT carried by RTF, which has no such option: a round trip through a document loses it,
+ * and that boundary is stated rather than discovered.
+ *
  * **AND WHAT IS NOT HERE IS NAMED**: `NSCoding` is declared by 10.6 and is not implemented (no class in this layer
- * implements it — the archive format is its own subject), and `NSTextListPrependEnclosingMarker` is RECORDED and not
- * yet APPLIED: prepending the enclosing list's marker needs the enclosing list, which is the paragraph style's array to
- * link, and that link is a cut of its own rather than a guess here.
+ * implements it — the archive format is its own subject).
  */
 #ifndef APPKIT_NSTEXTLIST_H
 #define APPKIT_NSTEXTLIST_H
@@ -41,6 +46,8 @@ enum {
 	NSString *_markerFormat;	/* RETAINED */
 	NSUInteger _listOptions;
 	NSInteger _startingItemNumber;
+	void *_listSecondary;		/* RETAINED — APPLE'S OWN PRIVATE SLOT, holding the ENCLOSING list; see
+					 * NSTextList_internal.h for who fills it and why no public door does */
 }
 
 /* The designated initialiser. A nil or empty format is refused by name: a list with no format has no marker, and this

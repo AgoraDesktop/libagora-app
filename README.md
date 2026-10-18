@@ -788,6 +788,20 @@ imported and then changed — the changes are recorded in [`PROVENANCE.md`](PROV
   backslashes, so the group had the right shape and no control words at all — and the probe caught it only because it
   looks for `{\\pict` rather than for the word. A case that asserted "the RTF mentions a picture" would have passed.
   Same lesson as the level array indexed by the wrong number: the check has to be about the thing that can be wrong.
+- **AND `NSTextListPrependEnclosingMarker` IS APPLIED, WHICH NEEDED A FACT NO PUBLIC API CARRIES.** The option means an
+  item in a nested list is numbered `2a` rather than `a`, and applying it needs the ENCLOSING LIST — which 10.6 gives no
+  setter for, because Apple keeps it in the private `_listSecondary` ivar its own header declares and fills it from the
+  paragraph style's ARRAY, since the array IS the nesting ("nested from outermost to innermost"). So `NSTextList` uses
+  that same slot, `NSParagraphStyle`'s `-setTextLists:` links the stack level by level, and `-markerForItemNumber:` walks
+  outwards RECURSIVELY — three levels read `1a-`, not one level's answer. MEASURED: item 3 in a stack of decimal-outside
+  and alpha-inside is **`3c`**, item 1 is **`1a`** (the same ITEM number, not a running count), and the same inner list
+  outside a stack is still plain **`c`**.
+- **AND THE STYLE NOW COPIES THE LISTS IT IS GIVEN, WHICH CHANGED AN ASSERTION THIS PROBE HAD.** Linking a stack is a fact
+  about *that style's* nesting, so setting it on a caller's object would be changing it behind their back — the style
+  takes copies, and the probe that used to assert pointer identity now asserts the copy explicitly and the ORDER by
+  format. A copy of the style rebuilds the chain, so the option survives it.
+- **AND THE TIE IS NOT CARRIED BY RTF**, which has no such option: a document round trip loses it, and that boundary is
+  stated in `NSTextList.h` rather than left to be discovered.
 - **AND WHAT IS STILL NOT CARRIED IS NAMED**: a `\\pict` whose blip is not PNG is decoded by `NSImage` or dropped with
   an `APPKIT-REFUSE` line rather than drawn as nothing; `-fileWrapper`/`-initWithFileWrapper:` remain owed on
   `NSTextAttachment` (the WRAPPER pair, not the bytes — `NSFileWrapper` exists in libagora-base and the encoder exists

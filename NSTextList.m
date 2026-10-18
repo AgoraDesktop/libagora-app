@@ -15,6 +15,7 @@
  * decimal: a caller with a newer format gets a numbered marker and a message, which is more use than an empty string.
  */
 #import <AppKit/NSTextList.h>
+#import "NSTextList_internal.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -123,7 +124,23 @@ static void fn_append_alpha(NSMutableString *out, NSInteger number, BOOL upperca
 - (void)dealloc
 {
 	[_markerFormat release];
+	[_listSecondary release];
 	[super dealloc];
+}
+
+/* **THE ENCLOSING LIST, WHICH IS THE PARAGRAPH STYLE'S TO SET** — see the internal header. A list retains the one
+ * outside it, so a stack is a chain and a list handed to a style keeps its chain alive. */
+- (void)_setEnclosingList:(NSTextList *)enclosing
+{
+	id held = [enclosing retain];
+
+	[_listSecondary release];
+	_listSecondary = held;
+}
+
+- (NSTextList *)_enclosingList
+{
+	return _listSecondary;
 }
 
 - (NSString *)markerFormat
@@ -150,42 +167,69 @@ static void fn_append_alpha(NSMutableString *out, NSInteger number, BOOL upperca
  * formats it. The item number is taken as given rather than rebased on `-startingItemNumber`, because the door's
  * argument IS the item's number — the starting number is how a caller decides which number the first item has, which
  * is what a list that begins at 5 needs and what `-markerForItemNumber:` then formats. */
-- (NSString *)markerForItemNumber:(NSInteger)itemNum
+/* **THE MARKER BODY: THE FORMAT APPLIED TO THE NUMBER**, which is everything EXCEPT the enclosing marker. It is a
+ * function rather than the first half of the method because the enclosing walk needs it too, and two copies of this
+ * chain would be two chances for `1a` and `a` to disagree about what `a` is. */
+static NSString *fn_marker_body(NSString *markerFormat, NSInteger itemNum)
 {
-	NSString *bullet = fn_bullet_for(_markerFormat);
+	NSString *bullet = fn_bullet_for(markerFormat);
 	NSMutableString *out;
 
 	if (bullet != nil) {
 		return bullet;
 	}
 	out = [NSMutableString string];
-	if ([_markerFormat isEqualToString:@"{decimal}"]) {
+	if ([markerFormat isEqualToString:@"{decimal}"]) {
 		[out appendFormat:@"%ld", (long)itemNum];
-	} else if ([_markerFormat isEqualToString:@"{lower-roman}"] || [_markerFormat isEqualToString:@"{upper-roman}"]) {
+	} else if ([markerFormat isEqualToString:@"{lower-roman}"] || [markerFormat isEqualToString:@"{upper-roman}"]) {
 		fn_append_roman(out, itemNum);
-		if ([_markerFormat isEqualToString:@"{upper-roman}"]) {
+		if ([markerFormat isEqualToString:@"{upper-roman}"]) {
 			return [out uppercaseString];
 		}
-	} else if ([_markerFormat isEqualToString:@"{lower-alpha}"] || [_markerFormat isEqualToString:@"{lower-latin}"]) {
+	} else if ([markerFormat isEqualToString:@"{lower-alpha}"] || [markerFormat isEqualToString:@"{lower-latin}"]) {
 		fn_append_alpha(out, itemNum, NO);
-	} else if ([_markerFormat isEqualToString:@"{upper-alpha}"] || [_markerFormat isEqualToString:@"{upper-latin}"]) {
+	} else if ([markerFormat isEqualToString:@"{upper-alpha}"] || [markerFormat isEqualToString:@"{upper-latin}"]) {
 		fn_append_alpha(out, itemNum, YES);
-	} else if ([_markerFormat isEqualToString:@"{lower-hexadecimal}"]
-		   || [_markerFormat isEqualToString:@"{upper-hexadecimal}"]) {
-		BOOL uppercase = [_markerFormat isEqualToString:@"{upper-hexadecimal}"];
+	} else if ([markerFormat isEqualToString:@"{lower-hexadecimal}"]
+		   || [markerFormat isEqualToString:@"{upper-hexadecimal}"]) {
+		BOOL uppercase = [markerFormat isEqualToString:@"{upper-hexadecimal}"];
 
-		[out appendFormat:(uppercase ? @"%lX" : @"%lx"),
-			(unsigned long)((itemNum < 0) ? -itemNum : itemNum)];
-	} else if ([_markerFormat isEqualToString:@"{octal}"]) {
+		[out appendFormat:(uppercase ? @"%lX" : @"%lx"), (unsigned long)((itemNum < 0) ? -itemNum : itemNum)];
+	} else if ([markerFormat isEqualToString:@"{octal}"]) {
 		[out appendFormat:@"%lo", (unsigned long)((itemNum < 0) ? -itemNum : itemNum)];
 	} else {
 		/* **A FORMAT THIS TIER DOES NOT KNOW IS REFUSED BY NAME AND ANSWERED IN DECIMAL**, because a caller with a
 		 * format from a newer era can act on a number and cannot act on an empty string. */
 		fprintf(stderr, "APPKIT-REFUSE: -[NSTextList markerForItemNumber:] does not know the marker format `%s`, "
-				"and answers in decimal\n", [_markerFormat UTF8String]);
+				"and answers in decimal\n", [markerFormat UTF8String]);
 		[out appendFormat:@"%ld", (long)itemNum];
 	}
 	return out;
+}
+
+/* **AND THE MARKER ITSELF, WHICH IS THE BODY OR THE BODY BEHIND ITS ENCLOSING LIST'S.** `NSTextListPrependEnclosingMarker`
+ * means an item in a nested list is numbered `2a` rather than `a`, and the walk is RECURSIVE through the chain because a
+ * list at the third level asks its own enclosing list, which asks its own — so three levels read `1a-` and not one
+ * level's answer. There is NO SEPARATOR: Apple's documentation states none, and this tier does not invent punctuation
+ * into a caller's marker; a caller who wants one puts it in the format.
+ *
+ * The chain is the paragraph style's (`NSTextList_internal.h`), so a list used outside a style simply has no enclosing
+ * list and answers its body — which is what the outermost level should do anyway. */
+- (NSString *)markerForItemNumber:(NSInteger)itemNum
+{
+	NSTextList *enclosing = (NSTextList *)_listSecondary;
+
+	if ((_listOptions & NSTextListPrependEnclosingMarker) != 0 && enclosing != nil) {
+		NSMutableString *nested = [NSMutableString string];
+		NSString *outside = [enclosing markerForItemNumber:itemNum];
+
+		if (outside != nil) {
+			[nested appendString:outside];
+		}
+		[nested appendString:fn_marker_body(_markerFormat, itemNum)];
+		return nested;
+	}
+	return fn_marker_body(_markerFormat, itemNum);
 }
 
 /* **`-copy` AND NOT `-copyWithZone:`, BECAUSE THIS TREE HAS NO ZONES** — `NSZone` is deliberately absent, exactly as

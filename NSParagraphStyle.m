@@ -13,6 +13,25 @@
  * states the decision and its cost), so a zone-taking door here would be a second copy protocol nobody conforms to.
  */
 #import <AppKit/NSParagraphStyle.h>
+#import "NSTextList_internal.h"
+
+/* **THE STACK IS A CHAIN, AND THIS IS WHERE IT IS MADE.** `-textLists` is "nested from outermost to innermost", so each
+ * list has to know the one immediately outside it — which is the only fact `NSTextListPrependEnclosingMarker` needs and
+ * the only fact no public API carries (10.6 declares Apple's private `_listSecondary` slot, which this tier's
+ * `NSTextList` uses for it). The link is made HERE rather than by the caller because it is a fact about THIS STYLE's
+ * stack: the same list object handed to two styles at different depths would otherwise hold one of them.
+ *
+ * AND IT IS WHY THE STYLE COPIES THE LISTS RATHER THAN SHARING THEM. A shared list whose enclosing pointer this style
+ * set would be a caller's object changed behind their back, so `-setTextLists:` takes copies — the same value semantics
+ * `-textBlocks` has with `copyItems:YES` at copy time. */
+static void fn_link_list_stack(NSArray *lists)
+{
+	NSUInteger k;
+
+	for (k = 1; k < [lists count]; k++) {
+		[(NSTextList *)[lists objectAtIndex:k] _setEnclosingList:[lists objectAtIndex:k - 1]];
+	}
+}
 #import <Foundation/NSObject.h>
 #import <Foundation/NSLocale.h>
 
@@ -94,6 +113,7 @@ static NSParagraphStyle *fn_defaultParagraphStyle = nil;
 		 * and every block in it is copied. */
 		_textBlocks = [[NSArray alloc] initWithArray:style->_textBlocks copyItems:YES];
 		_textLists = [[NSArray alloc] initWithArray:style->_textLists copyItems:YES];
+		fn_link_list_stack(_textLists);
 		_tabStops = [[NSArray alloc] initWithArray:style->_tabStops copyItems:YES];
 	}
 	return self;
@@ -207,10 +227,15 @@ static NSParagraphStyle *fn_defaultParagraphStyle = nil;
 
 - (void)setTextLists:(NSArray *)textLists
 {
-	id held = [textLists copy];
+	NSMutableArray *owned = [NSMutableArray array];
+	NSUInteger k;
 
+	for (k = 0; k < [textLists count]; k++) {
+		[owned addObject:[[[textLists objectAtIndex:k] copy] autorelease]];
+	}
+	fn_link_list_stack(owned);
 	[_textLists release];
-	_textLists = held;
+	_textLists = [owned copy];
 }
 
 - (NSArray *)textBlocks

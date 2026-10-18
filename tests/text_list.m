@@ -123,6 +123,44 @@ int main(void)
 		      "a format this tier does not know is answered in decimal");
 	}
 
+	/* **AND THE ENCLOSING MARKER**, which needs a STACK and so needs a paragraph style: the option alone does nothing.
+	 * The numbers are chosen so the two halves are distinguishable: the outer list is decimal and the inner one
+	 * alphabetic, so item 3 in the nested list is `3c` with the option and `c` without it — a check that only asked for
+	 * "the inner marker mentions the outer one" would pass on `33c` or `c3`. */
+	{
+		NSTextList *outer = listWith("{decimal}");
+		NSTextList *inner = [[[NSTextList alloc] initWithMarkerFormat:@"{lower-alpha}"
+							    options:NSTextListPrependEnclosingMarker] autorelease];
+		NSTextList *plainInner = listWith("{lower-alpha}");
+		NSMutableParagraphStyle *stack = [[NSParagraphStyle defaultParagraphStyle] mutableCopy];
+		NSParagraphStyle *copied;
+
+		check([[inner markerForItemNumber:3] isEqualToString:@"c"],
+		      "the option does nothing until there is an enclosing list");
+		[stack setTextLists:[NSArray arrayWithObjects:outer, inner, nil]];
+		{
+			/* THE STACK THE STYLE KEPT, not the objects handed in: the style copied them to make the chain. */
+			NSTextList *nested = [[stack textLists] objectAtIndex:1];
+
+			printf("  (nested marker for item 3: `%s`)\n", [[nested markerForItemNumber:3] UTF8String]);
+			check([[nested markerForItemNumber:3] isEqualToString:@"3c"],
+			      "inside a stack the inner marker is prefixed with the enclosing one (`3c`)");
+			check([[nested markerForItemNumber:1] isEqualToString:@"1a"],
+			      "and the prefix is the same ITEM number, not a running count (`1a`)");
+		}
+		check([[inner markerForItemNumber:3] isEqualToString:@"c"],
+		      "and the caller's own list was not linked — the stack belonged to the style");
+		copied = [stack copy];
+		check([[[[copied textLists] objectAtIndex:1] markerForItemNumber:3] isEqualToString:@"3c"],
+		      "a copy of the style rebuilds the chain, so the option survives the copy");
+		[copied release];
+		[stack setTextLists:[NSArray arrayWithObjects:plainInner, nil]];
+		check([[[stack textLists] objectAtIndex:0] markerForItemNumber:3] != nil
+		      && [[[[stack textLists] objectAtIndex:0] markerForItemNumber:3] isEqualToString:@"c"],
+		      "and a list without the option keeps its bare marker even at the top of a stack");
+		[stack release];
+	}
+
 	/* THE PARAGRAPH STYLE, WHICH IS WHERE A LIST LIVES: nested from outermost to innermost, and copied with the style. */
 	{
 		NSMutableParagraphStyle *style = [[NSParagraphStyle defaultParagraphStyle] mutableCopy];
@@ -133,8 +171,14 @@ int main(void)
 		check([[style textLists] count] == 0, "a style with no lists answers an empty array, not nil");
 		[style setTextLists:[NSArray arrayWithObjects:outer, inner, nil]];
 		check([[style textLists] count] == 2, "two lists are carried");
-		check([[style textLists] objectAtIndex:0] == outer && [[style textLists] objectAtIndex:1] == inner,
+		/* **AND THE STYLE OWNS COPIES RATHER THAN THE CALLER'S OBJECTS**, which is a change from what this probe first
+		 * asserted: the stack is a CHAIN (each list knows the one outside it), and setting that link on a caller's
+		 * object would be changing it behind their back. So the order is asserted by FORMAT, and the copy by identity. */
+		check([[[[style textLists] objectAtIndex:0] markerFormat] isEqualToString:@"{decimal}"]
+		      && [[[[style textLists] objectAtIndex:1] markerFormat] isEqualToString:@"{disc}"],
 		      "outermost first, in the order they were given");
+		check([[style textLists] objectAtIndex:0] != outer && [[style textLists] objectAtIndex:1] != inner,
+		      "and the style took copies, so it could link them without touching the caller's lists");
 		copied = [style copy];
 		check([[copied textLists] count] == 2 && [[copied textLists] objectAtIndex:0] != outer,
 		      "and a copy of the style owns its own copies of them");
