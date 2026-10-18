@@ -366,7 +366,8 @@ the compositor is really gone.
   literal RTF document with a font table, a colour table, a centred underlined red paragraph and a plain one parses to
   the text (the `\par` break and the `\'hh`/`\uN?` escapes included), the size by `\fs`, the ink by `\cf`, the rule by
   `\ul`, the alignment by `\qc`, and a second paragraph that says `\ulnone`/`\cf0` is neither underlined nor coloured;
-  a document with no RTF header answers **nil** rather than an empty string. **A FACE THIS TIER CANNOT RESOLVE IS
+  a document with no RTF header answers **nil** rather than an empty string, and the document attributes report type
+  **`NSRTF`** with encoding **4** (`NSUTF8StringEncoding`, an `NSNumber` — see the document-attributes note below). **A FACE THIS TIER CANNOT RESOLVE IS
   SUBSTITUTED** (the size is kept, which is what the layout measures with) — which is what an RTF reader is supposed
   to do. **AND THE APPKIT-AWARE WRITER IS HERE BESIDE IT** (`ctest`): Foundation's writer is keyed on its own
   presentation-intent bits and does not encode NSFont/NSColor/the two rules or the paragraph style, so
@@ -918,10 +919,25 @@ imported and then changed — the changes are recorded in [`PROVENANCE.md`](PROV
   category method ran. The fix is a SEAM in Foundation — one function pointer, installed by the AppKit from a
   CONSTRUCTOR (this tree's recorded choice over `+load`, for loader ordering) — and `-RTFDFromRange:` serializes
   whatever the installed writer returns, so the two doors cannot disagree.
-- **AND READING A PACKAGE BACK IS THE NEXT CUT, NAMED**: `-initWithRTFD:documentAttributes:` and
-  `-initWithRTFDFileWrapper:documentAttributes:` need the RTF reader to understand `\\NeXTGraphic` and to be handed the
-  package's files; today a written package is measured by its CONTENTS and its serialized round trip, not by reopening
-  it into an attributed string.
+- **AND READING A PACKAGE BACK LANDED, WHICH THIS NOTE USED TO CALL THE NEXT CUT.** `-initWithRTFD:documentAttributes:`
+  and `-initWithRTFDFileWrapper:documentAttributes:` are here, and the loop is CLOSED rather than inspected: write →
+  serialize → read gives back the same three characters, the middle one U+FFFC with the picture at its written size and
+  the FILE WRAPPER still carrying `pic.png`, and the in-memory package reads directly through the other door. The RTF
+  reader learned `\NeXTGraphic`: the name is collected where a `\pict`'s hex would be, resolved against the package's
+  children when the group closes, and the attachment it builds carries the wrapper as well as the decoded image. A
+  name the package does not hold, and a package with no readable `TXT.rtf`, are refused by name rather than drawn as
+  nothing or answered as an empty document.
+- **AND THE READERS REPORT THE DOCUMENT NOW, WHICH THE OLD ONES DID NOT.** Both took a `documentAttributes:` out-
+  parameter and wrote a single key whose value was a STRING naming `NSUTF8StringEncoding` rather than the `NSNumber`
+  the 10.6 header specifies — and the document TYPE was not reported at all. The AppKit header now declares
+  `NSDocumentTypeDocumentAttribute`, `NSRTFTextDocumentType`, `NSRTFDTextDocumentType` and
+  `NSCharacterEncodingDocumentAttribute`, and the reader fills the dictionary with the TYPE (RTF, or RTFD when a
+  package is behind the text) and the ENCODING as an `NSNumber` holding `NSUTF8StringEncoding`. MEASURED, in
+  `tests/text_rtf.m` and `tests/text_rtfd.m`: the plain parse reports type **`NSRTF`** and encoding **4**; both package
+  doors report **`NSRTFD`** with the same integer; and a FAILED parse leaves the dictionary UNTOUCHED rather than
+  describing a document that is not there. WHAT IS STILL NOT HERE IS THE WRITERS' SIDE: `-RTFFromRange:documentAttributes:`
+  and `-RTFDFromRange:documentAttributes:` accept a dictionary and read none of it, so a caller cannot yet ask for a
+  document-level fact (a background, a default tab interval) to be embedded in what is written.
 - **AND THE REFUSAL CENSUS IS A TEST NOW, NOT 129 PROSE CLAIMS.** This layer holds 129 `APPKIT-REFUSE` sites across 24
   files, and until this slice nothing watched them: a door quietly acquiring a real implementation was an improvement
   nobody recorded, and a real door quietly degrading into a refusal was a regression nobody saw. `tests/refusal_census.txt`

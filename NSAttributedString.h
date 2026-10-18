@@ -84,6 +84,27 @@ enum {
 typedef NSInteger NSUnderlineStyle;
 
 /* ============================================================================================ *
+ * AND THE DOCUMENT ATTRIBUTES: FACTS ABOUT THE WHOLE FILE, WHICH THE READER REPORTS.             *
+ * ============================================================================================ *
+ * THE 10.6 HEADER DECLARES `NSDocumentTypeDocumentAttribute` AND THE VALUES A READER ANSWERS      *
+ * BESIDE IT, with the value's type in a comment rather than a literal. TWO VALUES ARE DECLARED    *
+ * HERE BECAUSE TWO ARE WHAT THIS TIER'S READERS CAN PRODUCE — RTF and the package form, RTFD —   *
+ * and the rest of the era's set (`NSPlainTextDocumentType`, `NSMacSimpleTextDocumentType`, …)   *
+ * arrives with the readers that produce it, the same rule this file applies to the run           *
+ * attributes: a key lands when the class that CONSUMES or PRODUCES its value exists.              *
+ *
+ * AND THE ENCODING IS AN `NSNumber` RATHER THAN A NAME: the era's own comment says "NSNumber       *
+ * containing integer specifying NSStringEncoding for the file", and the reader decodes UTF-8, so   *
+ * `NSUTF8StringEncoding` is the one integer it reports. The key literals are Apple's long-standing  *
+ * spellings (`"CharacterEncoding"` is named in the era header itself), since the header publishes  *
+ * the names and not the strings.                                                                  *
+ * ============================================================================================ */
+extern NSString *NSDocumentTypeDocumentAttribute;
+extern NSString *NSRTFTextDocumentType;
+extern NSString *NSRTFDTextDocumentType;
+extern NSString *NSCharacterEncodingDocumentAttribute;
+
+/* ============================================================================================ *
  * AND THE DOOR THAT READS RICH TEXT FORMAT (RTF), WHICH IS THE HALF THIS TIER'S FOUNDATION DOES *
  * NOT HAVE. `libagora-base` already WRITES RTF — its `-RTFFromRange:documentAttributes:` is a real   *
  * writer, keyed on its own presentation-intent bits — but a READER has to turn RTF's control words   *
@@ -99,8 +120,10 @@ typedef NSInteger NSUnderlineStyle;
 @interface NSAttributedString (NSAttributedStringKitAdditions)
 
 /* **THE READER.** A failed parse answers nil rather than an empty string, because a caller that handed over bytes
- * which are not RTF should be able to tell. `documentAttributes` is filled with the document's own facts (the
- * character encoding), which is the one key this tier has an answer for. */
+ * which are not RTF should be able to tell. `documentAttributes` is filled with the document's own facts:
+ * `NSDocumentTypeDocumentAttribute` (`NSRTFTextDocumentType` here, `NSRTFDTextDocumentType` through the package
+ * doors) and `NSCharacterEncodingDocumentAttribute`, an `NSNumber` holding `NSUTF8StringEncoding` — the one encoding
+ * this reader decodes. A FAILED PARSE LEAVES THE DICTIONARY UNTOUCHED, because there is no document to describe. */
 - (nullable instancetype)initWithRTF:(NSData *)data documentAttributes:(NSDictionary **)dict;
 
 /* **AND THE PACKAGE FORM OF THE SAME READER**, which is RTFD: an RTF document whose pictures are FILES beside it,
@@ -108,7 +131,8 @@ typedef NSInteger NSUnderlineStyle;
  * `-RTFDFileWrapperFromRange:documentAttributes:` answers — and `-initWithRTFD:` the serialized form a document file
  * and a pasteboard carry. Both hand the text to the SAME reader with the package behind it, so `\NeXTGraphic`
  * resolves to the file the text names and the attachment it builds carries that file wrapper. A package with no
- * readable `TXT.rtf` is refused by name rather than answered as an empty document. */
+ * readable `TXT.rtf` is refused by name rather than answered as an empty document. THE DOCUMENT ATTRIBUTES NAME
+ * `NSRTFDTextDocumentType`, which is the one fact that distinguishes the package reader from the plain RTF one. */
 - (nullable instancetype)initWithRTFD:(NSData *)rtfdData documentAttributes:(NSDictionary **)dict;
 - (nullable instancetype)initWithRTFDFileWrapper:(NSFileWrapper *)wrapper
 			      documentAttributes:(NSDictionary **)dict;

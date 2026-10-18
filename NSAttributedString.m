@@ -23,3 +23,12 @@ NSString *NSStrikethroughStyleAttributeName = @"NSStrikethrough";
 NSString *NSStrikethroughColorAttributeName = @"NSStrikethroughColor";
 NSString *NSParagraphStyleAttributeName = @"NSParagraphStyle";
 NSString *NSAttachmentAttributeName = @"NSAttachment";
+
+/* **AND THE DOCUMENT-LEVEL KEYS, WHICH ARE ABOUT THE FILE RATHER THAN A RUN.** The reader reports the type and the
+ * encoding, and the type's two values are the two this tier can produce — RTF and the package form. The encoding's
+ * value is an `NSNumber`, as the era header says in as many words; the reader decodes UTF-8, so that is the integer a
+ * caller gets. See the declarations in the header for why only these four names are here. */
+NSString *NSDocumentTypeDocumentAttribute = @"NSDocumentType";
+NSString *NSRTFTextDocumentType = @"NSRTF";
+NSString *NSRTFDTextDocumentType = @"NSRTFD";
+NSString *NSCharacterEncodingDocumentAttribute = @"CharacterEncoding";

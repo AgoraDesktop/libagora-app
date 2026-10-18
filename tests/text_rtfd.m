@@ -75,6 +75,7 @@ int main(void)
 	NSFileWrapper *reread;
 	NSData *serialized;
 	NSDictionary *children;
+	NSDictionary *docAttrs = nil;
 
 	setvbuf(stdout, NULL, _IONBF, 0);
 	check(image != nil && named != nil, "the picture and the wrapper were made");
@@ -155,9 +156,17 @@ int main(void)
 	 * same three characters, an attachment on the middle one, the picture's size, and the FILE WRAPPER — because a
 	 * package that loses its file names is a package that cannot be written again with them. */
 	if (serialized != nil) {
-		NSAttributedString *back = [[NSAttributedString alloc] initWithRTFD:serialized documentAttributes:NULL];
+		NSAttributedString *back = [[NSAttributedString alloc] initWithRTFD:serialized
+							   documentAttributes:&docAttrs];
 
 		check(back != nil, "the serialized package reads back as an attributed string");
+		check(docAttrs != nil
+		      && [NSRTFDTextDocumentType isEqual:[docAttrs objectForKey:NSDocumentTypeDocumentAttribute]],
+		      "and it says the document is RTFD, which is what the package door is for");
+		check([[docAttrs objectForKey:NSCharacterEncodingDocumentAttribute] isKindOfClass:[NSNumber class]]
+		      && [[docAttrs objectForKey:NSCharacterEncodingDocumentAttribute] unsignedIntegerValue]
+			 == NSUTF8StringEncoding,
+		      "with the character encoding as an NSNumber holding UTF-8");
 		if (back != nil) {
 			check([back length] == 3, "with the same three characters");
 			printf("  (the package gave %lu character(s))\n", (unsigned long)[back length]);
@@ -191,11 +200,15 @@ int main(void)
 	}
 	/* AND THE IN-MEMORY PACKAGE IS READABLE BY THE OTHER DOOR, without going through bytes at all. */
 	if (package != nil) {
-		NSAttributedString *direct = [[NSAttributedString alloc] initWithRTFDFileWrapper:package
-									     documentAttributes:NULL];
+		NSAttributedString *direct;
+
+		docAttrs = nil;
+		direct = [[NSAttributedString alloc] initWithRTFDFileWrapper:package documentAttributes:&docAttrs];
 
 		check(direct != nil && [direct length] == 3,
 		      "the file-wrapper door reads the package the writer made");
+		check([NSRTFDTextDocumentType isEqual:[docAttrs objectForKey:NSDocumentTypeDocumentAttribute]],
+		      "and names the document RTFD too, from the in-memory package");
 		[direct release];
 	}
 

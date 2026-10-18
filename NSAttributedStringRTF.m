@@ -492,7 +492,8 @@ NSString *fn_rtf_text(NSAttributedString *source, NSMutableDictionary *attachmen
 /* **AND THE SAME READER WITH A PACKAGE BEHIND IT.** RTFD's text is an RTF document whose pictures are FILES rather
  * than hex, so the reader takes the package's children by name and resolves `\NeXTGraphic <name>` through them. `nil`
  * is the standalone case, and then a `\NeXTGraphic` is a reference to a file nobody handed over — refused by name
- * rather than drawn as nothing, because that is what it is. */
+ * rather than drawn as nothing, because that is what it is. THE SAME DISTINCTION IS THE DOCUMENT TYPE the reader
+ * reports: a package behind the text is `NSRTFDTextDocumentType`, and no package is `NSRTFTextDocumentType`. */
 - (instancetype)fn_initWithRTF:(NSData *)data package:(NSDictionary *)packageFiles documentAttributes:(NSDictionary **)dict
 {
 	NSString *source = [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding];
@@ -926,7 +927,18 @@ NSString *fn_rtf_text(NSAttributedString *source, NSMutableDictionary *attachmen
 			}
 		}
 		if (dict != NULL) {
-			*dict = [NSDictionary dictionaryWithObject:@"NSUTF8StringEncoding" forKey:@"CharacterEncoding"];
+			/* **AND THE DOCUMENT'S OWN FACTS, WHICH ARE NOT A RUN'S.** The TYPE distinguishes the two readers this
+			 * codec answers — a package behind the text is RTFD, no package is RTF — and the ENCODING is an
+			 * `NSNumber`, because the era header specifies an integer NSStringEncoding and UTF-8 is what this
+			 * reader decodes. Before this, the key was an undeclared literal and the value was a STRING naming
+			 * the constant rather than its value, which is the kind of wrong a type cannot catch and a probe must. */
+			NSMutableDictionary *facts = [NSMutableDictionary dictionaryWithCapacity:2];
+
+			[facts setObject:((packageFiles != nil) ? NSRTFDTextDocumentType : NSRTFTextDocumentType)
+				  forKey:NSDocumentTypeDocumentAttribute];
+			[facts setObject:[NSNumber numberWithUnsignedInteger:NSUTF8StringEncoding]
+				  forKey:NSCharacterEncodingDocumentAttribute];
+			*dict = facts;
 		}
 		self = [self initWithAttributedString:built];
 		[built release];

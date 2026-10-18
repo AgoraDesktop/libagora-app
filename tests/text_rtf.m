@@ -84,16 +84,32 @@ int main(void)
 		      && [second objectForKey:NSForegroundColorAttributeName] == nil,
 		      "the SECOND paragraph, which is neither underlined nor coloured, is neither");
 		check(documentAttributes != nil, "the document attributes are filled in");
+		if (documentAttributes != nil) {
+			id type = [documentAttributes objectForKey:NSDocumentTypeDocumentAttribute];
+			id encoding = [documentAttributes objectForKey:NSCharacterEncodingDocumentAttribute];
+
+			printf("  (note: the document is type `%s`, encoding %lu)\n",
+			       [type isKindOfClass:[NSString class]] ? [type UTF8String] : "(not a string)",
+			       (unsigned long)([encoding isKindOfClass:[NSNumber class]]
+					       ? [encoding unsignedIntegerValue] : 0));
+			check([NSRTFTextDocumentType isEqual:type], "the plain reader names the document type RTF");
+			check([encoding isKindOfClass:[NSNumber class]]
+			      && [encoding unsignedIntegerValue] == NSUTF8StringEncoding,
+			      "and the character encoding is an NSNumber holding UTF-8, the one this reader decodes");
+		}
 	}
 	[parsed release];
 
 	/* 2. **AND A DOCUMENT THAT IS NOT RTF ANSWERS NIL**, not an empty string. */
 	{
 		NSData *junk = [@"not an rtf document" dataUsingEncoding:NSUTF8StringEncoding];
-		NSAttributedString *none = [[NSAttributedString alloc] initWithRTF:junk documentAttributes:NULL];
+		NSDictionary *sentinel = [NSDictionary dictionaryWithObject:@"kept" forKey:@"sentinel"];
+		NSDictionary *untouched = sentinel;
+		NSAttributedString *none = [[NSAttributedString alloc] initWithRTF:junk documentAttributes:&untouched];
 
 		printf("  (note: garbage parsed to %s)\n", none != nil ? [[none string] UTF8String] : "(nil)");
 		check(none == nil, "a document with no RTF header answers nil rather than an empty string");
+		check(untouched == sentinel, "and a failed parse leaves the document attributes untouched");
 		[none release];
 	}
 

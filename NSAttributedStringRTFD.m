@@ -27,7 +27,12 @@
  * SAME reader with the package's children behind it, so `\NeXTGraphic <name>` resolves to the file the text names and
  * the attachment it builds carries that FILE WRAPPER, which is how the name survives being written again.
  *
- * **WHAT IS STILL NOT HERE, NAMED**: document attributes, which neither writer produces and neither reader reports.
+ * **AND THE READERS REPORT THE DOCUMENT, WHICH THEY DID NOT BEFORE**: `NSDocumentTypeDocumentAttribute` names
+ * `NSRTFDTextDocumentType` through these doors (the plain RTF reader names `NSRTFTextDocumentType`), and
+ * `NSCharacterEncodingDocumentAttribute` is the UTF-8 integer — the only encoding either reader decodes. WHAT IS
+ * STILL NOT HERE IS THE WRITERS' SIDE OF DOCUMENT ATTRIBUTES: `-RTFDFromRange:documentAttributes:` and
+ * `-RTFFromRange:documentAttributes:` take a dictionary and read none of it, so a caller cannot yet ask for a
+ * document-level fact (a background, a default tab interval) to be embedded in what is written.
  */
 #import "NSAttributedStringRTF_internal.h"
 
