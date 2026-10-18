@@ -53,7 +53,10 @@
  * AN INPUT METHOD: `AGInputMethod` is a dead-key table the context sends each key to FIRST, which composes the accent
  * and the next letter through these very doors, and a key it does not own reaches the standard key binding. ATTACHMENTS are drawn (`NSTextAttachment.h`, and the manager's run walk
  * draws the cell), and their INLINE ADVANCE IS THE ENGINE'S NOW: a `CTRunDelegate` over the attachment character makes
- * Core Text reserve the box, so the text after an attachment flows PAST it rather than over it. The view's own
+ * Core Text reserve the box, so the text after an attachment flows PAST it rather than over it. A PRESSED ATTACHMENT
+ * IS TRACKED HERE TOO: `-mouseDown:` hit-tests the box and hands the cell the DOWN, `-mouseDragged:` and `-mouseUp:`
+ * hand it every remaining event, and the cell's `-trackMouse:…` is asked once per event — the view owns the stream, so
+ * the modal loop `NSCell` refuses is never built. The view's own
  * `NSText`-inherited `_string` is a mirror (see above) rather than the authority.
  */
 #ifndef APPKIT_NSTEXTVIEW_H
@@ -86,6 +89,14 @@ NS_ASSUME_NONNULL_BEGIN
 	 * because the STORE cannot say which of its runs are still being composed. `NSNotFound` means nothing is marked,
 	 * which is the state of every view no input method has touched. */
 	NSRange _cg_markedRange;
+	/* **AND THE ATTACHMENT CELL THE POINTER IS TRACKING, IF ANY.** The view OWNS THE SESSION rather than borrowing a
+	 * modal loop from the cell (see `NSTextAttachment.h`), so the cell, the character it stands for and the frame it
+	 * occupied are remembered between the press and the release. THE CELL IS RETAINED FOR THE SESSION: an edit during
+	 * the drag could take the attachment out of the store, and a borrowed pointer to ink that no longer exists is the
+	 * one thing a drag must not keep. `nil` means no session, which is the state of every view between gestures. */
+	id _cg_trackingCell;		/* RETAINED while a session is in flight, else nil */
+	NSUInteger _cg_trackingIndex;
+	NSRect _cg_trackingFrame;
 }
 
 /* ---- THE TRIO, WHICH A CALLER REACHES TO PUT RUNS IN ------------------------------------------------ */

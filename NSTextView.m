@@ -20,6 +20,7 @@
 #import <AppKit/NSTextStorage.h>
 #import <AppKit/NSLayoutManager.h>
 #import <AppKit/NSTextContainer.h>
+#import <AppKit/NSTextAttachment.h>
 #import <AppKit/NSFont.h>
 #import <AppKit/NSColor.h>
 #import <AppKit/NSGraphicsContext.h>
@@ -77,6 +78,7 @@ static void cg_announce(NSText *text, NSString *name, SEL delegateSelector)
 {
 	[[NSNotificationCenter defaultCenter] removeObserver:self name:NSTextStorageDidProcessEditingNotification
 		object:_cg_textStorage];
+	[self cg_endAttachmentTracking];
 	[_cg_textContainer setTextView:nil];
 	[_cg_textContainer release];
 	[_cg_layoutManager release];
@@ -661,17 +663,142 @@ static void cg_announce(NSText *text, NSString *name, SEL delegateSelector)
  * THE POINTER: A CLICK LANDS ON THE VISUAL LINE IT IS OVER                                      *
  * ============================================================================================ */
 
+/* **AND AN ATTACHMENT'S BOX IS WHERE THE MANAGER DRAWS IT, WHICH IS THE ONE ARITHMETIC THE VIEW NEEDS.** The manager
+ * records the box on the attachment character and draws it ABOVE the baseline in container coordinates; the view's
+ * own inset is the only translation, so the frame a hit test reads is the frame the ink occupies. A character with no
+ * attachment, or one whose cell measures nothing, answers an EMPTY rect and is never hit. */
+- (NSRect)cg_frameForAttachmentAtIndex:(NSUInteger)index
+{
+	NSTextAttachment *attachment;
+	NSCell<NSTextAttachmentCell> *cell;
+	NSSize size;
+	NSUInteger line;
+
+	if (_cg_textStorage == nil || index >= [_cg_textStorage length]) {
+		return NSZeroRect;
+	}
+	attachment = [_cg_textStorage attribute:NSAttachmentAttributeName atIndex:index effectiveRange:NULL];
+	cell = [attachment attachmentCell];
+	size = (cell != nil) ? [cell cellSize] : NSZeroSize;
+	if (size.width <= 0.0 || size.height <= 0.0) {
+		return NSZeroRect;
+	}
+	line = [self cg_visualLineIndexForCharacterIndex:index];
+	return NSMakeRect(NS_TEXT_INSET + [self cg_xForIndex:index],
+			  [self cg_baselineForLine:line] - size.height, size.width, size.height);
+}
+
+/* **AND WHICH CELL A POINT IS ON, IF ANY.** The hit test answers the NEAREST character, so a point in the right half
+ * of a box can come back as the character AFTER the attachment — which is why the candidate and its predecessor are
+ * both tried, and why the point must fall inside the FRAME rather than merely on the character's own index. */
+- (BOOL)cg_attachmentAtPoint:(NSPoint)point cell:(NSCell<NSTextAttachmentCell> **)outCell
+		       index:(NSUInteger *)outIndex frame:(NSRect *)outFrame
+{
+	NSUInteger hit;
+	NSUInteger candidates[2];
+	NSUInteger count = 0;
+	NSUInteger i;
+
+	if (_cg_textStorage == nil || [_cg_textStorage length] == 0) {
+		return NO;
+	}
+	hit = [self cg_indexForPoint:point];
+	if (hit < [_cg_textStorage length]
+	    && [_cg_textStorage attribute:NSAttachmentAttributeName atIndex:hit effectiveRange:NULL] != nil) {
+		candidates[count++] = hit;
+	}
+	if (hit > 0
+	    && [_cg_textStorage attribute:NSAttachmentAttributeName atIndex:hit - 1 effectiveRange:NULL] != nil) {
+		candidates[count++] = hit - 1;
+	}
+	for (i = 0; i < count; i++) {
+		NSRect frame = [self cg_frameForAttachmentAtIndex:candidates[i]];
+
+		if (frame.size.width > 0.0 && frame.size.height > 0.0 && NSPointInRect(point, frame)) {
+			NSTextAttachment *attachment = [_cg_textStorage attribute:NSAttachmentAttributeName
+									 atIndex:candidates[i] effectiveRange:NULL];
+
+			if (outCell != NULL) {
+				*outCell = [attachment attachmentCell];
+			}
+			if (outIndex != NULL) {
+				*outIndex = candidates[i];
+			}
+			if (outFrame != NULL) {
+				*outFrame = frame;
+			}
+			return YES;
+		}
+	}
+	return NO;
+}
+
+/* **AND ONE EVENT TO THE TRACKED CELL, THROUGH THE MOST SPECIFIC DOOR IT ANSWERS.** The character-index variant is
+ * asked first because it is the sophisticated half of Apple's protocol and the one that knows WHICH attachment it is;
+ * a cell that implements only the plain door still works. NO from the cell means it declined the event. */
+- (BOOL)cg_trackAttachmentWithEvent:(NSEvent *)event
+{
+	NSCell<NSTextAttachmentCell> *cell = (NSCell<NSTextAttachmentCell> *)_cg_trackingCell;
+
+	if ([cell respondsToSelector:@selector(trackMouse:inRect:ofView:atCharacterIndex:untilMouseUp:)]) {
+		return [cell trackMouse:event inRect:_cg_trackingFrame ofView:self
+			atCharacterIndex:_cg_trackingIndex untilMouseUp:YES];
+	}
+	if ([cell respondsToSelector:@selector(trackMouse:inRect:ofView:untilMouseUp:)]) {
+		return [cell trackMouse:event inRect:_cg_trackingFrame ofView:self untilMouseUp:YES];
+	}
+	return NO;
+}
+
+/* THE SESSION'S END, which releases the retained cell and forgets the frame it occupied. */
+- (void)cg_endAttachmentTracking
+{
+	[(id)_cg_trackingCell release];
+	_cg_trackingCell = nil;
+	_cg_trackingIndex = 0;
+	_cg_trackingFrame = NSZeroRect;
+}
+
+/* **A PRESS ON AN ATTACHMENT IS OFFERED TO ITS CELL BEFORE IT IS A CARET.** The cell that wants the mouse OWNS the
+ * gesture: the view selects the attachment character so the click is visible, starts the session, and sends the DOWN
+ * through the cell's tracking door. A cell that declines — or implements neither tracking door — leaves an ordinary
+ * click, which is why that path falls through rather than swallowing the press. */
 - (void)mouseDown:(NSEvent *)event
 {
-	NSUInteger index;
+	NSPoint point;
+	NSCell<NSTextAttachmentCell> *cell = nil;
+	NSUInteger index = 0;
+	NSRect frame = NSZeroRect;
 
-	if (![self isSelectable]) {
-		return;
-	}
 	if ([self isEditable]) {
 		[[self window] makeFirstResponder:self];
 	}
-	index = [self cg_indexForPoint:[self convertPoint:[event locationInWindow] fromView:nil]];
+	point = [self convertPoint:[event locationInWindow] fromView:nil];
+	if ([self cg_attachmentAtPoint:point cell:&cell index:&index frame:&frame] && cell != nil) {
+		BOOL wants = NO;
+
+		if ([cell respondsToSelector:@selector(wantsToTrackMouseForEvent:inRect:ofView:atCharacterIndex:)]) {
+			wants = [cell wantsToTrackMouseForEvent:event inRect:frame ofView:self atCharacterIndex:index];
+		} else if ([cell respondsToSelector:@selector(wantsToTrackMouse)]) {
+			wants = [cell wantsToTrackMouse];
+		}
+		if (wants) {
+			_cg_trackingCell = [cell retain];
+			_cg_trackingIndex = index;
+			_cg_trackingFrame = frame;
+			[self setSelectedRange:NSMakeRange(index, 1)];
+			if ([self cg_trackAttachmentWithEvent:event]) {
+				_dragging = NO;
+				return;
+			}
+			/* THE CELL DECLINED THE PRESS ITSELF, so the ordinary click below is what happens. */
+			[self cg_endAttachmentTracking];
+		}
+	}
+	if (![self isSelectable]) {
+		return;
+	}
+	index = [self cg_indexForPoint:point];
 	_dragAnchor = index;
 	[self setSelectedRange:NSMakeRange(index, 0)];
 	_dragging = YES;
@@ -681,12 +808,29 @@ static void cg_announce(NSText *text, NSString *name, SEL delegateSelector)
 {
 	NSUInteger here;
 
+	if (_cg_trackingCell != nil) {
+		[self cg_trackAttachmentWithEvent:event];
+		return;
+	}
 	if (!_dragging) {
 		return;
 	}
 	here = [self cg_indexForPoint:[self convertPoint:[event locationInWindow] fromView:nil]];
 	[self setSelectedRange:(here < _dragAnchor) ? NSMakeRange(here, _dragAnchor - here)
 						    : NSMakeRange(_dragAnchor, here - _dragAnchor)];
+}
+
+/* **AND THE RELEASE ENDS THE SESSION WHATEVER THE CELL SAYS** — the up event is the last one the view will send it,
+ * and the cell's answer is Apple's "came up inside" rather than an instruction to keep going. The base's own release
+ * (which ends a text selection drag) runs when no attachment is being tracked. */
+- (void)mouseUp:(NSEvent *)event
+{
+	if (_cg_trackingCell != nil) {
+		[self cg_trackAttachmentWithEvent:event];
+		[self cg_endAttachmentTracking];
+		return;
+	}
+	[super mouseUp:event];
 }
 
 /* ============================================================================================ *

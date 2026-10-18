@@ -18,16 +18,24 @@
  * the width and the text after an attachment flows past it rather than over it. See `CTRunDelegate.h` for the box
  * itself.
  *
- * **WHAT IS NOT HERE, AND ITS ROWS STAY OPEN — AND ONE OF THE TWO GROUNDS HAS EXPIRED.** `NSFileWrapper` IS here now
- * and **THE WRAPPER PAIR IS HERE NOW**: `NSFileWrapper` has lived in `libagora-base` all along, the PNG encoder exists
- * (`NSBitmapImageRep` writes through Core Graphics' `CGImageDestination`), and `-fileWrapper`/`-initWithFileWrapper:`
- * are what an RTFD package is built out of.
- * to give: the READ half is decodable (the tree reads PNG and JPEG), but the WRITE half has no image ENCODER to turn
- * the attachment's picture back into bytes, so the pair cannot round-trip and it lands with the ENCODER rather than
- * with the wrapper. AND THE TRACKING FAMILY (`-wantsToTrackMouse`, `-highlight:…`, `-trackMouse:…`) IS OWED WITH
- * `NSCell`'s OWN REFUSAL: the door that would drive it is `-trackMouse:inRect:ofView:untilMouseUp:`, a MODAL LOOP this
- * tree has refused by name (see `NSCell.h`) because a loop built from guessed coordination can hang the guest — so the
- * three hooks wait for that decision rather than being half-wired here. A picture in a document is not draggable yet.
+ * **AND THE WRAPPER PAIR'S OLD GROUND HAS EXPIRED RATHER THAN ITS ROW.** The pair used to wait on an image ENCODER,
+ * and the encoder exists now — `NSBitmapImageRep` writes PNG through Core Graphics' `CGImageDestination` — so
+ * `-fileWrapper`/`-initWithFileWrapper:` are here, over `NSFileWrapper`, which has lived in `libagora-base` all along.
+ * That is what an RTFD package is built out of: the attachment is not the package, it is the FILE inside it.
+ *
+ * **AND THE TRACKING FAMILY IS HERE, DRIVEN BY THE TEXT VIEW'S OWN EVENT STREAM RATHER THAN BY A MODAL LOOP.**
+ * `NSCell` refuses `-trackMouse:inRect:ofView:untilMouseUp:` as a loop built from guessed coordination (see
+ * `NSCell.h`), so this family does NOT re-introduce one: `NSTextView` asks an attachment's cell from its own
+ * `-mouseDown:`/`-mouseDragged:`/`-mouseUp:`, and the cell's `-trackMouse:…` is asked ONCE PER EVENT instead of owning
+ * the loop. A cell subclass that overrides it therefore sees the whole gesture — the down, every drag and the up —
+ * which is the extension point Apple's loop exists for, without the loop.
+ *
+ * **THE ANSWER TO THAT DOOR IS THE EVENT'S, NOT THE SESSION'S, AND THE DIFFERENCE IS STATED RATHER THAN GLOSSED.**
+ * Apple's whole-session call answers "did the button come up inside the frame"; here the DOWN event's YES means
+ * "track me", a DRAG's means "keep tracking", and the UP event's is Apple's own answer for the end of the gesture.
+ * `-highlight:withFrame:inView:` is where the cell says it is pressed, and the default cell paints a translucent
+ * accent over its picture. A picture in a document can be pressed and dragged over now; the DELEGATE messages
+ * (`-textView:clickedOnCell:inRect:atIndex:` and the dragging family) are a separate door and stay owed.
  */
 #ifndef APPKIT_NSTEXTATTACHMENT_H
 #define APPKIT_NSTEXTATTACHMENT_H
@@ -47,24 +55,39 @@ enum {
 	NSAttachmentCharacter = 0xFFFC
 };
 
-/* **WHAT THE LAYOUT ASKS A CELL.** Three doors of Apple's protocol are here — the size, the baseline's place in the
- * cell, and the drawing — and the tracking family is named as owed above. The `characterIndex:` variants exist so a
- * cell that wants to know WHICH attachment it is drawing can; this tier's manager calls the plain one. */
+/* **WHAT THE LAYOUT AND THE TEXT VIEW ASK A CELL.** The simple half is the size, the baseline's place in the cell, the
+ * drawing, and the three tracking hooks; the `characterIndex:` variants are the sophisticated half Apple asks a cell
+ * that wants to know WHICH attachment it is drawing, and `NSTextAttachmentCell` implements them by forwarding to the
+ * simple ones — exactly the arrangement the 10.6 header describes. THE TRACKING DOORS ARE ASKED PER EVENT (see the
+ * file comment): the view calls `-trackMouse:…` on the down, on each drag and on the up. */
 @protocol NSTextAttachmentCell <NSObject>
 - (NSSize)cellSize;
 - (NSPoint)cellBaselineOffset;
 - (void)drawWithFrame:(NSRect)cellFrame inView:(nullable NSView *)controlView;
+- (BOOL)wantsToTrackMouse;
+- (void)highlight:(BOOL)flag withFrame:(NSRect)cellFrame inView:(nullable NSView *)controlView;
+- (BOOL)trackMouse:(NSEvent *)theEvent inRect:(NSRect)cellFrame ofView:(nullable NSView *)controlView
+      untilMouseUp:(BOOL)flag;
+
+/* AND THE THREE WITH THE CHARACTER INDEX, which the view asks FIRST when a cell answers them. */
 - (void)drawWithFrame:(NSRect)cellFrame inView:(nullable NSView *)controlView characterIndex:(NSUInteger)charIndex;
+- (BOOL)wantsToTrackMouseForEvent:(NSEvent *)theEvent inRect:(NSRect)cellFrame ofView:(nullable NSView *)controlView
+		 atCharacterIndex:(NSUInteger)charIndex;
+- (BOOL)trackMouse:(NSEvent *)theEvent inRect:(NSRect)cellFrame ofView:(nullable NSView *)controlView
+  atCharacterIndex:(NSUInteger)charIndex untilMouseUp:(BOOL)flag;
 @end
 
 /* **AND THE CELL THAT HOLDS A PICTURE, WHICH IS WHAT A FRESH ATTACHMENT GETS.** It is an `NSCell` because Apple's is,
- * and it draws its image into the frame it is given; `-cellSize` is the image's own size. */
+ * and it draws its image into the frame it is given; `-cellSize` is the image's own size. IT TRACKS THE MOUSE: a
+ * press highlights the picture with a translucent accent, a drag carries that highlight in and out of the cell's own
+ * frame, and the release clears it — so the default cell shows the gesture while a subclass overrides the same doors
+ * to give an attachment behaviour of its own. */
 @interface NSTextAttachmentCell : NSCell <NSTextAttachmentCell>
 @end
 
-/* **AND THE ATTACHMENT: A VALUE A RUN CARRIES, WITH A CELL THAT KNOWS HOW TO DRAW IT.** The image doors are the ones
- * this tier can honour; the file-wrapper pair is named as owed. `-setImage:` also gives the attachment a
- * `NSTextAttachmentCell` holding that image if it has none, which is the convenience Apple's own `-setImage:` is. */
+/* **AND THE ATTACHMENT: A VALUE A RUN CARRIES, WITH A CELL THAT KNOWS HOW TO DRAW IT.** The image doors and the
+ * file-wrapper pair are both here; `-setImage:` also gives the attachment a `NSTextAttachmentCell` holding that image
+ * if it has none, which is the convenience Apple's own `-setImage:` is. */
 @interface NSTextAttachment : NSObject
 {
 	NSImage *_image;				/* RETAINED */

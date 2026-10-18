@@ -65,6 +65,7 @@ tests/
   text_table_collapse.m         and `-collapsesBorders`: an edge two cells share is drawn once, by the min-side cell
   text_table_flow.m             and the FLOW: a row that does not fit goes on in the next container, columns unmoved
   text_attachment_flow.m        and the attachment's BOX: a fixed-size run the text flows around
+  text_attachment_tracking.m    and the attachment's TRACKING: the view presses it, the cell follows, one event per call
   text_tab_stops.m              and the TAB STOPS: a tab goes to its place, named by the paragraph style
   text_word_movement.m          and its WORD granularity: Option+arrow and Option+Delete, over the string
   text_view_lines.m             and the first slice of the MULTI-LINE view: the line model, and what reads it
@@ -406,9 +407,25 @@ the compositor is really gone.
   where the box is). **AND THE BOX IS THE ENGINE'S NOW**: the manager sets CORE TEXT'S `CTRunDelegate`
   (`kCTRunDelegateAttributeName`) over the attachment character, so `CTLine` and `CTTypesetter` reserve the width
   themselves — the manager's own `FNBox` arithmetic sees an advance that already IS the width and adds nothing. See
-  `libagora-text`'s `CTRunDelegate.h`. `-fileWrapper` and `-initWithFileWrapper:` wait on the tree's missing image
-  ENCODER — the read half decodes, the write half has nothing to encode with — and the cell's tracking family waits on
-  `NSCell`'s refused tracking loop; both named where they would be.
+  `libagora-text`'s `CTRunDelegate.h`. **AND THE FILE-WRAPPER PAIR'S ROW IS NO LONGER OPEN**: `-fileWrapper`,
+  `-initWithFileWrapper:` and `-setFileWrapper:` are here, because the encoder ground that used to hold them expired
+  with the PNG writer — the picture and the file are two separate facts on one attachment, and the RTFD package is
+  what that pair was for.
+- **And the attachment's TRACKING FAMILY, WHICH IS DRIVEN BY THE VIEW RATHER THAN BY THE REFUSED MODAL LOOP** (`ctest`):
+  `-wantsToTrackMouse`, `-highlight:withFrame:inView:` and `-trackMouse:inRect:ofView:untilMouseUp:` — plus the
+  `characterIndex:` variants — are here. `NSTextView -mouseDown:` hit-tests the box, asks the cell whether it wants the
+  mouse, selects the attachment character and sends the DOWN through the cell's tracking door; `-mouseDragged:` and
+  `-mouseUp:` send every remaining event through the same door. THE CELL'S DOOR IS ASKED ONCE PER EVENT rather than
+  owning a loop, which is the whole reason this family could land while `NSCell`'s own `-trackMouse:…` stays refused:
+  the coordination is the view's, and a guest cannot hang in a loop that does not exist. MEASURED,
+  `tests/text_attachment_tracking.m`: the cell answers both `-wantsToTrackMouse` doors; `-highlight:YES` puts **360**
+  accent pixels on a red 30x12 picture and `-highlight:NO` takes them away; a press on the rendered view selects the
+  attachment character and leaves **308** accent pixels; a drag OUT of the cell's frame clears the highlight and a drag
+  back IN restores it; a recording cell sees exactly **1** down, **2** drags and **1** up, each carrying the
+  attachment's character index, and the up answers **YES** inside the frame and **NO** outside; a cell that does not
+  want the mouse (or that declines the press itself) leaves an ordinary caret rather than a swallowed click. **AND
+  WHAT THIS DOES NOT DO IS STATED**: the delegate messages the 10.6 header promises a default attachment cell
+  (`-textView:clickedOnCell:inRect:atIndex:` and the dragging/pasteboard family) are a separate door and stay owed.
 - **And the TAB STOPS, which are a PLACE rather than a width** (`ctest`): `NSTextTab` names a location and a kind (left,
   right, centre, decimal), `NSParagraphStyle` carries them in `-tabStops` with `-defaultTabInterval` after the last, and
   the layout manager copies them into the `CTParagraphStyle` it builds — so `CTLine` advances a `\t` to the next stop.
@@ -877,9 +894,9 @@ imported and then changed — the changes are recorded in [`PROVENANCE.md`](PROV
 - **AND THE TIE IS NOT CARRIED BY RTF**, which has no such option: a document round trip loses it, and that boundary is
   stated in `NSTextList.h` rather than left to be discovered.
 - **AND WHAT IS STILL NOT CARRIED IS NAMED**: a `\\pict` whose blip is not PNG is decoded by `NSImage` or dropped with
-  an `APPKIT-REFUSE` line rather than drawn as nothing; `-fileWrapper`/`-initWithFileWrapper:` remain owed on
-  `NSTextAttachment` (the WRAPPER pair, not the bytes — `NSFileWrapper` exists in libagora-base and the encoder exists
-  here); and the tracking family still waits on the modal loop `NSCell.h` refuses by name.
+  an `APPKIT-REFUSE` line rather than drawn as nothing; and the tracking family — which this note used to say waited on
+  the modal loop `NSCell.h` refuses — is HERE now, driven by the text view's own event stream (see the attachment
+  tracking bullet above), so that clause is a record of a ground that expired rather than an open row.
 - **AND RTFD WRITES NOW — THE PACKAGE FORM — WHICH NEEDED TWO THINGS THAT DID NOT EXIST TOGETHER UNTIL THIS SLICE.**
   RTFD is not a different codec: it is the SAME RTF document, with its pictures stored as FILES beside it and its text
   REFERRING to them (`{\\NeXTGraphic <name> \\width<tw>\\height<tw>}`). So the RTF writer grew a SINK — `fn_rtf_text`
