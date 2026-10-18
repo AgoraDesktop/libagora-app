@@ -821,6 +821,87 @@ static void cg_announce(NSText *text, NSString *name, SEL delegateSelector)
 }
 
 /* ============================================================================================ *
+ * AND THE `NSTextInputClient` DOORS, WHICH ARE THE ONES AN INPUT METHOD MODERN ENOUGH TO ASK FOR  *
+ * A CANDIDATE WINDOW'S PLACEMENT NEEDS. Six of the fifteen are new here; the other nine are the
+ * ones `NSTextInput` already had and `NSText`'s and `NSResponder`'s ancestors already answer.     *
+ * ============================================================================================ */
+
+/* **THE SUBSTRING, WITH THE RANGE IT ACTUALLY GOT.** The proposed range is CLAMPED to the store and the clamped one is
+ * written back, which is the whole reason this door has two ranges where `NSTextInput`'s has one: a method asking for
+ * more than the document holds is told what it received rather than being left to assume. */
+- (NSAttributedString *)attributedSubstringForProposedRange:(NSRange)range actualRange:(NSRangePointer)actualRange
+{
+	NSUInteger n = [_cg_textStorage length];
+	NSRange clamped = range;
+
+	if (clamped.location > n) {
+		clamped.location = n;
+	}
+	if (clamped.location + clamped.length > n) {
+		clamped.length = n - clamped.location;
+	}
+	if (actualRange != NULL) {
+		*actualRange = clamped;
+	}
+	return [_cg_textStorage attributedSubstringFromRange:clamped];
+}
+
+/* THE WHOLE DOCUMENT, which is what a method reads when it wants more context than a proposed range gives it. A COPY,
+ * because the caller is not the owner — the same rule `-attributedSubstringFromRange:` follows. */
+- (NSAttributedString *)attributedString
+{
+	return [[_cg_textStorage copy] autorelease];
+}
+
+/* **AND WHERE A POINT FALLS WITHIN THE GLYPH IT HIT** — measured against the CHARACTER's box, and the deviation is stated
+ * rather than hidden: this layer sets one glyph per character except where a face ligates or composes, so a character's
+ * box IS its glyph's for the text it draws, and the manager's `-boundingRectForGlyphRange:` is the FLOW BAND (the
+ * column's width) rather than an ink box — MEASURED at 200 points for a single glyph, which is the whole view. So the box
+ * comes from the view's own per-character rect, which is what the caret and the candidate window are placed from anyway.
+ * A box of no width answers 0, the only honest fraction for it. */
+- (CGFloat)fractionOfDistanceThroughGlyphForPoint:(NSPoint)point
+{
+	NSRect frame = [[self window] frame];
+	NSPoint inWindow = NSMakePoint(point.x - frame.origin.x, point.y - frame.origin.y);
+	NSPoint local = [self convertPoint:inWindow fromView:nil];
+	NSRect box = [self cg_rectForCharacterIndex:[self cg_indexForPoint:local]];
+	CGFloat fraction;
+
+	if (box.size.width <= 0.0) {
+		return 0.0;
+	}
+	fraction = (local.x - box.origin.x) / box.size.width;
+	if (fraction < 0.0) {
+		return 0.0;
+	}
+	return (fraction > 1.0) ? 1.0 : fraction;
+}
+
+/* **AND TWO ANSWERS THAT ARE FACTS ABOUT THIS LAYER RATHER THAN ABOUT THE POINT**: every line sits ON its baseline, so
+ * the delta is zero; and there is no vertical text here, so nothing is drawn vertically. A caller that places a
+ * candidate window with these gets the right place for a horizontal view, which is the only kind there is. */
+- (CGFloat)baselineDeltaForCharacterAtIndex:(NSUInteger)anIndex
+{
+	(void)anIndex;
+	return 0.0;
+}
+
+- (BOOL)drawsVerticallyForCharacterAtIndex:(NSUInteger)charIndex
+{
+	(void)charIndex;
+	return NO;
+}
+
+/* THE WINDOW'S LEVEL, which is what a candidate window is ordered against — and `NSWindow`'s own door, not a second
+ * opinion about it. A view with no window answers the normal level, because that is where a windowless view would be. */
+- (NSInteger)windowLevel
+{
+	NSWindow *window = [self window];
+
+	return (window != nil) ? [window level] : NSNormalWindowLevel;
+}
+
+/* ============================================================================================ *
  * THE MOVEMENT: "THE LINE" MEANS THE VISUAL LINE, WHICH IS WHAT A PERSON SEES                     *
  * ============================================================================================ */
 

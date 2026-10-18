@@ -61,6 +61,7 @@
 
 #import <AppKit/NSText.h>
 #import <AppKit/NSTextInput.h>
+#import <AppKit/NSTextInputClient.h>
 
 @class NSTextStorage;
 @class NSLayoutManager;
@@ -68,7 +69,7 @@
 
 NS_ASSUME_NONNULL_BEGIN
 
-@interface NSTextView : NSText <NSTextInput>
+@interface NSTextView : NSText <NSTextInput, NSTextInputClient>
 {
 	/* **THE TRIO, AND THE VIEW OWNS THE FIRST TWO.** The store is RETAINED here and it retains the MANAGER (its own
 	 * list does); the manager retains the CONTAINER (its array does) and the container holds a BORROWED pointer back

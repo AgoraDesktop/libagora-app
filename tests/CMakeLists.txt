@@ -649,3 +649,10 @@ add_test(NAME appkit-readme-refs
             "-DREADME=${CMAKE_CURRENT_SOURCE_DIR}/../README.md"
             "-DTESTS_DIR=${CMAKE_CURRENT_SOURCE_DIR}"
             -P "${CMAKE_CURRENT_SOURCE_DIR}/readme_refs.cmake")
+
+# The NSTextInputClient protocol: a view held as a client and asked through it.
+add_executable(text_input_client text_input_client.m)
+target_link_libraries(text_input_client PRIVATE App)
+
+add_test(NAME appkit-text-input-client COMMAND text_input_client)
+set_tests_properties(appkit-text-input-client PROPERTIES ENVIRONMENT "${_agora_app_test_env}")

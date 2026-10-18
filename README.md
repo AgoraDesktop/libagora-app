@@ -1004,3 +1004,29 @@ imported and then changed — the changes are recorded in [`PROVENANCE.md`](PROV
   `events-headless` and `menu-headless` pass in the same run, so the compositor cases are green here too. A suite that
   takes under two minutes is one somebody runs after every change; that is worth more than the feature the time was
   being spent on.
+- **AND `NSTextInputClient` EXISTS NOW — THE PROTOCOL, WHICH WAS THE ONE PIECE OF THE INPUT-METHOD STORY THAT WAS NOT
+  THERE.** The machinery has been here for slices: a marked-text composition (`tests/text_marked_text.m`), the context
+  (`tests/text_input_context.m`), a dead-key table (`tests/text_input_method.m`), a candidate window
+  (`tests/text_candidate_list.m`). What a THIRD-PARTY input method or a ported client declares against was not: 10.6
+  declares fifteen doors on `NSTextInputClient` and this tree declared none of them. `NSTextView` conforms to both
+  protocols now — the older `NSTextInput` it always answered, and this one — and six of the fifteen are new methods, so
+  the probe holds the view as `id <NSTextInputClient>` and calls EVERY door through the protocol, which is what a ported
+  client actually needs.
+- **AND TWO OF THE NEW DOORS ARE FACTS ABOUT THIS LAYER, STATED RATHER THAN FAKED**: `-baselineDeltaForCharacterAtIndex:`
+  is 0 because every line here sits on its baseline, and `-drawsVerticallyForCharacterAtIndex:` is NO because there is no
+  vertical text. `-windowLevel` is `NSWindow`'s own door rather than a second opinion, and
+  `-attributedSubstringForProposedRange:actualRange:` CLAMPS the proposal and writes back what it actually got, which is
+  the whole reason that door takes two ranges where `NSTextInput`'s takes one.
+- **AND THE FRACTION DOOR MEASURES AGAINST A CHARACTER'S BOX, WITH THE DEVIATION NAMED, BECAUSE THE ALTERNATIVE WOULD BE
+  WRONG.** The obvious source is `NSLayoutManager`'s `-boundingRectForGlyphRange:inTextContainer:`, and MEASURING IT gave
+  **200 points for a single glyph** — that door answers the FLOW BAND (the column's width) rather than an ink box. So the
+  fraction is measured against the view's own per-character rect, which is what the caret is placed from; the text has one
+  glyph per character except where a face ligates or composes, so the two coincide for what this layer draws. The probe
+  tests the CONTRACT (a fraction in [0,1], deterministic, non-decreasing across the line) rather than an absolute number,
+  because a view with no window has degenerate character rects and an absolute check there would measure the geometry
+  rather than the arithmetic.
+- **AND THE CHECK THAT LED HERE WAS WRONG TWICE BEFORE IT WAS RIGHT, WHICH IS WORTH RECORDING**: a script comparing
+  `NSTextInput`'s doors against `NSTextView.m` reported `-selectedRange` and `-doCommandBySelector:` as unimplemented —
+  both are INHERITED (`NSText` and `NSResponder`), so the conformance was complete all along and the apparent bug was an
+  artefact of looking at one file. The lesson is the one this file keeps re-learning: a check has to be about the thing
+  it claims to measure, and INHERITANCE IS PART OF THAT THING.
