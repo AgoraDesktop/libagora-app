@@ -817,3 +817,21 @@ imported and then changed — the changes are recorded in [`PROVENANCE.md`](PROV
   `-initWithRTFDFileWrapper:documentAttributes:` need the RTF reader to understand `\\NeXTGraphic` and to be handed the
   package's files; today a written package is measured by its CONTENTS and its serialized round trip, not by reopening
   it into an attributed string.
+- **AND THE REFUSAL CENSUS IS A TEST NOW, NOT 129 PROSE CLAIMS.** This layer holds 129 `APPKIT-REFUSE` sites across 24
+  files, and until this slice nothing watched them: a door quietly acquiring a real implementation was an improvement
+  nobody recorded, and a real door quietly degrading into a refusal was a regression nobody saw. `tests/refusal_census.txt`
+  is the count PER FILE, and `tests/refusal_census.cmake` recomputes it on every build IN BOTH DIRECTIONS — a file
+  holding a refusal the census does not name fails, a census line whose count has moved fails, and the TOTAL is checked
+  against `# total:` as well. MEASURED, and the guard was PROVED TO BITE rather than assumed to: appending one
+  unrecorded refusal to `NSMenu.m` produced `NSMenu.m: the census says 19, the source has 20` and `the census says 129
+  in total, the sources have 130`, and restoring the file passed again.
+- **AND IT IS A CENSUS RATHER THAN A CEILING, WHICH IS THE DIFFERENCE BETWEEN HOLDING THE PROPERTY AND HOLDING A
+  NUMBER.** A count that may only fall says nothing about WHERE a refusal is — moving one from a class that needed it
+  to a class that did not would pass. Per-file counting means the only way to change the answer is to edit the census,
+  so adding or removing a refusal becomes a deliberate act with a diff.
+- **AND THE C SURFACE WAS CHECKED THE OTHER WAY, WITH THE INSTRUMENT `libagora-text` USES — AND IT HAS NO HOLES.** `nm
+  -D` against the 18 C functions this layer declares leaves exactly ONE name out, `NSEventMaskFromType`, and that one is
+  `NS_INLINE` in `NSEvent.h` — deliberately not a symbol, which is Apple's own shape for it. **THE LESSON IS ABOUT THE
+  EXTRACTOR, NOT THE LIBRARY**: a declared-and-undefined check that does not skip inline definitions reports a hole
+  where the header meant a function. The same check on Objective-C is impossible at all, because a method is dispatched
+  dynamically and appears in no symbol table — which is why this half needed a census instead of an allowlist.

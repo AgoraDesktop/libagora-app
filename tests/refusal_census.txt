@@ -1,0 +1,39 @@
+# THE REFUSAL CENSUS — every `APPKIT-REFUSE` site in this library, by file.
+#
+# Copyright © 2026 Kyle J. Cardoza. MIT licensed — see LICENSE.
+# SPDX-License-Identifier: MIT
+#
+# A REFUSAL IS A CLAIM ABOUT WHAT THIS LAYER CANNOT DO, and a claim held only in prose drifts: a door quietly
+# acquiring a real implementation is an improvement nobody records, and a real door quietly becoming a refusal is
+# a regression nobody sees. So the count is written down here and `refusal_census.cmake` recomputes it on every
+# build, in BOTH directions — a file with a refusal it does not list fails, and a listed count that has moved fails.
+# Changing this file is therefore the deliberate act of adding or removing a refusal, and the diff says which.
+#
+# THE FORMAT IS `file count`, one per line, and the total is the sum: 129.
+
+NSApplication.m                      3
+NSAttributedStringRTF.m              2
+NSAttributedStringRTFD.m             6
+NSBezierPath.m                       4
+NSBitmapImageRep.m                  15
+NSButtonCell.m                       1
+NSCell.m                             6
+NSColor.m                           17
+NSComboBoxCell.m                     1
+NSGraphicsContext.m                 14
+NSImage.m                            5
+NSImageRep.m                         3
+NSMenu.m                            19
+NSMenuItem.m                         1
+NSMenuItemCell.m                     3
+NSNib.m                              1
+NSPasteboard.m                       6
+NSPopUpButtonCell.m                  1
+NSSliderCell.m                       1
+NSText.m                             3
+NSTrackingArea.m                     1
+NSView.m                             2
+NSViewController.m                   1
+NSWindow.m                          13
+
+# total: 129

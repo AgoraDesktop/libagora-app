@@ -1,0 +1,81 @@
+# The refusal census, checked in both directions.
+#
+# usage: cmake -DSOURCE_DIR=<dir> -DCENSUS=<file> -P refusal_census.cmake
+#
+# A CENSUS RATHER THAN A CEILING, because a count that may only fall says nothing about WHERE a refusal is: moving one
+# from a class that needed it to a class that did not would pass. So the census is per FILE, and it is compared both
+# ways — a file holding a refusal the census does not name fails, and a census line whose count has moved fails. The
+# only way to change the answer is to edit the census, which is the point: it makes adding or removing a refusal a
+# deliberate act with a diff, instead of a side effect of a slice nobody re-read afterwards.
+#
+# THIS IS THE APPKIT HALF OF `libagora-text`'s `owed_symbols.cmake`, and it exists for the same reason that one does:
+# the tree's claims about what it cannot do are held by prose, and prose drifts. It cannot use the same instrument —
+# `nm` answers for C symbols, and every door here is an Objective-C METHOD, which is dispatched dynamically and appears
+# in no symbol table — so this counts the SITES instead, which is the census the prose actually makes.
+
+if(NOT SOURCE_DIR OR NOT CENSUS)
+  message(FATAL_ERROR "refusal_census.cmake needs -DSOURCE_DIR and -DCENSUS")
+endif()
+
+file(GLOB sources "${SOURCE_DIR}/*.m")
+file(READ "${CENSUS}" census_text)
+
+# THE TOTAL IS ITSELF A LINE IN THE FILE, as a comment, so the sum is checked against a number a reader can see.
+set(recorded_total -1)
+if(census_text MATCHES "# total: ([0-9]+)")
+  set(recorded_total "${CMAKE_MATCH_1}")
+endif()
+
+# THE CENSUS, parsed: "file count" lines, blank lines and `#` comments skipped.
+set(expected_names "")
+set(expected_total 0)
+string(REPLACE "\n" ";" census_lines "${census_text}")
+foreach(line IN LISTS census_lines)
+  string(STRIP "${line}" line)
+  if(line STREQUAL "" OR line MATCHES "^#")
+    continue()
+  endif()
+  if(NOT line MATCHES "^([^ ]+) +([0-9]+)$")
+    message(FATAL_ERROR "the census has a line that is not `file count`: `${line}`")
+  endif()
+  set(name "${CMAKE_MATCH_1}")
+  set(count "${CMAKE_MATCH_2}")
+  set(expected_names ${expected_names} "${name}")
+  math(EXPR expected_total "${expected_total} + ${count}")
+  set(expected_${name} "${count}")
+endforeach()
+
+# THE SOURCES, counted.
+set(actual_total 0)
+set(offenders "")
+foreach(source IN LISTS sources)
+  get_filename_component(name "${source}" NAME)
+  file(READ "${source}" text)
+  string(REGEX MATCHALL "APPKIT-REFUSE" sites "${text}")
+  list(LENGTH sites actual)
+  math(EXPR actual_total "${actual_total} + ${actual}")
+  set(recorded 0)
+  if(DEFINED expected_${name})
+    set(recorded "${expected_${name}}")
+  endif()
+  if(NOT actual EQUAL recorded)
+    list(APPEND offenders "${name}: the census says ${recorded}, the source has ${actual}")
+  endif()
+endforeach()
+
+# AND A CENSUS LINE WITH NO REFUSALS LEFT IS AS WRONG AS A REFUSAL WITH NO LINE.
+foreach(name IN LISTS expected_names)
+  if(NOT EXISTS "${SOURCE_DIR}/${name}")
+    list(APPEND offenders "${name}: named by the census and not in the source directory")
+  endif()
+endforeach()
+
+if(NOT recorded_total EQUAL actual_total)
+  list(APPEND offenders "the census says ${recorded_total} in total, the sources have ${actual_total}")
+endif()
+
+if(offenders)
+  string(REPLACE ";" "\n    " report "${offenders}")
+  message(FATAL_ERROR "the refusal census and the sources disagree:\n    ${report}")
+endif()
+message(STATUS "refusal census: ${actual_total} refusal site(s) over ${sources} file(s), exactly as recorded")

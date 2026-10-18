@@ -593,3 +593,12 @@ target_link_libraries(text_rtfd PRIVATE App)
 
 add_test(NAME appkit-text-rtfd COMMAND text_rtfd)
 set_tests_properties(appkit-text-rtfd PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
+
+# The refusal census: every `APPKIT-REFUSE` site in this library, counted against the committed table in BOTH
+# directions. `nm` cannot answer here — every door in this layer is an Objective-C method, which is dispatched
+# dynamically and appears in no symbol table — so the census counts the sites the prose itself makes.
+add_test(NAME appkit-refusal-census
+    COMMAND "${CMAKE_COMMAND}"
+            "-DSOURCE_DIR=${CMAKE_CURRENT_SOURCE_DIR}/.."
+            "-DCENSUS=${CMAKE_CURRENT_SOURCE_DIR}/refusal_census.txt"
+            -P "${CMAKE_CURRENT_SOURCE_DIR}/refusal_census.cmake")
