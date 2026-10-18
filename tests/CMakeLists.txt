@@ -641,3 +641,11 @@ target_link_libraries(text_table_delegation PRIVATE App)
 
 add_test(NAME appkit-text-table-delegation COMMAND text_table_delegation)
 set_tests_properties(appkit-text-table-delegation PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
+
+# And the README's citations: every `tests/<name>.m` it names must exist, because four of its "still owed" claims were
+# found false in one reading and the root cause was a sentence nobody had to revisit.
+add_test(NAME appkit-readme-refs
+    COMMAND "${CMAKE_COMMAND}"
+            "-DREADME=${CMAKE_CURRENT_SOURCE_DIR}/../README.md"
+            "-DTESTS_DIR=${CMAKE_CURRENT_SOURCE_DIR}"
+            -P "${CMAKE_CURRENT_SOURCE_DIR}/readme_refs.cmake")

@@ -186,9 +186,10 @@ the compositor is really gone.
   reports **Attributes** with a zero delta; two edits inside a group produce ONE announcement over their UNION — and a
   group of `-1` then `+2` reports delta **1**, with the second range brought back to the original's coordinates before
   the union, which is the arithmetic a naive accumulator gets wrong; and `-insertAttributedString:atIndex:`, a door
-  the store NEVER OVERRODE, is announced anyway — the routing, by dispatch. **WHAT IS OWED AND NAMED IN ITS HEADER**:
-  the layout-manager trio (`NSLayoutManager` does not exist here), the scripting category, and lazy attribute fixing
-  (there is nothing to defer).
+  the store NEVER OVERRODE, is announced anyway — the routing, by dispatch. **AND MOST OF WHAT THIS NOTE ONCE CALLED OWED HAS SINCE LANDED**, which is the correction that matters:
+  `NSLayoutManager` EXISTS (it is the largest class in this layer and the subject of nine probes), the layout-manager web
+  it belongs to is built, and what genuinely remains of this list is the scripting category and lazy attribute fixing
+  (there is nothing to defer, because nothing here defers an attribute).
 - **And the REGION that store is laid out in** (`ctest`): `NSTextContainer` is the middle of the trio and the smallest
   — four facts (a size, a line-fragment padding, two flags about tracking a view, and the view itself) and ONE
   computation: given a proposed line fragment, the part of it that falls inside. MEASURED: the size is what it was
@@ -196,9 +197,10 @@ the compositor is really gone.
   fragment inside the region answers itself and leaves `remainingRect` EMPTY (a rectangle has no holes); one running
   50 points past the right edge comes back **50** wide; one entirely past the region is EMPTY when the line may not
   move and is CARRIED to the region's near edge — **(200,10 100x20)** — when it may; and a fragment ABOVE the region
-  is carried DOWN to its top edge, because a text view's y grows downward. **WHAT IS OWED AND NAMED IN ITS HEADER**:
-  the layout-manager end of the web (`-layoutManager`, `-setLayoutManager:`, `-replaceLayoutManager:` name a class
-  this tier has not built), and the non-rectangular regions a subclass declares.
+  is carried DOWN to its top edge, because a text view's y grows downward. **AND THE LAYOUT-MANAGER END OF THE WEB EXISTS NOW**, which the container's own header states: `-layoutManager`,
+  `-setLayoutManager:` and `-replaceLayoutManager:` are implemented, the pointer is BORROWED in one direction because the
+  manager retains the container, and `-replaceLayoutManager:` does the half that crosses the object boundary. What is
+  genuinely owed here is the non-rectangular regions a subclass declares.
 - **And the WEB that ties the text system's three objects together** (`ctest`): `NSLayoutManager` slice one has no glyphs
   and no lines — what it has is the WIRING — and wiring is exactly the thing that can be checked from BOTH SIDES of
   every pair. MEASURED: a fresh manager has no store, no containers and NOTHING stale (`NSNotFound`); a storage that is
@@ -702,8 +704,10 @@ iconify in the protocol (Kestrel is parked). The chrome's toolbar pill is drawn 
 there is no toolbar for it to toggle; the three symbols beside it ARE buttons now, and `tests/chrome_buttons.m`
 presses them. The `NSTextInput` PROTOCOL is here and `NSTextView` answers it (`tests/text_marked_text.m`), and the
 input-method CONTEXT is here too (`tests/text_input_context.m`), and SO IS THE METHOD (`tests/text_input_method.m`):
-`AGInputMethod` is a dead-key table the context sends keys to first. What is still owed is the CANDIDATE LIST, for a
-method that offers several readings. And the
+`AGInputMethod` is a dead-key table the context sends keys to first. AND THE CANDIDATE LIST IS HERE TOO — this
+sentence said it was owed, and the note thirty lines below already said it had landed, so the two contradicted each
+other: `AGVariantsInputMethod` offers a letter's readings in an `AGCandidateWindow` placed under the caret
+(`tests/text_candidate_list.m`). And the
 ALIGNMENT COMMANDS are NOT absent: `NSText` declares `-alignLeft:` and its three siblings and each is one `-setAlignment:`,
 which the view moves glyphs for. **THE FIELD EDITOR IS NOT ON THAT LIST AND HAS NOT BEEN SINCE THE WINDOW LEARNED TO LEND ONE** —
 `-fieldEditor:forObject:` is implemented and the field cells open their sessions with it, so what that clause used to
@@ -730,12 +734,13 @@ side, rows as tall as their tallest cell. **AND THE BORDERS COLLAPSE** (`tests/t
 `-collapsesBorders` an edge two cells share is drawn once, by whichever block's border there is heavier (a tie going to
 the min-side one), the table's own border competing with the outer cells on its four outer edges; and a cell's box is
 its CELL rather than its text, and a table that does not fit FLOWS into the next container at a row boundary. The input-method
-CONTEXT are named in the view's own header as what is still owed — the `NSTextInput`
-protocol is here, the view ANSWERS it (`tests/text_marked_text.m`), the class that owns a composition across keystrokes
-is here too (`AGInputMethod`), AND SO IS THE CANDIDATE LIST — `AGVariantsInputMethod` offers a letter's readings in an
-`AGCandidateWindow` placed under the caret (`tests/text_candidate_list.m`). ATTACHMENTS draw (`tests/text_attachment.m`) with
-their inline advance named as the flow slice still owed. Each absence is stated
-rather than stubbed, and the refusals name themselves.
+family is WHOLE: the `NSTextInput` protocol is here, the view ANSWERS it (`tests/text_marked_text.m`), the class that owns
+a composition across keystrokes is here (`AGInputMethod`), and the CANDIDATE LIST is here — `AGVariantsInputMethod` offers
+a letter's readings in an `AGCandidateWindow` placed under the caret (`tests/text_candidate_list.m`). It used to say all
+of that was owed, and it has been true for several slices. ATTACHMENTS draw (`tests/text_attachment.m`) AND THEIR INLINE
+ADVANCE IS THE RUN DELEGATE'S — a cell reserves its box in the line so the text after it flows around rather than over
+it (`tests/text_attachment_flow.m`), which this sentence also used to call the flow slice still owed. Each absence is
+stated rather than stubbed, and the refusals name themselves.
 
 ## Build
 
