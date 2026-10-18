@@ -17,6 +17,9 @@
 #import <AppKit/NSFont.h>
 #import <AppKit/NSColor.h>
 #import <AppKit/NSParagraphStyle.h>
+#import <AppKit/NSBitmapImageRep.h>
+#import <AppKit/NSImage.h>
+#import <AppKit/NSTextAttachment.h>
 #import <Foundation/Foundation.h>
 #include <math.h>
 #include <stdint.h>
@@ -81,7 +84,13 @@ static NSInteger fn_colour_index(NSMutableArray *colours, NSColor *colour)
 	CGFloat curSize = 12.0;
 	BOOL curUnderline = NO, curStrike = NO;
 	NSTextAlignment curAlign = NSLeftTextAlignment;
-	NSInteger destination = 0;	/* 0 body, 1 font table, 2 colour table */
+	NSInteger destination = 0;	/* 0 body, 1 font table, 2 colour table, 3 picture */
+	/* **A PICTURE IS A DESTINATION TOO, AND ITS BODY IS HEX RATHER THAN TEXT.** The group's control words say what
+	 * kind of blip it is; the hex digits that follow are the image itself, collected here and decoded when the group
+	 * closes. A `\pict` this reader cannot decode leaves the text exactly as it was, which is the same boundary the
+	 * rest of this codec draws. */
+	NSMutableString *pictureHex = nil;
+	NSTextAttachment *pendingAttachment = nil;
 	NSInteger depth = 0;
 	NSInteger destDepth = 0;
 	BOOL colourFirst = NO;
@@ -96,6 +105,7 @@ static NSInteger fn_colour_index(NSMutableArray *colours, NSColor *colour)
 	}
 	text = [[NSMutableString alloc] init];
 	pendingName = [[NSMutableString alloc] init];
+	pictureHex = [[NSMutableString alloc] init];
 	markIndexes = [[NSMutableArray alloc] init];
 	markAttrs = [[NSMutableArray alloc] init];
 	fontNames = [[NSMutableArray alloc] init];
@@ -120,6 +130,7 @@ static NSInteger fn_colour_index(NSMutableArray *colours, NSColor *colour)
 			[a setObject:[colours objectAtIndex:curBg] forKey:NSBackgroundColorAttributeName]; } \
 		if (curUnderline) { [a setObject:[NSNumber numberWithInteger:NSUnderlineStyleSingle] forKey:NSUnderlineStyleAttributeName]; } \
 		if (curStrike) { [a setObject:[NSNumber numberWithInteger:NSUnderlineStyleSingle] forKey:NSStrikethroughStyleAttributeName]; } \
+		if (pendingAttachment != nil) { [a setObject:pendingAttachment forKey:NSAttachmentAttributeName]; } \
 		if (curAlign != NSLeftTextAlignment) { \
 			NSMutableParagraphStyle *ps = [[NSParagraphStyle defaultParagraphStyle] mutableCopy]; \
 			[ps setAlignment:curAlign]; \
@@ -144,6 +155,48 @@ static NSInteger fn_colour_index(NSMutableArray *colours, NSColor *colour)
 		if (c == '}') {
 			depth--;
 			if (destination != 0 && depth < destDepth) {
+				if (destination == 3) {
+					/* **THE PICTURE IS DECODED HERE, WHERE ITS GROUP ENDS.** The hex becomes bytes, the
+					 * bytes become an image through the same decoder `-initWithData:` uses, and the image
+					 * becomes an attachment on ONE character: a mark carrying it, the character, and a mark
+					 * putting the plain attributes back. A picture this build cannot decode leaves no
+					 * character at all, which is better than a U+FFFC that draws nothing. */
+					NSMutableData *bytes = [NSMutableData data];
+					NSUInteger h = 0;
+					BOOL odd = NO;
+
+					(void)odd;
+					while (h + 1 < [pictureHex length]) {
+						unsigned value = 0;
+
+						if (sscanf([[pictureHex substringWithRange:NSMakeRange(h, 2)] UTF8String], "%2x",
+							   &value) == 1) {
+							unsigned char byte = (unsigned char)value;
+
+							[bytes appendBytes:&byte length:1];
+						}
+						h += 2;
+					}
+					if ([bytes length] > 0) {
+						NSImage *image = [[NSImage alloc] initWithData:bytes];
+
+						if (image != nil) {
+							NSTextAttachment *attachment = [[NSTextAttachment alloc] init];
+
+							[attachment setImage:image];
+							pendingAttachment = attachment;
+							FN_PUSH_MARK();
+							[text appendFormat:@"%C", (unichar)NSAttachmentCharacter];
+							pendingAttachment = nil;
+							FN_PUSH_MARK();
+							[attachment release];
+						} else {
+							fprintf(stderr, "APPKIT-REFUSE: -initWithRTF: found a picture this build "
+									"cannot decode, and left it out rather than drawing nothing\n");
+						}
+						[image release];
+					}
+				}
 				destination = 0;	/* the destination's own group closed */
 			}
 			continue;
@@ -176,6 +229,13 @@ static NSInteger fn_colour_index(NSMutableArray *colours, NSColor *colour)
 				} else {
 					[colours addObject:[NSColor colorWithCalibratedRed:(CGFloat)pendingR / 255.0
 						green:(CGFloat)pendingG / 255.0 blue:(CGFloat)pendingB / 255.0 alpha:1.0]];
+				}
+				continue;
+			}
+			if (destination == 3) {
+				/* THE BODY OF A PICTURE IS HEX DIGITS, and whitespace between them is the writer's formatting. */
+				if ((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F')) {
+					[pictureHex appendFormat:@"%C", c];
 				}
 				continue;
 			}
@@ -257,7 +317,11 @@ static NSInteger fn_colour_index(NSMutableArray *colours, NSColor *colour)
 				pendingFont = -1;
 				continue;
 			}
-			if ([word isEqualToString:@"colortbl"]) {
+			if ([word isEqualToString:@"pict"]) {
+				destination = 3;
+				destDepth = depth;
+				[pictureHex setString:@""];
+			} else if ([word isEqualToString:@"colortbl"]) {
 				destination = 2;
 				destDepth = depth;
 				colourFirst = YES;
@@ -360,6 +424,52 @@ static NSInteger fn_colour_index(NSMutableArray *colours, NSColor *colour)
 	return self;
 }
 
+/* **A PICTURE, WRITTEN AS RTF's OWN GROUP.** `{\pict\pngblip\picw<px>\pich<px>\picwgoal<tw>\pichgoal<tw> <hex>}` is
+ * the shape every RTF writer emits for a PNG, and the bytes come from `NSBitmapImageRep`'s encoder — which is Core
+ * Graphics' `CGImageDestination` — so this method has no image code in it either. THE PIXEL SIZE AND THE GOAL SIZE ARE
+ * BOTH WRITTEN because they say different things: `\picw`/`\pich` are the picture's own pixels, `\picwgoal`/
+ * `\pichgoal` are how big to draw it in TWIPS (1/1440 inch), and the goal is the pixel size at 72 dpi — twenty twips to
+ * the pixel — which is the same size a rep drawn at its natural size has.
+ *
+ * FALSE MEANS "NOTHING WAS WRITTEN", and the caller then writes the character itself: an attachment with no image is a
+ * character that draws nothing, and dropping it from the document would lose the caller's text. */
+static BOOL fn_emit_picture(NSMutableString *out, NSTextAttachment *attachment)
+{
+	NSImage *image = [attachment image];
+	NSData *png = nil;
+	NSSize size;
+	NSImageRep *rep;
+	long width = 0, height = 0;
+	const unsigned char *bytes;
+	NSUInteger k;
+
+	if (image == nil) {
+		return NO;
+	}
+	size = [image size];
+	rep = [image bestRepresentationForRect:NSMakeRect(0, 0, size.width, size.height) context:nil hints:nil];
+	if (![rep isKindOfClass:[NSBitmapImageRep class]]) {
+		return NO;
+	}
+	png = [(NSBitmapImageRep *)rep representationUsingType:NSPNGFileType properties:nil];
+	if (png == nil || [png length] == 0) {
+		return NO;
+	}
+	width = (long)[(NSBitmapImageRep *)rep pixelsWide];
+	height = (long)[(NSBitmapImageRep *)rep pixelsHigh];
+	if (width <= 0 || height <= 0) {
+		return NO;
+	}
+	[out appendString:@"{\\pict\\pngblip"];
+	[out appendFormat:@"\\picw%ld\\pich%ld\\picwgoal%ld\\pichgoal%ld ", width, height, width * 20, height * 20];
+	bytes = (const unsigned char *)[png bytes];
+	for (k = 0; k < [png length]; k++) {
+		[out appendFormat:@"%02X", bytes[k]];
+	}
+	[out appendString:@"}"];
+	return YES;
+}
+
 /* **AND THE WRITER.** The tables are built in a FIRST pass so every face and colour an index is written for is already
  * declared; the body then walks the string and emits a control word only when the state CHANGES, which is what makes
  * the output small and what the reader's mark mechanism expects. Alignment is a PARAGRAPH property, so it is written
@@ -431,6 +541,16 @@ static NSInteger fn_colour_index(NSMutableArray *colours, NSColor *colour)
 		if (c == '\t') {
 			[out appendString:@"\\tab "];
 			continue;
+		}
+		if (c == (unichar)NSAttachmentCharacter) {
+			/* **AN ATTACHMENT WITH A PICTURE IS A PICTURE GROUP, NOT A CHARACTER.** One without a picture is
+			 * written as the character it is, because dropping it would lose the caller's text. */
+			NSTextAttachment *attachment = [[self attributesAtIndex:i effectiveRange:NULL]
+				objectForKey:NSAttachmentAttributeName];
+
+			if (attachment != nil && fn_emit_picture(out, attachment)) {
+				continue;
+			}
 		}
 		a = [self attributesAtIndex:i effectiveRange:NULL];
 		font = [a objectForKey:NSFontAttributeName];

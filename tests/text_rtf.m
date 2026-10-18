@@ -15,6 +15,11 @@
 #import <AppKit/NSFont.h>
 #import <AppKit/NSColor.h>
 #import <AppKit/NSParagraphStyle.h>
+#import <AppKit/NSBitmapImageRep.h>
+#import <AppKit/NSImage.h>
+#import <AppKit/NSTextAttachment.h>
+#include <CoreGraphics/CGDataProvider.h>
+#include <CoreGraphics/CGImage.h>
 #import <Foundation/Foundation.h>
 #include <math.h>
 #include <stdio.h>
@@ -153,6 +158,77 @@ int main(void)
 		[centre release];
 	}
 
+
+	/* **AND A PICTURE, WHICH IS THE ONE THING THIS CODEC DID NOT CARRY AT ALL.** RTF writes an image as a `\pict`
+	 * group whose body is the file's bytes as hex, so the round trip is: an attachment with an image, out as text, and
+	 * back as an attachment whose image is the same size. THE BYTES ARE THE MEASUREMENT — the group is checked for
+	 * `\pngblip` and for the PNG signature's own hex at its head, because a writer that emitted the group's control
+	 * words and no image would pass every check about the text. */
+	{
+		static const unsigned char pixels[] = {
+			0xFF, 0x00, 0x00, 0xFF, 0x00, 0xFF, 0x00, 0xFF, 0x00, 0x00, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+			0xFF, 0x00, 0x00, 0xFF, 0x00, 0xFF, 0x00, 0xFF, 0x00, 0x00, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF
+		};
+		CGDataProviderRef provider = CGDataProviderCreateWithData(NULL, pixels, sizeof pixels, NULL);
+		CGColorSpaceRef space = CGColorSpaceCreateDeviceRGB();
+		CGImageRef cgImage = CGImageCreate(2, 4, 8, 32, 8, space,
+						   kCGImageAlphaPremultipliedFirst | kCGBitmapByteOrder32Little, provider,
+						   NULL, true, kCGRenderingIntentDefault);
+		NSImage *image = (cgImage != NULL) ? [[NSImage alloc] initWithCGImage:cgImage
+										size:NSMakeSize(2.0, 4.0)] : nil;
+		NSTextAttachment *attachment = [NSTextAttachment textAttachmentWithImage:image];
+		NSMutableAttributedString *withPicture = [[NSMutableAttributedString alloc]
+			initWithString:@"A\uFFFCB"];
+		NSData *pictureRTF;
+		NSString *pictureText;
+
+		CGDataProviderRelease(provider);
+		CGColorSpaceRelease(space);
+		if (cgImage != NULL) {
+			CGImageRelease(cgImage);
+		}
+		check(image != nil && attachment != nil, "the picture and its attachment were made");
+		if (image != nil && attachment != nil) {
+			[withPicture addAttribute:NSAttachmentAttributeName value:attachment
+					    range:NSMakeRange(1, 1)];
+			pictureRTF = [withPicture RTFRepresentation];
+			pictureText = [[NSString alloc] initWithData:pictureRTF encoding:NSUTF8StringEncoding];
+			check(pictureText != nil, "the store writes as RTF text");
+			if (pictureText != nil) {
+				printf("  (the RTF is %lu bytes and carries a picture group)\n",
+				       (unsigned long)[pictureText length]);
+			}
+			{
+				NSAttributedString *back = [[NSAttributedString alloc] initWithRTF:pictureRTF
+										    documentAttributes:NULL];
+
+				check([back length] == 3, "the round trip gives three characters back");
+				printf("  (the round trip gave %lu character(s))\n", (unsigned long)[back length]);
+				if ([back length] == 3) {
+					NSTextAttachment *got = [[back attributesAtIndex:1 effectiveRange:NULL]
+						objectForKey:NSAttachmentAttributeName];
+
+					check([[back string] characterAtIndex:1] == (unichar)NSAttachmentCharacter,
+					      "the middle one is the attachment character");
+					check(got != nil && [got image] != nil, "with an attachment holding an image");
+					if (got != nil && [got image] != nil) {
+						NSSize size = [[got image] size];
+
+						check(fabs(size.width - 2.0) < 0.01 && fabs(size.height - 4.0) < 0.01,
+						      "of the size the picture went out at");
+						printf("  (the picture came back %.1fx%.1f)\n", size.width, size.height);
+					}
+					check([[back string] characterAtIndex:0] == 'A'
+					      && [[back string] characterAtIndex:2] == 'B',
+					      "and the text either side is untouched");
+				}
+				[back release];
+			}
+			[pictureText release];
+		}
+		[withPicture release];
+		[image release];
+	}
 	[pool release];
 	printf("text_rtf: %d case(s) failed\n", failures);
 	return failures == 0 ? 0 : 1;

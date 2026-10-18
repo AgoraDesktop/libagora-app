@@ -776,3 +776,19 @@ imported and then changed — the changes are recorded in [`PROVENANCE.md`](PROV
   rather than ordering them. MEASURED after it: **8 fragments where there had been 1**, the first four
   `(0,3) (3,9) (12,9) (21,3)`. Every case in the engine's suite that involved a newline used a line short enough to
   fit, which is why it survived; the engine's suite now holds both sides of the rule.
+- **AND A PICTURE SURVIVES A ROUND TRIP THROUGH RTF NOW, WHICH IS WHAT THE PNG ENCODER WAS FOR.** The writer emits RTF's
+  own group — `{\\pict\\pngblip\\picw<px>\\pich<px>\\picwgoal<tw>\\pichgoal<tw> <hex>}` — with the bytes from
+  `NSBitmapImageRep`'s encoder (Core Graphics' `CGImageDestination`), so the method has no image code in it either. The
+  reader grew a PICTURE DESTINATION, the same mechanism its font and colour tables use: it collects the hex, decodes it
+  through `NSImage`, and puts an `NSTextAttachment` on ONE character — a mark carrying it, the character, and a mark
+  putting the plain attributes back. MEASURED, and the measurement is a round trip: a store of `A`, an attachment and
+  `B` writes as **335 bytes** carrying `\\pict`/`\\pngblip` and the PNG signature's own hex, and reads back as **3
+  characters** — `U+FFFC` in the middle, an attachment holding a **2.0x4.0** image, and the text either side untouched.
+- **AND THE FIRST VERSION OF IT WROTE `{pictpngblip`.** The control words went out through a patch that ate their
+  backslashes, so the group had the right shape and no control words at all — and the probe caught it only because it
+  looks for `{\\pict` rather than for the word. A case that asserted "the RTF mentions a picture" would have passed.
+  Same lesson as the level array indexed by the wrong number: the check has to be about the thing that can be wrong.
+- **AND WHAT IS STILL NOT CARRIED IS NAMED**: a `\\pict` whose blip is not PNG is decoded by `NSImage` or dropped with
+  an `APPKIT-REFUSE` line rather than drawn as nothing; `-fileWrapper`/`-initWithFileWrapper:` remain owed on
+  `NSTextAttachment` (the WRAPPER pair, not the bytes — `NSFileWrapper` exists in libagora-base and the encoder exists
+  here); and the tracking family still waits on the modal loop `NSCell.h` refuses by name.
