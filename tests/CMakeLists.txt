@@ -613,3 +613,10 @@ add_test(NAME appkit-owed-census
             "-DEXTENSION=.h"
             "-DNEEDLE=(^|[^A-Za-z_])OWED"
             -P "${CMAKE_CURRENT_SOURCE_DIR}/claims_census.cmake")
+
+# NSTextList: the marker arithmetic, and the paragraph style that carries lists.
+add_executable(text_list text_list.m)
+target_link_libraries(text_list PRIVATE App)
+
+add_test(NAME appkit-text-list COMMAND text_list)
+set_tests_properties(appkit-text-list PROPERTIES ENVIRONMENT "${_agora_app_test_env}")

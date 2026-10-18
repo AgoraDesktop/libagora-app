@@ -93,6 +93,7 @@ static NSParagraphStyle *fn_defaultParagraphStyle = nil;
 		 * array it had handed to a store would be changing the document behind the store's back. The array is immutable
 		 * and every block in it is copied. */
 		_textBlocks = [[NSArray alloc] initWithArray:style->_textBlocks copyItems:YES];
+		_textLists = [[NSArray alloc] initWithArray:style->_textLists copyItems:YES];
 		_tabStops = [[NSArray alloc] initWithArray:style->_tabStops copyItems:YES];
 	}
 	return self;
@@ -101,6 +102,7 @@ static NSParagraphStyle *fn_defaultParagraphStyle = nil;
 - (void)dealloc
 {
 	[_textBlocks release];
+	[_textLists release];
 	[_tabStops release];
 	[super dealloc];
 }
@@ -196,6 +198,19 @@ static NSParagraphStyle *fn_defaultParagraphStyle = nil;
 - (NSArray *)tabStops
 {
 	return (_tabStops != nil) ? _tabStops : [NSArray array];
+}
+
+- (NSArray *)textLists
+{
+	return (_textLists != nil) ? _textLists : [NSArray array];
+}
+
+- (void)setTextLists:(NSArray *)textLists
+{
+	id held = [textLists copy];
+
+	[_textLists release];
+	_textLists = held;
 }
 
 - (NSArray *)textBlocks

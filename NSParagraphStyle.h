@@ -99,6 +99,7 @@ typedef NSUInteger NSLineBreakMode;
 	 * of the paragraph shares the box, and a `NSTextTableBlock` in this array is what makes the paragraph a table
 	 * cell. The array is retained; `NSParagraphStyle` is a value, so the blocks in it are copied with it. */
 	NSArray *_textBlocks;	/* RETAINED */
+	NSArray *_textLists;	/* RETAINED */
 }
 
 /* **ONE SHARED DEFAULT, WHICH IS APPLE'S OWN DOOR AND THE REASON A RUN WITH NO STYLE STILL HAS ONE.** The default has
@@ -158,6 +159,14 @@ typedef NSUInteger NSLineBreakMode;
  * its `NSTextTableBlock` here; a plain block is a box without a cell. The layout manager reads this array, finds the
  * block covering a line, and draws it; the grid across cells is the table's layout, not the style's. */
 - (NSArray *)textBlocks;
+
+/* **AND THE LISTS, WHICH 10.6 DECLARES IN THE SAME BREATH AS THE BLOCKS**: "Array to specify the text lists containing
+ * the paragraph, nested from outermost to innermost." So a paragraph inside two lists answers BOTH, outermost first, and
+ * the markers a caller draws come from each list's own format at the paragraph's own depth. A style with no lists
+ * answers an EMPTY ARRAY rather than nil, which is what `-textBlocks` already does beside it and what a caller iterating
+ * one expects. */
+- (NSArray *)textLists;
+- (void)setTextLists:(NSArray *)textLists;
 
 @end
 

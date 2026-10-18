@@ -850,3 +850,27 @@ imported and then changed — the changes are recorded in [`PROVENANCE.md`](PROV
 - **AND WHAT THE MARKER DOES NOT COVER IS SAID RATHER THAN IMPLIED**: claims phrased "refuses by name" or "stays ABSENT"
   are the same kind of statement and carry no marker, so they are not counted. The census holds what the marker marks —
   the emphatic form this tree writes its owes in — and says so in its own header.
+- **AND `NSTextList` EXISTS NOW, AND CHECKING IT AGAINST THE 10.6 SDK CHANGED WHAT WAS WRITTEN.** The class was to be
+  built "with Apple's marker-format constants" — and **10.6's `NSTextList.h` IS THIRTY-FOUR LINES AND DECLARES NO
+  MARKER-FORMAT CONSTANTS AT ALL**: no `NSTextListMarkerDecimal`, no `{decimal}` family, nothing. What it declares is
+  `NSTextListPrependEnclosingMarker`, five doors and `NSCoding`/`NSCopying`, and that is what `NSTextList.h` here
+  transcribes. So the header drops the invented constants, and the format VOCABULARY is documented as what it is — a
+  reading of Apple's documentation rather than a transcription of its header — the distinction being the difference
+  between a checkable claim and a guess.
+- **AND `NSParagraphStyle` DECLARES `-textLists` TWO LINES FROM `-textBlocks`**, "nested from outermost to innermost",
+  which settles where a list lives: `-textBlocks` has been on this class all along, so `-textLists` is its sibling —
+  carried, coped with the style (both arrays copied item-by-item), and empty rather than nil when unset.
+- **AND THE MARKER IS ARITHMETIC, SO THE PROBE MEASURES ARITHMETIC.** Every family is checked at the numbers an
+  off-by-one breaks: the Roman subtractive pairs (4 `iv`, 9 `ix`, 40 `xl`, 90 `xc`, 1990 `mcmxc`), the ALPHABETIC
+  ROLLOVER (26 `z` → 27 `aa` → 52 `az` → 53 `ba`, which is bijective base 26 and not base 26), the radix formats (255
+  `ff`/`FF`, 64 octal `100`), and every bullet BY CODE POINT (U+2022, U+25E6, U+25AA, U+2610, U+2713, U+25C6, `-`) —
+  because a format that returned its own name would pass any check that only asked for something non-empty.
+- **AND TWO THINGS ARE NAMED RATHER THAN FAKED**: `NSCoding` is declared by 10.6 and not implemented (no class in this
+  layer implements it), and `NSTextListPrependEnclosingMarker` is RECORDED and not yet APPLIED — prepending the
+  enclosing marker needs the enclosing list, which is the paragraph style's array to link, and that link is a cut of
+  its own rather than a guess here. An unknown format is refused by name and answered in decimal, because a caller with
+  a newer format can act on a number and not on an empty string.
+- **AND THE CENSUS CAUGHT THIS SLICE, WHICH IS THE POINT OF HAVING BUILT IT ONE SLICE EARLIER.** The two new refusals
+  made `appkit-refusal-census` fail with `NSTextList.m: the census says 0, the source has 2` and
+  `the census says 129 in total, the sources have 131`, so recording them was a deliberate edit with a diff rather than
+  a side effect. That is exactly the drift the census exists to make visible, caught on its first real opportunity.
