@@ -25,6 +25,7 @@
 #import <Foundation/Foundation.h>
 #include <CoreGraphics/CGDataProvider.h>
 #include <CoreGraphics/CGImage.h>
+#include <math.h>
 #include <stdio.h>
 
 static int failures;
@@ -147,6 +148,55 @@ int main(void)
 			      "under the same names");
 			[reread release];
 		}
+	}
+
+	/* **AND THE PACKAGE OPENS AGAIN**, which is the other half of the format and the reason the wrapper pair exists.
+	 * The loop is write → serialize → read, and it is closed by looking at what came back rather than at the bytes: the
+	 * same three characters, an attachment on the middle one, the picture's size, and the FILE WRAPPER — because a
+	 * package that loses its file names is a package that cannot be written again with them. */
+	if (serialized != nil) {
+		NSAttributedString *back = [[NSAttributedString alloc] initWithRTFD:serialized documentAttributes:NULL];
+
+		check(back != nil, "the serialized package reads back as an attributed string");
+		if (back != nil) {
+			check([back length] == 3, "with the same three characters");
+			printf("  (the package gave %lu character(s))\n", (unsigned long)[back length]);
+			if ([back length] == 3) {
+				NSTextAttachment *got = [[back attributesAtIndex:1 effectiveRange:NULL]
+					objectForKey:NSAttachmentAttributeName];
+
+				check([[back string] characterAtIndex:1] == (unichar)NSAttachmentCharacter,
+				      "the middle one is the attachment character");
+				check(got != nil, "carrying an attachment");
+				if (got != nil) {
+					NSSize size = [[got image] size];
+
+					check([got image] != nil && fabs(size.width - 2.0) < 0.01
+					      && fabs(size.height - 4.0) < 0.01,
+					      "whose picture is the size it went out at");
+					printf("  (the picture came back %.1fx%.1f, file `%s`)\n", size.width, size.height,
+					       [[[got fileWrapper] preferredFilename] UTF8String]);
+					check([[got fileWrapper] preferredFilename] != nil
+					      && [[[got fileWrapper] preferredFilename] isEqualToString:@"pic.png"],
+					      "and whose FILE WRAPPER still carries the package's own name for it");
+					check([[[got fileWrapper] regularFileContents] length] > 8,
+					      "with the file's bytes still readable");
+				}
+				check([[back string] characterAtIndex:0] == 'A'
+				      && [[back string] characterAtIndex:2] == 'B',
+				      "and the text either side of it unchanged");
+			}
+			[back release];
+		}
+	}
+	/* AND THE IN-MEMORY PACKAGE IS READABLE BY THE OTHER DOOR, without going through bytes at all. */
+	if (package != nil) {
+		NSAttributedString *direct = [[NSAttributedString alloc] initWithRTFDFileWrapper:package
+									     documentAttributes:NULL];
+
+		check(direct != nil && [direct length] == 3,
+		      "the file-wrapper door reads the package the writer made");
+		[direct release];
 	}
 
 	[store release];

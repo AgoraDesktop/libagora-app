@@ -24,4 +24,13 @@
  * The answer is autoreleased, and nil only when the string is nil. */
 extern NSString *fn_rtf_text(NSAttributedString *source, NSMutableDictionary *attachmentFiles);
 
+/* **AND THE READER'S OTHER DOOR, FOR A DOCUMENT WHOSE PICTURES ARE FILES.** `packageFiles` is the package's children
+ * keyed by the names the text refers to, or nil for a standalone RTF document — where `\NeXTGraphic` then has nothing to
+ * resolve against and says so. The public `-initWithRTF:documentAttributes:` is this with nil. */
+@interface NSAttributedString (NSAttributedStringRTFInternal)
+- (instancetype)fn_initWithRTF:(NSData *)data
+		       package:(NSDictionary *)packageFiles
+	     documentAttributes:(NSDictionary **)dict;
+@end
+
 #endif /* AGORA_APPKIT_NSATTRIBUTEDSTRINGRTF_INTERNAL_H */

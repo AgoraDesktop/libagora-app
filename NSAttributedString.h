@@ -103,6 +103,16 @@ typedef NSInteger NSUnderlineStyle;
  * character encoding), which is the one key this tier has an answer for. */
 - (nullable instancetype)initWithRTF:(NSData *)data documentAttributes:(NSDictionary **)dict;
 
+/* **AND THE PACKAGE FORM OF THE SAME READER**, which is RTFD: an RTF document whose pictures are FILES beside it,
+ * referred to by name. `-initWithRTFDFileWrapper:` takes the directory — a document read from disk, or the thing
+ * `-RTFDFileWrapperFromRange:documentAttributes:` answers — and `-initWithRTFD:` the serialized form a document file
+ * and a pasteboard carry. Both hand the text to the SAME reader with the package behind it, so `\NeXTGraphic`
+ * resolves to the file the text names and the attachment it builds carries that file wrapper. A package with no
+ * readable `TXT.rtf` is refused by name rather than answered as an empty document. */
+- (nullable instancetype)initWithRTFD:(NSData *)rtfdData documentAttributes:(NSDictionary **)dict;
+- (nullable instancetype)initWithRTFDFileWrapper:(NSFileWrapper *)wrapper
+			      documentAttributes:(NSDictionary **)dict;
+
 /* **AND THE WRITER, WHICH IS THE SAME CODEC THE OTHER WAY.** Foundation already writes RTF, but keyed on ITS
  * presentation-intent bits; this door encodes the APPKIT's own attributes — `NSFontAttributeName`,
  * `NSForegroundColorAttributeName`, `NSBackgroundColorAttributeName`, the two rules and the paragraph alignment —

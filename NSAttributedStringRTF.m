@@ -317,6 +317,15 @@ NSString *fn_rtf_text(NSAttributedString *source, NSMutableDictionary *attachmen
 
 - (instancetype)initWithRTF:(NSData *)data documentAttributes:(NSDictionary **)dict
 {
+	return [self fn_initWithRTF:data package:nil documentAttributes:dict];
+}
+
+/* **AND THE SAME READER WITH A PACKAGE BEHIND IT.** RTFD's text is an RTF document whose pictures are FILES rather
+ * than hex, so the reader takes the package's children by name and resolves `\NeXTGraphic <name>` through them. `nil`
+ * is the standalone case, and then a `\NeXTGraphic` is a reference to a file nobody handed over — refused by name
+ * rather than drawn as nothing, because that is what it is. */
+- (instancetype)fn_initWithRTF:(NSData *)data package:(NSDictionary *)packageFiles documentAttributes:(NSDictionary **)dict
+{
 	NSString *source = [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding];
 	NSMutableString *text;
 	NSMutableString *pendingName;
@@ -335,6 +344,10 @@ NSString *fn_rtf_text(NSAttributedString *source, NSMutableDictionary *attachmen
 	 * closes. A `\pict` this reader cannot decode leaves the text exactly as it was, which is the same boundary the
 	 * rest of this codec draws. */
 	NSMutableString *pictureHex = nil;
+	/* **AND A REFERENCE, WHICH IS A NAME RATHER THAN BYTES.** `{\NeXTGraphic <name> \width…\height…}` is how an RTFD
+	 * document points at a file in its package; the name is collected where the hex would be, and resolved when the
+	 * group closes. */
+	NSMutableString *pendingGraphicName = nil;
 	NSTextAttachment *pendingAttachment = nil;
 	NSInteger depth = 0;
 	NSInteger destDepth = 0;
@@ -351,6 +364,7 @@ NSString *fn_rtf_text(NSAttributedString *source, NSMutableDictionary *attachmen
 	text = [[NSMutableString alloc] init];
 	pendingName = [[NSMutableString alloc] init];
 	pictureHex = [[NSMutableString alloc] init];
+	pendingGraphicName = [[NSMutableString alloc] init];
 	markIndexes = [[NSMutableArray alloc] init];
 	markAttrs = [[NSMutableArray alloc] init];
 	fontNames = [[NSMutableArray alloc] init];
@@ -400,7 +414,38 @@ NSString *fn_rtf_text(NSAttributedString *source, NSMutableDictionary *attachmen
 		if (c == '}') {
 			depth--;
 			if (destination != 0 && depth < destDepth) {
-				if (destination == 3) {
+				if (destination == 4) {
+					/* **THE PACKAGE IS ASKED FOR THE FILE THE TEXT NAMED.** The wrapper it comes back with is kept ON
+					 * the attachment, which is what makes a package survive a trip through this reader and back out
+					 * with the same file names; the image is decoded from the same bytes for the cell to draw and
+					 * measure. A name the package does not hold is refused by name — a missing picture is a fact
+					 * about the document, not something to swallow. */
+					NSFileWrapper *file = (packageFiles != nil)
+						? [packageFiles objectForKey:pendingGraphicName] : nil;
+
+					if (file != nil) {
+						NSData *bytes = [file regularFileContents];
+						NSImage *image = (bytes != nil) ? [[NSImage alloc] initWithData:bytes] : nil;
+						NSTextAttachment *attachment = [[NSTextAttachment alloc]
+							initWithFileWrapper:file];
+
+						if (image != nil) {
+							[attachment setImage:image];
+							[image release];
+						}
+						pendingAttachment = attachment;
+						FN_PUSH_MARK();
+						[text appendFormat:@"%C", (unichar)NSAttachmentCharacter];
+						pendingAttachment = nil;
+						FN_PUSH_MARK();
+						[attachment release];
+					} else {
+						fprintf(stderr, "APPKIT-REFUSE: -initWithRTF: resolves a \\NeXTGraphic reference "
+								"against the package it was given, and `%s` is not in it\n",
+							[pendingGraphicName UTF8String]);
+					}
+				}
+			if (destination == 3) {
 					/* **THE PICTURE IS DECODED HERE, WHERE ITS GROUP ENDS.** The hex becomes bytes, the
 					 * bytes become an image through the same decoder `-initWithData:` uses, and the image
 					 * becomes an attachment on ONE character: a mark carrying it, the character, and a mark
@@ -474,6 +519,14 @@ NSString *fn_rtf_text(NSAttributedString *source, NSMutableDictionary *attachmen
 				} else {
 					[colours addObject:[NSColor colorWithCalibratedRed:(CGFloat)pendingR / 255.0
 						green:(CGFloat)pendingG / 255.0 blue:(CGFloat)pendingB / 255.0 alpha:1.0]];
+				}
+				continue;
+			}
+			if (destination == 4) {
+				/* **THE FILENAME RUNS UNTIL WHITESPACE OR THE NEXT CONTROL WORD**, which is where the parser's own
+				 * `\\` takes over — so the name is everything between `\NeXTGraphic ` and `\width`. */
+				if (c != ' ' && c != '\t') {
+					[pendingGraphicName appendFormat:@"%C", c];
 				}
 				continue;
 			}
@@ -562,7 +615,11 @@ NSString *fn_rtf_text(NSAttributedString *source, NSMutableDictionary *attachmen
 				pendingFont = -1;
 				continue;
 			}
-			if ([word isEqualToString:@"pict"]) {
+			if ([word isEqualToString:@"NeXTGraphic"]) {
+				destination = 4;
+				destDepth = depth;
+				[pendingGraphicName setString:@""];
+			} else if ([word isEqualToString:@"pict"]) {
 				destination = 3;
 				destDepth = depth;
 				[pictureHex setString:@""];
@@ -663,6 +720,8 @@ NSString *fn_rtf_text(NSAttributedString *source, NSMutableDictionary *attachmen
 	[markAttrs release];
 	[markIndexes release];
 	[pendingName release];
+	[pictureHex release];
+	[pendingGraphicName release];
 	[text release];
 	[source release];
 	#undef FN_PUSH_MARK

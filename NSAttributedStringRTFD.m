@@ -22,9 +22,12 @@
  * is here, so a caller that links the AppKit gets the format and a caller that links only Foundation gets the named
  * refusal it always got.
  *
- * **WHAT IS NOT HERE, NAMED**: reading a package back (`-initWithRTFD:documentAttributes:` and
- * `-initWithRTFDFileWrapper:documentAttributes:`), which the RTF reader would need to learn `\NeXTGraphic` for and to
- * be handed the package's files; and document attributes, which neither writer produces yet.
+ * **AND READING A PACKAGE BACK IS HERE TOO, WHICH IS WHAT MAKES THE FORMAT A ROUND TRIP RATHER THAN AN EXPORT.**
+ * `-initWithRTFDFileWrapper:` takes the directory and `-initWithRTFD:` the serialized form; both hand the text to the
+ * SAME reader with the package's children behind it, so `\NeXTGraphic <name>` resolves to the file the text names and
+ * the attachment it builds carries that FILE WRAPPER, which is how the name survives being written again.
+ *
+ * **WHAT IS STILL NOT HERE, NAMED**: document attributes, which neither writer produces and neither reader reports.
  */
 #import "NSAttributedStringRTF_internal.h"
 
@@ -90,6 +93,60 @@ static NSFileWrapper *fn_rtfd_package(NSAttributedString *self, NSRange range, N
 
 /* **AND THE SAME DOCUMENT AS DATA**, which is the serialized form of that package — the representation a pasteboard
  * and a document file both take. It is not the RTF bytes: a caller that wants the text alone asks `-RTFRepresentation`. */
+/* **AND THE READING HALF, WHICH MAKES THE PACKAGE REOPENABLE.** `-initWithRTFDFileWrapper:` takes the directory the
+ * writer made — or the one `-fileWrapperFromRange:documentAttributes:error:` gives back — finds `TXT.rtf`, and hands
+ * the read to the SAME reader with the package's children behind it, so `\NeXTGraphic` resolves to the file the text
+ * names and the attachment it builds carries that FILE WRAPPER (which is how the name survives the trip).
+ * `-initWithRTFD:` is that over the serialized form, which is what a document file and a pasteboard carry.
+ *
+ * A PACKAGE WITH NO `TXT.rtf` IS REFUSED BY NAME rather than answered as an empty document, because the two are
+ * different facts and a caller can act on the difference. */
+@implementation NSAttributedString (NSAttributedStringRTFDReading)
+
+- (nullable instancetype)initWithRTFDFileWrapper:(NSFileWrapper *)wrapper
+			      documentAttributes:(NSDictionary **)dict
+{
+	NSDictionary *children;
+	NSFileWrapper *text;
+	NSData *bytes;
+
+	if (wrapper == nil || ![wrapper isDirectory]) {
+		fprintf(stderr, "APPKIT-REFUSE: -initWithRTFDFileWrapper:documentAttributes: needs a directory wrapper; "
+				"an RTFD package IS a directory\n");
+		return nil;
+	}
+	children = [wrapper fileWrappers];
+	text = (children != nil) ? [children objectForKey:@"TXT.rtf"] : nil;
+	bytes = (text != nil) ? [text regularFileContents] : nil;
+	if (bytes == nil) {
+		fprintf(stderr, "APPKIT-REFUSE: -initWithRTFDFileWrapper:documentAttributes: found no readable `TXT.rtf` "
+				"in the package\n");
+		return nil;
+	}
+	return [self fn_initWithRTF:bytes package:children documentAttributes:dict];
+}
+
+- (nullable instancetype)initWithRTFD:(NSData *)rtfdData documentAttributes:(NSDictionary **)dict
+{
+	NSFileWrapper *package;
+	NSAttributedString *answer;
+
+	if (rtfdData == nil || [rtfdData length] == 0) {
+		fprintf(stderr, "APPKIT-REFUSE: -initWithRTFD:documentAttributes: was given no data\n");
+		return nil;
+	}
+	package = [[NSFileWrapper alloc] initWithSerializedRepresentation:rtfdData];
+	if (package == nil) {
+		fprintf(stderr, "APPKIT-REFUSE: -initWithRTFD:documentAttributes: the bytes are not a serialized package\n");
+		return nil;
+	}
+	answer = [self initWithRTFDFileWrapper:package documentAttributes:dict];
+	[package release];
+	return answer;
+}
+
+@end
+
 /* **AND IT IS INSTALLED FROM A CONSTRUCTOR RATHER THAN A CATEGORY METHOD**, for the reason this tree has already
  * recorded once: a category's methods are not what a runtime necessarily prefers over the class's own, and this task's
  * first attempt — a category implementation of the same selectors — was MEASURED LOSING to `libagora-base`'s refusal,
