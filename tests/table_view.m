@@ -310,7 +310,7 @@ int main(void)
 			}
 		}
 		check(textInk > 0, "the first two rows draw their values as ink");
-		check(eqc([rep colorAtX:300 y:(int)(1.0 * 22.0 + 10.0)], [NSColor selectedControlColor], 0.03),
+		check(eqc([rep colorAtX:100 y:(int)(1.0 * 22.0 + 10.0)], [NSColor selectedControlColor], 0.03),
 		      "the selected row's plate is the selected-control colour");
 		check(probe->willDisplay > 0, "the delegate was asked to display cells");
 		[rep release];

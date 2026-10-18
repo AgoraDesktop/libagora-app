@@ -271,7 +271,11 @@ static CGFloat fn_border_width(NSBorderType type)
 			headerHeight = 0.0;
 		}
 	}
-	content = NSMakeRect(NSMinX(frame) + border, NSMinY(frame) + border + hh + headerHeight,
+	/* **THE HEADER TAKES THE TOP STRIP; THE CLIP VIEW TAKES WHAT IS BELOW IT.** The header's height is already
+	 * subtracted from the content's, so the content starts at the bottom and ends at the header's bottom — NOT at
+	 * the scroll view's top. The first version also ADDED the header's height to the content's origin, which put the
+	 * header above the scroll view's own frame and clipped it away. */
+	content = NSMakeRect(NSMinX(frame) + border, NSMinY(frame) + border + hh,
 			     NSWidth(frame) - 2.0 * border - vw,
 			     NSHeight(frame) - 2.0 * border - hh - headerHeight);
 	if (content.size.width < 0.0) {

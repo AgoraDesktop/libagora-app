@@ -10,6 +10,7 @@
 #import "NSFont.h"
 #import "NSBezierPath.h"
 #import "NSStringDrawing.h"
+#import "NSGraphicsContext.h"
 
 #include <math.h>
 
@@ -72,8 +73,18 @@
 	if (x < NSMinX(cellFrame) + 3.0) {
 		x = NSMinX(cellFrame) + 3.0;
 	}
-	baseline = NSMidY(cellFrame) - (([font ascender] + (CGFloat)fabs((double)[font descender])) / 2.0)
-		   + (CGFloat)fabs((double)[font descender]);
+	{
+		CGFloat ascender = [font ascender];
+		CGFloat descent = (CGFloat)fabs((double)[font descender]);
+
+		CGContextRef cg = (CGContextRef)[[NSGraphicsContext currentContext] graphicsPort];
+		CGAffineTransform transform = cg != NULL ? CGContextGetCTM(cg) : CGAffineTransformIdentity;
+
+		/* The sign follows the CTM. The header view is drawn in the opposite direction from a table cell in the
+		 * same window; see the measured note in `NSTextFieldCell -drawInteriorWithFrame:`. */
+		baseline = NSMidY(cellFrame) + (transform.d >= 0.0 ? 1.0 : -1.0)
+			   * ((ascender - descent) / 2.0);
+	}
 	[string drawAtPoint:NSMakePoint(x, baseline) withAttributes:attributes];
 }
 

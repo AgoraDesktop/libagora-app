@@ -310,11 +310,19 @@
 	if (size.width <= 0.0 || size.height <= 0.0 || NSWidth(room) <= 0.0) {
 		return;
 	}
-	room = NSMakeRect(NSMinX(room), NSMidY(cellFrame) - size.height / 2.0, NSWidth(room), size.height);
-	[NSGraphicsContext saveGraphicsState];
-	[[NSBezierPath bezierPathWithRect:room] setClip];
-	[text drawInRect:room];
-	[NSGraphicsContext restoreGraphicsState];
+	{
+		NSFont *font = [text attribute:NSFontAttributeName atIndex:0 effectiveRange:NULL];
+		CGFloat ascender = [font ascender];
+		CGFloat descent = (CGFloat)fabs((double)[font descender]);
+		CGContextRef cg = (CGContextRef)[[NSGraphicsContext currentContext] graphicsPort];
+		CGAffineTransform transform = cg != NULL ? CGContextGetCTM(cg) : CGAffineTransformIdentity;
+		CGFloat baseline = NSMidY(cellFrame) + (transform.d >= 0.0 ? 1.0 : -1.0)
+				   * ((ascender - descent) / 2.0);
+		[NSGraphicsContext saveGraphicsState];
+		[[NSBezierPath bezierPathWithRect:cellFrame] setClip];
+		[text drawAtPoint:NSMakePoint(NSMinX(room), baseline)];
+		[NSGraphicsContext restoreGraphicsState];
+	}
 }
 
 /* **AND THE WORDS ARE LEFT-ALIGNED AND CLIPPED TO THE ROOM THE FIELD GIVES THEM.** `NSActionCell` draws nothing, so
@@ -359,11 +367,28 @@
 	if (tsize.width <= 0.0 || tsize.height <= 0.0 || NSWidth(room) <= 0.0) {
 		return;
 	}
-	room = NSMakeRect(NSMinX(room), NSMidY(cellFrame) - tsize.height / 2.0, NSWidth(room), tsize.height);
-	[NSGraphicsContext saveGraphicsState];
-	[[NSBezierPath bezierPathWithRect:room] setClip];
-	[string drawInRect:room withAttributes:attributes];
-	[NSGraphicsContext restoreGraphicsState];
+	/* **THE LINE IS DRAWN AT A BASELINE, NOT INTO A RECT — AND THAT IS WHAT KEEPS A SHORT CELL FROM CLIPPING IT.**
+	 * `-drawInRect:` hands the text to a framesetter with a path the size of the text, and in a 20-point table row
+	 * the glyphs came out with only their top halves visible: MEASURED in the table and outline views, where every
+	 * row's text was cut at the same line. `-drawAtPoint:` is a baseline, and this class already has the font's
+	 * ascent and descent, so the line is placed explicitly. */
+	{
+		CGFloat ascender = [font ascender];
+		CGFloat descent = (CGFloat)fabs((double)[font descender]);
+		/* **THE BASELINE'S SIGN FOLLOWS THE CTM, AND IT IS MEASURED RATHER THAN GUESSED.** A table's cells and a
+		 * plain content view's label report opposite directions in the same window; one sign for both cut every
+		 * table row's text in half. The sign below is the one the two contexts needed. */
+		CGContextRef cg = (CGContextRef)[[NSGraphicsContext currentContext] graphicsPort];
+		CGAffineTransform transform = cg != NULL ? CGContextGetCTM(cg) : CGAffineTransformIdentity;
+		CGFloat baseline = NSMidY(cellFrame) + (transform.d >= 0.0 ? 1.0 : -1.0)
+				   * ((ascender - descent) / 2.0);
+		/* **THE CLIP IS THE CELL, NOT A BAND THE SIZE OF THE FONT.** A tight band is one more rectangle whose
+		 * orientation can disagree with the context; the cell frame is the thing the text belongs inside. */
+		[NSGraphicsContext saveGraphicsState];
+		[[NSBezierPath bezierPathWithRect:cellFrame] setClip];
+		[string drawAtPoint:NSMakePoint(NSMinX(room), baseline) withAttributes:attributes];
+		[NSGraphicsContext restoreGraphicsState];
+	}
 }
 
 /* **AND THE MARGIN IS MEASURED FROM THE FIELD'S OWN EDGE RATHER THAN FROM THE BASE'S INSET RECT.** MEASURED: the ink

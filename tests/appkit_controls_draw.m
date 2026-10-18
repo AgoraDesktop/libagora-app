@@ -20,6 +20,11 @@
  * checkbox, "Playground" opens the text window, "Action" is the no-op), plus a separator, a flexible space and one
  * disabled item. The three pictures are drawn in this file, so the demonstration needs no icon files and no search
  * path. `tests/toolbar.m` asserts the behaviour; this is where it can be looked at.
+ *
+ * **AND IT OPENS A TABLE & OUTLINE WINDOW**, from the toolbar's "Table" item, the Data menu, or `--data` on the
+ * command line. The left side is an `NSOutlineView` with disclosure triangles and nested levels; the right is an
+ * `NSTableView` with three columns, a header and alternating rows. Both are the real classes from the last two
+ * slices, not painted pictures of them.
  */
 #import <AppKit/NSApplication.h>
 #import <AppKit/NSWindow.h>
@@ -39,6 +44,10 @@
 #import <AppKit/NSToolbar.h>	/* the band above the content, and the items in it */
 #import <AppKit/NSToolbarItem.h>
 #import <AppKit/NSToolbar_internal.h>	/* the band height and view, for the geometry line */
+#import <AppKit/NSTableView.h>	/* the cell-based table and the outline that flattens a tree */
+#import <AppKit/NSTableColumn.h>
+#import <AppKit/NSTableHeaderView.h>
+#import <AppKit/NSOutlineView.h>
 #import <AppKit/NSClipView.h>
 #import <AppKit/NSColor.h>
 #import <AppKit/NSBezierPath.h>
@@ -85,6 +94,12 @@
 	NSImage *gridIcon;
 	NSImage *playgroundIcon;
 	NSImage *actionIcon;
+	NSImage *tableIcon;
+	/* THE TABLE & OUTLINE WINDOW AND THE OBJECTS THAT FEED IT. The table and outline do not retain their data
+	 * sources, so the controller keeps them for as long as the window lives. */
+	NSWindow *_dataWindow;
+	id _tableSource;
+	id _outlineSource;
 }
 - (BOOL)validateMenuItem:(NSMenuItem *)item;
 - (void)toggleCheckbox:(id)sender;
@@ -92,6 +107,7 @@
 - (void)noop:(id)sender;
 - (void)choiceMade:(id)sender;
 - (void)showPlayground:(id)sender;
+- (void)showDataViews:(id)sender;
 - (NSToolbarItem *)toolbar:(NSToolbar *)toolbar
      itemForItemIdentifier:(NSString *)itemIdentifier
  willBeInsertedIntoToolbar:(BOOL)flag;
@@ -148,6 +164,8 @@ static NSImage *fn_toolbar_icon(int kind)
 		[[NSColor colorWithCalibratedRed:0.20 green:0.45 blue:0.85 alpha:1.0] setFill];
 	} else if (kind == 1) {
 		[[NSColor colorWithCalibratedRed:0.85 green:0.42 blue:0.20 alpha:1.0] setFill];
+	} else if (kind == 3) {
+		[[NSColor colorWithCalibratedRed:0.45 green:0.32 blue:0.72 alpha:1.0] setFill];
 	} else {
 		[[NSColor colorWithCalibratedRed:0.22 green:0.60 blue:0.35 alpha:1.0] setFill];
 	}
@@ -166,6 +184,13 @@ static NSImage *fn_toolbar_icon(int kind)
 		[[NSBezierPath bezierPathWithRect:NSMakeRect(4.0, 12.0, 10.0, 2.0)] fill];
 		[[NSBezierPath bezierPathWithRect:NSMakeRect(4.0, 8.0, 8.0, 2.0)] fill];
 		[[NSBezierPath bezierPathWithRect:NSMakeRect(4.0, 4.0, 6.0, 2.0)] fill];
+	} else if (kind == 3) {
+		/* A TABLE: a frame, two horizontal rules and one vertical rule. */
+		[[NSBezierPath bezierPathWithRect:NSMakeRect(4.0, 4.0, 10.0, 10.0)] fill];
+		[[NSColor colorWithCalibratedRed:0.45 green:0.32 blue:0.72 alpha:1.0] setFill];
+		[[NSBezierPath bezierPathWithRect:NSMakeRect(5.0, 6.5, 8.0, 1.0)] fill];
+		[[NSBezierPath bezierPathWithRect:NSMakeRect(5.0, 9.5, 8.0, 1.0)] fill];
+		[[NSBezierPath bezierPathWithRect:NSMakeRect(8.0, 5.0, 1.0, 8.0)] fill];
 	} else {
 		NSBezierPath *play = [NSBezierPath bezierPath];
 
@@ -291,6 +316,200 @@ static void fn_playground_fill(NSTextView *view)
 	[view setNeedsDisplay:YES];
 }
 
+
+/* ============================================================================================ *
+ * THE TABLE & OUTLINE WINDOW'S TWO MODELS.                                                       *
+ *                                                                                                *
+ * **THE TABLE'S MODEL IS ROWS OF DICTIONARIES AND THE OUTLINE'S IS A TREE OF NODES.** Neither  *
+ * source is retained by its view — AppKit's data sources are borrowed — so the controller keeps  *
+ * them in `_tableSource` and `_outlineSource` for as long as the window lives.                   *
+ * ============================================================================================ */
+
+@interface AGDemoTableSource : NSObject <NSTableViewDataSource, NSTableViewDelegate>
+{
+	NSArray *_rows;
+}
+@end
+
+@implementation AGDemoTableSource
+
+- (instancetype)init
+{
+	self = [super init];
+	if (self != nil) {
+		_rows = [[NSArray alloc] initWithObjects:
+			[NSDictionary dictionaryWithObjectsAndKeys:@"Notes.txt", @"name", @"Today 09:12", @"modified", @"4 KB", @"size", nil],
+			[NSDictionary dictionaryWithObjectsAndKeys:@"Budget.numbers", @"name", @"Yesterday", @"modified", @"38 KB", @"size", nil],
+			[NSDictionary dictionaryWithObjectsAndKeys:@"Agora plan.pdf", @"name", @"12 Oct 2026", @"modified", @"1.2 MB", @"size", nil],
+			[NSDictionary dictionaryWithObjectsAndKeys:@"Beach.png", @"name", @"10 Oct 2026", @"modified", @"840 KB", @"size", nil],
+			[NSDictionary dictionaryWithObjectsAndKeys:@"Family.jpg", @"name", @"03 Oct 2026", @"modified", @"2.1 MB", @"size", nil],
+			[NSDictionary dictionaryWithObjectsAndKeys:@"agora.zip", @"name", @"28 Sep 2026", @"modified", @"6.4 MB", @"size", nil],
+			[NSDictionary dictionaryWithObjectsAndKeys:@"window-server", @"name", @"18 Oct 2026", @"modified", @"folder", @"size", nil],
+			[NSDictionary dictionaryWithObjectsAndKeys:@"workspace", @"name", @"17 Oct 2026", @"modified", @"folder", @"size", nil],
+			nil];
+	}
+	return self;
+}
+
+- (void)dealloc
+{
+	[_rows release];
+	[super dealloc];
+}
+
+- (NSInteger)numberOfRowsInTableView:(NSTableView *)tableView
+{
+	(void)tableView;
+	return (NSInteger)[_rows count];
+}
+
+- (id)tableView:(NSTableView *)tableView objectValueForTableColumn:(NSTableColumn *)tableColumn row:(NSInteger)row
+{
+	(void)tableView;
+	return [[_rows objectAtIndex:(NSUInteger)row] objectForKey:[tableColumn identifier]];
+}
+
+@end
+
+@interface AGDemoNode : NSObject
+{
+@public
+	NSString *name;
+	NSMutableArray *children;
+}
+- (instancetype)initWithName:(NSString *)aName;
+@end
+
+@implementation AGDemoNode
+- (instancetype)initWithName:(NSString *)aName
+{
+	self = [super init];
+	if (self != nil) {
+		name = [aName copy];
+		children = [[NSMutableArray alloc] init];
+	}
+	return self;
+}
+- (void)dealloc
+{
+	[name release];
+	[children release];
+	[super dealloc];
+}
+@end
+
+@interface AGDemoOutlineSource : NSObject <NSOutlineViewDataSource, NSOutlineViewDelegate>
+{
+	NSMutableArray *_roots;
+@public
+	AGDemoNode *documents;
+	AGDemoNode *photos;
+}
+@end
+
+@implementation AGDemoOutlineSource
+
+- (instancetype)init
+{
+	self = [super init];
+	if (self != nil) {
+		AGDemoNode *notes = [[AGDemoNode alloc] initWithName:@"Notes.txt"];
+		AGDemoNode *budget = [[AGDemoNode alloc] initWithName:@"Budget.numbers"];
+		AGDemoNode *beach = [[AGDemoNode alloc] initWithName:@"Beach.png"];
+		AGDemoNode *family = [[AGDemoNode alloc] initWithName:@"Family.jpg"];
+		AGDemoNode *archive = [[AGDemoNode alloc] initWithName:@"agora.zip"];
+		AGDemoNode *app = [[AGDemoNode alloc] initWithName:@"libagora-app"];
+		AGDemoNode *server = [[AGDemoNode alloc] initWithName:@"window-server"];
+		AGDemoNode *workspace = [[AGDemoNode alloc] initWithName:@"workspace"];
+
+		documents = [[AGDemoNode alloc] initWithName:@"Documents"];
+		photos = [[AGDemoNode alloc] initWithName:@"Photos"];
+		[photos->children addObject:beach];
+		[documents->children addObject:notes];
+		[documents->children addObject:budget];
+		[documents->children addObject:photos];
+		[documents->children addObject:family];
+
+		{
+			AGDemoNode *downloads = [[AGDemoNode alloc] initWithName:@"Downloads"];
+			AGDemoNode *projects = [[AGDemoNode alloc] initWithName:@"Projects"];
+
+			[downloads->children addObject:archive];
+			[projects->children addObject:app];
+			[projects->children addObject:server];
+			[projects->children addObject:workspace];
+			_roots = [[NSMutableArray alloc] initWithObjects:documents, downloads, projects, nil];
+			[downloads release];
+			[projects release];
+		}
+		[notes release];
+		[budget release];
+		[beach release];
+		[family release];
+		[archive release];
+		[app release];
+		[server release];
+		[workspace release];
+	}
+	return self;
+}
+
+- (void)dealloc
+{
+	[_roots release];
+	[documents release];
+	[photos release];
+	[super dealloc];
+}
+
+- (NSInteger)outlineView:(NSOutlineView *)outlineView numberOfChildrenOfItem:(id)item
+{
+	(void)outlineView;
+	if (item == nil) {
+		return (NSInteger)[_roots count];
+	}
+	return (NSInteger)[((AGDemoNode *)item)->children count];
+}
+
+- (id)outlineView:(NSOutlineView *)outlineView child:(NSInteger)index ofItem:(id)item
+{
+	(void)outlineView;
+	if (item == nil) {
+		return [_roots objectAtIndex:(NSUInteger)index];
+	}
+	return [((AGDemoNode *)item)->children objectAtIndex:(NSUInteger)index];
+}
+
+- (BOOL)outlineView:(NSOutlineView *)outlineView isItemExpandable:(id)item
+{
+	(void)outlineView;
+	if (item == nil) {
+		return [_roots count] > 0;
+	}
+	return [((AGDemoNode *)item)->children count] > 0;
+}
+
+- (id)outlineView:(NSOutlineView *)outlineView objectValueForTableColumn:(NSTableColumn *)tableColumn byItem:(id)item
+{
+	(void)outlineView;
+	if (item == nil) {
+		return @"";
+	}
+	if ([[tableColumn identifier] isEqualToString:@"name"]) {
+		return ((AGDemoNode *)item)->name;
+	}
+	return [((AGDemoNode *)item)->children count] > 0 ? @"folder" : @"file";
+}
+
+- (BOOL)outlineView:(NSOutlineView *)outlineView shouldSelectItem:(id)item
+{
+	(void)outlineView;
+	(void)item;
+	return YES;
+}
+
+@end
+
 @implementation AGControlsController
 
 - (BOOL)validateMenuItem:(NSMenuItem *)item
@@ -340,6 +559,14 @@ static void fn_playground_fill(NSTextView *view)
 		[item setAction:@selector(showPlayground:)];
 		return item;
 	}
+	if ([itemIdentifier isEqualToString:@"table"]) {
+		[item setLabel:@"Table"];
+		[item setPaletteLabel:@"Table & Outline"];
+		[item setImage:tableIcon];
+		[item setTarget:self];
+		[item setAction:@selector(showDataViews:)];
+		return item;
+	}
 	if ([itemIdentifier isEqualToString:@"action"]) {
 		[item setLabel:@"Action"];
 		[item setPaletteLabel:@"Action"];
@@ -364,14 +591,14 @@ static void fn_playground_fill(NSTextView *view)
 - (NSArray *)toolbarDefaultItemIdentifiers:(NSToolbar *)toolbar
 {
 	(void)toolbar;
-	return [NSArray arrayWithObjects:@"grid", @"playground", NSToolbarSeparatorItemIdentifier,
+	return [NSArray arrayWithObjects:@"grid", @"playground", @"table", NSToolbarSeparatorItemIdentifier,
 					 @"action", NSToolbarFlexibleSpaceItemIdentifier, @"disabled", nil];
 }
 
 - (NSArray *)toolbarAllowedItemIdentifiers:(NSToolbar *)toolbar
 {
 	(void)toolbar;
-	return [NSArray arrayWithObjects:@"grid", @"playground", @"action", @"disabled",
+	return [NSArray arrayWithObjects:@"grid", @"playground", @"table", @"action", @"disabled",
 					 NSToolbarSeparatorItemIdentifier, NSToolbarSpaceItemIdentifier,
 					 NSToolbarFlexibleSpaceItemIdentifier, nil];
 }
@@ -543,6 +770,151 @@ static void fn_playground_fill(NSTextView *view)
 	[_playground orderFront:nil];
 }
 
+/* **A WINDOW FOR THE TWO DATA VIEWS: THE OUTLINE ON THE LEFT AND THE TABLE ON THE RIGHT.** They are in separate
+ * scroll views rather than one split view because `NSSplitView` is the next slice; the two panels still show the
+ * real classes and each one's own header. `--data` opens this window at startup so a screenshot can find it. */
+- (void)showDataViews:(id)sender
+{
+	NSRect visible;
+	NSRect content;
+	NSWindow *w;
+	NSView *root;
+	NSScrollView *outlineScroll;
+	NSOutlineView *outline;
+	NSTableColumn *outlineName;
+	NSTableColumn *outlineKind;
+	NSScrollView *tableScroll;
+	NSTableView *table;
+	NSTableColumn *tableName;
+	NSTableColumn *tableModified;
+	NSTableColumn *tableSize;
+	AGDemoOutlineSource *outlineSource;
+	AGDemoTableSource *tableSource;
+	NSTextField *outlineLabel;
+	NSTextField *tableLabel;
+
+	(void)sender;
+	if (_dataWindow != nil) {
+		[_dataWindow makeKeyAndOrderFront:nil];
+		return;
+	}
+	visible = [[NSScreen mainScreen] visibleFrame];
+	if (NSIsEmptyRect(visible)) {
+		visible = NSMakeRect(0.0, 0.0, 900.0, 600.0);
+	}
+	content = NSMakeRect(20.0, 20.0, 900.0, 520.0);
+	if (NSMaxX(content) > NSMaxX(visible)) {
+		content.origin.x = NSMaxX(visible) - NSWidth(content);
+	}
+	if (NSMaxY(content) > NSMaxY(visible)) {
+		content.origin.y = NSMaxY(visible) - NSHeight(content);
+	}
+	if (NSMinX(content) < NSMinX(visible)) {
+		content.origin.x = NSMinX(visible);
+	}
+	if (NSMinY(content) < NSMinY(visible)) {
+		content.origin.y = NSMinY(visible);
+	}
+	w = [[NSWindow alloc] initWithContentRect:content
+			styleMask:(NSTitledWindowMask | NSClosableWindowMask | NSMiniaturizableWindowMask | NSResizableWindowMask)
+			backing:NSBackingStoreBuffered defer:NO];
+	root = [[NSView alloc] initWithFrame:NSMakeRect(0.0, 0.0, 900.0, 520.0)];
+
+	outlineLabel = [[NSTextField alloc] initWithFrame:NSMakeRect(20.0, 478.0, 410.0, 20.0)];
+	[outlineLabel setStringValue:@"Outline view — disclosure, levels, item selection"];
+	[outlineLabel setEditable:NO];
+	[outlineLabel setSelectable:NO];
+	[outlineLabel setBordered:NO];
+	[outlineLabel setBezeled:NO];
+	[outlineLabel setDrawsBackground:NO];
+	[outlineLabel setFont:[NSFont boldSystemFontOfSize:[NSFont smallSystemFontSize]]];
+	[root addSubview:outlineLabel];
+	[outlineLabel release];
+
+	tableLabel = [[NSTextField alloc] initWithFrame:NSMakeRect(450.0, 478.0, 430.0, 20.0)];
+	[tableLabel setStringValue:@"Table view — columns, header, alternating rows"];
+	[tableLabel setEditable:NO];
+	[tableLabel setSelectable:NO];
+	[tableLabel setBordered:NO];
+	[tableLabel setBezeled:NO];
+	[tableLabel setDrawsBackground:NO];
+	[tableLabel setFont:[NSFont boldSystemFontOfSize:[NSFont smallSystemFontSize]]];
+	[root addSubview:tableLabel];
+	[tableLabel release];
+
+	outlineScroll = [[NSScrollView alloc] initWithFrame:NSMakeRect(20.0, 20.0, 410.0, 450.0)];
+	[outlineScroll setBorderType:NSLineBorder];
+	[outlineScroll setHasVerticalScroller:YES];
+	[outlineScroll setHasHorizontalScroller:YES];
+	outline = [[NSOutlineView alloc] initWithFrame:NSMakeRect(0.0, 0.0, 410.0, 450.0)];
+	[outline setRowHeight:20.0];
+	[outline setUsesAlternatingRowBackgroundColors:YES];
+	outlineName = [[NSTableColumn alloc] initWithIdentifier:@"name"];
+	outlineKind = [[NSTableColumn alloc] initWithIdentifier:@"kind"];
+	[outlineName setWidth:260.0];
+	[outlineKind setWidth:110.0];
+	[outline addTableColumn:outlineName];
+	[outline addTableColumn:outlineKind];
+	[outline setOutlineTableColumn:outlineName];
+	outlineSource = [[AGDemoOutlineSource alloc] init];
+	[outline setDataSource:outlineSource];
+	[outline setDelegate:outlineSource];
+	[outlineScroll setDocumentView:outline];
+	[outline reloadData];
+	[outline expandItem:outlineSource->documents];
+	[outline expandItem:outlineSource->photos];
+	[outline selectRowIndexes:[NSIndexSet indexSetWithIndex:1] byExtendingSelection:NO];
+
+	tableScroll = [[NSScrollView alloc] initWithFrame:NSMakeRect(450.0, 20.0, 430.0, 450.0)];
+	[tableScroll setBorderType:NSLineBorder];
+	[tableScroll setHasVerticalScroller:YES];
+	[tableScroll setHasHorizontalScroller:YES];
+	table = [[NSTableView alloc] initWithFrame:NSMakeRect(0.0, 0.0, 430.0, 450.0)];
+	[table setRowHeight:20.0];
+	[table setUsesAlternatingRowBackgroundColors:YES];
+	[table setAllowsMultipleSelection:YES];
+	tableName = [[NSTableColumn alloc] initWithIdentifier:@"name"];
+	tableModified = [[NSTableColumn alloc] initWithIdentifier:@"modified"];
+	tableSize = [[NSTableColumn alloc] initWithIdentifier:@"size"];
+	[tableName setWidth:170.0];
+	[tableModified setWidth:130.0];
+	[tableSize setWidth:80.0];
+	[table addTableColumn:tableName];
+	[table addTableColumn:tableModified];
+	[table addTableColumn:tableSize];
+	tableSource = [[AGDemoTableSource alloc] init];
+	[table setDataSource:tableSource];
+	[table setDelegate:tableSource];
+	[tableScroll setDocumentView:table];
+	[table reloadData];
+	[table selectRowIndexes:[NSIndexSet indexSetWithIndex:2] byExtendingSelection:NO];
+	[root addSubview:outlineScroll];
+	[root addSubview:tableScroll];
+	[w setContentView:root];
+	[w setTitle:@"Table & Outline"];
+	[w setReleasedWhenClosed:NO];
+	[w makeKeyAndOrderFront:nil];
+	_dataWindow = w;
+	_outlineSource = [outlineSource retain];
+	_tableSource = [tableSource retain];
+	fprintf(stderr, "controls: data window — outline %.0fx%.0f, table %.0fx%.0f, %lu outline rows, %lu table rows\n",
+		[outlineScroll frame].size.width, [outlineScroll frame].size.height,
+		[tableScroll frame].size.width, [tableScroll frame].size.height,
+		(unsigned long)[outline numberOfRows], (unsigned long)[table numberOfRows]);
+	[outline release];
+	[table release];
+	[outlineName release];
+	[outlineKind release];
+	[tableName release];
+	[tableModified release];
+	[tableSize release];
+	[outlineScroll release];
+	[tableScroll release];
+	[outlineSource release];
+	[tableSource release];
+	[root release];
+}
+
 @end
 
 /* ONE TITLE, ITS ITEMS, AND WHOSE ACTION THEY CARRY. Written as a helper because the bar below makes four of them and
@@ -673,6 +1045,7 @@ static NSMenuItem *add_menu(NSMenu *bar, NSString *title, NSArray *itemTitles, N
 int main(int argc, char **argv)
 {
 	int seconds = 0;
+	int showData = 0;
 	int i;
 
 	/* **THE CHROME'S THEME IS THIS DEMONSTRATION'S DEFAULT, WHICH IS WHAT MAKES IT THE THING TO ITERATE ON.** The
@@ -684,6 +1057,8 @@ int main(int argc, char **argv)
 	for (i = 1; i < argc; i++) {
 		if (strcmp(argv[i], "--seconds") == 0 && i + 1 < argc) {
 			seconds = atoi(argv[++i]);
+		} else if (strcmp(argv[i], "--data") == 0) {
+			showData = 1;
 		}
 	}
 #ifdef AGORA_CHROME_DEFAULT_THEME
@@ -884,6 +1259,7 @@ int main(int argc, char **argv)
 		controller->gridIcon = fn_toolbar_icon(0);
 		controller->playgroundIcon = fn_toolbar_icon(1);
 		controller->actionIcon = fn_toolbar_icon(2);
+		controller->tableIcon = fn_toolbar_icon(3);
 		toolbar = [[NSToolbar alloc] initWithIdentifier:@"AGControlsToolbar"];
 		[toolbar setDelegate:controller];
 		[toolbar setDisplayMode:NSToolbarDisplayModeIconAndLabel];
@@ -905,6 +1281,8 @@ int main(int argc, char **argv)
 		 * attachment and table slices in a store a person can type in. */
 		add_menu(bar, @"Demo", [NSArray arrayWithObjects:@"Text playground", nil],
 			 [NSArray arrayWithObjects:@"t", nil], controller, @selector(showPlayground:));
+		add_menu(bar, @"Data", [NSArray arrayWithObjects:@"Table & Outline", nil],
+			 [NSArray arrayWithObjects:@"d", nil], controller, @selector(showDataViews:));
 		add_menu(bar, @"Edit", [NSArray arrayWithObjects:@"Undo", @"Redo", nil],
 			 [NSArray arrayWithObjects:@"z", @"Z", nil], controller, @selector(noop:));
 		add_menu(bar, @"View", [NSArray arrayWithObjects:@"Show Grid", @"Show Ruler", nil],
@@ -927,6 +1305,9 @@ int main(int argc, char **argv)
 		 * so a window mapped after the controls window sits above it; it is ORDERED FRONT rather than made key, so the
 		 * CONTROLS keep the keyboard and their field keeps its editor while the playground is what a person sees. */
 		[controller showPlayground:nil];
+		if (showData) {
+			[controller showDataViews:nil];
+		}
 		/* ONE LINE OF GEOMETRY, so that a screenshot can be READ against the numbers the application believes rather
 		 * than against a guess about where a window landed. */
 		fprintf(stderr, "controls: toolbar = %.0f-point band, %.0f-wide view at y=%.0f, %lu items\n",
