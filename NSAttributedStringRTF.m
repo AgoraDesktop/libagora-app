@@ -205,6 +205,56 @@ static NSInteger fn_level_format(NSString *markerFormat)
 	return 0;
 }
 
+/* **AND THE WAY BACK: RTF's NUMBER TO A MARKER FORMAT**, the inverse of `fn_level_format`. A number this reader does
+ * not know is refused by name and read as decimal, because a list whose numbering silently became decimal is a wrong
+ * document rather than a missing one — and saying which number was seen is what makes that diagnosable. */
+static NSString *fn_marker_format_for_level(NSInteger nfc)
+{
+	switch (nfc) {
+	case 0:
+		return @"{decimal}";
+	case 1:
+		return @"{upper-roman}";
+	case 2:
+		return @"{lower-roman}";
+	case 3:
+		return @"{upper-alpha}";
+	case 4:
+		return @"{lower-alpha}";
+	case 23:
+		return @"{disc}";
+	default:
+		fprintf(stderr, "APPKIT-REFUSE: -initWithRTF: does not know list level format %ld, and reads it as "
+				"decimal\n", (long)nfc);
+		return @"{decimal}";
+	}
+}
+
+/* **THE STACK OF LISTS FOR A PARAGRAPH AT A DEPTH**, which is what `-textLists` holds: the definitions of levels 0
+ * through `level`, outermost first. A depth past the end of the definition is clamped rather than trusted, because the
+ * number comes from the file. */
+static NSArray *fn_lists_for_depth(NSDictionary *definitions, NSInteger listId, NSInteger level)
+{
+	NSArray *levels = (listId > 0) ? [definitions objectForKey:[NSNumber numberWithInteger:listId]] : nil;
+	NSMutableArray *stack;
+	NSInteger k;
+
+	if (levels == nil || [levels count] == 0) {
+		return [NSArray array];
+	}
+	if (level < 0) {
+		level = 0;
+	}
+	if ((NSUInteger)level >= [levels count]) {
+		level = (NSInteger)[levels count] - 1;
+	}
+	stack = [NSMutableArray array];
+	for (k = 0; k <= level; k++) {
+		[stack addObject:[levels objectAtIndex:(NSUInteger)k]];
+	}
+	return stack;
+}
+
 /* THE STACK A PARAGRAPH SITS IN, AS A KEY: a paragraph inside two lists is identified by BOTH formats, outermost
  * first, because two paragraphs with the same inner bullet under different outers are different lists to a reader. */
 static NSString *fn_lists_signature(NSArray *lists)
@@ -457,7 +507,15 @@ NSString *fn_rtf_text(NSAttributedString *source, NSMutableDictionary *attachmen
 	CGFloat curSize = 12.0;
 	BOOL curUnderline = NO, curStrike = NO;
 	NSTextAlignment curAlign = NSLeftTextAlignment;
-	NSInteger destination = 0;	/* 0 body, 1 font table, 2 colour table, 3 picture */
+	NSInteger destination = 0;	/* 0 body, 1 font table, 2 colour table, 3 picture, 4 graphic, 5 list table */
+	/* **AND THE LISTS**: the definitions the header declares, keyed by RTF's list id, and the id and depth the
+	 * paragraph being read is in. A paragraph's `-textLists` is a STACK of those definitions, which is why the depth is
+	 * kept rather than just the id. */
+	NSMutableDictionary *listDefinitions = [NSMutableDictionary dictionary];
+	NSMutableArray *pendingLevels = nil;	/* the levels of the list being read, in order */
+	NSInteger pendingListId = 0;
+	NSInteger currentListId = 0;
+	NSInteger currentLevel = 0;
 	/* **A PICTURE IS A DESTINATION TOO, AND ITS BODY IS HEX RATHER THAN TEXT.** The group's control words say what
 	 * kind of blip it is; the hex digits that follow are the image itself, collected here and decoded when the group
 	 * closes. A `\pict` this reader cannot decode leaves the text exactly as it was, which is the same boundary the
@@ -509,9 +567,11 @@ NSString *fn_rtf_text(NSAttributedString *source, NSMutableDictionary *attachmen
 		if (curUnderline) { [a setObject:[NSNumber numberWithInteger:NSUnderlineStyleSingle] forKey:NSUnderlineStyleAttributeName]; } \
 		if (curStrike) { [a setObject:[NSNumber numberWithInteger:NSUnderlineStyleSingle] forKey:NSStrikethroughStyleAttributeName]; } \
 		if (pendingAttachment != nil) { [a setObject:pendingAttachment forKey:NSAttachmentAttributeName]; } \
-		if (curAlign != NSLeftTextAlignment) { \
+		if (curAlign != NSLeftTextAlignment || [fn_lists_for_depth(listDefinitions, currentListId, currentLevel) count] > 0) { \
 			NSMutableParagraphStyle *ps = [[NSParagraphStyle defaultParagraphStyle] mutableCopy]; \
+			NSArray *paragraphLists = fn_lists_for_depth(listDefinitions, currentListId, currentLevel); \
 			[ps setAlignment:curAlign]; \
+			if ([paragraphLists count] > 0) { [ps setTextLists:paragraphLists]; } \
 			[a setObject:ps forKey:NSParagraphStyleAttributeName]; \
 			[ps release]; \
 		} \
@@ -728,7 +788,41 @@ NSString *fn_rtf_text(NSAttributedString *source, NSMutableDictionary *attachmen
 			}
 			i = k - 1;
 
-			if ([word isEqualToString:@"fonttbl"]) {
+			if ([word isEqualToString:@"listtable"]) {
+				destination = 5;
+				destDepth = depth;
+			} else if (destination == 5 && [word isEqualToString:@"list"]) {
+				pendingLevels = [NSMutableArray array];
+				pendingListId = 0;
+			} else if (destination == 5 && [word isEqualToString:@"levelnfc"]) {
+				if (pendingLevels == nil) {
+					pendingLevels = [NSMutableArray array];
+				}
+				[pendingLevels addObject:[[[NSTextList alloc] initWithMarkerFormat:
+					fn_marker_format_for_level((NSInteger)param) options:0] autorelease]];
+			} else if (destination == 5 && [word isEqualToString:@"levelstartat"]) {
+				/* THE START BELONGS TO THE LEVEL JUST DEFINED, which is the last one appended. */
+				if ([pendingLevels count] > 0) {
+					[[pendingLevels lastObject] setStartingItemNumber:(NSInteger)param];
+				}
+			} else if (destination == 5 && [word isEqualToString:@"listid"]) {
+				pendingListId = (NSInteger)param;
+				if (pendingListId > 0 && [pendingLevels count] > 0) {
+					[listDefinitions setObject:pendingLevels
+							   forKey:[NSNumber numberWithInteger:pendingListId]];
+				}
+			} else if ([word isEqualToString:@"ls"]) {
+				currentListId = (NSInteger)param;
+				FN_PUSH_MARK();
+			} else if ([word isEqualToString:@"ilvl"]) {
+				currentLevel = (NSInteger)param;
+				FN_PUSH_MARK();
+			} else if ([word isEqualToString:@"pard"]) {
+				/* A PARAGRAPH BREAKS THE LIST STATE: `\pard` resets paragraph properties, and the `\ls`/`\ilvl` that
+				 * matter are the ones after it. */
+				currentListId = 0;
+				currentLevel = 0;
+			} else if ([word isEqualToString:@"fonttbl"]) {
 				destination = 1;
 				destDepth = depth;
 				pendingFont = -1;
@@ -799,6 +893,10 @@ NSString *fn_rtf_text(NSAttributedString *source, NSMutableDictionary *attachmen
 				FN_PUSH_MARK();
 			} else if ([word isEqualToString:@"par"] || [word isEqualToString:@"line"]) {
 				[text appendString:@"\n"];
+				/* **AND THE LIST STATE ENDS WITH THE PARAGRAPH**, so a paragraph with no `\ls` of its own does not
+				 * inherit the previous one's. */
+				currentListId = 0;
+				currentLevel = 0;
 			} else if ([word isEqualToString:@"tab"]) {
 				[text appendString:@"\t"];
 			} else if ([word isEqualToString:@"u"]) {

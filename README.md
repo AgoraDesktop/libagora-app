@@ -892,6 +892,18 @@ imported and then changed — the changes are recorded in [`PROVENANCE.md`](PROV
   instead. A reader that renders markers from RTF's placeholders is a different reader from this one, and the READING
   HALF IS THE NEXT CUT — it will parse `{\listtable}`, `\levelnfc` and `\ls`/`\ilvl` back into `-textLists`, which is
   what closes the loop the way the picture slice did.
+- **AND LISTS READ BACK NOW, WHICH CLOSES THE LOOP THE WAY PICTURES DID.** The reader grew a LIST TABLE destination —
+  the fifth, beside the font, colour, picture and graphic ones — that turns each `\levelnfc` back into an `NSTextList`
+  (`0` decimal, `1`/`2` roman, `3`/`4` alpha, `23` disc, and an unknown number REFUSED BY NAME and read as decimal), and
+  `\ls`/`\ilvl` into the paragraph's `-textLists` — a STACK, outermost first, which is the shape 10.6 declares. The
+  state is reset at `\par` and at `\pard`, so a paragraph with no `\ls` of its own does not inherit the previous one's.
+  MEASURED by reading the writer's own document back: **1 list** on the first paragraph (decimal, **beginning at 5**, the
+  number the document stated), **2** on the nested one (decimal outside, disc inside — the format the `\levelnfc23`
+  named), and **0** on the third, which named none.
+- **AND A STYLE EXISTS FOR A LISTED PARAGRAPH EVEN WHEN IT IS LEFT-ALIGNED**, which the mark machinery had never needed
+  before: it built a paragraph style only to carry a non-default alignment, so a left-aligned paragraph in a list would
+  have had nowhere to put its lists.
 - **AND THE REFUSAL CENSUS CAUGHT THIS SLICE TOO** — the unknown-format refusal made it fail with
   `NSAttributedStringRTF.m: the census says 2, the source has 3` and `the census says 131 in total, the sources have
-  132`, so recording it was again a deliberate edit.
+  132` — and the reader's own unknown-format refusal did it again one slice later (`4` and `133`), so recording it was
+  again a deliberate edit.

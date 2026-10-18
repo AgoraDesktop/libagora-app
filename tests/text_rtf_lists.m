@@ -94,7 +94,49 @@ int main(void)
 			printf("  (the document names a list %lu time(s) for 3 paragraphs)\n", count);
 			check(count == 2, "and only the two listed paragraphs name one");
 		}
-		/* AND NOTHING WAS INJECTED INTO THE TEXT: the string's own characters are all there, and no `1.` was added. */
+			/* **AND THE DOCUMENT READS BACK WITH ITS LISTS**, which is the other half: the table's `\levelnfc` values become
+		 * `NSTextList`s again and each paragraph's `\ls`/`\ilvl` becomes `-textLists` — a STACK, outermost first, which
+		 * is the shape 10.6 declares. A reader that attached nothing would pass every check above. */
+		{
+			NSAttributedString *back = [[NSAttributedString alloc] initWithRTF:data documentAttributes:NULL];
+
+			check(back != nil, "the RTF reads back");
+			if (back != nil) {
+				NSParagraphStyle *firstStyle = [[back attributesAtIndex:0 effectiveRange:NULL]
+					objectForKey:NSParagraphStyleAttributeName];
+				NSParagraphStyle *secondStyle = [[back attributesAtIndex:7 effectiveRange:NULL]
+					objectForKey:NSParagraphStyleAttributeName];
+				NSParagraphStyle *thirdStyle = [[back attributesAtIndex:14 effectiveRange:NULL]
+					objectForKey:NSParagraphStyleAttributeName];
+
+				printf("  (first paragraph: %lu list(s), second: %lu, third: %lu)\n",
+				       (unsigned long)[[firstStyle textLists] count],
+				       (unsigned long)[[secondStyle textLists] count],
+				       (unsigned long)[[thirdStyle textLists] count]);
+				check([[firstStyle textLists] count] == 1, "the first paragraph is in ONE list");
+				if ([[firstStyle textLists] count] == 1) {
+					NSTextList *list = [[firstStyle textLists] objectAtIndex:0];
+
+					check([[list markerFormat] isEqualToString:@"{decimal}"]
+					      && [list startingItemNumber] == 5,
+					      "decimal, beginning at the number the document stated (5)");
+				}
+				check([[secondStyle textLists] count] == 2, "the nested paragraph is in TWO, outermost first");
+				if ([[secondStyle textLists] count] == 2) {
+					check([[[[secondStyle textLists] objectAtIndex:0] markerFormat]
+						isEqualToString:@"{decimal}"],
+					      "the outer one is the decimal list");
+					check([[[[secondStyle textLists] objectAtIndex:1] markerFormat]
+						isEqualToString:@"{disc}"],
+					      "and the inner one is the bullet the level format named (23)");
+				}
+				check([[thirdStyle textLists] count] == 0,
+				      "and the third paragraph, which named no list, is in none");
+				[back release];
+			}
+		}
+
+	/* AND NOTHING WAS INJECTED INTO THE TEXT: the string's own characters are all there, and no `1.` was added. */
 		check(mentions(rtf, "first") && mentions(rtf, "second") && mentions(rtf, "third"),
 		      "the paragraphs' own text is in the document");
 		check(!mentions(rtf, "5.\\tab") && !mentions(rtf, "5. "),
