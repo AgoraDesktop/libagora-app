@@ -20,6 +20,8 @@
  *
  * **WHAT IS NOT HERE, AND ITS ROWS STAY OPEN — AND ONE OF THE TWO GROUNDS HAS EXPIRED.** `NSFileWrapper` IS here now
  * (`libagora-base`), so `-fileWrapper` and `-initWithFileWrapper:` are owed for a DIFFERENT reason than this note used
+ * to give — **THE ENCODER EXISTS NOW** (`NSBitmapImageRep` writes PNG through Core Graphics' `CGImageDestination`), so
+ * what is missing is the WRAPPER, not the way to make the bytes.
  * to give: the READ half is decodable (the tree reads PNG and JPEG), but the WRITE half has no image ENCODER to turn
  * the attachment's picture back into bytes, so the pair cannot round-trip and it lands with the ENCODER rather than
  * with the wrapper. AND THE TRACKING FAMILY (`-wantsToTrackMouse`, `-highlight:…`, `-trackMouse:…`) IS OWED WITH

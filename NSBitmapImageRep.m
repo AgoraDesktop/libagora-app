@@ -16,6 +16,7 @@
 #import <CoreGraphics/CGColorSpace.h>
 #import <CoreGraphics/CGDataProvider.h>
 #import <CoreGraphics/CGImage.h>
+#import <CoreGraphics/CGImageDestination.h>
 #import <Foundation/NSString.h>
 #include <stdio.h>
 #include <string.h>
@@ -853,37 +854,85 @@ NSString *NSImageLoopCount = @"NSImageLoopCount";
 /* ---- THE ENCODER DOORS, WHICH REFUSE BY NAME ------------------------------------------------- */
 
 /* THE REFUSAL IS ONE MESSAGE IN ONE PLACE, because four doors say the same measured thing and four
- * copies of a reason is four chances for them to disagree about it. */
-static void fn_refuseEncoder(const char *which)
+ * copies of a reason is four chances for them to disagree about it. **AND WHAT IT SAYS HAS CHANGED: THE ENCODER
+ * EXISTS NOW.** Core Graphics grew `CGImageDestination` (libagora-drawing) and this build writes PNG through it, so
+ * the refusals that remain are about the TYPES rather than about having nothing to encode with. */
+static void fn_refuseEncoder(const char *which, const char *because)
 {
-	fprintf(stderr, "APPKIT-REFUSE: %s needs an ENCODER; this tree's CoreGraphics has the PNG and JPEG "
-			"decoders and no CGImageDestination, so there is nothing to encode with\n", which);
+	fprintf(stderr, "APPKIT-REFUSE: %s: %s\n", which, because);
+}
+
+/* **ONE IMAGE, ASKED OF CORE GRAPHICS RATHER THAN WRITTEN HERE.** The rep already has a `CGImage` — its own, or one
+ * built over its buffer — and `CGImageDestination` is the door that turns one into bytes, so this method has no
+ * pixel code and no second opinion about what PNG is. The destination is created over a MUTABLE DATA, one image is
+ * added, and `Finalize` is the write; the data is the rep's answer. */
+static NSData *fn_png_data_for_image(CGImageRef image)
+{
+	CFMutableDataRef data;
+	CGImageDestinationRef destination;
+	NSData *answer = nil;
+
+	if (image == NULL) {
+		return nil;
+	}
+	data = CFDataCreateMutable(kCFAllocatorDefault, 0);
+	if (data == NULL) {
+		return nil;
+	}
+	destination = CGImageDestinationCreateWithData(data, CFSTR("public.png"), 1, NULL);
+	if (destination != NULL) {
+		CGImageDestinationAddImage(destination, image, NULL);
+		if (CGImageDestinationFinalize(destination)) {
+			/* THE DATA IS THE ANSWER: +1 here, and the bridging cast costs no reference. */
+			answer = (NSData *)data;
+		} else {
+			CFRelease(data);
+		}
+		CFRelease(destination);
+	} else {
+		CFRelease(data);
+	}
+	return answer;
 }
 
 - (nullable NSData *)representationUsingType:(NSBitmapImageFileType)storageType
 				  properties:(nullable NSDictionary *)properties
 {
-	(void)storageType;
-	(void)properties;
-	fn_refuseEncoder("-representationUsingType:properties:");
-	return nil;
+	/* **THE PROPERTIES ARE REFUSED RATHER THAN IGNORED**, which is this tree's standing rule and the reason the
+	 * refusal is a message: a caller that asked for an interlaced PNG would get a plain one without being told. */
+	if (storageType != NSPNGFileType) {
+		fn_refuseEncoder("-representationUsingType:properties:",
+				 "this build writes NSPNGFileType only, through Core Graphics' CGImageDestination");
+		return nil;
+	}
+	if (properties != nil && [properties count] > 0) {
+		fn_refuseEncoder("-representationUsingType:properties:",
+				 "the encoder does not read the properties dictionary yet, and ignoring it would "
+				 "write an image the caller did not ask for");
+		return nil;
+	}
+	return fn_png_data_for_image([self CGImage]);
 }
 
 + (nullable NSData *)representationOfImageRepsInArray:(NSArray *)imageReps
 					   usingType:(NSBitmapImageFileType)storageType
 					  properties:(nullable NSDictionary *)properties
 {
-	(void)imageReps;
-	(void)storageType;
-	(void)properties;
-	fn_refuseEncoder("+representationOfImageRepsInArray:usingType:properties:");
-	return nil;
+	/* **ONE REP, BECAUSE PNG CARRIES ONE IMAGE.** Apple's door exists for the formats that carry several — TIFF and
+	 * PDF — and answering a one-image question for a two-image array would drop a picture without saying so. */
+	if (imageReps == nil || [imageReps count] != 1) {
+		fn_refuseEncoder("+representationOfImageRepsInArray:usingType:properties:",
+				 "a PNG carries ONE image, and this build will not drop the rest of an array");
+		return nil;
+	}
+	return [[imageReps objectAtIndex:0] representationUsingType:storageType properties:properties];
 }
 
 + (nullable NSData *)TIFFRepresentationOfImageRepsInArray:(NSArray *)array
 {
 	(void)array;
-	fn_refuseEncoder("+TIFFRepresentationOfImageRepsInArray:");
+	fn_refuseEncoder("+TIFFRepresentationOfImageRepsInArray:",
+			 "this build writes PNG only, and TIFF is not it");
 	return nil;
 }
 
@@ -894,7 +943,8 @@ static void fn_refuseEncoder(const char *which)
 	(void)array;
 	(void)comp;
 	(void)factor;
-	fn_refuseEncoder("+TIFFRepresentationOfImageRepsInArray:usingCompression:factor:");
+	fn_refuseEncoder("+TIFFRepresentationOfImageRepsInArray:usingCompression:factor:",
+			 "this build writes PNG only, and TIFF is not it");
 	return nil;
 }
 

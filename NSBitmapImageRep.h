@@ -18,19 +18,21 @@
  * authoritative. Apple always exposes a bitmap because its decoder always produces one; this layer
  * decodes straight into a CGImage (that is the only decoder it has), so it says so.
  *
- * THE READ SIDE IS REAL AND THE WRITE SIDE IS DECLARED AS THE REFUSAL IT IS, for a measured reason:
- * CoreGraphics here has `CGImageCreateWithPNGDataProvider` and `CGImageCreateWithJPEGDataProvider` and
- * NO ENCODER — there is no `CGImageDestination` in this tree, and no `libpng`/`libjpeg` write path
- * behind one. So `+imageRepWithData:` sniffs the two formats it can decode and REFUSES anything else by
- * name, and the encoder-side doors (`-representationUsingType:properties:`,
- * `+representationOfImageRepsInArray:usingType:properties:`, the two
- * `+TIFFRepresentationOfImageRepsInArray:` forms) are declared and REFUSE BY NAME — they answer nil
- * with the reason on stderr. **THE EARLIER DECISION HERE WAS TO LEAVE THEM ABSENT, AND IT WAS CHANGED
- * FOR THE CALLER'S SAKE**: a ported program that calls one of them gets a named refusal instead of a
- * link error, and the `NSBitmapImageFileType` enumeration it passes becomes declarable at all. What
- * did NOT change is that nothing is approximated: there is still no encoder, and
- * `-canBeCompressedUsing:` answers NO for every compression and `+getTIFFCompressionTypes:count:` gives
- * an EMPTY LIST, because a list of compressions this class cannot write would be a lie about it.
+ * **THE READ SIDE IS REAL AND THE WRITE SIDE WRITES PNG NOW, WHICH CORRECTS WHAT THIS HEADER SAID.** It used to
+ * record, correctly at the time, that CoreGraphics here had the two decoders and NO ENCODER — "there is no
+ * `CGImageDestination` in this tree, and no `libpng`/`libjpeg` write path behind one". Core Graphics grew one
+ * (`libagora-drawing/CGImageDestination.[ch]`, over the same simplified libpng API its PNG decoder reads with), so
+ * `-representationUsingType:properties:` answers for `NSPNGFileType` by handing the rep's `CGImage` to that
+ * destination. MEASURED, and the measurement is a round trip through this class's own decoder: a 2x2 image goes out
+ * as 97 bytes beginning `89 50 4E 47` and comes back at 2x2.
+ *
+ * AND WHAT IS STILL NOT ANSWERED IS REFUSED BY NAME, as before: `NSJPEGFileType` and the rest are types this build
+ * does not write, a non-empty `properties` dictionary is refused rather than ignored (a caller that asked for an
+ * interlaced PNG must not silently get a plain one), and `+representationOfImageRepsInArray:usingType:properties:`
+ * answers ONE rep — because a PNG carries one image — and refuses an array of more rather than dropping pictures.
+ * The two `+TIFFRepresentationOfImageRepsInArray:` forms still refuse, and so do `-canBeCompressedUsing:` (NO for
+ * every compression) and `+getTIFFCompressionTypes:count:` (an EMPTY LIST): TIFF is not written here, and a list of
+ * compressions this class cannot write would be a lie about it.
  *
  * AND WHAT THE PIXEL LAYOUT IS, SINCE A BUFFER NEEDS ONE: non-planar only (`isPlanar:YES` is refused
  * by name), one plane (`planes[0]`), and for a rep built FROM a CGImage the layout is READ OFF that
@@ -93,7 +95,7 @@ typedef enum {
  * CORPUS REFUTES BOTH: Apple's 10.6 header declares it INSIDE THIS VERY ENUM, behind `#if
  * MAC_OS_X_VERSION_MAX_ALLOWED >= MAC_OS_X_VERSION_10_4` — so 10.4 is when it arrives, and the strike
  * was an artefact of the guard, not a fact about the format. A class that cannot WRITE a format is still
- * not missing it from its vocabulary, and the encoder refuses every type by name in any case. */
+ * not missing it from its vocabulary, and the encoder refuses every type except `NSPNGFileType` by name. */
 typedef enum {
 	NSTIFFFileType = 0,
 	NSBMPFileType,
@@ -114,7 +116,7 @@ typedef enum {
 
 /* THE PROPERTY KEYS, AND WHAT EACH ONE CARRIES. Apple declares fourteen, all of them for the ENCODER
  * half — the options a caller hands `-representationUsingType:properties:`, and the values a decoder
- * leaves behind — so on a class with no encoder their VALUES are ours (the standing choice, the one the
+ * leaves behind — so on a class whose encoder reads none of them their VALUES are ours (the standing choice, the one the
  * named images make) while their meaning is Apple's, handed to `-setProperty:withValue:` and read back
  * with `-valueForProperty:` as the bag they were designed for. Declared rather than dropped for the same
  * reason the encoding doors are: a ported caller reads them BY NAME, and a name that does not exist is a
@@ -236,8 +238,8 @@ extern NSString *NSImageLoopCount;                 /* GIF out — an int in an N
 - (void)setProperty:(NSString *)property withValue:(nullable id)value;
 - (nullable id)valueForProperty:(NSString *)property;
 
-/* THE COMPRESSION PAIR. RECORDED, NOT USED — there is no encoder, so the only thing these can honestly
- * do is remember what they were told and hand it back; see the header's note. */
+/* THE COMPRESSION PAIR. RECORDED, NOT USED — this build writes PNG, which has no compression setting to give, so
+ * the only thing these can honestly do is remember what they were told and hand it back; see the header's note. */
 - (void)getCompression:(NSTIFFCompression *)compression factor:(float *)factor;
 - (void)setCompression:(NSTIFFCompression)compression factor:(float)factor;
 

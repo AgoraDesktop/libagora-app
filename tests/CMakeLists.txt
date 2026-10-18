@@ -577,3 +577,12 @@ target_link_libraries(chrome_theme PRIVATE App m)
 add_test(NAME appkit-chrome-theme COMMAND chrome_theme)
 set_tests_properties(appkit-chrome-theme PROPERTIES
   ENVIRONMENT "${_agora_app_test_env};AGORA_CHROME_THEME=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/chrome")
+
+# Writing an image out. The class's encoder door refused for its whole life because Core Graphics had no
+# `CGImageDestination`; this probe measures the answer with the class's own decoder and every refusal that
+# remains beside it.
+add_executable(appkit_bitmap_encode appkit_bitmap_encode.m)
+target_link_libraries(appkit_bitmap_encode PRIVATE App)
+
+add_test(NAME appkit-bitmap-encode COMMAND appkit_bitmap_encode)
+set_tests_properties(appkit-bitmap-encode PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
