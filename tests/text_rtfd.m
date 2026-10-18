@@ -21,6 +21,7 @@
 #import <AppKit/NSAttributedString.h>
 #import <AppKit/NSBitmapImageRep.h>
 #import <AppKit/NSImage.h>
+#import <AppKit/NSParagraphStyle.h>
 #import <AppKit/NSTextAttachment.h>
 #import <Foundation/Foundation.h>
 #include <CoreGraphics/CGDataProvider.h>
@@ -76,6 +77,7 @@ int main(void)
 	NSData *serialized;
 	NSDictionary *children;
 	NSDictionary *docAttrs = nil;
+	NSDictionary *writeAttrs;
 
 	setvbuf(stdout, NULL, _IONBF, 0);
 	check(image != nil && named != nil, "the picture and the wrapper were made");
@@ -100,7 +102,11 @@ int main(void)
 	[store addAttribute:NSAttachmentAttributeName value:withName range:NSMakeRange(1, 1)];
 	whole = NSMakeRange(0, [store length]);
 
-	package = [store RTFDFileWrapperFromRange:whole documentAttributes:NULL];
+	/* **AND A DOCUMENT ATTRIBUTE THE WRITER CONSUMES**, so the package's text carries the fact rather than only the
+	 * caller's dictionary: 36 points is `\deftab720` (twips). */
+	writeAttrs = [NSDictionary dictionaryWithObject:[NSNumber numberWithDouble:36.0]
+						forKey:NSDefaultTabIntervalDocumentAttribute];
+	package = [store RTFDFileWrapperFromRange:whole documentAttributes:writeAttrs];
 	check(package != nil, "the package was made");
 	check(package != nil && [package isDirectory], "and it is a DIRECTORY, which is what a package is");
 	if (package != nil) {
@@ -127,6 +133,8 @@ int main(void)
 			if (text != nil) {
 				check([text rangeOfString:@"\\NeXTGraphic pic.png"].location != NSNotFound,
 				      "whose text REFERS to the picture by that same name");
+				check([text rangeOfString:@"\\deftab720"].location != NSNotFound,
+				      "and carries the default tab interval the writer was asked for, in twips");
 				check([text rangeOfString:@"\\pict"].location == NSNotFound,
 				      "and does NOT also carry it inline — one picture, stored once");
 				[text release];
@@ -135,7 +143,7 @@ int main(void)
 	}
 
 	/* **AND THE SERIALIZED FORM**, which is what a file or a pasteboard carries. */
-	serialized = [store RTFDFromRange:whole documentAttributes:NULL];
+	serialized = [store RTFDFromRange:whole documentAttributes:writeAttrs];
 	check(serialized != nil && [serialized length] > 0, "the package serializes to bytes");
 	if (serialized != nil) {
 		reread = [[NSFileWrapper alloc] initWithSerializedRepresentation:serialized];
@@ -167,6 +175,8 @@ int main(void)
 		      && [[docAttrs objectForKey:NSCharacterEncodingDocumentAttribute] unsignedIntegerValue]
 			 == NSUTF8StringEncoding,
 		      "with the character encoding as an NSNumber holding UTF-8");
+		check(fabs([[docAttrs objectForKey:NSDefaultTabIntervalDocumentAttribute] doubleValue] - 36.0) < 0.01,
+		      "and the default tab interval comes back as 36 points from the package's own text");
 		if (back != nil) {
 			check([back length] == 3, "with the same three characters");
 			printf("  (the package gave %lu character(s))\n", (unsigned long)[back length]);
@@ -194,6 +204,13 @@ int main(void)
 				check([[back string] characterAtIndex:0] == 'A'
 				      && [[back string] characterAtIndex:2] == 'B',
 				      "and the text either side of it unchanged");
+				{
+					NSParagraphStyle *style = [[back attributesAtIndex:0 effectiveRange:NULL]
+						objectForKey:NSParagraphStyleAttributeName];
+
+					check(style != nil && fabs([style defaultTabInterval] - 36.0) < 0.01,
+					      "and the interval is APPLIED to the paragraph, which is what the layout reads");
+				}
 			}
 			[back release];
 		}

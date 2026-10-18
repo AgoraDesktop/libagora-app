@@ -32,3 +32,4 @@ NSString *NSDocumentTypeDocumentAttribute = @"NSDocumentType";
 NSString *NSRTFTextDocumentType = @"NSRTF";
 NSString *NSRTFDTextDocumentType = @"NSRTFD";
 NSString *NSCharacterEncodingDocumentAttribute = @"CharacterEncoding";
+NSString *NSDefaultTabIntervalDocumentAttribute = @"DefaultTabInterval";

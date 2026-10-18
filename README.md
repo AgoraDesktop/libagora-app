@@ -935,9 +935,18 @@ imported and then changed — the changes are recorded in [`PROVENANCE.md`](PROV
   package is behind the text) and the ENCODING as an `NSNumber` holding `NSUTF8StringEncoding`. MEASURED, in
   `tests/text_rtf.m` and `tests/text_rtfd.m`: the plain parse reports type **`NSRTF`** and encoding **4**; both package
   doors report **`NSRTFD`** with the same integer; and a FAILED parse leaves the dictionary UNTOUCHED rather than
-  describing a document that is not there. WHAT IS STILL NOT HERE IS THE WRITERS' SIDE: `-RTFFromRange:documentAttributes:`
-  and `-RTFDFromRange:documentAttributes:` accept a dictionary and read none of it, so a caller cannot yet ask for a
-  document-level fact (a background, a default tab interval) to be embedded in what is written.
+  describing a document that is not there. **AND THE WRITERS' SIDE IS NO LONGER EMPTY**, which the next bullet is.
+- **AND THE WRITERS CONSUME ONE OF THOSE FACTS NOW — THE DEFAULT TAB INTERVAL.** `fn_rtf_text` takes the writer's
+  document-attributes dictionary and the RTFD doors pass theirs through, so `NSDefaultTabIntervalDocumentAttribute`
+  is written as RTF's `\deftabN` in TWIPS (twenty to the point). THE READER DOES NOT MERELY REPORT IT: `\deftabN`
+  becomes a `NSParagraphStyle` with `-defaultTabInterval` set, because Core Text's own default is twelve stops at 28
+  points — a document that names an interval has to carry a style or the layout never sees it. MEASURED: 36 points
+  writes `\deftab720`; a literal `\deftab720` parses to **36.0** and the paragraph style applies **36.0**; the
+  package's own `TXT.rtf` carries the control word and both package doors read it back as **36.0** with the style
+  applied. `-RTFRepresentation` takes no dictionary, so its bytes are unchanged. WHAT IS STILL NOT EMBEDDED IS NAMED
+  RATHER THAN GLOSSED: a document background colour (`\cb` is a run/paragraph property too, so the tier would have
+  to guess which meaning an occurrence has), the read-only and view-mode flags (no control word in this tier's
+  vocabulary), and the hyphenation factor (a 0..1 number where RTF carries an on/off switch).
 - **AND THE REFUSAL CENSUS IS A TEST NOW, NOT 129 PROSE CLAIMS.** This layer holds 129 `APPKIT-REFUSE` sites across 24
   files, and until this slice nothing watched them: a door quietly acquiring a real implementation was an improvement
   nobody recorded, and a real door quietly degrading into a refusal was a regression nobody saw. `tests/refusal_census.txt`

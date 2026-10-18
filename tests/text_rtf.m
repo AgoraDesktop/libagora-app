@@ -100,6 +100,35 @@ int main(void)
 	}
 	[parsed release];
 
+	/* **AND THE DOCUMENT'S DEFAULT TAB INTERVAL, WHICH IS ONE FACT ABOUT THE WHOLE FILE.** `\deftabN` is in twips;
+	 * 720 is 36 points. The reader must both REPORT it and APPLY it — a document attribute a caller can read but the
+	 * layout cannot use would be a label rather than a document fact. */
+	{
+		NSString *tabbed = @"{\\rtf1\\ansi\\deftab720\n\\pard\\ql a\\tab b\\par}";
+		NSData *tabData = [tabbed dataUsingEncoding:NSUTF8StringEncoding];
+		NSDictionary *tabAttrs = nil;
+		NSAttributedString *tabbedBack = [[NSAttributedString alloc] initWithRTF:tabData
+							      documentAttributes:&tabAttrs];
+
+		check(tabbedBack != nil, "a document with a default tab interval parses");
+		{
+			NSNumber *interval = [tabAttrs objectForKey:NSDefaultTabIntervalDocumentAttribute];
+			NSParagraphStyle *style = (tabbedBack != nil && [tabbedBack length] > 0)
+				? [[tabbedBack attributesAtIndex:0 effectiveRange:NULL]
+					objectForKey:NSParagraphStyleAttributeName] : nil;
+
+			printf("  (note: `\\deftab720` came back as %.1f point(s), applied as %.1f)\n",
+			       interval != nil ? [interval doubleValue] : -1.0,
+			       style != nil ? [style defaultTabInterval] : -1.0);
+			check([interval isKindOfClass:[NSNumber class]]
+			      && fabs([interval doubleValue] - 36.0) < 0.01,
+			      "and reports 36 points — 720 twips at twenty to the point");
+			check(style != nil && fabs([style defaultTabInterval] - 36.0) < 0.01,
+			      "and APPLIES it to the paragraph style, which is what the layout reads");
+		}
+		[tabbedBack release];
+	}
+
 	/* 2. **AND A DOCUMENT THAT IS NOT RTF ANSWERS NIL**, not an empty string. */
 	{
 		NSData *junk = [@"not an rtf document" dataUsingEncoding:NSUTF8StringEncoding];

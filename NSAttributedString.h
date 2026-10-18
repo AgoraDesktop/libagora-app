@@ -104,6 +104,15 @@ extern NSString *NSRTFTextDocumentType;
 extern NSString *NSRTFDTextDocumentType;
 extern NSString *NSCharacterEncodingDocumentAttribute;
 
+/* **AND THE ONE DOCUMENT ATTRIBUTE THE WRITER CONSUMES.** The era's block annotates it "NSDefaultTabInterval",
+ * `NSNumber` containing a floating point value, "representing the document-wide default tab stop interval, in
+ * points" — and RTF has one control word for exactly that fact, `\deftabN`, measured in TWIPS (twentieths of a
+ * point). It is the one key in the block this tier can write WITHOUT INVENTING A MAPPING: the background colour
+ * and the read-only/view-mode flags need control words the tier would have to guess, and the hyphenation factor is
+ * a 0..1 number where RTF carries an on/off switch. So the writer writes this one and the reader reports it and
+ * APPLIES it to the paragraphs it builds, which is what makes it a round trip rather than a label. */
+extern NSString *NSDefaultTabIntervalDocumentAttribute;
+
 /* ============================================================================================ *
  * AND THE DOOR THAT READS RICH TEXT FORMAT (RTF), WHICH IS THE HALF THIS TIER'S FOUNDATION DOES *
  * NOT HAVE. `libagora-base` already WRITES RTF — its `-RTFFromRange:documentAttributes:` is a real   *

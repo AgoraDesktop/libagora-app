@@ -277,7 +277,8 @@ static NSArray *fn_paragraph_lists(NSAttributedString *source, NSUInteger index)
 	return (style != nil) ? [style textLists] : nil;
 }
 
-NSString *fn_rtf_text(NSAttributedString *source, NSMutableDictionary *attachmentFiles)
+NSString *fn_rtf_text(NSAttributedString *source, NSMutableDictionary *attachmentFiles,
+		      NSDictionary *documentAttributes)
 {
 	NSString *string = [source string];
 	NSUInteger n = [string length];
@@ -288,6 +289,13 @@ NSString *fn_rtf_text(NSAttributedString *source, NSMutableDictionary *attachmen
 	NSMutableArray *listStacks = [NSMutableArray array];			/* id - 1 → that stack */
 	NSInteger curFont = -1, curFg = -1, curBg = -1, curHalf = -1;
 	BOOL curUnder = NO, curStrike = NO;
+	/* **AND THE ONE DOCUMENT ATTRIBUTE THE WRITER READS.** RTF's `\deftabN` is in TWIPS, so the value in points is
+	 * multiplied by twenty; a non-NSNumber (a caller's wrong type) or a non-positive interval writes nothing, which
+	 * leaves the header exactly as it was before the key existed. */
+	id tabValue = (documentAttributes != nil)
+		? [documentAttributes objectForKey:NSDefaultTabIntervalDocumentAttribute] : nil;
+	long deftabTwips = ([tabValue isKindOfClass:[NSNumber class]])
+		? lround([tabValue doubleValue] * 20.0) : 0;
 	NSUInteger i;
 
 	for (i = 0; i < n; i++) {
@@ -323,7 +331,11 @@ NSString *fn_rtf_text(NSAttributedString *source, NSMutableDictionary *attachmen
 		}
 	}
 
-	[out appendString:@"{\\rtf1\\ansi\\ansicpg1252\\deff0\n"];
+	[out appendString:@"{\\rtf1\\ansi\\ansicpg1252\\deff0"];
+	if (deftabTwips > 0) {
+		[out appendFormat:@"\\deftab%ld", deftabTwips];
+	}
+	[out appendString:@"\n"];
 	[out appendString:@"{\\fonttbl"];
 	for (i = 0; i < [fontNames count]; i++) {
 		[out appendFormat:@"{\\f%lu %@;}", (unsigned long)i, [fontNames objectAtIndex:i]];
@@ -508,6 +520,11 @@ NSString *fn_rtf_text(NSAttributedString *source, NSMutableDictionary *attachmen
 	CGFloat curSize = 12.0;
 	BOOL curUnderline = NO, curStrike = NO;
 	NSTextAlignment curAlign = NSLeftTextAlignment;
+	/* **AND THE DOCUMENT-WIDE TAB INTERVAL, FROM `\deftabN` IN TWIPS.** It is applied to every paragraph style the
+	 * reader builds — Core Text's own default is twelve stops at 28 points, which is why a document that names an
+	 * interval must carry a style even when it has no other paragraph property — and it is reported in the document
+	 * attributes, so the fact survives into a caller's hands as well as into the layout. */
+	CGFloat documentTabInterval = 0.0;
 	NSInteger destination = 0;	/* 0 body, 1 font table, 2 colour table, 3 picture, 4 graphic, 5 list table */
 	/* **AND THE LISTS**: the definitions the header declares, keyed by RTF's list id, and the id and depth the
 	 * paragraph being read is in. A paragraph's `-textLists` is a STACK of those definitions, which is why the depth is
@@ -568,11 +585,13 @@ NSString *fn_rtf_text(NSAttributedString *source, NSMutableDictionary *attachmen
 		if (curUnderline) { [a setObject:[NSNumber numberWithInteger:NSUnderlineStyleSingle] forKey:NSUnderlineStyleAttributeName]; } \
 		if (curStrike) { [a setObject:[NSNumber numberWithInteger:NSUnderlineStyleSingle] forKey:NSStrikethroughStyleAttributeName]; } \
 		if (pendingAttachment != nil) { [a setObject:pendingAttachment forKey:NSAttachmentAttributeName]; } \
-		if (curAlign != NSLeftTextAlignment || [fn_lists_for_depth(listDefinitions, currentListId, currentLevel) count] > 0) { \
+		if (curAlign != NSLeftTextAlignment || [fn_lists_for_depth(listDefinitions, currentListId, currentLevel) count] > 0 \
+		    || documentTabInterval > 0.0) { \
 			NSMutableParagraphStyle *ps = [[NSParagraphStyle defaultParagraphStyle] mutableCopy]; \
 			NSArray *paragraphLists = fn_lists_for_depth(listDefinitions, currentListId, currentLevel); \
 			[ps setAlignment:curAlign]; \
 			if ([paragraphLists count] > 0) { [ps setTextLists:paragraphLists]; } \
+			if (documentTabInterval > 0.0) { [ps setDefaultTabInterval:documentTabInterval]; } \
 			[a setObject:ps forKey:NSParagraphStyleAttributeName]; \
 			[ps release]; \
 		} \
@@ -823,6 +842,14 @@ NSString *fn_rtf_text(NSAttributedString *source, NSMutableDictionary *attachmen
 				 * matter are the ones after it. */
 				currentListId = 0;
 				currentLevel = 0;
+			} else if ([word isEqualToString:@"deftab"]) {
+				/* **THE DOCUMENT'S DEFAULT TAB STOP, IN TWIPS (TWENTIETHS OF A POINT).** A mark is pushed because the
+				 * interval changes the paragraph style every run from here on carries; `\deftab` in a nested
+				 * destination is not the document's and is ignored. */
+				if (destination == 0 && param > 0) {
+					documentTabInterval = (CGFloat)param / 20.0;
+					FN_PUSH_MARK();
+				}
 			} else if ([word isEqualToString:@"fonttbl"]) {
 				destination = 1;
 				destDepth = depth;
@@ -938,6 +965,10 @@ NSString *fn_rtf_text(NSAttributedString *source, NSMutableDictionary *attachmen
 				  forKey:NSDocumentTypeDocumentAttribute];
 			[facts setObject:[NSNumber numberWithUnsignedInteger:NSUTF8StringEncoding]
 				  forKey:NSCharacterEncodingDocumentAttribute];
+			if (documentTabInterval > 0.0) {
+				[facts setObject:[NSNumber numberWithDouble:documentTabInterval]
+					  forKey:NSDefaultTabIntervalDocumentAttribute];
+			}
 			*dict = facts;
 		}
 		self = [self initWithAttributedString:built];
@@ -965,7 +996,7 @@ NSString *fn_rtf_text(NSAttributedString *source, NSMutableDictionary *attachmen
  * subset is the reader's, which is the point: what this writes, `-initWithRTF:` reads back. */
 - (NSData *)RTFRepresentation
 {
-	NSString *text = fn_rtf_text(self, nil);
+	NSString *text = fn_rtf_text(self, nil, nil);
 
 	return (text != nil) ? [text dataUsingEncoding:NSUTF8StringEncoding] : nil;
 }

@@ -21,8 +21,13 @@
  *   else  — write a REFERENCE to a file in the package (`{\NeXTGraphic <name> …}`) and put the bytes under that name
  *           in the dictionary, which is what RTFD is.
  *
- * The answer is autoreleased, and nil only when the string is nil. */
-extern NSString *fn_rtf_text(NSAttributedString *source, NSMutableDictionary *attachmentFiles);
+ * `documentAttributes` is the writer's INPUT dictionary, or nil. The one key it consumes today is
+ * `NSDefaultTabIntervalDocumentAttribute`, written as RTF's `\deftabN` (twips); a nil dictionary writes exactly the
+ * bytes this function wrote before the key existed, so `-RTFRepresentation` stays byte-identical.
+ *
+ * The answer is autoreleased, and nil only when the source is nil. */
+extern NSString *fn_rtf_text(NSAttributedString *source, NSMutableDictionary *attachmentFiles,
+			     NSDictionary *documentAttributes);
 
 /* **AND THE READER'S OTHER DOOR, FOR A DOCUMENT WHOSE PICTURES ARE FILES.** `packageFiles` is the package's children
  * keyed by the names the text refers to, or nil for a standalone RTF document — where `\NeXTGraphic` then has nothing to

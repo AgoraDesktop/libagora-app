@@ -29,10 +29,12 @@
  *
  * **AND THE READERS REPORT THE DOCUMENT, WHICH THEY DID NOT BEFORE**: `NSDocumentTypeDocumentAttribute` names
  * `NSRTFDTextDocumentType` through these doors (the plain RTF reader names `NSRTFTextDocumentType`), and
- * `NSCharacterEncodingDocumentAttribute` is the UTF-8 integer — the only encoding either reader decodes. WHAT IS
- * STILL NOT HERE IS THE WRITERS' SIDE OF DOCUMENT ATTRIBUTES: `-RTFDFromRange:documentAttributes:` and
- * `-RTFFromRange:documentAttributes:` take a dictionary and read none of it, so a caller cannot yet ask for a
- * document-level fact (a background, a default tab interval) to be embedded in what is written.
+ * `NSCharacterEncodingDocumentAttribute` is the UTF-8 integer — the only encoding either reader decodes. AND THE
+ * WRITERS CONSUME ONE DOCUMENT ATTRIBUTE NOW: `NSDefaultTabIntervalDocumentAttribute` is written as RTF's
+ * `\deftabN` in twips and read back as a paragraph style's `-defaultTabInterval`, which is what the layout reads. WHAT
+ * IS STILL NOT EMBEDDED IS STATED RATHER THAN GLOSSED: a document background colour and the read-only/view-mode
+ * flags need control words this tier would have to guess, and the hyphenation factor is a 0..1 number where RTF
+ * carries an on/off switch — so those three keys are not written.
  */
 #import "NSAttributedStringRTF_internal.h"
 
@@ -57,7 +59,6 @@ static NSFileWrapper *fn_rtfd_package(NSAttributedString *self, NSRange range, N
 	NSEnumerator *names;
 	NSString *name;
 
-	(void)dict;	/* document attributes are not produced yet — see the note at the top of this file. */
 	if (range.location + range.length > [self length]) {
 		fprintf(stderr, "APPKIT-REFUSE: -RTFDFileWrapperFromRange:documentAttributes: was given a range "
 				"past the end of the string\n");
@@ -66,7 +67,7 @@ static NSFileWrapper *fn_rtfd_package(NSAttributedString *self, NSRange range, N
 	piece = (range.length == [self length] && range.location == 0)
 		? self : [self attributedSubstringFromRange:range];
 	attachmentFiles = [NSMutableDictionary dictionary];
-	text = fn_rtf_text(piece, attachmentFiles);
+	text = fn_rtf_text(piece, attachmentFiles, dict);
 	if (text == nil) {
 		return nil;
 	}
