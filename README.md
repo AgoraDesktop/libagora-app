@@ -1036,7 +1036,7 @@ imported and then changed — the changes are recorded in [`PROVENANCE.md`](PROV
   (`tests/text_input_context.m`), a dead-key table (`tests/text_input_method.m`), a candidate window
   (`tests/text_candidate_list.m`). What a THIRD-PARTY input method or a ported client declares against was not: 10.6
   declares fifteen doors on `NSTextInputClient` and this tree declared none of them. `NSTextView` conforms to both
-  protocols now — the older `NSTextInput` it always answered, and this one — and six of the fifteen are new methods, so
+  protocols now — the older `NSTextInput` it always answered, and this one — and nine of the fifteen are new methods, so
   the probe holds the view as `id <NSTextInputClient>` and calls EVERY door through the protocol, which is what a ported
   client actually needs.
 - **AND TWO OF THE NEW DOORS ARE FACTS ABOUT THIS LAYER, STATED RATHER THAN FAKED**: `-baselineDeltaForCharacterAtIndex:`
@@ -1052,8 +1052,22 @@ imported and then changed — the changes are recorded in [`PROVENANCE.md`](PROV
   tests the CONTRACT (a fraction in [0,1], deterministic, non-decreasing across the line) rather than an absolute number,
   because a view with no window has degenerate character rects and an absolute check there would measure the geometry
   rather than the arithmetic.
+- **AND THREE OF THE FIFTEEN WERE STILL MISSING, WHICH THE BUILD CAUGHT AND THE PROBE NOW HOLDS.** The view declared
+  `NSTextInputClient` and answered twelve of its fifteen required doors: `-insertText:replacementRange:`,
+  `-setMarkedText:selectedRange:replacementRange:` and `-firstRectForCharacterRange:actualRange:` were absent, so the
+  conformance claim was false at runtime for any ported input method asking the modern spellings — and the compiler's
+  `-Wprotocol` warning was the thing that said so. They are here now, and MEASURED through `id <NSTextInputClient>`:
+  inserting `XY` over (1,2) of `abcd` gives **`aXYd`** with the caret at **3**; `NSNotFound` replaces the selection
+  (`abZd`) or, during a composition, the MARKED range (composition `ab` confirmed by `q` gives **`q`**); marking `XY`
+  over (1,2) gives **`aXYd`** with the mark at **(1,2)** and the selection at **(2,1)** inside it, and the next call
+  with `NSNotFound` grows it to **`aZWd`** with the mark still at **(1,2)**; and
+  `-firstRectForCharacterRange:actualRange:` writes back the CLAMPED range — (2,20) comes back as **(2,2)** and (10,5)
+  as **(4,0)**, each answering the same rectangle the old one-range door does for that range. THE HONEST BOUNDARY IS
+  NAMED TOO: the characters are inserted and inherit the run at the insertion point, so an `NSAttributedString`'s
+  ATTRIBUTES are not applied by this pair.
 - **AND THE CHECK THAT LED HERE WAS WRONG TWICE BEFORE IT WAS RIGHT, WHICH IS WORTH RECORDING**: a script comparing
   `NSTextInput`'s doors against `NSTextView.m` reported `-selectedRange` and `-doCommandBySelector:` as unimplemented —
-  both are INHERITED (`NSText` and `NSResponder`), so the conformance was complete all along and the apparent bug was an
-  artefact of looking at one file. The lesson is the one this file keeps re-learning: a check has to be about the thing
-  it claims to measure, and INHERITANCE IS PART OF THAT THING.
+  both are INHERITED (`NSText` and `NSResponder`), so THOSE TWO FINDINGS were artefacts of looking at one file. BUT THE
+  CONFORMANCE WAS NOT COMPLETE, which the same honesty has to say: the compiler found the three range-carrying doors
+  above, and they were real. The lesson is the one this file keeps re-learning: a check has to be about the thing
+  it claims to measure, and INHERITANCE IS PART OF THAT THING — as is the COMPILER's view of a protocol.

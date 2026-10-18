@@ -843,8 +843,19 @@ static void cg_announce(NSText *text, NSString *name, SEL delegateSelector)
  *
  * **AND AN INSERT THAT CONFIRMS A COMPOSITION REPLACES THE MARKED RANGE RATHER THAN THE SELECTION.** An input method
  * commits what it was composing by calling this door, and the caret sits INSIDE the mark while it does — so replacing
- * the selection would splice the confirmed text into the middle of the composition instead of over it. */
+ * the selection would splice the confirmed text into the middle of the composition instead of over it.
+ *
+ * **AND THE MODERN DOOR MAY NAME WHAT IT REPLACES.** `-insertText:replacementRange:` is the same edit with the target
+ * handed in instead of inferred: a range with a location replaces exactly that range, and `NSNotFound` falls back to
+ * the rule above (the marked range, else the selection). The characters are what is inserted, and the run they inherit
+ * is the one at the insertion point — this view's standing rule — so an `NSAttributedString`'s ATTRIBUTES are not
+ * applied by this pair; the marked-text drawing is the view's own (see `-drawRect:`). */
 - (void)insertText:(id)insertString
+{
+	[self insertText:insertString replacementRange:NSMakeRange(NSNotFound, 0)];
+}
+
+- (void)insertText:(id)insertString replacementRange:(NSRange)replacementRange
 {
 	NSString *text = ([insertString isKindOfClass:[NSAttributedString class]])
 			 ? [(NSAttributedString *)insertString string] : (NSString *)insertString;
@@ -853,7 +864,9 @@ static void cg_announce(NSText *text, NSString *name, SEL delegateSelector)
 	if (![self isEditable] || text == nil) {
 		return;
 	}
-	target = [self hasMarkedText] ? _cg_markedRange : _selectedRange;
+	target = (replacementRange.location != NSNotFound)
+		 ? replacementRange
+		 : ([self hasMarkedText] ? _cg_markedRange : _selectedRange);
 	[self replaceCharactersInRange:target withString:text];
 }
 
@@ -893,14 +906,44 @@ static void cg_announce(NSText *text, NSString *name, SEL delegateSelector)
 /* **EVERY KEYSTROKE OF A COMPOSITION IS ONE CALL, AND THE STRING IS THE WHOLE COMPOSITION SO FAR.** The target is the
  * marked range when there is one — a composition grows by replacing itself — and the SELECTION otherwise, which is how
  * the first keystroke starts one. An EMPTY string clears the marked text, which is the input method taking a
- * composition back. */
+ * composition back.
+ *
+ * **AND THE MODERN DOOR NAMES THE RANGE ITSELF**, with `NSNotFound` meaning the rule above. `selectedRange` is
+ * measured INSIDE the string being inserted — the 10.6 header says so in as many words — which is why the caret is
+ * written as `location + selectedRange.location` rather than taken as a document range. */
 - (void)setMarkedText:(id)string selectedRange:(NSRange)selectedRange
+{
+	NSRange target = [self hasMarkedText] ? _cg_markedRange : _selectedRange;
+
+	[self cg_setMarkedText:string selectedRange:selectedRange inRange:target];
+}
+
+- (void)setMarkedText:(id)string selectedRange:(NSRange)selectedRange replacementRange:(NSRange)replacementRange
+{
+	NSRange target = (replacementRange.location != NSNotFound)
+		 ? replacementRange
+		 : ([self hasMarkedText] ? _cg_markedRange : _selectedRange);
+
+	[self cg_setMarkedText:string selectedRange:selectedRange inRange:target];
+}
+
+/* THE BODY BOTH DOORS SHARE. The target is CLAMPED BEFORE its location is remembered: an explicit range past the end
+ * would otherwise put the marked range's recorded location there even after the edit primitive brought the actual
+ * replacement back inside the store. */
+- (void)cg_setMarkedText:(id)string selectedRange:(NSRange)selectedRange inRange:(NSRange)target
 {
 	NSString *text = ([string isKindOfClass:[NSAttributedString class]])
 			 ? [(NSAttributedString *)string string] : (NSString *)string;
-	NSRange target = [self hasMarkedText] ? _cg_markedRange : _selectedRange;
-	NSUInteger location = target.location;
+	NSUInteger length = [_cg_textStorage length];
+	NSUInteger location;
 
+	if (target.location > length) {
+		target.location = length;
+	}
+	if (target.location + target.length > length) {
+		target.length = length - target.location;
+	}
+	location = target.location;
 	if (text == nil) {
 		text = @"";
 	}
@@ -956,6 +999,28 @@ static void cg_announce(NSText *text, NSString *name, SEL delegateSelector)
 			  inWindow.size.width, inWindow.size.height);
 }
 
+/* **AND THE MODERN DOOR WRITES BACK WHAT IT ACTUALLY ANSWERED**, the same way the substring door does. The proposal is
+ * clamped to the store's own length — an out-of-document range is answered as an empty range at the end — and the
+ * clamped range is what `actualRange` receives. THE RECTANGLE IS THE FIRST CHARACTER's, which is the 10.6 header's own
+ * wording ("the first logical rectangular area") and the old door's answer; this tier's text flows left to right, so a
+ * range's first character is its first logical area. */
+- (NSRect)firstRectForCharacterRange:(NSRange)range actualRange:(NSRangePointer)actualRange
+{
+	NSUInteger length = [_cg_textStorage length];
+	NSRange clamped = range;
+
+	if (clamped.location > length) {
+		clamped.location = length;
+	}
+	if (clamped.location + clamped.length > length) {
+		clamped.length = length - clamped.location;
+	}
+	if (actualRange != NULL) {
+		*actualRange = clamped;
+	}
+	return [self firstRectForCharacterRange:clamped];
+}
+
 - (NSUInteger)characterIndexForPoint:(NSPoint)point
 {
 	NSRect frame = [[self window] frame];
@@ -966,7 +1031,7 @@ static void cg_announce(NSText *text, NSString *name, SEL delegateSelector)
 
 /* ============================================================================================ *
  * AND THE `NSTextInputClient` DOORS, WHICH ARE THE ONES AN INPUT METHOD MODERN ENOUGH TO ASK FOR  *
- * A CANDIDATE WINDOW'S PLACEMENT NEEDS. Six of the fifteen are new here; the other nine are the
+ * A CANDIDATE WINDOW'S PLACEMENT NEEDS. Nine of the fifteen are new in this class; the other six are the
  * ones `NSTextInput` already had and `NSText`'s and `NSResponder`'s ancestors already answer.     *
  * ============================================================================================ */
 
