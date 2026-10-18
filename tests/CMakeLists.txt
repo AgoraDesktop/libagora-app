@@ -90,6 +90,13 @@ target_link_libraries(menu_validation PRIVATE App)
 add_test(NAME appkit-menu-validation COMMAND menu_validation)
 set_tests_properties(appkit-menu-validation PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
 
+# **THE OUTLINE: THE TABLE'S TREE, FLATTENED.** Roots and children, levels, the disclosure triangle's click, the
+# outline column's inset, and selection in item terms — offscreen.
+add_executable(outline_view outline_view.m)
+target_link_libraries(outline_view PRIVATE App m)
+add_test(NAME appkit-outline-view COMMAND outline_view)
+set_tests_properties(appkit-outline-view PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
+
 # **THE TABLE: A DATA SOURCE'S ROWS, COLUMNS, HEADER, SELECTION AND INK.** Offscreen: a scroll view, a table and a
 # header are geometry and drawing, and the one window in the probe only supplies a coordinate root for the events.
 add_executable(table_view table_view.m)

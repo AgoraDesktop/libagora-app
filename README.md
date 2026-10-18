@@ -12,8 +12,9 @@ directory (`../README.md`). `libagora-app` is the top of its stack: above it the
 window and view classes there is now a cell and control layer (buttons, switches and sliders), a tracking-area
 engine, one line of editable text with the standard key bindings, a title bar the client DRAWS itself, the menu
 subsystem — validation, a selection chip, and a pointer grab that lets a popup be dismissed by clicking away —
-a TOOLBAR: items from a delegate, in a band the window reserves between its chrome and its content, and a
-CELL-BASED TABLE: columns, rows, a scrolling header and a selection.
+and a TOOLBAR: items from a delegate, in a band the window reserves between its chrome and its content. Above the
+controls there is a CELL-BASED TABLE: columns, rows, a scrolling header and a selection, and an OUTLINE VIEW over it:
+the same table, flattened from a tree with disclosure triangles.
 
 The classes here come from the Fiwix AppKit (same author, same licence — see `PROVENANCE.md`), and they
 talked to an X server: `NSWindow.m` called `XOpenDisplay`, `XCreateSimpleWindow`, `XMapWindow`, `XPutImage`
@@ -92,6 +93,7 @@ tests/
   chrome_buttons.m              and what a chrome button DOES: a click through the seam, and what happened
   toolbar.m                     the TOOLBAR: the delegate's items, the band, the ink and the click
   table_view.m                  the TABLE: columns, rows, the header, selection, the divider drag and the ink
+  outline_view.m                the OUTLINE: the tree flattened, levels, the triangle's click and item selection
   control_drag.m                and what a DRAG costs: forty motions, and how many frames the window committed
   run-*-headless.sh             ctest: a compositor with a virtual monitor (no desktop input involved)
   run-*-nested.sh, inspect.py   the PIXEL tests, and they are OPT-IN: `gnome-shell --nested` is a whole
@@ -787,13 +789,23 @@ the header's.
 
 **WHAT THIS SLICE DOES NOT DO.** Editing through the field editor, drag and drop, type-select, variable row heights,
 column reordering and autosave are not here; the header can resize a column but not yet drag it to another place.
-`-editedRow`/`-editedColumn` answer -1 for the same reason. `NSOutlineView` is the next slice and subclasses this
-class; `NSSplitView`, `NSSegmentedControl` and `NSPathControl` are the rest of the Finder shell's prerequisites.
+`-editedRow`/`-editedColumn` answer -1 for the same reason. `NSOutlineView` is here now and subclasses this class;
+`NSSplitView`, `NSSegmentedControl` and `NSPathControl` are the rest of the Finder shell's prerequisites.
 
 `tests/table_view.m` is the probe: it puts a three-column table in a scroll view, measures the columns, rows and
 cells, exercises a delegate that refuses one row, drives the header's divider and sort click through real events,
 and draws the table and the header into bitmaps to find their ink. It also checks the window fix this slice needed:
 a content view now follows EVERY frame set, not only one carrying a toolbar.
+
+**`NSOutlineView` IS THE SAME TABLE WITH A FLATTENED TREE.** `-reloadData` asks the data source for the roots and
+walks every open item depth-first into a row list with a parallel level array; `-itemAtRow:`, `-rowForItem:` and
+`-levelForRow:` are then array lookups, so drawing never asks the model where anything is. The expanded set is by
+ITEM IDENTITY — two equal items are two rows — and `-expandItem:`, `-collapseItem:` and their child-recursive forms
+announce the four item notifications. The OUTLINE COLUMN is the one that carries the tree: its cell frame is inset by
+`level * indentationPerLevel` plus the triangle's box, the triangle is drawn in the reserved space, and a click inside
+that box expands or collapses the row. The other columns keep their own x, which is what makes a source list's text
+line up while its icons and dates do not move. `tests/outline_view.m` drives the levels, the expand/collapse state,
+the triangle's click, the inset geometry and item-based selection.
 
 ### Still absent, and why
 
@@ -803,7 +815,7 @@ reply dance on `NSWindow`), the FRAME-AUTOSAVE strings, the CURSOR-RECT invalida
 implemented. What is still absent is the DRAWER (the class — `-drawers` answers an empty array, which is Apple's own
 contract), the TOOLBAR'S CUSTOMIZATION PALETTE (the toolbar itself is here; the palette refuses by name), the TABLE'S
 EDITING, DRAG AND DROP, TYPE-SELECT, VARIABLE ROW HEIGHTS, COLUMN REORDERING AND AUTOSAVE (the cell-based core is
-here), `NSOutlineView`, `NSSplitView`, `NSSegmentedControl` and `NSPathControl` (the rest of the Finder shell), and the
+here), `NSSplitView`, `NSSegmentedControl` and `NSPathControl` (the rest of the Finder shell), and the
 script-command doors, which are declared and REFUSE by name; what the window's close,
 minimise and zoom buttons DO is now this tier's — each goes through the `-perform…` door its menu item sends — but
 the MINIMISE is

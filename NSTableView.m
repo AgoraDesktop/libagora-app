@@ -753,8 +753,19 @@ NSString *NSTableViewColumnDidResizeNotification = @"NSTableViewColumnDidResizeN
 	[self setNeedsDisplay:YES];
 }
 
-- (NSIndexSet *)selectedColumnIndexes { return [[_selectedColumnIndexes copy] autorelease]; }
-- (NSIndexSet *)selectedRowIndexes { return [[_selectedRowIndexes copy] autorelease]; }
+/* **THE GETTERS ANSWER A FROZEN SNAPSHOT, NOT THE LIVE SET.** `-copy` on an `NSMutableIndexSet` in this Foundation
+ * is a RETAIN (an immutable needs no copy), so returning `copy` handed a caller the table's own mutable selection —
+ * a caller could edit the selection through the getter by accident, and this table's own outline subclass read a
+ * "before" that the selection then mutated underneath it. `initWithIndexSet:` is the genuinely frozen answer. */
+- (NSIndexSet *)selectedColumnIndexes
+{
+	return [[[NSIndexSet alloc] initWithIndexSet:_selectedColumnIndexes] autorelease];
+}
+
+- (NSIndexSet *)selectedRowIndexes
+{
+	return [[[NSIndexSet alloc] initWithIndexSet:_selectedRowIndexes] autorelease];
+}
 
 - (NSInteger)selectedColumn
 {

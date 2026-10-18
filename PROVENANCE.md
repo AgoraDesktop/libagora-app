@@ -179,7 +179,8 @@ the geometry, the ink, the click and the configuration round trip.
 
 ## 10. The table view is written from the SDK headers, not imported
 
-**`NSTableView`, `NSTableColumn`, `NSTableHeaderView` and `NSTableHeaderCell` are this repository's own code**, written
+**`NSTableView`, `NSTableColumn`, `NSTableHeaderView`, `NSTableHeaderCell` and `NSOutlineView` are this repository's
+own code**, written
 against the declarations in the MacOSX10.6 SDK rather than copied from the Fiwix tree (which has no table). They follow
 the era's cell-based shape: a column owns one data cell that each row lends, the data source supplies the value, and
 the table supplies the geometry and the selection.
@@ -194,8 +195,9 @@ Two pieces are this tier's rather than the SDK's, and both are recorded where th
   needs no second coordinate system.
 
 The first slice is cell-based and deliberately does not do editing, drag and drop, type-select, variable row heights,
-column reordering or autosave; `NSTableView.h` names the omissions. `tests/table_view.m` holds the geometry, the
-header gesture and the ink.
+column reordering or autosave; `NSTableView.h` names the omissions. `NSOutlineView` is the same table with a
+flattened tree, an identity-based expanded set and the disclosure triangle; `tests/table_view.m` and
+`tests/outline_view.m` hold the geometry, the header gesture, the tree and the ink.
 
 ## Keeping in sync
 
