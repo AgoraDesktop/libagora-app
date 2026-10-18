@@ -964,3 +964,13 @@ imported and then changed — the changes are recorded in [`PROVENANCE.md`](PROV
   (154 faces here), evicting its own entries, so it is 512 now. MEASURED: a repeated fallback miss **0.0001 s against
   0.0070 s**, and `text_hyphenation` under the sanitizer **13 SECONDS against MORE THAN 280** — zero reports either way,
   because the cost was pure file I/O and never a memory defect.
+- **AND THE 60-SECOND CASE IS 4 SECONDS NOW, WHICH SETTLES WHERE ITS TIME WAS GOING.** `appkit-text-layout-overflow` was
+  the reason this suite did not get run casually: MEASURED at ~60 s before the font-walk fix and **4 s** after it, with
+  the case's own answer unchanged (`0 case(s) failed`, and the same `2 fragment(s)` it always reported). It was never
+  doing slow WORK — it was paying the directory walk once per character that needed a fallback face, which is the same
+  defect the sanitizer sweep found in `text_hyphenation` and the same one the two fixes behind it addressed.
+- **AND THE WHOLE SUITE IS RUNNABLE NOW, WHICH IS THE POINT OF FIXING IT**: **70 of 70 tests pass in 107 SECONDS**, and
+  the slowest case is a headless window test at **7.3 s** — not a text case, and not close to a minute. `window-headless`,
+  `events-headless` and `menu-headless` pass in the same run, so the compositor cases are green here too. A suite that
+  takes under two minutes is one somebody runs after every change; that is worth more than the feature the time was
+  being spent on.
