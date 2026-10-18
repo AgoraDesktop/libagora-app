@@ -25,10 +25,12 @@
  * DOES THE HALF THAT CROSSES THE OBJECT BOUNDARY — off the old manager's list and onto the new one's — which is why it
  * exists beside the primitive.
  *
- * **AND THE CONTAINER IS NOT GENERAL: `-isSimpleRectangularTextContainer` ANSWERS YES.** Apple's default returns YES
- * and a SUBCLASS overrides it to NO when its region has holes or concavities — which is exactly the line between "the
- * fragment is the intersection with a rectangle" and "the fragment needs a region walk", so this class implements the
- * first and NAMES the second as the subclass's.
+ * **AND THE CONTAINER IS ONLY A RECTANGLE BY DEFAULT: `-isSimpleRectangularTextContainer` ANSWERS YES.** Apple's
+ * default returns YES and a SUBCLASS overrides it to NO when its region has holes or concavities. THAT ANSWER IS
+ * READ NOW: the layout manager keeps the cheap arithmetic for a YES — the container's width less its padding, at x=0,
+ * with a ZERO HEIGHT meaning unbounded, which is what a scrolling text view's container carries — and for a NO it
+ * ASKS `-lineFragmentRectForProposedRect:sweepDirection:movementDirection:remainingRect:` for each line's band and
+ * lays the line in the subrect's x and width, continuing into the remaining rect when the region hands one back.
  */
 #ifndef APPKIT_NSTEXTCONTAINER_H
 #define APPKIT_NSTEXTCONTAINER_H

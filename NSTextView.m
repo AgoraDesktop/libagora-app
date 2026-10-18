@@ -576,6 +576,27 @@ static void cg_announce(NSText *text, NSString *name, SEL delegateSelector)
  * What it keeps is the BACKGROUND FILL and the SELECTION, both of which are the VIEW's — the selection because only
  * the view knows where it is. THE GLYPHS AND THEIR RUNS ARE THE MANAGER'S: a foreground colour, a background colour and
  * an underline all come out of `NSLayoutManager`'s two draw doors. */
+/* **AND A LINE'S INK IS CLIPPED TO THE SUBRECT THE CONTAINER GAVE IT.** With a shaped container one logical line can
+ * be set in more than one fragment, and an index at the boundary answers the NEXT part's x — so a band drawn from it
+ * would span the hole between them. The fragment's used rect IS that part's ink, and clamping each band to it keeps
+ * the selection and the composition rule inside the line they belong to. A simple rectangular container is unaffected:
+ * its band and its fragment are the same width. */
+- (CGFloat)cg_clampBandX:(CGFloat)x toLine:(NSUInteger)line
+{
+	NSRange range = [self cg_visualLineRangeAtIndex:line];
+	NSRect used = [_cg_layoutManager lineFragmentUsedRectForGlyphAtIndex:range.location effectiveRange:NULL];
+	CGFloat min = used.origin.x;
+	CGFloat max = used.origin.x + used.size.width;
+
+	if (x < min) {
+		return min;
+	}
+	if (x > max) {
+		return max;
+	}
+	return x;
+}
+
 - (void)drawRect:(NSRect)dirtyRect
 {
 	NSGraphicsContext *context = [NSGraphicsContext currentContext];
@@ -609,8 +630,8 @@ static void cg_announce(NSText *text, NSString *name, SEL delegateSelector)
 
 			if (lo < hi) {
 				CGFloat baseline = [self cg_baselineForLine:i];
-				CGFloat x0 = NS_TEXT_INSET + [self cg_xForIndex:lo];
-				CGFloat x1 = NS_TEXT_INSET + [self cg_xForIndex:hi];
+				CGFloat x0 = [self cg_clampBandX:NS_TEXT_INSET + [self cg_xForIndex:lo] toLine:i];
+				CGFloat x1 = [self cg_clampBandX:NS_TEXT_INSET + [self cg_xForIndex:hi] toLine:i];
 
 				[[NSColor cg_accentColor] setFill];
 				[[NSBezierPath bezierPathWithRect:
@@ -639,8 +660,8 @@ static void cg_announce(NSText *text, NSString *name, SEL delegateSelector)
 
 			if (lo < hi) {
 				CGFloat baseline = [self cg_baselineForLine:i];
-				CGFloat x0 = NS_TEXT_INSET + [self cg_xForIndex:lo];
-				CGFloat x1 = NS_TEXT_INSET + [self cg_xForIndex:hi];
+				CGFloat x0 = [self cg_clampBandX:NS_TEXT_INSET + [self cg_xForIndex:lo] toLine:i];
+				CGFloat x1 = [self cg_clampBandX:NS_TEXT_INSET + [self cg_xForIndex:hi] toLine:i];
 
 				[[NSColor controlTextColor] setFill];
 				[[NSBezierPath bezierPathWithRect:NSMakeRect(x0, baseline + 2.0, x1 - x0, 1.0)] fill];

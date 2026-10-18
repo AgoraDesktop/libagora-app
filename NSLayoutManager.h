@@ -20,9 +20,10 @@
  *
  * **AND THE LAYOUT IS THE SECOND KIND OF INVALIDATION MADE REAL.** Apple's sentence names two: a range can need
  * GLYPHS generated, or it can need its glyphs LAID OUT. Slice one built the web and recorded which ranges were stale;
- * this slice asks the CONTAINER how wide a line may be, breaks the store's string into LINE FRAGMENTS with the same
- * TYPESETTER the text view uses, and answers where each fragment is — which is what `-usedRectForTextContainer:` is
- * the size of, and what a view will draw into.
+ * this slice asks the CONTAINER for the band a line may occupy — its SIZE for a simple rectangle, and its
+ * `-lineFragmentRectForProposedRect:sweepDirection:movementDirection:remainingRect:` answer for a shaped region —
+ * breaks the store's string into LINE FRAGMENTS with the same TYPESETTER the text view uses, and answers where each
+ * fragment is — which is what `-usedRectForTextContainer:` is the size of, and what a view will draw into.
  *
  * **AND THE GLYPH STORE IS THE GENERATED LINES, WHICH IS WHAT KEEPS THE MAP HONEST.** Apple's manager "stores glyphs,
  * attributes, and layout information"; the glyphs a `CTLine` maps its string to ARE the store here, and the layout

@@ -2003,6 +2003,11 @@ static BOOL fn_cell_owns_edge(CGFloat thisWidth, CGFloat otherWidth, BOOL tieGoe
 		CGFloat padding = [container lineFragmentPadding];
 		CGFloat containerWidth = [container containerSize].width;
 		CGFloat containerHeight = [container containerSize].height;
+		/* **AND WHETHER ITS REGION IS THE CHEAP RECTANGLE OR A SHAPE THE CONTAINER MUST ANSWER FOR.** Apple's own
+		 * door says the answer is what a layout manager uses to decide whether it may take the cheap route, so a
+		 * simple container keeps the arithmetic this class has always used — including its convention that a ZERO
+		 * HEIGHT is unbounded, which a scrolling text view's container carries — and a shaped one is ASKED. */
+		BOOL simpleContainer = [container isSimpleRectangularTextContainer];
 		CGFloat y = 0.0;
 
 		while (start < (CFIndex)n) {
@@ -2038,23 +2043,15 @@ static BOOL fn_cell_owns_edge(CGFloat thisWidth, CGFloat otherWidth, BOOL tieGoe
 			BOOL paragraphStart = (start == 0) || ([string characterAtIndex:(NSUInteger)start - 1] == '\n');
 			CGFloat indent = paragraphStart ? [style firstLineHeadIndent] : [style headIndent];
 			CGFloat tailIndent = [style tailIndent];
-			CGFloat leadingEdge = padding + indent;
-			CGFloat trailingEdge = (tailIndent >= 0.0) ? (containerWidth - padding - tailIndent)
-								  : (padding - tailIndent);
-			CGFloat width = trailingEdge - leadingEdge;
 			CGFloat multiple = [style lineHeightMultiple];
 			CGFloat lineHeight;
 			CGFloat lineAscent;
 			CGFloat leading;
-			CFIndex count;
-			CTLineRef line = NULL;
-			CGFloat lineWidth = 0.0;
-			BOOL hyphenated = NO;
-			NSRange range;
+			NSRect proposed;
+			NSRect part;
+			NSRect remaining = NSZeroRect;
+			BOOL firstPart = YES;
 
-			if (width < 1.0) {
-				width = 1.0;
-			}
 			if (multiple <= 0.0) {
 				multiple = 1.0;
 			}
@@ -2088,61 +2085,129 @@ static BOOL fn_cell_owns_edge(CGFloat thisWidth, CGFloat otherWidth, BOOL tieGoe
 			if (containerHeight > 0.0 && y + leading + lineHeight > containerHeight + 0.001 && [fragments count] > 0) {
 				break;
 			}
-			count = CTTypesetterSuggestLineBreak(ts, start, (double)width);
-			if (count <= 0) {
-				count = 1;
-			}
-			if (start + count > (CFIndex)n) {
-				count = (CFIndex)n - start;
-			}
-			range = NSMakeRange((NSUInteger)start, (NSUInteger)count);
-			line = [self cg_createLineForRange:range style:style attributedString:s typesetter:ts font:font];
-			if (line != NULL) {
-				lineWidth = (CGFloat)CTLineGetTypographicBounds(line, NULL, NULL, NULL);
-				if (lineWidth > width) {
-					lineWidth = width;
+			/* **AND THE REGION THIS LINE MUST FIT: THE CONTAINER ANSWERS FOR A SHAPED ONE.** The proposed band is the
+			 * container's whole width at this line's place, and a shaped container returns the FIRST subrect that fits
+			 * plus, when its region has a hole or a concavity, the REMAINING subrect after it — which is where the same
+			 * line's text continues, at the same baseline. A SIMPLE RECTANGLE takes the band itself, so every document
+			 * that existed before this slice lays out byte for byte as it did. */
+			proposed = NSMakeRect(0.0, y + leading, containerWidth, lineHeight);
+			if (simpleContainer) {
+				part = proposed;
+			} else {
+				part = [container lineFragmentRectForProposedRect:proposed
+					sweepDirection:NSLineSweepRight movementDirection:NSLineDoesntMove
+					remainingRect:&remaining];
+				if (NSIsEmptyRect(part)) {
+					/* NO ROOM AT THIS LINE'S PLACE, so the rest of this container's text starts in the next one — the
+					 * same outcome the height check above gives a container that has run out of room. */
+					break;
 				}
 			}
-			/* **THEN THE ZONE IS ASKED, BEFORE THE FRAGMENT IS MADE, because the answer changes the fragment.** The
-			 * factor's reading is at `cg_hyphenatedLineForRange:`, including why the test is `lineWidth < factor *
-			 * width` and why the default leaves every existing document alone. A hyphenated line REPLACES the
-			 * breaker's, and the piece it took from the next word moves `count`, `range` and the width with it. */
-			hyphenated = NO;
-			if (line != NULL && [style hyphenationFactor] > 0.0f
-			    && lineWidth < (CGFloat)[style hyphenationFactor] * width) {
-				NSRange extended = range;
-				CTLineRef hyphenatedLine = [self cg_hyphenatedLineForRange:&extended style:style
-							  attributedString:s typesetter:ts font:font width:width];
+			while (start < (CFIndex)n) {
+				CGFloat partPadding = padding;
+				CGFloat partIndent = firstPart ? indent : 0.0;
+				BOOL lastPart = NSIsEmptyRect(remaining);
+				CGFloat partTail = lastPart ? tailIndent : 0.0;
+				CGFloat leadingEdge = part.origin.x + partPadding + partIndent;
+				CGFloat trailingEdge = (partTail >= 0.0)
+					? (part.origin.x + part.size.width - partPadding - partTail)
+					: (part.origin.x + partPadding - partTail);
+				CGFloat width = trailingEdge - leadingEdge;
+				CFIndex count;
+				CTLineRef line = NULL;
+				CGFloat lineWidth = 0.0;
+				BOOL hyphenated = NO;
+				NSRange range;
+				NSUInteger lineGlyphs;
 
-				if (hyphenatedLine != NULL) {
-					CFRelease(line);
-					line = hyphenatedLine;
-					range = extended;
-					count = (CFIndex)extended.length;
+				if (width < 1.0) {
+					width = 1.0;
+				}
+				count = CTTypesetterSuggestLineBreak(ts, start, (double)width);
+				if (count <= 0) {
+					count = 1;
+				}
+				if (start + count > (CFIndex)n) {
+					count = (CFIndex)n - start;
+				}
+				range = NSMakeRange((NSUInteger)start, (NSUInteger)count);
+				line = [self cg_createLineForRange:range style:style attributedString:s typesetter:ts font:font];
+				if (line != NULL) {
 					lineWidth = (CGFloat)CTLineGetTypographicBounds(line, NULL, NULL, NULL);
-					hyphenated = YES;
+					if (lineWidth > width) {
+						lineWidth = width;
+					}
+				}
+				/* **THEN THE ZONE IS ASKED, BEFORE THE FRAGMENT IS MADE, because the answer changes the fragment.** The
+				 * factor's reading is at `cg_hyphenatedLineForRange:`, including why the test is `lineWidth < factor *
+				 * width` and why the default leaves every existing document alone. A hyphenated line REPLACES the
+				 * breaker's, and the piece it took from the next word moves `count`, `range` and the width with it. */
+				hyphenated = NO;
+				if (line != NULL && [style hyphenationFactor] > 0.0f
+				    && lineWidth < (CGFloat)[style hyphenationFactor] * width) {
+					NSRange extended = range;
+					CTLineRef hyphenatedLine = [self cg_hyphenatedLineForRange:&extended style:style
+								  attributedString:s typesetter:ts font:font width:width];
+
+					if (hyphenatedLine != NULL) {
+						CFRelease(line);
+						line = hyphenatedLine;
+						range = extended;
+						count = (CFIndex)extended.length;
+						lineWidth = (CGFloat)CTLineGetTypographicBounds(line, NULL, NULL, NULL);
+						hyphenated = YES;
+					}
+				}
+				{
+					CGFloat textTop = y + leading;
+					CGFloat baseline = textTop + lineAscent;
+					CGFloat alignOffset = [self cg_alignmentOffsetForLine:line
+							alignment:[self cg_alignmentForParagraphAt:(NSUInteger)start] width:width];
+					NSArray *boxes = [self cg_boxesForRange:range line:line];
+					/* **THE FRAGMENT OCCUPIES THE GLYPHS ITS LINE HAS, WHICH IS THE SHAPER'S COUNT.** Its RECT is the
+					 * subrect the container gave (x and width), and two parts of one line share the same y and baseline
+					 * because they are one line set in two places. */
+					lineGlyphs = (line != NULL) ? (NSUInteger)CTLineGetGlyphCount(line) : 0;
+					FNFragment *made = [FNFragment fragmentWithRange:range
+						glyphRange:NSMakeRange(glyphBase, lineGlyphs)
+						rect:NSMakeRect(part.origin.x, y, part.size.width, leading + lineHeight)
+						usedRect:NSMakeRect(leadingEdge + alignOffset, textTop,
+								    lineWidth + [self cg_boxExtra:boxes], lineHeight)
+						baseline:baseline line:line boxes:boxes];
+
+					made->hyphenated = hyphenated;
+					[fragments addObject:made];
+					glyphBase += lineGlyphs;
+				}
+				start += count;
+				/* **A HARD BREAK ENDS THE LINE**, so there is no remaining rect to put more of it in. */
+				if (range.length > 0
+				    && [string characterAtIndex:range.location + range.length - 1] == '\n') {
+					break;
+				}
+				if (NSIsEmptyRect(remaining) || start >= (CFIndex)n) {
+					break;
+				}
+				/* **THE SAME LINE CONTINUES IN THE PART THE SHAPE LEFT**, at the same baseline — and the remaining
+				 * rect is ASKED ABOUT TOO, because it may itself hold a later hole. A container that answers the same
+				 * subrect again is the one case this stops on, so a malformed region cannot spin the loop. */
+				{
+					NSRect nextProposed = remaining;
+					NSRect next;
+					NSRect nextRemaining = NSZeroRect;
+
+					next = [container lineFragmentRectForProposedRect:nextProposed
+						sweepDirection:NSLineSweepRight movementDirection:NSLineDoesntMove
+						remainingRect:&nextRemaining];
+					if (NSIsEmptyRect(next) || NSEqualRects(next, part)) {
+						break;
+					}
+					part = next;
+					remaining = nextRemaining;
+					firstPart = NO;
 				}
 			}
-			{
-				CGFloat textTop = y + leading;
-				CGFloat baseline = textTop + lineAscent;
-				CGFloat alignOffset = [self cg_alignmentOffsetForLine:line
-						alignment:[self cg_alignmentForParagraphAt:(NSUInteger)start] width:width];
-				NSArray *boxes = [self cg_boxesForRange:range line:line];
-				/* **THE FRAGMENT OCCUPIES THE GLYPHS ITS LINE HAS, WHICH IS THE SHAPER'S COUNT.** */
-				NSUInteger lineGlyphs = (line != NULL) ? (NSUInteger)CTLineGetGlyphCount(line) : 0;
-				FNFragment *made = [FNFragment fragmentWithRange:range
-					glyphRange:NSMakeRange(glyphBase, lineGlyphs)
-					rect:NSMakeRect(0.0, y, containerWidth, leading + lineHeight)
-					usedRect:NSMakeRect(leadingEdge + alignOffset, textTop, lineWidth + [self cg_boxExtra:boxes], lineHeight)
-					baseline:baseline line:line boxes:boxes];
-
-				made->hyphenated = hyphenated;
-				[fragments addObject:made];
-				y = textTop + lineHeight;
-				glyphBase += lineGlyphs;
-			}
-			start += count;
+			y = y + leading + lineHeight;
 			previousStyle = style;
 			lastContainer = i;
 			lastY = y;
@@ -2374,19 +2439,44 @@ static BOOL fn_cell_owns_edge(CGFloat thisWidth, CGFloat otherWidth, BOOL tieGoe
 	if ([fragments count] == 0) {
 		return 0;
 	}
-	for (i = 0; i < [fragments count]; i++) {
-		FNFragment *candidate = [fragments objectAtIndex:i];
+	/* **A LINE CAN NOW BE SET IN MORE THAN ONE PLACE**, so the y band alone is not enough: among the fragments whose
+	 * band contains the point, the one whose SUBRECT also contains its x wins, and a point in a gap chooses the
+	 * nearest part. With a simple rectangular container every fragment is the full width, so this is the same answer
+	 * the y-only walk gave. */
+	{
+		FNFragment *band = nil;
+		CGFloat bestDistance = 0.0;
 
-		if (fragment == nil) {
-			fragment = candidate;
+		for (i = 0; i < [fragments count]; i++) {
+			FNFragment *candidate = [fragments objectAtIndex:i];
+			BOOL inBand = (point.y >= candidate->rect.origin.y
+				       && point.y <= candidate->rect.origin.y + candidate->rect.size.height);
+
+			if (fragment == nil) {
+				fragment = candidate;
+			}
+			if (inBand) {
+				CGFloat distance = 0.0;
+
+				if (point.x < candidate->rect.origin.x) {
+					distance = candidate->rect.origin.x - point.x;
+				} else if (point.x > candidate->rect.origin.x + candidate->rect.size.width) {
+					distance = point.x - (candidate->rect.origin.x + candidate->rect.size.width);
+				}
+				if (band == nil || distance < bestDistance) {
+					band = candidate;
+					bestDistance = distance;
+				}
+				if (distance == 0.0) {
+					break;
+				}
+			}
+			if (point.y > candidate->rect.origin.y) {
+				fragment = candidate;
+			}
 		}
-		if (point.y >= candidate->rect.origin.y
-		    && point.y <= candidate->rect.origin.y + candidate->rect.size.height) {
-			fragment = candidate;
-			break;
-		}
-		if (point.y > candidate->rect.origin.y) {
-			fragment = candidate;
+		if (band != nil) {
+			fragment = band;
 		}
 	}
 	/* **AND A BOX IS HIT BY ITS OWN FACE, NOT BY THE PLACEHOLDER GLYPH's OFFSET.** The point's x is walked past the

@@ -45,6 +45,7 @@ tests/
   text_input.m                  the first slice of the text system, driven a keystroke at a time
   text_storage.m                and the STORE the rich-text slice is built on: an attributed string that announces edits
   text_container.m              and the REGION that store is laid out in: a size, a padding, and the fragments that fit
+  text_container_region.m       and a SHAPED region: the container's subrect places and narrows the line, holes split it
   text_layout_web.m             and the WEB that ties the trio together: the store, its managers, and what goes stale
   text_layout_fragments.m       and the FRAGMENTS that web produces: the store laid into the container's lines
   text_layout_draw.m            and the INK: the manager drawing the glyphs it laid out, where the origin says
@@ -200,8 +201,15 @@ the compositor is really gone.
   move and is CARRIED to the region's near edge — **(200,10 100x20)** — when it may; and a fragment ABOVE the region
   is carried DOWN to its top edge, because a text view's y grows downward. **AND THE LAYOUT-MANAGER END OF THE WEB EXISTS NOW**, which the container's own header states: `-layoutManager`,
   `-setLayoutManager:` and `-replaceLayoutManager:` are implemented, the pointer is BORROWED in one direction because the
-  manager retains the container, and `-replaceLayoutManager:` does the half that crosses the object boundary. What is
-  genuinely owed here is the non-rectangular regions a subclass declares.
+  manager retains the container, and `-replaceLayoutManager:` does the half that crosses the object boundary. **AND
+  THE NON-RECTANGULAR REGIONS A SUBCLASS DECLARES ARE LAID OUT NOW, WHICH THIS SENTENCE USED TO CALL OWED**:
+  `NSLayoutManager` asks `-isSimpleRectangularTextContainer` once per container; a YES keeps the cheap arithmetic every
+  document already took (including this tier's ZERO HEIGHT MEANS UNBOUNDED convention), and a NO makes it ask
+  `-lineFragmentRectForProposedRect:sweepDirection:movementDirection:remainingRect:` for each line's band and use the
+  answered subrect's x and width. MEASURED, `tests/text_container_region.m`: an inset first line (x=40, width=120)
+  makes the fragment start at **40**, measure **120** and break EARLIER than the plain container; a line with a hole
+  comes back in **two** fragments at the **same baseline** with contiguous ranges, the right one at **x=160**; and a
+  point at x=200 on that line hit-tests into the RIGHT part rather than the left one's end.
 - **And the WEB that ties the text system's three objects together** (`ctest`): `NSLayoutManager` slice one has no glyphs
   and no lines — what it has is the WIRING — and wiring is exactly the thing that can be checked from BOTH SIDES of
   every pair. MEASURED: a fresh manager has no store, no containers and NOTHING stale (`NSNotFound`); a storage that is

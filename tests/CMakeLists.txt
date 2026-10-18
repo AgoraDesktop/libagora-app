@@ -141,6 +141,14 @@ target_link_libraries(text_container PRIVATE App)
 add_test(NAME appkit-text-container COMMAND text_container)
 set_tests_properties(appkit-text-container PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
 
+# **AND A CONTAINER'S SHAPED REGION, WHICH THE LAYOUT NOW ASKS FOR.** A non-simple container is asked for each
+# line's band; an inset first line starts at its x and breaks at its width, and a hole splits ONE logical line into
+# two fragments at the same baseline, with the hit test choosing by x among them.
+add_executable(text_container_region text_container_region.m)
+target_link_libraries(text_container_region PRIVATE App)
+add_test(NAME appkit-text-container-region COMMAND text_container_region)
+set_tests_properties(appkit-text-container-region PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
+
 # **AND THE WEB THAT TIES THE TRIO TOGETHER.** `NSLayoutManager` slice one: a store it is handed by the storage that
 # lists it, containers it owns and they borrow, and ONE piece of behaviour — an edit in the store is folded into a stale
 # range and announced to a delegate. Each pair is checked from BOTH sides.
