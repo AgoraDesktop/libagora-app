@@ -32,12 +32,15 @@
  * **WHAT IS NOT HERE, AND WHY — CORRECTED, BECAUSE FOUR OF THESE ARRIVED AFTER THE LIST WAS WRITTEN.** The SHEETS
  * (their state is this file's; `-beginSheet:modalForWindow:...` and `-endSheet:returnCode:` are `NSApplication`'s),
  * the FRAME-AUTOSAVE strings, the CURSOR-RECT invalidation and the CHILD-WINDOW list are all implemented now, and
- * the screen is `NSScreen`'s own row and is measured with it. What remains absent: the TOOLBAR, the DRAWER (the
- * class) and the SCRIPT-COMMAND handling, which refuses by name. The minimisable/closable BUTTONS are a window
- * manager's (Kestrel is parked). Each of those is absent rather than stubbed.
+ * the screen is `NSScreen`'s own row and is measured with it. THE TOOLBAR IS HERE: `-setToolbar:` attaches one,
+ * the frame-to-content arithmetic reserves its band, and the chrome's pill toggles it. What remains absent: the
+ * DRAWER (the class) and the SCRIPT-COMMAND handling, which refuses by name. The minimisable/closable BUTTONS are
+ * a window manager's (Kestrel is parked). Each of those is absent rather than stubbed.
  */
 #include "AGWindowServer.h"
 #import "AGChromeTheme.h"	/* the chrome's control graphics, when an XFWM theme resolves */
+#import "NSToolbar.h"
+#import "NSToolbar_internal.h"	/* the band's height and view, and the toolbar's own seam */
 
 #include <math.h>	/* M_PI — the arcs a pill's caps are made of */
 
@@ -231,6 +234,19 @@ static CGFloat fn_title_bar_height(void)
 	return (themed > 0.0) ? themed : fn_TITLE_BAR;
 }
 
+/* **THE BAND THE TOOLBAR TAKES, ASKED OF THE TOOLBAR.** This is the one function that relates the window's frame
+ * arithmetic to `NSToolbar`, and it answers zero for no toolbar and for a hidden one — so every caller below can add
+ * it unconditionally and a window without a toolbar keeps the geometry it always had. */
+static CGFloat fn_toolbar_height(NSWindow *w)
+{
+	NSToolbar *toolbar = [w toolbar];
+
+	if (toolbar == nil || ![toolbar isVisible]) {
+		return 0.0;
+	}
+	return [toolbar cg_toolbarHeight];
+}
+
 typedef struct {
 	NSRect rects[AGChromeButtonCount];	/* window coordinates: origin at the window's bottom-left */
 	BOOL present[AGChromeButtonCount];
@@ -259,7 +275,10 @@ static void fn_chrome_layout(NSWindow *w, fn_chrome_layout_t *layout)
 	NSRect content = [w contentRectForFrameRect:[w frame]];
 	AGChromeTheme *theme = [AGChromeTheme sharedTheme];
 	CGFloat width = content.size.width;
-	CGFloat top = content.size.height;	/* the content's top IS the strip's bottom, in window coordinates */
+	/* THE STRIP'S BOTTOM IS THE TOOLBAR'S TOP WHEN THERE IS ONE, so the title bar never paints over the band. The
+	 * content rect no longer contains the toolbar (see `-contentRectForFrameRect:`), which is why the height is added
+	 * back here rather than assumed to be zero. */
+	CGFloat top = content.size.height + fn_toolbar_height(w);
 	int i;
 
 	memset(layout, 0, sizeof *layout);
@@ -620,14 +639,27 @@ static void fn_ag_frame(void *context, uint32_t time_ms)
 			  contentRect.size.width, contentRect.size.height + chrome);
 }
 
+/* **THE INSTANCE PAIR OWNS THE TOOLBAR'S BAND; THE CLASS PAIR CANNOT.** A class method has no toolbar to ask, and
+ * Apple's own pair has the same limitation. The instance pair is what every geometry door in this file uses, so the
+ * content view, the min/max constraint conversion and the title bar all see one answer: the content rect excludes
+ * the chrome AND the toolbar while the toolbar is visible. */
 - (NSRect)contentRectForFrameRect:(NSRect)frameRect
 {
-	return [[self class] contentRectForFrameRect:frameRect styleMask:_styleMask];
+	NSRect content = [[self class] contentRectForFrameRect:frameRect styleMask:_styleMask];
+
+	content.size.height -= fn_toolbar_height(self);
+	if (content.size.height < 0.0) {
+		content.size.height = 0.0;
+	}
+	return content;
 }
 
 - (NSRect)frameRectForContentRect:(NSRect)contentRect
 {
-	return [[self class] frameRectForContentRect:contentRect styleMask:_styleMask];
+	NSRect frame = [[self class] frameRectForContentRect:contentRect styleMask:_styleMask];
+
+	frame.size.height += fn_toolbar_height(self);
+	return frame;
 }
 
 - (instancetype)initWithContentRect:(NSRect)contentRect styleMask:(NSUInteger)styleMask
@@ -692,6 +724,9 @@ static void fn_ag_frame(void *context, uint32_t time_ms)
 	[_cg_registeredDraggedTypes release];
 	[_keyViewLoop release];
 	[_fieldEditor release];
+	/* AND THE TOOLBAR, WHICH THE WINDOW OWNS. Its own `-cg_setWindow:nil` is what takes its view out of the content
+	 * tree; releasing it here is safe because nothing else retains it after this window goes. */
+	[_toolbar release];
 	[super dealloc];
 }
 
@@ -777,9 +812,9 @@ static NSString *fn_title_that_fits(NSString *title, NSDictionary *attributes, C
 
 /* WHERE A TITLE'S BASELINE GOES: the box is `ascent` above the baseline and `|descent|` below, so centring it in
  * the strip puts the baseline at the strip's bottom plus half the leftover, MINUS the descent. */
-static CGFloat fn_title_baseline(NSRect content, CGFloat ascent, CGFloat descent)
+static CGFloat fn_title_baseline(CGFloat top, CGFloat ascent, CGFloat descent)
 {
-	return content.size.height + (fn_title_bar_height() - (ascent - descent)) / 2.0 - descent;
+	return top + (fn_title_bar_height() - (ascent - descent)) / 2.0 - descent;
 }
 
 /* ============================================================================================ *
@@ -849,10 +884,9 @@ static void fn_draw_symbol(CGContextRef c, CGRect box, int kind)
  * is: the control will show and hide a strip that runs across the window, and a mark wider than it is tall is the
  * one that says so.
  *
- * IT IS A BUTTON AND NOT YET ONE. Its action is "toggle the window's toolbar", and this tier has no toolbar for it
- * to toggle, so it is drawn and does nothing — stated here rather than left to be discovered by whoever presses it.
- * The fill and the border are the CONTROL's, from `NSColor`'s own vocabulary and from the one border width every
- * control in this tier wears (`NS_CELL_BEZEL_WIDTH`), so the pill is already the button it will become. */
+ * IT IS A BUTTON NOW. Its action is "toggle the window's toolbar" (`-toggleToolbarShown:`), which is quiet for a
+ * window with none; the drawing is still the mark's own and the ink is the CONTROL's, from `NSColor`'s own vocabulary
+ * and from the one border width every control in this tier wears (`NS_CELL_BEZEL_WIDTH`). */
 static void fn_draw_toolbar_pill(CGContextRef c, CGRect box)
 {
 	CGRect r = box;
@@ -897,8 +931,12 @@ static BOOL fn_pointInChrome(NSWindow *w, NSPoint p)
 	if (layout.height <= 0.0) {
 		return NO;
 	}
-	return p.x >= 0.0 && p.x < content.size.width
-		&& p.y >= content.size.height && p.y < content.size.height + layout.height;
+	{
+		CGFloat top = content.size.height + fn_toolbar_height(w);
+
+		return p.x >= 0.0 && p.x < content.size.width
+			&& p.y >= top && p.y < top + layout.height;
+	}
 }
 
 /* ============================================================================================ *
@@ -951,7 +989,7 @@ static int fn_resizeEdges(NSWindow *w, NSPoint p)
 	}
 	fn_chrome_layout(w, &layout);
 	width = content.size.width;
-	height = content.size.height + layout.height;	/* the FRAME's own height in these coordinates */
+	height = content.size.height + fn_toolbar_height(w) + layout.height;	/* the FRAME's own height */
 	if (p.x < 0.0 || p.y < 0.0 || p.x >= width || p.y >= height) {
 		return 0;
 	}
@@ -1041,10 +1079,9 @@ static AGChromeButtonState fn_chrome_state(NSWindow *w, NSInteger index)
  * that read only the buttons would put them on this tier's flat grey and leave the rest of the bar plain. The
  * pieces are tiled in XFWM's order (1…5, cycled) and the corners are drawn LAST so they cover the tiling's ends; a
  * theme with only SOME of them keeps the frame colour as the ground, which is what the fill underneath is for. */
-static void fn_draw_themed_title_bar(CGContextRef c, AGChromeTheme *theme, NSRect content, BOOL active,
-				     CGFloat height)
+static void fn_draw_themed_title_bar(CGContextRef c, AGChromeTheme *theme, NSRect content, CGFloat top,
+				     BOOL active, CGFloat height)
 {
-	CGFloat top = content.size.height;
 	CGFloat width = content.size.width;
 	CGFloat x;
 	int i;
@@ -1091,7 +1128,7 @@ static void fn_draw_chrome(CGContextRef c, NSWindow *w, NSRect content)
 {
 	fn_chrome_layout_t layout;
 	AGChromeTheme *theme = [AGChromeTheme sharedTheme];
-	CGFloat top = content.size.height;
+	CGFloat top = content.size.height + fn_toolbar_height(w);
 	int i;
 
 	fn_chrome_layout(w, &layout);
@@ -1101,7 +1138,7 @@ static void fn_draw_chrome(CGContextRef c, NSWindow *w, NSRect content)
 		 * title pieces between them; the buttons and the title text sit on THAT, not on a flat fill. Only a window
 		 * with chrome has a bar to draw. */
 		if (layout.height > 0.0) {
-			fn_draw_themed_title_bar(c, theme, content, [w isKeyWindow], layout.height);
+			fn_draw_themed_title_bar(c, theme, content, top, [w isKeyWindow], layout.height);
 		}
 		/* **THE THEME'S BUTTONS, AT THEIR OWN SIZE.** Each is asked for the state the pointer and the window make,
 		 * and a theme that is missing one file falls back to the drawn mark for THAT button rather than for the
@@ -1168,7 +1205,7 @@ static void fn_draw_chrome(CGContextRef c, NSWindow *w, NSRect content)
 
 			[NSGraphicsContext setCurrentContext:g];
 			[title drawAtPoint:NSMakePoint(centre - width / 2.0,
-						       fn_title_baseline(content, [font ascender], [font descender]))
+						       fn_title_baseline(top, [font ascender], [font descender]))
 			     withAttributes:attributes];
 			[NSGraphicsContext setCurrentContext:prev];
 			[prev release];
@@ -1475,6 +1512,12 @@ static CGFloat fn_clamp_axis(CGFloat v, CGFloat lo, CGFloat hi)
 	}
 	if (resized) {
 		fn_announce(self, NSWindowDidResizeNotification, @selector(windowDidResize:));
+	}
+	/* THE CONTENT VIEW AND THE TOOLBAR FOLLOW THE FRAME WHEN THERE IS A BAND TO PLACE. Without a toolbar the content
+	 * view keeps the historical behaviour (it is laid out when it is set); with one, a resize or a visibility change
+	 * has to move both, and this is the one door every such change ends in. */
+	if (_toolbar != nil) {
+		[self cg_toolbarLayoutChanged];
 	}
 	(void)flag;
 }
@@ -1946,6 +1989,11 @@ static CGFloat fn_clamp_axis(CGFloat v, CGFloat lo, CGFloat hi)
 		 * subtree answered `-window` with nil, which is a gap the key-view walk found: `-previousKeyView` starts at
 		 * the window's content view and had nothing to start from. */
 		[_contentView cg_setWindow:self];
+	}
+	/* THE TOOLBAR'S VIEW MOVES WITH THE CONTENT VIEW: `-addSubview:` takes it out of the previous content view, and
+	 * `-cg_toolbarLayoutChanged` is the one place that adoption happens. */
+	if (_toolbar != nil) {
+		[self cg_toolbarLayoutChanged];
 	}
 	/* **AND THE FIRST RESPONDER MOVES THROUGH THE REAL DOOR RATHER THAN BY ASSIGNMENT.** This used to write
 	 * `_firstResponder` straight, which made the new content view the first responder WITHOUT EVER ASKING IT —
@@ -2551,10 +2599,9 @@ static CGFloat fn_clamp_axis(CGFloat v, CGFloat lo, CGFloat hi)
  * button's behaviour too. Sending `-close`, `-miniaturize:` and `-zoom:` from here instead would be a second road
  * to each that skips every question the first one asks.
  *
- * **AND THE PILL HAS NO ACTION, WHICH IS `NSToolbar`'S ABSENCE RATHER THAN A GAP IN THIS SWITCH.** It is the
- * toolbar toggle and there is no toolbar to toggle; `-toggleToolbarShown:` is the door that already refuses by
- * name. So a press on it draws the theme's pressed art and settles back, which is exactly what the mark has always
- * done — stated here rather than left to be discovered by whoever presses it. */
+ * **AND THE PILL IS THE TOOLBAR TOGGLE.** It sends `-toggleToolbarShown:`, which is the same door a menu item
+ * sends and the same door the toolbar's own visibility uses; a window with no toolbar has nothing to toggle and the
+ * door is quiet, which is the behaviour the mark had before there was an `NSToolbar` to attach. */
 - (void)cg_performChromeButton:(NSInteger)index
 {
 	switch ((AGChromeButton)index) {
@@ -2570,6 +2617,12 @@ static CGFloat fn_clamp_axis(CGFloat v, CGFloat lo, CGFloat hi)
 		break;
 	case AGChromeButtonMaximize:
 		[self performZoom:self];
+		break;
+	case AGChromeButtonMenu:
+		/* **THE PILL IS THE TOOLBAR TOGGLE, AND NOW THERE IS A TOOLBAR TO TOGGLE.** With none attached the door is a
+		 * no-op, which is the same answer it gave when `NSToolbar` was absent — but the mark is wired, so a window with
+		 * a toolbar behaves like one. */
+		[self toggleToolbarShown:self];
 		break;
 	default:
 		break;
@@ -3871,13 +3924,20 @@ static NSUInteger fn_edge_index(NSRectEdge edge)
 - (void)toggleToolbarShown:(id)sender
 {
 	(void)sender;
-	fn_refuse_window("-toggleToolbarShown:", "NSToolbar");
+	/* **THE PILL'S ACTION AND THE MENU ITEM'S, THE SAME ACT.** With no toolbar there is nothing to toggle and the
+	 * door is quiet; with one, `-setVisible:` owns the frame arithmetic so both roads end in the same place. */
+	if (_toolbar != nil) {
+		[_toolbar setVisible:![_toolbar isVisible]];
+	}
 }
 
 - (void)runToolbarCustomizationPalette:(id)sender
 {
-	(void)sender;
-	fn_refuse_window("-runToolbarCustomizationPalette:", "NSToolbar");
+	/* **THE WINDOW OWNS NO PALETTE: THE TOOLBAR DOES, AND IT REFUSES BY NAME.** A window with no toolbar has nothing
+	 * to ask; a window with one gets the toolbar's own answer, which is the one place that knows why. */
+	if (_toolbar != nil) {
+		[_toolbar runCustomizationPalette:sender];
+	}
 }
 
 + (void)menuChanged:(id)menu
@@ -4132,9 +4192,90 @@ static NSUInteger fn_edge_index(NSRectEdge edge)
 	return NULL;
 }
 
-- (nullable id)toolbar
+- (nullable NSToolbar *)toolbar
 {
-	return nil;
+	return _toolbar;
+}
+
+/* **ATTACHING A TOOLBAR PRESERVES THE CONTENT AND GROWS THE FRAME.** The content rect is taken with whatever toolbar
+ * the window has now, the new toolbar is attached, and the frame is rebuilt from that same content — so a window
+ * whose content is 400x300 keeps a 400x300 document and gains the band. Detaching is the same arithmetic in reverse.
+ * The toolbar's back-pointer is not retained; this side of the pair is. */
+- (void)setToolbar:(nullable NSToolbar *)aToolbar
+{
+	NSRect content;
+	NSToolbar *old;
+
+	if (_toolbar == aToolbar) {
+		return;
+	}
+	content = [self contentRectForFrameRect:_frame];
+	old = _toolbar;
+	_toolbar = [aToolbar retain];
+	[old cg_setWindow:nil];
+	[old release];
+	[aToolbar cg_setWindow:self];
+	[self setFrame:[self frameRectForContentRect:content] display:YES];
+	[self cg_toolbarLayoutChanged];
+}
+
+/* **THE ONE PLACE THE BAND'S GEOMETRY IS WRITTEN.** `NSToolbar` asks for it when it is shown, hidden or resized; this
+ * file asks for it when the frame or the content view moves. The content view gets the content rect and the toolbar
+ * view sits at that rect's top edge, which is where the chrome's title bar begins. A hidden toolbar's view stays in
+ * the tree but is hidden, so it neither draws nor takes a click. */
+- (void)cg_toolbarLayoutChanged
+{
+	NSRect content = [self contentRectForFrameRect:_frame];
+
+	if (_contentView != nil) {
+		[_contentView setFrame:content];
+	}
+	if (_toolbar != nil) {
+		NSView *view = [_toolbar cg_view];
+		NSRect band = NSMakeRect(0.0, content.size.height, content.size.width,
+					 [_toolbar cg_toolbarHeight]);
+
+		if (_contentView != nil && [view superview] != _contentView) {
+			[_contentView addSubview:view];
+		}
+		[view setFrame:band];
+		[view setHidden:![_toolbar isVisible]];
+		[view setNeedsDisplay:YES];
+	}
+	[self setNeedsDisplay:YES];
+}
+
+/* **THE BAND REACHED THROUGH A CONTEXT, WHICH IS HOW THE TOOLBAR IS CHECKED WITHOUT A COMPOSITOR.** The live window
+ * gets the same ink through its content view's tree — the toolbar is a real subview — but a test needs to draw it
+ * into a bitmap without pretending to be the window server. A nil context, or a toolbar that is absent or hidden,
+ * draws nothing. */
+- (void)cg_drawToolbarInContext:(nullable NSGraphicsContext *)context
+{
+	CGContextRef c;
+	NSRect content;
+	NSRect band;
+	NSView *view;
+	NSGraphicsContext *previous;
+
+	if (_toolbar == nil || ![_toolbar isVisible] || context == nil) {
+		return;
+	}
+	c = (CGContextRef)[context graphicsPort];
+	if (c == NULL) {
+		return;
+	}
+	content = [self contentRectForFrameRect:_frame];
+	band = NSMakeRect(0.0, content.size.height, content.size.width, [_toolbar cg_toolbarHeight]);
+	view = [_toolbar cg_view];
+	[view setFrame:band];
+	previous = [[NSGraphicsContext currentContext] retain];
+	[NSGraphicsContext setCurrentContext:context];
+	CGContextSaveGState(c);
+	CGContextTranslateCTM(c, band.origin.x, band.origin.y);
+	[view displayRect:[view bounds]];
+	CGContextRestoreGState(c);
+	[NSGraphicsContext setCurrentContext:previous];
+	[previous release];
 }
 
 - (nullable NSArray *)drawers

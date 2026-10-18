@@ -10,9 +10,9 @@ directory (`../README.md`). `libagora-app` is the top of its stack: above it the
 
 **The AppKit is imported and its windows run on Agora's window server. The X11 seam is gone.** Above the
 window and view classes there is now a cell and control layer (buttons, switches and sliders), a tracking-area
-engine, one line of editable text with the standard key bindings, a title bar the client DRAWS itself, and the
-menu subsystem — validation, a selection chip, and a pointer grab that lets a popup be dismissed by clicking
-away.
+engine, one line of editable text with the standard key bindings, a title bar the client DRAWS itself, the menu
+subsystem — validation, a selection chip, and a pointer grab that lets a popup be dismissed by clicking away —
+and a TOOLBAR: items from a delegate, in a band the window reserves between its chrome and its content.
 
 The classes here come from the Fiwix AppKit (same author, same licence — see `PROVENANCE.md`), and they
 talked to an X server: `NSWindow.m` called `XOpenDisplay`, `XCreateSimpleWindow`, `XMapWindow`, `XPutImage`
@@ -89,6 +89,7 @@ tests/
   appkit_controls_draw.m        a window full of controls, a SCROLL PANEL, and a TEXT PLAYGROUND window
   chrome_theme.m                the THEME: an XFWM `.xpm` set becomes the chrome's buttons, 1:1
   chrome_buttons.m              and what a chrome button DOES: a click through the seam, and what happened
+  toolbar.m                     the TOOLBAR: the delegate's items, the band, the ink and the click
   control_drag.m                and what a DRAG costs: forty motions, and how many frames the window committed
   run-*-headless.sh             ctest: a compositor with a virtual monitor (no desktop input involved)
   run-*-nested.sh, inspect.py   the PIXEL tests, and they are OPT-IN: `gnome-shell --nested` is a whole
@@ -719,12 +720,44 @@ XPMs — so `tests/chrome_theme.m` never depends on a licence a checkout does no
 `-performClose:`, so a delegate's `-windowShouldClose:` is asked and can refuse it; the minus performs
 `-performMiniaturize:` and the plus `-performZoom:`. A PRESS performs nothing on its own — it is remembered and
 drawn pressed, and the RELEASE is what acts, and only if the pointer is still on the button that was pressed, so
-sliding off the X is how a hand changes its mind. THE PILL PERFORMS NOTHING, because it is the toolbar toggle and
-`NSToolbar` does not exist here — `-toggleToolbarShown:` is the door that refuses by name. And THE MINUS MARKS THE
+sliding off the X is how a hand changes its mind. THE PILL IS THE TOOLBAR TOGGLE and sends `-toggleToolbarShown:`,
+which toggles the window's toolbar when it has one and is quiet when it has none; `tests/toolbar.m` presses a window
+with a toolbar and `tests/chrome_buttons.m` presses one without. And THE MINUS MARKS THE
 STATE AND ANNOUNCES IT RATHER THAN TAKING THE WINDOW OFF THE SCREEN: there is no Dock to put a miniaturized window
 in and no iconify in the protocol, which `-miniaturize:` states where it stands. `tests/chrome_buttons.m` is what
 holds all of that to account — it presses the buttons through the seam and asks what HAPPENED, which is the half
 no test about pixels can see.
+
+### The toolbar, and the band it takes
+
+**`NSToolbar` AND `NSToolbarItem` ARE HERE, AND THE BAND IS CARVED OUT OF THE FRAME.** Attaching a toolbar grows the
+window's frame by the band's height — 52 points regular, 38 small — and leaves the CONTENT's size alone; hiding it
+gives that height back. `-contentRectForFrameRect:` is the one place that knows, so the content view, the min/max
+constraint conversion and the title bar all agree on where the content ends and the chrome begins. The chrome's pill
+sends `-toggleToolbarShown:`, the same door a menu item would send and the same one the toolbar's own visibility uses.
+
+**THE TOOLBAR IS A REAL VIEW AT THE CONTENT'S TOP EDGE.** It is a subview whose frame sits above its superview's
+bounds, which works because `NSView` clips a child to its OWN frame rather than its parent's — the same fact the
+chrome's painter relies on. That is what keeps a custom item view a real control with its own responder chain instead
+of a bitmap painted by the window. The layout is left-to-right with the era's three spacers; a fixed space is eight
+points and a flexible space shares what is left, and an item that does not fit is CLIPPED rather than moved into an
+overflow menu (there is no toolbar overflow menu in this tier, and `-visibleItems` answers what is actually shown).
+
+**WHAT THE CLASSES IMPLEMENT, AND WHAT THEY REFUSE.** The delegate supplies the default, allowed and selectable
+identifier lists and the item for an identifier; insertion and removal announce `NSToolbarWillAddItemNotification`
+and `NSToolbarDidRemoveItemNotification` and call the delegate's matching methods; display and size modes, selection,
+validation (`-validateToolbarItem:` first, then `-validateUserInterfaceItem:`, then "does the target answer the
+action") and the configuration dictionary are all real. Autosaving writes that dictionary to `NSUserDefaults`. The
+CUSTOMIZATION PALETTE is the one absence: it is a panel and a drag session, and `-runCustomizationPalette:` refuses
+by name while `-customizationPaletteIsRunning` answers NO. The dictionary's keys are this tier's own (`NSToolbarItemIdentifiers`
+and friends) because Apple keeps its own keys private, and `-setConfigurationFromDictionary:` ignores a key it does not
+know rather than pretending to understand one.
+
+`tests/toolbar.m` is what holds the four contracts together: it attaches a toolbar and measures the frame, walks the
+delegate's default list through insertions and removals, checks a validator that changes its item while answering,
+clicks an item through the view and reads the selection, round-trips the configuration dictionary, and draws the band
+into a bitmap to find its ground, its baseline and a label. `tests/chrome_buttons.m` still presses the pill on a window
+with NO toolbar, where the door is correctly quiet.
 
 ### Still absent, and why
 
@@ -732,13 +765,14 @@ no test about pixels can see.
 the SHEETS (`NSApplication -beginSheet:modalForWindow:…` and `-endSheet:returnCode:`, with the attachment and the
 reply dance on `NSWindow`), the FRAME-AUTOSAVE strings, the CURSOR-RECT invalidation and the CHILD-WINDOW list are all
 implemented. What is still absent is the DRAWER (the class — `-drawers` answers an empty array, which is Apple's own
-contract), the TOOLBAR, and the script-command doors, which are declared and REFUSE by name; what the window's close,
+contract), the TOOLBAR'S CUSTOMIZATION PALETTE (the toolbar itself is here; the palette refuses by name), and the
+script-command doors, which are declared and REFUSE by name; what the window's close,
 minimise and zoom buttons DO is now this tier's — each goes through the `-perform…` door its menu item sends — but
 the MINIMISE is
 still only a state the window marks and announces, because there is no Dock to put a miniaturized window in and no
-iconify in the protocol (Kestrel is parked). The chrome's toolbar pill is drawn and performs nothing, because
-there is no toolbar for it to toggle; the three symbols beside it ARE buttons now, and `tests/chrome_buttons.m`
-presses them. The `NSTextInput` PROTOCOL is here and `NSTextView` answers it (`tests/text_marked_text.m`), and the
+iconify in the protocol (Kestrel is parked). The chrome's toolbar pill toggles the window's toolbar (`tests/toolbar.m`);
+a window with no toolbar has nothing to toggle, which is the case `tests/chrome_buttons.m` presses. The three
+symbols beside it ARE buttons, and that same probe presses them. The `NSTextInput` PROTOCOL is here and `NSTextView` answers it (`tests/text_marked_text.m`), and the
 input-method CONTEXT is here too (`tests/text_input_context.m`), and SO IS THE METHOD (`tests/text_input_method.m`):
 `AGInputMethod` is a dead-key table the context sends keys to first. AND THE CANDIDATE LIST IS HERE TOO — this
 sentence said it was owed, and the note thirty lines below already said it had landed, so the two contradicted each

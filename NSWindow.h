@@ -28,11 +28,12 @@
  * FRAME-AUTOSAVE STRINGS (`-setFrameAutosaveName:` and the pair of `…UsingName:` doors, saved when the window
  * closes), THE CURSOR-RECT INVALIDATION (`-addCursorRect:cursor:` on the view, resolved against the pointer by this
  * class) and THE CHILD-WINDOW LIST (`-addChildWindow:ordered:`, `-childWindows`, `-parentWindow`) are all
- * IMPLEMENTED; so is the screen measurement, which is `NSScreen`'s own row and is used (`+mainScreen`). WHAT REMAINS
- * ABSENT: the TOOLBAR (there is no `NSToolbar`), the DRAWER (the CLASS — this class answers `-drawers` with an empty
- * array, which is Apple's own contract for a window without one) and the SCRIPT-COMMAND DOORS, which are declared
- * and REFUSE by name because the scripting suite is not here. The window's BUTTONS are a window manager's business
- * (Kestrel, which will draw them, is parked). Each of those is absent rather than stubbed.
+ * IMPLEMENTED; so is the screen measurement, which is `NSScreen`'s own row and is used (`+mainScreen`). THE TOOLBAR
+ * IS HERE TOO: `-setToolbar:` attaches an `NSToolbar`, `-contentRectForFrameRect:` reserves the band it needs, and
+ * the chrome's pill toggles it. WHAT REMAINS ABSENT: the DRAWER (the CLASS — this class answers `-drawers` with an
+ * empty array, which is Apple's own contract for a window without one) and the SCRIPT-COMMAND DOORS, which are
+ * declared and REFUSE by name because the scripting suite is not here. The window's BUTTONS are a window manager's
+ * business (Kestrel, which will draw them, is parked). Each of those is absent rather than stubbed.
  */
 
 #import <AppKit/NSGraphicsContext.h>
@@ -80,6 +81,7 @@ enum {
 @class NSEvent;
 @class NSImage;
 @class NSWindowController;
+@class NSToolbar;
 @class NSURL;
 @class NSResponder;
 @class NSView;
@@ -250,8 +252,8 @@ typedef NSUInteger NSWindowSharingType;
 	BOOL _ignoresMouseEvents;
 	/* **THE CONTENT BORDER, ONE VALUE PER EDGE** — indexed by `NSRectEdge`, which this tree's geometry declares as
 	 * NSRectEdgeMinX/MinY/MaxX/MaxY in that order. Apple's automatic thickness is computed from the toolbar and
-	 * title-bar area; this window draws its own chrome with a constant strip and has no toolbar, so there is nothing
-	 * for the automatic value to come from and it is 0 (stated where the doors are). */
+	 * title-bar area; this window draws its own chrome and answers 0 rather than deriving a second answer from the
+	 * band, which is stated where the doors are. */
 	CGFloat _contentBorderThickness[4];
 	BOOL _autorecalculatesContentBorder[4];
 	/* **WHAT THE USER MAY DO WITH THE WINDOW, AND TWO FLAGS STORED AS THEIR DEVIATIONS.** `-isMovable`'s default is
@@ -296,6 +298,10 @@ typedef NSUInteger NSWindowSharingType;
 	BOOL _preservesContentDuringLiveResize;
 	NSBackingStoreType _backing;
 	BOOL _showsToolbarButton;
+	/* **THE TOOLBAR, WHICH IS RETAINED BECAUSE THE WINDOW IS THE ONLY OWNER A CALLER EXPECTS.** An `NSToolbar` holds
+	 * a NON-retained back-pointer to its window; the window owns the toolbar, so removing one releases it (and the
+	 * toolbar's own `-cg_setWindow:nil` takes its view out of this window's content tree). */
+	NSToolbar *_toolbar;
 	NSMutableArray *_cg_registeredDraggedTypes;
 	BOOL _cg_registeredDraggedTypesSet;
 	/* THE PLACE IN THE STACK THIS WINDOW ASKED FOR — `NSNormalWindowLevel` until a caller says otherwise. */
@@ -427,8 +433,10 @@ typedef NSUInteger NSWindowSharingType;
 	BOOL _viewsNeedDisplay;
 }
 
-/* THE GEOMETRY PAIR, IN BOTH SPELLINGS: the class forms take the style mask, the instance forms use the
- * receiver's, and the chrome they add is the title bar's — see the implementation for whose number it is. */
+/* THE GEOMETRY PAIR, IN BOTH SPELLINGS: the class forms take the style mask and know only the CHROME (a class
+ * method has no toolbar to ask); the instance forms use the receiver's style mask AND its visible toolbar, so the
+ * content rect is the frame minus the title bar minus the band. The instance forms are what every door in the
+ * implementation uses, which is what keeps a window with a toolbar consistent. */
 + (NSRect)frameRectForContentRect:(NSRect)contentRect styleMask:(NSUInteger)styleMask;
 + (NSRect)contentRectForFrameRect:(NSRect)frameRect styleMask:(NSUInteger)styleMask;
 - (NSRect)frameRectForContentRect:(NSRect)contentRect;
@@ -590,6 +598,13 @@ typedef NSUInteger NSWindowSharingType;
  * centred" needs and what a live screenshot alone cannot give (see `tests/window_chrome.m`). The context is the
  * caller's and is not retained. */
 - (void)cg_drawChromeInContext:(nullable NSGraphicsContext *)context;
+
+/* **AND THE TOOLBAR'S TWO SEAMS, WHICH ARE THE WINDOW'S BECAUSE THE BAND IS THE WINDOW'S GEOMETRY.** The toolbar
+ * is a real subview of the content view, so the live path needs no painter; these two are what a test (and the
+ * toolbar's own show/hide arithmetic) reach. `-cg_toolbarLayoutChanged` re-lays the content view and the band;
+ * `-cg_drawToolbarInContext:` draws the band alone into a context. */
+- (void)cg_toolbarLayoutChanged;
+- (void)cg_drawToolbarInContext:(nullable NSGraphicsContext *)context;
 
 /* **AND THE MENU BAR'S OWN COLOUR, WHICH THE SERVER OWNS AND BOTH THE BAR AND THE MENUS USE.** The strip belongs to
  * the server, so it is the SERVER that says what colour it is (`agora-shell`'s `menu_bar_area`, whose colour
@@ -780,7 +795,8 @@ typedef NSUInteger NSWindowSharingType;
 
  * THE COMMON GROUND, SAID ONCE: this tier has the display (an X client window), the drawing substrate
  * (CoreGraphics) and the event path. What it has not got is printing, PDF/EPS production, the scripting suite,
- * Carbon, toolbars, text views, cells, or a drag session — and each door below names the one it needs. */
+ * Carbon, the default button cell, or a drag session — and each door below names the one it needs. A toolbar is
+ * no longer on that list: `-setToolbar:` attaches one, and `tests/toolbar.m` drives it. */
 - (nullable NSData *)dataWithEPSInsideRect:(NSRect)rect;	/* needs a PDF/EPS producer: this tree's CG has none */
 - (nullable NSData *)dataWithPDFInsideRect:(NSRect)rect;	/* the same substrate, and the PDF half is parked */
 - (void)print:(nullable id)sender;			/* needs the printing system (NSPrintOperation) */
@@ -793,7 +809,7 @@ typedef NSUInteger NSWindowSharingType;
 	    slideBack:(BOOL)slideFlag;
 - (void)disableKeyEquivalentForDefaultButtonCell;	/* needs the default button CELL: no NSCell in this tier */
 - (void)enableKeyEquivalentForDefaultButtonCell;
-- (void)toggleToolbarShown:(nullable id)sender;		/* needs NSToolbar */
+- (void)toggleToolbarShown:(nullable id)sender;
 - (void)runToolbarCustomizationPalette:(nullable id)sender;
 + (void)menuChanged:(nullable id)menu;			/* needs the application's menu system (NSMenu) */
 - (nullable NSWindow *)initWithWindowRef:(nullable void *)windowRef;	/* needs CARBON, which this tree is not —
@@ -949,15 +965,22 @@ typedef NSUInteger NSWindowSharingType;
 - (void)setShowsToolbarButton:(BOOL)show;
 - (BOOL)showsToolbarButton;
 
+/* **THE TOOLBAR, AND WHAT ATTACHING ONE DOES TO THE FRAME.** The toolbar's visible band is part of the window's
+ * chrome for every geometry question — `-contentRectForFrameRect:` shrinks by it, `-frameRectForContentRect:` grows
+ * by it, and the content view's frame is laid out in the result. Setting a toolbar therefore GROWS the frame so the
+ * content keeps its size, and setting nil shrinks it back; `-toggleToolbarShown:` does the same on its own door.
+ * The window retains the toolbar; the toolbar's back-pointer to the window is not retained. */
+- (void)setToolbar:(nullable NSToolbar *)toolbar;
+- (nullable NSToolbar *)toolbar;
+
 /* AND THE ONES THAT ANSWER RATHER THAN STORE, EACH BECAUSE THE ANSWER IS THE TRUTH HERE: a window is never in a
  * live resize (nothing resizes it live), the single-space model means the one space IS the active one, and this
- * tier has no Carbon ref, no toolbar, no drawers, no cells, no Dock tile, and no graphics context of its own — it
- * draws through a `CGContext`. `-drawers` answering an EMPTY ARRAY is not a refusal: Apple's own contract for a
- * window without drawers is exactly that. */
+ * tier has no Carbon ref, no drawers, no cells, no Dock tile, and no graphics context of its own — it draws through
+ * a `CGContext`. `-drawers` answering an EMPTY ARRAY is not a refusal: Apple's own contract for a window without
+ * drawers is exactly that. */
 - (BOOL)inLiveResize;
 - (BOOL)isOnActiveSpace;
 - (void *)windowRef;
-- (nullable id)toolbar;
 - (nullable NSArray *)drawers;
 - (nullable id)defaultButtonCell;
 - (nullable id)dockTile;

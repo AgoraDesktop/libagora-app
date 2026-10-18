@@ -158,6 +158,25 @@ what moves it to another title is a MOVE.
 title ends it. The `APPKIT_MENU_DIAG` line also prints the point and the item it hit now, because "the session
 ended" says nothing about why — that line is what made this findable.
 
+## 9. The toolbar is written from the SDK header, not imported
+
+**`NSToolbar`, `NSToolbarItem` and `NSUserInterfaceValidation` are this repository's own code**, written against the
+classes' declarations in the MacOSX10.6 SDK rather than copied out of the Fiwix tree (which has no toolbar). They
+follow the same era surface the imported classes do: the 10.6 selector set, the era's enum values, manual
+retain/release, and the tree's `-cg_` seam where a private door has to cross a file.
+
+Two decisions are this tier's rather than the SDK's, and both are recorded where they live:
+
+- **the customization palette is a named refusal**, because it is a panel plus a drag-and-drop session and neither
+  exists here; the toolbar itself, its items, validation, selection, display/size modes and the autosaved
+  configuration dictionary are implemented;
+- **the configuration dictionary's keys are ours** (`NSToolbarItemIdentifiers` and the five beside it), because
+  Apple documents the dictionary's existence and keeps its keys private. A dictionary this class writes, it reads.
+
+The window's side — the band's height in `-contentRectForFrameRect:`, the toolbar view as a subview at the content's
+top edge, and the chrome pill's `-toggleToolbarShown:` — is likewise this repository's, and `tests/toolbar.m` holds
+the geometry, the ink, the click and the configuration round trip.
+
 ## Keeping in sync
 
 The Fiwix AppKit is the origin and this repository has now diverged from it in the seam. A fix made there

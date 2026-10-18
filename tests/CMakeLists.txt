@@ -90,6 +90,13 @@ target_link_libraries(menu_validation PRIVATE App)
 add_test(NAME appkit-menu-validation COMMAND menu_validation)
 set_tests_properties(appkit-menu-validation PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
 
+# **THE TOOLBAR: A DELEGATE'S ITEMS, THE BAND THEY TAKE, THE INK THEY DRAW AND THE CLICK THEY ANSWER.** Offscreen,
+# like the chrome: the frame arithmetic and the view's own context need no compositor.
+add_executable(toolbar toolbar.m)
+target_link_libraries(toolbar PRIVATE App m)
+add_test(NAME appkit-toolbar COMMAND toolbar)
+set_tests_properties(appkit-toolbar PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
+
 # **THE CONTROL LAYER: A VIEW THAT DELEGATES ITS FACE TO A CELL.** Offscreen, and the claim is the INK — a button's
 # bezel and title, a switch's indicator, the value doors forwarding, and `-performClick:` reaching the target.
 add_executable(control_ink control_ink.m)
