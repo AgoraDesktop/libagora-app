@@ -340,10 +340,17 @@ the compositor is really gone.
   that forwards here does not recurse), and `NSTextTableBlock` forwards its `-boundsRectForContentRect:...` to its table.
   MEASURED in the same probe: the identical cell is drawn through a plain table and through a subclass that grows the box
   eight points on each side, and the ground goes from **300 green pixels to 868** — the table's growth is honoured.
-- **AND ONE OF THE THREE IS STILL OWED, WITH ITS REASON.** `-rectForBlock:layoutAtPoint:inRect:textContainer:
-  characterRange:` needs the COLUMN GEOMETRY, which the layout manager computes across every cell of the table (that is
-  what makes a column as wide as its widest cell and its x stable across a container break) — moving that into the table
-  is the grid itself, not a delegation.
+- **AND ONE OF THE THREE IS STILL OWED, AND ITS CAUSE IS NOW KNOWN RATHER THAN GUESSED.**
+  `-rectForBlock:layoutAtPoint:inRect:textContainer:characterRange:` was IMPLEMENTED and wired — the table published the
+  column widths the manager measured, the door computed a cell's content rect from them, the block forwarded to its table,
+  and the manager asked the door instead of doing the arithmetic inline — and then REVERTED, which is the finding rather
+  than a setback. THE FOUR TABLE PROBES PASSED WITH IT IN, so the default reproduced the old geometry exactly; what failed
+  was the OVERRIDE: a subclass that moved its cells twelve points right changed nothing that could be observed. Measured
+  three ways — the manager's fragment rect for the cell (`lineFragmentRectForGlyphAtIndex:`, which reports CONTAINER-LOCAL
+  coordinates so the cell's x is invisible in it), the drawn ground's left edge, and the drawn INK's left edge (11 in both
+  the plain and the shifted table). A cell's text is laid out in a CELL-LOCAL container and that container's origin is not
+  carried into the drawing, so an x the door answers is dropped downstream. THAT is the refactor the door needs: the
+  placement path has to USE the rect it asks for, which is the same pass that decides row heights.
 - **AND THE FIRST ATTEMPT AT THIS WAS REVERTED BEFORE IT WAS RETRIED, WHICH IS WHY IT IS TWO SLICES.** The internal
   painter, the block's forwarding and a probe were written once and the probe failed: its table subclass never saw the
   override. The cause turned out to be two things — **`-copy` on `NSTextTable` and on `NSTextTableBlock` HARD-CODED ITS
