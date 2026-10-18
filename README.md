@@ -321,8 +321,20 @@ the compositor is really gone.
   fresh block has no ground and no widths; a per-layer width sets all four edges and a per-edge colour is answered for
   that edge alone; a content rect of (10,10 30x10) with **5** on every side grows to (5,5 40x20); a fresh table is one
   automatic column and a cell answers its row/span/column; a style's `-textBlocks` survives `-copy`; and the manager
-  puts the ground and the border around `ab` — read as green and red pixels. **WHAT IS STILL OWED IS THE GRID**: shared
-  column widths, rows measured across spanning cells, and `-collapsesBorders`.
+  puts the ground and the border around `ab` — read as green and red pixels. **AND THE GRID IS NO LONGER OWED, WHICH
+  CORRECTS WHAT THIS NOTE SAID**: the three things it named are each implemented and each has a probe — shared column
+  widths and rows as tall as their tallest cell (`tests/text_table_grid.m`: two cells in a row share a y, two in a column
+  share an x, a row of long cells is measured and wrapped), columns re-measured across a container break so a cell keeps
+  its x (`text_table_flow.m`), and `-collapsesBorders` (`text_table_collapse.m`: the shared edge drawn ONCE, owned by the
+  HEAVIER cell rather than by the left one, with the table's own border joining the collapse on its outer edges).
+  **WHAT IS GENUINELY OWED OF THAT FAMILY IS THE THREE DELEGATION DOORS** on `NSTextTable` that 10.6 declares —
+  `-rectForBlock:layoutAtPoint:inRect:textContainer:characterRange:`,
+  `-boundsRectForBlock:contentRect:inRect:textContainer:characterRange:` and
+  `-drawBackgroundForBlock:withFrame:inView:characterRange:layoutManager:` — which are what makes subclassing a table the
+  way to customise one. **AND AN ATTEMPT AT THE DRAWING ONE WAS REVERTED RATHER THAN SHIPPED**: the internal painter and
+  the block's forwarding worked (the block's door was reached with its table intact), but a probe whose table subclass
+  overrode the Apple-shaped door never saw the override called from the manager's path, and the cause was not isolated.
+  A half-wired extension point is worse than a named absence, so the doors stay owed and the probe is not in the suite.
 - **And the RTF READER, which is the half Foundation does not have** (`ctest`): `libagora-base` already WRITES RTF (`-RTFFromRange:documentAttributes:`), but a reader has to turn control words into the APPKIT's attribute keys —
   `NSFontAttributeName`, `NSForegroundColorAttributeName`, … — which Foundation has no vocabulary for. MEASURED: a
   literal RTF document with a font table, a colour table, a centred underlined red paragraph and a plain one parses to
