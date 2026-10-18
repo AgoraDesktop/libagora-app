@@ -338,6 +338,8 @@ int main(void)
 		[NSGraphicsContext setCurrentContext:ctx];
 		[[NSColor whiteColor] setFill];
 		[[NSBezierPath bezierPathWithRect:NSMakeRect(0.0, 0.0, (CGFloat)TW, (CGFloat)fh)] fill];
+		/* THE BAND ALONE, THEN THE LIVE WINDOW'S CONTENT WALK. The second is the one that found the invisible-toolbar
+		 * defect: the band drew correctly when asked for its own rect, and the content tree's walk never reached it. */
 		[window cg_drawToolbarInContext:ctx];
 		[window cg_drawChromeInContext:ctx];
 		check(lum([rep colorAtX:2 y:bandTop + 8]) < 0.99,
@@ -358,6 +360,35 @@ int main(void)
 		check(ink > 0, "an item's label is drawn as ink inside the band");
 		check(lum([rep colorAtX:2 y:6]) < lum([rep colorAtX:2 y:bandTop + 8]),
 		      "the title bar is painted above the band, in the chrome's own colour");
+	}
+
+	/* **AND THE SAME BAND THROUGH THE WINDOW'S OWN CONTENT WALK.** This is the path a live window uses, and it is
+	 * the one that was blank while the band-only draw above was correct. */
+	{
+		const int fh = (int)(TH + 22.0 + [toolbar cg_toolbarHeight]);
+		const int bandTop = fh - (int)(TH + [toolbar cg_toolbarHeight]);
+		const int bandBottom = fh - (int)TH - 1;
+		NSBitmapImageRep *contentRep = new_rep(TW, fh);
+		NSGraphicsContext *contentCtx = [NSGraphicsContext graphicsContextWithBitmapImageRep:contentRep];
+		int contentInk = 0;
+
+		[NSGraphicsContext setCurrentContext:contentCtx];
+		[[NSColor whiteColor] setFill];
+		[[NSBezierPath bezierPathWithRect:NSMakeRect(0.0, 0.0, (CGFloat)TW, (CGFloat)fh)] fill];
+		[window cg_drawContentInContext:contentCtx];
+		for (i = 0; i < TW; i++) {
+			int y;
+
+			for (y = bandTop; y <= bandBottom; y++) {
+				NSColor *pixel = [contentRep colorAtX:i y:y];
+
+				if (pixel != nil && lum(pixel) < 0.55) {
+					contentInk++;
+				}
+			}
+		}
+		check(contentInk > 0, "the content view's own walk reaches the toolbar band and draws its items");
+		[contentRep release];
 	}
 
 	/* 9. THE TOGGLE DOORS, INCLUDING THE CHROME'S PILL. */

@@ -602,8 +602,10 @@ typedef NSUInteger NSWindowSharingType;
 /* **AND THE TOOLBAR'S TWO SEAMS, WHICH ARE THE WINDOW'S BECAUSE THE BAND IS THE WINDOW'S GEOMETRY.** The toolbar
  * is a real subview of the content view, so the live path needs no painter; these two are what a test (and the
  * toolbar's own show/hide arithmetic) reach. `-cg_toolbarLayoutChanged` re-lays the content view and the band;
- * `-cg_drawToolbarInContext:` draws the band alone into a context. */
+ * `-cg_drawContentInContext:` is the window's own content-tree walk (the one the live frame uses), and
+ * `-cg_drawToolbarInContext:` draws the band alone. */
 - (void)cg_toolbarLayoutChanged;
+- (void)cg_drawContentInContext:(nullable NSGraphicsContext *)context;
 - (void)cg_drawToolbarInContext:(nullable NSGraphicsContext *)context;
 
 /* **AND THE MENU BAR'S OWN COLOUR, WHICH THE SERVER OWNS AND BOTH THE BAR AND THE MENUS USE.** The strip belongs to

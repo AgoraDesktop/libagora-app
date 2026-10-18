@@ -14,6 +14,12 @@
  * demonstrate EACH OTHER: the View menu's "Show Grid" is a CHECKED item whose state is validated against the
  * checkbox below it, "Undo" is DISABLED by the same validator, and the push button TOGGLES the checkbox — so a click
  * on a control changes a menu item, and the menu reports what the control says.
+ *
+ * **AND IT WEARS A TOOLBAR, WHICH IS THE STRIP THE `NSToolbar` SLICE EXISTS TO SHOW.** The window grows by the band
+ * and the controls stay where they were; the items are the SAME actions the menus use ("Show Grid" toggles the
+ * checkbox, "Playground" opens the text window, "Action" is the no-op), plus a separator, a flexible space and one
+ * disabled item. The three pictures are drawn in this file, so the demonstration needs no icon files and no search
+ * path. `tests/toolbar.m` asserts the behaviour; this is where it can be looked at.
  */
 #import <AppKit/NSApplication.h>
 #import <AppKit/NSWindow.h>
@@ -30,6 +36,9 @@
 #import <AppKit/NSPopUpButton.h>
 #import <AppKit/NSComboBox.h>	/* the other field with a chip, and the one-triangle mark that tells them apart */
 #import <AppKit/AGSwitch.h>	/* the tier's own control: a track and a knob, 32 x 20 */
+#import <AppKit/NSToolbar.h>	/* the band above the content, and the items in it */
+#import <AppKit/NSToolbarItem.h>
+#import <AppKit/NSToolbar_internal.h>	/* the band height and view, for the geometry line */
 #import <AppKit/NSClipView.h>
 #import <AppKit/NSColor.h>
 #import <AppKit/NSBezierPath.h>
@@ -54,7 +63,7 @@
 
 /* **THE TARGET BOTH HALVES POINT AT.** A menu item's action, a button's action and a validator all end here, which
  * is what makes the checkbox and the View menu one piece of state rather than two that look alike. */
-@interface AGControlsController : NSObject
+@interface AGControlsController : NSObject <NSToolbarDelegate>
 {
 @public
 	NSButton *checkbox;
@@ -70,6 +79,12 @@
 	NSSlider *plain;
 	/* **AND THE PLAYGROUND WINDOW, KEPT SO A SECOND CHOICE BRINGS IT FORWARD rather than making another.** */
 	NSWindow *_playground;
+	/* THE TOOLBAR'S THREE PICTURES, made once in `main` before the toolbar asks for its items. They are borrowed
+	 * here — the items retain them when they are set — and they are small enough that a drawing helper is cheaper
+	 * than shipping icon files a demonstration would have to find. */
+	NSImage *gridIcon;
+	NSImage *playgroundIcon;
+	NSImage *actionIcon;
 }
 - (BOOL)validateMenuItem:(NSMenuItem *)item;
 - (void)toggleCheckbox:(id)sender;
@@ -77,6 +92,13 @@
 - (void)noop:(id)sender;
 - (void)choiceMade:(id)sender;
 - (void)showPlayground:(id)sender;
+- (NSToolbarItem *)toolbar:(NSToolbar *)toolbar
+     itemForItemIdentifier:(NSString *)itemIdentifier
+ willBeInsertedIntoToolbar:(BOOL)flag;
+- (NSArray *)toolbarDefaultItemIdentifiers:(NSToolbar *)toolbar;
+- (NSArray *)toolbarAllowedItemIdentifiers:(NSToolbar *)toolbar;
+- (NSArray *)toolbarSelectableItemIdentifiers:(NSToolbar *)toolbar;
+- (BOOL)validateToolbarItem:(NSToolbarItem *)item;
 @end
 
 /* ============================================================================================ *
@@ -103,6 +125,56 @@ static NSImage *fn_playground_picture(CGFloat w, CGFloat h)
 	[[NSBezierPath bezierPathWithRect:NSMakeRect(0.0, 0.0, w, h)] fill];
 	[[NSColor whiteColor] setFill];
 	[[NSBezierPath bezierPathWithRect:NSMakeRect(w * 0.25, h * 0.25, w * 0.5, h * 0.5)] fill];
+	[image addRepresentation:rep];
+	[rep release];
+	return [image autorelease];
+}
+
+/* **THE TOOLBAR'S PICTURES, DRAWN RATHER THAN FOUND.** A toolbar's icon is the one picture the demonstration would
+ * otherwise have to ship as a file, and a file is a path that has to resolve from wherever the binary was run. Three
+ * 18-point tiles, one per item, are drawn from the same shapes the rest of this file uses: a grid of rules, three
+ * lines of text, and a triangle. The round rect is the button face the rest of the tier's controls wear. */
+static NSImage *fn_toolbar_icon(int kind)
+{
+	NSBitmapImageRep *rep = [[NSBitmapImageRep alloc] initWithBitmapDataPlanes:NULL pixelsWide:18 pixelsHigh:18
+		bitsPerSample:8 samplesPerPixel:4 hasAlpha:YES isPlanar:NO
+		colorSpaceName:NSCalibratedRGBColorSpace bytesPerRow:18 * 4 bitsPerPixel:32];
+	NSImage *image = [[NSImage alloc] initWithSize:NSMakeSize(18.0, 18.0)];
+	NSBezierPath *face = [NSBezierPath bezierPathWithRoundedRect:NSMakeRect(0.0, 0.0, 18.0, 18.0)
+							      xRadius:4.0 yRadius:4.0];
+
+	[NSGraphicsContext setCurrentContext:[NSGraphicsContext graphicsContextWithBitmapImageRep:rep]];
+	if (kind == 0) {
+		[[NSColor colorWithCalibratedRed:0.20 green:0.45 blue:0.85 alpha:1.0] setFill];
+	} else if (kind == 1) {
+		[[NSColor colorWithCalibratedRed:0.85 green:0.42 blue:0.20 alpha:1.0] setFill];
+	} else {
+		[[NSColor colorWithCalibratedRed:0.22 green:0.60 blue:0.35 alpha:1.0] setFill];
+	}
+	[face fill];
+	[[NSColor whiteColor] setFill];
+	if (kind == 0) {
+		/* A GRID: two rules each way, and the outer frame. */
+		[[NSBezierPath bezierPathWithRect:NSMakeRect(4.0, 4.0, 10.0, 1.0)] fill];
+		[[NSBezierPath bezierPathWithRect:NSMakeRect(4.0, 8.0, 10.0, 1.0)] fill];
+		[[NSBezierPath bezierPathWithRect:NSMakeRect(4.0, 12.0, 10.0, 1.0)] fill];
+		[[NSBezierPath bezierPathWithRect:NSMakeRect(4.0, 4.0, 1.0, 9.0)] fill];
+		[[NSBezierPath bezierPathWithRect:NSMakeRect(8.0, 4.0, 1.0, 9.0)] fill];
+		[[NSBezierPath bezierPathWithRect:NSMakeRect(12.0, 4.0, 1.0, 9.0)] fill];
+	} else if (kind == 1) {
+		/* THREE LINES OF TEXT, the last one short — a page rather than a picture. */
+		[[NSBezierPath bezierPathWithRect:NSMakeRect(4.0, 12.0, 10.0, 2.0)] fill];
+		[[NSBezierPath bezierPathWithRect:NSMakeRect(4.0, 8.0, 8.0, 2.0)] fill];
+		[[NSBezierPath bezierPathWithRect:NSMakeRect(4.0, 4.0, 6.0, 2.0)] fill];
+	} else {
+		NSBezierPath *play = [NSBezierPath bezierPath];
+
+		[play moveToPoint:NSMakePoint(6.0, 4.0)];
+		[play lineToPoint:NSMakePoint(14.0, 9.0)];
+		[play lineToPoint:NSMakePoint(6.0, 14.0)];
+		[play closePath];
+		[play fill];
+	}
 	[image addRepresentation:rep];
 	[rep release];
 	return [image autorelease];
@@ -239,6 +311,92 @@ static void fn_playground_fill(NSTextView *view)
 	return YES;
 }
 
+/* **THE TOOLBAR'S ITEMS, MADE FROM THE SAME ACTIONS THE MENU USES.** "Show Grid" toggles the checkbox the View menu
+ * validates against, "Playground" opens the text window, and "Action" is the no-op that prints its own name — so the
+ * strip and the menus are two roads to the same three acts rather than a second set of commands. The separator,
+ * flexible space and the disabled item are the other half of what a toolbar has to show: a spacer the delegate does
+ * not make, and an item that says it cannot be pressed. */
+- (NSToolbarItem *)toolbar:(NSToolbar *)toolbar
+     itemForItemIdentifier:(NSString *)itemIdentifier
+ willBeInsertedIntoToolbar:(BOOL)flag
+{
+	NSToolbarItem *item = [[[NSToolbarItem alloc] initWithItemIdentifier:itemIdentifier] autorelease];
+
+	(void)toolbar;
+	(void)flag;
+	if ([itemIdentifier isEqualToString:@"grid"]) {
+		[item setLabel:@"Show Grid"];
+		[item setPaletteLabel:@"Show Grid"];
+		[item setImage:gridIcon];
+		[item setTarget:self];
+		[item setAction:@selector(toggleCheckbox:)];
+		return item;
+	}
+	if ([itemIdentifier isEqualToString:@"playground"]) {
+		[item setLabel:@"Playground"];
+		[item setPaletteLabel:@"Playground"];
+		[item setImage:playgroundIcon];
+		[item setTarget:self];
+		[item setAction:@selector(showPlayground:)];
+		return item;
+	}
+	if ([itemIdentifier isEqualToString:@"action"]) {
+		[item setLabel:@"Action"];
+		[item setPaletteLabel:@"Action"];
+		[item setImage:actionIcon];
+		[item setTarget:self];
+		[item setAction:@selector(noop:)];
+		return item;
+	}
+	if ([itemIdentifier isEqualToString:@"disabled"]) {
+		[item setLabel:@"Disabled"];
+		[item setPaletteLabel:@"Disabled"];
+		[item setImage:actionIcon];
+		[item setTarget:self];
+		[item setAction:@selector(noop:)];
+		[item setEnabled:NO];
+		return item;
+	}
+	/* A SPACER IS THE TOOLBAR'S OWN, which is what returning nil asks for. */
+	return nil;
+}
+
+- (NSArray *)toolbarDefaultItemIdentifiers:(NSToolbar *)toolbar
+{
+	(void)toolbar;
+	return [NSArray arrayWithObjects:@"grid", @"playground", NSToolbarSeparatorItemIdentifier,
+					 @"action", NSToolbarFlexibleSpaceItemIdentifier, @"disabled", nil];
+}
+
+- (NSArray *)toolbarAllowedItemIdentifiers:(NSToolbar *)toolbar
+{
+	(void)toolbar;
+	return [NSArray arrayWithObjects:@"grid", @"playground", @"action", @"disabled",
+					 NSToolbarSeparatorItemIdentifier, NSToolbarSpaceItemIdentifier,
+					 NSToolbarFlexibleSpaceItemIdentifier, nil];
+}
+
+- (NSArray *)toolbarSelectableItemIdentifiers:(NSToolbar *)toolbar
+{
+	(void)toolbar;
+	/* THE GRID IS THE ONE MODE, so it is the one item a click can leave selected. The action items do something and
+	 * come back up; a selected "Playground" would claim the window is a mode. */
+	return [NSArray arrayWithObject:@"grid"];
+}
+
+- (BOOL)validateToolbarItem:(NSToolbarItem *)item
+{
+	NSString *identifier = [item itemIdentifier];
+
+	/* THE DISABLED ITEM IS THE ONE THE STRIP SHOWS GREY, and it says NO here as well as being built disabled. The
+	 * validator is what a later update pass asks, so the state cannot come back to life just because the window was
+	 * updated. */
+	if ([identifier isEqualToString:@"disabled"]) {
+		return NO;
+	}
+	return YES;
+}
+
 - (void)toggleCheckbox:(id)sender
 {
 	(void)sender;
@@ -269,7 +427,19 @@ static void fn_playground_fill(NSTextView *view)
  * doing nothing but saying so. */
 - (void)noop:(id)sender
 {
-	fprintf(stderr, "controls: menu item chosen: %s\n", [[(NSMenuItem *)sender title] UTF8String]);
+	/* **THE SAME ACTION IS A MENU ITEM'S AND A TOOLBAR ITEM'S, SO IT READS EITHER.** A menu item has a title and a
+	 * toolbar item has a label; an action that cast blindly to `NSMenuItem` would print a title out of an object that
+	 * does not have one — the crash a shared target is supposed to avoid, not cause. */
+	NSString *name = nil;
+
+	if ([sender isKindOfClass:[NSMenuItem class]]) {
+		name = [(NSMenuItem *)sender title];
+	} else if ([sender isKindOfClass:[NSToolbarItem class]]) {
+		name = [(NSToolbarItem *)sender label];
+	} else if ([sender isKindOfClass:[NSButton class]]) {
+		name = [(NSButton *)sender title];
+	}
+	fprintf(stderr, "controls: action chosen: %s\n", name != nil ? [name UTF8String] : "?");
 }
 
 /* **A POP-UP BUTTON'S ACTION, AND IT READS THE SENDER THE WAY THE SLIDER'S DOES.** The sender is the BUTTON — not the
@@ -547,6 +717,7 @@ int main(int argc, char **argv)
 		NSComboBox *combo;
 		NSMenu *choices;
 		AGScrollDoc *doc;
+		NSToolbar *toolbar;
 
 		[app finishLaunching];
 
@@ -566,7 +737,10 @@ int main(int argc, char **argv)
 		 *
 		 * THE FRAME GROWS BY THE STRIP AND THE CONTENT DOES NOT MOVE, because the frame is bottom-left: the title bar is
 		 * added ABOVE the 420x290 the controls are already laid out in. */
-		w = [[NSWindow alloc] initWithContentRect:NSMakeRect(120, 120, 760, 420)
+		/* **THE WINDOW SITS LOW ENOUGH FOR THE TOOLBAR IT IS ABOUT TO WEAR.** The content is still 760x420; a toolbar
+		 * adds its 52-point band and the title bar another 22, so the frame is 494 tall and the origin is 60 rather than
+		 * 120 — otherwise the default 900x600 demonstration would put the title bar above the screen. */
+		w = [[NSWindow alloc] initWithContentRect:NSMakeRect(120, 60, 760, 420)
 			styleMask:(NSTitledWindowMask | NSClosableWindowMask | NSMiniaturizableWindowMask | NSResizableWindowMask)
 			backing:NSBackingStoreBuffered defer:NO];
 		content = [[NSView alloc] initWithFrame:NSMakeRect(0, 0, 760, 420)];
@@ -703,6 +877,19 @@ int main(int argc, char **argv)
 		[w setContentView:content];
 		[w setTitle:@"Controls"];
 
+		/* **AND THE TOOLBAR, WHICH IS THE STRIP THIS WINDOW NOW WEARS.** It is given the controller as its delegate,
+		 * asked for labels beside its pictures (so the items are readable without a tooltip), and attached AFTER the
+		 * content view so the window can grow the frame and leave the controls where they were. The icons are made
+		 * once, before the delegate is asked for an item. */
+		controller->gridIcon = fn_toolbar_icon(0);
+		controller->playgroundIcon = fn_toolbar_icon(1);
+		controller->actionIcon = fn_toolbar_icon(2);
+		toolbar = [[NSToolbar alloc] initWithIdentifier:@"AGControlsToolbar"];
+		[toolbar setDelegate:controller];
+		[toolbar setDisplayMode:NSToolbarDisplayModeIconAndLabel];
+		[toolbar setSelectedItemIdentifier:@"grid"];
+		[w setToolbar:toolbar];
+
 		/* **AND THE MENUS, WHICH ARE THE APPLICATION'S AND GO IN THE SERVER'S BAR.** View has the checked item and
 		 * Edit the disabled one; both are validated against this controller, and the push button toggles the same
 		 * checkbox their state is read from. */
@@ -742,6 +929,9 @@ int main(int argc, char **argv)
 		[controller showPlayground:nil];
 		/* ONE LINE OF GEOMETRY, so that a screenshot can be READ against the numbers the application believes rather
 		 * than against a guess about where a window landed. */
+		fprintf(stderr, "controls: toolbar = %.0f-point band, %.0f-wide view at y=%.0f, %lu items\n",
+			[toolbar cg_toolbarHeight], [[toolbar cg_view] frame].size.width,
+			[[toolbar cg_view] frame].origin.y, (unsigned long)[[toolbar items] count]);
 		fprintf(stderr, "controls: window frame = %.0f,%.0f %.0fx%.0f; content = %.0fx%.0f; slider = %.0f,%.0f; "
 			"field = %.0f,%.0f %.0fx%.0f\n",
 			[w frame].origin.x, [w frame].origin.y, [w frame].size.width, [w frame].size.height,

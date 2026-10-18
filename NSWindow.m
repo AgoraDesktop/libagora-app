@@ -2960,8 +2960,6 @@ static CGFloat fn_clamp_axis(CGFloat v, CGFloat lo, CGFloat hi)
 - (void)cg_drawFrame
 {
 	NSRect content;
-	NSGraphicsContext *g;
-	NSGraphicsContext *prev;
 	CGContextRef c;
 	uint32_t *frame;
 	int stride = 0;
@@ -3016,14 +3014,7 @@ static CGFloat fn_clamp_axis(CGFloat v, CGFloat lo, CGFloat hi)
 		memset(_pixels, 0, (size_t)_surfaceWidth * (size_t)_surfaceHeight * 4u);
 	}
 	if (_contentView != nil) {
-		g = [NSGraphicsContext graphicsContextWithCGContext:_surface flipped:NO];
-		prev = [[NSGraphicsContext currentContext] retain];
-		[NSGraphicsContext setCurrentContext:g];
-		/* THE TREE WALK IS THE VIEW'S: `-displayRect:` draws the receiver AND its subviews, which is what the
-		 * WINDOW used to do by hand — and could only do for one view. */
-		[_contentView displayRect:[_contentView bounds]];
-		[NSGraphicsContext setCurrentContext:prev];
-		[prev release];
+		[self cg_drawContentInContext:[NSGraphicsContext graphicsContextWithCGContext:_surface flipped:NO]];
 	}
 	/* THE CHROME, THROUGH THE SAME DOOR A TEST USES — see `-cg_drawChromeInContext:` for why it is a method. */
 	[self cg_drawChromeInContext:[NSGraphicsContext graphicsContextWithCGContext:c flipped:NO]];
@@ -4245,10 +4236,31 @@ static NSUInteger fn_edge_index(NSRectEdge edge)
 	[self setNeedsDisplay:YES];
 }
 
-/* **THE BAND REACHED THROUGH A CONTEXT, WHICH IS HOW THE TOOLBAR IS CHECKED WITHOUT A COMPOSITOR.** The live window
- * gets the same ink through its content view's tree — the toolbar is a real subview — but a test needs to draw it
- * into a bitmap without pretending to be the window server. A nil context, or a toolbar that is absent or hidden,
- * draws nothing. */
+/* **THE CONTENT TREE, WHICH IS THE LIVE WINDOW'S WALK AND THE DOOR A TEST CAN DRIVE.** `-displayRect:` draws the
+ * receiver AND its subviews, so this is the whole content surface. **THE RECT INCLUDES THE TOOLBAR'S BAND, WHICH IS
+ * OUTSIDE THE CONTENT VIEW'S FRAME.** `-displayRect:` converts the RECEIVER's rect into each child's coordinates, so
+ * passing only the content rect converts to a zero-height rect at the toolbar's edge and its `-drawRect:` is never
+ * called — MEASURED: the toolbar painted correctly in an offscreen draw of its own view and was invisible on a live
+ * window, which is exactly the difference this rect closes. */
+- (void)cg_drawContentInContext:(nullable NSGraphicsContext *)context
+{
+	NSGraphicsContext *previous;
+	NSRect visible;
+
+	if (_contentView == nil || context == nil) {
+		return;
+	}
+	previous = [[NSGraphicsContext currentContext] retain];
+	[NSGraphicsContext setCurrentContext:context];
+	visible = [_contentView bounds];
+	visible.size.height += fn_toolbar_height(self);
+	[_contentView displayRect:visible];
+	[NSGraphicsContext setCurrentContext:previous];
+	[previous release];
+}
+
+/* **THE BAND ALONE, FOR A TEST THAT WANTS THE STRIP WITHOUT THE CONTENT.** A nil context, or a toolbar that is
+ * absent or hidden, draws nothing. */
 - (void)cg_drawToolbarInContext:(nullable NSGraphicsContext *)context
 {
 	CGContextRef c;

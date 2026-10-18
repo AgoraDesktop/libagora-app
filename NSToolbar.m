@@ -471,10 +471,11 @@ static CGFloat fn_standard_width(NSToolbarItem *item, NSToolbarDisplayMode displ
 	}
 	/* THE STRIP'S OWN GROUND. A toolbar is a control surface, so it is the control background rather than the
 	 * window's, and the baseline below is the seam between the two. */
-	/* **THE STRIP IS A CONTROL SURFACE, ONE STEP OFF THE WINDOW'S WHITE.** `+controlBackgroundColor` is pure white
-	 * and a white toolbar would read as more content; `+controlHighlightColor` is the raised grey the rest of the
-	 * controls use, and the baseline below is what gives it an edge. */
-	CGContextSetFillColorWithColor(c, [[NSColor controlHighlightColor] CGColor]);
+	/* **THE STRIP IS A CONTROL SURFACE, ONE STEP BELOW THE WINDOW AND ABOVE THE TITLE BAR.** The window is 0.93 and
+	 * a control's face is 0.90, so the toolbar takes the control's grey: a toolbar that matched the content would read
+	 * as more content, and one that matched the chrome would read as part of the title bar. The baseline below is what
+	 * gives the bottom edge its line. */
+	CGContextSetFillColorWithColor(c, [[NSColor controlColor] CGColor]);
 	CGContextFillRect(c, CGRectMake(0.0, 0.0, bounds.size.width, bounds.size.height));
 
 	for (i = 0; i < [_layoutItems count]; i++) {
@@ -521,7 +522,15 @@ static CGFloat fn_standard_width(NSToolbarItem *item, NSToolbarDisplayMode displ
 
 			fn_item_rects(item, rect, display, mode, &imageRect, &labelRect);
 			if (image != nil && imageRect.size.width > 0.0 && imageRect.size.height > 0.0) {
+				/* A DISABLED ITEM'S PICTURE DIMS WITH ITS LABEL, which is the same pairing `NSButtonCell` uses: a
+				 * grey word beside a full-strength icon still looks pressable. */
+				if (![item isEnabled]) {
+					CGContextSetAlpha(c, 0.5);
+				}
 				[image drawInRect:imageRect];
+				if (![item isEnabled]) {
+					CGContextSetAlpha(c, 1.0);
+				}
 			}
 			if (label == nil || [label length] == 0 || labelRect.size.width <= 0.0) {
 				continue;
