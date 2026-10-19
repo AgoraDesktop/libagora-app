@@ -17,7 +17,9 @@ content, with item groups that lay their members adjacent. Above the controls th
 rows, a scrolling header, a selection, editing through the field editor, type-select, variable row heights, column
 reordering, autosave and a local row drag; and an OUTLINE VIEW over it:
 the same table, flattened from a tree with disclosure triangles. And beside them a SPLIT VIEW: panes side by side or
-one above another, dividers that drag, panes that collapse, and the delegate that constrains all of it.
+one above another, dividers that drag, panes that collapse, and the delegate that constrains all of it. Under all of
+it is a DRAG SESSION: a source begins a drag from a view, the composed image floats in a window of its own, and a
+destination in ANY window of the application is found by screen point and answers the dragged types.
 
 The classes here come from the Fiwix AppKit (same author, same licence — see `PROVENANCE.md`), and they
 talked to an X server: `NSWindow.m` called `XOpenDisplay`, `XCreateSimpleWindow`, `XMapWindow`, `XPutImage`
@@ -97,6 +99,8 @@ tests/
   toolbar.m                     the TOOLBAR: the delegate's items, the band, the ink and the click
   table_view.m                  the TABLE: columns, rows, the header, selection, the divider drag and the ink
   table_advanced.m              the TABLE's other half: heights, type-select, reordering, autosave, editing, drag
+  drag_session.m                the DRAG SESSION: source, destination, types, masks, modifiers and the image
+  drag_seam.m                   and its floating IMAGE WINDOW, against Agora's own headless server
   outline_view.m                the OUTLINE: the tree flattened, levels, the triangle's click and item selection
   segmented_control.m           the SEGMENTED CONTROL: segment geometry, selection, tracking, forwarding and ink
   path_control.m                the PATH BAR: URL decomposition, component geometry, styles, clicks and ink
@@ -849,9 +853,10 @@ the header's.
 through the data source; type-select searches the prepared cells' strings (or the delegate's per-cell strings);
 variable row heights come from `-tableView:heightOfRow:` and are cached; the header reorders a column when dragged
 past its threshold, with `-tableView:shouldReorderColumn:toColumn:` allowed to refuse; and an autosave name persists
-column widths, order, hidden state and sort descriptors. A LOCAL row drag writes the data source's pasteboard,
-validates and accepts, and draws the insertion line. What is still absent is the CROSS-PROCESS drag session
-(`NSDraggingSession`, a drag image on the glass, another application's destination) and the later view-based API
+column widths, order, hidden state and sort descriptors. A ROW DRAG writes the data source's pasteboard, begins
+the tier's drag session, validates and accepts, and draws the insertion line. The drag session (`NSDragging.h`) is
+what makes the same row draggable onto ANOTHER view that registered for the types; what is still absent is the
+CROSS-PROCESS half (another application's destination and its pasteboard) and the later view-based API
 (`NSTableCellView`, `-viewForTableColumn:row:`). `NSOutlineView`, `NSSplitView`, `NSSegmentedControl` and
 `NSPathControl` are here beside them: the Finder shell's AppKit prerequisites are complete.
 
@@ -859,8 +864,8 @@ validates and accepts, and draws the insertion line. What is still absent is the
 and cells, exercises a delegate that refuses one row, drives the header's divider and sort click through real
 events, and draws the table and the header into bitmaps to find their ink. `tests/table_advanced.m` is the second:
 variable row heights and their cache, a typed prefix that wraps and restarts, a header drag that reorders a column,
-an autosave round trip through a second table, a field-editor session that writes back to the data source, and a
-local row drag that reaches `writeRows`/`validateDrop`/`acceptDrop`.
+an autosave round trip through a second table, a field-editor session that writes back to the data source, and a row
+drag that runs through the tier's DRAG SESSION and reaches `writeRows`/`validateDrop`/`acceptDrop`.
 
 **`NSOutlineView` IS THE SAME TABLE WITH A FLATTENED TREE.** `-reloadData` asks the data source for the roots and
 walks every open item depth-first into a row list with a parallel level array; `-itemAtRow:`, `-rowForItem:` and
@@ -944,9 +949,70 @@ The three styles are three faces: Standard is the light-blue bar with small arro
 bar at the small control size with chevrons, and PopUp shows the last component and raises a menu of the whole path.
 A single click goes through `NSControl`'s ordinary tracking loop and leaves `-clickedPathComponentCell` answering the
 component under the release; a double-click is the control's own gesture and sends `-doubleAction` with the same
-clicked cell. The editable/drop half is absent with the drag session and the file panel this tier has not got —
-`NSPathControl.h` names both gaps. `tests/path_control.m` measures the URL decomposition, the prefix URLs, the
+clicked cell. The editable/drop half is absent with the file panel this tier has not got and is not registered as a destination —
+the drag session exists now (`NSDragging.h`), so what a path bar would accept is a decision the class has not made
+rather than a session it has not got. `NSPathControl.h` names the gaps. `tests/path_control.m` measures the URL decomposition, the prefix URLs, the
 geometry and its middle truncation, the three styles, single and double actions, manual component cells and the ink.
+
+### The drag session, and the image that floats
+
+**`NSDraggingSession`, `NSDraggingItem`, `NSDraggingSource`, `NSDraggingDestination` AND THE 10.6 `NSDraggingInfo`
+ARE HERE, AND THE SESSION IS THE APPLICATION'S.** A drag is a pointer that has left its view but not its button: the
+source view's window takes the pointer for the duration with the SAME real capture a window move uses
+(`AGWindowSetPointerCapture`, not the fallback grab), every motion and the release arrive at that window, and
+`NSWindow -sendEvent:` hands them to the active session before any view sees them. That last sentence is what keeps a
+source view from tracking a second, private drop while the session tracks the real one — the table used to do exactly
+that, and its row drag is the session's now.
+
+**THE DESTINATION IS FOUND BY SCREEN POINT, NOT BY EVENT ROUTING.** A captured motion is relative to the SOURCE
+window and may be far outside it, so the session takes the compositor's absolute point when the event carries one,
+asks `+[NSWindow windowNumberAtPoint:belowWindowWithWindowNumber:]` which window of this application is there, hit
+tests that window's content view, and CLIMBS from the hit view to the first one that registered for the dragged
+types. Climbing is what lets a registered container catch a drag over an unregistered child — a source list's row is
+a cell, not a view. A drag therefore crosses from one window of the application to another and remains one drag;
+`-draggingExited:` and `-draggingEntered:` are sent at the crossing, and the info object's `-draggingLocation` is in
+the DESTINATION window's coordinates because that is the protocol's contract (the session's own
+`-draggingLocation` is in screen coordinates, which is Apple's different contract for the session — one selector
+cannot be both, so the info is a separate private object reading the session).
+
+**THE OPERATION IS NEGOTIATED, NOT ASSUMED.** A destination's `-draggingEntered:`/`-draggingUpdated:` answer is
+intersected with the source's `-draggingSourceOperationMaskForLocal:` (or the 10.7
+`-draggingSession:sourceOperationMaskForDraggingContext:` when a source answers it), and Option turns a permitted
+MOVE into a COPY unless the source's `-ignoreModifierKeysWhileDragging` opts out. It is the reason a table whose mask
+was narrowed to Copy cannot be dropped on with Move: the intersection is None and the drop does not happen. On the
+release the session asks `-prepareForDragOperation:`, then `-performDragOperation:`, then `-concludeDragOperation:`;
+a NO at either of the first two reports `NSDragOperationNone` to the source. `-draggingEnded:` follows a drop, and
+`-draggingExited:` does not — leaving and dropping are different events. **`-wantsPeriodicDraggingUpdates` IS ASKED
+AND RECORDED BUT NO TIMER SENDS UPDATES**: every motion already sends `-draggingUpdated:`, and a still pointer
+changes no answer, so a timer would be a callback with nothing to say. That is stated rather than left to be found.
+
+**THE IMAGE IS THE UNION OF THE ITEMS' FRAMES.** Each `NSDraggingItem` carries a frame in the SOURCE VIEW's
+coordinates (`-setDraggingFrame:contents:`), and the session converts each to the screen, takes the union, and
+composes one image with each item drawn at its own offset. A formation other than `None` is recorded and not laid
+out; an item keeps the frame it was given. **THE IMAGE FLOATS IN A BORDERLESS WINDOW OF ITS OWN** — transparent,
+`NSFloatingWindowLevel`, `-ignoresMouseEvents:YES` so the destination search never finds the image instead of the view
+beneath it — and it moves by the pointer offset taken when the drag began. Without a compositor no image window is
+made and the session still runs; that is how the offscreen probe measures the logic and how `drag_seam` measures the
+window where there is glass. Escape cancels a drag (and performs nothing); `-slideDraggedImageTo:` moves the image
+and `-animatesToStartingPositionsOnCancelOrFail` is recorded, because a slide-back ANIMATION is not here — the image
+is ordered out at the end instead, and the header says so rather than dressing the removal as Apple's animation.
+
+**THREE DEVIATIONS ARE NAMED RATHER THAN IMPLIED.** The PASTEBOARD IS THE CALLER'S: Apple builds it from each
+item's pasteboard writer, this tree has no `NSPasteboardItem`/`NSPasteboardWriting`, so a writer is recorded and not
+consulted and a source writes its types to `NSDragPboard` (or the pasteboard the legacy door was handed) before
+beginning. The LEGACY `-dragImage:at:offset:event:pasteboard:source:slideBack:` DOOR RETURNS BEFORE THE DRAG ENDS:
+the session is asynchronous and the result reaches the source's ended callback, not the door's return value. And
+there is no `NSDraggingImageComponent`; an item's contents is an `NSImage` (anything else is refused by name).
+
+`tests/drag_session.m` is the probe: it registers two windows, begins a session, crosses from one to the other,
+reads the info at the destination (coordinates, window, pasteboard, source, sequence, image size), updates, drops and
+checks the four callbacks' order and the negotiated operation; then a destination that refuses, the Option-to-Copy
+rule and its opt-out, leaving and `-draggingExited:`, Escape, an unregistered child climbing to its parent, a type
+the destination never registered, a two-item union, the legacy door with its own pasteboard, a WINDOW's registration
+reaching its content view, and the window's own legacy door forwarding to it. `tests/drag_seam.m`
+begins a drag against Agora's headless server and checks the image window itself: visible, borderless, transparent,
+floating, pointer-transparent, the composed size, the offset placement, that a motion moves it, and that the release
+orders it out.
 
 ### Still absent, and why
 
@@ -956,7 +1022,8 @@ reply dance on `NSWindow`), the FRAME-AUTOSAVE strings, the CURSOR-RECT invalida
 `NSSplitView`, `NSSegmentedControl`/`NSToolbarItemGroup` and `NSPathControl` are all implemented. What is still absent
 is the DRAWER (the class — `-drawers` answers an empty array, which is Apple's own contract), the TOOLBAR'S
 CUSTOMIZATION PALETTE (the toolbar itself is here; the palette refuses by name), the CROSS-PROCESS DRAG SESSION
-(the table's local row drag is here; `NSDraggingSession`, drag images and another application's drop are not),
+(the in-process session, its drag image window, its two protocols and the table's row drag are here; another
+application's destination and its pasteboard are not, because that is the window server's transport),
 `NSBrowser`, `NSSearchField`, `NSProgressIndicator`, `NSPanel`/`NSAlert`, `NSTabView`, `NSCollectionView`,
 `NSDocument`, and the
 script-command doors, which are declared and REFUSE by name; what the window's close,

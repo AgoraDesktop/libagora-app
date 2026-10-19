@@ -472,8 +472,9 @@ typedef NSUInteger NSWindowSharingType;
  * the one that was asked for. A MAXIMUM THAT IS TIGHTER THAN THE MINIMUM LANDS ON THE MAXIMUM: it is applied last,
  * and a window that cannot be as large as its minimum is a caller error this tier must still resolve to some size.
  *
- * WHAT IS NOT HERE IS `-liveResize`'s BEHAVIOUR: `-preservesContentDuringLiveResize` and `-inLiveResize` describe
- * a DRAG, and there is no drag in this tier — the window manager that would run one is the guest's. */
+ * WHAT IS NOT HERE IS `-liveResize`'s BEHAVIOUR: `-preservesContentDuringLiveResize` and `-inLiveResize` describe a
+ * LIVE RESIZE, and there is no live-resize protocol here — the window manager that would run one is the guest's. (The
+ * drag session is a different thing and is here: `NSDragging.h`.) */
 - (NSSize)minSize;
 - (void)setMinSize:(NSSize)size;
 - (NSSize)maxSize;
@@ -795,13 +796,14 @@ typedef NSUInteger NSWindowSharingType;
  * door that is simply absent is worse still, because a ported program gets a link error instead of the reason.
 
  * THE COMMON GROUND, SAID ONCE: this tier has the display (an X client window), the drawing substrate
- * (CoreGraphics) and the event path. What it has not got is printing, PDF/EPS production, the scripting suite,
- * Carbon, the default button cell, or a drag session — and each door below names the one it needs. A toolbar is
- * no longer on that list: `-setToolbar:` attaches one, and `tests/toolbar.m` drives it. */
+ * (CoreGraphics) and the event path. What it has not got is printing, PDF/EPS production, the scripting suite, the
+ * default button cell and the toolbar's customization palette — and each door below names the one it needs. A toolbar
+ * and a drag session are no longer on that list: `-setToolbar:` attaches one (`tests/toolbar.m`) and
+ * `-dragImage:...` forwards to the content view's session (`tests/drag_session.m`, `tests/drag_seam.m`). */
 - (nullable NSData *)dataWithEPSInsideRect:(NSRect)rect;	/* needs a PDF/EPS producer: this tree's CG has none */
 - (nullable NSData *)dataWithPDFInsideRect:(NSRect)rect;	/* the same substrate, and the PDF half is parked */
 - (void)print:(nullable id)sender;			/* needs the printing system (NSPrintOperation) */
-- (void)dragImage:(nullable NSImage *)anImage		/* needs a drag SESSION: the window server's drag loop */
+- (void)dragImage:(nullable NSImage *)anImage		/* forwards to the content view's drag session */
 		   at:(NSPoint)baseLocation
 	       offset:(NSSize)initialOffset
 		event:(nullable NSEvent *)event
@@ -839,8 +841,8 @@ typedef NSUInteger NSWindowSharingType;
  * it back through nothing — there is no getter in Apple's surface either, and the store is stated rather than
  * made to look effective.
 
- * `-registerForDraggedTypes:` AND `-unregisterDraggedTypes` ARE RECORDED THE SAME WAY: the set is kept, and what
- * would consume it is the content view's drag acceptance, in a tier with no drag session. */
+ * `-registerForDraggedTypes:` AND `-unregisterDraggedTypes` FORWARD TO THE CONTENT VIEW, which is Apple's own
+ * contract and the only shape the destination search can read: it hit-tests the content view and climbs. */
 - (NSInteger)gState;
 - (void)endEditingFor:(nullable id)anObject;
 - (void)useOptimizedDrawing:(BOOL)flag;

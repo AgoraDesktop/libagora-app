@@ -103,6 +103,10 @@
 - (void)cg_setPointerGrab:(BOOL)flag;
 /* **AND THE ONE A DRAG USES, WHICH IS A REAL GRAB — see `-cg_setPointerCapture` for why the two differ.** */
 - (void)cg_setPointerCapture:(BOOL)flag;
+/* AND WHETHER THERE IS A COMPOSITOR TO MAKE A WINDOW ON AT ALL, which is the question a drag image's floating
+ * window has to ask before ordering itself in: with none, the session runs without an image rather than printing a
+ * refusal for a window that could never be shown. */
++ (BOOL)cg_hasWindowServer;
 - (NSScreen *)cg_screenFor:(NSScreen *)screen;
 - (void)cg_rebuildCursorRectsIfNeeded;
 - (NSCursor *)cg_cursorForContentPoint:(NSPoint)p;
@@ -1492,6 +1496,18 @@ static int s_connection_gone;
 	return s_connection_gone ? YES : NO;
 }
 
+/* THE OTHER SIDE OF THAT QUESTION, and the one a drag asks: a connection that was never made is not a connection
+ * that has gone away. `fn_server` is this file's lazy connect, so asking here is what makes the answer true rather
+ * than an environment-variable guess. */
++ (BOOL)cg_hasWindowServer
+{
+	/* THE QUESTION IS "HAS THIS PROCESS A CONNECTION", NOT "COULD ONE BE MADE": `fn_server` would CONNECT on a
+	 * machine whose environment names a compositor, and a probe that never ordered a window would then be talking to
+	 * a live server for no reason. A real drag begins in a window that was ordered in, so a real application has
+	 * already connected by the time it asks. */
+	return s_server != NULL;
+}
+
 + (BOOL)cg_waitForEventInMilliseconds:(long)ms
 {
 	AGWindowServer *server = fn_server();
@@ -2082,6 +2098,14 @@ static CGFloat fn_clamp_axis(CGFloat v, CGFloat lo, CGFloat hi)
 
 - (void)close
 {
+	/* **A WINDOW THAT CLOSES MID-DRAG ENDS THE DRAG.** The session retains the source window, so the window is
+	 * still a safe message send here; letting it go without one would leave a session holding a captured pointer
+	 * that no surface can release. `-cg_finish` sends the source and destination callbacks with no operation, which
+	 * is the same ending an Escape gives. */
+	if ([NSDraggingSession cg_activeSession] != nil
+	    && [[NSDraggingSession cg_activeSession] cg_sourceWindow] == self) {
+		[[NSDraggingSession cg_activeSession] cg_finish];
+	}
 	/* THE DELEGATE IS TOLD BEFORE THE WINDOW GOES**, which is the whole point of a `will` callback: after it, the
 	 * window is gone and the numbers are meaningless. */
 	fn_announce(self, NSWindowWillCloseNotification, @selector(windowWillClose:));
@@ -2393,6 +2417,16 @@ static CGFloat fn_clamp_axis(CGFloat v, CGFloat lo, CGFloat hi)
 	SEL sel = NULL;
 	id target;
 	BOOL mouse = NO;
+
+	/* **A DRAG IN FLIGHT TAKES THE POINTER'S EVENTS BEFORE ANY VIEW DOES.** The session captured the pointer on the
+	 * source window, so every motion and the release arrive here — and the source view must not also see them, or
+	 * a table would track a second, private drop while the session tracked the real one. The session answers YES
+	 * only for the events it owns; a key it does not want, or anything outside a drag, falls through to the ordinary
+	 * dispatch below. */
+	if ([NSDraggingSession cg_activeSession] != nil
+	    && [[NSDraggingSession cg_activeSession] cg_handleEvent:theEvent]) {
+		return;
+	}
 
 	switch ([theEvent type]) {
 	case NSLeftMouseDown:      sel = @selector(mouseDown:); mouse = YES; break;
@@ -4105,8 +4139,16 @@ static NSUInteger fn_edge_index(NSRectEdge edge)
 - (void)dragImage:(NSImage *)anImage at:(NSPoint)baseLocation offset:(NSSize)initialOffset event:(NSEvent *)event
        pasteboard:(NSPasteboard *)pboard source:(id)sourceObj slideBack:(BOOL)slideFlag
 {
-	(void)anImage; (void)baseLocation; (void)initialOffset; (void)event; (void)pboard; (void)sourceObj; (void)slideFlag;
-	fn_refuse_window("-dragImage:at:offset:event:pasteboard:source:slideBack:", "a drag session (the window server's drag loop)");
+	/* **THE WINDOW'S VERSION IS THE CONTENT VIEW'S, IN THE CONTENT VIEW'S COORDINATES.** Apple's `baseLocation` is
+	 * in the window's base system; the content view is the root, so the conversion is the root's own (which ignores
+	 * its frame origin). The session is the view's now, so this door is a forward rather than a refusal. */
+	if (_contentView == nil) {
+		fn_refuse_window("-dragImage:at:offset:event:pasteboard:source:slideBack:",
+				 "a content view; the drag belongs to the view it starts in, and this window has none");
+		return;
+	}
+	[_contentView dragImage:anImage at:[_contentView convertPoint:baseLocation fromView:nil]
+			  offset:initialOffset event:event pasteboard:pboard source:sourceObj slideBack:slideFlag];
 }
 
 - (void)disableKeyEquivalentForDefaultButtonCell
@@ -4232,25 +4274,21 @@ static NSUInteger fn_edge_index(NSRectEdge edge)
 
 - (void)registerForDraggedTypes:(NSArray *)newTypes
 {
-	/* RECORDED THE SAME WAY: what would consume this set is the content view's drag acceptance, in a tier with no
-	 * drag session — so the set is kept and the pair reports what it was given. */
-	if (_cg_registeredDraggedTypes == nil) {
-		_cg_registeredDraggedTypes = [[NSMutableArray alloc] init];
-	}
-	[_cg_registeredDraggedTypes removeAllObjects];
-	if (newTypes != nil) {
-		[_cg_registeredDraggedTypes addObjectsFromArray:newTypes];
-	}
+	/* **THE WINDOW FORWARDS TO ITS CONTENT VIEW, WHICH IS APPLE'S OWN CONTRACT.** "Registers the window's content
+	 * view" is the documentation's sentence, and it is also the only shape that works with the destination search:
+	 * the search hit-tests the content view and climbs, so the registration has to live there. A window with no
+	 * content view has nothing to register. */
+	[_contentView registerForDraggedTypes:newTypes];
 }
 
 - (void)unregisterDraggedTypes
 {
-	[_cg_registeredDraggedTypes removeAllObjects];
+	[_contentView unregisterDraggedTypes];
 }
 
 - (nullable NSArray *)cg_registeredDraggedTypes
 {
-	return _cg_registeredDraggedTypes;
+	return [_contentView cg_registeredDraggedTypes];
 }
 
 /* ---- THE FRAME'S CONSTRAINTS: TWO PAIRS, MUTUALLY EXCLUSIVE WITHIN EACH --------------------------------- */

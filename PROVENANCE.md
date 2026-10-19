@@ -346,11 +346,12 @@ Four decisions are this tier's:
   the small control size, fills the control face and draws chevrons; PopUp shows only the last component and raises a
   menu of the whole path. The component cells draw only their interiors, so the path cell owns every background and
   separator.
-- **the editable/drop half is ABSENT and named.** `NSDragging.h` here supplies only `NSDragOperation` and its values
-  because that is all the era's path-control declaration needs; there is no drag session, no `NSDraggingInfo`
-  implementation and no `NSOpenPanel`, so the drag-source/destination delegate methods are declared and never called.
-  File icons are not filled in either, because this tier has no `NSWorkspace` icon door. `NSPathControl.h` and
-  `NSPathCell.h` say both things where a reader meets them.
+- **the editable/drop half is ABSENT and named.** The drag SESSION now exists (`NSDragging.h`, section 17), so what
+  this class has not got is no longer the machinery: it does not register as a destination and has no editable text
+  or drop target, and there is no `NSOpenPanel` for a Browse action. The drag-source/destination delegate methods are
+  therefore declared and never called, which is a decision about this class rather than a missing session. File icons
+  are not filled in either, because this tier has no `NSWorkspace` icon door. `NSPathControl.h` and `NSPathCell.h` say
+  both things where a reader meets them.
 
 The PopUp style's menu is built from the component cells and selecting a row sets `-clickedPathComponentCell` before
 the action is sent; the delegate's `willPopUpMenu:` hook is forwarded from the cell to the control's delegate.
@@ -386,16 +387,49 @@ features below are the era's doors.
   `-tableView:setObjectValue:forTableColumn:row:`. `-editedRow`/`-editedColumn` answer -1 outside the session. A
   refused first responder clears the table's edit state, and a double-click on an editable cell with no
   double-action starts the session.
-- **A LOCAL ROW DRAG** writes the data source's pasteboard, proposes a row/operation, calls
-  `-tableView:validateDrop:proposedRow:proposedDropOperation:` and on the release
-  `-tableView:acceptDrop:row:dropOperation:`, drawing a two-point insertion line. `NSDragging.h` now carries
-  `NSDragOperation` and the three-answer `NSDraggingInfo` slice the table's local drag needs. **THE CROSS-PROCESS
-  SESSION IS STILL ABSENT** — no `NSDraggingSession`, no drag image on the glass, no other application's destination
-  — and `NSTableView.h` says so at the data-source protocol.
+- **A ROW DRAG** writes the data source's pasteboard, snapshots the dragged rows into an image and begins the tier's
+  DRAG SESSION (`NSDragging.h`, section 17). The table is both source and destination: its
+  `-draggingEntered:`/`-draggingUpdated:` propose a row and call
+  `-tableView:validateDrop:proposedRow:proposedDropOperation:`, and `-performDragOperation:` calls
+  `-tableView:acceptDrop:row:dropOperation:`; the insertion line is still two points and follows the session's
+  pointer. **THE CROSS-PROCESS HALF REMAINS ABSENT** — another application's destination and its pasteboard need the
+  window server's transport — and `NSTableView.h` says so at the data-source protocol.
 
 `tests/table_advanced.m` holds all six: the variable-height geometry and re-tile, the prefix/wrap/restart type-select,
 the header reorder and its delegate, an autosave round trip through a second table, a field-editor session that writes
 back to the data source, and a local drag that reaches all three data-source methods.
+
+## 17. The drag session is this repository's own code
+
+**`NSDragging.h` AND `NSDragging.m` ARE WRITTEN HERE, against the 10.6 `NSDraggingInfo`/`NSDraggingSource` protocol
+declarations and the 10.7 `NSDraggingSession`/`NSDraggingItem` pair the shell plan names.** The four decisions below
+are the ones a reader needs before changing it:
+
+- **THE APPLICATION OWNS THE LOOP, NOT THE WINDOW SERVER.** A session captures the pointer on the source view's
+  window with the seam's real grab, and `NSWindow -sendEvent:` routes the motions and the release to the active
+  session before any view sees them. The destination is found by SCREEN point — the compositor's absolute pointer
+  when the event carries it, the window's frame plus the event's own point otherwise — through
+  `+[NSWindow windowNumberAtPoint:belowWindowWithWindowNumber:]` and the content view's `-hitTest:`, then up the
+  superview chain to the first registered view. That is what lets a drag cross windows; a same-window drag is the
+  same path with the source's window as the answer.
+- **THE IMAGE IS A BORDERLESS WINDOW.** A client cannot draw over another window's surface, so the floating image is
+  `NSBorderlessWindowMask`, `NSFloatingWindowLevel`, non-opaque with a clear ground, and
+  `-setIgnoresMouseEvents:YES` — the last so the destination search cannot find the image instead of the view under
+  it. The image is composed once at the beginning from the union of the items' frames; a motion moves the window by
+  the pointer offset taken then.
+- **THE PASTEBOARD IS THE CALLER'S, AND THE LEGACY DOOR IS ASYNCHRONOUS.** Apple derives a pasteboard from the
+  items' pasteboard writers; this tree has no `NSPasteboardItem` or `NSPasteboardWriting`, so a writer is recorded
+  and not consulted and the session uses `NSDragPboard` (or the pasteboard the 10.6 door was handed). The 10.6 door
+  returns before the drag ends, and the operation reaches the source's ended callback rather than its return value.
+  `-wantsPeriodicDraggingUpdates` is asked and recorded, but no timer sends updates: every motion already does.
+- **THE INFO OBJECT IS NOT THE SESSION.** Apple's session answers `-draggingLocation` in SCREEN coordinates and
+  `NSDraggingInfo` answers it in the DESTINATION window's; one selector cannot be both. A private object conforming
+  to the protocol reads the session's live state, so a destination sees the pointer move without a second copy of it.
+
+`tests/drag_session.m` measures the two-window crossing, the info's answers, the mask/modifier negotiation, the
+callback sequence (entered/updated/prepared/performed/concluded/ended, and exited on a leave), Escape, the parent
+climb, the type filter, a two-item union and the legacy door. `tests/drag_seam.m` measures the image window against
+Agora's headless server.
 
 ## Keeping in sync
 

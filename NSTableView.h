@@ -102,7 +102,9 @@ extern NSString *NSTableViewColumnDidResizeNotification;
 - (void)tableView:(NSTableView *)tableView sortDescriptorsDidChange:(NSArray *)oldDescriptors;
 
 /* THE DRAG SOURCE AND DESTINATION CONTRACT. The table's LOCAL row drag calls these with a pasteboard and a small
- * `NSDraggingInfo`; the cross-process session is still absent, so a drop from another application does not arrive. */
+ * `NSDraggingInfo`, and the drag itself is the tier's session (`NSDragging.h`). The CROSS-PROCESS half is still
+ * absent — a drop from another application does not arrive — because that is the window server's transport rather than
+ * this class. */
 - (BOOL)tableView:(NSTableView *)tableView writeRowsWithIndexes:(NSIndexSet *)rowIndexes
      toPasteboard:(NSPasteboard *)pboard;
 - (NSDragOperation)tableView:(NSTableView *)tableView validateDrop:(id <NSDraggingInfo>)info
@@ -279,8 +281,8 @@ extern NSString *NSTableViewColumnDidResizeNotification;
 - (BOOL)autosaveTableColumns;
 
 /* THE DRAG SOURCE AND DESTINATION DOORS. The masks are stored; `-setDropRow:dropOperation:` is a data source's
- * re-target during `-validateDrop:`. The table's local row drag calls the data source; a cross-process drag session is
- * not in this tier. */
+ * re-target during `-validateDrop:`. A row drag runs through the tier's `NSDraggingSession` and the table is its own
+ * destination; the CROSS-PROCESS half is not in this tier. */
 - (BOOL)canDragRowsWithIndexes:(NSIndexSet *)rowIndexes atPoint:(NSPoint)mouseDownPoint;
 - (void)setDraggingSourceOperationMask:(NSDragOperation)mask forLocal:(BOOL)isLocal;
 - (NSDragOperation)draggingSourceOperationMaskForLocal:(BOOL)isLocal;

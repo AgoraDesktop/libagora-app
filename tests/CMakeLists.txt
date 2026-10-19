@@ -730,3 +730,22 @@ target_link_libraries(text_input_client PRIVATE App)
 
 add_test(NAME appkit-text-input-client COMMAND text_input_client)
 set_tests_properties(appkit-text-input-client PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
+
+# **THE DRAG SESSION: THE SOURCE, THE DESTINATION AND THE IMAGE.** Two registered windows, a source view and a
+# destination view, driven through the application's own dispatch (`-[NSWindow sendEvent:]`) — no compositor, because
+# the search falls back to the application's window registry when there is no connection. The floating image window
+# needs glass and is asked about by `drag_seam` against the sibling's headless server.
+add_executable(drag_session drag_session.m)
+target_link_libraries(drag_session PRIVATE App m)
+add_test(NAME appkit-drag-session COMMAND drag_session)
+set_tests_properties(appkit-drag-session PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
+
+# **THE IMAGE WINDOW NEEDS GLASS.** The session is offscreen; the borderless floating window is not, so this asks the
+# sibling's headless server for a real connection and SKIPS (77) when it is not built.
+add_executable(drag_seam drag_seam.m)
+target_link_libraries(drag_seam PRIVATE App m)
+add_test(NAME appkit-drag-seam
+  COMMAND "${CMAKE_CURRENT_SOURCE_DIR}/run-drag-seam.sh"
+	  "$<TARGET_FILE:drag_seam>" "${AGORA_WINDOW_SERVER_BINARY}")
+set_tests_properties(appkit-drag-seam PROPERTIES SKIP_RETURN_CODE 77
+  ENVIRONMENT "${_agora_app_test_env}")

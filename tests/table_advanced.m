@@ -18,6 +18,7 @@
 #import <AppKit/NSTableColumn.h>
 #import <AppKit/NSTableHeaderView.h>
 #import <AppKit/NSTextFieldCell.h>
+#import <AppKit/NSDragging.h>
 #import <AppKit/NSEvent.h>
 #import <AppKit/NSColor.h>
 #import <Foundation/Foundation.h>
@@ -371,6 +372,10 @@ int main(void)
 	      "and the local drag mask is stored");
 	[table setDropRow:2 dropOperation:NSTableViewDropAbove];
 	check(1, "setDropRow:dropOperation: is accepted for a data source's re-target");
+	/* THE MASK IS THE SOURCE'S ANSWER TO THE SESSION, so the row drag below would be refused if the earlier probe's
+	 * Copy-only mask stayed set: a destination offering Move intersected with Copy is None, which is Apple's own rule
+	 * and the reason the session applies it. Every is the table's default for a local drag. */
+	[table setDraggingSourceOperationMask:NSDragOperationEvery forLocal:YES];
 	[table selectRowIndexes:[NSIndexSet indexSetWithIndex:0] byExtendingSelection:NO];
 	{
 		NSPoint from = [table convertPoint:NSMakePoint(10.0, 10.0) toView:nil];
@@ -379,12 +384,15 @@ int main(void)
 		NSEvent *drag = mouse(NSLeftMouseDragged, to, [window windowNumber]);
 		NSEvent *up = mouse(NSLeftMouseUp, to, [window windowNumber]);
 
-		[table mouseDown:down];
-		[table mouseDragged:drag];
-		[table mouseUp:up];
+		/* THE DRAG IS THE WINDOW'S NOW: the session captures the pointer, so the motion and the release arrive
+		 * through `-sendEvent:` rather than being handed to the table directly. That is the real dispatch path. */
+		[window sendEvent:down];
+		[window sendEvent:drag];
+		[window sendEvent:up];
 	}
 	check(source->writes == 1 && source->validated >= 1 && source->accepted == 1,
-	      "a local drag writes, validates and accepts through the data source");
+	      "a row drag writes, validates and accepts through the data source and the drag session");
+	check([NSDraggingSession cg_activeSession] == nil, "and the session is over when the drop is");
 
 	[table release];
 	[scroll release];

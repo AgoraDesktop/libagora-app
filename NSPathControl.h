@@ -11,10 +11,11 @@
  * `NSControl`'s ordinary tracking loop, so the action is sent with `-clickedPathComponentCell` answering the component
  * under the hand.
  *
- * **THE DRAG HALF IS DECLARED AND NOT WIRED, WHICH IS THE HONEST SHAPE HERE.** `NSDragging.h` supplies the operation
- * vocabulary and the three-answer `NSDraggingInfo` slice, but the drag session, the open panel and the editable path
- * value are absent; `allowedTypes` and the two PopUp delegate hooks are stored/implemented where they can be, and the
- * drag-source/destination methods are declared because the era's header declares them. They are not called.
+ * **THE DRAG HALF IS DECLARED AND NOT WIRED, WHICH IS THE HONEST SHAPE HERE.** The drag SESSION exists now
+ * (`NSDragging.h`), but this class neither begins one nor registers as a destination, and the open panel and the
+ * editable path value are still absent. `allowedTypes` and the two PopUp delegate hooks are stored/implemented where
+ * they can be, and the drag-source/destination methods are declared because the era's header declares them. They are
+ * not called: what is missing is this class's policy, not the machinery.
  *
  * Written from `NSPathControl.h` in the MacOSX10.6 SDK (see PROVENANCE.md).
  */
@@ -63,7 +64,7 @@ NS_ASSUME_NONNULL_BEGIN
 - (nullable id <NSPathControlDelegate>)delegate;
 - (void)setDelegate:(nullable id <NSPathControlDelegate>)delegate;
 
-/* THE DRAG SOURCE'S MASKS. Stored and answered; there is no drag session to consult them yet. */
+/* THE DRAG SOURCE'S MASKS. Stored and answered; nothing consults them because this control begins no drag. */
 - (void)setDraggingSourceOperationMask:(NSDragOperation)mask forLocal:(BOOL)isLocal;
 - (NSDragOperation)draggingSourceOperationMaskForLocal:(BOOL)isLocal;
 
@@ -76,8 +77,8 @@ NS_ASSUME_NONNULL_BEGIN
 @protocol NSPathControlDelegate <NSObject>
 @optional
 
-/* DECLARED AND NOT CALLED until the drag session exists. The two pasteboard types and the drop policy belong to that
- * slice; the path control's header names the gap rather than pretending the drop works. */
+/* DECLARED AND NOT CALLED: the control is not a destination and begins no drag. The two pasteboard types and the drop
+ * policy belong to a decision this class has not made; its header names the gap rather than pretending the drop works. */
 - (BOOL)pathControl:(NSPathControl *)pathControl
     shouldDragPathComponentCell:(NSPathComponentCell *)pathComponentCell
 		 withPasteboard:(NSPasteboard *)pasteboard;

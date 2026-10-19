@@ -55,6 +55,7 @@
  */
 
 #import <AppKit/NSResponder.h>
+#import <AppKit/NSDragging.h>
 #import <AppKit/NSBitmapImageRep.h>
 #import <AppKit/NSTrackingArea.h>
 /* AND `NSGraphics.h` IS IMPORTED RATHER THAN ASSUMED, because this header USES `NSFocusRingType` for a property and
@@ -175,7 +176,7 @@ extern NSString *NSDefinitionPresentationTypeKey;
 extern NSString *NSDefinitionPresentationTypeDictionaryApplication;
 extern NSString *NSDefinitionPresentationTypeOverlay;
 
-@interface NSView : NSResponder
+@interface NSView : NSResponder <NSDraggingDestination>
 {
 	/* THE FRAME IS THE VIEW IN ITS SUPERVIEW; THE BOUNDS ARE ITS OWN SYSTEM. See the note above for the
 	 * relationship this layer keeps simple. */
@@ -467,7 +468,8 @@ extern NSString *NSDefinitionPresentationTypeOverlay;
 - (void)writeEPSInsideRect:(NSRect)rect toPasteboard:(nullable NSPasteboard *)pasteboard;
 - (void)writePDFInsideRect:(NSRect)rect toPasteboard:(nullable NSPasteboard *)pasteboard;
 
-/* AND THE DRAG AND FULL-SCREEN DOORS, on the grounds their class-mates already state: no drag session, and the
+/* AND THE DRAG AND FULL-SCREEN DOORS, on the grounds their class-mates already state: a promised-file drag needs the
+ * cross-process transport and a file list (the in-process session is here but does not make these two work), and the
  * full-screen mode is the manager's. */
 - (BOOL)dragFile:(NSString *)filename fromRect:(NSRect)rect slideBack:(BOOL)aFlag event:(nullable NSEvent *)event;
 - (BOOL)dragPromisedFilesOfTypes:(NSArray *)typeArray fromRect:(NSRect)rect source:(nullable id)sourceObject
@@ -582,7 +584,30 @@ extern NSString *NSDefinitionPresentationTypeOverlay;
 - (nullable NSData *)dataWithEPSInsideRect:(NSRect)rect;	/* needs a PDF/EPS producer: this tree's CG has none */
 - (nullable NSData *)dataWithPDFInsideRect:(NSRect)rect;	/* the same substrate, and the PDF half is parked */
 - (void)print:(nullable id)sender;			/* needs the printing system (NSPrintOperation) */
-- (void)dragImage:(nullable NSImage *)anImage		/* needs a drag SESSION: the window server's drag loop */
+
+/* ============================================================================================ *
+ * DRAGGING — THE SOURCE, THE DESTINATION AND THE REGISTRATION.                                  *
+ * ============================================================================================ */
+
+/* **THE DRAG SESSION IS HERE NOW.** `-dragImage:at:offset:event:pasteboard:source:slideBack:` used to refuse by
+ * name; it begins a real in-process session now, and so does the modern pair. The session is asynchronous — it
+ * returns a `NSDraggingSession` and the application's event dispatch drives it — so the legacy door's return value
+ * is gone (it never had one here) and the RESULT of a drag reaches the SOURCE's `-draggedImage:endedAt:operation:`
+ * or `-draggingSession:endedAtPoint:operation:`. `NSDragging.h` states that deviation where the source protocol is.
+ *
+ * THE DESTINATION DOORS BELOW ARE APPLE'S, DECLARED HERE SO A SUBCLASS'S OVERRIDE IS CHECKED rather than matched by
+ * a string. `NSView` supplies the defaults: no operation from entering or updating, YES for preparing, NO for
+ * performing, and YES for periodic updates. A view becomes a destination by calling `-registerForDraggedTypes:`
+ * with the types it will take; the session finds it by hit-testing the window under the pointer and climbing from
+ * the hit view, so a registered container catches a drag over an unregistered child.
+ *
+ * THE DRAG IMAGE IS A FLOATING WINDOW OF THIS APPLICATION'S OWN (`NSDragging.h` says why). It is the application
+ * half of the drag: another application's window is not a destination yet, because that needs the window server's
+ * transport rather than this class. */
+- (nullable NSDraggingSession *)beginDraggingSessionWithItems:(NSArray *)items
+							event:(NSEvent *)event
+						       source:(id <NSDraggingSource>)source;
+- (void)dragImage:(nullable NSImage *)anImage
 		   at:(NSPoint)viewLocation
 	       offset:(NSSize)initialOffset
 		event:(nullable NSEvent *)event
@@ -590,19 +615,28 @@ extern NSString *NSDefinitionPresentationTypeOverlay;
 	       source:(nullable id)sourceObj
 	    slideBack:(BOOL)slideFlag;
 
-/* AND THE THREE THAT ANSWER RATHER THAN REFUSE.
+- (NSDragOperation)draggingEntered:(id <NSDraggingInfo>)sender;
+- (NSDragOperation)draggingUpdated:(id <NSDraggingInfo>)sender;
+- (void)draggingExited:(nullable id <NSDraggingInfo>)sender;
+- (void)draggingEnded:(id <NSDraggingInfo>)sender;
+- (BOOL)prepareForDragOperation:(id <NSDraggingInfo>)sender;
+- (BOOL)performDragOperation:(id <NSDraggingInfo>)sender;
+- (void)concludeDragOperation:(nullable id <NSDraggingInfo>)sender;
+- (BOOL)wantsPeriodicDraggingUpdates;
 
- * `-gState` ANSWERS 0 FOR THE SAME REASON THE WINDOW'S DOES: Apple's door returns the receiver's graphics-state ID,
- * and this tier draws through a `CGContext` rather than a state stack, so there is no ID and 0 is the truth.
-
- * THE DRAG PAIR IS RECORDED, AND ON THE VIEW THAT IS CLOSER TO THE REAL CONTRACT THAN ON THE WINDOW: what consumes
- * a registered type is this view's own drag acceptance, so the set kept here is what a content view's registration
- * would be read back through. There is still no drag session, and the set is stated rather than made to look
- * effective. */
+/* THE DRAG PAIR, ON THE VIEW THAT IS CLOSER TO THE REAL CONTRACT THAN THE WINDOW: what consumes a registered type
+ * is this view's own drag acceptance, so the set kept here is what the destination search reads. The set REPLACES
+ * the previous one, which is Apple's contract for `-registerForDraggedTypes:`, and it is read back through a seam
+ * because Apple declares no getter.
+ *
+ * **`-cg_acceptsDraggedTypes:` IS THAT SEAM'S ANSWER, NOT A SECOND REGISTRATION LIST.** The default is the
+ * intersection of the registered types with the drag's; `NSTableView` overrides it to accept any type when its data
+ * source answers the drop protocol, because a table has no type to register for. */
 - (NSInteger)gState;
 - (void)registerForDraggedTypes:(nullable NSArray *)newTypes;
 - (void)unregisterDraggedTypes;
 - (nullable NSArray *)cg_registeredDraggedTypes;
+- (BOOL)cg_acceptsDraggedTypes:(nullable NSArray *)types;
 - (void)setBoundsOrigin:(NSPoint)newOrigin;
 - (void)setBoundsSize:(NSSize)newSize;
 - (NSSize)convertSize:(NSSize)aSize toView:(nullable NSView *)view;

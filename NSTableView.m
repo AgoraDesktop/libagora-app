@@ -31,6 +31,8 @@
 #import "NSFont.h"
 #import "NSTextFieldCell.h"
 #import "NSText.h"
+#import "NSImage.h"
+#import "NSBitmapImageRep.h"
 #import "NSWindow.h"
 #import "NSPasteboard.h"
 
@@ -55,38 +57,6 @@ NSString *NSTableViewColumnDidResizeNotification = @"NSTableViewColumnDidResizeN
 /* THE LOCAL DRAG'S INFO. `NSDraggingInfo` is a protocol, not a class, so the table's own drag needs an object that
  * answers the three questions its data source reads. The type, the pasteboard and the operation mask are enough for
  * the data-source contract; the cross-process session remains absent. */
-@interface AGTableDraggingInfo : NSObject <NSDraggingInfo>
-{
-	NSPasteboard *_pasteboard;	/* RETAINED */
-	NSPoint _location;
-	NSDragOperation _mask;
-}
-- (instancetype)initWithPasteboard:(NSPasteboard *)pasteboard location:(NSPoint)location
-			      mask:(NSDragOperation)mask;
-@end
-
-@implementation AGTableDraggingInfo
-- (instancetype)initWithPasteboard:(NSPasteboard *)pasteboard location:(NSPoint)location
-			      mask:(NSDragOperation)mask
-{
-	self = [super init];
-	if (self != nil) {
-		_pasteboard = [pasteboard retain];
-		_location = location;
-		_mask = mask;
-	}
-	return self;
-}
-- (void)dealloc
-{
-	[_pasteboard release];
-	[super dealloc];
-}
-- (NSPasteboard *)draggingPasteboard { return _pasteboard; }
-- (NSPoint)draggingLocation { return _location; }
-- (NSDragOperation)draggingSourceOperationMask { return _mask; }
-@end
-
 #define AG_TABLE_DEFAULT_ROW_HEIGHT 17.0
 #define AG_TABLE_DEFAULT_HEADER_HEIGHT 20.0
 
@@ -104,6 +74,8 @@ NSString *NSTableViewColumnDidResizeNotification = @"NSTableViewColumnDidResizeN
 - (void)cg_loadAutosave;
 - (NSString *)cg_autosaveKey;
 - (BOOL)cg_typeSelectWithEvent:(NSEvent *)event;
+- (void)doneDragging;
+- (NSDragOperation)cg_validateDrop:(id <NSDraggingInfo>)info;
 - (NSString *)cg_typeSelectStringForRow:(NSInteger)row;
 @end
 
@@ -1329,108 +1301,209 @@ NSString *NSTableViewColumnDidResizeNotification = @"NSTableViewColumnDidResizeN
 	}
 }
 
-/* ---- THE LOCAL ROW DRAG ------------------------------------------------------------------------- */
+/* ---- THE ROW DRAG, THROUGH THE TIER'S DRAG SESSION ---------------------------------------------- */
 
-/* **THE TABLE CAN DRAG ITS OWN ROWS WITHOUT A SYSTEM SESSION, AND THAT IS WHAT THIS IS.** A press past the threshold
- * asks the data source to write its rows to the drag pasteboard; each motion puts a proposed row and operation to
- * `-validateDrop:`, and the release calls `-acceptDrop:`. The data source moves its own model — the table never
- * reorders rows behind its back. What is NOT here is the cross-process session: there is no `NSDraggingSession`, no
- * drag image on the glass and no other application's destination. The pasteboard and the three info answers are the
- * part the data-source contract actually reads. */
+/* **THE TABLE IS A DRAG SOURCE AND A DRAG DESTINATION, AND THE SESSION IS THE TIER'S RATHER THAN THIS FILE'S.**
+ * The old half tracked its own motions, its own drop row and its own mouse-up; this one writes the data source's
+ * pasteboard, snapshots the dragged rows into an image and calls `-dragImage:...`, and from then on the session owns
+ * the pointer. The data source's three-answer contract is unchanged: `-tableView:validateDrop:...` is asked on every
+ * `-draggingUpdated:`, and `-tableView:acceptDrop:...` is asked once when the destination is this table. The
+ * difference is that the same drag can now be dropped on ANOTHER view that registered for the types — the point of
+ * the session — and that the insertion line follows the session's pointer rather than a private one.
+ *
+ * THE IMAGE IS THE ROWS' OWN INK, captured through `-cacheDisplayInRect:toBitmapImageRep:` so it is a snapshot of
+ * what the table drew (the selection plate included) rather than a second drawing routine that could disagree. */
 - (void)mouseDragged:(NSEvent *)event
 {
 	NSPoint point;
 	NSIndexSet *rows;
-	NSDragOperation operation = NSDragOperationNone;
+	NSPasteboard *pasteboard;
+	NSRect unionRect = NSZeroRect;
+	NSBitmapImageRep *rep;
+	NSImage *image;
+	NSUInteger row;
+	BOOL first = YES;
 
-	if (_clickedRow < 0 || _dataSource == nil) {
-		[super mouseDragged:event];
+	if (_clickedRow < 0 || _dataSource == nil || _cgDragging) {
+		if (!_cgDragging) {
+			[super mouseDragged:event];
+		}
 		return;
 	}
 	point = [self convertPoint:[event locationInWindow] fromView:nil];
-	if (!_cgDragging) {
-		if (fabs((double)(point.x - _cgDragStartPoint.x)) < 4.0
-		    && fabs((double)(point.y - _cgDragStartPoint.y)) < 4.0) {
-			return;
-		}
-		rows = _selectedRowIndexes;
-		if ([rows count] == 0 || ![rows containsIndex:(NSUInteger)_clickedRow]) {
-			rows = [NSIndexSet indexSetWithIndex:(NSUInteger)_clickedRow];
-		}
-		if (![self canDragRowsWithIndexes:rows atPoint:_cgDragStartPoint]) {
-			return;
-		}
-		{
-			NSPasteboard *pasteboard = [NSPasteboard pasteboardWithName:NSDragPboard];
-
-			if (pasteboard == nil) {
-				return;
-			}
-			[pasteboard clearContents];
-			if (![_dataSource respondsToSelector:
-					@selector(tableView:writeRowsWithIndexes:toPasteboard:)]
-			    || ![_dataSource tableView:self writeRowsWithIndexes:rows toPasteboard:pasteboard]) {
-				return;
-			}
-			_cgDragRows = [rows copy];
-			_cgDragPasteboard = [pasteboard retain];
-			_cgDragging = YES;
-		}
+	if (fabs((double)(point.x - _cgDragStartPoint.x)) < 4.0
+	    && fabs((double)(point.y - _cgDragStartPoint.y)) < 4.0) {
+		return;
 	}
-	{
-		NSInteger row = [self rowAtPoint:point];
-		NSInteger proposedRow;
-
-		if (row < 0) {
-			proposedRow = (point.y < 0.0) ? 0 : _numberOfRows;
-		} else {
-			NSRect rowRect = [self rectOfRow:row];
-
-			proposedRow = (point.y < NSMidY(rowRect)) ? row : row + 1;
-		}
-		_cgDropRow = proposedRow;
-		_cgDropOperation = NSTableViewDropAbove;
-		if ([_dataSource respondsToSelector:@selector(tableView:validateDrop:proposedRow:proposedDropOperation:)]) {
-			AGTableDraggingInfo *info = [[AGTableDraggingInfo alloc]
-				initWithPasteboard:_cgDragPasteboard location:point
-					      mask:[self draggingSourceOperationMaskForLocal:YES]];
-
-			operation = [_dataSource tableView:self validateDrop:info proposedRow:_cgDropRow
-					 proposedDropOperation:_cgDropOperation];
-			[info release];
-		}
-		if (operation == NSDragOperationNone) {
-			_cgDropRow = -1;
-		}
+	rows = _selectedRowIndexes;
+	if ([rows count] == 0 || ![rows containsIndex:(NSUInteger)_clickedRow]) {
+		rows = [NSIndexSet indexSetWithIndex:(NSUInteger)_clickedRow];
 	}
-	[self setNeedsDisplay:YES];
-}
+	if (![self canDragRowsWithIndexes:rows atPoint:_cgDragStartPoint]) {
+		return;
+	}
+	pasteboard = [NSPasteboard pasteboardWithName:NSDragPboard];
+	if (pasteboard == nil) {
+		return;
+	}
+	[pasteboard clearContents];
+	if (![_dataSource tableView:self writeRowsWithIndexes:rows toPasteboard:pasteboard]) {
+		return;
+	}
+	for (row = [rows firstIndex]; row != NSNotFound; row = [rows indexGreaterThanIndex:row]) {
+		NSRect rowRect = [self rectOfRow:(NSInteger)row];
 
-- (void)mouseUp:(NSEvent *)event
-{
-	if (_cgDragging) {
-		NSPoint point = [self convertPoint:[event locationInWindow] fromView:nil];
-
-		if (_cgDropRow >= 0
-		    && [_dataSource respondsToSelector:@selector(tableView:acceptDrop:row:dropOperation:)]) {
-			AGTableDraggingInfo *info = [[AGTableDraggingInfo alloc]
-				initWithPasteboard:_cgDragPasteboard location:point
-					      mask:[self draggingSourceOperationMaskForLocal:YES]];
-
-			(void)[_dataSource tableView:self acceptDrop:info row:_cgDropRow
-				     dropOperation:_cgDropOperation];
-			[info release];
-		}
+		unionRect = first ? rowRect : NSUnionRect(unionRect, rowRect);
+		first = NO;
+	}
+	if (first) {
+		return;
+	}
+	rep = [self bitmapImageRepForCachingDisplayInRect:unionRect];
+	if (rep == nil) {
+		return;
+	}
+	[self cacheDisplayInRect:unionRect toBitmapImageRep:rep];
+	image = [[NSImage alloc] initWithSize:unionRect.size];
+	[image addRepresentation:rep];
+	[_cgDragRows release];
+	_cgDragRows = [rows copy];
+	[_cgDragPasteboard release];
+	_cgDragPasteboard = [pasteboard retain];
+	_cgDragging = YES;
+	[self dragImage:image at:unionRect.origin offset:NSZeroSize event:event pasteboard:pasteboard source:self
+		 slideBack:YES];
+	[image release];
+	if ([NSDraggingSession cg_activeSession] == nil) {
+		/* THE SESSION REFUSED (no window, no items), so the press remains an ordinary one rather than a table that
+		 * believes a drag is in flight for ever. */
+		_cgDragging = NO;
 		[_cgDragRows release];
 		_cgDragRows = nil;
 		[_cgDragPasteboard release];
 		_cgDragPasteboard = nil;
-		_cgDragging = NO;
-		_cgDropRow = -1;
-		[self setNeedsDisplay:YES];
-		return;
 	}
-	[super mouseUp:event];
+}
+
+/* THE SOURCE'S ENDED CALLBACK, in both eras' spellings: one of them fires, and either clears the local state. */
+- (void)doneDragging
+{
+	_cgDragging = NO;
+	_cgDropRow = -1;
+	[_cgDragRows release];
+	_cgDragRows = nil;
+	[_cgDragPasteboard release];
+	_cgDragPasteboard = nil;
+	[self setNeedsDisplay:YES];
+}
+
+- (void)draggedImage:(NSImage *)image endedAt:(NSPoint)screenPoint operation:(NSDragOperation)operation
+{
+	(void)image; (void)screenPoint; (void)operation;
+	[self doneDragging];
+}
+
+- (void)draggingSession:(NSDraggingSession *)session
+	   endedAtPoint:(NSPoint)screenPoint
+	    operation:(NSDragOperation)operation
+{
+	(void)session; (void)screenPoint; (void)operation;
+	[self doneDragging];
+}
+
+/* ---- THE TABLE AS A DRAG DESTINATION ------------------------------------------------------------ */
+
+/* **A TABLE IS A DESTINATION FOR ANY TYPE ITS DATA SOURCE WILL VALIDATE.** There is no pasteboard type to register:
+ * the data source's `-tableView:validateDrop:...` IS the table's contract, and Apple's table accepts the drop on the
+ * same terms. That is why `-cg_acceptsDraggedTypes:` is overridden rather than a list being registered in `-init`. */
+- (BOOL)cg_acceptsDraggedTypes:(NSArray *)types
+{
+	(void)types;
+	if (_dataSource != nil
+	    && [_dataSource respondsToSelector:@selector(tableView:validateDrop:proposedRow:proposedDropOperation:)]) {
+		return YES;
+	}
+	return [super cg_acceptsDraggedTypes:types];
+}
+
+/* THE PROPOSED ROW COMES FROM THE POINTER, exactly as it did in the private drag: above the midpoint is above the
+ * row, below it is below. The operation is the data source's answer, and None clears the insertion line rather than
+ * drawing a drop that will not happen. */
+- (NSDragOperation)cg_validateDrop:(id <NSDraggingInfo>)info
+{
+	NSPoint point = [self convertPoint:[info draggingLocation] fromView:nil];
+	NSInteger row = [self rowAtPoint:point];
+	NSInteger proposedRow;
+	NSDragOperation operation = NSDragOperationNone;
+
+	if (row < 0) {
+		proposedRow = (point.y < 0.0) ? 0 : _numberOfRows;
+	} else {
+		NSRect rowRect = [self rectOfRow:row];
+
+		proposedRow = (point.y < NSMidY(rowRect)) ? row : row + 1;
+	}
+	_cgDropRow = proposedRow;
+	_cgDropOperation = NSTableViewDropAbove;
+	if ([_dataSource respondsToSelector:@selector(tableView:validateDrop:proposedRow:proposedDropOperation:)]) {
+		operation = [_dataSource tableView:self validateDrop:info proposedRow:_cgDropRow
+			       proposedDropOperation:_cgDropOperation];
+	}
+	if (operation == NSDragOperationNone) {
+		_cgDropRow = -1;
+	}
+	[self setNeedsDisplay:YES];
+	return operation;
+}
+
+- (NSDragOperation)draggingEntered:(id <NSDraggingInfo>)info
+{
+	return [self cg_validateDrop:info];
+}
+
+- (NSDragOperation)draggingUpdated:(id <NSDraggingInfo>)info
+{
+	return [self cg_validateDrop:info];
+}
+
+- (void)draggingExited:(id <NSDraggingInfo>)info
+{
+	(void)info;
+	_cgDropRow = -1;
+	[self setNeedsDisplay:YES];
+}
+
+- (void)draggingEnded:(id <NSDraggingInfo>)info
+{
+	(void)info;
+	_cgDropRow = -1;
+	[self setNeedsDisplay:YES];
+}
+
+- (BOOL)prepareForDragOperation:(id <NSDraggingInfo>)info
+{
+	(void)info;
+	return YES;
+}
+
+- (BOOL)performDragOperation:(id <NSDraggingInfo>)info
+{
+	BOOL accepted = NO;
+
+	if (_cgDropRow >= 0
+	    && [_dataSource respondsToSelector:@selector(tableView:acceptDrop:row:dropOperation:)]) {
+		accepted = [_dataSource tableView:self acceptDrop:info row:_cgDropRow dropOperation:_cgDropOperation];
+	}
+	_cgDropRow = -1;
+	[self setNeedsDisplay:YES];
+	return accepted;
+}
+
+- (void)concludeDragOperation:(id <NSDraggingInfo>)info
+{
+	(void)info;
+	_cgDropRow = -1;
+	[self setNeedsDisplay:YES];
 }
 
 - (void)keyDown:(NSEvent *)event

@@ -15,10 +15,11 @@
  * NavigationBar is the breadcrumb bar with chevrons and small control size; PopUp shows the last component and opens a
  * menu of the whole path when pressed. Standard and NavigationBar track component clicks; PopUp tracks a menu choice.
  *
- * WHAT THIS SLICE DOES NOT DO: the editable/drop half of the 10.6 class. Drag and drop, the open panel, and the
- * animated hover expansion are absent with the drag session and file panels this tier has not got. `allowedTypes`,
- * `doubleAction`, the delegate hooks and the control-size propagation are stored/implemented; the two delegate hooks
- * are called only from the PopUp menu and the open panel is not shown.
+ * WHAT THIS SLICE DOES NOT DO: the editable/drop half of the 10.6 class. The drag session exists now
+ * (`NSDragging.h`), but this cell does not register as a destination or begin a drag; the open panel and the animated
+ * hover expansion are still absent. `allowedTypes`, `doubleAction`, the delegate hooks and the control-size
+ * propagation are stored/implemented; the two delegate hooks are called only from the PopUp menu and the open panel is
+ * not shown.
  *
  * Written from `NSPathCell.h` in the MacOSX10.6 SDK (see PROVENANCE.md).
  */

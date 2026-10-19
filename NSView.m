@@ -24,6 +24,8 @@
 #import <AppKit/NSImage.h>
 #import <AppKit/NSTextInputContext.h>
 #import <AppKit/NSTextInput.h>
+#import <AppKit/NSEvent.h>
+#import <AppKit/NSDragging.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -143,6 +145,18 @@ static NSRect fn_intersect(NSRect a, NSRect b)
 @interface NSTrackingArea (APPKITTrackingEngine)
 - (BOOL)cg_isInside;
 - (void)cg_setInside:(BOOL)flag;
+@end
+
+/* THE DRAG SESSION'S ONE BEGIN DOOR, declared here because the VIEW is the class that opens a session and the
+ * session's internals live in `NSDragging.m`. Everything after the beginning is the session's; this file only hands
+ * it the items, the event and the source. */
+@interface NSDraggingSession (APPKITDragBegin)
++ (nullable NSDraggingSession *)cg_beginWithItems:(NSArray *)items
+					    event:(nullable NSEvent *)event
+					   source:(id <NSDraggingSource>)source
+					     view:(NSView *)view
+				       pasteboard:(nullable NSPasteboard *)pasteboard
+					slideBack:(BOOL)slideBack;
 @end
 
 /* THE PRIVATE DOOR THE SUPERVIEW USES TO HAND ITS WINDOW DOWN, declared here because this is the file that
@@ -1320,15 +1334,6 @@ NSString *NSDefinitionPresentationTypeOverlay = @"Overlay";
 	fn_refuse_window("-print:", "the printing system (NSPrintOperation)");
 }
 
-- (void)dragImage:(NSImage *)anImage at:(NSPoint)viewLocation offset:(NSSize)initialOffset event:(NSEvent *)event
-       pasteboard:(NSPasteboard *)pboard source:(id)sourceObj slideBack:(BOOL)slideFlag
-{
-	(void)anImage; (void)viewLocation; (void)initialOffset; (void)event; (void)pboard; (void)sourceObj;
-	(void)slideFlag;
-	fn_refuse_window("-dragImage:at:offset:event:pasteboard:source:slideBack:",
-			 "a drag session (the window server's drag loop)");
-}
-
 /* AND THE THREE THAT ANSWER RATHER THAN REFUSE. */
 
 - (NSInteger)gState
@@ -1338,10 +1343,47 @@ NSString *NSDefinitionPresentationTypeOverlay = @"Overlay";
 	return 0;
 }
 
+/* ---- THE DRAG SOURCE'S TWO DOORS ---------------------------------------------------------------- */
+
+/* **THE SESSION IS `NSDragging.m`'S; THE DOORS ARE THE VIEW'S.** A category in the session's file made the class's
+ * own `@implementation` incomplete, which is exactly what the compiler said: Apple declares these on NSView, so this
+ * is where they belong. The legacy door is the modern one with one item made from the image — and it is ASYNCHRONOUS:
+ * the operation reaches the source's ended callback, not this door's return value, which the header states. */
+- (nullable NSDraggingSession *)beginDraggingSessionWithItems:(NSArray *)items
+							event:(NSEvent *)event
+						       source:(id <NSDraggingSource>)source
+{
+	return [NSDraggingSession cg_beginWithItems:items event:event source:source view:self
+				      pasteboard:nil slideBack:YES];
+}
+
+- (void)dragImage:(NSImage *)anImage at:(NSPoint)viewLocation offset:(NSSize)initialOffset
+	    event:(NSEvent *)event pasteboard:(NSPasteboard *)pboard source:(id)sourceObj
+	 slideBack:(BOOL)slideFlag
+{
+	NSDraggingItem *item;
+	NSImage *image = anImage;
+
+	if (image == nil) {
+		/* AN IMAGE IS WHAT THE DOOR IS NAMED FOR, and a nil one would make a session whose pointer offset is
+		 * undefined. A one-point transparent image is the honest stand-in for "no picture". */
+		image = [[[NSImage alloc] initWithSize:NSMakeSize(1.0, 1.0)] autorelease];
+	}
+	item = [[[NSDraggingItem alloc] initWithPasteboardWriter:nil] autorelease];
+	[item setDraggingFrame:NSMakeRect(viewLocation.x, viewLocation.y,
+					  [image size].width, [image size].height)
+		      contents:image];
+	(void)initialOffset;	/* THE OFFSET IS DERIVED FROM THE EVENT: `at:` already says where the image is, and the
+				 * event says where the pointer is, which is the pair the session needs. */
+	(void)[NSDraggingSession cg_beginWithItems:[NSArray arrayWithObject:item] event:event source:sourceObj
+					      view:self pasteboard:pboard slideBack:slideFlag];
+}
+
 - (void)registerForDraggedTypes:(NSArray *)newTypes
 {
-	/* RECORDED, AND ON THE VIEW THIS IS THE REAL CONTRACT'S HALF: what would consume the set is this view's own drag
-	 * acceptance. There is still no drag session to exercise it, so the set is kept and read back through a seam. */
+	/* THE SET THE DESTINATION SEARCH READS.** `-registerForDraggedTypes:` REPLACES rather than appends, which is
+	 * Apple's contract (the header records it), and the list is read back through `-cg_registeredDraggedTypes`
+	 * because Apple declares no getter. */
 	if (_cg_registeredDraggedTypes == nil) {
 		_cg_registeredDraggedTypes = [[NSMutableArray alloc] init];
 	}
@@ -1359,6 +1401,70 @@ NSString *NSDefinitionPresentationTypeOverlay = @"Overlay";
 - (nullable NSArray *)cg_registeredDraggedTypes
 {
 	return _cg_registeredDraggedTypes;
+}
+
+/* **THE DESTINATION'S DEFAULT ANSWERS, WHICH ARE APPLE'S.** A plain view refuses a drag (None), accepts no drop
+ * (perform NO), and says it wants periodic updates even though this tier has no timer to send them — the answer is
+ * what a destination expects to read, and the absence of a timer is stated in `NSDragging.h` rather than hidden in
+ * a NO. `-prepareForDragOperation:` defaults YES because preparing is the destination's chance to change its mind,
+ * not an extra gate. */
+- (NSDragOperation)draggingEntered:(id <NSDraggingInfo>)sender
+{
+	(void)sender;
+	return NSDragOperationNone;
+}
+
+- (NSDragOperation)draggingUpdated:(id <NSDraggingInfo>)sender
+{
+	(void)sender;
+	return NSDragOperationNone;
+}
+
+- (void)draggingExited:(id <NSDraggingInfo>)sender
+{
+	(void)sender;
+}
+
+- (void)draggingEnded:(id <NSDraggingInfo>)sender
+{
+	(void)sender;
+}
+
+- (BOOL)prepareForDragOperation:(id <NSDraggingInfo>)sender
+{
+	(void)sender;
+	return YES;
+}
+
+- (BOOL)performDragOperation:(id <NSDraggingInfo>)sender
+{
+	(void)sender;
+	return NO;
+}
+
+- (void)concludeDragOperation:(id <NSDraggingInfo>)sender
+{
+	(void)sender;
+}
+
+- (BOOL)wantsPeriodicDraggingUpdates
+{
+	return YES;
+}
+
+- (BOOL)cg_acceptsDraggedTypes:(NSArray *)types
+{
+	NSUInteger i;
+
+	if (_cg_registeredDraggedTypes == nil || types == nil) {
+		return NO;
+	}
+	for (i = 0; i < [types count]; i++) {
+		if ([_cg_registeredDraggedTypes containsObject:[types objectAtIndex:i]]) {
+			return YES;
+		}
+	}
+	return NO;
 }
 
 
