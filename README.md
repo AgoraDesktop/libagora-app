@@ -858,7 +858,7 @@ the tier's drag session, validates and accepts, and draws the insertion line. Th
 what makes the same row draggable onto ANOTHER view that registered for the types; what is still absent is the
 CROSS-PROCESS half (another application's destination and its pasteboard) and the later view-based API
 (`NSTableCellView`, `-viewForTableColumn:row:`). `NSOutlineView`, `NSSplitView`, `NSSegmentedControl` and
-`NSPathControl` are here beside them: the Finder shell's AppKit prerequisites are complete.
+`NSPathControl` are here beside them: Workspace's AppKit prerequisites are complete.
 
 `tests/table_view.m` is the first probe: it puts a three-column table in a scroll view, measures the columns, rows
 and cells, exercises a delegate that refuses one row, drives the header's divider and sort click through real

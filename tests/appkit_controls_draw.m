@@ -1343,7 +1343,7 @@ int main(int argc, char **argv)
 		 *
 		 * THE SECOND ITEM IS THE ONE SELECTED, so the window opens with the button naming a row rather than wearing
 		 * an empty title — a popup whose title is blank looks like a button that failed to load. */
-		/* **AND A SEGMENTED CONTROL, THE FINDER'S VIEW SWITCHER.** Three segments, the first selected, in the free
+		/* **AND A SEGMENTED CONTROL, THE FILE WINDOW'S VIEW SWITCHER.** Three segments, the first selected, in the free
 		 * room above the pop-up row. It is a real NSSegmentedControl: the plate, the separators and the labels are the
 		 * cell's, and clicking a segment moves the selection through the control's ordinary tracking loop. */
 		segmented = [[NSSegmentedControl alloc] initWithFrame:NSMakeRect(30, 340, 260, 24)];
@@ -1354,7 +1354,7 @@ int main(int argc, char **argv)
 		[segmented setSelectedSegment:0];
 		[segmented setTarget:controller];
 		[segmented setAction:@selector(noop:)];
-		/* **AND THE PATH BAR, THE FINDER'S OTHER PIECE OF NAVIGATION CHROME.** A real NSPathControl in the
+		/* **AND THE PATH BAR, THE FILE WINDOW'S OTHER PIECE OF NAVIGATION CHROME.** A real NSPathControl in the
 		 * navigation-bar style: the URL becomes component cells, and the chevrons between them are the cell's. */
 		pathBar = [[NSPathControl alloc] initWithFrame:NSMakeRect(30, 305, 350, 24)];
 		[pathBar setPathStyle:NSPathStyleNavigationBar];
