@@ -9,8 +9,8 @@ directory (`../README.md`). `libagora-app` is the top of its stack: above it the
 ## Status
 
 **The AppKit is imported and its windows run on Agora's window server. The X11 seam is gone.** Above the
-window and view classes there is now a cell and control layer (buttons, switches, sliders, a segmented control and
-a path bar), a tracking-area engine, one line of editable text with the standard key bindings, a title bar the client DRAWS
+window and view classes there is now a cell and control layer (buttons, switches, sliders, a segmented control, a progress indicator and a path
+bar), a tracking-area engine, one line of editable text with the standard key bindings, a title bar the client DRAWS
 itself, the menu subsystem — validation, a selection chip, and a pointer grab that lets a popup be dismissed by
 clicking away — and a TOOLBAR: items from a delegate, in a band the window reserves between its chrome and its
 content, with item groups that lay their members adjacent. Above the controls there is a CELL-BASED TABLE: columns,
@@ -107,6 +107,7 @@ tests/
   path_control.m                the PATH BAR: URL decomposition, component geometry, styles, clicks and ink
   split_view.m                  the SPLIT VIEW: panes, divider positions, the drag, the collapse and the ink
   browser.m                     the BROWSER: columns, the delegate's cells, the selection, the path and the width
+  progress_indicator.m          the PROGRESS INDICATOR: range, clamp, spinner state and the bar's ink
   control_drag.m                and what a DRAG costs: forty motions, and how many frames the window committed
   run-*-headless.sh             ctest: a compositor with a virtual monitor (no desktop input involved)
   run-*-nested.sh, inspect.py   the PIXEL tests, and they are OPT-IN: `gnome-shell --nested` is a whole
@@ -1040,6 +1041,15 @@ begins a drag against Agora's headless server and checks the image window itself
 floating, pointer-transparent, the composed size, the offset placement, that a motion moves it, and that the release
 orders it out.
 
+### The progress indicator, and a value as a bar
+
+**`NSProgressIndicator` IS HERE IN ITS TWO STYLES.** The determinate bar draws a track, a hairline and an accent fill
+proportional to `(value - min) / (max - min)`; the value is clamped on the way in and the range setters keep
+`min <= max`. The spinning style draws a ring and a smaller ring while `-isAnimating`; this tier has no animation
+timer, so `-startAnimation:`/`-stopAnimation:` keep the state a caller reads and the ring is drawn for that state.
+`-isIndeterminate` records the mode and the bar's fill is omitted for it. `tests/progress_indicator.m` checks the
+default range, clamping, `-incrementBy:`, the spinner state and a bitmap's filled/empty halves.
+
 ### Still absent, and why
 
 **SEVEN THINGS THAT USED TO BE ON THIS LIST ARE NOT ANY MORE, AND THE LIST IS CORRECTED RATHER THAN QUIETLY SHRUNK:**
@@ -1050,7 +1060,7 @@ is the DRAWER (the class — `-drawers` answers an empty array, which is Apple's
 CUSTOMIZATION PALETTE (the toolbar itself is here; the palette refuses by name), the CROSS-PROCESS DRAG SESSION
 (the in-process session, its drag image window, its two protocols and the table's row drag are here; another
 application's destination and its pasteboard are not, because that is the window server's transport),
-`NSSearchField`, `NSProgressIndicator`, `NSPanel`/`NSAlert`, `NSTabView`, `NSCollectionView`, `NSDocument`, and the
+`NSSearchField`, `NSPanel`/`NSAlert`, `NSTabView`, `NSCollectionView`, `NSDocument`, and the
 script-command doors, which are declared and REFUSE by name; what the window's close,
 minimise and zoom buttons DO is now this tier's — each goes through the `-perform…` door its menu item sends — but
 the MINIMISE is

@@ -456,6 +456,18 @@ before copying it into the table's own set. The copy read freed memory; the sele
 `tests/browser.m` is the regression. The fix is in `NSTableView.m`, not in the browser, because any table delegate may
 answer with the proposal.
 
+## 19. The progress indicator is this repository's own code
+
+**`NSProgressIndicator.h`/`.m` ARE WRITTEN FROM THE 10.6 DECLARATIONS.** The determinate bar's track, hairline and
+accent fill are drawn in `-drawRect:`; the value is clamped in `-setDoubleValue:` and the range setters keep the two
+ends ordered. The spinning style is a ring plus a smaller ring while `-isAnimating`; there is no animation timer in
+this tier, which is stated at the door rather than hidden behind a NO. `-isIndeterminate` records the mode and omits
+the fill.
+
+`tests/progress_indicator.m` measures the default range, both clamps, `-incrementBy:`, the spinner state, and a
+bitmap whose filled half and empty half must be different ink. The file-operation progress window consumes this
+class; the manager itself is Workspace's.
+
 ## Keeping in sync
 
 The Fiwix AppKit is the origin and this repository has now diverged from it in the seam. A fix made there

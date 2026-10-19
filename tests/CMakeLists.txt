@@ -756,3 +756,9 @@ add_executable(browser browser.m)
 target_link_libraries(browser PRIVATE App m)
 add_test(NAME appkit-browser COMMAND browser)
 set_tests_properties(appkit-browser PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
+
+# **THE PROGRESS INDICATOR: A VALUE AS A BAR.** Offscreen, with a bitmap for the fill.
+add_executable(progress_indicator progress_indicator.m)
+target_link_libraries(progress_indicator PRIVATE App m)
+add_test(NAME appkit-progress-indicator COMMAND progress_indicator)
+set_tests_properties(appkit-progress-indicator PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
