@@ -293,6 +293,28 @@
 	[self drawInteriorWithFrame:cellFrame inView:controlView];
 }
 
+/* **THE BASELINE THAT PUTS A LINE'S MIDDLE ON THE CELL'S MIDDLE, IN EITHER Y DIRECTION.** The band is the font's
+ * ascent and descent and its middle is `NSMidY(cellFrame)`; the caret places the band one half-difference either
+ * side of that, and the sign is the CONTEXT's, read from the CTM rather than assumed (the context object's
+ * `-isFlipped` is not a guide: it answers NO for the bitmap a flipped table draws into).
+ *
+ * THE MEASUREMENT, because it is what makes this more than an assertion: rendered both ways, a row's ink centre is
+ * 9.5 of a 20-point cell with this caret. With a caret that always subtracts the half-difference — the y-up-only
+ * version this method replaced — the flipped render puts the centre at 2.0, eight points high: the clipped row the
+ * demonstration showed, which left the outline's closed triangle pointing below the words' middle instead of at it.
+ * `tests/table_view.m` and `tests/outline_view.m` render the same row both ways and assert the alignment.
+ *
+ * `NSTableHeaderCell` inherits this door rather than keeping a second copy; see `NSTextFieldCell.h`. */
+- (CGFloat)cg_centredBaselineInFrame:(NSRect)cellFrame font:(NSFont *)font
+{
+	CGFloat ascender = [font ascender];
+	CGFloat descent = (CGFloat)fabs((double)[font descender]);
+	CGContextRef cg = (CGContextRef)[[NSGraphicsContext currentContext] graphicsPort];
+	CGAffineTransform transform = cg != NULL ? CGContextGetCTM(cg) : CGAffineTransformIdentity;
+
+	return NSMidY(cellFrame) + (transform.d >= 0.0 ? 1.0 : -1.0) * ((ascender - descent) / 2.0);
+}
+
 /* **AND THE PLACEHOLDER IS DRAWN THE WAY THE STRING IS, BECAUSE IT IS THE SAME SORT OF THING.** Same text rect, same
  * left edge, same vertical centring on the field, same clip — so a hint and a value cannot sit at different heights in
  * the same box, which is the bug a second placement path always grows. What differs is the COLOUR, and that is the
@@ -312,14 +334,13 @@
 	}
 	{
 		NSFont *font = [text attribute:NSFontAttributeName atIndex:0 effectiveRange:NULL];
-		CGFloat ascender = [font ascender];
-		CGFloat descent = (CGFloat)fabs((double)[font descender]);
-		CGContextRef cg = (CGContextRef)[[NSGraphicsContext currentContext] graphicsPort];
-		CGAffineTransform transform = cg != NULL ? CGContextGetCTM(cg) : CGAffineTransformIdentity;
-		CGFloat baseline = NSMidY(cellFrame) + (transform.d >= 0.0 ? 1.0 : -1.0)
-				   * ((ascender - descent) / 2.0);
+		CGFloat baseline = [self cg_centredBaselineInFrame:cellFrame font:font];
 		[NSGraphicsContext saveGraphicsState];
-		[[NSBezierPath bezierPathWithRect:cellFrame] setClip];
+		/* **INTERSECT THE CALLER'S CLIP, DO NOT REPLACE IT.** `-setClip` here threw away the clip
+		 * view's and the table's clip, so a cell whose column ran past its table drew its text
+		 * straight across the neighbouring view — the split view probe found it at a narrow pane.
+		 * The cell's own rectangle is a bound within the caller's region, which is `-addClip`. */
+		[[NSBezierPath bezierPathWithRect:cellFrame] addClip];
 		[text drawAtPoint:NSMakePoint(NSMinX(room), baseline)];
 		[NSGraphicsContext restoreGraphicsState];
 	}
@@ -373,19 +394,14 @@
 	 * row's text was cut at the same line. `-drawAtPoint:` is a baseline, and this class already has the font's
 	 * ascent and descent, so the line is placed explicitly. */
 	{
-		CGFloat ascender = [font ascender];
-		CGFloat descent = (CGFloat)fabs((double)[font descender]);
-		/* **THE BASELINE'S SIGN FOLLOWS THE CTM, AND IT IS MEASURED RATHER THAN GUESSED.** A table's cells and a
-		 * plain content view's label report opposite directions in the same window; one sign for both cut every
-		 * table row's text in half. The sign below is the one the two contexts needed. */
-		CGContextRef cg = (CGContextRef)[[NSGraphicsContext currentContext] graphicsPort];
-		CGAffineTransform transform = cg != NULL ? CGContextGetCTM(cg) : CGAffineTransformIdentity;
-		CGFloat baseline = NSMidY(cellFrame) + (transform.d >= 0.0 ? 1.0 : -1.0)
-				   * ((ascender - descent) / 2.0);
+		/* **THE BASELINE COMES FROM THE ONE DOOR, SO A FLIP CANNOT MOVE THIS CELL AND NOT THE OTHERS.** */
+		CGFloat baseline = [self cg_centredBaselineInFrame:cellFrame font:font];
 		/* **THE CLIP IS THE CELL, NOT A BAND THE SIZE OF THE FONT.** A tight band is one more rectangle whose
 		 * orientation can disagree with the context; the cell frame is the thing the text belongs inside. */
 		[NSGraphicsContext saveGraphicsState];
-		[[NSBezierPath bezierPathWithRect:cellFrame] setClip];
+		/* THE SAME INTERSECTION THE PLACEHOLDER USES: the cell is a seam inside whatever clip the
+		 * control already established, not a replacement for it. */
+		[[NSBezierPath bezierPathWithRect:cellFrame] addClip];
 		[string drawAtPoint:NSMakePoint(NSMinX(room), baseline) withAttributes:attributes];
 		[NSGraphicsContext restoreGraphicsState];
 	}

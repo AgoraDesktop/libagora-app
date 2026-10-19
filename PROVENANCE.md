@@ -199,6 +199,204 @@ column reordering or autosave; `NSTableView.h` names the omissions. `NSOutlineVi
 flattened tree, an identity-based expanded set and the disclosure triangle; `tests/table_view.m` and
 `tests/outline_view.m` hold the geometry, the header gesture, the tree and the ink.
 
+## 11. The split view is written from the SDK header, not imported
+
+**`NSSplitView` is this repository's own code**, written against the class and delegate declarations in the
+MacOSX10.6 SDK rather than copied from the Fiwix tree (which has no split view). It follows the era surface: the
+three divider styles, `vertical`, `dividerStyle`, `autosaveName`, `adjustSubviews`, `isSubviewCollapsed:`, the
+divider index doors, the deprecated pane-splitter pair, and every optional delegate method in the 10.6 header.
+
+Four decisions are this tier's rather than the SDK's, and each is recorded where it lives:
+
+- **the view is FLIPPED and a divider position is its LEADING edge.** The old documentation says a divider's
+  rectangle is in flipped coordinates, but Apple's headers do not say whether `-setPosition:` names the leading
+  edge, the centre or the trailing edge. This implementation names the leading edge: the pane before divider 0 is
+  exactly the proposed number of points wide (or tall), which is the reading a caller writing a sidebar expects.
+- **the thicknesses and the pane splitter's grip are ours.** Apple publishes the three style names and says only
+  that the default thickness depends on the platform. This tree draws a six-point thick bar, a one-point thin
+  hairline, and an 18-point pane splitter: a `windowBackgroundColor` gutter with THREE HOLLOW RINGS down its centre,
+  `#BCBCBC` (`controlDarkShadowColor`), two-point radii eight points apart — the SAME GRIP `NSScrollerCell` draws,
+  and the same border grey the rest of the tier uses. The pane splitter also rounds each non-final pane to a whole
+  point, so its one-point pane borders land on the pixel grid as `#BCBCBC` rather than antialiasing into a lighter
+  grey; the two ordinary styles keep the exact fractional arithmetic because a filled bar has no border to blur.
+  Those ordinary styles are one filled rectangle; `dividerColor` is `controlDarkShadowColor` for all three. A
+  subclass overrides `-dividerThickness`, `-dividerColor` or `-drawDividerInRect:` for anything else.
+- **autosave uses this tier's dictionary.** `autosaveName` is the contract; the value under it is a dictionary of
+  pane fractions and collapsed indexes (`fractions`, `collapsed`) under an `AgoraSplitView <name>` defaults key.
+  Apple keeps its own format private, so there is nothing compatible to write.
+- **the drag's tracking loop belongs to the running application.** A press takes `-nextEventMatchingMask:` until
+  the release, so a drag survives the pointer leaving the view. When the application is not running there is no
+  event source; `-mouseDragged:` and `-mouseUp:` then do the same work one event at a time, which is how
+  `tests/split_view.m` drives it.
+
+The collapse rule is Apple's documented half-minimum rule: a pane with a delegate-declared minimum collapses when a
+drag has passed halfway between that minimum and zero. A double-click asks the delegate's
+`shouldCollapse` question and toggles the pane. The later `NSSplitViewController` (10.10) and the holding-priority
+doors (10.8) are absent because they are later than the vintage this tree pins.
+
+## 12. A cell's text intersects the caller's clip; it does not replace it
+
+**MEASURED in the split view demonstration:** a table in a narrow pane drew its size column's TEXT past the pane and
+over the window beside it, while the row backgrounds stopped correctly at the edge. The cause was not the split view.
+`NSTextFieldCell -drawInteriorWithFrame:inView:`, its placeholder path, and `NSPopUpButtonCell`'s title each did:
+
+    [[NSBezierPath bezierPathWithRect:cellRect] setClip];
+
+`-setClip` REPLACES the current clip. A cell is drawn inside a clip view, a table and a split view, and replacing their
+clip with the cell's own rectangle threw all three away — so a column wider than its table let its words escape to the
+window's edge. The row backgrounds were unaffected because they never set a clip of their own.
+
+**FIX:** the three call sites use `-addClip`, which INTERSECTS the cell's rectangle with the clip the caller already
+established. The visual result inside a cell is identical; the difference is that the enclosing view's edge now holds.
+`tests/split_view.m` §17 renders a table whose column is 250 points wide inside a 100-point pane and asserts that no
+dark text pixel reaches the blank pane beside it. It fails with `-setClip` and passes with `-addClip`, which is what
+makes it a regression test rather than a description.
+
+## 13. A click activates, raises and keys; a lone window is the one the application speaks through
+
+Three window-management defects were measured together, because one click exposed all three.
+
+**1. A CLICK DID NOT ACTIVATE, RAISE OR KEY.** `NSApplication -sendEvent:` wrote the two application ivars on a
+mouse-down and stopped:
+
+    _keyWindow = w;
+    _mainWindow = w;
+
+so `-isActive` stayed whatever it was, the window was never ordered front, and `-isKeyWindow`/`-isMainWindow` stayed
+NO because the window's own flags were never set. The click path now calls the public doors: `-activate`,
+`-orderFront:`, `-makeKeyWindow` and `-makeMainWindow`. `-orderFront:` also sends the server's `raise` now, and
+`-orderBack:` sends the new `AGWindowLower` seam (`lower`), instead of both of them raising.
+
+**2. THE APPLICATION'S KEY/MAIN ANSWERS COULD DISAGREE WITH THE WINDOW'S.** `-keyWindow`/`-mainWindow` were only
+written by the click path and by window registration; `-makeKeyWindow`/`-makeMainWindow` changed the window's own
+flags and posted the notifications but never told the application. `NSWindow -becomeKeyWindow`, `-resignKeyWindow`,
+`-becomeMainWindow` and `-resignMainWindow` now call private `NSApplication` doors, so the two answers move together
+whichever door caused the change.
+
+**3. THE CHROME KEPT THE OLD INK UNTIL THE POINTER MOVED.** The stoplights draw their active/inactive art from
+`-isKeyWindow`, but a key-state change did not mark the window stale. The bar repainted only when the pointer's
+next motion happened to change the hover, which is the reported "the lights change only when the mouse moves over
+them". Both key and main transitions now call `-setNeedsDisplay:YES`; `tests/chrome_theme.m` asserts the flag after
+`-makeKeyWindow` and after `-resignKeyWindow`.
+
+**AND AN ACTIVE APPLICATION ALWAYS HAS A KEY WINDOW.** `-cg_addWindow:` recorded `_keyWindow` when it was nil and
+left the window's own key flag NO, so a single-window application launched with its chrome inactive until somebody
+clicked it. `-cg_ensureKeyAndMainWindow` now runs from activation, window addition and window removal: it keeps the
+remembered window when it can still take the state, otherwise picks the first visible window that can, and skips
+windows that refuse (the desktop, borderless panels). With one usable window there is no choice to make — that
+window is key and main — which is the measured rule `tests/appkit_activation.m` now holds with a titled window.
+
+Apple's activation notifications are transitions, not counts: `-activateIgnoringOtherApps:` and `-deactivate` now
+announce only when `_active` actually changes, so the compositor's keyboard-enter and a click in the same pass do not
+make a delegate act twice. `tests/appkit_events.m` deactivates, resigns key/main, clicks, and asserts all three
+states; it fails with the old direct-ivar assignment.
+
+## 14. The segmented control and the toolbar group are written from the SDK headers
+
+**`NSSegmentedControl`, `NSSegmentedCell` and `NSToolbarItemGroup` are this repository's own code**, written against
+the MacOSX10.6 SDK declarations rather than imported. The segmented pair follows the era's surface exactly: the seven
+segment styles, the three tracking modes, per-segment width/image/scaling/label/menu/tool-tip/tag/enabled/selected
+doors, the cell's `-drawSegment:inFrame:withView:` content hook and `-interiorBackgroundStyleForSegment:`.
+
+Three decisions are this tier's:
+
+- **the cell owns one private record per segment.** A segment is not a view; its label, picture, scaling rule, width,
+  tag, enabled flag, selected flag, menu and tool tip live in an `AGSegmentItem` and are released together. The
+  geometry is derived from those records: zero width autosizes, surplus width goes to the auto-sized segments, and a
+  frame narrower than the natural row scales it to fit.
+- **the drawing is split into bezel and content.** The track, selected/pressed plates and separators are painted by
+  `-drawWithFrame:inView:`; `-drawSegment:inFrame:withView:` paints one segment's content. The plate uses
+  `selectedControlColor`, the track `controlColor`, the separators and border `controlDarkShadowColor`, and the
+  selected label `selectedControlTextColor`. A segment menu and tool tip are STORED and read back, but the pop-up and
+  the window tool tip are not yet wired; `NSSegmentedControl.h` names that omission.
+- **the tracking is committed in `-stopTracking:`.** `SelectOne` moves the selection, `SelectAny` toggles the segment
+  and leaves its neighbours, and `Momentary` exposes the pressed segment to the action while drawing it only for the
+  duration of the press. `NSControl`'s existing loop does the event pumping; the cell only answers its three hooks.
+
+**THE TOOLBAR GROUP IS ONE ITEM WITH SEVERAL FACES.** `NSToolbarItemGroup` stores its subitems, refuses a non-item or
+a nested group, and marks the toolbar stale when the list changes. `NSToolbar` flattens a group WITHOUT a custom view
+into its subitems for measurement, drawing and hit testing, while keeping a parallel owner list so `-items` and
+`-visibleItems` still answer the GROUP and its members are laid out adjacent. A group WITH a custom view is one item
+wearing that view. The 10.6 class has only `subitems`; the later selection-mode/selected-index doors are not part of
+this vintage. The parent's label and target/action do not override a standard subitem's — the members carry their own,
+and `NSToolbarItemGroup.h` states that gap rather than leaving it to be discovered.
+
+`tests/segmented_control.m` measures the segment geometry (fixed, auto and scaled), all three tracking modes, the
+per-segment storage, the action seeing the committed selection and the track/plate/separator/label ink.
+`tests/toolbar.m` inserts a group of two custom-view subitems, checks that the group is the unit `-items` and
+`-visibleItems` report, that both subitem views are adopted side by side, and that removing the group takes them out.
+
+## 15. The path control is written from the SDK headers, not imported
+
+**`NSPathControl`, `NSPathCell` and `NSPathComponentCell` are this repository's own code**, written against the
+MacOSX10.6 SDK declarations. The control is a forwarder; the path cell owns the URL, the component array, the style,
+the background, the placeholder and the clicked component; a component cell is an `NSTextFieldCell` with a URL and the
+inherited picture.
+
+Four decisions are this tier's:
+
+- **the URL is decomposed into one component per path element.** A file URL's `/System/Library` becomes `/`, `System`,
+  `Library`, each with its own prefix URL; a non-file URL is one component whose title is `-absoluteString`. The
+  component class is `+pathComponentCellClass`, so a subclass can supply its own.
+- **the middle truncates; the ends stay.** The first component and the last are always visible, an ellipsis takes the
+  hidden middle's place, and middle components are kept from the last one backwards for as long as they fit. A
+  component that is not visible answers `NSZeroRect` from `-rectOfPathComponentCell:…`, which is Apple's documented
+  answer for "not currently displayed".
+- **the three styles are three faces.** Standard fills a light-blue bar and uses small arrows; NavigationBar forces
+  the small control size, fills the control face and draws chevrons; PopUp shows only the last component and raises a
+  menu of the whole path. The component cells draw only their interiors, so the path cell owns every background and
+  separator.
+- **the editable/drop half is ABSENT and named.** `NSDragging.h` here supplies only `NSDragOperation` and its values
+  because that is all the era's path-control declaration needs; there is no drag session, no `NSDraggingInfo`
+  implementation and no `NSOpenPanel`, so the drag-source/destination delegate methods are declared and never called.
+  File icons are not filled in either, because this tier has no `NSWorkspace` icon door. `NSPathControl.h` and
+  `NSPathCell.h` say both things where a reader meets them.
+
+The PopUp style's menu is built from the component cells and selecting a row sets `-clickedPathComponentCell` before
+the action is sent; the delegate's `willPopUpMenu:` hook is forwarded from the cell to the control's delegate.
+`tests/path_control.m` holds the decomposition, prefix URLs, geometry, middle truncation, three styles, single and
+double actions, manual cells and the bar's ink.
+
+## 16. The table's second half: heights, type-select, reordering, autosave, editing and a local drag
+
+**THE CELL-BASED TABLE'S MISSING HALF IS IMPLEMENTED, AND IT IS STILL CELL-BASED.** No `NSTableCellView` or
+`-viewForTableColumn:row:` was introduced; the era's cells, data source and delegate are the surface, and the six
+features below are the era's doors.
+
+- **VARIABLE ROW HEIGHTS** are cached as a top and an extent per row, rebuilt from
+  `-tableView:heightOfRow:` (or `_rowHeight` when the delegate does not answer). `-rectOfRow:`, `-rowAtPoint:`,
+  `-rowsInRect:` and `-tile` read the cache; `-reloadData`, `-noteNumberOfRowsChanged` and
+  `-noteHeightOfRowsWithIndexesChanged:` invalidate it. A row's rect no longer assumes a constant pitch, and the
+  row hit test binary-searches the cached tops.
+- **TYPE-SELECT** accumulates a prefix for one second, searches the prepared cells' `-stringValue` or the delegate's
+  `-tableView:typeSelectStringForTableColumn:row:`, starts at the selected row and wraps. A key that does not extend
+  the prefix restarts it with that key, so `c`, `h`, `d` can select "Charlie" and then "Delta" without waiting out the
+  timeout. `-allowsTypeSelect` turns it off.
+- **COLUMN REORDERING** is the header's second gesture. A press on the body of a header asks
+  `-tableView:shouldReorderColumn:toColumn:` with -1; a drag past four points moves the column through
+  `-moveColumn:toColumn:`, asks the delegate again for the target, and `-tableView:didDragTableColumn:` is sent once.
+  `-draggedColumn`/`-draggedDistance` report the gesture. The table's move door posts the move notification, sends
+  the delegate's column-did-move hook and saves the autosave.
+- **AUTOSAVE** stores, under `AgoraTableView <name>`, the column order, widths, hidden state and sort descriptors.
+  It loads when the name and `-autosaveTableColumns` are both set, and saves on a move, a user resize and a sort
+  descriptor change. The dictionary's keys are this tier's; Apple's format is private.
+- **EDITING** uses `NSWindow -fieldEditor:forObject:`. `-editColumn:row:withEvent:select:` prepares the data cell,
+  checks `-shouldFocusCell:atColumn:row:`, starts the cell's session with the table as the caller delegate, and the
+  table's `-textDidEndEditing:` writes the cell's object value through the data source's
+  `-tableView:setObjectValue:forTableColumn:row:`. `-editedRow`/`-editedColumn` answer -1 outside the session. A
+  refused first responder clears the table's edit state, and a double-click on an editable cell with no
+  double-action starts the session.
+- **A LOCAL ROW DRAG** writes the data source's pasteboard, proposes a row/operation, calls
+  `-tableView:validateDrop:proposedRow:proposedDropOperation:` and on the release
+  `-tableView:acceptDrop:row:dropOperation:`, drawing a two-point insertion line. `NSDragging.h` now carries
+  `NSDragOperation` and the three-answer `NSDraggingInfo` slice the table's local drag needs. **THE CROSS-PROCESS
+  SESSION IS STILL ABSENT** — no `NSDraggingSession`, no drag image on the glass, no other application's destination
+  — and `NSTableView.h` says so at the data-source protocol.
+
+`tests/table_advanced.m` holds all six: the variable-height geometry and re-tile, the prefix/wrap/restart type-select,
+the header reorder and its delegate, an autosave round trip through a second table, a field-editor session that writes
+back to the data source, and a local drag that reaches all three data-source methods.
+
 ## Keeping in sync
 
 The Fiwix AppKit is the origin and this repository has now diverged from it in the seam. A fix made there

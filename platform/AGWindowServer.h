@@ -228,6 +228,14 @@ void AGWindowSetTransparent(AGWindow *window, int transparent);
  * this and simply delivers nothing, which is the behaviour every popup had before it. */
 void AGWindowSetPointerGrab(AGWindow *window, int grab);
 
+/* **AND TAKE IT WHEREVER IT IS, FOR THE DURATION OF A DRAG.** The grab above is a fallback and stops at the first
+ * surface under the pointer, which is what a menu bar needs; a window being MOVED or RESIZED needs the opposite,
+ * because it goes out from under the hand — the edge follows the pointer and the compositor's copy of the surface
+ * is a frame behind, so the pointer ends up over the desktop or over a neighbour. While this is set, motion and
+ * buttons are delivered to THIS window whatever is under them, which is the only way a drag hears its own hand.
+ * The server gives it back when the last button comes up; zero gives it back early. */
+void AGWindowSetPointerCapture(AGWindow *window, int capture);
+
 /* **MAKE THIS WINDOW AN ITEM THE SERVER PLACES, OF THIS WIDTH.** The one place the frame rule does not reach:
  * `NSStatusItem` has a length and no position, because an application does not know what else is in the status bar
  * and so cannot know where its own item goes. After this, `AGWindowSetFrame` no longer moves the window — a status
@@ -240,6 +248,8 @@ void AGWindowSetStatusItem(AGWindow *window, int length);
 /* BRING THE WINDOW TO THE FRONT OF ITS LEVEL — the Mac's `-orderFront:`. It is not a level change and not a
  * claim on the keyboard: who has FOCUS is the user's click together with `-makeKeyAndOrderFront:`. */
 void AGWindowRaise(AGWindow *window);
+/* SEND IT TO THE BACK OF ITS LEVEL — the Mac's `-orderBack:`. The same level, the other end of it. */
+void AGWindowLower(AGWindow *window);
 
 int AGWindowWidth(const AGWindow *window);
 int AGWindowHeight(const AGWindow *window);

@@ -58,12 +58,13 @@ static BOOL ag_eventIsInsideCell(NSEvent *event, NSRect cellFrame, NSView *contr
 {
 	(void)controlView;
 	[[self image] drawInRect:cellFrame];
-	/* **AND A PRESSED PICTURE IS DIMMED WITH THE PLATFORM'S SELECTION COLOUR.** The overlay lives HERE, in the drawing,
+	/* **AND A PRESSED PICTURE IS DIMMED WITH THE PLATFORM'S ACCENT** — the same colour the text selection around it is
+	 * painted with, so a selected attachment and the selected words beside it are one highlight. The overlay lives HERE, in the drawing,
 	 * rather than in `-highlight:`: that door sets the flag and marks the frame, and this one paints the state it set —
 	 * the division `NSCell` states, and the reason a redraw after a drag comes out right. The alpha leaves the picture
 	 * readable underneath, which is what makes this a highlight rather than a replacement. */
 	if ([self isHighlighted]) {
-		[[[NSColor selectedControlColor] colorWithAlphaComponent:0.35] setFill];
+		[[[NSColor cg_accentColor] colorWithAlphaComponent:0.35] setFill];
 		[[NSBezierPath bezierPathWithRect:cellFrame] fill];
 	}
 }

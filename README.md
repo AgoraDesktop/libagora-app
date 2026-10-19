@@ -9,12 +9,15 @@ directory (`../README.md`). `libagora-app` is the top of its stack: above it the
 ## Status
 
 **The AppKit is imported and its windows run on Agora's window server. The X11 seam is gone.** Above the
-window and view classes there is now a cell and control layer (buttons, switches and sliders), a tracking-area
-engine, one line of editable text with the standard key bindings, a title bar the client DRAWS itself, the menu
-subsystem — validation, a selection chip, and a pointer grab that lets a popup be dismissed by clicking away —
-and a TOOLBAR: items from a delegate, in a band the window reserves between its chrome and its content. Above the
-controls there is a CELL-BASED TABLE: columns, rows, a scrolling header and a selection, and an OUTLINE VIEW over it:
-the same table, flattened from a tree with disclosure triangles.
+window and view classes there is now a cell and control layer (buttons, switches, sliders, a segmented control and
+a path bar), a tracking-area engine, one line of editable text with the standard key bindings, a title bar the client DRAWS
+itself, the menu subsystem — validation, a selection chip, and a pointer grab that lets a popup be dismissed by
+clicking away — and a TOOLBAR: items from a delegate, in a band the window reserves between its chrome and its
+content, with item groups that lay their members adjacent. Above the controls there is a CELL-BASED TABLE: columns,
+rows, a scrolling header, a selection, editing through the field editor, type-select, variable row heights, column
+reordering, autosave and a local row drag; and an OUTLINE VIEW over it:
+the same table, flattened from a tree with disclosure triangles. And beside them a SPLIT VIEW: panes side by side or
+one above another, dividers that drag, panes that collapse, and the delegate that constrains all of it.
 
 The classes here come from the Fiwix AppKit (same author, same licence — see `PROVENANCE.md`), and they
 talked to an X server: `NSWindow.m` called `XOpenDisplay`, `XCreateSimpleWindow`, `XMapWindow`, `XPutImage`
@@ -85,15 +88,19 @@ tests/
   scroller.m                    and its BAR: a fraction into a knob, a point into a part, a drag back into a value
   scroll_view.m                 and the FRAME that joins them: the tiling, the loop, and -enclosingScrollView
   view_offset.m                 and the ONE THING a scroll moves: a non-zero `bounds` origin, drawn and converted
-  window_chrome.m               the DRAWN chrome, offscreen: the symbols, the centred title and the pill
+  window_chrome.m               the DRAWN chrome, offscreen: Greybird's bar and its four marks, the centred title
   menu_validation.m             validation and state, which the view tests do not reach
-  appkit_activation.m           only the ACTIVE application's menu bar shows
+  appkit_activation.m           only the ACTIVE application's menu bar shows, and its sole window is key/main
   appkit_controls_draw.m        a window full of controls, a SCROLL PANEL, a TEXT PLAYGROUND and a TABLE & OUTLINE window
   chrome_theme.m                the THEME: an XFWM `.xpm` set becomes the chrome's buttons, 1:1
   chrome_buttons.m              and what a chrome button DOES: a click through the seam, and what happened
   toolbar.m                     the TOOLBAR: the delegate's items, the band, the ink and the click
   table_view.m                  the TABLE: columns, rows, the header, selection, the divider drag and the ink
+  table_advanced.m              the TABLE's other half: heights, type-select, reordering, autosave, editing, drag
   outline_view.m                the OUTLINE: the tree flattened, levels, the triangle's click and item selection
+  segmented_control.m           the SEGMENTED CONTROL: segment geometry, selection, tracking, forwarding and ink
+  path_control.m                the PATH BAR: URL decomposition, component geometry, styles, clicks and ink
+  split_view.m                  the SPLIT VIEW: panes, divider positions, the drag, the collapse and the ink
   control_drag.m                and what a DRAG costs: forty motions, and how many frames the window committed
   run-*-headless.sh             ctest: a compositor with a virtual monitor (no desktop input involved)
   run-*-nested.sh, inspect.py   the PIXEL tests, and they are OPT-IN: `gnome-shell --nested` is a whole
@@ -122,16 +129,20 @@ the compositor is really gone.
   moving `+290 px` between two captures 1.2 s apart. That is `NSView -drawRect:` → `NSWindow` → the seam →
   the compositor → a screenshot, with nothing mocked.
 - **Events arrive where they should** (`ctest`, `tests/appkit_events.m`): the seam's `AGEvent` built by hand
-  and pushed through the window, then pumped by `NSApplication` and dispatched by `-sendEvent:` — 10 checks,
+  and pushed through the window, then pumped by `NSApplication` and dispatched by `-sendEvent:` — 20 checks,
   including that a key reaches the FIRST RESPONDER with the character xkbcommon produced, that a MODIFIER
   arrives as `-flagsChanged:` rather than as a keystroke, that a click lands on THE VIEW UNDER THE POINTER,
-  and that a view which does not handle an event BUBBLES it up the responder chain.
+  that a view which does not handle an event BUBBLES it up the responder chain, and that the click ACTIVATES
+  the application and makes the clicked window KEY and MAIN.
 - **The seam alone** (`ctest`): exactly 60 of 60 frames headless, and the keymap translation checked against
   a pinned `us` keymap.
 - **The controls** (`ctest`, all offscreen): a button draws its bezel and title and sends its action; a switch
   draws an indicator and a radio a different one; a slider's `-knobRect:flipped:` and its inverse agree at the
-  knob's centre and clamp past either end; and a push button's height is a bezel METRIC rather than a property
-  of its title.
+  knob's centre and clamp past either end; a push button's height is a bezel METRIC rather than a property of its
+  title; and a SEGMENTED CONTROL's fixed, auto-sized and scaled segments, its three tracking modes, its per-segment
+  picture/menu/tag storage and its selected plate are all measured; and a PATH BAR decomposes a file URL into
+  component cells with their own prefix URLs, keeps the ends while truncating the middle, and sends the component
+  under the release (or under a double-click) with the clicked cell answering.
 - **The tracking engine** (`ctest`): the same rectangle, the same owner and the same pointer produce an ENTER
   for `NSTrackingActiveAlways` and NOTHING for the default `NSTrackingActiveInKeyWindow` in a window that is not
   key — the scope word that keeps a background window's controls dark; `-mouseMoved:` fires when the point moves
@@ -514,9 +525,11 @@ the compositor is really gone.
   on the CONTROL reaches the CELL, and the NEXT session's EDITOR is configured from it — while a field with the flags
   OFF gets a plain editor, so the check cannot pass against an editor that is always rich. What still does not happen
   is named rather than implied: no paragraph model in the cell — so the flags travel and nothing obeys them yet.
-- **The chrome** (`ctest`, offscreen): the title bar's symbols are SHAPES in pixels — ink on both diagonals of
-  the X, a thick stroke across the minus, and a pill rounded at both caps — the title is centred and bold, and
-  each symbol appears only for the style-mask bit that asks for it.
+- **The chrome** (`ctest`, offscreen): the title bar is Greybird's, DRAWN — a one-point outline and a white row
+  over the face, round corners, an eight-by-nine X, an eight-by-two minus and an eight-by-eight plus in the
+  theme's greys and its blue under a
+  press, and a filled triangle at the far end. The pixels are asked, not the code: the marks' SHAPES, their
+  COLOURS per state, their crispness (two rows of ink, no blended row), and the title centred and bold.
 - **The menu subsystem** (`ctest`): a target's `-validateMenuItem:` decides enablement and MAY CHANGE the item
   while it answers, an item that is ON draws a checkmark, and a disabled title is drawn dimmed.
 - **Activation** (`ctest`, against Agora's own server): the menu bar window is shown while the compositor says
@@ -529,8 +542,9 @@ the compositor is really gone.
   fixture.
 - **What a chrome button DOES** (`ctest`): a pointer pressed and released through the seam's own door, and the
   question asked of the WINDOW rather than of the pixels — the plus zooms and a second click restores, a release
-  that slid off the button performs nothing while one that slid back does, the minus miniaturizes, the pill
-  changes nothing, and the X asks a delegate's `-windowShouldClose:` and honours a refusal.
+  that slid off the button performs nothing while one that slid back does, the minus miniaturizes, the fourth
+  mark changes nothing on a window with no toolbar, and the X asks a delegate's `-windowShouldClose:` and honours
+  a refusal.
 - **What a DRAG costs** (`ctest`, a real run loop): a control's tracking is a MODAL LOOP, so everything the run loop
   does once per pass has to be done there by hand — and it did one full draw and one commit PER MOTION. Forty
   motions committed FORTY-THREE frames before, and ONE after: the values are all still applied and the action
@@ -596,7 +610,7 @@ the compositor is really gone.
   and the child clip is the child's FRAME region rather than its bounds rect — which was the same value only while the
   origin was zero. MEASURED: a mark at a document's own y 100..120 draws at 110 with the clip view at the top and at
   10 after a scroll of 100, in one run, through `-displayRect:`.
-- **`ctest`: 62 of 62 passed** (the keyboard and the seam, the AppKit and its input path, the controls and their
+- **`ctest`: 82 of 82 passed** (the keyboard and the seam, the AppKit and its input path, the controls and their
   metrics, the field control and its cell and its bezel and its placeholder and what it may hold, the text path and its
   word granularity and the multi-line view and its wrapping and its scrolling and its READING OF THE STORE, the STORE
   the rich-text slice is built on and the REGION it is laid out in and the WEB that ties the three together and the
@@ -631,8 +645,11 @@ These are properties of the protocol rather than gaps, and each is written at th
   matters here**: `agora-shell`'s `set_frame` is the Mac's model — the application states a frame and the server
   honours it, position included — which is what makes the chrome DRAGGABLE (see the chrome section). The
   distinction is a property of the COMPOSITOR and not of `NSWindow`.
-- **There is no unmap, no iconify and no stacking.** `-orderOut:`, `-miniaturize:`, `-orderBack:` and
-  `-orderFrontRegardless` change *this object's* state and not the screen's.
+- **There is no iconify and no window-manager placement.** Agora's own protocol HAS the other two doors —
+  `set_visible` is the unmap and `raise`/`lower` are the stacking — so `-orderOut:`, `-orderFront:` and
+  `-orderBack:` change the screen when the compositor speaks `agora-shell`, and only this object's state when it
+  speaks bare `xdg-shell`. `-orderFrontRegardless` deliberately shows without raising, and `-miniaturize:` is
+  still only a state because no iconify exists.
 - **There is no Expose.** The client owns the pixels; a repaint is asked for by the frame callback, which is
   why `-display` and the seam's frame handler both end in the same draw.
 - **The screen is an output.** `NSScreen` asks the seam, which learns the size from `wl_output`; with no
@@ -680,20 +697,45 @@ because it had made the clicked subview the first responder.
 
 ### The window chrome's buttons, and where they can come from
 
-The chrome is the CLIENT's — the window server draws no title bar — and with no theme resolved it is the marks
-`NSWindow` draws: an X, a minus, a plus and a toolbar pill. **A theme can replace them.** Point
-`AGORA_CHROME_THEME` at an XFWM theme (the directory of `.xpm` files, or a theme root with an `xfwm4/` inside
-it), or drop one at `~/.local/share/agora/chrome/xfwm4`. The buttons are then `close`, `hide`, `maximize` and
-`menu` — the pill is what a toolbar toggle has no XFWM file for, and `menu` is the nearest thing the theme
-offers — in the four states XFWM ships, `active`, `inactive`, `prelight` and `pressed`. They are drawn at their
-OWN size: the strip grows to the theme's height and a 24x26 button IS 24x26 pixels. That is what "1:1" means,
-and it is why `+contentRectForFrameRect:styleMask:` is a function of the theme rather than of a constant.
+The chrome is the CLIENT's — the window server draws no title bar — and with no theme resolved it is **Greybird's
+look, DRAWN**: ONE surface in ONE colour — `+cg_chromeFaceColor`, the theme's `#DEDEDE`, filling the title bar and
+the toolbar band alike — with a one-point `#939393` outline and a white row under it along the top, six-point top
+corners, and nothing drawn down the ends: the strip's edges are the window's own, and a line down them read as a
+border AROUND the chrome rather than as the top of it. The four marks are the theme's too — an X, a minus, a plus
+and a filled triangle — at its size (eight by nine, two-point strokes; the plus is eight by eight, because a
+plus is four arms of one length and an even upright is the only way to get them) and in its inks: `#797979` on a key window,
+`#BFBFBF` on one that is not, `#4B4B4B` under the pointer, and the theme's BLUE `#6897BC` under a press, over a
+one-point light row that makes each mark read as cut into the surface. **None of that is a bitmap**: a fill, two
+stroked paths and the marks' own paths, so it is crisp at any size and carries no licence but this tree's.
+`tests/window_chrome.m` states each of those numbers as a claim about pixels, and `tests/toolbar.m` states that the
+band and the title bar are the SAME pixel rather than two colours that happen to match.
+
+**SIX POINTS IS THE WINDOW'S RADIUS, AND IT IS THE WINDOW'S SHAPE AND NOT ONLY ITS DECORATION.** The compositor
+clips every window to a rounded rectangle of that radius and draws its shadow around the same one; the protocol does
+not carry a radius, so `fn_BAR_RADIUS` in `NSWindow.m` and `AWS_SHADOW_RADIUS` in `window-server/src/output.c` are
+the same number written twice and have to be changed together. It is NOT `NS_CELL_BEZEL_RADIUS`, which is four: a
+push button is a small thing and a window is not, and the two agreed at five and at four only because they happened
+to.
+
+**AND THE CORNER ITSELF IS THE COMPOSITOR'S, WHICH IS NOT AN ACCIDENT OF LAYERING.** A window travels the wire
+opaque, so the client can PAINT an arc but cannot remove the square of its own pixels around it — MEASURED, that is
+exactly what it looked like: "the rounding is sort of overlaid on a rectangle". The compositor clips each window's
+shape to a rounded rectangle at the same radius its shadow uses, which is what makes the arc the boundary of the
+window rather than a drawing on top of it. A surface flush with the output (a maximised window, the menu bar, a
+status item) is left square, so rounding never cuts a notch out of the desktop's own edge.
+
+**A THEME CAN STILL REPLACE IT, AND THAT IS THE OTHER HALF.** Point `AGORA_CHROME_THEME` at an XFWM theme (the
+directory of `.xpm` files, or a theme root with an `xfwm4/` inside it), or drop one at
+`~/.local/share/agora/chrome/xfwm4`. The buttons are then `close`, `hide`, `maximize` and `menu` in the four
+states XFWM ships, `active`, `inactive`, `prelight` and `pressed`, drawn at their OWN size: the strip grows to the
+theme's height and a 20x24 button IS 20x24 pixels. That is what "1:1" means, and it is why
+`+contentRectForFrameRect:styleMask:` is a function of the theme rather than of a constant.
 
 **AND THE BAR THE BUTTONS SIT ON IS THE THEME'S TOO.** XFWM composes a title bar from a corner at each end
 (`top-left` / `top-right`) and a strip of `title-1`…`title-5` pieces tiled between them, and those files are the
-ground the buttons were drawn against — so they are read as well, and a theme's buttons no longer sit on this
-tier's flat grey. A theme missing any of them keeps the frame colour for that part, and a process with no theme at
-all keeps the marks `NSWindow` draws.
+ground the buttons were drawn against — so they are read as well, and a theme's buttons do not sit on this tier's
+flat grey. A theme missing any of them keeps the frame colour for that part, and a process with no theme at all
+draws the bar and the marks itself, as above.
 
 **`tests/run-controls.sh` IS HOW TO LOOK AT A THEME WHILE CHANGING IT.** It opens the controls demonstration in a
 nested Agora compositor — an ordinary X window that grabs nothing, unlike a nested `gnome-shell` — with the tree's
@@ -705,10 +747,24 @@ with the drag, so the pointer's place in the world is the frame's origin PLUS th
 under it is that sum minus the grab — one subtraction, with no accumulated delta to drift. `-isMovable` decides
 whether it happens; a borderless window has no chrome and so no handle.
 
-**AND ONE BLACK POINT DIVIDES THE CHROME FROM THE CONTENT, BELOW THE TOOLBAR WHEN THERE IS ONE.** The title bar and
-the toolbar are ONE surface — the toolbar fills with `+windowFrameColor`, the ground the title bar is drawn on — so
-the boundary is at the top of the CONTENT, not between the title bar and the band. One black row runs the full width
-there, drawn last so a theme's buttons cannot paint over it. A borderless window has no chrome and gets no line.
+**AND A DRAG TAKES THE POINTER OUTRIGHT, WHICH IS A DIFFERENT DOOR FROM THE MENU'S.** A window being moved or
+resized goes out from under the hand — the edge follows the pointer, and the compositor's copy of the surface is a
+frame behind — so the pointer ends up over the desktop or over the window BEHIND the one being dragged. A popup's
+`set_pointer_grab` cannot help there: it is a FALLBACK that gives way to any surface under the pointer, which it has
+to be or a menu bar could not be crossed back to. `set_pointer_capture` is the real grab, it is what a drag holds,
+and the compositor gives it back when the last button comes up. MEASURED, with the fallback: dragging a window's
+bottom edge down over the window behind it moved NOTHING — the motions had gone to the neighbour, and so had the
+release — and with the capture the same drag follows the pointer to the pixel. `tests/seat_routing.c` in the window
+server is the routing rule as a unit test; the two doors are asked one after the other there, so a change that
+turned the menu's grab into a real one would fail it.
+
+**AND ONE POINT OF THE BEZEL'S GREY DIVIDES THE CHROME FROM THE CONTENT, BELOW THE TOOLBAR WHEN THERE IS ONE.** The
+title bar and the toolbar are ONE surface — both fill with `+cg_chromeFaceColor`, so there is no boundary to see
+between them — so the boundary is at the top of the CONTENT, not between the title bar and the band. One row of
+`+controlDarkShadowColor` runs the full width there, drawn last so a theme's buttons cannot paint over it: that is
+the grey a push button's bezel, a field's edge and a checkbox's box are stroked with, because this line is the chrome's
+BOTTOM EDGE and not a division between two surfaces. It was black, which read as a shadow the window does not
+otherwise have. A borderless window has no chrome and gets no line.
 
 **A THEME IS NOT PART OF THIS LIBRARY AND MUST NOT BE.** It is somebody else's work under somebody else's
 licence — the one this was built against is GPL — and reading it from disk is not linking it, so Agora's MIT is
@@ -722,8 +778,9 @@ XPMs — so `tests/chrome_theme.m` never depends on a licence a checkout does no
 `-performClose:`, so a delegate's `-windowShouldClose:` is asked and can refuse it; the minus performs
 `-performMiniaturize:` and the plus `-performZoom:`. A PRESS performs nothing on its own — it is remembered and
 drawn pressed, and the RELEASE is what acts, and only if the pointer is still on the button that was pressed, so
-sliding off the X is how a hand changes its mind. THE PILL IS THE TOOLBAR TOGGLE and sends `-toggleToolbarShown:`,
-which toggles the window's toolbar when it has one and is quiet when it has none; `tests/toolbar.m` presses a window
+sliding off the X is how a hand changes its mind. THE FOURTH MARK IS THE TOOLBAR TOGGLE and sends
+`-toggleToolbarShown:`, which toggles the window's toolbar when it has one and is quiet when it has none;
+`tests/toolbar.m` presses a window
 with a toolbar and `tests/chrome_buttons.m` presses one without. And THE MINUS MARKS THE
 STATE AND ANNOUNCES IT RATHER THAN TAKING THE WINDOW OFF THE SCREEN: there is no Dock to put a miniaturized window
 in and no iconify in the protocol, which `-miniaturize:` states where it stands. `tests/chrome_buttons.m` is what
@@ -735,11 +792,12 @@ no test about pixels can see.
 **`NSToolbar` AND `NSToolbarItem` ARE HERE, AND THE BAND IS CARVED OUT OF THE FRAME.** Attaching a toolbar grows the
 window's frame by the band's height — 52 points regular, 38 small — and leaves the CONTENT's size alone; hiding it
 gives that height back. `-contentRectForFrameRect:` is the one place that knows, so the content view, the min/max
-constraint conversion and the title bar all agree on where the content ends and the chrome begins. The chrome's pill
-sends `-toggleToolbarShown:`, the same door a menu item would send and the same one the toolbar's own visibility uses.
+constraint conversion and the title bar all agree on where the content ends and the chrome begins. The chrome's
+fourth mark sends `-toggleToolbarShown:`, the same door a menu item would send and the same one the toolbar's own
+visibility uses.
 
-**THE BAND IS THE CHROME, NOT A CONTROL PANEL UNDER IT.** It fills with `+windowFrameColor`: the title bar and the
-toolbar are one surface, and the black hairline is at the CONTENT's top edge, below the band — so the document starts
+**THE BAND IS THE CHROME, NOT A CONTROL PANEL UNDER IT.** It fills with `+cg_chromeFaceColor`: the title bar and the
+toolbar are one surface, and the bezel's-grey hairline is at the CONTENT's top edge, below the band — so the document starts
 under one line and the toolbar reads as the chrome continuing downward. `-setShowsBaselineSeparator:` is the toolbar's
 switch for that line; the window's chrome painter draws it, so there is exactly one rule and no seam between the title
 bar and the band.
@@ -764,8 +822,8 @@ know rather than pretending to understand one.
 `tests/toolbar.m` is what holds the four contracts together: it attaches a toolbar and measures the frame, walks the
 delegate's default list through insertions and removals, checks a validator that changes its item while answering,
 clicks an item through the view and reads the selection, round-trips the configuration dictionary, and draws the band
-into a bitmap to find its ground, its baseline and a label. `tests/chrome_buttons.m` still presses the pill on a window
-with NO toolbar, where the door is correctly quiet.
+into a bitmap to find its ground, its baseline and a label. `tests/chrome_buttons.m` still presses the fourth mark on
+a window with NO toolbar, where the door is correctly quiet.
 
 ### The table view, and the header that stays put
 
@@ -787,15 +845,22 @@ divider drag resizes the column within its min/max; a click on a column with a s
 tells the data source. `-showsBaselineSeparator` is the toolbar's switch for the black line at the content's top, not
 the header's.
 
-**WHAT THIS SLICE DOES NOT DO.** Editing through the field editor, drag and drop, type-select, variable row heights,
-column reordering and autosave are not here; the header can resize a column but not yet drag it to another place.
-`-editedRow`/`-editedColumn` answer -1 for the same reason. `NSOutlineView` is here now and subclasses this class;
-`NSSplitView`, `NSSegmentedControl` and `NSPathControl` are the rest of the Finder shell's prerequisites.
+**THE OTHER HALF IS HERE NOW.** Editing opens the window's field editor over the cell and writes the result back
+through the data source; type-select searches the prepared cells' strings (or the delegate's per-cell strings);
+variable row heights come from `-tableView:heightOfRow:` and are cached; the header reorders a column when dragged
+past its threshold, with `-tableView:shouldReorderColumn:toColumn:` allowed to refuse; and an autosave name persists
+column widths, order, hidden state and sort descriptors. A LOCAL row drag writes the data source's pasteboard,
+validates and accepts, and draws the insertion line. What is still absent is the CROSS-PROCESS drag session
+(`NSDraggingSession`, a drag image on the glass, another application's destination) and the later view-based API
+(`NSTableCellView`, `-viewForTableColumn:row:`). `NSOutlineView`, `NSSplitView`, `NSSegmentedControl` and
+`NSPathControl` are here beside them: the Finder shell's AppKit prerequisites are complete.
 
-`tests/table_view.m` is the probe: it puts a three-column table in a scroll view, measures the columns, rows and
-cells, exercises a delegate that refuses one row, drives the header's divider and sort click through real events,
-and draws the table and the header into bitmaps to find their ink. It also checks the window fix this slice needed:
-a content view now follows EVERY frame set, not only one carrying a toolbar.
+`tests/table_view.m` is the first probe: it puts a three-column table in a scroll view, measures the columns, rows
+and cells, exercises a delegate that refuses one row, drives the header's divider and sort click through real
+events, and draws the table and the header into bitmaps to find their ink. `tests/table_advanced.m` is the second:
+variable row heights and their cache, a typed prefix that wraps and restarts, a header drag that reorders a column,
+an autosave round trip through a second table, a field-editor session that writes back to the data source, and a
+local row drag that reaches `writeRows`/`validateDrop`/`acceptDrop`.
 
 **`NSOutlineView` IS THE SAME TABLE WITH A FLATTENED TREE.** `-reloadData` asks the data source for the roots and
 walks every open item depth-first into a row list with a parallel level array; `-itemAtRow:`, `-rowForItem:` and
@@ -807,20 +872,98 @@ that box expands or collapses the row. The other columns keep their own x, which
 line up while its icons and dates do not move. `tests/outline_view.m` drives the levels, the expand/collapse state,
 the triangle's click, the inset geometry and item-based selection.
 
+### The split view, and the divider that moves
+
+**`NSSplitView` IS HERE AS THE 10.6 CLASS, AND IT IS FLIPPED.** Subview 0 is the left pane of a vertical split view or
+the TOP pane of a horizontal one, so a horizontal split's y grows down and a divider needs no mirror arithmetic. A
+divider's POSITION is its LEADING edge, not its centre: the pane before divider 0 is exactly that many points wide (or
+tall), and the trailing edge is that plus `-dividerThickness`. Every geometry door derives the leading edges from the
+panes' frames — pane 0 starts at zero, each pane adds its extent and one divider, and the last pane takes the
+remainder — so moving one divider only has to resize the two panes beside it. Every later divider keeps its absolute
+position and every earlier one is untouched.
+
+**THE DIVIDERS ARE THE DELEGATE'S, AND SO IS THE COLLAPSE.** `-splitView:constrainMinCoordinate:ofSubviewAt:` and its
+maximum narrow the geometric range; `-splitView:constrainSplitPosition:ofSubviewAt:` replaces the proposed position
+before the range is applied. `-setPosition:ofDividerAtIndex:` and a drag both pass through the same private move door,
+so a programmatic move and a hand's drag cannot disagree. With no delegate nothing can collapse (Apple's rule);
+with one, a pane is collapsible only when `-splitView:canCollapseSubview:` says so, and a double-click additionally
+asks `-splitView:shouldCollapseSubview:forDoubleClickOnDividerAtIndex:`. A collapsed pane is HIDDEN AND ZERO-SIZED,
+still retained as a subview; opening it returns it to the size it had when it collapsed, or a third of the available
+room when that is too small to be useful.
+
+**THE DRAG IS A DELTA FROM THE PRESS, AND THE TRACKING LOOP IS THE RUNNING APPLICATION'S.** A press records the
+divider and the pointer's point; each motion proposes `startPosition + (point - startPoint)`. A running application
+takes a tracking loop so the release arrives even when the pointer leaves the split view; with no run loop, as in the
+probe, `-mouseDragged:` and `-mouseUp:` are the same pump, one event at a time. The thin style's effective rectangle is
+wider than its ink (two points on each side), the thick style's is the drawn rectangle, and a delegate may replace
+either or add an additional grab area.
+
+**THE THICKNESSES AND THE AUTOSAVE FORMAT ARE THIS TIER'S, AND THAT IS STATED RATHER THAN PRESENTED AS APPLE'S.**
+Apple publishes the three style names and says only that the default thickness "depends on the platform"; this tree
+draws a six-point thick bar, a one-point thin hairline, and an 18-point pane splitter — a window-face gutter with three
+hollow `#BCBCBC` rings down its centre, the same two-point/eight-apart grip `NSScrollerCell` draws. The pane splitter
+snaps its non-final panes to whole points so its one-point pane borders land on the pixel grid and stay the toolkit's
+border grey rather than antialiasing into a lighter one. The `autosaveName` is the
+contract and the dictionary under it is ours: pane fractions and the collapsed indexes, so a split view restored under
+the same name comes back at the same proportions. `tests/split_view.m` holds the geometry in both orientations, the
+divider ranges, the delegate's constraints and resize hook, a fixed-size pane, the drag and double-click collapse, the
+two announcements with and without a divider index, the autosave round trip, the ink, and a narrow pane clipping a
+wider table's TEXT — the check that found the cells' `-setClip` replacing the enclosing clip instead of intersecting
+it.
+
+### The segmented control, and a row that acts as one
+
+**`NSSegmentedControl` IS A FORWARDER; `NSSegmentedCell` OWNS THE ROW.** One private record per segment carries its
+label, picture, picture-scaling rule, width, tag, enabled flag, selected flag, menu and tool tip. A width of zero
+means "as wide as the content needs"; a frame wider than the natural total gives the surplus to the auto-sized
+segments, and a frame narrower than it scales the row to fit. The three tracking modes are real rules: `SelectOne`
+moves the selection, `SelectAny` toggles one segment and leaves the rest, and `Momentary` shows the pressed segment
+only while the button is held. Drawing is split the way Apple splits it — `-drawWithFrame:` paints the track, the
+selected/pressed plates and the separators, then `-drawSegment:inFrame:withView:` paints each segment's content — so
+a subclass changes the content without redoing the bezel. The plate is `+cg_accentColor` on a `controlColor`
+track — the platform's one accent, the same colour a pressed button, a menu's chip, a slider's fill, a switch's
+track and a selection wear — the separators and border are `controlDarkShadowColor`, and the selected label keeps
+the ordinary dark ink, because the accent is a light periwinkle and a persistent chip carries dark ink on it (a
+pressed button's white is for the moment it is held). `tests/segmented_control.m` measures all of it, including the
+three tracking modes.
+
+**`NSToolbarItemGroup` IS THE TOOLBAR'S UNIT, NOT A SECOND BUTTON.** A group is one item for insertion, removal,
+reordering and `-visibleItems`; a group without a custom view flattens into its subitems for layout, drawing and hit
+testing, so its members appear adjacent with no gap. A group with a custom view is one item wearing that view. A
+group may not contain another group, and the setter refuses one by name.
+
+### The path bar, and the middle it keeps
+
+**`NSPathControl`, `NSPathCell` AND `NSPathComponentCell` ARE THE 10.6 PATH BAR.** Setting a file URL decomposes it
+into one component cell per path element, each with its own prefix URL; a non-file URL becomes one component. The
+path cell owns the geometry: components are measured from their cells, separators are inserted between them, and
+when the row is wider than the frame the MIDDLE components are hidden and an ellipsis is drawn in their place. The
+first and last stay, because they are the root and the item a person is looking at.
+
+The three styles are three faces: Standard is the light-blue bar with small arrows, NavigationBar is the breadcrumb
+bar at the small control size with chevrons, and PopUp shows the last component and raises a menu of the whole path.
+A single click goes through `NSControl`'s ordinary tracking loop and leaves `-clickedPathComponentCell` answering the
+component under the release; a double-click is the control's own gesture and sends `-doubleAction` with the same
+clicked cell. The editable/drop half is absent with the drag session and the file panel this tier has not got —
+`NSPathControl.h` names both gaps. `tests/path_control.m` measures the URL decomposition, the prefix URLs, the
+geometry and its middle truncation, the three styles, single and double actions, manual component cells and the ink.
+
 ### Still absent, and why
 
-**FOUR THINGS THAT USED TO BE ON THIS LIST ARE NOT ANY MORE, AND THE LIST IS CORRECTED RATHER THAN QUIETLY SHRUNK:**
+**SEVEN THINGS THAT USED TO BE ON THIS LIST ARE NOT ANY MORE, AND THE LIST IS CORRECTED RATHER THAN QUIETLY SHRUNK:**
 the SHEETS (`NSApplication -beginSheet:modalForWindow:…` and `-endSheet:returnCode:`, with the attachment and the
-reply dance on `NSWindow`), the FRAME-AUTOSAVE strings, the CURSOR-RECT invalidation and the CHILD-WINDOW list are all
-implemented. What is still absent is the DRAWER (the class — `-drawers` answers an empty array, which is Apple's own
-contract), the TOOLBAR'S CUSTOMIZATION PALETTE (the toolbar itself is here; the palette refuses by name), the TABLE'S
-EDITING, DRAG AND DROP, TYPE-SELECT, VARIABLE ROW HEIGHTS, COLUMN REORDERING AND AUTOSAVE (the cell-based core is
-here), `NSSplitView`, `NSSegmentedControl` and `NSPathControl` (the rest of the Finder shell), and the
+reply dance on `NSWindow`), the FRAME-AUTOSAVE strings, the CURSOR-RECT invalidation, the CHILD-WINDOW list,
+`NSSplitView`, `NSSegmentedControl`/`NSToolbarItemGroup` and `NSPathControl` are all implemented. What is still absent
+is the DRAWER (the class — `-drawers` answers an empty array, which is Apple's own contract), the TOOLBAR'S
+CUSTOMIZATION PALETTE (the toolbar itself is here; the palette refuses by name), the CROSS-PROCESS DRAG SESSION
+(the table's local row drag is here; `NSDraggingSession`, drag images and another application's drop are not),
+`NSBrowser`, `NSSearchField`, `NSProgressIndicator`, `NSPanel`/`NSAlert`, `NSTabView`, `NSCollectionView`,
+`NSDocument`, and the
 script-command doors, which are declared and REFUSE by name; what the window's close,
 minimise and zoom buttons DO is now this tier's — each goes through the `-perform…` door its menu item sends — but
 the MINIMISE is
 still only a state the window marks and announces, because there is no Dock to put a miniaturized window in and no
-iconify in the protocol (Kestrel is parked). The chrome's toolbar pill toggles the window's toolbar (`tests/toolbar.m`);
+iconify in the protocol (Kestrel is parked). The chrome's fourth mark toggles the window's toolbar (`tests/toolbar.m`);
 a window with no toolbar has nothing to toggle, which is the case `tests/chrome_buttons.m` presses. The three
 symbols beside it ARE buttons, and that same probe presses them. The `NSTextInput` PROTOCOL is here and `NSTextView` answers it (`tests/text_marked_text.m`), and the
 input-method CONTEXT is here too (`tests/text_input_context.m`), and SO IS THE METHOD (`tests/text_input_method.m`):

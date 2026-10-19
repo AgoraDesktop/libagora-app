@@ -16,10 +16,14 @@
  * origin agree without a second coordinate system. The enclosing `NSClipView` is flipped too, so the document's
  * origin is its top-left.
  *
- * **WHAT THIS SLICE DOES NOT DO, STATED RATHER THAN STUBBED.** Editing a cell through the field editor, drag and drop,
- * type-select, variable row heights, column reordering, autosave and the later view-based API are not here. The
- * header can resize a column; it cannot yet drag one to a new position. `-editedRow`/`-editedColumn` answer -1 for
- * the same reason. `NSOutlineView` is the next slice and subclasses this class.
+ * **THE SECOND HALF IS HERE NOW: EDITING, TYPE-SELECT, VARIABLE HEIGHTS, COLUMN REORDERING, AUTOSAVE AND A LOCAL ROW
+ * DRAG.** The field editor is the window's; `-editColumn:row:withEvent:select:` starts a session and the data source's
+ * `-tableView:setObjectValue:...` receives the result. Type-select searches the prepared cells' strings (or the
+ * delegate's), variable heights come from `-tableView:heightOfRow:` and are cached, the header reorders a column when
+ * dragged past its threshold, and the autosave name persists column widths, order, hidden state and sort descriptors.
+ * The row drag is LOCAL: the data source writes the pasteboard, validates and accepts, and the table draws the
+ * insertion line — there is no `NSDraggingSession` and no cross-application destination yet. The later view-based API
+ * (`NSTableCellView`, `-viewForTableColumn:row:`) is still absent. `NSOutlineView` subclasses this class.
  *
  * Written from `NSTableView.h` in the MacOSX10.6 SDK (see PROVENANCE.md). The delegate and data-source protocols are
  * the era's; every method beyond the row count is declared `@optional` so a caller implements the part it uses.
@@ -28,6 +32,7 @@
 #define APPKIT_NSTABLEVIEW_H
 
 #import <AppKit/NSControl.h>
+#import <AppKit/NSDragging.h>
 #import <AppKit/NSUserInterfaceValidation.h>
 #import <Foundation/NSGeometry.h>
 #import <Foundation/NSIndexSet.h>
@@ -37,13 +42,16 @@ NS_ASSUME_NONNULL_BEGIN
 @class NSArray;
 @class NSColor;
 @class NSEvent;
+@class NSPasteboard;
 @class NSMutableArray;
 @class NSMutableIndexSet;
 @class NSSortDescriptor;
 @class NSTableColumn;
 @class NSTableHeaderView;
 @class NSTableView;
+@class NSURL;
 @class NSView;
+@protocol NSDraggingInfo;
 
 /* THE ERA'S THREE ENUMERATIONS. Their values are the order the headers give them because none publishes numbers. */
 enum {
@@ -68,6 +76,14 @@ enum {
 };
 typedef NSInteger NSTableViewSelectionHighlightStyle;
 
+/* THE TWO DROP POSITIONS. `DropOn` replaces the row under the pointer; `DropAbove` inserts before it — and
+ * `-setDropRow:dropOperation:` is how a data source re-targets `-validateDrop:`. */
+enum {
+	NSTableViewDropOn = 0,
+	NSTableViewDropAbove = 1
+};
+typedef NSInteger NSTableViewDropOperation;
+
 /* THE FOUR ANNOUNCEMENTS THE CORE MAKES. Selection changes are the two every caller listens for; the column pair is
  * for a header that moved or resized a column. */
 extern NSString *NSTableViewSelectionDidChangeNotification;
@@ -84,9 +100,18 @@ extern NSString *NSTableViewColumnDidResizeNotification;
 - (void)tableView:(NSTableView *)tableView setObjectValue:(nullable id)object
    forTableColumn:(nullable NSTableColumn *)tableColumn row:(NSInteger)row;
 - (void)tableView:(NSTableView *)tableView sortDescriptorsDidChange:(NSArray *)oldDescriptors;
+
+/* THE DRAG SOURCE AND DESTINATION CONTRACT. The table's LOCAL row drag calls these with a pasteboard and a small
+ * `NSDraggingInfo`; the cross-process session is still absent, so a drop from another application does not arrive. */
+- (BOOL)tableView:(NSTableView *)tableView writeRowsWithIndexes:(NSIndexSet *)rowIndexes
+     toPasteboard:(NSPasteboard *)pboard;
+- (NSDragOperation)tableView:(NSTableView *)tableView validateDrop:(id <NSDraggingInfo>)info
+		 proposedRow:(NSInteger)row proposedDropOperation:(NSTableViewDropOperation)dropOperation;
+- (BOOL)tableView:(NSTableView *)tableView acceptDrop:(id <NSDraggingInfo>)info
+	      row:(NSInteger)row dropOperation:(NSTableViewDropOperation)dropOperation;
 @end
 
-@protocol NSTableViewDelegate <NSObject>
+@protocol NSTableViewDelegate <NSControlTextEditingDelegate>
 @optional
 - (void)tableView:(NSTableView *)tableView willDisplayCell:(id)cell
    forTableColumn:(nullable NSTableColumn *)tableColumn row:(NSInteger)row;
@@ -99,9 +124,19 @@ extern NSString *NSTableViewColumnDidResizeNotification;
 - (BOOL)tableView:(NSTableView *)tableView shouldSelectTableColumn:(nullable NSTableColumn *)tableColumn;
 - (void)tableView:(NSTableView *)tableView mouseDownInHeaderOfTableColumn:(NSTableColumn *)tableColumn;
 - (void)tableView:(NSTableView *)tableView didClickTableColumn:(NSTableColumn *)tableColumn;
+- (void)tableView:(NSTableView *)tableView didDragTableColumn:(NSTableColumn *)tableColumn;
+- (BOOL)tableView:(NSTableView *)tableView shouldReorderColumn:(NSInteger)columnIndex
+	     toColumn:(NSInteger)newColumnIndex;
 - (nullable NSCell *)tableView:(NSTableView *)tableView dataCellForTableColumn:(nullable NSTableColumn *)tableColumn
 			     row:(NSInteger)row;
 - (BOOL)tableView:(NSTableView *)tableView isGroupRow:(NSInteger)row;
+- (CGFloat)tableView:(NSTableView *)tableView heightOfRow:(NSInteger)row;
+- (nullable NSString *)tableView:(NSTableView *)tableView
+   typeSelectStringForTableColumn:(nullable NSTableColumn *)tableColumn row:(NSInteger)row;
+- (NSInteger)tableView:(NSTableView *)tableView nextTypeSelectMatchFromRow:(NSInteger)startRow
+			   toRow:(NSInteger)endRow forString:(NSString *)searchString;
+- (BOOL)tableView:(NSTableView *)tableView shouldTypeSelectForEvent:(NSEvent *)event
+   withCurrentSearchString:(nullable NSString *)searchString;
 - (void)tableViewSelectionDidChange:(NSNotification *)notification;
 - (void)tableViewColumnDidMove:(NSNotification *)notification;
 - (void)tableViewColumnDidResize:(NSNotification *)notification;
@@ -123,6 +158,30 @@ extern NSString *NSTableViewColumnDidResizeNotification;
 	CGFloat _rowHeight;
 	NSSize _intercellSpacing;
 	NSUInteger _gridStyleMask;
+	/* VARIABLE ROW HEIGHTS: one top and one extent per row, rebuilt from the delegate's `-tableView:heightOfRow:`
+	 * (or `_rowHeight` when it does not answer). */
+	NSMutableArray *_cgRowTops;		/* RETAINED: NSNumber doubles */
+	NSMutableArray *_cgRowHeights;		/* RETAINED: NSNumber doubles */
+	/* THE EDIT SESSION. The cell is retained for the duration and the row/column answer -1 outside one. */
+	NSInteger _editedRow;
+	NSInteger _editedColumn;
+	NSCell *_cgEditingCell;			/* RETAINED while editing */
+	/* TYPE-SELECT: the accumulated prefix and when the last key arrived. */
+	NSMutableString *_cgTypeSelectString;	/* RETAINED */
+	NSTimeInterval _cgTypeSelectTime;
+	/* AUTOSAVE: the name and whether column geometry/sort order are saved under it. */
+	NSString *_autosaveName;		/* COPIED */
+	BOOL _autosaveTableColumns;
+	/* DRAG/DROP VOCABULARY: the source masks and the current proposed drop, recorded for the session's arrival. */
+	NSDragOperation _cgLocalDragMask;
+	NSDragOperation _cgNonLocalDragMask;
+	NSInteger _cgDropRow;
+	NSTableViewDropOperation _cgDropOperation;
+	/* THE LOCAL ROW DRAG: the rows, the pasteboard they wrote and the press they began at. */
+	NSIndexSet *_cgDragRows;		/* RETAINED while a drag is in flight */
+	NSPasteboard *_cgDragPasteboard;	/* RETAINED while a drag is in flight */
+	NSPoint _cgDragStartPoint;
+	BOOL _cgDragging;
 	NSTableViewColumnAutoresizingStyle _columnAutoresizingStyle;
 	NSTableViewSelectionHighlightStyle _selectionHighlightStyle;
 	NSInteger _highlightedTableColumn;
@@ -192,7 +251,7 @@ extern NSString *NSTableViewColumnDidResizeNotification;
 - (void)noteNumberOfRowsChanged;
 - (void)reloadDataForRowIndexes:(NSIndexSet *)rowIndexes columnIndexes:(NSIndexSet *)columnIndexes;
 
-/* THE CLICK AND EDIT STATE. Editing is not in this slice, so the edited pair answers -1. */
+/* THE CLICK AND EDIT STATE. The edited pair answers the session's row/column, or -1 outside one. */
 - (NSInteger)editedColumn;
 - (NSInteger)editedRow;
 - (NSInteger)clickedColumn;
@@ -205,6 +264,27 @@ extern NSString *NSTableViewColumnDidResizeNotification;
 - (nullable NSTableColumn *)highlightedTableColumn;
 - (void)setAllowsTypeSelect:(BOOL)value;
 - (BOOL)allowsTypeSelect;
+
+/* EDITING. `-editColumn:row:withEvent:select:` starts the window's field editor over the cell; the data source's
+ * `-tableView:setObjectValue:forTableColumn:row:` is what receives the result when the session ends. */
+- (void)editColumn:(NSInteger)column row:(NSInteger)row withEvent:(nullable NSEvent *)theEvent select:(BOOL)select;
+- (BOOL)shouldFocusCell:(NSCell *)cell atColumn:(NSInteger)column row:(NSInteger)row;
+- (nullable NSText *)currentEditor;
+- (BOOL)abortEditing;
+
+/* AUTOSAVE. The name plus the flag save column widths, order, hidden state and sort descriptors in defaults. */
+- (void)setAutosaveName:(nullable NSString *)name;
+- (nullable NSString *)autosaveName;
+- (void)setAutosaveTableColumns:(BOOL)save;
+- (BOOL)autosaveTableColumns;
+
+/* THE DRAG SOURCE AND DESTINATION DOORS. The masks are stored; `-setDropRow:dropOperation:` is a data source's
+ * re-target during `-validateDrop:`. The table's local row drag calls the data source; a cross-process drag session is
+ * not in this tier. */
+- (BOOL)canDragRowsWithIndexes:(NSIndexSet *)rowIndexes atPoint:(NSPoint)mouseDownPoint;
+- (void)setDraggingSourceOperationMask:(NSDragOperation)mask forLocal:(BOOL)isLocal;
+- (NSDragOperation)draggingSourceOperationMaskForLocal:(BOOL)isLocal;
+- (void)setDropRow:(NSInteger)row dropOperation:(NSTableViewDropOperation)dropOperation;
 
 /* SELECTION. */
 - (void)setAllowsMultipleSelection:(BOOL)flag;

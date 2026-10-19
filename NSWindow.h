@@ -359,7 +359,6 @@ typedef NSUInteger NSWindowSharingType;
 	int _cg_resizeEdges;
 	NSRect _cg_resizeStartFrame;
 	NSPoint _cg_resizeGrab;
-	BOOL _cg_resizeUsesGlobal;
 	NSRect _cg_resizePendingFrame;
 	BOOL _cg_resizePending;
 	NSInteger _cg_windowNumber; /* Apple's window number, assigned when the AGWindow is made; -1 before */

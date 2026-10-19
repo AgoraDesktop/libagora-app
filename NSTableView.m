@@ -30,9 +30,12 @@
 #import "NSEvent.h"
 #import "NSFont.h"
 #import "NSTextFieldCell.h"
+#import "NSText.h"
 #import "NSWindow.h"
+#import "NSPasteboard.h"
 
 #import <Foundation/NSArray.h>
+#import <Foundation/NSDate.h>
 #import <Foundation/NSDictionary.h>
 #import <Foundation/NSIndexSet.h>
 #import <Foundation/NSNotification.h>
@@ -40,6 +43,7 @@
 #import <Foundation/NSNumber.h>
 #import <Foundation/NSSortDescriptor.h>
 #import <Foundation/NSString.h>
+#import <Foundation/NSUserDefaults.h>
 
 #include <math.h>
 
@@ -47,6 +51,41 @@ NSString *NSTableViewSelectionDidChangeNotification = @"NSTableViewSelectionDidC
 NSString *NSTableViewSelectionIsChangingNotification = @"NSTableViewSelectionIsChangingNotification";
 NSString *NSTableViewColumnDidMoveNotification = @"NSTableViewColumnDidMoveNotification";
 NSString *NSTableViewColumnDidResizeNotification = @"NSTableViewColumnDidResizeNotification";
+
+/* THE LOCAL DRAG'S INFO. `NSDraggingInfo` is a protocol, not a class, so the table's own drag needs an object that
+ * answers the three questions its data source reads. The type, the pasteboard and the operation mask are enough for
+ * the data-source contract; the cross-process session remains absent. */
+@interface AGTableDraggingInfo : NSObject <NSDraggingInfo>
+{
+	NSPasteboard *_pasteboard;	/* RETAINED */
+	NSPoint _location;
+	NSDragOperation _mask;
+}
+- (instancetype)initWithPasteboard:(NSPasteboard *)pasteboard location:(NSPoint)location
+			      mask:(NSDragOperation)mask;
+@end
+
+@implementation AGTableDraggingInfo
+- (instancetype)initWithPasteboard:(NSPasteboard *)pasteboard location:(NSPoint)location
+			      mask:(NSDragOperation)mask
+{
+	self = [super init];
+	if (self != nil) {
+		_pasteboard = [pasteboard retain];
+		_location = location;
+		_mask = mask;
+	}
+	return self;
+}
+- (void)dealloc
+{
+	[_pasteboard release];
+	[super dealloc];
+}
+- (NSPasteboard *)draggingPasteboard { return _pasteboard; }
+- (NSPoint)draggingLocation { return _location; }
+- (NSDragOperation)draggingSourceOperationMask { return _mask; }
+@end
 
 #define AG_TABLE_DEFAULT_ROW_HEIGHT 17.0
 #define AG_TABLE_DEFAULT_HEADER_HEIGHT 20.0
@@ -59,6 +98,13 @@ NSString *NSTableViewColumnDidResizeNotification = @"NSTableViewColumnDidResizeN
 - (void)fn_announceSelectionIsChanging;
 - (void)fn_applySelectedColumns:(NSIndexSet *)columns;
 - (NSArray *)fn_visibleColumns;
+- (void)cg_rebuildRowHeights;
+- (CGFloat)cg_rowHeightAtIndex:(NSInteger)row;
+- (void)cg_saveAutosave;
+- (void)cg_loadAutosave;
+- (NSString *)cg_autosaveKey;
+- (BOOL)cg_typeSelectWithEvent:(NSEvent *)event;
+- (NSString *)cg_typeSelectStringForRow:(NSInteger)row;
 @end
 
 @implementation NSTableView
@@ -76,6 +122,22 @@ NSString *NSTableViewColumnDidResizeNotification = @"NSTableViewColumnDidResizeN
 		_backgroundColor = [[NSColor controlBackgroundColor] retain];
 		_gridColor = [[NSColor gridColor] retain];
 		_rowHeight = AG_TABLE_DEFAULT_ROW_HEIGHT;
+		_cgRowTops = [[NSMutableArray alloc] init];
+		_cgRowHeights = [[NSMutableArray alloc] init];
+		_editedRow = -1;
+		_editedColumn = -1;
+		_cgEditingCell = nil;
+		_cgTypeSelectString = [[NSMutableString alloc] init];
+		_cgTypeSelectTime = 0.0;
+		_autosaveName = nil;
+		_autosaveTableColumns = NO;
+		_cgLocalDragMask = NSDragOperationEvery;
+		_cgNonLocalDragMask = NSDragOperationNone;
+		_cgDropRow = -1;
+		_cgDropOperation = NSTableViewDropOn;
+		_cgDragRows = nil;
+		_cgDragPasteboard = nil;
+		_cgDragging = NO;
 		_intercellSpacing = NSMakeSize(3.0, 2.0);
 		_gridStyleMask = NSTableViewGridNone;
 		_columnAutoresizingStyle = NSTableViewNoColumnAutoresizing;
@@ -120,6 +182,13 @@ NSString *NSTableViewColumnDidResizeNotification = @"NSTableViewColumnDidResizeN
 	[_sortDescriptors release];
 	[_backgroundColor release];
 	[_gridColor release];
+	[_cgRowTops release];
+	[_cgRowHeights release];
+	[_cgEditingCell release];
+	[_cgTypeSelectString release];
+	[_autosaveName release];
+	[_cgDragRows release];
+	[_cgDragPasteboard release];
 	[super dealloc];
 }
 
@@ -258,6 +327,7 @@ NSString *NSTableViewColumnDidResizeNotification = @"NSTableViewColumnDidResizeN
 - (void)setIntercellSpacing:(NSSize)aSize
 {
 	_intercellSpacing = aSize;
+	[self cg_rebuildRowHeights];
 	[self tile];
 }
 
@@ -297,14 +367,57 @@ NSString *NSTableViewColumnDidResizeNotification = @"NSTableViewColumnDidResizeN
 	return (_gridColor != nil) ? _gridColor : [NSColor gridColor];
 }
 
+/* **ROW HEIGHTS ARE CACHED, BECAUSE THE GEOMETRY ASKS FOR THEM CONSTANTLY.** One top and one extent per row are
+ * rebuilt from the delegate's `-tableView:heightOfRow:` (or `_rowHeight` when it does not answer); `-rectOfRow:`,
+ * `-rowAtPoint:`, `-rowsInRect:` and `-tile` then read the cache rather than asking the model. `-reloadData`,
+ * `-noteNumberOfRowsChanged` and `-noteHeightOfRowsWithIndexesChanged:` invalidate it, which is Apple's rule. */
+- (CGFloat)cg_rowHeightAtIndex:(NSInteger)row
+{
+	if (row < 0 || (NSUInteger)row >= [_cgRowHeights count]) {
+		return _rowHeight;
+	}
+	return (CGFloat)[[_cgRowHeights objectAtIndex:(NSUInteger)row] doubleValue];
+}
+
+- (void)cg_rebuildRowHeights
+{
+	CGFloat top = 0.0;
+	NSInteger row;
+
+	[_cgRowTops removeAllObjects];
+	[_cgRowHeights removeAllObjects];
+	for (row = 0; row < _numberOfRows; row++) {
+		CGFloat height = _rowHeight;
+
+		if (_delegate != nil && [_delegate respondsToSelector:@selector(tableView:heightOfRow:)]) {
+			height = [_delegate tableView:self heightOfRow:row];
+		}
+		if (height < 1.0) {
+			height = 1.0;
+		}
+		height = ceil(height);
+		[_cgRowTops addObject:[NSNumber numberWithDouble:(double)top]];
+		[_cgRowHeights addObject:[NSNumber numberWithDouble:(double)height]];
+		top += height + _intercellSpacing.height;
+	}
+}
+
 - (void)setRowHeight:(CGFloat)rowHeight
 {
 	_rowHeight = (rowHeight > 0.0) ? rowHeight : 1.0;
+	[self cg_rebuildRowHeights];
 	[self tile];
 }
 
 - (CGFloat)rowHeight { return _rowHeight; }
-- (void)noteHeightOfRowsWithIndexesChanged:(NSIndexSet *)indexSet { (void)indexSet; [self setNeedsDisplay:YES]; }
+
+- (void)noteHeightOfRowsWithIndexesChanged:(NSIndexSet *)indexSet
+{
+	(void)indexSet;
+	[self cg_rebuildRowHeights];
+	[self tile];
+	[self setNeedsDisplay:YES];
+}
 
 /* ---- THE COLUMNS --------------------------------------------------------------------------------- */
 
@@ -361,7 +474,12 @@ NSString *NSTableViewColumnDidResizeNotification = @"NSTableViewColumnDidResizeN
 	[column release];
 	[self tile];
 	[self setNeedsDisplay:YES];
+	if (_delegate != nil && [_delegate respondsToSelector:@selector(tableViewColumnDidMove:)]) {
+		[_delegate tableViewColumnDidMove:
+			[NSNotification notificationWithName:NSTableViewColumnDidMoveNotification object:self]];
+	}
 	[[NSNotificationCenter defaultCenter] postNotificationName:NSTableViewColumnDidMoveNotification object:self];
+	[self cg_saveAutosave];
 }
 
 - (NSInteger)columnWithIdentifier:(id)identifier
@@ -423,7 +541,14 @@ NSString *NSTableViewColumnDidResizeNotification = @"NSTableViewColumnDidResizeN
 		width += [column width];
 		first = NO;
 	}
-	height = (CGFloat)_numberOfRows * (_rowHeight + _intercellSpacing.height);
+	if ((NSInteger)[_cgRowHeights count] != _numberOfRows) {
+		[self cg_rebuildRowHeights];
+	}
+	height = 0.0;
+	if ([_cgRowTops count] > 0) {
+		height = (CGFloat)[[_cgRowTops lastObject] doubleValue]
+			+ (CGFloat)[[_cgRowHeights lastObject] doubleValue];
+	}
 	if (width < clip.width) {
 		width = clip.width;
 	}
@@ -440,6 +565,9 @@ NSString *NSTableViewColumnDidResizeNotification = @"NSTableViewColumnDidResizeN
 	NSUInteger i;
 	BOOL first = YES;
 
+	if ((NSInteger)[_cgRowHeights count] != _numberOfRows) {
+		[self cg_rebuildRowHeights];
+	}
 	for (i = 0; i < [_tableColumns count]; i++) {
 		NSTableColumn *column = [_tableColumns objectAtIndex:i];
 
@@ -452,7 +580,15 @@ NSString *NSTableViewColumnDidResizeNotification = @"NSTableViewColumnDidResizeN
 		width += [column width];
 		first = NO;
 	}
-	[self setFrameSize:NSMakeSize(width, (CGFloat)_numberOfRows * (_rowHeight + _intercellSpacing.height))];
+	{
+		CGFloat height = 0.0;
+
+		if ([_cgRowTops count] > 0) {
+			height = (CGFloat)[[_cgRowTops lastObject] doubleValue]
+				+ (CGFloat)[[_cgRowHeights lastObject] doubleValue];
+		}
+		[self setFrameSize:NSMakeSize(width, height)];
+	}
 }
 
 - (void)sizeLastColumnToFit
@@ -508,6 +644,7 @@ NSString *NSTableViewColumnDidResizeNotification = @"NSTableViewColumnDidResizeN
 		rows = 0;
 	}
 	_numberOfRows = rows;
+	[self cg_rebuildRowHeights];
 	/* A RELOAD CAN SHRINK THE MODEL UNDER THE SELECTION, so indexes that no longer exist are dropped rather than
 	 * left selected and undrawable. */
 	if ([_selectedRowIndexes count] > 0 && [_selectedRowIndexes lastIndex] >= (NSUInteger)_numberOfRows) {
@@ -536,6 +673,7 @@ NSString *NSTableViewColumnDidResizeNotification = @"NSTableViewColumnDidResizeN
 	} else {
 		_numberOfRows = 0;
 	}
+	[self cg_rebuildRowHeights];
 	[self tile];
 	[self setNeedsDisplay:YES];
 }
@@ -547,8 +685,8 @@ NSString *NSTableViewColumnDidResizeNotification = @"NSTableViewColumnDidResizeN
 	[self setNeedsDisplay:YES];
 }
 
-- (NSInteger)editedColumn { return -1; }
-- (NSInteger)editedRow { return -1; }
+- (NSInteger)editedColumn { return _editedColumn; }
+- (NSInteger)editedRow { return _editedRow; }
 - (NSInteger)clickedColumn { return _clickedColumn; }
 - (NSInteger)clickedRow { return _clickedRow; }
 
@@ -562,6 +700,7 @@ NSString *NSTableViewColumnDidResizeNotification = @"NSTableViewColumnDidResizeN
 	[_sortDescriptors release];
 	_sortDescriptors = copy;
 	[self setNeedsDisplay:YES];
+	[self cg_saveAutosave];
 }
 
 - (NSArray *)sortDescriptors { return _sortDescriptors; }
@@ -580,7 +719,13 @@ NSString *NSTableViewColumnDidResizeNotification = @"NSTableViewColumnDidResizeN
 		       ? [_tableColumns objectAtIndex:(NSUInteger)_highlightedTableColumn] : nil;
 }
 
-- (void)setAllowsTypeSelect:(BOOL)value { _allowsTypeSelect = value ? YES : NO; }
+- (void)setAllowsTypeSelect:(BOOL)value
+{
+	_allowsTypeSelect = value ? YES : NO;
+	if (!_allowsTypeSelect) {
+		[_cgTypeSelectString setString:@""];
+	}
+}
 - (BOOL)allowsTypeSelect { return _allowsTypeSelect; }
 
 /* ---- SELECTION ---------------------------------------------------------------------------------- */
@@ -826,11 +971,11 @@ NSString *NSTableViewColumnDidResizeNotification = @"NSTableViewColumnDidResizeN
 
 - (NSRect)rectOfRow:(NSInteger)row
 {
-	if (row < 0 || row >= _numberOfRows) {
+	if (row < 0 || row >= _numberOfRows || (NSUInteger)row >= [_cgRowTops count]) {
 		return NSZeroRect;
 	}
-	return NSMakeRect(0.0, (CGFloat)row * (_rowHeight + _intercellSpacing.height),
-			  [self frame].size.width, _rowHeight);
+	return NSMakeRect(0.0, (CGFloat)[[_cgRowTops objectAtIndex:(NSUInteger)row] doubleValue],
+			  [self frame].size.width, [self cg_rowHeightAtIndex:row]);
 }
 
 - (NSInteger)columnAtPoint:(NSPoint)point
@@ -857,13 +1002,26 @@ NSString *NSTableViewColumnDidResizeNotification = @"NSTableViewColumnDidResizeN
 
 - (NSInteger)rowAtPoint:(NSPoint)point
 {
-	NSInteger row;
+	NSInteger low = 0;
+	NSInteger high = _numberOfRows - 1;
 
-	if (point.y < 0.0 || _numberOfRows == 0) {
+	if (point.y < 0.0 || _numberOfRows == 0 || (NSInteger)[_cgRowTops count] != _numberOfRows) {
 		return -1;
 	}
-	row = (NSInteger)floor((double)(point.y / (_rowHeight + _intercellSpacing.height)));
-	return (row < _numberOfRows) ? row : -1;
+	while (low <= high) {
+		NSInteger mid = (low + high) / 2;
+		CGFloat top = (CGFloat)[[_cgRowTops objectAtIndex:(NSUInteger)mid] doubleValue];
+		CGFloat bottom = top + [self cg_rowHeightAtIndex:mid];
+
+		if (point.y < top) {
+			high = mid - 1;
+		} else if (point.y >= bottom) {
+			low = mid + 1;
+		} else {
+			return mid;
+		}
+	}
+	return -1;
 }
 
 - (NSRange)rowsInRect:(NSRect)rect
@@ -874,16 +1032,19 @@ NSString *NSTableViewColumnDidResizeNotification = @"NSTableViewColumnDidResizeN
 	if (_numberOfRows == 0 || NSIsEmptyRect(rect)) {
 		return NSMakeRange(NSNotFound, 0);
 	}
-	first = [self rowAtPoint:NSMakePoint(0.0, NSMinY(rect))];
-	if (first < 0) {
-		first = (NSInteger)floor((double)(NSMinY(rect) / (_rowHeight + _intercellSpacing.height)));
-		if (first < 0) {
-			first = 0;
-		}
+	if ((NSInteger)[_cgRowTops count] != _numberOfRows) {
+		return NSMakeRange(NSNotFound, 0);
 	}
-	last = [self rowAtPoint:NSMakePoint(0.0, NSMaxY(rect) - 0.001)];
-	if (last < 0) {
-		last = _numberOfRows - 1;
+	first = 0;
+	while (first < _numberOfRows &&
+	       (CGFloat)[[_cgRowTops objectAtIndex:(NSUInteger)first] doubleValue]
+		       + [self cg_rowHeightAtIndex:first] <= NSMinY(rect)) {
+		first++;
+	}
+	last = first;
+	while (last + 1 < _numberOfRows &&
+	       (CGFloat)[[_cgRowTops objectAtIndex:(NSUInteger)(last + 1)] doubleValue] < NSMaxY(rect)) {
+		last++;
 	}
 	if (first >= _numberOfRows || last < first) {
 		return NSMakeRange(NSNotFound, 0);
@@ -978,8 +1139,14 @@ NSString *NSTableViewColumnDidResizeNotification = @"NSTableViewColumnDidResizeN
 		NSRect rect = [self rectOfRow:(NSInteger)row];
 
 		if (NSIntersectsRect(rect, clipRect)) {
+			/* **A SELECTED ROW IS A SELECTION, SO IT WEARS THE PLATFORM'S ACCENT** — the menu's chip says the same
+			 * thing in a smaller shape, and its own note asks for the accent "on the whole row" in a list. The
+			 * SOURCE-LIST style is the exception and stays a grey, because that style is a sidebar's, not a
+			 * table's. The selected row's ink is `+selectedControlTextColor`, the white a text selection wears on
+			 * this accent; `+selectedControlColor`, the era's blue, is a different colour on purpose and nothing in
+			 * this tier paints a highlight with it any more. */
 			NSColor *selection = (_selectionHighlightStyle == NSTableViewSelectionHighlightStyleSourceList)
-				? [NSColor controlHighlightColor] : [NSColor selectedControlColor];
+				? [NSColor controlHighlightColor] : [NSColor cg_accentColor];
 
 			[selection setFill];
 			[[NSBezierPath bezierPathWithRect:rect] fill];
@@ -1011,8 +1178,15 @@ NSString *NSTableViewColumnDidResizeNotification = @"NSTableViewColumnDidResizeN
 		}
 		canSetInk = [cell respondsToSelector:@selector(setTextColor:)];
 		if (selected && canSetInk) {
+			/* **AND THE SELECTED ROW KEEPS THE DARK INK THE OTHER ROWS HAVE.** The plate is the platform's accent —
+			 * a LIGHT periwinkle — and white on it is a wash, MEASURED: the row was legible and read as faded. The
+			 * plate is what says "this row", the same division the segmented control's chip and the menu's chip
+			 * make; white is a pressed button's ink, for the moment it is held, and a selection is not that.
+			 *
+			 * IT WAS `+selectedControlTextColor` (white) while the plate was the era's BLUE, and that pairing was
+			 * right for a blue. A colour change is a whole pairing. */
 			saved = [[(id)cell textColor] retain];
-			[(id)cell setTextColor:[NSColor selectedControlTextColor]];
+			[(id)cell setTextColor:[NSColor controlTextColor]];
 		}
 		[cell drawWithFrame:rect inView:self];
 		if (selected && canSetInk) {
@@ -1070,6 +1244,17 @@ NSString *NSTableViewColumnDidResizeNotification = @"NSTableViewColumnDidResizeN
 		}
 	}
 	[self drawGridInClipRect:dirtyRect];
+	if (_cgDragging && _cgDropRow >= 0) {
+		CGFloat y = 0.0;
+
+		if (_cgDropRow < _numberOfRows) {
+			y = NSMinY([self rectOfRow:_cgDropRow]);
+		} else if (_numberOfRows > 0) {
+			y = NSMaxY([self rectOfRow:_numberOfRows - 1]);
+		}
+		[[NSColor cg_accentColor] setFill];
+		[[NSBezierPath bezierPathWithRect:NSMakeRect(0.0, y - 1.0, [self frame].size.width, 2.0)] fill];
+	}
 }
 
 /* ---- THE POINTER AND THE KEYBOARD --------------------------------------------------------------- */
@@ -1096,10 +1281,17 @@ NSString *NSTableViewColumnDidResizeNotification = @"NSTableViewColumnDidResizeN
 	NSPoint point = [self convertPoint:[event locationInWindow] fromView:nil];
 	NSUInteger modifiers = [event modifierFlags];
 
+	[_cgTypeSelectString setString:@""];
+	_cgTypeSelectTime = 0.0;
+	_cgDragStartPoint = point;
 	_clickedRow = [self rowAtPoint:point];
 	_clickedColumn = [self columnAtPoint:point];
-	if ([event clickCount] >= 2 && _doubleAction != NULL) {
-		[[NSApplication sharedApplication] sendAction:_doubleAction to:nil from:self];
+	if ([event clickCount] >= 2) {
+		if (_doubleAction != NULL) {
+			[[NSApplication sharedApplication] sendAction:_doubleAction to:nil from:self];
+		} else if (_clickedRow >= 0 && _clickedColumn >= 0) {
+			[self editColumn:_clickedColumn row:_clickedRow withEvent:event select:YES];
+		}
 		return;
 	}
 	if (_clickedRow < 0) {
@@ -1137,6 +1329,110 @@ NSString *NSTableViewColumnDidResizeNotification = @"NSTableViewColumnDidResizeN
 	}
 }
 
+/* ---- THE LOCAL ROW DRAG ------------------------------------------------------------------------- */
+
+/* **THE TABLE CAN DRAG ITS OWN ROWS WITHOUT A SYSTEM SESSION, AND THAT IS WHAT THIS IS.** A press past the threshold
+ * asks the data source to write its rows to the drag pasteboard; each motion puts a proposed row and operation to
+ * `-validateDrop:`, and the release calls `-acceptDrop:`. The data source moves its own model — the table never
+ * reorders rows behind its back. What is NOT here is the cross-process session: there is no `NSDraggingSession`, no
+ * drag image on the glass and no other application's destination. The pasteboard and the three info answers are the
+ * part the data-source contract actually reads. */
+- (void)mouseDragged:(NSEvent *)event
+{
+	NSPoint point;
+	NSIndexSet *rows;
+	NSDragOperation operation = NSDragOperationNone;
+
+	if (_clickedRow < 0 || _dataSource == nil) {
+		[super mouseDragged:event];
+		return;
+	}
+	point = [self convertPoint:[event locationInWindow] fromView:nil];
+	if (!_cgDragging) {
+		if (fabs((double)(point.x - _cgDragStartPoint.x)) < 4.0
+		    && fabs((double)(point.y - _cgDragStartPoint.y)) < 4.0) {
+			return;
+		}
+		rows = _selectedRowIndexes;
+		if ([rows count] == 0 || ![rows containsIndex:(NSUInteger)_clickedRow]) {
+			rows = [NSIndexSet indexSetWithIndex:(NSUInteger)_clickedRow];
+		}
+		if (![self canDragRowsWithIndexes:rows atPoint:_cgDragStartPoint]) {
+			return;
+		}
+		{
+			NSPasteboard *pasteboard = [NSPasteboard pasteboardWithName:NSDragPboard];
+
+			if (pasteboard == nil) {
+				return;
+			}
+			[pasteboard clearContents];
+			if (![_dataSource respondsToSelector:
+					@selector(tableView:writeRowsWithIndexes:toPasteboard:)]
+			    || ![_dataSource tableView:self writeRowsWithIndexes:rows toPasteboard:pasteboard]) {
+				return;
+			}
+			_cgDragRows = [rows copy];
+			_cgDragPasteboard = [pasteboard retain];
+			_cgDragging = YES;
+		}
+	}
+	{
+		NSInteger row = [self rowAtPoint:point];
+		NSInteger proposedRow;
+
+		if (row < 0) {
+			proposedRow = (point.y < 0.0) ? 0 : _numberOfRows;
+		} else {
+			NSRect rowRect = [self rectOfRow:row];
+
+			proposedRow = (point.y < NSMidY(rowRect)) ? row : row + 1;
+		}
+		_cgDropRow = proposedRow;
+		_cgDropOperation = NSTableViewDropAbove;
+		if ([_dataSource respondsToSelector:@selector(tableView:validateDrop:proposedRow:proposedDropOperation:)]) {
+			AGTableDraggingInfo *info = [[AGTableDraggingInfo alloc]
+				initWithPasteboard:_cgDragPasteboard location:point
+					      mask:[self draggingSourceOperationMaskForLocal:YES]];
+
+			operation = [_dataSource tableView:self validateDrop:info proposedRow:_cgDropRow
+					 proposedDropOperation:_cgDropOperation];
+			[info release];
+		}
+		if (operation == NSDragOperationNone) {
+			_cgDropRow = -1;
+		}
+	}
+	[self setNeedsDisplay:YES];
+}
+
+- (void)mouseUp:(NSEvent *)event
+{
+	if (_cgDragging) {
+		NSPoint point = [self convertPoint:[event locationInWindow] fromView:nil];
+
+		if (_cgDropRow >= 0
+		    && [_dataSource respondsToSelector:@selector(tableView:acceptDrop:row:dropOperation:)]) {
+			AGTableDraggingInfo *info = [[AGTableDraggingInfo alloc]
+				initWithPasteboard:_cgDragPasteboard location:point
+					      mask:[self draggingSourceOperationMaskForLocal:YES]];
+
+			(void)[_dataSource tableView:self acceptDrop:info row:_cgDropRow
+				     dropOperation:_cgDropOperation];
+			[info release];
+		}
+		[_cgDragRows release];
+		_cgDragRows = nil;
+		[_cgDragPasteboard release];
+		_cgDragPasteboard = nil;
+		_cgDragging = NO;
+		_cgDropRow = -1;
+		[self setNeedsDisplay:YES];
+		return;
+	}
+	[super mouseUp:event];
+}
+
 - (void)keyDown:(NSEvent *)event
 {
 	NSString *characters = [event charactersIgnoringModifiers];
@@ -1172,11 +1468,436 @@ NSString *NSTableViewColumnDidResizeNotification = @"NSTableViewColumnDidResizeN
 		}
 		break;
 	default:
+		if ([self cg_typeSelectWithEvent:event]) {
+			return;
+		}
 		[super keyDown:event];
 		return;
 	}
 	[self selectRowIndexes:[NSIndexSet indexSetWithIndex:(NSUInteger)next] byExtendingSelection:NO];
 	[self scrollRowToVisible:next];
+}
+
+/* ---- TYPE SELECT, EDITING, AUTOSAVE AND THE DRAG VOCABULARY ------------------------------------- */
+
+/* **TYPE SELECT SEARCHES THE CELLS THE TABLE WOULD DRAW.** A delegate may name the string per column/row; without it,
+ * the prepared cell's `-stringValue` is the text — Apple's default. The first visible column with text wins, and the
+ * search starts at the selected row (or 0) and wraps. A one-second pause starts a new prefix, which is the standard
+ * type-select rule. */
+- (NSString *)cg_typeSelectStringForRow:(NSInteger)row
+{
+	NSInteger column;
+
+	for (column = 0; column < (NSInteger)[_tableColumns count]; column++) {
+		NSTableColumn *tableColumn = [_tableColumns objectAtIndex:(NSUInteger)column];
+		NSString *string = nil;
+
+		if ([tableColumn isHidden]) {
+			continue;
+		}
+		if (_delegate != nil && [_delegate respondsToSelector:
+					 @selector(tableView:typeSelectStringForTableColumn:row:)]) {
+			string = [_delegate tableView:self typeSelectStringForTableColumn:tableColumn row:row];
+		} else {
+			NSCell *cell = [self preparedCellAtColumn:column row:row];
+
+			string = [cell stringValue];
+		}
+		if (string != nil && [string length] > 0) {
+			return string;
+		}
+	}
+	return nil;
+}
+
+- (BOOL)cg_typeSelectWithEvent:(NSEvent *)event
+{
+	NSString *characters;
+	unichar key;
+	NSInteger start;
+	NSInteger i;
+	NSTimeInterval now;
+
+	if (!_allowsTypeSelect || _numberOfRows == 0) {
+		return NO;
+	}
+	if (([event modifierFlags] & (NSCommandKeyMask | NSControlKeyMask)) != 0) {
+		return NO;
+	}
+	characters = [event charactersIgnoringModifiers];
+	if ([characters length] == 0) {
+		return NO;
+	}
+	key = [characters characterAtIndex:0];
+	if (key < 0x20 || key == 0x7f) {
+		return NO;
+	}
+	if (_delegate != nil && [_delegate respondsToSelector:
+				 @selector(tableView:shouldTypeSelectForEvent:withCurrentSearchString:)]) {
+		NSString *current = [_cgTypeSelectString length] > 0 ? _cgTypeSelectString : nil;
+
+		if (![_delegate tableView:self shouldTypeSelectForEvent:event withCurrentSearchString:current]) {
+			return NO;
+		}
+	}
+	now = [NSDate timeIntervalSinceReferenceDate];
+	if (now - _cgTypeSelectTime > 1.0) {
+		[_cgTypeSelectString setString:@""];
+	}
+	_cgTypeSelectTime = now;
+	[_cgTypeSelectString appendString:characters];
+	start = [self selectedRow];
+	if (start < 0 || start >= _numberOfRows) {
+		start = 0;
+	}
+	for (;;) {
+		for (i = 0; i < _numberOfRows; i++) {
+			NSInteger row = (start + i) % _numberOfRows;
+			NSString *string = [self cg_typeSelectStringForRow:row];
+
+			if (string != nil
+			    && [[string lowercaseString] hasPrefix:[_cgTypeSelectString lowercaseString]]) {
+				[self selectRowIndexes:[NSIndexSet indexSetWithIndex:(NSUInteger)row]
+				     byExtendingSelection:NO];
+				[self scrollRowToVisible:row];
+				return YES;
+			}
+		}
+		/* **A KEY THAT DOES NOT EXTEND THE PREFIX STARTS A NEW ONE.** Typing `c`, `h` selects "Charlie"; the next
+		 * `d` makes `chd`, which matches nothing, so the search restarts at `d` — Apple's type-select behaviour,
+		 * and the reason a fast typist can move from one name to another without waiting out the timeout. */
+		if ([_cgTypeSelectString length] <= 1) {
+			return NO;
+		}
+		{
+			unichar last = [_cgTypeSelectString characterAtIndex:[_cgTypeSelectString length] - 1];
+
+			[_cgTypeSelectString setString:[NSString stringWithCharacters:&last length:1]];
+		}
+	}
+	return NO;
+}
+
+- (BOOL)shouldFocusCell:(NSCell *)cell atColumn:(NSInteger)column row:(NSInteger)row
+{
+	(void)column;
+	(void)row;
+	if (cell == nil || ![cell isEnabled]) {
+		return NO;
+	}
+	if ([cell isKindOfClass:[NSTextFieldCell class]] && ![cell isEditable] && ![cell isSelectable]) {
+		return NO;
+	}
+	if (_delegate != nil && [_delegate respondsToSelector:@selector(tableView:shouldEditTableColumn:row:)]) {
+		NSTableColumn *tableColumn = (column >= 0 && (NSUInteger)column < [_tableColumns count])
+						   ? [_tableColumns objectAtIndex:(NSUInteger)column] : nil;
+
+		return [_delegate tableView:self shouldEditTableColumn:tableColumn row:row];
+	}
+	return YES;
+}
+
+- (void)editColumn:(NSInteger)column row:(NSInteger)row withEvent:(NSEvent *)theEvent select:(BOOL)select
+{
+	NSTableColumn *tableColumn;
+	NSCell *cell;
+	NSText *editor;
+	NSRect rect;
+
+	if (row < 0 || row >= _numberOfRows || column < 0 || (NSUInteger)column >= [_tableColumns count]
+	    || [self window] == nil) {
+		return;
+	}
+	tableColumn = [_tableColumns objectAtIndex:(NSUInteger)column];
+	if ([tableColumn isHidden]) {
+		return;
+	}
+	cell = [self preparedCellAtColumn:column row:row];
+	if (![self shouldFocusCell:cell atColumn:column row:row]
+	    || ![cell respondsToSelector:@selector(selectWithFrame:inView:editor:delegate:start:length:)]) {
+		return;
+	}
+	editor = [[self window] fieldEditor:YES forObject:self];
+	if (editor == nil) {
+		return;
+	}
+	[cell retain];
+	[_cgEditingCell release];
+	_cgEditingCell = cell;
+	_editedRow = row;
+	_editedColumn = column;
+	rect = [self frameOfCellAtColumn:column row:row];
+	if ([cell isKindOfClass:[NSTextFieldCell class]]) {
+		if (select) {
+			[(NSTextFieldCell *)cell selectWithFrame:rect inView:self editor:editor delegate:self start:0
+							  length:(NSInteger)[[cell stringValue] length]];
+		} else {
+			[(NSTextFieldCell *)cell editWithFrame:rect inView:self editor:editor delegate:self
+							 event:theEvent];
+		}
+	}
+	[self setNeedsDisplay:YES];
+}
+
+- (NSText *)currentEditor
+{
+	if (_cgEditingCell != nil && [_cgEditingCell respondsToSelector:@selector(cg_currentEditor)]) {
+		return [(NSTextFieldCell *)_cgEditingCell cg_currentEditor];
+	}
+	return nil;
+}
+
+- (BOOL)abortEditing
+{
+	BOOL aborted = NO;
+
+	if (_cgEditingCell != nil && [_cgEditingCell respondsToSelector:@selector(cg_abortEditing)]) {
+		aborted = [(NSTextFieldCell *)_cgEditingCell cg_abortEditing];
+	}
+	[_cgEditingCell release];
+	_cgEditingCell = nil;
+	_editedRow = -1;
+	_editedColumn = -1;
+	[self setNeedsDisplay:YES];
+	return aborted;
+}
+
+/* **THE TABLE IS THE CELL'S CALLER DELEGATE, SO THE SESSION'S FIVE EVENTS ARRIVE HERE.** The two questions go on to
+ * the table's delegate; the end is where the edited cell's value reaches the DATA SOURCE, which is the whole point of
+ * an edit. `NSTextFieldCell` has already written the editor's string back into the cell by the time this is called. */
+- (BOOL)textShouldBeginEditing:(NSText *)textObject
+{
+	if (_delegate != nil && [_delegate respondsToSelector:@selector(control:textShouldBeginEditing:)]) {
+		return [_delegate control:self textShouldBeginEditing:textObject];
+	}
+	return YES;
+}
+
+- (BOOL)textShouldEndEditing:(NSText *)textObject
+{
+	if (_delegate != nil && [_delegate respondsToSelector:@selector(control:textShouldEndEditing:)]) {
+		return [_delegate control:self textShouldEndEditing:textObject];
+	}
+	return YES;
+}
+
+- (void)textDidBeginEditing:(NSNotification *)notification
+{
+	NSDictionary *info = [NSDictionary dictionaryWithObject:[notification object] forKey:NSFieldEditorUserInfoKey];
+
+	[[NSNotificationCenter defaultCenter] postNotificationName:NSControlTextDidBeginEditingNotification
+							    object:self userInfo:info];
+}
+
+- (void)textDidChange:(NSNotification *)notification
+{
+	NSDictionary *info = [NSDictionary dictionaryWithObject:[notification object] forKey:NSFieldEditorUserInfoKey];
+
+	[[NSNotificationCenter defaultCenter] postNotificationName:NSControlTextDidChangeNotification
+							    object:self userInfo:info];
+	[self setNeedsDisplayInRect:[self rectOfRow:_editedRow]];
+}
+
+- (void)textDidEndEditing:(NSNotification *)notification
+{
+	NSInteger row = _editedRow;
+	NSInteger column = _editedColumn;
+	NSCell *cell = _cgEditingCell;
+	NSDictionary *info;
+
+	_cgEditingCell = nil;
+	_editedRow = -1;
+	_editedColumn = -1;
+	if (cell != nil && row >= 0 && column >= 0 && row < _numberOfRows
+	    && (NSUInteger)column < [_tableColumns count]) {
+		NSTableColumn *tableColumn = [_tableColumns objectAtIndex:(NSUInteger)column];
+
+		if (_dataSource != nil && [_dataSource respondsToSelector:
+					   @selector(tableView:setObjectValue:forTableColumn:row:)]) {
+			[_dataSource tableView:self setObjectValue:[cell objectValue]
+				  forTableColumn:tableColumn row:row];
+		}
+		[self setNeedsDisplayInRect:[self rectOfRow:row]];
+	}
+	info = [NSDictionary dictionaryWithObject:[notification object] forKey:NSFieldEditorUserInfoKey];
+	[[NSNotificationCenter defaultCenter] postNotificationName:NSControlTextDidEndEditingNotification
+							    object:self userInfo:info];
+	[cell release];
+}
+
+/* ---- AUTOSAVE ------------------------------------------------------------------------------------ */
+
+- (NSString *)cg_autosaveKey
+{
+	return [NSString stringWithFormat:@"AgoraTableView %@", _autosaveName];
+}
+
+- (void)cg_saveAutosave
+{
+	NSMutableArray *order;
+	NSMutableDictionary *widths;
+	NSMutableArray *hidden;
+	NSMutableArray *sort;
+	NSMutableDictionary *dictionary;
+	NSUInteger i;
+
+	if (_autosaveName == nil || [_autosaveName length] == 0 || !_autosaveTableColumns) {
+		return;
+	}
+	order = [NSMutableArray array];
+	widths = [NSMutableDictionary dictionary];
+	hidden = [NSMutableArray array];
+	sort = [NSMutableArray array];
+	for (i = 0; i < [_tableColumns count]; i++) {
+		NSTableColumn *column = [_tableColumns objectAtIndex:i];
+		NSString *identifier = [[column identifier] description];
+
+		[order addObject:identifier];
+		[widths setObject:[NSNumber numberWithDouble:(double)[column width]] forKey:identifier];
+		if ([column isHidden]) {
+			[hidden addObject:identifier];
+		}
+	}
+	for (i = 0; i < [_sortDescriptors count]; i++) {
+		NSSortDescriptor *descriptor = [_sortDescriptors objectAtIndex:i];
+		NSMutableDictionary *entry = [NSMutableDictionary dictionary];
+
+		if ([descriptor key] != nil) {
+			[entry setObject:[descriptor key] forKey:@"key"];
+		}
+		[entry setObject:[NSNumber numberWithBool:[descriptor ascending]] forKey:@"ascending"];
+		[sort addObject:entry];
+	}
+	dictionary = [NSMutableDictionary dictionary];
+	[dictionary setObject:order forKey:@"order"];
+	[dictionary setObject:widths forKey:@"widths"];
+	[dictionary setObject:hidden forKey:@"hidden"];
+	[dictionary setObject:sort forKey:@"sort"];
+	[[NSUserDefaults standardUserDefaults] setObject:dictionary forKey:[self cg_autosaveKey]];
+}
+
+- (void)cg_loadAutosave
+{
+	NSDictionary *dictionary;
+	NSArray *order;
+	NSDictionary *widths;
+	NSArray *hidden;
+	NSArray *sort;
+	NSMutableArray *reordered;
+	NSMutableArray *descriptors;
+	NSUInteger i;
+
+	if (_autosaveName == nil || [_autosaveName length] == 0 || !_autosaveTableColumns) {
+		return;
+	}
+	dictionary = [[NSUserDefaults standardUserDefaults] dictionaryForKey:[self cg_autosaveKey]];
+	if (dictionary == nil) {
+		return;
+	}
+	order = [dictionary objectForKey:@"order"];
+	widths = [dictionary objectForKey:@"widths"];
+	hidden = [dictionary objectForKey:@"hidden"];
+	sort = [dictionary objectForKey:@"sort"];
+	reordered = [NSMutableArray array];
+	for (i = 0; order != nil && i < [order count]; i++) {
+		NSString *identifier = [order objectAtIndex:i];
+		NSUInteger j;
+
+		for (j = 0; j < [_tableColumns count]; j++) {
+			NSTableColumn *column = [_tableColumns objectAtIndex:j];
+
+			if ([[[column identifier] description] isEqual:identifier]
+			    && [reordered indexOfObjectIdenticalTo:column] == NSNotFound) {
+				[reordered addObject:column];
+				break;
+			}
+		}
+	}
+	for (i = 0; i < [_tableColumns count]; i++) {
+		NSTableColumn *column = [_tableColumns objectAtIndex:i];
+
+		if ([reordered indexOfObjectIdenticalTo:column] == NSNotFound) {
+			[reordered addObject:column];
+		}
+	}
+	[_tableColumns removeAllObjects];
+	[_tableColumns addObjectsFromArray:reordered];
+	for (i = 0; i < [_tableColumns count]; i++) {
+		NSTableColumn *column = [_tableColumns objectAtIndex:i];
+		NSString *identifier = [[column identifier] description];
+		NSNumber *width = [widths objectForKey:identifier];
+
+		if (width != nil) {
+			[column setWidth:(CGFloat)[width doubleValue]];
+		}
+		[column setHidden:(hidden != nil && [hidden containsObject:identifier])];
+	}
+	descriptors = [NSMutableArray array];
+	for (i = 0; sort != nil && i < [sort count]; i++) {
+		NSDictionary *entry = [sort objectAtIndex:i];
+		NSString *key = [entry objectForKey:@"key"];
+		NSNumber *ascending = [entry objectForKey:@"ascending"];
+
+		if (key != nil) {
+			[descriptors addObject:[NSSortDescriptor sortDescriptorWithKey:key
+									    ascending:[ascending boolValue]]];
+		}
+	}
+	[_sortDescriptors release];
+	_sortDescriptors = [[NSArray alloc] initWithArray:descriptors];
+	[self cg_rebuildRowHeights];
+	[self tile];
+	[self setNeedsDisplay:YES];
+}
+
+- (void)setAutosaveName:(NSString *)name
+{
+	NSString *copy = [name copy];
+
+	[_autosaveName release];
+	_autosaveName = copy;
+	[self cg_loadAutosave];
+}
+
+- (NSString *)autosaveName { return _autosaveName; }
+- (void)setAutosaveTableColumns:(BOOL)save
+{
+	_autosaveTableColumns = save ? YES : NO;
+	if (_autosaveTableColumns) {
+		[self cg_loadAutosave];
+	}
+}
+- (BOOL)autosaveTableColumns { return _autosaveTableColumns; }
+
+/* ---- THE DRAG VOCABULARY ------------------------------------------------------------------------ */
+
+- (BOOL)canDragRowsWithIndexes:(NSIndexSet *)rowIndexes atPoint:(NSPoint)mouseDownPoint
+{
+	(void)mouseDownPoint;
+	if ([rowIndexes count] == 0 || _dataSource == nil) {
+		return NO;
+	}
+	return [_dataSource respondsToSelector:@selector(tableView:writeRowsWithIndexes:toPasteboard:)];
+}
+
+- (void)setDraggingSourceOperationMask:(NSDragOperation)mask forLocal:(BOOL)isLocal
+{
+	if (isLocal) {
+		_cgLocalDragMask = mask;
+	} else {
+		_cgNonLocalDragMask = mask;
+	}
+}
+
+- (NSDragOperation)draggingSourceOperationMaskForLocal:(BOOL)isLocal
+{
+	return isLocal ? _cgLocalDragMask : _cgNonLocalDragMask;
+}
+
+- (void)setDropRow:(NSInteger)row dropOperation:(NSTableViewDropOperation)dropOperation
+{
+	_cgDropRow = row;
+	_cgDropOperation = dropOperation;
 }
 
 - (BOOL)validateUserInterfaceItem:(id <NSValidatedUserInterfaceItem>)anItem

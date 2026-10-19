@@ -61,8 +61,10 @@ int main(void)
 		[app setMainMenu:bar];
 
 		/* AND A WINDOW, ordered front so the compositor hands this client the keyboard. */
+		/* A TITLED WINDOW, so the one-window rule has a window that CAN be key and main; a borderless window
+		 * would make the key-state checks below untestable by design. */
 		window = [[NSWindow alloc] initWithContentRect:NSMakeRect(80.0, 80.0, 300.0, 200.0)
-						     styleMask:NSBorderlessWindowMask backing:NSBackingStoreBuffered defer:NO];
+						     styleMask:NSTitledWindowMask backing:NSBackingStoreBuffered defer:NO];
 		[window setTitle:@"Activation"];
 		[window setContentView:[[[NSView alloc] initWithFrame:NSMakeRect(0.0, 0.0, 300.0, 200.0)] autorelease]];
 		[window orderFront:nil];
@@ -98,6 +100,12 @@ int main(void)
 		check([app isActive], "and it is ACTIVE — the compositor gave this client the keyboard");
 		check(barWindow != nil && [barWindow isVisible],
 		      "so its menu bar is SHOWN while it is the active application");
+		/* **ONE WINDOW, AND IT IS THE ONE THE APPLICATION SPEAKS THROUGH.** Activating must make it key and main
+		 * without a click, which is what keeps its chrome active and its menu commands routed. */
+		check([window isKeyWindow] && [app keyWindow] == window,
+		      "the application's ONLY window is KEY as soon as the application is active");
+		check([window isMainWindow] && [app mainWindow] == window,
+		      "and MAIN, without waiting for a click");
 
 		/* 3. DEACTIVATING — what another application taking the keyboard does — TAKES THE MENUS AWAY. */
 		[app deactivate];

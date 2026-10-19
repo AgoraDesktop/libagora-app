@@ -78,26 +78,33 @@ static NSImage *red_image(CGFloat w, CGFloat h)
 	return image;
 }
 
-/* **THE ACCENT OVER A RED PICTURE, COUNTED BY ITS COLOUR RATHER THAN BY "NOT WHITE".** The overlay is the platform's
- * selection colour at 35%, so a covered pixel is (0.72, 0.15, 0.28) — still mostly red, with a blue the plain picture
- * does not have. The bounds keep the SELECTION BAND behind the picture out of the count (that is a much bluer blue),
- * so a positive answer is the overlay and not the text view's own selection ink. */
+/* **THE ACCENT OVER A RED PICTURE, COUNTED AGAINST THE BLEND ITS OWN COLOURS MAKE.** The overlay is
+ * `+cg_accentColor` at 35% over the flat red the picture is drawn with, so a covered pixel is
+ * `0.35 · accent + 0.65 · red`, DERIVED here rather than written down — the accent is a DOOR, and a literal is a
+ * second copy of it that goes stale the day the accent does. MEASURED: it did. This counted the era's
+ * `+selectedControlColor` blend (0.72, 0.15, 0.28) and read ZERO the moment the attachment began wearing the
+ * platform's accent, which is a failing test that was right about the pixels and wrong about the colour.
+ *
+ * THE TOLERANCE KEEPS THE SELECTION BAND OUT OF THE COUNT, which is the one thing the window was ever for: the band
+ * behind the picture is the accent WHOLE and this is the accent at a third, and the two are nowhere near each other.
+ */
 static int accent_pixels(NSBitmapImageRep *rep)
 {
+	NSColor *accent = [NSColor cg_accentColor];
+	CGFloat er = 0.35 * [accent redComponent] + 0.65;
+	CGFloat eg = 0.35 * [accent greenComponent];
+	CGFloat eb = 0.35 * [accent blueComponent];
 	int x, y, count = 0;
 
 	for (y = 0; y < H; y++) {
 		for (x = 0; x < W; x++) {
 			NSColor *c = [rep colorAtX:x y:y];
-			CGFloat r, g, b;
 
 			if (c == nil) {
 				continue;
 			}
-			r = [c redComponent];
-			g = [c greenComponent];
-			b = [c blueComponent];
-			if (r > 0.5 && r < 0.85 && g < 0.35 && b > 0.2 && b < 0.5) {
+			if (fabs([c redComponent] - er) < 0.06 && fabs([c greenComponent] - eg) < 0.06
+			    && fabs([c blueComponent] - eb) < 0.06) {
 				count++;
 			}
 		}

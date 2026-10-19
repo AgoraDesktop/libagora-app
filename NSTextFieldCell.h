@@ -36,6 +36,7 @@
 #import <AppKit/NSActionCell.h>
 
 @class NSColor;
+@class NSFont;
 @class NSText;
 @class NSEvent;
 @class NSView;
@@ -161,6 +162,21 @@ typedef NSUInteger NSTextFieldBezelStyle;
  * field and a button's face are noticed when their borders are a shade apart. */
 - (void)drawWithFrame:(NSRect)cellFrame inView:(nullable id)controlView;
 - (void)drawInteriorWithFrame:(NSRect)cellFrame inView:(nullable id)controlView;
+
+/* **AND THE ONE PLACE A LINE'S VERTICAL CENTRE IS DECIDED.** A field, a placeholder, a table cell and a table header
+ * all take their baseline from this door, so the words in a 20-point table row, the value in a combo box's field and
+ * a header's title are centred by one rule — which is what makes a disclosure triangle or a chip, centred on its row,
+ * point at the middle of the line rather than at its shoulders.
+ *
+ * It is a door rather than arithmetic repeated in each drawing method because the repetition is how the copies
+ * diverged: `NSTableHeaderCell` carried one version and `NSTextFieldCell` another.
+ *
+ * AND THE MEASUREMENT THAT KEEPS THIS HONEST, in `tests/table_view.m`: the same row is rendered through both of the
+ * directions a window uses, and its ink centre must be the cell's `NSHeight / 2` each time. With this caret both
+ * read 9.5 of a 20-point cell; with a caret that always subtracts the half-difference (the y-up-only version the
+ * table used to carry) the flipped render reads **2.0** — eight points high, which is the clipped row the
+ * demonstration showed. A triangle centred on the row then pointed at the words' shoulders instead of their middle. */
+- (CGFloat)cg_centredBaselineInFrame:(NSRect)cellFrame font:(NSFont *)font;
 
 /* **THE RECT THE TEXT LIVES IN, WHICH IS THE FACE INSET BY THE MARGIN A FIELD OWES ITS OWN TEXT.** `NSCell`'s
  * `-drawingRectForBounds:` is the face; this adds `NS_CELL_CONTENT_GAP` — the same four points a checkbox leaves

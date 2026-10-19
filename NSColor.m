@@ -814,6 +814,17 @@ static void fn_cmyk_of(NSColor *self, CGFloat cmyk[4])
 	return fn_singleton(&s, 0.50, 0.50, 0.50, 1.0);
 }
 
+/* **THE CHROME'S ONE SURFACE — #DEDEDE, sampled from the theme's bar and shared by BOTH halves of it.** The title bar
+ * and the toolbar band are one strip, so they are one colour; a window that painted them from two doors grew a seam
+ * where the numbers drifted, and the seam is what this exists to make impossible. Neutral rather than
+ * `+windowFrameColor`'s faint blue: a bare grey is what the theme's own art is, and one surface has nothing to be
+ * distinguished FROM. */
++ (NSColor *)cg_chromeFaceColor
+{
+	static NSColor *s;
+	return fn_singleton(&s, 0.871, 0.871, 0.871, 1.0);
+}
+
 /* **THE GROOVE, WHICH IS SAMPLED RATHER THAN CHOSEN.** The header carries why a scroller needs a door of its own at
  * all; the number is `Argentum Mockup.png`'s own — 217 for the track the knob runs in. THE KNOB'S EDGE IS NOT HERE:
  * it measured 188, which is `+controlDarkShadowColor`'s value, and one grey with two names is exactly the drift this

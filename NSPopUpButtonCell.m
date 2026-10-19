@@ -587,7 +587,9 @@ static NSInteger fn_popup_index(NSInteger menu_index)
 	if (tsize.width > 0.0 && tsize.height > 0.0 && (limit - x) > 0.0) {
 		room = NSMakeRect(x, NSMidY(cellFrame) - tsize.height / 2.0, limit - x, tsize.height);
 		[NSGraphicsContext saveGraphicsState];
-		[[NSBezierPath bezierPathWithRect:room] setClip];
+		/* **INTERSECT, NOT REPLACE.** A pop-up in a clipped container must not discard that container's
+		 * clip to draw its own title; the two rectangles are a bound and a bound, not two rivals. */
+		[[NSBezierPath bezierPathWithRect:room] addClip];
 		if (attributed != nil) {
 			[attributed drawInRect:room];
 		} else {

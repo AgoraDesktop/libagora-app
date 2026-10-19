@@ -274,6 +274,14 @@ extern NSString *NSSystemColorsDidChangeNotification;
  * mark for a door the tier adds, and it is defined ONCE — the menu's selection chip and every control that
  * highlights now read the same two numbers instead of each carrying its own copy of them.
  *
+ * **AND NOTHING IN THIS TIER PAINTS A HIGHLIGHT WITH THE ERA'S BLUE ANY MORE.** `+selectedControlColor` is still
+ * ANSWERED — it is Apple's name for a colour an application may ask for — but the segmented control's plate, the
+ * toolbar's chip, a table's selected row, its drop indicator, a header's selected column, a path cell, a bezeled
+ * cell and a pressed text attachment all read THIS door now, which is what "every control that highlights" was
+ * always meant to say. The one pairing that moves with the colour: a plate this light carries DARK ink (the menu's
+ * chip, the segmented control's selected label, a selected row), and white is left for the states that are a flash
+ * rather than a place — a button under the finger.
+ *
  * AND IT IS NAMED FOR THE PRESS ON EVERY CONTROL WHOSE FACE IS A GREY. What a control the pointer merely rests on
  * wears is a step DOWN the grey scale rather than a second colour (see `+cg_prelightControlFaceColor` below), so a
  * BUTTON's accent means one thing: this control is being used.
@@ -304,6 +312,12 @@ extern NSString *NSSystemColorsDidChangeNotification;
  * 0.70 on the way past, which was too light for this strip. 0.50 is a DARK grey on a light one — a full step below
  * `+controlShadowColor`'s 0.60 — and still nothing like black. */
 + (NSColor *)cg_chromeInkColor;
+/* **AND THE CHROME'S ONE SURFACE, WHICH IS THE TITLE BAR *AND* THE TOOLBAR BAND.** Greybird's `#DEDEDE`: the colour
+ * every piece of that theme's bar is filled with. It exists as a door rather than as a constant in `NSWindow.m`
+ * because TWO files paint the same strip — the window paints the title bar and `NSToolbar` paints the band below it —
+ * and a chrome that changes colour halfway down is exactly what two copies of a number produce. The white row under
+ * the top edge and the one-point outline are EDGES of this surface, not surfaces of their own. */
++ (NSColor *)cg_chromeFaceColor;
 /* **AND THE GROOVE A SCROLLER'S KNOB RUNS IN, WHICH IS THE ONE PLACE THIS TREE INVERTS ITS OWN RULE.** Everywhere
  * else a raised thing is lighter than the window it sits on — that is the whole of `+controlColor`'s 0.95. A
  * SCROLLER'S GROUND IS NOT THE WINDOW, THOUGH: it is the GROOVE, so the knob takes the white and the groove takes a

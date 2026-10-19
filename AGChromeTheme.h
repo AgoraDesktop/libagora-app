@@ -13,6 +13,10 @@
  * licence on Agora. Read at runtime it is data, and Agora's MIT is untouched; the theme's own provenance travels
  * with the theme.
  *
+ * **AND IT IS ORDINARY FOR NO THEME TO RESOLVE, BECAUSE THE CHROME'S OWN LOOK IS DRAWN.** `NSWindow` draws
+ * Greybird's bar and its four marks itself, in that theme's measures and colours, so a process with no theme is
+ * not a fallback — it is the usual case, and this class is the OVERRIDE.
+ *
  * IT IS A SINGLETON BECAUSE THE THEME IS A PROCESS-WIDE FACT. The frame-to-content arithmetic is a CLASS method
  * (`+contentRectForFrameRect:styleMask:`) with no window to ask, so the title bar's height has to be answerable
  * without an instance — and the height comes from the theme. Resolved once, on first use; a program that sets
@@ -20,7 +24,7 @@
  *
  * WHERE A THEME IS FOUND. `$AGORA_CHROME_THEME`, which may be the directory the `.xpm` files are in OR a theme
  * root with an `xfwm4/` inside it; then `$XDG_DATA_HOME/agora/chrome/xfwm4` (or `~/.local/share/agora/chrome/
- * xfwm4`). No theme resolving is not an error: the chrome falls back to the marks `NSWindow` draws.
+ * xfwm4`). No theme resolving is not an error — it is the ordinary case: the chrome draws its own bar and marks.
  */
 #ifndef AGORA_AGCHROMETHEME_H
 #define AGORA_AGCHROMETHEME_H

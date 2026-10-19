@@ -14,6 +14,10 @@
 # LANDED: `NSTextAttachment.h` was the one file whose OWED note was about that family, and the note is now a record of
 # what is here rather than a claim about what is not — so the line is gone and the total fell with it.
 #
+# AND IT IS SEVENTEEN AGAIN FOR A DIFFERENT REASON: `NSSplitView.h` declares Apple's deprecated pane-splitter pair
+# and says in as many words that a deprecated item is OWED here for older applications. The count rising is the
+# deliberate act the census exists to make visible.
+#
 # A CLAIM PHRASED WITHOUT THIS WORD IS NOT COUNTED, and that is stated rather than implied: "refuses by name" and
 # "stays ABSENT" are the same kind of claim in this tree's prose and do not carry the marker. The census holds what the
 # marker marks, which is the emphatic form the tree writes its owes in.
@@ -29,5 +33,6 @@ NSGraphicsContext.h                  1
 NSMenu.h                             4
 NSPasteboard.h                       1
 NSResponder.h                        1
+NSSplitView.h                        1
 
-# total: 16
+# total: 17

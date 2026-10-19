@@ -27,6 +27,7 @@
 #import <AppKit/NSEvent.h>
 #import <AppKit/NSToolbar.h>
 #import <AppKit/NSToolbarItem.h>
+#import <AppKit/NSToolbarItemGroup.h>
 #import <AppKit/NSToolbar_internal.h>
 #import <AppKit/AGChromeTheme.h>
 
@@ -42,6 +43,11 @@
 #define TH 300
 
 static int s_failed;
+
+static int near(double a, double b)
+{
+	return fabs(a - b) < 0.05;
+}
 
 static void check(int ok, const char *name)
 {
@@ -111,6 +117,7 @@ static int same_colour(NSColor *a, NSColor *b, double tol)
 	int itemRequests;
 	AGToolbarTarget *target;
 	NSToolbarItem *customItem;	/* NOT RETAINED: the test owns it */
+	NSToolbarItemGroup *groupItem;	/* NOT RETAINED: the test owns it */
 	BOOL selectable;
 }
 @end
@@ -127,6 +134,9 @@ static int same_colour(NSColor *a, NSColor *b, double tol)
 	itemRequests++;
 	if ([itemIdentifier isEqualToString:@"custom"] && customItem != nil) {
 		return customItem;
+	}
+	if ([itemIdentifier isEqualToString:@"group"] && groupItem != nil) {
+		return groupItem;
 	}
 	if ([itemIdentifier isEqualToString:NSToolbarSeparatorItemIdentifier] ||
 	    [itemIdentifier isEqualToString:NSToolbarSpaceItemIdentifier] ||
@@ -276,6 +286,46 @@ int main(void)
 		check([custom superview] == nil, "removing the item takes its view out of the tree");
 	}
 
+	/* 4b. **A GROUP IS ONE ITEM ON SCREEN AND ITS SUBITEMS ARE ADJACENT.** Two tiny custom views prove the
+	 * flattening without depending on the standard face's label metrics: the group stays the unit `-items` and
+	 * `-visibleItems` report, while the two views are separate subviews laid side by side. */
+	{
+		NSView *firstView = [[[NSView alloc] initWithFrame:NSMakeRect(0.0, 0.0, 12.0, 24.0)] autorelease];
+		NSView *secondView = [[[NSView alloc] initWithFrame:NSMakeRect(0.0, 0.0, 12.0, 24.0)] autorelease];
+		NSToolbarItem *first = [[[NSToolbarItem alloc] initWithItemIdentifier:@"g1"] autorelease];
+		NSToolbarItem *second = [[[NSToolbarItem alloc] initWithItemIdentifier:@"g2"] autorelease];
+		NSToolbarItemGroup *group = [[NSToolbarItemGroup alloc] initWithItemIdentifier:@"group"];
+		NSArray *visible;
+
+		[first setLabel:@"g1"];
+		[first setView:firstView];
+		[first setMinSize:NSMakeSize(12.0, 24.0)];
+		[first setMaxSize:NSMakeSize(12.0, 24.0)];
+		[second setLabel:@"g2"];
+		[second setView:secondView];
+		[second setMinSize:NSMakeSize(12.0, 24.0)];
+		[second setMaxSize:NSMakeSize(12.0, 24.0)];
+		[group setSubitems:[NSArray arrayWithObjects:first, second, nil]];
+		delegate->groupItem = group;
+		[toolbar insertItemWithItemIdentifier:@"group" atIndex:0];
+		visible = [toolbar visibleItems];
+		check([[toolbar items] count] == 7
+		      && [[[toolbar items] objectAtIndex:0] isKindOfClass:[NSToolbarItemGroup class]],
+		      "the group is one item in -items");
+		check([visible containsObject:group] && ![visible containsObject:first]
+		      && ![visible containsObject:second],
+		      "and the group, not its subitems, is what -visibleItems reports");
+		check([firstView superview] == toolbarView && [secondView superview] == toolbarView,
+		      "both subitem views are adopted by the toolbar's view");
+		check(near([secondView frame].origin.x, [firstView frame].origin.x + [firstView frame].size.width),
+		      "and they are laid out adjacent");
+		[toolbar removeItemAtIndex:0];
+		delegate->groupItem = nil;
+		check([firstView superview] == nil && [secondView superview] == nil,
+		      "removing the group takes both subitem views out of the tree");
+		[group release];
+	}
+
 	/* 5. VALIDATION IS THE TARGET'S TO DECIDE, AND MAY CHANGE THE ITEM. */
 	{
 		NSToolbarItem *item = [[toolbar items] objectAtIndex:0];
@@ -351,12 +401,15 @@ int main(void)
 		 * defect: the band drew correctly when asked for its own rect, and the content tree's walk never reached it. */
 		[window cg_drawToolbarInContext:ctx];
 		[window cg_drawChromeInContext:ctx];
-		check(same_colour([rep colorAtX:2 y:bandTop + 8], [NSColor windowFrameColor], 0.02),
-		      "the toolbar band is filled with the chrome's own windowFrameColor");
-		/* THE HAIRLINE IS THE CONTENT'S TOP ROW, one row BELOW the band — the chrome painter draws it, not the
-		 * toolbar's own view, because the band is part of the chrome. */
-		check(lum([rep colorAtX:2 y:bandBottom + 1]) < lum([rep colorAtX:2 y:bandTop + 8]),
-		      "the black hairline is at the content's top edge, below the band");
+		check(same_colour([rep colorAtX:2 y:bandTop + 8], [NSColor cg_chromeFaceColor], 0.02),
+		      "the toolbar band is filled with the chrome's own face colour");
+		/* **THE HAIRLINE IS THE CONTENT'S TOP ROW, ONE ROW BELOW THE BAND — AND IT WEARS THE CONTROL BEZEL'S GREY.**
+		 * The chrome painter draws it, not the toolbar's own view, because the band is part of the chrome; and it is
+		 * `+controlDarkShadowColor`, the same ink a push button's bezel, a field's edge and a checkbox's box are
+		 * stroked with, because it is the BOTTOM OF THE CHROME and every other edge on this desktop is that one
+		 * grey. It was black, which read as a shadow the window does not otherwise have. */
+		check(same_colour([rep colorAtX:2 y:bandBottom + 1], [NSColor controlDarkShadowColor], 0.02),
+		      "the chrome's hairline, at the content's top edge below the band, is the bezel's grey");
 		for (i = 0; i < TW; i++) {
 			int y;
 
@@ -369,9 +422,15 @@ int main(void)
 			}
 		}
 		check(ink > 0, "an item's label is drawn as ink inside the band");
-		check(same_colour([rep colorAtX:2 y:6], [NSColor windowFrameColor], 0.02)
-		      && same_colour([rep colorAtX:2 y:6], [rep colorAtX:2 y:bandTop + 8], 0.02),
-		      "the title bar above it is the SAME chrome ground, so the band is part of the chrome");
+		/* **AND THE TITLE BAR ABOVE IT IS THE SAME COLOUR, WHICH IS THE WHOLE CLAIM.** The strip is ONE surface —
+		 * the title bar and the toolbar band are one rectangle in one colour (`+cg_chromeFaceColor`), painted by two
+		 * different objects — so what is checked is not that each is a plausible grey but that THE TWO PIXELS ARE THE
+		 * SAME, one from above the boundary and one from below it. A chrome that painted them from two doors grew a
+		 * seam the moment the numbers drifted, and a seam is exactly what this asks about. */
+		check(same_colour([rep colorAtX:2 y:6], [NSColor cg_chromeFaceColor], 0.02),
+		      "the title bar above the band is the chrome's face colour");
+		check(same_colour([rep colorAtX:2 y:6], [rep colorAtX:2 y:bandTop + 8], 0.002),
+		      "and the band below it is the SAME PIXEL — one continuous surface, not two that happen to match");
 	}
 
 	/* **AND THE SAME BAND THROUGH THE WINDOW'S OWN CONTENT WALK.** This is the path a live window uses, and it is

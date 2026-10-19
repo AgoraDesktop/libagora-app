@@ -5,9 +5,9 @@
  * SPDX-License-Identifier: MIT
  *
  * The header draws through the columns' own header cells, so a column's title and face are the column's rather than a
- * second copy here. Its one gesture is a divider drag: the right few points of a column's box begin a resize, the
- * table re-tiles on every motion, and the column's min/max clamps the width. Column reordering is deliberately not in
- * this slice, so `-draggedColumn` answers -1 and `-draggedDistance` answers 0.
+ * second copy here. It has TWO gestures: a divider drag resizes the column within its min/max, and a drag on the body
+ * of a header reorders the column once the pointer crosses the threshold — with the table's delegate allowed to
+ * refuse through `-tableView:shouldReorderColumn:toColumn:`. `-draggedColumn`/`-draggedDistance` report the second.
  */
 #import "NSTableHeaderView.h"
 #import "NSTableHeaderCell.h"
@@ -23,7 +23,14 @@
 #import <Foundation/NSNotification.h>
 #import <Foundation/NSNotificationCenter.h>
 
+#include <math.h>
+
 #define AG_HEADER_RESIZE_GRAB 3.0
+#define AG_HEADER_REORDER_THRESHOLD 4.0
+
+@interface NSTableView (AGHeaderAutosave)
+- (void)cg_saveAutosave;
+@end
 
 @implementation NSTableHeaderView
 
@@ -37,6 +44,10 @@
 		_resizedColumn = -1;
 		_pressedColumn = -1;
 		_resizing = NO;
+		_draggedColumn = -1;
+		_draggedDistance = 0.0;
+		_dragStartX = 0.0;
+		_didDrag = NO;
 	}
 	return self;
 }
@@ -53,12 +64,12 @@
 
 - (NSInteger)draggedColumn
 {
-	return -1;
+	return _draggedColumn;
 }
 
 - (CGFloat)draggedDistance
 {
-	return 0.0;
+	return _draggedDistance;
 }
 
 - (NSInteger)resizedColumn
@@ -122,7 +133,8 @@
 			continue;
 		}
 		if (selected) {
-			[[NSColor selectedControlColor] setFill];
+			/* A SELECTED COLUMN IS A SELECTION, so it wears the platform's accent like every other one. */
+			[[NSColor cg_accentColor] setFill];
 			[[NSBezierPath bezierPathWithRect:rect] fill];
 		}
 		if (cell != nil) {
@@ -156,6 +168,9 @@
 	_pressedColumn = column;
 	_resizedColumn = -1;
 	_resizing = NO;
+	_draggedColumn = -1;
+	_draggedDistance = 0.0;
+	_didDrag = NO;
 	if (column < 0 || _tableView == nil) {
 		return;
 	}
@@ -169,6 +184,19 @@
 		_resizeStartWidth = [[[_tableView tableColumns] objectAtIndex:(NSUInteger)column] width];
 		[self setNeedsDisplay:YES];
 		return;
+	}
+	/* A PRESS ON THE BODY OF A HEADER IS A REORDER CANDIDATE. The initial `toColumn:-1` is Apple's question: it asks
+	 * whether this column may be dragged AT ALL. A delegate that says no still gets the click and the sort below. */
+	if ([_tableView allowsColumnReordering]) {
+		BOOL allowed = YES;
+
+		if ([[_tableView delegate] respondsToSelector:@selector(tableView:shouldReorderColumn:toColumn:)]) {
+			allowed = [[_tableView delegate] tableView:_tableView shouldReorderColumn:column toColumn:-1];
+		}
+		if (allowed) {
+			_draggedColumn = column;
+			_dragStartX = point.x;
+		}
 	}
 	if ([_tableView delegate] != nil &&
 	    [[_tableView delegate] respondsToSelector:@selector(tableView:mouseDownInHeaderOfTableColumn:)]) {
@@ -188,10 +216,41 @@
 	NSTableColumn *column;
 	CGFloat width;
 
-	if (!_resizing || _resizedColumn < 0 || _tableView == nil) {
+	if (_tableView == nil) {
 		return;
 	}
 	point = [self convertPoint:[event locationInWindow] fromView:nil];
+	if (!_resizing && _draggedColumn >= 0) {
+		NSInteger target;
+
+		_draggedDistance = point.x - _dragStartX;
+		if (fabs((double)_draggedDistance) < AG_HEADER_REORDER_THRESHOLD) {
+			return;
+		}
+		target = [self columnAtPoint:point];
+		if (target < 0) {
+			target = (point.x < 0.0) ? 0 : [_tableView numberOfColumns] - 1;
+		}
+		if (target != _draggedColumn && target >= 0 && target < [_tableView numberOfColumns]) {
+			BOOL allowed = YES;
+
+			if ([[_tableView delegate] respondsToSelector:
+					 @selector(tableView:shouldReorderColumn:toColumn:)]) {
+				allowed = [[_tableView delegate] tableView:_tableView
+							shouldReorderColumn:_draggedColumn toColumn:target];
+			}
+			if (allowed) {
+				[_tableView moveColumn:_draggedColumn toColumn:target];
+				_draggedColumn = target;
+				_didDrag = YES;
+				[self setNeedsDisplay:YES];
+			}
+		}
+		return;
+	}
+	if (!_resizing || _resizedColumn < 0) {
+		return;
+	}
 	columns = [_tableView tableColumns];
 	if ((NSUInteger)_resizedColumn >= [columns count]) {
 		return;
@@ -227,9 +286,28 @@
 				[[_tableView delegate] tableViewColumnDidResize:note];
 			}
 			[[NSNotificationCenter defaultCenter] postNotification:note];
+			[_tableView cg_saveAutosave];
 		}
 		return;
 	}
+	if (_draggedColumn >= 0 && _didDrag) {
+		NSTableColumn *dragged = ([_tableView numberOfColumns] > 0
+					  && _draggedColumn < [_tableView numberOfColumns])
+					 ? [[_tableView tableColumns] objectAtIndex:(NSUInteger)_draggedColumn] : nil;
+
+		if (dragged != nil && [[_tableView delegate] respondsToSelector:@selector(tableView:didDragTableColumn:)]) {
+			[[_tableView delegate] tableView:_tableView didDragTableColumn:dragged];
+		}
+		_draggedColumn = -1;
+		_draggedDistance = 0.0;
+		_didDrag = NO;
+		_pressedColumn = -1;
+		[self setNeedsDisplay:YES];
+		return;
+	}
+	_draggedColumn = -1;
+	_draggedDistance = 0.0;
+	_didDrag = NO;
 	point = [self convertPoint:[event locationInWindow] fromView:nil];
 	column = [self columnAtPoint:point];
 	if (column >= 0 && column == _pressedColumn && _tableView != nil) {

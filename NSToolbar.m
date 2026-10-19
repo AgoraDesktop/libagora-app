@@ -18,7 +18,7 @@
  * eight points of air on either side. Items that do not fit are CLIPPED rather than moved into an overflow menu;
  * there is no toolbar overflow menu in this tier and `-visibleItems` is the honest answer to what is on screen.
  *
- * **THE BAND IS PART OF THE CHROME, SO IT WEARS THE CHROME'S COLOUR.** It fills with `+windowFrameColor`, the same
+ * **THE BAND IS PART OF THE CHROME, SO IT WEARS THE CHROME'S COLOUR.** It fills with `+cg_chromeFaceColor`, the same
  * ground the title bar is drawn on, and the window's black hairline is at the CONTENT's top edge — below the band —
  * rather than between the title bar and it. That is what makes the toolbar read as the chrome continuing downward:
  * the title bar and the strip are one surface, and the document starts under the one black line. The control inks
@@ -27,6 +27,7 @@
  */
 #import "NSToolbar.h"
 #import "NSToolbarItem.h"
+#import "NSToolbarItemGroup.h"
 #import "NSToolbar_internal.h"
 
 #import "NSApplication.h"
@@ -128,6 +129,9 @@ static void fn_announce(NSToolbar *toolbar, NSString *name, NSToolbarItem *item)
 {
 	NSToolbar *_toolbar;			/* NOT RETAINED: the toolbar owns this view */
 	NSMutableArray *_layoutItems;		/* RETAINED: the items that fit, in draw order */
+	/* THE UNIT EACH DISPLAY ITEM BELONGS TO. A group's subitems are separate display items but one owner, so
+	 * `-visibleItems` can answer the group while drawing and hit testing still address the subitem. */
+	NSMutableArray *_layoutOwners;		/* RETAINED, parallel to `_layoutItems` */
 	NSMutableArray *_itemRects;		/* RETAINED: NSValues, parallel to `_layoutItems` */
 	NSMutableArray *_hostedViews;		/* RETAINED: the custom item views this view has adopted */
 	NSInteger _pressedIndex;		/* index into `_layoutItems`, or -1 */
@@ -217,6 +221,7 @@ static void fn_item_rects(NSToolbarItem *item, NSRect rect, NSToolbarDisplayMode
 	if (self != nil) {
 		_toolbar = toolbar;
 		_layoutItems = [[NSMutableArray alloc] init];
+		_layoutOwners = [[NSMutableArray alloc] init];
 		_itemRects = [[NSMutableArray alloc] init];
 		_hostedViews = [[NSMutableArray alloc] init];
 		_pressedIndex = -1;
@@ -228,6 +233,7 @@ static void fn_item_rects(NSToolbarItem *item, NSRect rect, NSToolbarDisplayMode
 - (void)dealloc
 {
 	[_layoutItems release];
+	[_layoutOwners release];
 	[_itemRects release];
 	[_hostedViews release];
 	[super dealloc];
@@ -304,8 +310,31 @@ static CGFloat fn_standard_width(NSToolbarItem *item, NSToolbarDisplayMode displ
 
 - (void)cg_relayout
 {
-	NSArray *items = [_toolbar items];
+	NSArray *sourceItems = [_toolbar items];
+	NSMutableArray *items = [NSMutableArray array];
+	NSMutableArray *owners = [NSMutableArray array];
 	NSUInteger i, count;
+
+	/* **FLATTEN A GROUP INTO ITS SUBITEMS FOR LAYOUT, BUT KEEP THE GROUP AS THE UNIT.** A group with a custom view
+	 * is one item wearing that view; a group without one contributes its subitems adjacent, and `_layoutOwners`
+	 * remembers which group each displayed subitem belongs to. That is why `-visibleItems` can answer the group
+	 * while the pointer and the painter still name the subitem under the hand. */
+	for (i = 0; i < [sourceItems count]; i++) {
+		NSToolbarItem *source = [sourceItems objectAtIndex:i];
+
+		if ([source isKindOfClass:[NSToolbarItemGroup class]] && [source view] == nil) {
+			NSArray *subitems = [(NSToolbarItemGroup *)source subitems];
+			NSUInteger k;
+
+			for (k = 0; k < [subitems count]; k++) {
+				[items addObject:[subitems objectAtIndex:k]];
+				[owners addObject:source];
+			}
+		} else {
+			[items addObject:source];
+			[owners addObject:source];
+		}
+	}
 	CGFloat width = [self bounds].size.width;
 	CGFloat height = [self bounds].size.height;
 	CGFloat fixed = 2.0 * fn_TOOLBAR_EDGE;
@@ -315,11 +344,13 @@ static CGFloat fn_standard_width(NSToolbarItem *item, NSToolbarDisplayMode displ
 	NSMutableArray *wantedViews = [[NSMutableArray alloc] init];
 
 	[_layoutItems removeAllObjects];
+	[_layoutOwners removeAllObjects];
 	[_itemRects removeAllObjects];
 	/* A VIEW THAT HAS NOT BEEN GIVEN A WIDTH YET CANNOT DECIDE WHAT FITS. The window sets the frame before drawing;
 	 * a toolbar asked for `-visibleItems` before attachment answers every item, which is the useful answer. */
 	if (width <= 0.0) {
 		[_layoutItems addObjectsFromArray:items];
+		[_layoutOwners addObjectsFromArray:owners];
 		for (i = 0; i < [items count]; i++) {
 			[_itemRects addObject:[NSValue valueWithRect:NSZeroRect]];
 		}
@@ -374,6 +405,7 @@ static CGFloat fn_standard_width(NSToolbarItem *item, NSToolbarDisplayMode displ
 			continue;
 		}
 		[_layoutItems addObject:item];
+		[_layoutOwners addObject:[owners objectAtIndex:i]];
 		{
 			CGFloat itemHeight = height;
 			CGFloat itemY = 0.0;
@@ -444,7 +476,17 @@ static CGFloat fn_standard_width(NSToolbarItem *item, NSToolbarDisplayMode displ
 
 - (NSArray *)cg_visibleItems
 {
-	return [NSArray arrayWithArray:_layoutItems];
+	NSMutableArray *visible = [NSMutableArray array];
+	NSUInteger i;
+
+	for (i = 0; i < [_layoutOwners count]; i++) {
+		id owner = [_layoutOwners objectAtIndex:i];
+
+		if ([visible count] == 0 || [visible lastObject] != owner) {
+			[visible addObject:owner];
+		}
+	}
+	return [NSArray arrayWithArray:visible];
 }
 
 - (BOOL)isFlipped
@@ -471,11 +513,12 @@ static CGFloat fn_standard_width(NSToolbarItem *item, NSToolbarDisplayMode displ
 	if (c == NULL) {
 		return;
 	}
-	/* **THE BAND IS THE CHROME'S GROUND.** `+windowFrameColor` is the colour the title bar is drawn on, so the strip
+	/* **THE BAND IS THE CHROME'S SURFACE, IN THE CHROME'S OWN COLOUR.** `+cg_chromeFaceColor` is the colour the title
+	 * bar above it is filled with, so the strip
 	 * reads as that surface continuing downward rather than as a control panel placed under it. The line that ends
 	 * the chrome is `NSWindow`'s black hairline at the content's top edge, drawn by the chrome painter — not here,
 	 * because it belongs to the whole chrome and not to this view. */
-	CGContextSetFillColorWithColor(c, [[NSColor windowFrameColor] CGColor]);
+	CGContextSetFillColorWithColor(c, [[NSColor cg_chromeFaceColor] CGColor]);
 	CGContextFillRect(c, CGRectMake(0.0, 0.0, bounds.size.width, bounds.size.height));
 
 	for (i = 0; i < [_layoutItems count]; i++) {
@@ -502,10 +545,14 @@ static CGFloat fn_standard_width(NSToolbarItem *item, NSToolbarDisplayMode displ
 			NSRect plate = NSInsetRect(rect, 3.0, 4.0);
 			NSBezierPath *path = [NSBezierPath bezierPathWithRoundedRect:plate xRadius:4.0 yRadius:4.0];
 
+			/* **AND THE CHIP IS THE PLATFORM'S ACCENT, THE SAME ONE A PRESSED BUTTON AND A MENU'S CHIP WEAR.** The
+			 * pressed item takes it whole; a SELECTED item — a mode the toolbar is reporting rather than a press —
+			 * takes it at just over half, which is the pale wash the era's blue was doing here. `+selectedControlColor`
+			 * was a second blue in the same window as everything else's accent. */
 			if (active && (NSInteger)i == _pressedIndex) {
-				[[NSColor selectedControlColor] setFill];
+				[[NSColor cg_accentColor] setFill];
 			} else if (selected) {
-				[[[NSColor selectedControlColor] colorWithAlphaComponent:0.55] setFill];
+				[[[NSColor cg_accentColor] colorWithAlphaComponent:0.55] setFill];
 			} else {
 				[[NSColor controlHighlightColor] setFill];
 			}

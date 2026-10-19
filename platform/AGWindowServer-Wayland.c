@@ -1499,6 +1499,20 @@ void AGWindowSetPointerGrab(AGWindow *window, int grab)
 	}
 }
 
+void AGWindowSetPointerCapture(AGWindow *window, int capture)
+{
+	if (window == NULL) {
+		return;
+	}
+	/* Nothing is remembered here, for the same reason the fallback remembers nothing: a compositor without
+	 * `agora_shell` has no door for this, and a client that recorded the request would believe it held a pointer
+	 * the compositor never gave it. */
+	if (window->agora != NULL) {
+		agora_window_set_pointer_capture(window->agora, capture ? 1 : 0);
+		wl_display_flush(window->server->display);
+	}
+}
+
 /* **THE ONE KIND OF WINDOW THE SERVER PLACES, AND THE DOOR IS A KIND RATHER THAN A FRAME.** `NSStatusItem` says
  * how long its item is and nothing about where it goes, because an application cannot know what else is in the
  * status bar. So the width is what is sent — and the frame this layer remembers is left alone, so that a client
@@ -1534,6 +1548,14 @@ void AGWindowRaise(AGWindow *window)
 {
 	if (window != NULL && window->agora != NULL) {
 		agora_window_raise(window->agora);
+		wl_display_flush(window->server->display);
+	}
+}
+
+void AGWindowLower(AGWindow *window)
+{
+	if (window != NULL && window->agora != NULL) {
+		agora_window_lower(window->agora);
 		wl_display_flush(window->server->display);
 	}
 }

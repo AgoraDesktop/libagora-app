@@ -286,11 +286,24 @@ int main(void)
 		check(content->keyDowns == before, "and NOT as a key down");
 		check((content->lastModifiers & NSShiftKeyMask) != 0, "and the flag it carries is the shift bit");
 
-		/* 3. A CLICK GOES TO THE VIEW UNDER THE POINTER. */
+		/* **3. A CLICK IS ALSO WINDOW MANAGEMENT: it activates the application, makes the clicked window key and
+		 * main, and asks for it to be frontmost.** Deactivating first makes the activation half observable even in
+		 * a headless run where the seat has already delivered a keyboard-enter. Before this door was fixed, the
+		 * click wrote the application's two ivars and left `-isKeyWindow`/`-isMainWindow` NO. */
+		[application deactivate];
+		[window resignKeyWindow];
+		[window resignMainWindow];
+		check(![application isActive], "the application is INACTIVE before the click");
+		check(![window isKeyWindow] && ![window isMainWindow], "and the window is neither key nor main");
 		event = click_at_content_point(window, 60.0, 30.0);	/* inside `inner` */
 		deliver(application, window, &event);
 		check(inner->mouseDowns == 1, "a click lands on the SUBVIEW it is over");
 		check(content->mouseDowns == 0, "and not on the content view behind it");
+		check([application isActive], "and the click ACTIVATES the application");
+		check([application keyWindow] == window && [window isKeyWindow],
+		      "the clicked window becomes KEY, and the application agrees");
+		check([application mainWindow] == window && [window isMainWindow],
+		      "and MAIN, through the doors that announce it");
 
 		/* 4. AND A VIEW THAT DOES NOT HANDLE IT BUBBLES UP THE CHAIN. */
 		before = content->mouseDowns;

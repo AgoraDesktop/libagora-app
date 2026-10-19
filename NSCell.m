@@ -1674,12 +1674,14 @@ static const NSSize FN_CELL_NO_OPINION = { 10000.0, 10000.0 };
 {
 	/* **THE FACE, THEN THE CONTENTS — APPLE'S SPLIT, IN APPLE'S ORDER.** A bordered or bezeled cell paints its border
 	 * and its background here; everything else belongs to the interior below, which is why a subclass that changes
-	 * only the face overrides THIS door and inherits the other. THE HIGHLIGHTED STATE DARKENS THE FACE rather than
-	 * changing its colour, which is the Mac's answer for a button being pressed. */
+	 * only the face overrides THIS door and inherits the other. THE HIGHLIGHTED STATE TAKES THE PLATFORM'S ACCENT,
+	 * which is what "this control is being used" means everywhere in this tier — the same accent a pressed button, a
+	 * menu's chip, a slider's fill and a selection wear. (This said the state DARKENS the face rather than changing
+	 * its colour, which was never what the line below did: it swapped the face for the era's blue.) */
 	if (_bezeled) {
 		NSBezierPath *face = [NSBezierPath bezierPathWithRoundedRect:cellFrame xRadius:4.0 yRadius:4.0];
 
-		[(_highlighted ? [NSColor selectedControlColor] : [NSColor controlColor]) setFill];
+		[(_highlighted ? [NSColor cg_accentColor] : [NSColor controlColor]) setFill];
 		[face fill];
 		[[NSColor controlDarkShadowColor] setStroke];
 		[face setLineWidth:1.0];

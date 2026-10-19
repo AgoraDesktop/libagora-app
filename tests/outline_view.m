@@ -211,6 +211,73 @@ static void expect_rows(NSOutlineView *outline, NSInteger rows, const char *what
 	check([outline numberOfRows] == rows, what);
 }
 
+/* **THE TRIANGLE'S MIDDLE AND THE LINE'S MIDDLE, IN THE SAME ROW AND THE SAME RENDER.**
+ *
+ * The claim is the one a person reads: a closed disclosure triangle points at the middle of the line of text beside
+ * it. Both are measured as INK bands — the triangle's in the left gutter, the text's in the cell — and compared with
+ * each other, so the check does not depend on where either one's box is.
+ *
+ * It runs in BOTH CTM directions because a bitmap's own context is y-down (MEASURED: d = -1) while the
+ * translate-and-scale the ink test above applies makes it y-up, and a table row's text and its triangle must agree in
+ * both. Device y is view y in the y-up case; the y-down case is mirrored about the image. */
+static int row_ink_centres(NSOutlineView *outline, BOOL flip, int row,
+			   double *triangleOut, double *textOut)
+{
+	int w = (int)[outline frame].size.width;
+	int h = (int)[outline frame].size.height;
+	NSRect rowRect = [outline rectOfRow:row];
+	NSBitmapImageRep *rep = [[NSBitmapImageRep alloc] initWithBitmapDataPlanes:NULL pixelsWide:w
+		pixelsHigh:h bitsPerSample:8 samplesPerPixel:4 hasAlpha:YES isPlanar:NO
+		colorSpaceName:NSCalibratedRGBColorSpace bytesPerRow:w * 4 bitsPerPixel:32];
+	NSGraphicsContext *ctx = [NSGraphicsContext graphicsContextWithBitmapImageRep:rep];
+	double triFirst = -1.0, triLast = -1.0, textFirst = -1.0, textLast = -1.0;
+	int y0, y1, y, x, found = 0;
+
+	[NSGraphicsContext setCurrentContext:ctx];
+	[[NSColor whiteColor] setFill];
+	[[NSBezierPath bezierPathWithRect:NSMakeRect(0.0, 0.0, (CGFloat)w, (CGFloat)h)] fill];
+	if (flip) {
+		CGContextRef cg = (CGContextRef)[ctx graphicsPort];
+
+		CGContextTranslateCTM(cg, 0.0, (CGFloat)h);
+		CGContextScaleCTM(cg, 1.0, -1.0);
+	}
+	[outline displayRect:[outline bounds]];
+	y0 = flip ? (int)NSMinY(rowRect) : h - (int)NSMaxY(rowRect) - 1;
+	y1 = flip ? (int)NSMaxY(rowRect) - 1 : h - (int)NSMinY(rowRect) - 1;
+	for (y = y0; y <= y1; y++) {
+		for (x = 2; x < 12; x++) {
+			NSColor *pixel = [rep colorAtX:x y:y];
+
+			if (pixel != nil && [pixel redComponent] < 0.4 && [pixel greenComponent] < 0.4
+			    && [pixel blueComponent] < 0.4) {
+				if (triFirst < 0.0) { triFirst = y; }
+				triLast = y;
+				break;
+			}
+		}
+		for (x = 16; x < 140; x++) {
+			NSColor *pixel = [rep colorAtX:x y:y];
+
+			if (pixel != nil && [pixel redComponent] < 0.4 && [pixel greenComponent] < 0.4
+			    && [pixel blueComponent] < 0.4) {
+				if (textFirst < 0.0) { textFirst = y; }
+				textLast = y;
+				break;
+			}
+		}
+	}
+	[rep release];
+	[NSGraphicsContext setCurrentContext:nil];
+	if (triFirst < 0.0 || textFirst < 0.0) {
+		return 0;
+	}
+	*triangleOut = flip ? (triFirst + triLast) / 2.0 : (double)h - 1.0 - (triFirst + triLast) / 2.0;
+	*textOut = flip ? (textFirst + textLast) / 2.0 : (double)h - 1.0 - (textFirst + textLast) / 2.0;
+	found = 1;
+	return found;
+}
+
 int main(void)
 {
 	NSApplication *application = [NSApplication sharedApplication];
@@ -356,6 +423,18 @@ int main(void)
 		check(ink > 0, "the first row draws its disclosure and its value");
 		check(probe->willDisplay > 0, "the outline delegate was asked to display cells");
 		[rep release];
+		{
+			/* THE CLAIM A PERSON READS: a closed triangle points at the middle of the line beside it. A is row 0
+			 * and is collapsed here, so its disclosure points right. Both render directions are measured. */
+			double triUp = 0.0, textUp = 0.0, triDown = 0.0, textDown = 0.0;
+			int haveUp = row_ink_centres(outline, YES, 0, &triUp, &textUp);
+			int haveDown = row_ink_centres(outline, NO, 0, &triDown, &textDown);
+
+			check(haveUp && fabs(triUp - textUp) < 1.5,
+			      "a y-up render: the closed triangle's middle is the line's middle");
+			check(haveDown && fabs(triDown - textDown) < 1.5,
+			      "and a y-down one (a flipped view's own CTM) agrees with it");
+		}
 	}
 
 	[outline release];

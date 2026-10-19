@@ -88,6 +88,9 @@ static NSBitmapImageRep *draw_chrome(NSWindow *w)
  * by moving the pointer there; this is the door the pointer's motion calls. */
 @interface NSWindow (APPKITChromeThemeTest)
 - (void)cg_updateTrackingForPoint:(NSPoint)windowPoint;
+/* WHETHER THE NEXT PASS WILL PAINT THE WINDOW — the flag a key-state change has to set, and the only way an
+ * offscreen probe can see that it did. */
+- (BOOL)cg_needsDisplay;
 @end
 
 /* **THE ABSOLUTE POINTER, WHICH ONLY A COMPOSITOR CAN SUPPLY AND ONLY A DRAG READS.** Declared so the offscreen
@@ -197,6 +200,18 @@ int main(void)
 			{
 				NSBitmapImageRep *rep;
 
+				/* **THE STATE CHANGE HAS TO STALE THE CHROME, NOT THE POINTER'S NEXT MOTION.** The stoplights draw
+				 * their active art from `-isKeyWindow`; before this door was fixed the window kept the old ink until a
+				 * hover happened to invalidate it. */
+				if ([w isKeyWindow]) {
+					[w resignKeyWindow];
+				}
+				[w setNeedsDisplay:NO];
+				[w makeKeyWindow];
+				check([w cg_needsDisplay], "making a window key marks its chrome for a repaint");
+				[w setNeedsDisplay:NO];
+				[w resignKeyWindow];
+				check([w cg_needsDisplay], "and resigning marks it too");
 				[w makeKeyWindow];
 				rep = draw_chrome(w);
 				check([w isKeyWindow] && is_rgb(at_win(rep, close_x() + s_buttonW / 2, y), 1.0, 0.0, 0.0),
@@ -280,18 +295,22 @@ int main(void)
 				[rep release];
 			}
 
-			/* 8. **AND THE BLACK HAIRLINE AT THE CONTENT'S TOP.** One black point along the TOP row of the CONTENT,
-			 * full width — the line where the chrome ends. It is the row BELOW the strip because a theme's buttons fill
-			 * the strip, so a line on its last row would cut across the buttons' bottoms; with a toolbar attached the
-			 * same row is below the BAND, which is why the chrome and the toolbar are one surface. */
+			/* 8. **AND THE HAIRLINE AT THE CONTENT'S TOP.** One point of the CONTROL BEZEL'S GREY
+			 * (`+controlDarkShadowColor`) along the TOP row of the CONTENT, full width — the line where the chrome
+			 * ends. It is the row BELOW the strip because a theme's buttons fill the strip, so a line on its last row
+			 * would cut across the buttons' bottoms; with a toolbar attached the same row is below the BAND, which is
+			 * why the chrome and the toolbar are one surface. It was black until the chrome became one surface: with
+			 * no second colour there it is the chrome's own BOTTOM EDGE, so it is drawn in the ink this tier uses for
+			 * every other control's edge. */
 			{
 				NSBitmapImageRep *rep = draw_chrome(w);
+				double edge = [[NSColor controlDarkShadowColor] redComponent];
 
-				check(is_rgb(at_win(rep, 5, CH - 1), 0.0, 0.0, 0.0)
-				      && is_rgb(at_win(rep, 50, CH - 1), 0.0, 0.0, 0.0)
-				      && is_rgb(at_win(rep, CW - 5, CH - 1), 0.0, 0.0, 0.0),
-				      "a BLACK HAIRLINE runs the full width at the content's top edge");
-				check(!is_rgb(at_win(rep, 50, CH - 2), 0.0, 0.0, 0.0),
+				check(is_rgb(at_win(rep, 5, CH - 1), edge, edge, edge)
+				      && is_rgb(at_win(rep, 50, CH - 1), edge, edge, edge)
+				      && is_rgb(at_win(rep, CW - 5, CH - 1), edge, edge, edge),
+				      "a HAIRLINE in the bezel's grey runs the full width at the content's top edge");
+				check(!is_rgb(at_win(rep, 50, CH - 2), edge, edge, edge),
 				      "and it is one point, not a band");
 				[rep release];
 			}

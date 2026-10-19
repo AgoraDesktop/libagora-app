@@ -67,6 +67,71 @@ static NSBitmapImageRep *new_rep(int w, int h)
 		colorSpaceName:NSCalibratedRGBColorSpace bytesPerRow:w * 4 bitsPerPixel:32];
 }
 
+/* **WHERE THE FIRST ROW'S TEXT ACTUALLY LANDS, IN THE VIEW'S OWN Y, FOR A CHOSEN CTM DIRECTION.**
+ *
+ * The claim this measures is the one a person reads off the screen: a cell's line of text is centred on the cell, so
+ * a disclosure triangle centred on the row (or a combo box's chip) points at the middle of the words. It is
+ * measured in BOTH directions because the tabular views are flipped and a plain content view is not, and the first
+ * version of the baseline arithmetic assumed one of them — MEASURED: the y-up copy drew a flipped table's rows one
+ * ascent too high and clipped their tops, while the offscreen render happened to use the direction it assumed.
+ *
+ * `flipped` applies the same translate-and-scale the ink test above uses; without it the context keeps the bitmap's
+ * own y-down CTM, which is what a window's flipped view draws in. The band is returned in view coordinates, so the
+ * two directions are compared against the same number. Returns 0 if no ink was found. */
+static int text_band_in_row(NSTableView *table, BOOL flip, int row, double *centreOut)
+{
+	int w = (int)[table frame].size.width;
+	int h = (int)[table frame].size.height;
+	NSRect rowRect = [table rectOfRow:row];
+	NSBitmapImageRep *rep = new_rep(w, h);
+	NSGraphicsContext *ctx = [NSGraphicsContext graphicsContextWithBitmapImageRep:rep];
+	int deviceFirst = -1, deviceLast = -1;
+	int y0, y1, y;
+
+	[NSGraphicsContext setCurrentContext:ctx];
+	[[NSColor whiteColor] setFill];
+	[[NSBezierPath bezierPathWithRect:NSMakeRect(0.0, 0.0, (CGFloat)w, (CGFloat)h)] fill];
+	if (flip) {
+		CGContextRef cg = (CGContextRef)[ctx graphicsPort];
+
+		CGContextTranslateCTM(cg, 0.0, (CGFloat)h);
+		CGContextScaleCTM(cg, 1.0, -1.0);
+	}
+	[table displayRect:[table bounds]];
+	/* ONLY ROW `row`'S BAND. The bitmap's own context is y-DOWN (MEASURED: d = -1); the translate-and-scale
+	 * turns it into y-up, where device y IS view y, and leaves the unflipped case mirrored about the image. */
+	y0 = flip ? (int)NSMinY(rowRect) : h - (int)NSMaxY(rowRect) - 1;
+	y1 = flip ? (int)NSMaxY(rowRect) - 1 : h - (int)NSMinY(rowRect) - 1;
+	for (y = y0; y <= y1; y++) {
+		int x, dark = 0;
+
+		for (x = 4; x < 60; x++) {
+			NSColor *pixel = [rep colorAtX:x y:y];
+
+			if (pixel != nil && [pixel redComponent] < 0.4 && [pixel greenComponent] < 0.4
+			    && [pixel blueComponent] < 0.4) {
+				dark++;
+			}
+		}
+		if (dark > 0) {
+			if (deviceFirst < 0) {
+				deviceFirst = y;
+			}
+			deviceLast = y;
+		}
+	}
+	[rep release];
+	[NSGraphicsContext setCurrentContext:nil];
+	if (deviceFirst < 0) {
+		return 0;
+	}
+	/* Device y -> view y: identity in the y-up context the flip makes, mirrored in the bitmap's own y-down one. */
+	*centreOut = flip ? ((double)deviceFirst + (double)deviceLast) / 2.0
+			  : (double)h - 1.0 - ((double)deviceFirst + (double)deviceLast) / 2.0;
+	(void)rowRect;
+	return 1;
+}
+
 @interface AGTableProbe : NSObject <NSTableViewDataSource, NSTableViewDelegate>
 {
 @public
@@ -310,8 +375,22 @@ int main(void)
 			}
 		}
 		check(textInk > 0, "the first two rows draw their values as ink");
-		check(eqc([rep colorAtX:100 y:(int)(1.0 * 22.0 + 10.0)], [NSColor selectedControlColor], 0.03),
-		      "the selected row's plate is the selected-control colour");
+		{
+			/* THE SAME ROW, DRAWN IN BOTH CTM DIRECTIONS: the line is centred on the cell either way, which is
+			 * what keeps a triangle (or a chip) centred on the row pointing at the middle of the words. */
+			double rowCentre = NSHeight([table rectOfRow:0]) / 2.0;
+			double up = 0.0, down = 0.0;
+			int haveUp = text_band_in_row(table, YES, 0, &up);
+			int haveDown = text_band_in_row(table, NO, 0, &down);
+
+			printf("  [band] rowCentre=%.2f y-up=%.2f y-down=%.2f\n", rowCentre, up, down);
+			check(haveUp && fabs(up - rowCentre) < 1.5,
+			      "a y-up render centres the row's line on the cell");
+			check(haveDown && fabs(down - rowCentre) < 1.5,
+			      "and a y-down one (a flipped view's own CTM) does too");
+		}
+		check(eqc([rep colorAtX:100 y:(int)(1.0 * 22.0 + 10.0)], [NSColor cg_accentColor], 0.03),
+		      "the selected row's plate is the platform's accent");
 		check(probe->willDisplay > 0, "the delegate was asked to display cells");
 		[rep release];
 	}

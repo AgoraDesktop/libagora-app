@@ -13,8 +13,10 @@
  * A DIVIDER DRAG IS THE HEADER'S OWN GESTURE. The right few points of a column's header begin a resize; the width is
  * clamped by the column's min/max, the table is re-tiled, and the scroll view's header width stays the visible width.
  *
- * Written from `NSTableHeaderView.h` in the MacOSX10.6 SDK (see PROVENANCE.md). Column REORDERING is not in this
- * slice, so `-draggedColumn` answers -1 and `-draggedDistance` answers 0.
+ * A COLUMN DRAG IS THE HEADER'S SECOND GESTURE. A press that misses the divider is a reorder candidate; once the
+ * pointer has travelled past the threshold the column is moved through `-moveColumn:toColumn:`, and the table's
+ * delegate can refuse with `-tableView:shouldReorderColumn:toColumn:`. `-draggedColumn` and `-draggedDistance` report
+ * the gesture while it runs.
  */
 #ifndef APPKIT_NSTABLEHEADERVIEW_H
 #define APPKIT_NSTABLEHEADERVIEW_H
@@ -33,12 +35,17 @@ NS_ASSUME_NONNULL_BEGIN
 	CGFloat _resizeStartX;
 	CGFloat _resizeStartWidth;
 	BOOL _resizing;
+	NSInteger _draggedColumn;
+	CGFloat _draggedDistance;
+	CGFloat _dragStartX;
+	BOOL _didDrag;
 }
 
 - (void)setTableView:(nullable NSTableView *)tableView;
 - (nullable NSTableView *)tableView;
 
-/* THE REORDERING STATE, WHICH THIS SLICE DOES NOT REACH. */
+/* THE REORDERING STATE: the column being dragged, how far the pointer has moved, and whether it has crossed the
+ * threshold that turns the press into a drag. */
 - (NSInteger)draggedColumn;
 - (CGFloat)draggedDistance;
 

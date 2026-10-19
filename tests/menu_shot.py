@@ -47,23 +47,28 @@ def main():
     # THE TOP EDGE FIRST: one row below the bar, the columns that are the panel's brightest shade.
     top_row = BAR_ROWS
     top_cols = [x for x in range(w) if is_panel_top(*px[x, top_row])]
-    # **AND THE BOTTOM BY WALKING DOWN A COLUMN OF THE PANEL'S OWN PADDING.** The panel's rows are exactly the run
-    # of the panel's colour below its top — which is what makes the height a measurement of the PANEL rather than of
-    # wherever its ink happens to be.
+    # **AND THE BOTTOM BY COUNTING ROWS THE PANEL IS STILL IN, NOT BY WALKING ONE COLUMN DOWN.** The panel's rows are
+    # the run of rows below its top that contain the panel's colour at all — which is what makes the height a
+    # measurement of the PANEL rather than of wherever its ink happens to be.
     #
-    # **IT IS A PADDING COLUMN AND NOT THE MIDDLE, AND THAT CHANGED WHEN THE TEXT DID.** The walk went down the
-    # middle while the text was GREY, because grey ink is still neutral and the only thing that stopped it was the
-    # wallpaper. FONT SMOOTHING MADE THE INK COLOURED — three samples to the pixel is what the extra resolution IS —
-    # so a column through a letter now reads a channel split of up to 140 and a "neutral" test stops nine rows in.
-    # The panel's own padding is 2 points wide and no row's ink reaches it: MEASURED, the columns at x=217..220 are
-    # the panel's colour for all 48 rows while x=221 onwards meet the first letterhead.
+    # **THE COLUMN WALK WAS RIGHT UNTIL A WINDOW COULD ROUND ITS CORNERS.** It walked the panel's padding column, one
+    # point inside the panel's left edge — which is EXACTLY the column a rounded corner cuts. MEASURED, once the
+    # compositor clipped windows to rounded corners, that column read 47 rows of 48 at a four-point radius and 12 of
+    # 48 at six; the panel was right the whole time and the probe was measuring the corner.
+    #
+    # A ROW IS THE STURDIER UNIT. Text costs a row its ink but never its whole width — the spaces between the glyphs
+    # are still the panel — and a rounded corner costs it a few pixels at each end, while the row past the panel's
+    # bottom has none of the colour at all. FOUR PIXELS is the floor: a stray antialiased pixel on the wallpaper
+    # cannot extend the panel by a row, and no row of the panel has fewer than four.
     panel = []
     if top_cols:
-        padx = min(top_cols) + 1
+        left, right = min(top_cols), max(top_cols)
         for y in range(top_row, h):
-            if px[padx, y] != PANEL:
+            lit = sum(1 for x in range(left, right + 1) if px[x, y] == PANEL)
+
+            if lit < 4:
                 break
-            panel.extend((x, y) for x in range(min(top_cols), max(top_cols) + 1))
+            panel.extend((x, y) for x in range(left, right + 1))
 
     checks = []
     if not panel:

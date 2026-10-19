@@ -7,7 +7,13 @@
 # The tests link the whole AppKit, whose dependencies live in the install prefix; DT_RUNPATH is NOT inherited
 # by a dependency, so the prefix's lib directory has to be on LD_LIBRARY_PATH for the transitive hops to
 # resolve. The directory comes from an imported target rather than being written down.
-set(_agora_app_test_env "LD_LIBRARY_PATH=$<TARGET_FILE_DIR:Foundation::Foundation>:$<TARGET_FILE_DIR:App>")
+#
+# **AND THE BUILD TREE COMES FIRST, WHICH IS NOT COSMETIC.** The prefix also carries an installed
+# `libagora-app.so`, so with the prefix first every test loaded the INSTALLED AppKit while the executable it
+# had just been linked with — and the source tree it is meant to test — were ignored. MEASURED: a triangle moved
+# four points in `NSOutlineView.m` and rebuilt changed nothing in `appkit-outline-view`, because the test had
+# loaded the prefix's copy; the same was true of a baseline change that the guard checks exist to catch.
+set(_agora_app_test_env "LD_LIBRARY_PATH=$<TARGET_FILE_DIR:App>:$<TARGET_FILE_DIR:Foundation::Foundation>")
 
 # **THE SIBLING'S WINDOW SERVER IS AN OPTION RATHER THAN A REQUIREMENT, AND IT HAS TO BE NAMED BEFORE IT IS USED.**
 # A component's tests must not need another component's build to be present, so the tests that want a compositor of
@@ -96,6 +102,36 @@ add_executable(outline_view outline_view.m)
 target_link_libraries(outline_view PRIVATE App m)
 add_test(NAME appkit-outline-view COMMAND outline_view)
 set_tests_properties(appkit-outline-view PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
+
+# **THE PATH CONTROL: A PATH AS COMPONENT CELLS.** URL decomposition, the component geometry and its middle
+# truncation, the three styles, single/double action and the bar's ink -- offscreen, with a borderless window only
+# as the coordinate root for the double-click event.
+add_executable(path_control path_control.m)
+target_link_libraries(path_control PRIVATE App m)
+add_test(NAME appkit-path-control COMMAND path_control)
+set_tests_properties(appkit-path-control PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
+
+# **THE SEGMENTED CONTROL: A ROW OF BUTTONS THAT ACTS AS ONE CONTROL.** The public forwards, the segment geometry,
+# the three tracking modes, the per-segment storage and the ink -- offscreen, because all of it is geometry and
+# drawing once the cell is handed a control view.
+add_executable(segmented_control segmented_control.m)
+target_link_libraries(segmented_control PRIVATE App m)
+add_test(NAME appkit-segmented-control COMMAND segmented_control)
+set_tests_properties(appkit-segmented-control PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
+
+# **THE TABLE'S OTHER HALF: VARIABLE HEIGHTS, TYPE-SELECT, REORDERING, AUTOSAVE AND EDITING.** Offscreen, with a
+# scroll view and a window for the header's coordinate root and the field editor.
+add_executable(table_advanced table_advanced.m)
+target_link_libraries(table_advanced PRIVATE App m)
+add_test(NAME appkit-table-advanced COMMAND table_advanced)
+set_tests_properties(appkit-table-advanced PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
+
+# **THE SPLIT VIEW: PANES, DIVIDERS, THE DRAG, THE COLLAPSE AND THE DELEGATE.** Offscreen: the geometry, the
+# effective rectangles and the ink need no compositor, and a synthetic press is delivered to the view directly.
+add_executable(split_view split_view.m)
+target_link_libraries(split_view PRIVATE App m)
+add_test(NAME appkit-split-view COMMAND split_view)
+set_tests_properties(appkit-split-view PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
 
 # **THE TABLE: A DATA SOURCE'S ROWS, COLUMNS, HEADER, SELECTION AND INK.** Offscreen: a scroll view, a table and a
 # header are geometry and drawing, and the one window in the probe only supplies a coordinate root for the events.

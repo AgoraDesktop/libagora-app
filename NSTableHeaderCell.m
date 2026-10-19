@@ -73,18 +73,10 @@
 	if (x < NSMinX(cellFrame) + 3.0) {
 		x = NSMinX(cellFrame) + 3.0;
 	}
-	{
-		CGFloat ascender = [font ascender];
-		CGFloat descent = (CGFloat)fabs((double)[font descender]);
-
-		CGContextRef cg = (CGContextRef)[[NSGraphicsContext currentContext] graphicsPort];
-		CGAffineTransform transform = cg != NULL ? CGContextGetCTM(cg) : CGAffineTransformIdentity;
-
-		/* The sign follows the CTM. The header view is drawn in the opposite direction from a table cell in the
-		 * same window; see the measured note in `NSTextFieldCell -drawInteriorWithFrame:`. */
-		baseline = NSMidY(cellFrame) + (transform.d >= 0.0 ? 1.0 : -1.0)
-			   * ((ascender - descent) / 2.0);
-	}
+	/* THE HEADER'S WORD IS CENTRED BY THE BASE CELL'S ONE DOOR — the same one a field, a placeholder and a table
+	 * data cell use, so a header's title and its sort indicator cannot disagree about the middle of the line; see
+	 * `NSTextFieldCell.h` for the measurement and for why the arithmetic is not repeated here. */
+	baseline = [self cg_centredBaselineInFrame:cellFrame font:font];
 	[string drawAtPoint:NSMakePoint(x, baseline) withAttributes:attributes];
 }
 

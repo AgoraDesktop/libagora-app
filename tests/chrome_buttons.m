@@ -332,7 +332,7 @@ int main(void)
 		click_button(application, window, AGChromeButtonHide);
 		check([window isMiniaturized], "a click on the MINIMIZE button miniaturizes the window");
 
-		/* 5. THE PILL PERFORMS NOTHING ON A WINDOW WITH NO TOOLBAR. It is the toolbar toggle, there is nothing attached,
+		/* 5. THE FOURTH MARK PERFORMS NOTHING ON A WINDOW WITH NO TOOLBAR. It is the toolbar toggle, there is nothing attached,
 		 * and the one thing it must not do in the meantime is stand in for another button. */
 		before = [window frame];
 		click_button(application, window, AGChromeButtonMenu);
@@ -340,7 +340,7 @@ int main(void)
 		      && [window frame].origin.x == before.origin.x && [window frame].origin.y == before.origin.y
 		      && [window frame].size.width == before.size.width
 		      && [window frame].size.height == before.size.height,
-		      "a click on the PILL changes nothing — it is the toolbar toggle and this window has no toolbar");
+		      "a click on the TOOLBAR MARK changes nothing — it is the toggle and this window has no toolbar");
 		check([window windowNumber] != -1, "and the window is still here");
 
 		/* 6. THE X ASKS THE DELEGATE, WHICH IS THE DIFFERENCE BETWEEN THE BUTTON AND `-close`. */

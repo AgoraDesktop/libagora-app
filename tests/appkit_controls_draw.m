@@ -31,6 +31,8 @@
 #import <AppKit/NSView.h>
 #import <AppKit/NSButton.h>
 #import <AppKit/NSSlider.h>
+#import <AppKit/NSSegmentedControl.h>
+#import <AppKit/NSPathControl.h>
 #import <AppKit/NSTextField.h>	/* the field CONTROL — a cell, a click, and the window's field editor */
 #import <AppKit/NSCell.h>
 #import <AppKit/NSMenu.h>
@@ -48,6 +50,7 @@
 #import <AppKit/NSTableColumn.h>
 #import <AppKit/NSTableHeaderView.h>
 #import <AppKit/NSOutlineView.h>
+#import <AppKit/NSSplitView.h>
 #import <AppKit/NSClipView.h>
 #import <AppKit/NSColor.h>
 #import <AppKit/NSBezierPath.h>
@@ -69,6 +72,98 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+
+/* **THE PANE'S CARD, WHICH IS THE MOCKUP'S ROUNDED PANEL RATHER THAN A SQUARE SCROLL VIEW.** The split view owns the
+ * gutter and its three rings; a pane that wants the white rounded face draws it itself, exactly as an application's
+ * content view would. The card fills white, strokes the tier's `#BCBCBC` border, insets its content by one point so
+ * the border survives, and CLIPS THE CONTENT to a rounded path in `-displayRect:` — without the clip the content's
+ * square corners paint over the card's rounded ones. */
+@interface AGDemoPaneView : NSView
+{
+	NSView *_content;	/* RETAINED, and also retained by the subview list */
+}
+- (instancetype)initWithFrame:(NSRect)frame content:(NSView *)content;
+- (void)cg_drawBorder;
+@end
+
+@implementation AGDemoPaneView
+
+- (instancetype)initWithFrame:(NSRect)frame content:(NSView *)content
+{
+	self = [super initWithFrame:frame];
+	if (self != nil) {
+		_content = [content retain];
+		[self addSubview:_content];
+		[self cg_layoutContent];
+	}
+	return self;
+}
+
+- (void)dealloc
+{
+	[_content release];
+	[super dealloc];
+}
+
+- (void)cg_layoutContent
+{
+	[_content setFrame:NSInsetRect([self bounds], 1.0, 1.0)];
+}
+
+- (void)setFrame:(NSRect)frame
+{
+	[super setFrame:frame];
+	[self cg_layoutContent];
+}
+
+- (void)resizeSubviewsWithOldSize:(NSSize)oldSize
+{
+	[super resizeSubviewsWithOldSize:oldSize];
+	[self cg_layoutContent];
+}
+
+- (void)drawRect:(NSRect)dirtyRect
+{
+	NSBezierPath *path = [NSBezierPath bezierPathWithRoundedRect:NSInsetRect([self bounds], 0.5, 0.5)
+							     xRadius:5.0 yRadius:5.0];
+
+	(void)dirtyRect;
+	[[NSColor whiteColor] setFill];
+	[path fill];
+}
+
+/* THE BORDER IS DRAWN AFTER THE CONTENT, NOT BEFORE IT. The card's own `-drawRect:` and its content are both clipped
+ * to the INNER rounded path so the content's square corners cannot spill outside the card; drawing the border there
+ * would clip the outer edge away with them. It is stroked on top, outside that clip, which is what makes the rounded
+ * outline the topmost ink in the pane. */
+- (void)cg_drawBorder
+{
+	NSBezierPath *path = [NSBezierPath bezierPathWithRoundedRect:NSInsetRect([self bounds], 0.5, 0.5)
+							     xRadius:5.0 yRadius:5.0];
+
+	[[NSColor controlDarkShadowColor] setStroke];
+	[path setLineWidth:1.0];
+	[path stroke];
+}
+
+- (void)displayRect:(NSRect)rect
+{
+	CGContextRef cg = [[NSGraphicsContext currentContext] CGContext];
+	NSBezierPath *clip = [NSBezierPath bezierPathWithRoundedRect:NSInsetRect([self bounds], 1.0, 1.0)
+							     xRadius:4.0 yRadius:4.0];
+
+	if (cg != NULL) {
+		CGContextSaveGState(cg);
+	}
+	[clip addClip];
+	[super displayRect:rect];
+	if (cg != NULL) {
+		CGContextRestoreGState(cg);
+	}
+	[self cg_drawBorder];
+}
+
+@end
 
 /* **THE TARGET BOTH HALVES POINT AT.** A menu item's action, a button's action and a validator all end here, which
  * is what makes the checkbox and the View menu one piece of state rather than two that look alike. */
@@ -367,6 +462,24 @@ static void fn_playground_fill(NSTextView *view)
 {
 	(void)tableView;
 	return [[_rows objectAtIndex:(NSUInteger)row] objectForKey:[tableColumn identifier]];
+}
+
+/* **THE DEMONSTRATION WEARS THE TABLE'S OTHER HALF TOO.** Rows vary in height so the row geometry is visible, and
+ * the name column answers the type-select string so typing a prefix selects a row. */
+- (CGFloat)tableView:(NSTableView *)tableView heightOfRow:(NSInteger)row
+{
+	(void)tableView;
+	return 20.0 + (CGFloat)(row % 3) * 6.0;
+}
+
+- (NSString *)tableView:(NSTableView *)tableView
+   typeSelectStringForTableColumn:(NSTableColumn *)tableColumn row:(NSInteger)row
+{
+	(void)tableView;
+	if ([[tableColumn identifier] isEqual:@"name"]) {
+		return [[_rows objectAtIndex:(NSUInteger)row] objectForKey:@"name"];
+	}
+	return nil;
 }
 
 @end
@@ -770,15 +883,20 @@ static void fn_playground_fill(NSTextView *view)
 	[_playground orderFront:nil];
 }
 
-/* **A WINDOW FOR THE TWO DATA VIEWS: THE OUTLINE ON THE LEFT AND THE TABLE ON THE RIGHT.** They are in separate
- * scroll views rather than one split view because `NSSplitView` is the next slice; the two panels still show the
- * real classes and each one's own header. `--data` opens this window at startup so a screenshot can find it. */
+/* **A WINDOW FOR THE TWO DATA VIEWS: THE OUTLINE ON THE LEFT AND THE TABLE ON THE RIGHT, IN ONE SPLIT VIEW.** The
+ * divider is the real `NSSplitView` — the class this demonstration used to say was the next slice — so the panels
+ * can be resized against each other and the geometry is the platform's rather than two frames placed by hand; the
+ * two panels still show the real classes and each one's own header. `--data` opens this window at startup so a
+ * screenshot can find it. */
 - (void)showDataViews:(id)sender
 {
 	NSRect visible;
 	NSRect content;
 	NSWindow *w;
 	NSView *root;
+	NSSplitView *splitView;
+	AGDemoPaneView *outlineCard;
+	AGDemoPaneView *tableCard;
 	NSScrollView *outlineScroll;
 	NSOutlineView *outline;
 	NSTableColumn *outlineName;
@@ -843,7 +961,7 @@ static void fn_playground_fill(NSTextView *view)
 	[tableLabel release];
 
 	outlineScroll = [[NSScrollView alloc] initWithFrame:NSMakeRect(20.0, 20.0, 410.0, 450.0)];
-	[outlineScroll setBorderType:NSLineBorder];
+	[outlineScroll setBorderType:NSNoBorder];
 	[outlineScroll setHasVerticalScroller:YES];
 	[outlineScroll setHasHorizontalScroller:YES];
 	outline = [[NSOutlineView alloc] initWithFrame:NSMakeRect(0.0, 0.0, 410.0, 450.0)];
@@ -866,7 +984,7 @@ static void fn_playground_fill(NSTextView *view)
 	[outline selectRowIndexes:[NSIndexSet indexSetWithIndex:1] byExtendingSelection:NO];
 
 	tableScroll = [[NSScrollView alloc] initWithFrame:NSMakeRect(450.0, 20.0, 430.0, 450.0)];
-	[tableScroll setBorderType:NSLineBorder];
+	[tableScroll setBorderType:NSNoBorder];
 	[tableScroll setHasVerticalScroller:YES];
 	[tableScroll setHasHorizontalScroller:YES];
 	table = [[NSTableView alloc] initWithFrame:NSMakeRect(0.0, 0.0, 430.0, 450.0)];
@@ -888,8 +1006,19 @@ static void fn_playground_fill(NSTextView *view)
 	[tableScroll setDocumentView:table];
 	[table reloadData];
 	[table selectRowIndexes:[NSIndexSet indexSetWithIndex:2] byExtendingSelection:NO];
-	[root addSubview:outlineScroll];
-	[root addSubview:tableScroll];
+	/* THE SPLIT VIEW IS THE PANES' SUPERVIEW, so the two scroll views are added to it rather than to the root. Its
+	 * frame is the pair's shared area and the thin divider is the one between them. */
+	splitView = [[NSSplitView alloc] initWithFrame:NSMakeRect(20.0, 20.0, 860.0, 450.0)];
+	[splitView setVertical:YES];
+	[splitView setDividerStyle:NSSplitViewDividerStylePaneSplitter];
+	outlineCard = [[AGDemoPaneView alloc] initWithFrame:NSMakeRect(0.0, 0.0, 410.0, 450.0)
+						    content:outlineScroll];
+	tableCard = [[AGDemoPaneView alloc] initWithFrame:NSMakeRect(0.0, 0.0, 450.0, 450.0)
+						  content:tableScroll];
+	[splitView addSubview:outlineCard];
+	[splitView addSubview:tableCard];
+	[splitView adjustSubviews];
+	[root addSubview:splitView];
 	[w setContentView:root];
 	[w setTitle:@"Table & Outline"];
 	[w setReleasedWhenClosed:NO];
@@ -897,9 +1026,11 @@ static void fn_playground_fill(NSTextView *view)
 	_dataWindow = w;
 	_outlineSource = [outlineSource retain];
 	_tableSource = [tableSource retain];
-	fprintf(stderr, "controls: data window — outline %.0fx%.0f, table %.0fx%.0f, %lu outline rows, %lu table rows\n",
+	fprintf(stderr, "controls: data window — outline %.0fx%.0f, table %.0fx%.0f, split %.0f/%.0f, %lu outline rows, "
+		"%lu table rows\n",
 		[outlineScroll frame].size.width, [outlineScroll frame].size.height,
 		[tableScroll frame].size.width, [tableScroll frame].size.height,
+		[outlineScroll frame].size.width, [tableScroll frame].size.width,
 		(unsigned long)[outline numberOfRows], (unsigned long)[table numberOfRows]);
 	[outline release];
 	[table release];
@@ -910,6 +1041,9 @@ static void fn_playground_fill(NSTextView *view)
 	[tableSize release];
 	[outlineScroll release];
 	[tableScroll release];
+	[outlineCard release];
+	[tableCard release];
+	[splitView release];
 	[outlineSource release];
 	[tableSource release];
 	[root release];
@@ -1080,6 +1214,8 @@ int main(int argc, char **argv)
 		NSButton *readout;
 		NSSlider *slider;
 		NSSlider *plain;
+		NSSegmentedControl *segmented;
+		NSPathControl *pathBar;
 		/* **AND A TEXT FIELD, WHICH IS THE ONE CONTROL IN THIS WINDOW THAT TAKES THE KEYBOARD.** It is focused below,
 		 * which opens its editor, so a keystroke goes to the field rather than nowhere: the window sends KEY EVENTS to its
 		 * first responder, and a window with none has nobody to type at. (The responder that ends up holding the keyboard
@@ -1207,6 +1343,24 @@ int main(int argc, char **argv)
 		 *
 		 * THE SECOND ITEM IS THE ONE SELECTED, so the window opens with the button naming a row rather than wearing
 		 * an empty title — a popup whose title is blank looks like a button that failed to load. */
+		/* **AND A SEGMENTED CONTROL, THE FINDER'S VIEW SWITCHER.** Three segments, the first selected, in the free
+		 * room above the pop-up row. It is a real NSSegmentedControl: the plate, the separators and the labels are the
+		 * cell's, and clicking a segment moves the selection through the control's ordinary tracking loop. */
+		segmented = [[NSSegmentedControl alloc] initWithFrame:NSMakeRect(30, 340, 260, 24)];
+		[segmented setSegmentCount:3];
+		[segmented setLabel:@"Icon" forSegment:0];
+		[segmented setLabel:@"List" forSegment:1];
+		[segmented setLabel:@"Column" forSegment:2];
+		[segmented setSelectedSegment:0];
+		[segmented setTarget:controller];
+		[segmented setAction:@selector(noop:)];
+		/* **AND THE PATH BAR, THE FINDER'S OTHER PIECE OF NAVIGATION CHROME.** A real NSPathControl in the
+		 * navigation-bar style: the URL becomes component cells, and the chevrons between them are the cell's. */
+		pathBar = [[NSPathControl alloc] initWithFrame:NSMakeRect(30, 305, 350, 24)];
+		[pathBar setPathStyle:NSPathStyleNavigationBar];
+		[pathBar setURL:[NSURL fileURLWithPath:@"/System/Library/CoreServices"]];
+		[pathBar setTarget:controller];
+		[pathBar setAction:@selector(noop:)];
 		popup = [[NSPopUpButton alloc] initWithFrame:NSMakeRect(30, 268, 0, 0) pullsDown:NO];
 		choices = [[NSMenu alloc] initWithTitle:@"Choices"];
 		[choices addItemWithTitle:@"First choice" action:NULL keyEquivalent:@""];
@@ -1223,6 +1377,8 @@ int main(int argc, char **argv)
 		[popup setTarget:controller];
 		[popup setAction:@selector(choiceMade:)];
 		[content addSubview:popup];
+		[content addSubview:segmented];
+		[content addSubview:pathBar];
 		/* **AND THE COMBO BOX GOES BESIDE IT, WHICH IS WHERE THE SAMPLE PUTS THE PAIR.** The gallery draws these two on
 		 * adjacent rows and this window puts them on ONE, because the whole difference between them is one mark and a
 		 * person should be able to see both chips without moving their eye: the pop-up's carries two triangles knocked
@@ -1340,7 +1496,7 @@ int main(int argc, char **argv)
 				fprintf(stderr, "controls: chrome theme = %s (%g-point strip)\n",
 					[[theme directory] UTF8String], (double)[theme titleBarHeight]);
 			} else {
-				fprintf(stderr, "controls: no chrome theme — drawing Agora's own marks\n");
+				fprintf(stderr, "controls: no chrome theme — drawing the chrome's own bar and marks\n");
 			}
 		}
 		if (seconds > 0) {

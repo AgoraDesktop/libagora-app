@@ -76,6 +76,12 @@
 - (void)cg_addWindow:(NSWindow *)aWindow;
 - (void)cg_removeWindow:(NSWindow *)aWindow;
 - (void)cg_windowClosed:(NSWindow *)aWindow;
+/* **THE TWO STATES A CLICK MOVES, KEPT IN ONE PLACE.** `NSWindow` owns the per-window key/main flags and posts
+ * the notifications; the application owns `-keyWindow`/`-mainWindow`. These doors are how the window tells the
+ * application which one is which, so a `-makeKeyWindow` from a caller and a click in `-sendEvent:` cannot leave
+ * the two answers disagreeing. */
+- (void)cg_setKeyWindow:(NSWindow *)aWindow;
+- (void)cg_setMainWindow:(NSWindow *)aWindow;
 @end
 
 /* AND THE ONE PIECE OF PRIVATE STATE THAT CROSSES A FILE BOUNDARY: `-preventWindowOrdering` records a request and
@@ -84,6 +90,13 @@
  * pattern rather than exporting the ivar. */
 @interface NSApplication (APPKITWindowOrdering)
 - (BOOL)cg_preventsWindowOrdering;
+@end
+
+/* **THE ONE-WINDOW RULE, AS A PRIVATE DOOR.** An application that is active must have a key window, and an
+ * application with one usable window must not leave that window looking inactive just because nobody clicked it
+ * yet. This is what `-activateIgnoringOtherApps:`, `-cg_addWindow:` and `-cg_removeWindow:` consult. */
+@interface NSApplication (APPKITKeyWindow)
+- (void)cg_ensureKeyAndMainWindow;
 @end
 
 /* AND THE SHEET SEAM, WHICH CROSSES THE OTHER WAY: the doors that begin and end a session are this class's, the
@@ -282,6 +295,62 @@ BOOL NSApplicationLoad(void)
 	}
 }
 
+- (void)cg_setKeyWindow:(NSWindow *)aWindow
+{
+	_keyWindow = aWindow;
+}
+
+- (void)cg_setMainWindow:(NSWindow *)aWindow
+{
+	_mainWindow = aWindow;
+}
+
+/* **AN ACTIVE APPLICATION ALWAYS HAS A KEY WINDOW, AND A SINGLE WINDOW IS ALWAYS THAT ONE.** `-cg_addWindow:`
+ * used to record the application's two pointers and stop there, so a window that had never been clicked answered
+ * `-isKeyWindow` NO and drew its chrome inactive even when it was the only window on the screen. The candidate is
+ * the remembered window when it can still take the state, otherwise the first visible window that can. A window
+ * that refuses (the desktop, a borderless panel) is skipped rather than forced. */
+- (void)cg_ensureKeyAndMainWindow
+{
+	NSWindow *candidate;
+	NSUInteger i;
+
+	if (!_active) {
+		return;
+	}
+	candidate = _keyWindow;
+	if (candidate == nil || ![candidate isVisible] || ![candidate canBecomeKeyWindow]) {
+		candidate = nil;
+		for (i = 0; i < [_windows count]; i++) {
+			NSWindow *w = [_windows objectAtIndex:i];
+
+			if ([w isVisible] && [w canBecomeKeyWindow]) {
+				candidate = w;
+				break;
+			}
+		}
+	}
+	if (candidate != nil && ![candidate isKeyWindow]) {
+		[candidate makeKeyWindow];
+	}
+
+	candidate = _mainWindow;
+	if (candidate == nil || ![candidate canBecomeMainWindow]) {
+		candidate = nil;
+		for (i = 0; i < [_windows count]; i++) {
+			NSWindow *w = [_windows objectAtIndex:i];
+
+			if ([w canBecomeMainWindow]) {
+				candidate = w;
+				break;
+			}
+		}
+	}
+	if (candidate != nil && ![candidate isMainWindow]) {
+		[candidate makeMainWindow];
+	}
+}
+
 - (void)cg_removeWindow:(NSWindow *)aWindow
 {
 	NSUInteger i;
@@ -301,6 +370,7 @@ BOOL NSApplicationLoad(void)
 	if (_mainWindow == aWindow) {
 		_mainWindow = [_windows count] > 0 ? [_windows objectAtIndex:0] : nil;
 	}
+	[self cg_ensureKeyAndMainWindow];
 }
 
 /* THE WINDOW-MENU PAIR, which is bookkeeping rather than a menu: it records which windows the application's
@@ -1146,15 +1216,30 @@ static double s_last_report;
 	default:
 		break;
 	}
-	switch ([theEvent type]) {
-	case NSLeftMouseDown:
-	case NSRightMouseDown:
-	case NSOtherMouseDown:
-		_keyWindow = w;
-		_mainWindow = w;
-		break;
-	default:
-		break;
+	if ([theEvent type] == NSLeftMouseDown || [theEvent type] == NSRightMouseDown
+	    || [theEvent type] == NSOtherMouseDown) {
+		/* **A CLICK IS THREE ACTS, AND THE OLD CODE DID ONLY THE THIRD OF THE FIRST ONE.** It wrote the two
+		 * application ivars and stopped: the window itself never became key (`-isKeyWindow` stayed NO), never
+		 * became main, was never raised, and the application was never activated. A person clicked a background
+		 * window and it stayed behind an inactive application's menu bar.
+		 *
+		 * `-orderFront:` comes first because `-canBecomeMainWindow` requires a VISIBLE window — and it is also
+		 * the raise, now that `-orderFront:` sends the server's `raise`. `-makeKeyWindow`/`-makeMainWindow` are
+		 * the public doors, so their notifications and their previous-window resignations run; a window that
+		 * cannot become key or main (the desktop, a menu) keeps the previous one instead of stealing the state
+		 * by assignment.
+		 *
+		 * AND THE APPLICATION ACTIVATES: a click in another process is what makes that process the active one.
+		 * `-activate` is idempotent now, so the keyboard-enter half of the compositor's click-to-focus can arrive
+		 * before or after this and announce once. */
+		[self activate];
+		[w orderFront:nil];
+		if ([w canBecomeKeyWindow]) {
+			[w makeKeyWindow];
+		}
+		if ([w canBecomeMainWindow]) {
+			[w makeMainWindow];
+		}
 	}
 	[w sendEvent:theEvent];
 }
@@ -1166,12 +1251,17 @@ static double s_last_report;
  * keep `-isActive` honest and bring the windows back when the application is unhidden. */
 - (void)activateIgnoringOtherApps:(BOOL)flag
 {
-	/* `-isActive` REPORTS THIS, so the flag is set where the state changes. */
-	_active = YES;
+	/* `-isActive` REPORTS THIS, so the flag is set where the state changes. THE ANNOUNCEMENT IS A TRANSITION,
+	 * NOT A COUNT: the compositor's keyboard-enter and a click can both ask in the same pass, and an application
+	 * that posted Will/Did twice for one activation would make a delegate act twice on one change. */
+	BOOL wasActive = _active;
 	NSUInteger i;
 
+	_active = YES;
 	(void)flag;
-	fn_announce(self, NSApplicationWillBecomeActiveNotification, @selector(applicationWillBecomeActive:));
+	if (!wasActive) {
+		fn_announce(self, NSApplicationWillBecomeActiveNotification, @selector(applicationWillBecomeActive:));
+	}
 	_hidden = NO;
 	for (i = 0; i < [_windows count]; i++) {
 		if (!_preventsOrdering && _keyWindow == [_windows objectAtIndex:i]) {
@@ -1184,18 +1274,29 @@ static double s_last_report;
 	if (_menuBarWindow != nil) {
 		[_menuBarWindow orderFront:nil];
 	}
+	/* **AND THE WINDOW THE APPLICATION SPEAKS THROUGH IS KEY AND MAIN.** On a first launch nobody has clicked yet;
+	 * with one window there is no choice to make; with several the remembered one keeps the state. */
+	[self cg_ensureKeyAndMainWindow];
 }
 
 - (void)activate
 {
+	BOOL wasActive = _active;
+
 	[self activateIgnoringOtherApps:NO];
 	/* THE OTHER HALF OF THE PAIR, so the two doors are not the same door with two names: this is the one that says
-	 * the application HAS the focus, and the one above says it is about to get it. */
-	fn_announce(self, NSApplicationDidBecomeActiveNotification, @selector(applicationDidBecomeActive:));
+	 * the application HAS the focus, and the one above says it is about to get it. A second `-activate` on an
+	 * already-active application still brings its key window and menu bar forward, but it announces nothing. */
+	if (!wasActive) {
+		fn_announce(self, NSApplicationDidBecomeActiveNotification, @selector(applicationDidBecomeActive:));
+	}
 }
 
 - (void)deactivate
 {
+	if (!_active) {
+		return;
+	}
 	/* `-isActive` REPORTS THIS, so the flag is set where the state changes. */
 	_active = NO;
 	/* **AND THE MENU BAR GOES WITH IT, so only the application in front shows menus.** The window is not DESTROYED —

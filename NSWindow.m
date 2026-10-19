@@ -33,7 +33,7 @@
  * (their state is this file's; `-beginSheet:modalForWindow:...` and `-endSheet:returnCode:` are `NSApplication`'s),
  * the FRAME-AUTOSAVE strings, the CURSOR-RECT invalidation and the CHILD-WINDOW list are all implemented now, and
  * the screen is `NSScreen`'s own row and is measured with it. THE TOOLBAR IS HERE: `-setToolbar:` attaches one,
- * the frame-to-content arithmetic reserves its band, and the chrome's pill toggles it. What remains absent: the
+ * the frame-to-content arithmetic reserves its band, and the chrome's fourth mark toggles it. What remains absent: the
  * DRAWER (the class) and the SCRIPT-COMMAND handling, which refuses by name. The minimisable/closable BUTTONS are
  * a window manager's (Kestrel is parked). Each of those is absent rather than stubbed.
  */
@@ -42,7 +42,7 @@
 #import "NSToolbar.h"
 #import "NSToolbar_internal.h"	/* the band's height and view, and the toolbar's own seam */
 
-#include <math.h>	/* M_PI — the arcs a pill's caps are made of */
+#include <math.h>	/* sqrt — how far a two-point diagonal reaches past its centreline */
 
 #import "AppKitRefusal.h"
 #import <CoreGraphics/CGBitmapContext.h>
@@ -101,6 +101,8 @@
 				dequeue:(BOOL)dequeue;
 /* THE CURSOR DOORS THIS FILE ADDS, declared here because this is the file that defines them. */
 - (void)cg_setPointerGrab:(BOOL)flag;
+/* **AND THE ONE A DRAG USES, WHICH IS A REAL GRAB — see `-cg_setPointerCapture` for why the two differ.** */
+- (void)cg_setPointerCapture:(BOOL)flag;
 - (NSScreen *)cg_screenFor:(NSScreen *)screen;
 - (void)cg_rebuildCursorRectsIfNeeded;
 - (NSCursor *)cg_cursorForContentPoint:(NSPoint)p;
@@ -174,6 +176,9 @@
 - (void)cg_addWindow:(NSWindow *)aWindow;
 - (void)cg_windowClosed:(NSWindow *)aWindow;
 - (void)cg_removeWindow:(NSWindow *)aWindow;
+/* THE APPLICATION'S TWO ANSWERS, kept in step with this window's own `_key`/`_main` flags by the doors below. */
+- (void)cg_setKeyWindow:(NSWindow *)aWindow;
+- (void)cg_setMainWindow:(NSWindow *)aWindow;
 @end
 
 /* THE TITLE BAR'S HEIGHT, AND IT IS OURS. A titled window's FRAME is its content plus its chrome, and this
@@ -181,36 +186,70 @@
  * rather than discovered: it is where the chrome and this arithmetic will have to agree. A borderless window
  * has no chrome and adds nothing. */
 static const CGFloat fn_TITLE_BAR = 22.0;
-/* **AND THE CHROME'S OWN MEASURES, WHICH ARE FIVE NUMBERS RATHER THAN TWO.** What the strip's height leaves is the
- * size of a drawn SYMBOL and how far apart they sit, the strip's own edge padding, and the shape of the TOOLBAR PILL
- * at the far end. Everything else about the chrome — where the symbols start, how much room a title has, what
- * `+minFrameWidthWithTitle:styleMask:` owes them — is DERIVED from these rather than written a third and fourth
- * time, which is what this file used to do. */
-static const CGFloat fn_SYMBOL = 11.0;		/* the box ONE drawn symbol lives in */
-static const CGFloat fn_SYMBOL_STROKE = 3.0;	/* "very thick": a little over a quarter of the box */
+/* **AND THE CHROME'S OWN MEASURES, WHICH ARE FOUR NUMBERS AND A SET OF MARKS.** What the strip's height leaves is
+ * the size of a SYMBOL BOX and how far apart the boxes sit, the strip's own edge padding, and the marks themselves —
+ * which are GREYBIRD'S, at GREYBIRD'S sizes, because that is the look this chrome is. Everything else about the
+ * chrome — where the symbols start, how much room a title has, what `+minFrameWidthWithTitle:styleMask:` owes them —
+ * is DERIVED from these rather than written a third and fourth time, which is what this file used to do. */
+static const CGFloat fn_SYMBOL = 11.0;		/* the box ONE drawn mark lives in */
 static const CGFloat fn_SYMBOL_GAP = 9.0;	/* between one symbol's box and the next */
 static const CGFloat fn_CHROME_EDGE = 8.0;	/* the strip's own padding, at either end */
-/* **AND 35 PER CENT SHORTER, WHICH TAKES IT FROM 30 TO 19.5.** The height came down last round and now the width
- * has followed, so the shape is closer to square than to a bar — which is what a toolbar TOGGLE should look like next
- * to the three symbols, where a long capsule read as a second button. 35 per cent is the design's number and it is
- * kept EXACTLY rather than rounded to a whole point, because that is what was asked for: the consequence is that the
- * box's left edge lands on a half pixel, and it is worth stating which edge that is — the STRAIGHT ones (the top and
- * the bottom, and the y is snapped below) stay crisp, and it is the arc CAPS at the ends that carry the half, where a
- * part-covered pixel is what a curve looks like anyway. */
-static const CGFloat fn_PILL_WIDTH = 19.5;	/* the toolbar pill, HORIZONTAL: wider than it is tall, but not by much */
-/* **AND HALF THE HEIGHT IT STARTED AT, WHICH MAKES IT A MARK RATHER THAN A BAR.** At 14 points it was as deep as the
- * symbols beside it and read as a second button; 7 reads as what it is — a small filled shape at the end of the
- * strip. It is STILL A PILL because its radius is half its height and not a number of its own, which is the one
- * property the height was never allowed to change. */
-static const CGFloat fn_PILL_HEIGHT = 7.0;
 
-/* **AND THE HAIRLINE BETWEEN THE CHROME AND THE CONTENT IS BLACK, AND IT SITS AT THE CONTENT'S TOP EDGE.** The
- * chrome now includes the TOOLBAR when a window has one, so the boundary is below the band and not between the title
- * bar and it: one black point across the full width separates everything the window owns from the document it holds.
- * It was a 0.45 grey while the chrome and the content were the two surfaces it divided; with the toolbar in the
- * chrome the user asked for black, and black is what makes the band read as the chrome's bottom rather than as a
- * second surface with a border of its own. IT IS DRAWN LAST, so a theme's buttons cannot paint over it. */
-static const CGFloat fn_CHROME_HAIRLINE = 0.0;
+/* **THE MARK'S OWN BOX, INSIDE THE ELEVEN-POINT ONE.** These are the theme's measures and not this file's taste:
+ * every one of its four button pictures is twenty by twenty-four with the mark in columns 6..13 and rows 9..17 — a
+ * mark EIGHT POINTS WIDE and NINE TALL, whose strokes are TWO points thick — so those are the numbers here. The
+ * four boxes are all one size now: the toolbar toggle wears the theme's own MENU mark, a filled triangle eight by
+ * six, where this chrome used to draw a pill of its own invention at the far end. A mark that is not one of the
+ * theme's is a mark that does not belong on its bar. */
+static const CGFloat fn_MARK_WIDTH = 8.0;	/* the mark, across */
+static const CGFloat fn_MARK_HEIGHT = 9.0;	/* the X's and the minus's; the plus is eight and the triangle six */
+static const CGFloat fn_MARK_CHEVRON = 6.0;
+static const CGFloat fn_MARK_STROKE = 2.0;	/* the theme's two points, where this file used to draw three */
+
+/* **THE CHROME'S OWN GEOMETRY: SIX-POINT TOP CORNERS AND A ONE-POINT OUTLINE.** Six is the window's SHAPE and not
+ * only its decoration: the compositor clips every window to a rounded rectangle and draws its shadow around the same
+ * one, and `AWS_SHADOW_RADIUS` in `window-server/src/output.c` is this number's copy — the protocol does not carry a
+ * radius, so the two components each state it and they have to be changed together. A decoration whose corners are
+ * one radius and a window whose shape is another is a window that looks drawn on rather than cut out.
+ *
+ * AND IT IS NOT THE CONTROL BEZEL'S RADIUS. `NS_CELL_BEZEL_RADIUS` is four: a push button is a small thing and a
+ * window is not, and the two agreed at five and at four only because they happened to.
+ *
+ * THERE IS NO OUTLINE ALONG THE BOTTOM, because the content's hairline is already the boundary there and a second
+ * line a point above it would be two boundaries where the window has one. */
+static const CGFloat fn_BAR_RADIUS = 6.0;
+static const CGFloat fn_BAR_BORDER = 1.0;
+
+/* **AND ITS PALETTE, SAMPLED FROM THE THEME'S ART RATHER THAN CHOSEN.** Each value is the colour that fills the most
+ * pixels of the matching `.xpm`: `#939393` the outline along the top and down the ends, `#797979` the body of a mark on
+ * a key window, `#BFBFBF` the faded one on a window that is not, `#4B4B4B` the darker one under the pointer, and
+ * `#6897BC` the BLUE one under a press — which is the theme's own answer to "this is happening now" and is the one
+ * mark colour here that is not a grey. The two light values are the one-point row that sits UNDER every mark and is
+ * what makes a mark read as pressed into the bar rather than printed on it; it is the reason every mark is drawn
+ * twice, once a point low in this ink and once in its own.
+ *
+ * THE BAR'S FACE IS NOT HERE, because it is not this file's alone: `+cg_chromeFaceColor` is the one surface the title
+ * bar and the toolbar band share. */
+static const CGFloat fn_BAR_EDGE = 0.576;	/* #939393 */
+static const CGFloat fn_MARK_INK = 0.475;	/* #797979 */
+static const CGFloat fn_MARK_FAINT = 0.749;	/* #BFBFBF */
+static const CGFloat fn_MARK_HOVER = 0.294;	/* #4B4B4B */
+static const CGFloat fn_MARK_LIGHT = 0.898;	/* #E5E5E5 */
+static const CGFloat fn_MARK_LIGHT_FAINT = 0.925; /* #ECECEC */
+static const CGFloat fn_MARK_PRESS_RED = 0x68 / 255.0;	/* #6897BC */
+static const CGFloat fn_MARK_PRESS_GREEN = 0x97 / 255.0;
+static const CGFloat fn_MARK_PRESS_BLUE = 0xBC / 255.0;
+
+/* **AND THE HAIRLINE BETWEEN THE CHROME AND THE CONTENT WEARS THE CONTROL BEZEL'S GREY** — `+controlDarkShadowColor`,
+ * the same 0.737 that strokes a push button's bezel, a checkbox's box, a field's edge and a slider's track. It sits at
+ * the CONTENT'S TOP EDGE, which is below the toolbar band when a window has one: the chrome includes the toolbar, so
+ * the boundary is below everything the window owns and not between the title bar and the band.
+ *
+ * IT WAS BLACK, AND BLACK WAS THE WRONG KIND OF LINE. Every other edge on this desktop is that one grey — a control's
+ * border, a field's, a groove's — and a hard black rule between two light surfaces read as a shadow the window does
+ * not otherwise have. The hairline is the BOTTOM OF THE CHROME, not a division between two colours: after the chrome
+ * and the toolbar became one surface it is the only line left there, so it is drawn in the ink the tier uses for
+ * exactly that. IT IS STILL DRAWN LAST, so a theme's buttons cannot paint over it. */
 
 /* ============================================================================================ *
  * THE CHROME'S THEME, AND WHY THE HEIGHT IS A FUNCTION NOW.                                     *
@@ -218,7 +257,7 @@ static const CGFloat fn_CHROME_HAIRLINE = 0.0;
  * **A WINDOW'S CHROME IS EITHER THE THEME'S OR THIS FILE'S, AND THE HEIGHT DECIDES WHICH.** When   *
  * an XFWM theme resolves (see `AGChromeTheme`) the strip takes the THEME'S height and its buttons  *
  * are the theme's bitmaps at their own size — 1:1, no scaling — and when none does, everything     *
- * below is the marks this file has always drawn at `fn_TITLE_BAR`. The frame-to-content arithmetic  *
+ * below is the bar and the marks THIS FILE DRAWS at `fn_TITLE_BAR`, in Greybird's own measures.     *
  * is a CLASS method with no window to ask, which is why the theme is a process-wide singleton: one  *
  * answer for every window in the process, which is what a theme is.                                *
  *                                                                                                *
@@ -328,10 +367,9 @@ static void fn_chrome_layout(NSWindow *w, fn_chrome_layout_t *layout)
 			layout->leftBlock = x - fn_SYMBOL_GAP;
 		}
 		if (layout->present[AGChromeButtonMenu]) {
-			layout->rects[AGChromeButtonMenu] = NSMakeRect(width - fn_CHROME_EDGE - fn_PILL_WIDTH,
-								      floor(top + (layout->height - fn_PILL_HEIGHT) / 2.0),
-								      fn_PILL_WIDTH, fn_PILL_HEIGHT);
-			layout->rightBlock = fn_CHROME_EDGE + fn_PILL_WIDTH;
+			layout->rects[AGChromeButtonMenu] = NSMakeRect(width - fn_CHROME_EDGE - fn_SYMBOL, y,
+								       fn_SYMBOL, fn_SYMBOL);
+			layout->rightBlock = fn_CHROME_EDGE + fn_SYMBOL;
 		} else {
 			layout->rightBlock = fn_CHROME_EDGE;
 		}
@@ -820,98 +858,214 @@ static CGFloat fn_title_baseline(CGFloat top, CGFloat ascent, CGFloat descent)
 }
 
 /* ============================================================================================ *
- * THE THREE SYMBOLS ARE DRAWN, NOT TYPESET, AND THAT IS THE POINT OF THEM.                     *
+ * THE BAR AND ITS MARKS ARE GREYBIRD'S, DRAWN AS VECTORS RATHER THAN COPIED AS ART.              *
  *                                                                                                *
- * Agora's window chrome is NOT the Apple trio of coloured circles: it is an X, a minus and a      *
- * plus, in ONE ink, and they are PATHS rather than glyphs. A glyph would be a character the font   *
- * has to have — the same argument the System menu's hamburger is drawn on — and it would also be  *
- * a WEIGHT the font has to have, where "very thick" here is a stroke width and nothing else. The  *
- * shapes are arithmetic on a box, so they are drawn from a box.                                  *
+ * **THE THEME THIS LOOK COMES FROM CANNOT SHIP, SO THE LOOK IS DRAWN HERE INSTEAD.** Greybird's  *
+ * button pictures are somebody else's work under a GPL, and a theme is readable at runtime but    *
+ * not part of this library (`AGChromeTheme` carries that argument in full) — which leaves two    *
+ * honest ways to wear it: depend on a file the person using the window supplies, or draw it.     *
+ * This draws it. Every number below is the theme's own, taken from its `.xpm` art rather than    *
+ * invented: the bar's face, its one-point outline and five-point corners, the mark's eight-by-   *
+ * nine box and two-point strokes, and the four inks a mark wears.                               *
+ *                                                                                                *
+ * AND IT IS A DRAWING AND NOT A GLYPH. A glyph would be a character the font has to have — the   *
+ * same argument the System menu's hamburger is drawn on — and it would also be a WEIGHT the font *
+ * has to have, where two points here is a stroke width and nothing else. The shapes are          *
+ * arithmetic on a box, so they are drawn from a box, and they are crisp at any size because      *
+ * there is no bitmap to resample.                                                               *
  * ============================================================================================ */
 
-/* ONE SYMBOL, IN ITS OWN BOX. The box is inset by half the stroke before anything is drawn, which is the rule this
- * tier keeps everywhere a stroke has to stay inside a rectangle it was given (the bezel, the field's border, the
- * indicator's): a stroke is CENTRED on its path, so a line drawn on the box's edge would hang half of itself outside
- * it. With the round caps below, the insetting is exactly cancelled at the ends — the ink of each stroke reaches the
- * box and no further — which is what makes three boxes of one size look like one set. */
-static void fn_draw_symbol(CGContextRef c, CGRect box, int kind)
+/* **THE FOUR INKS, ONE PER STATE, AND THE LIGHT ROW THAT SITS UNDER EACH.** `outShade` is that row's colour, and a
+ * state that has none — the pressed blue, which the theme draws flat — answers nil so the caller makes one pass
+ * instead of two. The states are the same four the theme ships, so these answers are the theme's: `active` is the
+ * body colour, `inactive` the faded one a window that is not key wears, `prelight` the darker one under the pointer,
+ * and `pressed` the blue one that says this is happening now. */
+static NSColor *fn_mark_ink(AGChromeButtonState state, NSColor **outShade)
 {
-	CGFloat t = fn_SYMBOL_STROKE;		/* the bar's thickness, one number for all three marks */
-	CGFloat cx = CGRectGetMidX(box);
-	CGFloat cy = CGRectGetMidY(box);
-	CGFloat half = fn_SYMBOL / 2.0;
-	CGFloat ht = t / 2.0;
-
-	CGContextSetFillColorWithColor(c, [[NSColor cg_chromeInkColor] CGColor]);
-	if (kind == 0) {
-		/* **THE X IS TWO RECTANGLES DRAWN THE SAME WAY THE OTHER TWO MARKS ARE, WITH THE CTM DOING THE TURNING.**
-		 * The first version built each bar as a four-point PATH and filled it, and it came out asymmetric — MEASURED,
-		 * the ink's centre of mass sat 0.8 rows above the box's centre and the bottom two rows were nearly empty,
-		 * while the minus and the plus beside it were exact. The difference between them was not the geometry: the
-		 * same four corners, rasterized by pixel centre, are a clean mirrored X. It was the DRAWING CALL — the two
-		 * axis-aligned marks go through `CGContextFillRect` and the X went through `CGContextFillPath`, and only the
-		 * filled RECTANGLE is exact. So the bars are rectangles now and the rotation is the context's, which is what
-		 * a CTM is for.
-		 *
-		 * `len` IS DERIVED, NOT CHOSEN. A bar's half-length projects onto each axis as `len/2 · cos 45`, its
-		 * half-thickness as `ht · sin 45`, and those two must sum to half the box for the bar's corners to land ON
-		 * the box's edges — so len = 2 · (half − ht / root two) · root two, which is 12.56 points for an eleven-point
-		 * box at three points thick. Both bars are the same length; only the sign of the turn differs. */
-		CGFloat len = 2.0 * (half - ht / sqrt(2.0)) * sqrt(2.0);
-		int k;
-
-		for (k = 0; k < 2; k++) {
-			CGContextSaveGState(c);
-			CGContextTranslateCTM(c, cx, cy);
-			CGContextRotateCTM(c, (k == 0) ? (CGFloat)(M_PI / 4.0) : (CGFloat)(-M_PI / 4.0));
-			CGContextFillRect(c, CGRectMake(-len / 2.0, -ht, len, t));
-			CGContextRestoreGState(c);
-		}
-		return;
+	*outShade = nil;
+	switch (state) {
+	case AGChromeButtonStateInactive:
+		*outShade = [NSColor colorWithCalibratedWhite:fn_MARK_LIGHT_FAINT alpha:1.0];
+		return [NSColor colorWithCalibratedWhite:fn_MARK_FAINT alpha:1.0];
+	case AGChromeButtonStatePrelight:
+		*outShade = [NSColor colorWithCalibratedWhite:fn_MARK_LIGHT alpha:1.0];
+		return [NSColor colorWithCalibratedWhite:fn_MARK_HOVER alpha:1.0];
+	case AGChromeButtonStatePressed:
+		return [NSColor colorWithCalibratedRed:fn_MARK_PRESS_RED green:fn_MARK_PRESS_GREEN
+						 blue:fn_MARK_PRESS_BLUE alpha:1.0];
+	case AGChromeButtonStateActive:
+	default:
+		*outShade = [NSColor colorWithCalibratedWhite:fn_MARK_LIGHT alpha:1.0];
+		return [NSColor colorWithCalibratedWhite:fn_MARK_INK alpha:1.0];
 	}
-	if (kind == 1) {
-		/* − — the single rectangle everything else here is made of. */
-		CGContextFillRect(c, CGRectMake(cx - half, cy - ht, fn_SYMBOL, t));
-		return;
-	}
-	/* **AND THE PLUS IS THE MINUS PLUS THE SAME RECTANGLE TURNED A QUARTER TURN** — the two of them at 90 degrees,
-	 * as asked, and the same two numbers as the X's bars so all three marks are the same weight. */
-	CGContextFillRect(c, CGRectMake(cx - half, cy - ht, fn_SYMBOL, t));
-	CGContextFillRect(c, CGRectMake(cx - ht, cy - half, t, fn_SYMBOL));
 }
 
-/* **AND THE TOOLBAR PILL: A ROUNDED RECTANGLE WHOSE RADIUS IS HALF ITS HEIGHT.** That single sentence is the whole
- * shape, which is why it is drawn from the two numbers instead of from a radius — there is no third number to get
- * wrong, and a pill is what a rounded rectangle IS once its caps are semicircles. It is HORIZONTAL because a toolbar
- * is: the control will show and hide a strip that runs across the window, and a mark wider than it is tall is the
- * one that says so.
+/* **ONE MARK'S PATH, IN ITS OWN BOX, BUILT FROM THE SYMBOL BOX IT SITS IN.** The mark is eight by nine — except the
+ * plus, which is eight by eight because only an even upright can have four equal arms — and the box is eleven by
+ * eleven, so its origin is snapped to a whole point and lands half a point to the left of centre —
+ * which is deliberate: every edge of a minus, a plus or the chevron's base then falls ON a pixel boundary, and an
+ * edge on a boundary is a crisp edge rather than two rows of half-covered ones. The X is the exception by nature,
+ * and the snap costs it nothing.
  *
- * IT IS A BUTTON NOW. Its action is "toggle the window's toolbar" (`-toggleToolbarShown:`), which is quiet for a
- * window with none; the drawing is still the mark's own and the ink is the CONTROL's, from `NSColor`'s own vocabulary
- * and from the one border width every control in this tier wears (`NS_CELL_BEZEL_WIDTH`). */
-static void fn_draw_toolbar_pill(CGContextRef c, CGRect box)
+ * THE SHAPES ARE THE THEME'S, MEASURED FROM ITS PIXELS: the X crosses its box corner to corner, the minus is one
+ * two-point bar, the plus is that bar plus the same one turned a quarter turn, and the chevron is a FILLED triangle
+ * eight wide and six tall with its base at the top. Each is drawn with the call that draws it exactly — filled
+ * rectangles go through `CGContextFillRect` and the triangle through `CGContextFillPath`, the pair of lessons
+ * `tests/window_chrome.m` records — and the X alone is STROKED, because it is the one shape whose edges are not on
+ * the axes. */
+static void fn_mark_path(CGContextRef c, CGRect box, AGChromeButton button)
 {
-	CGRect r = box;
-	CGFloat radius = r.size.height / 2.0;
-	CGFloat my = CGRectGetMidY(r);
+	CGFloat w = fn_MARK_WIDTH;
+	CGFloat h = (button == AGChromeButtonMenu) ? fn_MARK_CHEVRON : fn_MARK_HEIGHT;
+	CGFloat t = fn_MARK_STROKE;
+	CGFloat x = CGRectGetMinX(box) + floor((fn_SYMBOL - w) / 2.0);
+	CGFloat y = CGRectGetMinY(box) + floor((fn_SYMBOL - fn_MARK_HEIGHT) / 2.0);
 
-	CGContextBeginPath(c);
-	CGContextAddArc(c, CGRectGetMinX(r) + radius, my, radius, M_PI / 2.0, 3.0 * M_PI / 2.0, 0);
-	CGContextAddLineToPoint(c, CGRectGetMaxX(r) - radius, CGRectGetMinY(r));
-	CGContextAddArc(c, CGRectGetMaxX(r) - radius, my, radius, -M_PI / 2.0, M_PI / 2.0, 0);
-	CGContextClosePath(c);
-	/* **IT IS A FILLED SHAPE AND NOT A BUTTON OUTLINE, WHICH IS WHAT MAKES IT THE SAME KIND OF THING AS THE MARK
-	 * BESIDE IT.** It used to be a control's face with a control's border round it — `+controlColor` inside a
-	 * one-point `+controlDarkShadowColor` — and beside three flat symbols that reads as a different species: a chip
-	 * of chrome pretending to be a widget. Now all four are ONE grey, filled, with no stroke at all, and the pill's
-	 * SHAPE is the whole of what distinguishes it from the symbols next to it.
+	if (button == AGChromeButtonMenu) {
+		/* THE CHEVRON IS CENTRED ON THE MARKS BESIDE IT, not on its own shorter box: it hangs from the same middle
+		 * row as the minus and the plus, which is why it is placed from `fn_MARK_HEIGHT` and not from its own six. */
+		y += (fn_MARK_HEIGHT - h) / 2.0;
+		CGContextMoveToPoint(c, x, y + h);
+		CGContextAddLineToPoint(c, x + w, y + h);
+		CGContextAddLineToPoint(c, x + w / 2.0, y);
+		CGContextClosePath(c);
+		CGContextFillPath(c);
+		return;
+	}
+	if (button == AGChromeButtonClose) {
+		/* **THE X IS STROKED WITH BUTT CAPS, AND `e` IS WHY IT FILLS ITS BOX.** A two-point stroke is centred on
+		 * its path, so the ink of a diagonal reaches half the stroke's width SIDEWAYS from the centreline — which at
+		 * forty-five degrees is `t/2 · sin 45`, or 0.707, in each axis. Pulling the endpoints back by exactly that
+		 * puts the stroke's outer corners ON the box's corners, so the mark inks the whole eight by nine the theme's
+		 * does; pulling them back by `t/2 · √2` instead — which is what this said first — left it a six-by-eight
+		 * inside an eight-by-nine box, MEASURED, and a mark smaller than its neighbours'. The caps are BUTT and not
+		 * round because the theme's are: a round cap would put a semicircle where its author put a squared end. */
+		CGFloat e = t / 2.0 / (CGFloat)sqrt(2.0);
+
+		CGContextSetLineWidth(c, t);
+		CGContextSetLineCap(c, kCGLineCapButt);
+		CGContextMoveToPoint(c, x + e, y + h - e);
+		CGContextAddLineToPoint(c, x + w - e, y + e);
+		CGContextMoveToPoint(c, x + e, y + e);
+		CGContextAddLineToPoint(c, x + w - e, y + h - e);
+		CGContextStrokePath(c);
+		return;
+	}
+	/* **THE MINUS, AND THE PLUS AS FOUR EQUAL ARMS FROM ONE CENTRE.** Both are snapped to a whole row so their edges
+	 * are crisp and both are the theme's two points thick; what the plus must ALSO be is EVEN, and that is the one
+	 * thing the mark's nine-row box cannot give it.
 	 *
-	 * THE HALF-STROKE INSET WENT WITH THE STROKE, which was the only thing it was ever for — the same subtraction
-	 * the menu panel's border made one file over. AND IT IS ONE CALL: a path is CONSUMED by the drawing call that
-	 * uses it (this function carries the note about `CGContextFillPath` below, which is how that was learned), so
-	 * `kCGPathFill` says fill and nothing else, which is exactly the claim. */
-	CGContextSetFillColorWithColor(c, [[NSColor cg_chromeInkColor] CGColor]);
-	CGContextDrawPath(c, kCGPathFill);
+	 * A two-point bar inside a nine-row upright leaves three rows above it and four below — MEASURED, "the top and
+	 * bottom of the + are uneven" — and no choice of row fixes it: nine and two are odd and even, so the arms cannot
+	 * match. The upright is therefore EIGHT rows — the cross-bar's own length — centred on the bar's centre, which
+	 * leaves three above, three below, and three at each end of the bar: four arms of one length from one centre, a
+	 * plus rather than a cross with a long leg. It is one row shorter than the X, and that is the price of the
+	 * symmetry: an odd upright cannot have it.
+	 *
+	 * THE CENTRE IS SHARED. The cross-bar's rows are what the MINUS uses too, and all three marks are centre on the
+	 * same row as a result — so the set reads as one, which is the thing the eye checks first.
+	 */
+	{
+		CGFloat bar = y + floor((h - t) / 2.0);		/* the cross-bar's bottom row: the centre all three share */
+		CGFloat arms = w;				/* the upright is as long as the cross-bar */
+
+		CGContextFillRect(c, CGRectMake(x, bar, w, t));
+		if (button == AGChromeButtonMaximize) {
+			CGContextFillRect(c, CGRectMake(x + floor((w - t) / 2.0), bar + t / 2.0 - arms / 2.0, t, arms));
+		}
+	}
+}
+
+/* **AND ONE MARK DRAWN IN ONE STATE, WHICH IS TWO PASSES AND NOT ONE.** The light row comes first, a point BELOW the
+ * ink in window coordinates, and the ink is laid over it: what survives is a one-point light edge under each stroke,
+ * which is the whole of the theme's engraved look — the mark reads as cut into the bar rather than printed on it.
+ * The blue pressed state is flat because its art is, and `fn_mark_ink` says so by answering no shade at all. */
+static void fn_draw_mark(CGContextRef c, CGRect box, AGChromeButton button, AGChromeButtonState state)
+{
+	NSColor *shade = nil;
+	NSColor *ink = fn_mark_ink(state, &shade);
+
+	/* **AND THE MARKS ARE NOT ANTIALIASED, WHICH IS HOW THE THEME'S OWN ART IS DRAWN.** A two-point diagonal is the
+	 * one shape here that a soft edge ruins: the theme's X is a hard two-pixel stair and reads as an X at its own
+	 * size, while the same stroke smoothed blends its arms into a blob at the crossing. Turning it off for the marks
+	 * says "these are marks and not photographs", and the bar's arcs keep theirs, where a curve needs it. */
+	CGContextSaveGState(c);
+	CGContextSetShouldAntialias(c, false);
+	if (shade != nil) {
+		CGContextSaveGState(c);
+		CGContextTranslateCTM(c, 0.0, -1.0);
+		CGContextSetFillColorWithColor(c, [shade CGColor]);
+		CGContextSetStrokeColorWithColor(c, [shade CGColor]);
+		fn_mark_path(c, box, button);
+		CGContextRestoreGState(c);
+	}
+	CGContextSetFillColorWithColor(c, [ink CGColor]);
+	CGContextSetStrokeColorWithColor(c, [ink CGColor]);
+	fn_mark_path(c, box, button);
+	CGContextRestoreGState(c);
+}
+
+/* **THE CHROME IS ONE SURFACE WITH ONE EDGE: ITS TOP.** The title bar and the toolbar band are the same rectangle and
+ * the same colour (`+cg_chromeFaceColor`) — the window paints the strip above the band, `NSToolbar` paints the band,
+ * and there is no seam between them because there is no second colour to make one. What this function adds is the top:
+ * a one-point outline in the theme's `#939393` and a one-point white row under it, following the top's six-point
+ * corners and then STOPPING at the tangent on each side.
+ *
+ * **AND NOTHING DOWN THE SIDES.** A one-point line down the left and right ends of the strip reads as a border drawn
+ * around the chrome rather than as the top of it: the ends of a window's decoration are the window's own edges, and
+ * the shadow the compositor draws outside them is what says where they are. MEASURED, that line was the first thing
+ * the eye found on the right-hand end, where the strip has nothing else in it.
+ *
+ * **THE HALF-POINT INSETS ARE THE WHOLE OF WHY THIS IS CRISP.** A one-point stroke is centred on its path, so a path
+ * on the shape's own edge covers half a pixel inside and half outside and renders as two grey rows. The outline is
+ * therefore drawn on a path inset by HALF its width, with its radius brought down to match so the corner stays
+ * concentric, and the highlight on a path inset by one and a half. */
+static void fn_chrome_edge_path(CGContextRef c, CGFloat width, CGFloat top, CGFloat radius, CGFloat inset)
+{
+	CGFloat left = inset;
+	CGFloat right = width - inset;
+	CGFloat y = top - inset;
+	CGFloat r = radius - inset;
+
+	if (r < 0.0) {
+		r = 0.0;
+	}
+	/* FROM THE LEFT TANGENT, ROUND THE CORNER, ACROSS, AND ROUND THE OTHER — and no further: the path BEGINS at the
+	 * point where the arc leaves the left edge, which is what makes the ends of the stroke the corners' own. */
+	CGContextMoveToPoint(c, left, y - r);
+	CGContextAddArcToPoint(c, left, y, left + r, y, r);
+	CGContextAddLineToPoint(c, right - r, y);
+	CGContextAddArcToPoint(c, right, y, right, y - r, r);
+}
+
+/* `top` IS THE WINDOW'S OWN TOP EDGE and `width` its width; the strip's height does not enter, because the edge does
+ * not run down it. */
+static void fn_draw_chrome_edges(CGContextRef c, CGFloat width, CGFloat top)
+{
+	CGFloat radius = fn_BAR_RADIUS;
+	CGFloat w = fn_BAR_BORDER;
+
+	if (width < 2.0 * radius) {
+		radius = width / 2.0;	/* a window narrower than its own corners gets an edge, not a folded path */
+	}
+	CGContextSaveGState(c);
+	CGContextSetShouldAntialias(c, true);
+
+	/* 1. THE OUTLINE, inset by half of itself so its one point lands ON the pixel instead of across two of them. */
+	CGContextBeginPath(c);
+	fn_chrome_edge_path(c, width, top, radius, w / 2.0);
+	CGContextSetLineWidth(c, w);
+	CGContextSetStrokeColorWithColor(c, [[NSColor colorWithCalibratedWhite:fn_BAR_EDGE alpha:1.0] CGColor]);
+	CGContextStrokePath(c);
+
+	/* 2. AND THE LIGHT ROW UNDER IT, one point further in. */
+	CGContextBeginPath(c);
+	fn_chrome_edge_path(c, width, top, radius, w * 1.5);
+	CGContextSetLineWidth(c, w);
+	CGContextSetStrokeColorWithColor(c, [[NSColor whiteColor] CGColor]);
+	CGContextStrokePath(c);
+
+	CGContextRestoreGState(c);
 }
 
 /* ONE IMAGE INTO ONE RECTANGLE. **NO FLIP IS NEEDED AND THAT IS THIS TREE'S OWN CONVENTION, MEASURED RATHER THAN
@@ -1154,23 +1308,28 @@ static void fn_draw_chrome(CGContextRef c, NSWindow *w, NSRect content)
 			image = [theme imageForButton:(AGChromeButton)i state:fn_chrome_state(w, i)];
 			if (image != NULL) {
 				fn_draw_image(c, layout.rects[i], image);
-			} else if (i < AGChromeButtonCount - 1) {
-				fn_draw_symbol(c, layout.rects[i], i);
 			} else {
-				fn_draw_toolbar_pill(c, layout.rects[i]);
+				fn_draw_mark(c, layout.rects[i], (AGChromeButton)i, fn_chrome_state(w, i));
 			}
 		}
 	} else {
-		/* THE MARKS THIS FILE HAS ALWAYS DRAWN, which is what a process with no theme gets. */
-		CGContextSetFillColorWithColor(c, [[NSColor windowFrameColor] CGColor]);
+		/* **THE CHROME THIS FILE DRAWS ITSELF, WHICH IS WHAT A PROCESS WITH NO THEME GETS — THE ORDINARY CASE,
+		 * because no theme ships with this library.** ONE SURFACE in ONE colour: the title bar's share of the strip is
+		 * filled here, the toolbar band's share is filled by `NSToolbar` with the same `+cg_chromeFaceColor`, and the
+		 * edge — outline and white row — is then drawn over BOTH of them, from the window's top to the content's
+		 * hairline. The marks go last, on top of their surface, each in the state the window and the pointer make.
+		 *
+		 * AND IT IS ALL VECTORS: a fill, one stroked path for the outline, one for the highlight, and the marks'
+		 * own paths. No image, no texture, no resampling. */
+		CGContextSetFillColorWithColor(c, [[NSColor cg_chromeFaceColor] CGColor]);
 		CGContextFillRect(c, CGRectMake(0.0, top, content.size.width, layout.height));
-		for (i = 0; i < AGChromeButtonCount - 1; i++) {
-			if (layout.present[i]) {
-				fn_draw_symbol(c, layout.rects[i], i);
-			}
+		if (layout.height > 0.0) {
+			fn_draw_chrome_edges(c, content.size.width, top + layout.height);
 		}
-		if (layout.present[AGChromeButtonMenu]) {
-			fn_draw_toolbar_pill(c, layout.rects[AGChromeButtonMenu]);
+		for (i = 0; i < AGChromeButtonCount; i++) {
+			if (layout.present[i]) {
+				fn_draw_mark(c, layout.rects[i], (AGChromeButton)i, fn_chrome_state(w, i));
+			}
 		}
 	}
 
@@ -1222,8 +1381,7 @@ static void fn_draw_chrome(CGContextRef c, NSWindow *w, NSRect content)
 		NSToolbar *toolbar = [w toolbar];
 
 		if (toolbar == nil || ![toolbar isVisible] || [toolbar showsBaselineSeparator]) {
-			CGContextSetFillColorWithColor(c,
-				[[NSColor colorWithCalibratedWhite:fn_CHROME_HAIRLINE alpha:1.0] CGColor]);
+			CGContextSetFillColorWithColor(c, [[NSColor controlDarkShadowColor] CGColor]);
 			CGContextFillRect(c, CGRectMake(0.0, content.size.height - 1.0, content.size.width, 1.0));
 		}
 	}
@@ -1766,6 +1924,10 @@ static CGFloat fn_clamp_axis(CGFloat v, CGFloat lo, CGFloat hi)
 	 * to draw, or a freshly ordered-in window would never be painted at all. */
 	[self setNeedsDisplay:YES];
 	AGWindowShow(_agwindow);
+	/* **`-orderFront:` RAISES, WHICH IS APPLE'S OWN SENTENCE ABOUT IT** — and until now this door only showed the
+	 * window, while `-orderBack:` sent `raise` and therefore did the opposite of its name. A click in another window
+	 * calls this door, so the raise is what makes "clicking brings it frontmost" true. */
+	AGWindowRaise(_agwindow);
 	_visible = YES;
 	/* A WINDOW THAT IS ON THE SCREEN IS ONE THE RUN LOOP MUST DRAIN, so it joins the registry here
 	 * rather than being polled for: the loop has no way to ask a server which windows are ours. */
@@ -1906,6 +2068,8 @@ static CGFloat fn_clamp_axis(CGFloat v, CGFloat lo, CGFloat hi)
 		return;
 	}
 	_key = NO;
+	[[NSApplication sharedApplication] cg_setKeyWindow:nil];
+	[self setNeedsDisplay:YES];
 	/* **AND THE TRACKING IS RE-EVALUATED, WHICH IS THE WHOLE REASON THE SCOPE BITS ARE WORTH HAVING.** Every area
 	 * whose scope is `NSTrackingActiveInKeyWindow` — which is the default, and what every control in this tree installs
 	 * — has just stopped being live, so a control the pointer is resting on gives up its prelight the moment its window
@@ -2279,11 +2443,12 @@ static CGFloat fn_clamp_axis(CGFloat v, CGFloat lo, CGFloat hi)
 				 * point to an absolute right edge gave a 62-point inset for a two-point one and a 40-point drag
 				 * grew the window by 100. */
 				_cg_resizeGrab = NSMakePoint(_frame.origin.x + p.x, _frame.origin.y + p.y);
-				_cg_resizeUsesGlobal = [theEvent cg_hasGlobalPoint];
-				/* THE POINTER IS TAKEN FOR THE DURATION, exactly as a move's is and for the same measured reason:
-				 * a hand that outruns the window would otherwise put the pointer on the desktop, and the motion
-				 * and the release would simply stop arriving. */
-				[self cg_setPointerGrab:YES];
+				/* THE POINTER IS TAKEN FOR THE DURATION, OUTRIGHT rather than as a fallback: a resize moves the
+				 * window out from under the hand — the edge follows the pointer and the compositor's copy of the
+				 * surface is a frame behind — so the pointer leaves the window and lands on the desktop or on a
+				 * neighbour, and a fallback would lose every motion that crossed onto one. See
+				 * `-cg_setPointerCapture:`. */
+				[self cg_setPointerCapture:YES];
 				return;
 			}
 			if (hit >= 0) {
@@ -2313,24 +2478,31 @@ static CGFloat fn_clamp_axis(CGFloat v, CGFloat lo, CGFloat hi)
 
 					_cg_dragGlobalOffset = NSMakePoint(g.x - _frame.origin.x, g.y - _frame.origin.y);
 				}
-				/* **AND THE POINTER IS TAKEN FOR THE DURATION OF THE DRAG, WHICH IS WHAT KEEPS A FAST ONE FROM
-				 * LOSING IT.** The compositor delivers pointer events to the surface UNDER the pointer and to nobody
-				 * when there is none: a hand that outruns the window puts the pointer on the desktop, and the motion
-				 * and the release simply stop arriving — MEASURED, a fast drag moved the window zero pixels and left
-				 * it still believing a drag was in progress. `set_pointer_grab` is the fallback that sends those
-				 * no-surface events to THIS window (the same door the menus use to hear a click outside themselves),
-				 * and it is given back on the release. */
-				[self cg_setPointerGrab:YES];
+				/* **AND THE POINTER IS TAKEN OUTRIGHT FOR THE DURATION OF THE DRAG.** The compositor delivers pointer
+				 * events to the surface UNDER the pointer: a hand that outruns the window puts the pointer on the
+				 * desktop, or on the window BEHIND the one being moved, and the motion and the release stop arriving
+				 * — MEASURED, a fast drag moved the window zero pixels and left it still believing a drag was in
+				 * progress. The fallback grab the menus use is not enough for that second case: it only catches
+				 * events over NO surface, so a pointer over a neighbour still starves the drag. `set_pointer_capture`
+				 * is the real grab — nothing else hears the pointer until it is given back on the release. */
+				[self cg_setPointerCapture:YES];
 				return;
 			}
 		} else if ([theEvent type] == NSLeftMouseDragged && _cg_resizeEdges != 0) {
 			/* **THE POINTER'S ABSOLUTE POSITION, WHICH IS WHAT A RESIZE IS MEASURED AGAINST.** The relative
 			 * fallback reconstructs it from this window's own frame and the pointer's place in it — the same pair
 			 * the move's fallback uses, and for the same reason: an edge is where the POINTER is, and a window that
-			 * followed a delta instead would drift from the hand by every motion the compositor batched. */
+			 * followed a delta instead would drift from the hand by every motion the compositor batched.
+			 *
+			 * **AND IT IS TAKEN FROM EVERY EVENT THAT CARRIES ONE, NOT ONLY FROM A PRESS THAT DID.** A resize has
+			 * no grab OFFSET to derive — `_cg_resizeGrab` is an absolute point already — so a motion's own absolute
+			 * position is usable the moment one arrives, and the drag does not care whether the press happened to
+			 * come with one. That matters while the pointer is captured: the motions that cross onto a neighbour are
+			 * exactly the ones whose absolute position is worth having, and they are the ones a press-time flag
+			 * would have discarded. */
 			NSPoint g;
 
-			if (_cg_resizeUsesGlobal && [theEvent cg_hasGlobalPoint]) {
+			if ([theEvent cg_hasGlobalPoint]) {
 				g = [theEvent cg_globalPoint];
 			} else {
 				NSPoint p = [theEvent locationInWindow];
@@ -2385,10 +2557,10 @@ static CGFloat fn_clamp_axis(CGFloat v, CGFloat lo, CGFloat hi)
 
 			if (_cg_draggingChrome) {
 				[self cg_applyPendingDrag];	/* the drag's LAST move is not lost to a pass boundary */
-				[self cg_setPointerGrab:NO];	/* the drag is over; the pointer is the compositor's again */
+				[self cg_setPointerCapture:NO];	/* the drag is over; the pointer is the compositor's again */
 			} else if (_cg_resizeEdges != 0) {
 				[self cg_applyPendingResize];	/* and a resize's last aim is not lost either */
-				[self cg_setPointerGrab:NO];
+				[self cg_setPointerCapture:NO];
 			} else if (pressed >= 0) {
 				NSPoint p = [theEvent locationInWindow];
 
@@ -2405,7 +2577,6 @@ static CGFloat fn_clamp_axis(CGFloat v, CGFloat lo, CGFloat hi)
 			_cg_draggingChrome = NO;
 			_cg_dragUsesGlobal = NO;
 			_cg_resizeEdges = 0;
-			_cg_resizeUsesGlobal = NO;
 			[self setNeedsDisplay:YES];
 			/* **AND THE ACTION GOES LAST, BECAUSE ONE OF THEM DESTROYS THE WINDOW.** `-performClose:` ends in
 			 * `-close`, which destroys the surface and takes this window off the application's list — so every line
@@ -2849,6 +3020,22 @@ static CGFloat fn_clamp_axis(CGFloat v, CGFloat lo, CGFloat hi)
 	}
 }
 
+/* **THE DRAG'S, WHICH IS A DIFFERENT DOOR BECAUSE IT MEANS SOMETHING DIFFERENT.** The grab above is a FALLBACK: it
+ * catches pointer events that would go to NO surface, and a surface under the pointer still takes them — which is
+ * exactly what a menu bar needs, because the bar is a separate window from the menu it opened and the pointer must
+ * be able to cross back to it. A window being dragged or resized needs the opposite: it MOVES OUT FROM UNDER THE
+ * HAND, so "what is under the pointer" stops being a useful question the moment the drag starts. MEASURED, with
+ * the fallback: resizing a window out over its neighbour stopped following the pointer the instant the hand crossed
+ * onto the neighbour, and the press and release had gone there too, so the window went on believing it was still
+ * being resized. The capture is a REAL grab — motion and buttons go to this window wherever the pointer is, until
+ * the last button comes up. */
+- (void)cg_setPointerCapture:(BOOL)flag
+{
+	if (_agwindow != NULL) {
+		AGWindowSetPointerCapture(_agwindow, flag ? 1 : 0);
+	}
+}
+
 /* **THE DRAG'S MOVE, MADE ONCE PER PASS AND ONLY EVER AT THE LATEST POINTER.** Every motion inside a frame updates
  * the target and only the LAST one is applied, so a fast flick puts the window WHERE THE POINTER IS rather than
  * walking it through the points the hand passed over — MEASURED, that walk is what "it crawls towards the target,
@@ -3253,7 +3440,7 @@ const CGFloat NSScreenSaverWindowLevel = 1000.0;
 + (CGFloat)minFrameWidthWithTitle:(NSString *)aTitle styleMask:(NSUInteger)aStyle
 {
 	/* **THE CHROME'S ALLOWANCE IS DERIVED FROM THE CHROME, NOT CHOSEN.** It is the block of three symbols and the air
-	 * between them at one end, the toolbar pill at the other, and the strip's own padding around all of it — the SAME
+	 * between them at one end, the fourth mark at the other, and the strip's own padding around all of it — the SAME
 	 * numbers the painter lays out with, so a window cannot be too narrow for what it paints. It used to be
 	 * `3.0 * fn_BUTTON`, which was this sentence with the old circles' diameter in it.
 	 *
@@ -3278,7 +3465,7 @@ const CGFloat NSScreenSaverWindowLevel = 1000.0;
 	} else {
 		CGFloat block = 3.0 * fn_SYMBOL + 2.0 * fn_SYMBOL_GAP;
 
-		chrome = 2.0 * fn_CHROME_EDGE + block + fn_PILL_WIDTH;
+		chrome = 2.0 * fn_CHROME_EDGE + block + fn_SYMBOL;
 	}
 	CGFloat title = 0.0;
 
@@ -3490,7 +3677,7 @@ static NSWindow *fn_main_window(NSWindow *except)
 	 * which is the deviation the header records. */
 	[self setNeedsDisplay:YES];
 	AGWindowShow(_agwindow);
-	AGWindowRaise(_agwindow);
+	AGWindowLower(_agwindow);
 	_visible = YES;
 	[[NSApplication sharedApplication] cg_addWindow:self];
 }
@@ -3525,6 +3712,15 @@ static NSWindow *fn_main_window(NSWindow *except)
 		[previous resignKeyWindow];
 	}
 	_key = YES;
+	/* **THE APPLICATION'S `-keyWindow` MOVES WITH THE WINDOW'S OWN FLAG**, whichever door caused the change: a
+	 * click, `-makeKeyWindow`, or a previous key window resigning. Keeping the two in one place is what stops
+	 * `-isKeyWindow` and `-keyWindow` from disagreeing. */
+	[[NSApplication sharedApplication] cg_setKeyWindow:self];
+	/* **AND THE CHROME IS STALE THE MOMENT THE KEY STATE CHANGES.** `fn_chrome_state` draws a stoplight's ACTIVE
+	 * art from `-isKeyWindow`, so the whole title bar has to repaint when this flag moves — otherwise the buttons
+	 * keep the old state until a pointer motion happens to invalidate the hover, which is the bug a person sees as
+	 * "the lights only change when the mouse moves over them". */
+	[self setNeedsDisplay:YES];
 	/* AND THE SAME RE-EVALUATION ON THE WAY IN: the areas that were dead a moment ago are live again, so a control the
 	 * pointer is already resting on lights up without waiting for the hand to move. */
 	[self cg_updateTrackingForPoint:[self mouseLocationOutsideOfEventStream]];
@@ -3543,6 +3739,8 @@ static NSWindow *fn_main_window(NSWindow *except)
 		[previous resignMainWindow];
 	}
 	_main = YES;
+	[[NSApplication sharedApplication] cg_setMainWindow:self];
+	[self setNeedsDisplay:YES];
 	fn_announce(self, NSWindowDidBecomeMainNotification, @selector(windowDidBecomeMain:));
 }
 
@@ -3552,6 +3750,8 @@ static NSWindow *fn_main_window(NSWindow *except)
 		return;
 	}
 	_main = NO;
+	[[NSApplication sharedApplication] cg_setMainWindow:nil];
+	[self setNeedsDisplay:YES];
 	fn_announce(self, NSWindowDidResignMainNotification, @selector(windowDidResignMain:));
 }
 

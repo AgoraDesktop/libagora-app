@@ -7,21 +7,32 @@
  * The window server draws no title bar (see `agora-shell.xml`: its share of the model is the shadow, the work area
  * and the Z-order), so the strip is `NSWindow`'s own drawing and `-cg_drawChromeInContext:` hands it the context a
  * caller already has. This test hands it a bitmap rep's and then asks the PIXELS, which is the only place a claim
- * about a shape is worth anything: "the close symbol is an X and not a circle" is not a fact about the code that
+ * about a shape is worth anything: "the close mark is an X and not a circle" is not a fact about the code that
  * chose to draw lines.
  *
- * WHAT IS ASSERTED, each one a behaviour that did not exist before this slice:
+ * **THE CHROME WEARS GREYBIRD'S LOOK NOW, AND THAT LOOK IS DRAWN RATHER THAN COPIED.** The theme is somebody
+ * else's GPL work and cannot ship, so `NSWindow` draws the bar and the four marks itself, in the theme's own
+ * measures and colours — which means this file has to state them, because a number in a comment is not a claim.
  *
- *   1. The strip is filled, from one end to the other, in the frame colour.
- *   2. The three symbols are DRAWN at the left, one ink for all of them, and each one only if its style-mask bit
- *      is set — and they are SHAPES: ink on both diagonals of the X, ink above the minus and none beside it, ink
- *      above the plus. A circle would satisfy none of the three.
- *   3. The stroke is THICK — three points, measured as the ink's extent across the minus.
- *   4. The title is CENTRED in the strip and BOLD, the second of those measured against the same string drawn in
+ * WHAT IS ASSERTED, each one a way the chrome can look right and be wrong:
+ *
+ *   1. THE BAR IS A BAR: a one-point outline on its top row, a white row under that, the face below them, and a
+ *      ROUND corner — the frame colour at the corner's own pixel, because a rounded corner is a shape and a square
+ *      one would ink it.
+ *   2. THE THREE MARKS ARE THE THEME'S, IN ITS SIZES: an eight-by-nine box each, ink on both diagonals of the X
+ *      and none at its top middle, one bar for the minus, that bar plus the upright for the plus. A circle would
+ *      satisfy none of them.
+ *   3. THE INK IS GREY AND IT FOLLOWS THE WINDOW: `#BFBFBF` while the window is not key, `#797979` when it is,
+ *      `#4B4B4B` under the pointer and the theme's own blue under a press. The press is the one that proves the
+ *      state is read at all, since the other three are greys.
+ *   4. AND IT IS CRISP: every pixel of the minus is the ink exactly, with no half-covered row above or below it.
+ *      That is what the marks' antialiasing switch buys, and a blurred two-point diagonal is exactly what it
+ *      prevents.
+ *   5. The title is CENTRED in the strip and BOLD, the second of those measured against the same string drawn in
  *      the two faces rather than against a number.
- *   5. The pill is at the right end, filled like a control and bordered like one, and ROUNDED — its corner is the
- *      strip, which is what a rounded rectangle's corner is and what a square one's is not.
- *   6. A title too long for the room between the two blocks is CUT rather than run under them.
+ *   6. THE FOURTH MARK IS A TRIANGLE: eight wide at its top, narrowing to two at its point, at the right end and
+ *      clear of the bar's own edge. A pill — what stood there before — is the same width top and bottom.
+ *   7. A title too long for the room between the two blocks is CUT rather than run under them.
  */
 #import <AppKit/NSWindow.h>
 #import <AppKit/NSView.h>
@@ -32,6 +43,7 @@
 #import <AppKit/NSGraphicsContext.h>
 #import <AppKit/NSBezierPath.h>
 #import <AppKit/NSApplication.h>
+#import <AppKit/NSEvent.h>
 #import <Foundation/Foundation.h>
 
 #include <stdio.h>
@@ -43,6 +55,23 @@
 #define CH 120
 #define STRIP 22
 #define FH (CH + STRIP)
+
+/* THE CHROME'S OWN NUMBERS, repeated here ON PURPOSE. They live in `NSWindow.m` as file-static constants, and a
+ * test that imported them would agree with the painter by construction — including when the painter is wrong. These
+ * are the theme's, taken from its `.xpm` art, and if the painter's copy ever drifts this file says so.
+ *
+ * THE FACE IS THE ONE EXCEPTION, and it is not a copy: `+cg_chromeFaceColor` is a PUBLISHED door, because the title
+ * bar and the toolbar band are painted by two different files and have to be one colour. A claim about it is a claim
+ * about the contract, so it is asked of `NSColor` rather than written down here a second time. */
+#define EDGE_L     0.576	/* #939393 — its outline */
+#define INK_L      0.475	/* #797979 — a mark on a key window */
+#define FAINT_L    0.749	/* #BFBFBF — and on one that is not */
+#define HOVER_L    0.294	/* #4B4B4B — under the pointer */
+#define PRESS_R    (0x68 / 255.0)
+#define PRESS_G    (0x97 / 255.0)
+#define PRESS_B    (0xBC / 255.0)
+#define MARK_W     8
+#define MARK_H     9
 
 static int s_failed;
 
@@ -79,48 +108,49 @@ static int is_colour(NSColor *c, NSColor *want, double tol)
 		&& fabs([c blueComponent] - [want blueComponent]) < tol;
 }
 
-/* INK IS DARK. The strip is 0.82 and the frame text colour is black, so one threshold separates them and nothing
- * else in the strip is near it — the pill's face is LIGHTER than the strip, which is why the pill is asked about by
- * colour below rather than by darkness. */
-/* **INK IS "DARKER THAN THE STRIP", WHICH IS A DIFFERENT THRESHOLD SINCE THE MARKS STOPPED BEING BLACK.**
- * The chrome's marks and its pill are `+cg_chromeInkColor` (0.70) and the strip is `+windowFrameColor` (0.82), so the
- * fixed 0.5 this asked for while the marks were `+windowFrameTextColor` stopped finding them altogether — MEASURED, a
- * minus that drew at 0.70 read as "0 rows thick". What the question really is, everywhere below, is "is this pixel
- * part of a mark that was DRAWN rather than the surface it was drawn on", and 0.78 answers it: the strip is 0.82, and
- * both inks — the chrome's 0.70 and the title's black — are under it. */
+static NSColor *grey(double white)
+{
+	return [NSColor colorWithCalibratedWhite:white alpha:1.0];
+}
+
+/* **THE INK IS "DARKER THAN THE BAR'S FACE", AND THE BAR'S OUTLINE IS DARKER STILL.** The face is 0.871, a mark is
+ * 0.749 on a window that is not key and 0.475 on one that is, and the light row under a mark is 0.898 — so 0.80
+ * separates a mark from the surface it is drawn on in every state. The OUTLINE at 0.576 is under that threshold too,
+ * which is why every scan below stays off the bar's top row and its two end columns: the outline is not a mark, and
+ * a probe that counted it would find "ink" across the whole strip and call a title a hundred points too wide. */
 static int ink_at(NSBitmapImageRep *rep, int x, int y)
 {
-	return lum(at(rep, x, y)) < 0.78;
+	return lum(at(rep, x, y)) < 0.80;
 }
 
-static int ink_in(NSBitmapImageRep *rep, int x0, int y0, int x1, int y1)
+/* **THE INK'S BOUNDING BOX IN A COLUMN RANGE, OVER THE ROWS A MARK CAN BE DRAWN IN.** The rows start below the bar's
+ * outline (row 0) and stop before the content's hairline, which is the band the marks and the title share. Returns NO
+ * when there is no ink at all. */
+static int ink_box_range(NSBitmapImageRep *rep, int x0, int x1, int y0, int y1,
+			 int *outX0, int *outX1, int *outY0, int *outY1)
 {
-	int x, y, n = 0;
-
-	for (y = y0; y < y1; y++) {
-		for (x = x0; x < x1; x++) {
-			if (ink_at(rep, x, y)) {
-				n++;
-			}
-		}
-	}
-	return n;
-}
-
-/* **THE INK'S BOUNDING BOX IN A COLUMN RANGE**, which is how a title's width and its centre are measured without
- * asking the font anything: what was drawn is what can be seen. Returns NO when there is no ink at all. */
-static int ink_box_range(NSBitmapImageRep *rep, int x0, int x1, int y0, int y1, int *outX0, int *outX1)
-{
-	int x, y, lo = -1, hi = -1;
+	int x, y, lo = -1, hi = -1, top = -1, bot = -1;
 
 	for (x = x0; x < x1; x++) {
 		for (y = y0; y < y1; y++) {
 			if (ink_at(rep, x, y)) {
-				if (lo < 0) {
+				/* **MIN AND MAX, NOT FIRST AND LAST.** The scan runs columns first, so "the first ink
+				 * found" is the top of the FIRST COLUMN with any, and "the last" is the bottom of the
+				 * LAST one — and a mark whose tips are single pixels has neither. This read `if (top <
+				 * 0) top = y` and `bot = y` and measured the close mark as seven rows tall instead of
+				 * nine, which is exactly the kind of quiet off-by-two a shape check dies of. */
+				if (lo < 0 || x < lo) {
 					lo = x;
 				}
-				hi = x;
-				break;
+				if (x > hi) {
+					hi = x;
+				}
+				if (top < 0 || y < top) {
+					top = y;
+				}
+				if (y > bot) {
+					bot = y;
+				}
 			}
 		}
 	}
@@ -129,14 +159,15 @@ static int ink_box_range(NSBitmapImageRep *rep, int x0, int x1, int y0, int y1, 
 	}
 	*outX0 = lo;
 	*outX1 = hi;
+	*outY0 = top;
+	*outY1 = bot;
 	return 1;
 }
 
-/* THE STRIP'S OWN BAND, which is what almost every question here is about; the text scratch reps below are taller and
- * ask about their own rows instead. */
-static int ink_box(NSBitmapImageRep *rep, int x0, int x1, int *outX0, int *outX1)
+/* THE MARK'S OWN BAND: below the bar's outline and above the content. */
+static int mark_box(NSBitmapImageRep *rep, int x0, int x1, int *lo, int *hi, int *top, int *bot)
 {
-	return ink_box_range(rep, x0, x1, 0, STRIP, outX0, outX1);
+	return ink_box_range(rep, x0, x1, 2, STRIP, lo, hi, top, bot);
 }
 
 /* DRAW THE CHROME into a fresh rep, which is the whole of how this file reaches it. */
@@ -159,7 +190,7 @@ static int text_ink_width(NSFont *font, NSString *s)
 	NSBitmapImageRep *rep = new_rep(240, 40);
 	NSGraphicsContext *ctx = [NSGraphicsContext graphicsContextWithBitmapImageRep:rep];
 	NSDictionary *attrs = [NSDictionary dictionaryWithObject:font forKey:NSFontAttributeName];
-	int lo = 0, hi = 0;
+	int lo = 0, hi = 0, top = 0, bot = 0;
 	int found;
 
 	[NSGraphicsContext setCurrentContext:ctx];
@@ -167,10 +198,17 @@ static int text_ink_width(NSFont *font, NSString *s)
 	[[NSBezierPath bezierPathWithRect:NSMakeRect(0.0, 0.0, 240.0, 40.0)] fill];
 	[[NSColor blackColor] setFill];
 	[s drawAtPoint:NSMakePoint(4.0, 4.0) withAttributes:attrs];
-	found = ink_box_range(rep, 0, 240, 0, 40, &lo, &hi);
+	found = ink_box_range(rep, 0, 240, 0, 40, &lo, &hi, &top, &bot);
 	[rep release];
 	return found ? (hi - lo + 1) : 0;
 }
+
+/* **THE DOORS THIS FILE NEEDS THAT ONLY THE POINTER OR THE KEY STATE CAN OPEN**, declared the way this tree's other
+ * probes declare a private contract: a hover is an engine call, and a press is an event the way a compositor would
+ * have sent it. */
+@interface NSWindow (APPKITWindowChromeTest)
+- (void)cg_updateTrackingForPoint:(NSPoint)windowPoint;
+@end
 
 int main(void)
 {
@@ -178,211 +216,310 @@ int main(void)
 		NSWindow *w = [[NSWindow alloc] initWithContentRect:NSMakeRect(0.0, 0.0, (CGFloat)CW, (CGFloat)CH)
 			styleMask:(NSTitledWindowMask | NSClosableWindowMask | NSMiniaturizableWindowMask | NSResizableWindowMask)
 			backing:NSBackingStoreBuffered defer:NO];
-		/* THE SYMBOLS' BOXES, in the rep's own coordinates — rows count from the TOP here, so the strip is rows
-		 * 0..21 and the eleven-point boxes are centred in it at rows 5..15. x is the same at both ends of the
-		 * conversion, so the three boxes are 8..19, 28..39 and 48..59: the strip's edge padding, then the symbol,
-		 * then the gap, three times. */
-		/* **AND THE BOXES ARE ON WHOLE POINTS, WHICH IS WHY THESE ROWS ARE ODD-NUMBERED.** The painter snaps the
-		 * strip's eleven-point boxes with `floor`, so a three-point stroke has its centre on a half point and covers
-		 * exactly three rows; the box therefore occupies rows 6..16 of this rep and its centre is 11. These read 5 and
-		 * 15 until that snap — and the probes still landed on ink, which is exactly how a probe goes quietly wrong. */
-		const int boxY0 = 6, boxY1 = 16;
-		const int xX = 8, xM = 28, xP = 48;
-		const int midY = (boxY0 + boxY1) / 2;
+		/* **THE BOXES ARE THE LAYOUT'S AND THE INK INSIDE THEM IS MEASURED.** The three left boxes are eleven
+		 * points, nine points apart, starting at the strip's eight-point edge: 8..18, 28..38 and 48..58. Nothing
+		 * below writes down a ROW: the marks' rows are found by asking the pixels, because they are the thing under
+		 * test and a row written here would be a second copy of the painter's arithmetic. */
+		const int xClose = 8, xHide = 28, xZoom = 48;
+		const int xMenu = CW - 8 - 11;
+		int lo = 0, hi = 0, top = 0, bot = 0;
 
 		[w setTitle:@"Controls"];
 
-		/* 1. THE STRIP, which is the surface everything else in this file is drawn on. */
+		/* 1. **THE CHROME IS ONE SURFACE WITH ONE EDGE: ITS TOP.** The face is `+cg_chromeFaceColor` — the colour the
+		 * toolbar band is painted with too, which is what makes the strip continuous — the row above it is a white
+		 * highlight, and above that a one-point outline. THE EDGE IS THE TOP'S ALONE: it follows the corners and
+		 * stops, so the ends of the strip are the window's own edges and nothing is drawn down them. That is a
+		 * decision with a reason (a line down the ends reads as a border AROUND the chrome), so it is checked as
+		 * hard as the things that ARE drawn. */
 		{
 			NSBitmapImageRep *rep = draw_chrome(w);
 
-			check(is_colour(at(rep, 70, 1), [NSColor windowFrameColor], 0.02),
-			      "the strip is filled in the frame colour, in the row above the content");
-			check(is_colour(at(rep, 70, STRIP + 6), [NSColor whiteColor], 0.02),
-			      "and it does not run down into the content below it");
+			check(is_colour(at(rep, CW / 2, 0), grey(EDGE_L), 0.02),
+			      "the strip's top row is its one-point outline, in the theme's #939393");
+			check(is_colour(at(rep, CW / 2, 1), [NSColor whiteColor], 0.02),
+			      "and the row below it is the white highlight the theme draws there");
+			check(is_colour(at(rep, CW / 4, 6), [NSColor cg_chromeFaceColor], 0.02),
+			      "and the surface is +cg_chromeFaceColor — the one colour the title bar and the toolbar share");
+			check(is_colour(at(rep, 0, 0), [NSColor cg_chromeFaceColor], 0.02),
+			      "the CORNER's own pixel is the surface, because the top edge is round and does not reach it");
+			check(is_colour(at(rep, 8, 0), grey(EDGE_L), 0.02) && !is_colour(at(rep, 3, 0), grey(EDGE_L), 0.02),
+			      "while the top edge, past the SIX-point corner, IS the outline — so the corner is a shape, not a gap");
+			check(is_colour(at(rep, 0, 10), [NSColor cg_chromeFaceColor], 0.02)
+			      && is_colour(at(rep, CW - 1, 10), [NSColor cg_chromeFaceColor], 0.02),
+			      "and NOTHING is drawn down the ends — the strip is the surface to the window's own edges");
+			check(is_colour(at(rep, CW / 2, STRIP + 6), [NSColor whiteColor], 0.02),
+			      "and the chrome does not run down into the content below it");
 			[rep release];
 		}
 
-		/* 2. **THE THREE SYMBOLS, AS SHAPES.** Each check below is one shape's own geometry and would fail for the
-		 * other two: the X inks two diagonals, the minus inks one horizontal and NOTHING above it, and the plus inks
-		 * the horizontal AND the upright over the same centre. A circle — what used to be drawn — passes none. */
+		/* 2. **THE THREE MARKS, AS SHAPES AND AT THE THEME'S SIZE.** Each check below is one shape's own geometry and
+		 * would fail for the other two: the X inks two diagonals, the minus inks one bar and NOTHING beside it, and the
+		 * plus inks the bar AND the upright over the same centre. A circle — what used to be drawn — passes none. */
 		{
 			NSBitmapImageRep *rep = draw_chrome(w);
 
-			check(ink_at(rep, xX + 2, boxY0 + 1) && ink_at(rep, xX + 10, boxY0 + 1) && ink_at(rep, xX + 5, midY)
-			      && !ink_at(rep, xX + 5, boxY0),
-			      "the CLOSE symbol inks BOTH diagonals of its box and NOT its top middle — an X, not a dot");
-			check(ink_at(rep, xM + 5, midY) && !ink_at(rep, xM + 1, boxY0 + 1) && !ink_at(rep, xM + 10, boxY0 + 1),
-			      "the MINIATURIZE symbol inks one horizontal line and nothing above it — a minus");
-			check(ink_at(rep, xP + 5, midY) && ink_at(rep, xP + 5, boxY0 + 1)
-			      && !ink_at(rep, xP + 1, boxY0 + 1),
-			      "and the ZOOM symbol inks the same line PLUS the upright through it — a plus");
-			/* **AND THE MINUS ENDS IN A FACE, WHICH IS WHAT MAKES IT A RECTANGLE RATHER THAN A STROKE.** This is the
-			 * check the last two rounds were missing, and it is about SHAPE: the ink at a rectangle's end column is
-			 * its full END FACE — three rows of it, because that is how thick the bar is — where a round cap covers
-			 * about a tenth of that column and leaves two rows half covered. MEASURED: 3 here, and 2 with the round caps
-			 * this chrome used to be drawn with. Nothing about antialiasing or crispness would have found that, which is
-			 * exactly why two rounds of looking at those did not. */
+			check(mark_box(rep, xClose, xClose + 11, &lo, &hi, &top, &bot)
+			      && (hi - lo + 1) == MARK_W && (bot - top + 1) == MARK_H,
+			      "the close mark is the theme's EIGHT BY NINE, in its eleven-point box");
+			check(ink_at(rep, lo + 1, top + 1) && ink_at(rep, hi - 1, top + 1)
+			      && !ink_at(rep, (lo + hi) / 2, top + 1),
+			      "it inks BOTH diagonals and NOT its top middle — an X, not a dot");
+			check(mark_box(rep, xHide, xHide + 11, &lo, &hi, &top, &bot)
+			      && (hi - lo + 1) == MARK_W && (bot - top + 1) == 2,
+			      "the miniaturize mark is ONE TWO-POINT BAR, eight wide — a minus");
+			check(mark_box(rep, xZoom, xZoom + 11, &lo, &hi, &top, &bot)
+			      && (hi - lo + 1) == MARK_W && (bot - top + 1) == MARK_W,
+			      "and the zoom mark is that bar PLUS the upright — a plus, eight by eight");
+			/* **AND ITS FOUR ARMS ARE ONE LENGTH, WHICH IS THE WHOLE OF WHAT A PLUS IS.** The cross-bar's rows
+			 * are the only ones as wide as the mark and the upright's columns the only ones as tall; the rows
+			 * above and below the bar, and the columns either side of the upright, are the four arms. They must
+			 * MATCH — MEASURED, in a nine-row upright a two-row bar leaves three rows above and four below, which
+			 * is exactly "the top and bottom of the + are uneven". A plus whose arms differ is a cross with a long
+			 * leg, and the upright is eight rows for this reason. */
 			{
-				int row, x, first = -1, face = 0;
+				int x, y, barTop = -1, barBot = -1, upLeft = -1, upRight = -1;
+				int above, below, leftArm, rightArm;
 
-				for (x = xM - 2; x <= xM + 13 && first < 0; x++) {
-					for (row = boxY0; row <= boxY1; row++) {
-						if (lum(at(rep, x, row)) < 0.72) {
-							first = x;
-							break;
+				for (y = top; y <= bot; y++) {
+					int width = 0;
+
+					for (x = lo; x <= hi; x++) {
+						if (ink_at(rep, x, y)) {
+							width++;
 						}
 					}
-				}
-				for (row = boxY0; row <= boxY1; row++) {
-					if (first >= 0 && lum(at(rep, first, row)) < 0.72) {
-						face++;
+					if (width == MARK_W) {
+						if (barTop < 0) {
+							barTop = y;
+						}
+						barBot = y;
 					}
 				}
-				printf("  (note: the minus's end face at column %d is %d rows tall)\n", first, face);
-				check(face == 3, "and its end is a FACE rather than a cap — 3 rows of rectangle, not 2 of semicircle");
-			}
-			/* **THE THICKNESS AND THE CRISPNESS, WHICH ARE TWO DIFFERENT CLAIMS.** "Darker than the strip" is the
-			 * first — that is what "very thick" means, and a blurred edge passes it just as well. The second is rows
-			 * of PURE ink, to within the rep's own round trip: before the boxes were snapped onto whole points the
-			 * minus was four rows with two of them half covered, and it read 2 then and reads 3 now. */
-			{
-				int y, rows = 0, pure = 0;
+				for (x = lo; x <= hi; x++) {
+					int height = 0;
 
-				for (y = 0; y < STRIP; y++) {
-					if (ink_at(rep, xM + 5, y)) {
-						rows++;
+					for (y = top; y <= bot; y++) {
+						if (ink_at(rep, x, y)) {
+							height++;
+						}
 					}
-					if (is_colour(at(rep, xM + 5, y), [NSColor cg_chromeInkColor], 0.02)) {
+					if (height == MARK_W) {
+						if (upLeft < 0) {
+							upLeft = x;
+						}
+						upRight = x;
+					}
+				}
+				above = barTop - top;
+				below = bot - barBot;
+				leftArm = upLeft - lo;
+				rightArm = hi - upRight;
+				printf("  (note: the plus's arms are %d above, %d below, %d left, %d right)\n",
+				       above, below, leftArm, rightArm);
+				check(barTop >= 0 && upLeft >= 0 && above == below && leftArm == rightArm
+				      && above == leftArm,
+				      "and its four arms are ONE length — an even plus, not a cross with a long leg");
+			}
+			{
+				int mx0 = 0, mx1 = 0, my0 = 0, my1 = 0, px0 = 0, px1 = 0, py0 = 0, py1 = 0;
+
+				/* **THE MINUS IS THE PLUS'S OWN CROSS BAR, TO THE ROW.** Its rows lie inside the upright's and
+				 * its middle IS the upright's — the half-point offset a nine-row upright forced is gone with the
+				 * upright, because the upright is now the cross-bar's own length. */
+				check(mark_box(rep, xHide, xHide + 11, &mx0, &mx1, &my0, &my1)
+				      && mark_box(rep, xZoom, xZoom + 11, &px0, &px1, &py0, &py1)
+				      && my0 >= py0 && my1 <= py1
+				      && (my0 + my1) == (py0 + py1),
+				      "and the minus IS the plus's cross bar — same middle, inside the same upright");
+			}
+			[rep release];
+		}
+
+		/* 3. **THE INK IS GREY, AND IT FOLLOWS THE WINDOW.** The window this file builds is NOT key, so it wears the
+		 * faded ink; making it key swaps to the theme's body colour. Those two are compared by COLOUR and not by
+		 * "darker", because the claim is the theme's palette and not that something was drawn. */
+		{
+			NSBitmapImageRep *rep = draw_chrome(w);
+			int midX, midY;
+
+			check(mark_box(rep, xHide, xHide + 11, &lo, &hi, &top, &bot), "the minus can be found");
+			midX = (lo + hi) / 2;
+			midY = (top + bot) / 2;
+			check(is_colour(at(rep, midX, midY), grey(FAINT_L), 0.02),
+			      "a window that is NOT key draws the theme's faded #BFBFBF marks");
+			[w makeKeyWindow];
+			check([w isKeyWindow], "and this window can be made key");
+			[rep release];
+			rep = draw_chrome(w);
+			check(is_colour(at(rep, midX, midY), grey(INK_L), 0.02),
+			      "made key, the SAME pixel is the theme's #797979");
+			[rep release];
+		}
+
+		/* 4. **THE POINTER'S TWO STATES, WHICH ARE TWO MORE GREYS.** Hovering the minus darkens it to `#4B4B4B`; a
+		 * press on the close mark turns it the theme's blue. The blue is the point: three greys that are merely
+		 * "different" could all be wrong, and a colour that is not a grey could not be. */
+		{
+			NSBitmapImageRep *rep;
+			int midX, midY;
+
+			[w cg_updateTrackingForPoint:NSMakePoint((CGFloat)(xHide + 5), (CGFloat)(CH + 11))];
+			rep = draw_chrome(w);
+			check(mark_box(rep, xHide, xHide + 11, &lo, &hi, &top, &bot), "the hovered minus can be found");
+			midX = (lo + hi) / 2;
+			midY = (top + bot) / 2;
+			check(is_colour(at(rep, midX, midY), grey(HOVER_L), 0.02),
+			      "the mark UNDER THE POINTER is the theme's darker #4B4B4B");
+			[rep release];
+		}
+		{
+			NSBitmapImageRep *rep;
+			NSEvent *down = [NSEvent mouseEventWithType:NSLeftMouseDown
+				location:NSMakePoint((CGFloat)(xClose + 5), (CGFloat)(CH + 11))
+				modifierFlags:0 timestamp:0.0 windowNumber:[w windowNumber] context:nil
+				eventNumber:0 clickCount:1 pressure:0.0f];
+
+			[w sendEvent:down];
+			rep = draw_chrome(w);
+			check(mark_box(rep, xClose, xClose + 11, &lo, &hi, &top, &bot), "the pressed close mark can be found");
+			check(is_colour(at(rep, (lo + hi) / 2, (top + bot) / 2),
+					[NSColor colorWithCalibratedRed:PRESS_R green:PRESS_G blue:PRESS_B alpha:1.0], 0.02),
+			      "and a PRESS draws it in the theme's own BLUE (#6897BC), which no grey could imitate");
+			[rep release];
+		}
+
+		/* 5. **AND IT IS CRISP, WHICH IS THE MARKS' OWN RULE.** A two-point bar is two rows of the ink EXACTLY; the
+		 * light row under it is the theme's and is lighter than the bar, so it is not ink; and there is no
+		 * half-covered row on either side of it. Before antialiasing was turned off for the marks the diagonal was
+		 * the shape that suffered, and the bar is the shape that measures it without any geometry to argue about. */
+		{
+			NSBitmapImageRep *rep = draw_chrome(w);
+			int x, y, pure = 0, blended = 0;
+
+			if (mark_box(rep, xHide, xHide + 11, &lo, &hi, &top, &bot)) {
+				for (x = lo; x <= hi; x++) {
+					int inkHere = 0;
+
+					for (y = top - 1; y <= bot + 1; y++) {
+						NSColor *p = at(rep, x, y);
+
+						if (is_colour(p, grey(INK_L), 0.02)) {
+							inkHere++;
+						} else if (lum(p) < 0.80) {
+							blended++;
+						}
+					}
+					if (inkHere == 2) {
 						pure++;
 					}
 				}
-				printf("  (note: the minus is %d rows thick, %d of them pure ink)\n", rows, pure);
-				check(rows >= 3 && rows <= 5, "the symbols are drawn with a VERY THICK stroke, not a hairline");
-				check(pure == 3, "and its edges are not blended — 3 rows of ink, not 4 with two half covered");
 			}
+			printf("  (note: %d of the minus's 8 columns are 2 rows of pure ink; %d blended pixels beside them)\n",
+			       pure, blended);
+			check(pure == MARK_W, "every column of the minus is TWO ROWS of ink and no more");
+			check(blended == 0, "and there is not one half-covered pixel in the band — the marks are not smoothed");
 			[rep release];
 		}
 
-		/* 4. **THE TITLE IS CENTRED AND BOLD.** Centred is measured as the ink's own centre against the strip's,
+		/* 6. **THE TITLE IS CENTRED AND BOLD.** Centred is measured as the ink's own centre against the strip's,
 		 * over the columns BETWEEN the two blocks — where the title is the only thing that can be drawn. Bold is
 		 * measured against the same string in the two faces, so it says "this came from the emphasized face" rather
 		 * than "this came from the face whose name I happen to have written down". */
 		{
 			NSBitmapImageRep *rep = draw_chrome(w);
-			int lo = 0, hi = 0, leftEnd = xP + 11 + 4;
-			int rightStart = CW - 8 - 30 - 4;
-			int found = ink_box(rep, leftEnd, rightStart, &lo, &hi);
+			int leftEnd = xZoom + 11 + 4;
+			int rightStart = xMenu - 4;
+			int found = mark_box(rep, leftEnd, rightStart, &lo, &hi, &top, &bot);
 			double centre = found ? ((double)lo + (double)hi) / 2.0 : -1.0;
-			int chromeWidth = found ? (hi - lo + 1) : 0;
+			int titleWidth = found ? (hi - lo + 1) : 0;
 			int boldWidth, plainWidth;
 
-			printf("  (note: the title's ink runs x %d..%d, centre %.1f against the strip's %.1f; width %d)\\n",
-			       lo, hi, centre, (double)CW / 2.0, chromeWidth);
+			printf("  (note: the title's ink runs x %d..%d, centre %.1f against the strip's %.1f; width %d)\n",
+			       lo, hi, centre, (double)CW / 2.0, titleWidth);
 			check(found, "the title is drawn in the strip");
 			check(found && fabs(centre - (double)CW / 2.0) <= 2.0,
-			      "and it is CENTRED — its ink's centre is the strip's, not the left end after the symbols");
+			      "and it is CENTRED — its ink's centre is the strip's, not the left end after the marks");
 
 			boldWidth = text_ink_width([NSFont boldSystemFontOfSize:[[NSFont titleBarFontOfSize:0.0] pointSize]],
 						   [w title]);
 			plainWidth = text_ink_width([NSFont systemFontOfSize:[[NSFont titleBarFontOfSize:0.0] pointSize]],
 						    [w title]);
-			printf("  (note: the same title measures %d in the emphasized face and %d in the regular one)\\n",
+			printf("  (note: the same title measures %d in the emphasized face and %d in the regular one)\n",
 			       boldWidth, plainWidth);
 			check(boldWidth > 0 && plainWidth > 0, "the same string can be measured in both faces");
 			/* **CLOSER TO, RATHER THAN EQUAL TO.** The two measurements are the same string drawn at the same
 			 * point, so an exact match is what one would expect — and it is NOT what happens: the scratch rep draws
 			 * at an integer point and the chrome's title is centred, so the two land on different sub-pixel phases
 			 * and the ink's width can differ by one row of coverage. The CLAIM is which face it came from, and the
-			 * two faces differ by more than that (46 against 49 for this title), so the distance decides it. */
+			 * two faces differ by more than that, so the distance decides it. */
 			check(boldWidth != plainWidth
-			      && abs(chromeWidth - boldWidth) < abs(chromeWidth - plainWidth),
+			      && abs(titleWidth - boldWidth) < abs(titleWidth - plainWidth),
 			      "and the title in the strip is the BOLD one — nearer the emphasized face than the regular one");
 			[rep release];
 		}
 
-		/* 5. **THE PILL AT THE FAR END, AND ROUNDED.** The face is the control colour, the border is the control
-		 * border, and the CORNER is the strip — which is the whole difference between a rounded rectangle and a
-		 * square one, and cannot be satisfied by a rectangle. */
+		/* 7. **THE FOURTH MARK IS THE THEME'S TRIANGLE, AND ITS SHAPE IS THE CLAIM.** Eight wide on its base row and
+		 * narrower on every row below it, down to a point: that is a filled triangle, and a pill — which is what
+		 * stood at this end before — is the same width on every row and would fail every line of this. */
 		{
 			NSBitmapImageRep *rep = draw_chrome(w);
-			/* **THE PILL'S OWN WIDTH, FROM THE ARITHMETIC THE PAINTER USES: the strip's edge padding, then the
-			 * shape.** 19.5 points puts the box's left edge on a half pixel — CW - 8 - 19.5 is 272.5 — so a probe
-			 * that wants an integer column starts at 273, the first one the shape covers whole. This read
-			 * `CW - 8 - 30` until the width changed, and then it was no longer the pill's edge but a column ten
-			 * points to its LEFT: every check below went on passing, because they all landed inside the shape
-			 * anyway, while the corner probe quietly began sampling empty strip and proving nothing at all. A probe
-			 * derived from a constant that has since moved is not a probe. */
-			int left = CW - 8 - 19, midRow = STRIP / 2;
+			int widths[STRIP], i, rows = 0, nextToEdge = 0;
+			int t0 = 0, t1 = 0, t2 = 0, t3 = 0;
 
-			/* **THE PILL IS A FILLED SHAPE IN THE MARKS' OWN INK, WITH NO BORDER AT ALL — AND ITS HEIGHT IS A
-			 * METRIC RATHER THAN A ROW NUMBER.** Every claim below is made against the column of ink ITSELF rather
-			 * than against rows written down here, which is what the first version did: it probed row 4 for the top
-			 * edge, and the moment the pill was made shorter that row was the STRIP, so the check failed on a pill
-			 * that was exactly right. A probe is a claim about geometry and has to be derived from the geometry —
-			 * the same lesson `box_is` carries one screen down, learned the same way. */
-			{
-				int top = -1, bottom = -1, y, height;
+			memset(widths, 0, sizeof widths);
+			/* **THE TRIANGLE'S ROWS COME FROM THE TRIANGLE.** Writing down "rows 2..8" here was the first
+			 * version and it measured zero, because the mark sits nine rows lower than that — a probe with a
+			 * row in it is a second copy of the painter's arithmetic. */
+			if (!mark_box(rep, xMenu, xMenu + 11, &t0, &t1, &t2, &t3)) {
+				t2 = t3 = -1;
+			} else {
+				for (i = 0; t2 + i <= t3; i++) {
+					int x;
 
-				for (y = 0; y < STRIP; y++) {
-					if (is_colour(at(rep, left + 9, y), [NSColor cg_chromeInkColor], 0.03)) {
-						if (top < 0) {
-							top = y;
-						}
-						bottom = y;
-					}
-				}
-				height = (top < 0) ? 0 : (bottom - top + 1);
-				printf("  (note: the pill runs rows %d..%d — %d points tall in a %d-point strip)\n",
-				       top, bottom, height, STRIP);
-				check(is_colour(at(rep, left + 9, midRow), [NSColor cg_chromeInkColor], 0.03),
-				      "the toolbar pill is filled in the chrome's ink — the same grey as the three marks");
-				check(height > 0, "and it is drawn at all");
-				check(height == 7, "and it is HALF the 14 points it was — a mark rather than a bar");
-				{
-					int x, across = 0;
-
-					/* **THE SCAN IS THE PILL'S OWN END OF THE STRIP, NOT THE WHOLE OF IT.** A full-width row finds the three
-					 * SYMBOLS too — same ink, same row — and MEASURED that reads 41 columns, which is the marks plus the pill
-					 * and not the pill. */
-					for (x = CW - 40; x < CW; x++) {
-						if (is_colour(at(rep, x, top + 3), [NSColor cg_chromeInkColor], 0.03)) {
-							across++;
+					for (x = xMenu; x < xMenu + 11; x++) {
+						if (ink_at(rep, x, t2 + i)) {
+							widths[i]++;
 						}
 					}
-					printf("  (note: the pill is %d columns across, where 30 points used to be 30)\n", across);
-					check(across >= 19 && across <= 20,
-					      "and 35 PER CENT SHORTER across — 19.5 points where it was 30");
+					rows++;
 				}
-				check(top > 0 && is_colour(at(rep, left + 9, top - 1), [NSColor windowFrameColor], 0.02),
-				      "with STRIP directly above its top edge, so there is no border row there");
-				/* **AND THE TOLERANCE IS THE INK'S OWN, BECAUSE THE BORDER IS NO LONGER FAR FROM IT.** The border
-				 * was lightened to `+controlDarkShadowColor`'s 0.55 against the chrome ink's 0.50, so a 0.06
-				 * tolerance cannot tell them apart — it would call the pill's own edge "the border". The pixel
-				 * here is the ink exactly, so 0.02 says what the 0.06 said when the two were 0.10 apart. */
-				check(!is_colour(at(rep, left + 9, top), [NSColor controlDarkShadowColor], 0.02)
-				      && !is_colour(at(rep, left + 9, top), [NSColor controlColor], 0.02),
-				      "and that edge is neither the border nor the face the pill used to be drawn with");
-				/* **AND THE CORNER IS ASKED AS "NOT THE INK" RATHER THAN "IS THE STRIP".** The point below is inside the
-				 * shape's bounding box but outside its rounded corner, so a SQUARE pill would ink it and a rounded one
-				 * leaves the strip showing — which is the claim. Asking for an exact strip colour instead was the first
-				 * version and it FAILED on a pill that was right: a 3.5-point radius means that pixel is part of the
-				 * curve's own antialiasing, a blend of the two, and neither colour to within 0.02. */
-				check(!is_colour(at(rep, left, top), [NSColor cg_chromeInkColor], 0.03),
-				      "while its corner is NOT the ink — a rounded rectangle, not a square one");
 			}
+			printf("  (note: the triangle's rows are %d,%d,%d,%d,%d,%d wide)\n",
+			       widths[0], widths[1], widths[2], widths[3], widths[4], widths[5]);
+			check(rows >= 5 && widths[0] == MARK_W,
+			      "the toolbar mark is EIGHT WIDE at its top");
+			check(rows >= 5 && widths[rows - 1] < widths[0] && widths[rows - 1] <= 2,
+			      "and narrows to a point at the bottom — a triangle, not a pill");
+			{
+				int narrowed = 1;
+
+				for (i = 1; i < rows; i++) {
+					if (widths[i] > widths[i - 1]) {
+						narrowed = 0;
+					}
+				}
+				check(narrowed, "and it narrows on EVERY row, without widening again");
+			}
+			for (i = xMenu; i < CW; i++) {
+				if (is_colour(at(rep, i, 10), [NSColor cg_chromeFaceColor], 0.02)) {
+					nextToEdge++;
+				}
+			}
+			check(nextToEdge >= 8, "and it stands clear of the bar's own end, as the left block does");
 			[rep release];
 		}
 
-		/* 6. **AND A TITLE WITH NO ROOM IS CUT RATHER THAN ALLOWED TO RUN UNDER A SYMBOL.** The window here is 300
+		/* 8. **AND A TITLE WITH NO ROOM IS CUT RATHER THAN ALLOWED TO RUN UNDER A MARK.** The window here is 160
 		 * points wide with two blocks in it, so a title long enough to reach either one has to be truncated — and
-		 * what is checked is that the ink stops before the pill rather than where the string happens to end. */
+		 * what is checked is that the ink stops before the right block rather than where the string happens to end. */
 		{
 			NSWindow *narrow = [[NSWindow alloc] initWithContentRect:NSMakeRect(0.0, 0.0, 160.0, (CGFloat)CH)
 				styleMask:(NSTitledWindowMask | NSClosableWindowMask | NSMiniaturizableWindowMask | NSResizableWindowMask)
 				backing:NSBackingStoreBuffered defer:NO];
 			NSBitmapImageRep *rep;
-			int lo = 0, hi = 0;
+			int bandLeft = 48 + 11 + 2;
+			int bandRight = 160 - 19 - 2;
 
 			[narrow setTitle:@"A Title Far Longer Than Any Of This Window's Chrome Could Ever Hope To Fit"];
 			rep = new_rep(160, FH);
@@ -394,17 +531,12 @@ int main(void)
 				[[NSBezierPath bezierPathWithRect:NSMakeRect(0.0, 0.0, 160.0, (CGFloat)FH)] fill];
 				[narrow cg_drawChromeInContext:ctx];
 			}
-			/* **THE SCAN IS THE COLUMNS THE TITLE MAY USE, NOT THE WHOLE STRIP.** The symbols and the pill are ink
-			 * too, so a full-width scan measures THEM and says nothing about the title — which is exactly what the first
-			 * version of this check did: it passed while the pill had no border (there was nothing to find at the right
-			 * end) and broke the moment the border was drawn, reporting the pill's own ink as an over-long title. The
-			 * band below is what the title has to itself, and "the ink is inside it with air at both ends" is the claim
-			 * that the title was CUT. */
-			if (ink_box_range(rep, 8 + 51 + 2, 160 - 8 - 30 - 2, 0, STRIP, &lo, &hi)) {
-				printf("  (note: a title with no room runs x %d..%d, in the band it has)\n", lo, hi);
-			}
-			check(ink_box_range(rep, 8 + 51 + 2, 160 - 8 - 30 - 2, 0, STRIP, &lo, &hi)
-			      && lo > 8 + 51 && hi < 160 - 8 - 30,
+			/* **THE SCAN IS THE COLUMNS THE TITLE MAY USE, NOT THE WHOLE STRIP.** The marks and the triangle are ink
+			 * too, so a full-width scan measures THEM and says nothing about the title. The band below is what the
+			 * title has to itself, and "the ink is inside it with air at both ends" is the claim that the title was
+			 * CUT. */
+			check(mark_box(rep, bandLeft, bandRight, &lo, &hi, &top, &bot)
+			      && lo > 48 + 11 && hi < 160 - 19,
 			      "an over-long title is CUT, and its ink stays clear of both blocks");
 			[rep release];
 			[narrow release];

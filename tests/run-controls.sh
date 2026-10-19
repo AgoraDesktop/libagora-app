@@ -12,12 +12,32 @@
 #
 #     AGORA_CHROME_THEME=/path/to/theme ./tests/run-controls.sh
 #
-# Usage: run-controls.sh [WINDOW-SERVER] [WIDTHxHEIGHT]
+# Usage: run-controls.sh [WINDOW-SERVER] [WIDTHxHEIGHT] [DEMO-ARG...]
+#        run-controls.sh --data          # the Table & Outline window at startup
+#        run-controls.sh "" 1200x820 --data
+#
+# **THE DEMO'S OWN ARGUMENTS ARE FORWARDED**, so the split view can be looked at without a second launcher:
+# `--data` opens the Table & Outline window at startup, and anything the demonstration does not recognise is
+# ignored by it. A first argument beginning with `-` is a DEMO argument, not a server path, so `run-controls.sh
+# --data` needs no empty placeholders.
 set -u
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
-SERVER="${1:-${HERE}/../../window-server/build/window-server}"
-GEOM="${2:-900x600}"
+DEMO_ARGS=()
+if [ $# -gt 0 ] && [ "${1#-}" != "$1" ]; then
+	SERVER="${HERE}/../../window-server/build/window-server"
+	GEOM="900x600"
+	DEMO_ARGS=("$@")
+else
+	SERVER="${1:-${HERE}/../../window-server/build/window-server}"
+	GEOM="${2:-900x600}"
+	if [ $# -ge 2 ]; then
+		shift 2
+	elif [ $# -eq 1 ]; then
+		shift 1
+	fi
+	DEMO_ARGS=("$@")
+fi
 W="${GEOM%x*}"
 H="${GEOM#*x}"
 BIN="${HERE}/../build/tests/appkit_controls_draw"
@@ -27,8 +47,12 @@ DISPLAY="${DISPLAY:-:1}"
 
 # The AppKit and its Foundation live in the workspace's install prefix, and DT_RUNPATH is NOT inherited by a
 # transitive dependency — so the client needs the prefix on its library path, the same reason the tests set it.
+# **AND THE BUILD TREE COMES FIRST**, because the prefix also carries an INSTALLED `libagora-app.so`: without
+# this the demonstration can load the old copy and miss the class it was just built to show. MEASURED in the
+# tests, which had the same ordering bug and loaded the prefix's AppKit while testing the source tree.
+BUILD_LIB="$(cd "${HERE}/../build" && pwd)"
 PREFIX="$(cd "${HERE}/../.." && pwd)/build-prefix/lib"
-export LD_LIBRARY_PATH="${PREFIX}:${LD_LIBRARY_PATH:-}"
+export LD_LIBRARY_PATH="${BUILD_LIB}:${PREFIX}:${LD_LIBRARY_PATH:-}"
 
 [ -x "${SERVER}" ] || { echo "no window server at ${SERVER}" >&2; exit 1; }
 [ -x "${BIN}" ] || { echo "nothing to run at ${BIN} — build the AppKit first" >&2; exit 1; }
@@ -57,4 +81,8 @@ echo "Close that window (or Ctrl-C here) to stop it." >&2
 
 # IN THE FOREGROUND, so Ctrl-C reaches the client too and the trap runs when it exits. The client prints which
 # theme resolved, its strip height, and the window's geometry — which is what iterating on a theme wants to see.
-WAYLAND_DISPLAY="${SOCK}" "${BIN}"
+if [ ${#DEMO_ARGS[@]} -gt 0 ]; then
+	WAYLAND_DISPLAY="${SOCK}" "${BIN}" "${DEMO_ARGS[@]}"
+else
+	WAYLAND_DISPLAY="${SOCK}" "${BIN}"
+fi
