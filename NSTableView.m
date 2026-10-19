@@ -790,8 +790,14 @@ NSString *NSTableViewColumnDidResizeNotification = @"NSTableViewColumnDidResizeN
 		NSIndexSet *answer = [_delegate tableView:self selectionIndexesForProposedSelection:allowed];
 
 		if (answer != nil) {
+			/* **THE DELEGATE MAY RETURN THE PROPOSED SET ITSELF.** It is `allowed`, and releasing it before copying
+			 * was a use-after-free: the copy read a deallocated set and the selection became EMPTY. MEASURED through
+			 * `NSBrowser`, whose delegate returns the proposal unchanged. The retain keeps the same object alive
+			 * across the release, and the copy is the table's own either way. */
+			[answer retain];
 			[allowed release];
 			allowed = [[NSMutableIndexSet alloc] initWithIndexSet:answer];
+			[answer release];
 		}
 	}
 	[self fn_applySelectedRows:allowed notify:YES];

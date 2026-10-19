@@ -749,3 +749,10 @@ add_test(NAME appkit-drag-seam
 	  "$<TARGET_FILE:drag_seam>" "${AGORA_WINDOW_SERVER_BINARY}")
 set_tests_properties(appkit-drag-seam PROPERTIES SKIP_RETURN_CODE 77
   ENVIRONMENT "${_agora_app_test_env}")
+
+# **THE BROWSER'S OWN PROBE.** Columns are private tables; the delegate's row counts, the selection that opens the
+# next column, the path and the cell fill are the public contract.
+add_executable(browser browser.m)
+target_link_libraries(browser PRIVATE App m)
+add_test(NAME appkit-browser COMMAND browser)
+set_tests_properties(appkit-browser PROPERTIES ENVIRONMENT "${_agora_app_test_env}")

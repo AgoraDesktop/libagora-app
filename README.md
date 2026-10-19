@@ -17,8 +17,9 @@ content, with item groups that lay their members adjacent. Above the controls th
 rows, a scrolling header, a selection, editing through the field editor, type-select, variable row heights, column
 reordering, autosave and a local row drag; and an OUTLINE VIEW over it:
 the same table, flattened from a tree with disclosure triangles. And beside them a SPLIT VIEW: panes side by side or
-one above another, dividers that drag, panes that collapse, and the delegate that constrains all of it. Under all of
-it is a DRAG SESSION: a source begins a drag from a view, the composed image floats in a window of its own, and a
+one above another, dividers that drag, panes that collapse, and the delegate that constrains all of it. And a
+BROWSER: the columns of a Finder-style column view, each a table over the same delegate, with a selection that loads
+the next column. Under all of it is a DRAG SESSION: a source begins a drag from a view, the composed image floats in a window of its own, and a
 destination in ANY window of the application is found by screen point and answers the dragged types.
 
 The classes here come from the Fiwix AppKit (same author, same licence — see `PROVENANCE.md`), and they
@@ -105,6 +106,7 @@ tests/
   segmented_control.m           the SEGMENTED CONTROL: segment geometry, selection, tracking, forwarding and ink
   path_control.m                the PATH BAR: URL decomposition, component geometry, styles, clicks and ink
   split_view.m                  the SPLIT VIEW: panes, divider positions, the drag, the collapse and the ink
+  browser.m                     the BROWSER: columns, the delegate's cells, the selection, the path and the width
   control_drag.m                and what a DRAG costs: forty motions, and how many frames the window committed
   run-*-headless.sh             ctest: a compositor with a virtual monitor (no desktop input involved)
   run-*-nested.sh, inspect.py   the PIXEL tests, and they are OPT-IN: `gnome-shell --nested` is a whole
@@ -916,6 +918,30 @@ two announcements with and without a divider index, the autosave round trip, the
 wider table's TEXT — the check that found the cells' `-setClip` replacing the enclosing clip instead of intersecting
 it.
 
+### The browser, and the next column
+
+**`NSBrowser` IS HERE AS A TABLE-BACKED BROWSER.** Apple's class is an `NSMatrix` of `NSBrowserCell`s per column;
+this tree has no `NSMatrix`, so each column is an `NSTableView` inside one horizontal `NSScrollView`, and the browser
+is the data source and delegate of every one of them. The PUBLIC contract is 10.6's: the delegate answers
+`-browser:numberOfRowsInColumn:`, fills each row through `-browser:willDisplayCell:atRow:column:`, and may answer
+`-browser:titleOfColumn:`; selecting a row asks for the column to its right, a leaf asks for zero rows and adds no
+column, and `-path`/`-setPath:` are the selected cells' strings joined by `-pathSeparator`. Column width, the
+separator, multiple/empty selection, horizontal scrolling and `-scrollColumnToVisible:` are all here.
+
+**`NSBrowserCell` IS THE ROW'S CELL.** It is a text-field cell with the picture and the leaf/loaded pair, drawing
+the sixteen-point image beside the title exactly as the sidebar's cell does. The old
+`-browser:createRowsForColumn:inMatrix:` form is the one part that cannot exist without `NSMatrix`, and the header
+names that absence rather than a stub nobody could call.
+
+**AND THE TABLE'S SELECTION DOOR HAD A USE-AFTER-FREE, FOUND BY THIS CLASS.** A delegate that returns the proposed
+selection set unchanged (which is what a browser does) had that set released before the table copied it, so the copy
+read freed memory and the selection became EMPTY. The table now retains the answer across the release; the browser's
+probe is what measures it.
+
+`tests/browser.m` is the probe: a three-root tree, the columns' row counts, the cell titles and leaf flags, a
+branch's two children in column 1, a grandchild in column 2, a leaf adding no column, the path, reloading a column,
+`setPath:`, and the column width reaching the private table.
+
 ### The segmented control, and a row that acts as one
 
 **`NSSegmentedControl` IS A FORWARDER; `NSSegmentedCell` OWNS THE ROW.** One private record per segment carries its
@@ -1024,8 +1050,7 @@ is the DRAWER (the class — `-drawers` answers an empty array, which is Apple's
 CUSTOMIZATION PALETTE (the toolbar itself is here; the palette refuses by name), the CROSS-PROCESS DRAG SESSION
 (the in-process session, its drag image window, its two protocols and the table's row drag are here; another
 application's destination and its pasteboard are not, because that is the window server's transport),
-`NSBrowser`, `NSSearchField`, `NSProgressIndicator`, `NSPanel`/`NSAlert`, `NSTabView`, `NSCollectionView`,
-`NSDocument`, and the
+`NSSearchField`, `NSProgressIndicator`, `NSPanel`/`NSAlert`, `NSTabView`, `NSCollectionView`, `NSDocument`, and the
 script-command doors, which are declared and REFUSE by name; what the window's close,
 minimise and zoom buttons DO is now this tier's — each goes through the `-perform…` door its menu item sends — but
 the MINIMISE is

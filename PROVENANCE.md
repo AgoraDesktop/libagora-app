@@ -431,6 +431,31 @@ callback sequence (entered/updated/prepared/performed/concluded/ended, and exite
 climb, the type filter, a two-item union and the legacy door. `tests/drag_seam.m` measures the image window against
 Agora's headless server.
 
+## 18. The browser is table-backed, and the selection door's use-after-free
+
+**`NSBrowser.h`, `NSBrowser.m`, `NSBrowserCell.h` AND `NSBrowserCell.m` ARE THIS REPOSITORY'S OWN CODE**, written
+against the 10.6 declarations. Four decisions are the ones to know:
+
+- **A COLUMN IS AN `NSTableView`.** The tree has no `NSMatrix`, so the browser owns one horizontal `NSScrollView`
+  and a document view of side-by-side tables; the browser is their data source and delegate and maps a sender back
+  to its column by identity. The public delegate surface is the cell-based 10.6 one; the old
+  `-browser:createRowsForColumn:inMatrix:` form is absent because the class it names is absent.
+- **A SELECTION ASKS FOR THE COLUMN TO ITS RIGHT.** `-tableViewSelectionDidChange:` records the row, truncates the
+  columns after it, asks the delegate for `column + 1`, and builds or removes that column. A leaf returns zero rows
+  and leaves the browser as it was. The browser's own `-selectRow:inColumn:` goes through the same table door.
+- **THE PATH IS THE SELECTED CELLS' STRINGS.** `-path`, `-setPath:` and `-selectedPath` use the cells' `-stringValue`
+  and `-pathSeparator`, so a delegate that fills cells through `willDisplayCell` automatically has a path.
+- **THE CLIP VIEW CENTRES A SMALL DOCUMENT, SO THE DOCUMENT IS AT LEAST AS WIDE AS THE BROWSER.** With one column
+  that would put the column in the middle of the browser; the document width is widened so the first column stays at
+  the left edge.
+
+**AND THE TABLE'S SELECTION DOOR HAD A USE-AFTER-FREE.** `NSTableView -selectRowIndexes:…` passed the proposed set to
+`-tableView:selectionIndexesForProposedSelection:` and, when the delegate returned **that same set**, released it
+before copying it into the table's own set. The copy read freed memory; the selection became empty. MEASURED through
+`NSBrowser`, whose delegate returns the proposal unchanged. The table retains the answer across the release now, and
+`tests/browser.m` is the regression. The fix is in `NSTableView.m`, not in the browser, because any table delegate may
+answer with the proposal.
+
 ## Keeping in sync
 
 The Fiwix AppKit is the origin and this repository has now diverged from it in the seam. A fix made there
