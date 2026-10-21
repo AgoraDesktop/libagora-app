@@ -24,6 +24,7 @@
  * when that size is too small to be useful.
  */
 #import "NSSplitView.h"
+#import "NSWindow_internal.h"
 
 #import "NSApplication.h"
 #import "NSBezierPath.h"
@@ -140,6 +141,8 @@ static CGFloat fn_axis_length(NSSize size, BOOL vertical)
 		_cg_dragStartPoint = NSZeroPoint;
 		_cg_dragStartPosition = 0.0;
 		_cg_pushedCursor = NO;
+		_cg_dragPreviewActive = NO;
+		_cg_dragPreviewCenter = 0.0;
 		_cg_adjusting = NO;
 		_cg_hasLayout = NO;
 		_cg_loadingAutosave = NO;
@@ -205,6 +208,11 @@ static CGFloat fn_axis_length(NSSize size, BOOL vertical)
 	[self adjustSubviews];
 	[self setNeedsDisplay:YES];
 	[[self window] invalidateCursorRectsForView:self];
+}
+
+- (BOOL)cg_isDraggingDivider
+{
+	return _cg_draggingDividerIndex >= 0;
 }
 
 - (CGFloat)dividerThickness
@@ -1154,6 +1162,10 @@ static CGFloat fn_axis_length(NSSize size, BOOL vertical)
 	_cg_dragStartPoint = point;
 	_cg_dragStartPosition = [self cg_positionOfDividerAtIndex:index];
 	_cg_pushedCursor = NO;
+	[self cg_setDragPreviewCenter:_cg_dragStartPosition + [self dividerThickness] / 2.0];
+	if ([self window] != nil) {
+		[[self window] cg_suspendTrackingUpdates];
+	}
 
 	/* **A PROGRAM WITH NO RUN LOOP HAS NO EVENT SOURCE.** The state above is then the whole of the press, and the
 	 * probe drives `-mouseDragged:` and `-mouseUp:` itself; a running application takes the tracking loop, which
@@ -1179,17 +1191,32 @@ static CGFloat fn_axis_length(NSSize size, BOOL vertical)
 			continue;
 		}
 		where = [self convertPoint:[next locationInWindow] fromView:nil];
-		[self cg_dragToPoint:where];
+		{
+			CGFloat delta = _vertical ? (where.x - _cg_dragStartPoint.x) : (where.y - _cg_dragStartPoint.y);
+			CGFloat center = _cg_dragStartPosition + delta + [self dividerThickness] / 2.0;
+
+			[self cg_setDragPreviewCenter:center];
+		}
 		if ([next type] == NSLeftMouseUp) {
+			CGFloat delta = _vertical ? (where.x - _cg_dragStartPoint.x) : (where.y - _cg_dragStartPoint.y);
+
+			[self cg_moveDividerAtIndex:index toPosition:_cg_dragStartPosition + delta];
 			break;
 		}
 		[window displayIfNeeded];
 	}
 	[NSCursor pop];
 	_cg_pushedCursor = NO;
+	[self cg_clearDragPreview];
 	_cg_draggingDividerIndex = -1;
+	/* **THE END IS ANNOUNCED AFTER THE FLAG CLEARS**, so a delegate that deferred its document layout to the end of
+	 * the drag hears a notification that means "the drag is over" rather than another motion. */
+	[self cg_postDidResizeWithDivider:index];
 	[self cg_saveAutosave];
 	[self setNeedsDisplay:YES];
+	if ([self window] != nil) {
+		[[self window] cg_resumeTrackingUpdates];
+	}
 }
 
 - (void)mouseDragged:(NSEvent *)event
@@ -1198,7 +1225,12 @@ static CGFloat fn_axis_length(NSSize size, BOOL vertical)
 		[super mouseDragged:event];
 		return;
 	}
-	[self cg_dragToPoint:[self convertPoint:[event locationInWindow] fromView:nil]];
+	{
+		NSPoint point = [self convertPoint:[event locationInWindow] fromView:nil];
+		CGFloat delta = _vertical ? (point.x - _cg_dragStartPoint.x) : (point.y - _cg_dragStartPoint.y);
+
+		[self cg_setDragPreviewCenter:_cg_dragStartPosition + delta + [self dividerThickness] / 2.0];
+	}
 }
 
 - (void)mouseUp:(NSEvent *)event
@@ -1207,17 +1239,64 @@ static CGFloat fn_axis_length(NSSize size, BOOL vertical)
 		[super mouseUp:event];
 		return;
 	}
-	[self cg_dragToPoint:[self convertPoint:[event locationInWindow] fromView:nil]];
+	{
+		NSPoint point = [self convertPoint:[event locationInWindow] fromView:nil];
+		CGFloat delta = _vertical ? (point.x - _cg_dragStartPoint.x) : (point.y - _cg_dragStartPoint.y);
+
+		[self cg_clearDragPreview];
+		[self cg_moveDividerAtIndex:_cg_draggingDividerIndex
+				 toPosition:_cg_dragStartPosition + delta];
+	}
 	if (_cg_pushedCursor) {
 		[NSCursor pop];
 		_cg_pushedCursor = NO;
 	}
-	_cg_draggingDividerIndex = -1;
+	{
+		NSInteger index = _cg_draggingDividerIndex;
+
+		_cg_draggingDividerIndex = -1;
+		[self cg_postDidResizeWithDivider:index];
+	}
 	[self cg_saveAutosave];
 	[self setNeedsDisplay:YES];
+	if ([self window] != nil) {
+		[[self window] cg_resumeTrackingUpdates];
+	}
 }
 
-/* ---- DRAWING ------------------------------------------------------------------------------------ */
+/* ---- THE DRAG'S PREVIEW LINE ------------------------------------------------------------------- */
+
+- (NSRect)cg_dragPreviewRect
+{
+	NSRect b = [self bounds];
+
+	if (_vertical) {
+		return NSMakeRect(_cg_dragPreviewCenter - 0.5, NSMinY(b), 1.0, NSHeight(b));
+	}
+	return NSMakeRect(NSMinX(b), _cg_dragPreviewCenter - 0.5, NSWidth(b), 1.0);
+}
+
+- (void)cg_setDragPreviewCenter:(CGFloat)center
+{
+	NSWindow *window = [self window];
+
+	_cg_dragPreviewCenter = center;
+	_cg_dragPreviewActive = YES;
+	if (window != nil) {
+		NSView *content = [window contentView];
+		NSRect line = [self cg_dragPreviewRect];
+
+		[window cg_setDragGuideRect:[content convertRect:line fromView:self]];
+	}
+}
+
+- (void)cg_clearDragPreview
+{
+	_cg_dragPreviewActive = NO;
+	if ([self window] != nil) {
+		[[self window] cg_clearDragGuide];
+	}
+}
 
 - (void)drawRect:(NSRect)dirtyRect
 {

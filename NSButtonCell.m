@@ -24,6 +24,8 @@
 /* **AND THE CONTEXT, FOR ONE CALL: `CGContextSetAlpha`, which is how a disabled button's picture dims when it asked
  * to — `-drawInRect:` carries no fraction and the compositing doors do not scale. */
 #import <AppKit/NSGraphicsContext.h>
+
+#import "NSImage_internal.h"
 #include <CoreGraphics/CGContext.h>
 
 @implementation NSButtonCell
@@ -787,7 +789,15 @@ static NSSize fn_button_image_size(NSSize image, NSSize box, NSImageScaling scal
 		if (dim && cg != NULL) {
 			CGContextSetAlpha(cg, 0.5);
 		}
-		[image drawInRect:where];
+		/* **A TEMPLATE IS DRAWN IN THE BUTTON'S INK, WHICH IS THE TITLE'S OWN.** A template image is ONE INK and
+		 * the control is what chooses it: `-cg_inkColor` already answers the three cases this cell has — the
+		 * era's grey when disabled, white on the accent while pressed, `controlTextColor` otherwise — so a
+		 * platform image and the words beside it are the same colour in every state, which is the whole reason
+		 * `NSImageNameGoLeftTemplate` is a template rather than a picture of a grey arrow. A picture that is NOT a
+		 * template, or a template with no stencil behind it, takes the ordinary door and draws its own pixels. */
+		if (!([image isTemplate] && [image cg_drawInRect:where ink:ink])) {
+			[image drawInRect:where];
+		}
 		if (dim && cg != NULL) {
 			CGContextSetAlpha(cg, 1.0);
 		}

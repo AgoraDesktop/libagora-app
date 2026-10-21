@@ -80,6 +80,8 @@ static CGFloat fn_border_width(NSBorderType type)
 		_borderType = NSNoBorder;
 		_backgroundColor = [[NSColor controlBackgroundColor] retain];
 		_drawsBackground = YES;
+		/* APPLE'S DEFAULT IS NO, and this tree keeps it: a caller that wants bars to come and go opts in. */
+		_autohidesScrollers = NO;
 		/* THE LINE STEP IS TEN POINTS AND THE PAGE STEP IS ZERO, which is the era's pair: zero means "page by the
 		 * visible extent", so a page is a fraction of the window rather than a fixed number of points. */
 		_lineScroll = 10.0;
@@ -98,6 +100,8 @@ static CGFloat fn_border_width(NSBorderType type)
 {
 	[_headerView release];
 	[_backgroundColor release];
+	[_vScroller release];
+	[_hScroller release];
 	[super dealloc];
 }
 
@@ -196,8 +200,9 @@ static CGFloat fn_border_width(NSBorderType type)
 	}
 	if (_vScroller != nil) {
 		[_vScroller removeFromSuperview];
+		[_vScroller release];
 	}
-	_vScroller = anObject;	/* BORROWED: the subview link owns it */
+	_vScroller = [anObject retain];	/* OWNED: it may be detached while it is configured but hidden */
 	if (anObject != nil) {
 		[self addSubview:anObject];
 		[anObject setTarget:self];
@@ -218,13 +223,30 @@ static CGFloat fn_border_width(NSBorderType type)
 	}
 	if (_hScroller != nil) {
 		[_hScroller removeFromSuperview];
+		[_hScroller release];
 	}
-	_hScroller = anObject;
+	_hScroller = [anObject retain];
 	if (anObject != nil) {
 		[self addSubview:anObject];
 		[anObject setTarget:self];
 		[anObject setAction:@selector(cg_scrollerAction:)];
 	}
+	[self tile];
+}
+
+- (BOOL)autohidesScrollers
+{
+	return _autohidesScrollers;
+}
+
+- (void)setAutohidesScrollers:(BOOL)flag
+{
+	BOOL value = flag ? YES : NO;
+
+	if (_autohidesScrollers == value) {
+		return;
+	}
+	_autohidesScrollers = value;
 	[self tile];
 }
 
@@ -251,8 +273,18 @@ static CGFloat fn_border_width(NSBorderType type)
 	CGFloat vw = 0.0;
 	CGFloat hh = 0.0;
 	CGFloat headerHeight = 0.0;
+	CGFloat usedVW;
+	CGFloat usedHH;
 	NSRect content;
+	BOOL visibilityChanged = NO;
+	NSSize oldContent = (_contentView != nil) ? [_contentView frame].size : NSZeroSize;
+	BOOL showV = YES;
+	BOOL showH = YES;
 
+	if (_inTile) {
+		return;
+	}
+	_inTile = YES;
 	if (_vScroller != nil) {
 		vw = NSWidth([_vScroller frame]);
 		if (vw <= 0.0) {
@@ -271,13 +303,46 @@ static CGFloat fn_border_width(NSBorderType type)
 			headerHeight = 0.0;
 		}
 	}
+	/* **A CONFIGURED BAR THAT THE DOCUMENT DOES NOT NEED STEPS ASIDE.** The visibility is decided against the
+	 * document's own frame, and it is decided as a PAIR because a vertical bar takes width that can make a
+	 * horizontal one necessary and vice versa; three passes are enough for those two to settle. */
+	[self cg_scrollerVisibility:&showV :&showH];
+	/* **A HIDDEN BAR LEAVES THE TREE, and its object is retained by this view while it is away.** A configured
+	 * scroller still answers `-hasVerticalScroller`/`-verticalScroller`, but a view that is not a subview cannot
+	 * leave ink behind, which is what a merely `-isHidden` bar did on the window. */
+	if (_vScroller != nil) {
+		BOOL changed = (([_vScroller superview] == self) != showV);
+		[_vScroller setHidden:!showV];
+		if (showV) {
+			if ([_vScroller superview] != self) {
+				[self addSubview:_vScroller];
+			}
+		} else if ([_vScroller superview] == self) {
+			[_vScroller removeFromSuperview];
+		}
+		visibilityChanged = visibilityChanged || changed;
+	}
+	if (_hScroller != nil) {
+		BOOL changed = (([_hScroller superview] == self) != showH);
+		[_hScroller setHidden:!showH];
+		if (showH) {
+			if ([_hScroller superview] != self) {
+				[self addSubview:_hScroller];
+			}
+		} else if ([_hScroller superview] == self) {
+			[_hScroller removeFromSuperview];
+		}
+		visibilityChanged = visibilityChanged || changed;
+	}
+	usedVW = showV ? vw : 0.0;
+	usedHH = showH ? hh : 0.0;
 	/* **THE HEADER TAKES THE TOP STRIP; THE CLIP VIEW TAKES WHAT IS BELOW IT.** The header's height is already
 	 * subtracted from the content's, so the content starts at the bottom and ends at the header's bottom — NOT at
 	 * the scroll view's top. The first version also ADDED the header's height to the content's origin, which put the
 	 * header above the scroll view's own frame and clipped it away. */
-	content = NSMakeRect(NSMinX(frame) + border, NSMinY(frame) + border + hh,
-			     NSWidth(frame) - 2.0 * border - vw,
-			     NSHeight(frame) - 2.0 * border - hh - headerHeight);
+	content = NSMakeRect(NSMinX(frame) + border, NSMinY(frame) + border + usedHH,
+			     NSWidth(frame) - 2.0 * border - usedVW,
+			     NSHeight(frame) - 2.0 * border - usedHH - headerHeight);
 	if (content.size.width < 0.0) {
 		content.size.width = 0.0;
 	}
@@ -294,16 +359,78 @@ static CGFloat fn_border_width(NSBorderType type)
 		[_headerView setFrame:header];
 	}
 	if (_vScroller != nil) {
-		[_vScroller setFrame:NSMakeRect(NSMaxX(frame) - border - vw, NSMinY(frame) + border + hh,
-						vw, NSHeight(frame) - 2.0 * border - hh)];
+		[_vScroller setFrame:showV ? NSMakeRect(NSMaxX(frame) - border - vw,
+							NSMinY(frame) + border + usedHH,
+							vw, NSHeight(frame) - 2.0 * border - usedHH) : NSZeroRect];
 	}
 	if (_hScroller != nil) {
-		[_hScroller setFrame:NSMakeRect(NSMinX(frame) + border, NSMinY(frame) + border,
-						NSWidth(frame) - 2.0 * border - vw, hh)];
+		[_hScroller setFrame:showH ? NSMakeRect(NSMinX(frame) + border, NSMinY(frame) + border,
+							NSWidth(frame) - 2.0 * border - usedVW, hh) : NSZeroRect];
+	}
+	if (visibilityChanged) {
+		[self setNeedsDisplay:YES];
+		[[self superview] setNeedsDisplay:YES];
 	}
 	if (_contentView != nil) {
+		NSView *doc = [_contentView documentView];
+
+		/* **A DOCUMENT THAT FILLS THE CLIP HAS TO BE TOLD THE CLIP CHANGED.** Hiding a bar gives the clip more
+		 * room; a table sizes itself from `-contentSize`, so without this call the sidebar's rows would keep the
+		 * narrow width they had beside a visible bar. */
+		if ((oldContent.width != content.size.width || oldContent.height != content.size.height)
+		    && doc != nil && [doc respondsToSelector:@selector(tile)]) {
+			[doc tile];
+		}
+		/* The clip's visible origin may be past the end of a document that just got room to shrink. */
+		[_contentView scrollToPoint:[_contentView bounds].origin];
 		[self reflectScrolledClipView:_contentView];
 	}
+	_inTile = NO;
+}
+
+/* WHAT THE AUTOHIDE RULE WOULD SHOW. `-tile` uses it to lay the bars out; `-reflectScrolledClipView:` uses it
+ * to notice that a document whose frame changed now fits (or no longer fits) and needs a re-tile. */
+- (void)cg_scrollerVisibility:(BOOL *)showVertical :(BOOL *)showHorizontal
+{
+	BOOL wantV = (_vScroller != nil);
+	BOOL wantH = (_hScroller != nil);
+	NSView *doc = [_contentView documentView];
+	NSSize docSize = (doc != nil) ? [doc frame].size : NSZeroSize;
+	CGFloat border = fn_border_width(_borderType);
+	CGFloat vw = wantV ? NSWidth([_vScroller frame]) : 0.0;
+	CGFloat hh = wantH ? NSHeight([_hScroller frame]) : 0.0;
+	CGFloat headerHeight = (_headerView != nil) ? NSHeight([_headerView frame]) : 0.0;
+	BOOL showV = wantV;
+	BOOL showH = wantH;
+	NSInteger pass;
+
+	if (!_autohidesScrollers) {
+		*showVertical = showV;
+		*showHorizontal = showH;
+		return;
+	}
+	if (vw <= 0.0) {
+		vw = [NSScroller scrollerWidth];
+	}
+	if (hh <= 0.0) {
+		hh = [NSScroller scrollerWidth];
+	}
+	showV = NO;
+	showH = NO;
+	for (pass = 0; pass < 3; pass++) {
+		CGFloat availW = NSWidth([self bounds]) - 2.0 * border - (showV ? vw : 0.0);
+		CGFloat availH = NSHeight([self bounds]) - 2.0 * border - (showH ? hh : 0.0) - headerHeight;
+		BOOL needV = wantV && docSize.height > availH;
+		BOOL needH = wantH && docSize.width > availW;
+
+		if (needV == showV && needH == showH) {
+			break;
+		}
+		showV = needV;
+		showH = needH;
+	}
+	*showVertical = showV;
+	*showHorizontal = showH;
 }
 
 - (NSSize)contentSize
@@ -436,6 +563,27 @@ static CGFloat fn_border_width(NSBorderType type)
 {
 	if (aClipView == nil || aClipView != _contentView) {
 		return;
+	}
+	/* **A DOCUMENT THAT CHANGED SIZE CAN CHANGE WHICH BARS ARE NEEDED.** The clip view announces the change through
+	 * this same door, so before syncing the knobs the scroll view asks whether the autohide pair is what it is
+	 * showing; if it is not, `-tile` is the one pass that lays the new pair out. The guard stops the tile's own
+	 * final reflect from starting a second tile. */
+	if (!_inTile && _autohidesScrollers) {
+		BOOL showV = YES;
+		BOOL showH = YES;
+		BOOL needsTile = NO;
+
+		[self cg_scrollerVisibility:&showV :&showH];
+		if (_vScroller != nil && [_vScroller isHidden] != !showV) {
+			needsTile = YES;
+		}
+		if (_hScroller != nil && [_hScroller isHidden] != !showH) {
+			needsTile = YES;
+		}
+		if (needsTile) {
+			[self tile];
+			return;
+		}
 	}
 	/* THE HEADER FOLLOWS THE HORIZONTAL OFFSET AND NOT THE VERTICAL ONE. */
 	if (_headerView != nil) {

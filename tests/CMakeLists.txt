@@ -470,6 +470,23 @@ target_link_libraries(scroll_view PRIVATE App m)
 add_test(NAME appkit-scroll-view COMMAND scroll_view)
 set_tests_properties(appkit-scroll-view PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
 
+# **AND THE PLATFORM'S OWN PICTURES, WHICH USED TO BE NAMES WITH NOTHING BEHIND THEM.** Every `NSImageName…` this
+# tier draws answers an image; every one is a template; and a template drawn through the tint door really does take
+# the ink it was given. Offscreen, into a bitmap rep.
+add_executable(system_images system_images.m)
+target_link_libraries(system_images PRIVATE App m)
+add_test(NAME appkit-system-images COMMAND system_images)
+set_tests_properties(appkit-system-images PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
+
+# **AND THE HALF OF "DRAW ONLY WHAT CHANGED" NOTHING CAN SEE FROM OUTSIDE: THE CLIP.** A window hands `-displayRect:`
+# the union of what was invalidated; the tree draws anyway, so unless that rectangle is a CLIP each `-drawRect:` paints
+# its whole bounds and the saving is the copy alone. The probe is a view that paints everything on purpose — and its
+# pixels outside the rectangle must stay untouched. Offscreen, into a bitmap rep.
+add_executable(display_damage display_damage.m)
+target_link_libraries(display_damage PRIVATE App m)
+add_test(NAME appkit-display-damage COMMAND display_damage)
+set_tests_properties(appkit-display-damage PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
+
 # **AND THE ONE THING A SCROLL ACTUALLY MOVES: A NON-ZERO `bounds` ORIGIN.** It is read in the conversions, in the live
 # `-displayRect:`, and in the offscreen `fn_draw_view` that used to refuse it — so a clip view scrolled correctly and
 # nothing moved. Offscreen, into a bitmap rep.
@@ -661,6 +678,14 @@ target_link_libraries(appkit_bitmap_encode PRIVATE App)
 add_test(NAME appkit-bitmap-encode COMMAND appkit_bitmap_encode)
 set_tests_properties(appkit-bitmap-encode PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
 
+# The one rule an image rep's draw has to keep in BOTH coordinate systems AppKit builds: up is up. The
+# Desktop is y-up and `WSIconView` is flipped, and the same bytes must not arrive mirrored in the two.
+add_executable(image_draw image_draw.m)
+target_link_libraries(image_draw PRIVATE App)
+
+add_test(NAME appkit-image-draw COMMAND image_draw)
+set_tests_properties(appkit-image-draw PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
+
 # The package form of the RTF document: TXT.rtf plus one file per attachment, and the reference between them.
 add_executable(text_rtfd text_rtfd.m)
 target_link_libraries(text_rtfd PRIVATE App)
@@ -762,3 +787,20 @@ add_executable(progress_indicator progress_indicator.m)
 target_link_libraries(progress_indicator PRIVATE App m)
 add_test(NAME appkit-progress-indicator COMMAND progress_indicator)
 set_tests_properties(appkit-progress-indicator PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
+
+# **AUTO LAYOUT: EQUATIONS BECOME FRAMES.** No window and no compositor — a tree of views, a handful of constraints,
+# and frames that a person can compute by hand. The flipped-parent case and the cousin case are the two that a
+# one-level solver would pass and this one must too, so they are why the probe is not just a width check.
+add_executable(auto_layout auto_layout.m)
+target_link_libraries(auto_layout PRIVATE App m)
+add_test(NAME appkit-auto-layout COMMAND auto_layout)
+set_tests_properties(appkit-auto-layout PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
+
+# **THE PANEL AND THE ALERT: A HELPER WINDOW, AND A QUESTION WITH BUTTONS.** The panel's defaults and its
+# click-to-key rule, the alert's content and layout, the button codes through a modal session, Return and Escape
+# through the panel's own key handler, and the sheet form's reply. Offscreen: the geometry, the field strings and
+# the session doors need no compositor, and `-runModal` is deliberately not called because it is an unbounded loop.
+add_executable(panel_alert panel_alert.m)
+target_link_libraries(panel_alert PRIVATE App m)
+add_test(NAME appkit-panel-alert COMMAND panel_alert)
+set_tests_properties(appkit-panel-alert PROPERTIES ENVIRONMENT "${_agora_app_test_env}")

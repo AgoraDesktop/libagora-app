@@ -256,6 +256,64 @@ int main(void)
 	check([toolbarView superview] == content, "the toolbar's view is a real subview of the content view");
 	check([toolbarView frame].origin.y == TH, "and it sits at the content's top edge");
 
+	/* 2b. **THE PRELIGHT IS THE ACCENT, AND A DISABLED ITEM DOES NOT TAKE ONE.** A borderless toolbar item's
+	 * background is the band's until the pointer answers it; the prelight this draws is the platform accent at a
+	 * quarter, so it reads as the item responding rather than as a panel appearing under it — MEASURED, because the
+	 * grey it used to be (`+controlHighlightColor`) was LIGHTER than the chrome face. And a disabled item is flat
+	 * whatever the pointer does, which is the rule `NSButtonCell` follows for its own face.
+	 *
+	 * The probe renders the band twice — once with the pointer nowhere, once after a motion over an item's own
+	 * rectangle — and compares the pixels inside that rectangle. Nothing here depends on where an item's rectangle
+	 * IS: the first item starts at the band's left padding, and the check is "something in that box changed, and
+	 * what changed leads in blue". */
+	{
+		NSBitmapImageRep *beforeRep = [[NSBitmapImageRep alloc] initWithBitmapDataPlanes:NULL
+			pixelsWide:(NSInteger)TW pixelsHigh:(NSInteger)[toolbar cg_toolbarHeight] bitsPerSample:8
+			samplesPerPixel:4 hasAlpha:YES isPlanar:NO colorSpaceName:NSDeviceRGBColorSpace
+			bytesPerRow:(NSInteger)TW * 4 bitsPerPixel:32];
+		NSBitmapImageRep *afterRep = [[NSBitmapImageRep alloc] initWithBitmapDataPlanes:NULL
+			pixelsWide:(NSInteger)TW pixelsHigh:(NSInteger)[toolbar cg_toolbarHeight] bitsPerSample:8
+			samplesPerPixel:4 hasAlpha:YES isPlanar:NO colorSpaceName:NSDeviceRGBColorSpace
+			bytesPerRow:(NSInteger)TW * 4 bitsPerPixel:32];
+		unsigned char *a;
+		unsigned char *b;
+		int x, y, changed = 0, bluest = -1;
+
+		[NSGraphicsContext setCurrentContext:[NSGraphicsContext graphicsContextWithBitmapImageRep:beforeRep]];
+		[toolbarView displayRect:[toolbarView bounds]];
+		a = [beforeRep bitmapData];
+
+		/* THE FIRST ITEM'S OWN RECTANGLE, in the view's coordinates: the band's padding is 8 and its first item is
+		 * a labelled one, so 40 points is inside it. The EVENT's location is in the WINDOW's content coordinates,
+		 * which is where the view's frame origin has to be added back. */
+		[toolbarView mouseMoved:mouse(NSMouseMoved,
+					      NSMakePoint(8.0 + 20.0 + [toolbarView frame].origin.x,
+							  [toolbarView frame].origin.y +
+							  [toolbar cg_toolbarHeight] / 2.0),
+					      [window windowNumber])];
+		[NSGraphicsContext setCurrentContext:[NSGraphicsContext graphicsContextWithBitmapImageRep:afterRep]];
+		[toolbarView displayRect:[toolbarView bounds]];
+		b = [afterRep bitmapData];
+
+		for (y = 0; y < (int)[toolbar cg_toolbarHeight]; y++) {
+			for (x = 8; x < 48; x++) {
+				unsigned char *pa = a + ((size_t)y * (size_t)TW + (size_t)x) * 4u;
+				unsigned char *pb = b + ((size_t)y * (size_t)TW + (size_t)x) * 4u;
+
+				if (pa[0] != pb[0] || pa[1] != pb[1] || pa[2] != pb[2]) {
+					changed++;
+					if (pb[2] > pb[0] && (bluest < 0 || pb[2] - pb[0] > bluest)) {
+						bluest = (int)pb[2] - (int)pb[0];
+					}
+				}
+			}
+		}
+		check(changed > 20, "a pointer over an item paints a plate where the band was flat");
+		check(bluest > 6, "and the plate is the ACCENT, not a grey: blue leads red");
+		[beforeRep release];
+		[afterRep release];
+	}
+
 	/* 3. INSERT AND REMOVE, WITH THE NOTIFICATIONS BOTH WAYS. */
 	[toolbar insertItemWithItemIdentifier:@"five" atIndex:1];
 	items = [toolbar items];

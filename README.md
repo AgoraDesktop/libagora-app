@@ -20,7 +20,9 @@ the same table, flattened from a tree with disclosure triangles. And beside them
 one above another, dividers that drag, panes that collapse, and the delegate that constrains all of it. And a
 BROWSER: the columns of a Finder-style column view, each a table over the same delegate, with a selection that loads
 the next column. Under all of it is a DRAG SESSION: a source begins a drag from a view, the composed image floats in a window of its own, and a
-destination in ANY window of the application is found by screen point and answers the dragged types.
+destination in ANY window of the application is found by screen point and answers the dragged types. And beside the
+windows there is now a PANEL and an ALERT: a helper window that takes the keyboard only when a field asks it to, and a
+question with buttons whose answers are Apple's 1000/1001/1002.
 
 The classes here come from the Fiwix AppKit (same author, same licence — see `PROVENANCE.md`), and they
 talked to an X server: `NSWindow.m` called `XOpenDisplay`, `XCreateSimpleWindow`, `XMapWindow`, `XPutImage`
@@ -108,6 +110,8 @@ tests/
   split_view.m                  the SPLIT VIEW: panes, divider positions, the drag, the collapse and the ink
   browser.m                     the BROWSER: columns, the delegate's cells, the selection, the path and the width
   progress_indicator.m          the PROGRESS INDICATOR: range, clamp, spinner state and the bar's ink
+  panel_alert.m                 the PANEL and the ALERT: the click-to-key rule, the content and the two ways to run it
+  image_draw.m                  an image rep draws UP in a y-up and a y-down context alike
   control_drag.m                and what a DRAG costs: forty motions, and how many frames the window committed
   run-*-headless.sh             ctest: a compositor with a virtual monitor (no desktop input involved)
   run-*-nested.sh, inspect.py   the PIXEL tests, and they are OPT-IN: `gnome-shell --nested` is a whole
@@ -154,7 +158,17 @@ the compositor is really gone.
   for `NSTrackingActiveAlways` and NOTHING for the default `NSTrackingActiveInKeyWindow` in a window that is not
   key — the scope word that keeps a background window's controls dark; `-mouseMoved:` fires when the point moves
   and not when it is repeated; `[event trackingArea]` names the area that fired; and a control entering a window
-  installs a hover area.
+  installs a hover area. **AND THE MOTION PATH NO LONGER RE-WALKS THE TREE FOR AN UNMOVED POINTER:** the engine ran
+  on every repeated motion event, which the 256-column browser turned into a full-core idle loop; `-cg_updateTrackingIfMovedToPoint:`
+  now returns when the point is unchanged (MEASURED 500 -> 23 CPU ticks per five seconds), while the state-change
+  callers still use the full door. See `PROVENANCE.md` § 27.
+- **AND A GUTTER DRAG SHOWS A LINE, LAYS OUT ONCE, AND DRAWS ONLY THE DAMAGE:** the 256-slot pool attaches only
+  the active/visible columns to the document, both the sidebar and column dividers draw a one-point preview line
+  (a WINDOW overlay, above the panes and columns, not a line hidden under them) while the button is held and resize
+  on release, tracking is suspended for the drag, hover cursor lookup is
+  skipped while a button is held, and `-displayIfNeeded` paints only the union of dirty subview rectangles into
+  the persistent surface. A full redraw of the whole window per motion event is what made the gutters crawl. See
+  `PROVENANCE.md` § 28.
 - **The text path** (`ctest`): a key is built as an `NSEvent`, `-interpretKeyEvents:` turns it into a command,
   and the command edits the string — typing, both Backspace spellings, movement, Shift-extension, and the
   notification and its delegate both firing for one edit.
@@ -603,6 +617,12 @@ the compositor is really gone.
   arrow came out five points wide at its base and the bottom three, because a fractional vertex lands on the pixel grid
   differently depending on which way the point faces. Whole-point rows make them CRISP and each other's mirror —
   MEASURED, 25 points each and no half-covered point between the grey and the ground.
+- **And the bars can STEP ASIDE** (`ctest`, offscreen): `NSScrollView -autohidesScrollers` is Apple's opt-in.
+  A configured bar still exists and still answers `-verticalScroller`/`-horizontalScroller`, but when the document
+  fits the bar is hidden and the content takes its space. The visibility is decided as a PAIR — a vertical bar's
+  width can make a horizontal one necessary and the reverse — and `tests/scroll_view.m` drives a small document
+  (both hidden), a wide one (horizontal only) and a square overflow (both shown), then turns autohide back off.
+  The default stays NO, which is Apple's default; the browser's per-column bars opt in.
 - **And the frame that joins them** (`ctest`, offscreen): `NSScrollView` tiles its content view and its two bars —
   a 200x200 frame with both scrollers gives the content `(0,15)` 185x185, the vertical bar the right column and the
   horizontal one the bottom row — and the two class conversions are EXACT INVERSES of each other and of `-tile`. The
@@ -695,6 +715,10 @@ because it had made the clicked subview the first responder.
 - **An NSTrackingArea's SCOPE is what a background window needed.** Before the option word, the window decided
   the crossing for the deepest view of whatever window the pointer was over, so a control in a window that was
   not key prelighted anyway. The area's own `Active…` bits are the fix, and the test pins both answers.
+- **`NSImageRep -drawInRect:` drew the same bytes mirrored in the two coordinate systems AppKit builds.** The
+  Desktop is y-up and Workspace's flipped `WSIconView` is y-down; `CGContextDrawImage` follows the CTM, so
+  Frost's folder art was upright in one and upside-down in the other. A positive CTM `d` now gets the rect's
+  own vertical mirror (`PROVENANCE.md` §24), and `image_draw.m` is the offscreen regression.
 - **`CGContextDrawImage` wrote the destination in one byte order and nothing else did.** Its hand sampler wrote
   blue to `d[0]` whatever the surface was — right for a WINDOW's surface (`PremultipliedFirst |
   ByteOrder32Little`, memory B,G,R,A) and wrong for a bitmap rep's (`PremultipliedLast | ByteOrder32Big`, memory
@@ -802,6 +826,17 @@ gives that height back. `-contentRectForFrameRect:` is the one place that knows,
 constraint conversion and the title bar all agree on where the content ends and the chrome begins. The chrome's
 fourth mark sends `-toggleToolbarShown:`, the same door a menu item would send and the same one the toolbar's own
 visibility uses.
+
+**ONE COLOUR, THREE STRENGTHS: THE ACCENT IS WHAT "THE POINTER IS HERE" LOOKS LIKE.** A borderless item's background
+is the band's until something answers it, and the plate that answers is the platform accent — a PRESS takes it whole,
+a SELECTED item (a view switcher's current mode) at 55%, and a PRELIGHT at 25%, enough to answer the hand without
+making the band look as though a button had been put on it. The prelight used to be `+controlHighlightColor`, a grey
+LIGHTER than the chrome face, which read as a panel appearing under the item; and a DISABLED item takes no plate at
+all, whatever the pointer is doing — the rule `NSButtonCell` follows for its own face, and the fix for a "Back" that
+had disabled itself and kept its wash. The hover is driven by an `NSTrackingArea` (`NSTrackingInVisibleRect`, enter,
+exit and motion) rather than by motion alone, because a pointer that leaves the band produces no motion inside it and
+the plate would stay lit behind it. `tests/toolbar.m` renders the band twice and asserts that hovering an item changes
+pixels inside its rectangle and that the changed ink leads in blue.
 
 **THE BAND IS THE CHROME, NOT A CONTROL PANEL UNDER IT.** It fills with `+cg_chromeFaceColor`: the title bar and the
 toolbar are one surface, and the bezel's-grey hairline is at the CONTENT's top edge, below the band — so the document starts
@@ -922,17 +957,35 @@ it.
 ### The browser, and the next column
 
 **`NSBrowser` IS HERE AS A TABLE-BACKED BROWSER.** Apple's class is an `NSMatrix` of `NSBrowserCell`s per column;
-this tree has no `NSMatrix`, so each column is an `NSTableView` inside one horizontal `NSScrollView`, and the browser
-is the data source and delegate of every one of them. The PUBLIC contract is 10.6's: the delegate answers
-`-browser:numberOfRowsInColumn:`, fills each row through `-browser:willDisplayCell:atRow:column:`, and may answer
-`-browser:titleOfColumn:`; selecting a row asks for the column to its right, a leaf asks for zero rows and adds no
-column, and `-path`/`-setPath:` are the selected cells' strings joined by `-pathSeparator`. Column width, the
-separator, multiple/empty selection, horizontal scrolling and `-scrollColumnToVisible:` are all here.
+this tree has no `NSMatrix`, so each column is an `NSTableView` inside its own vertical `NSScrollView`, all inside one
+horizontal `NSScrollView`; the browser is the data source and delegate of every one of them. **THE COLUMNS ARE A
+256-SLOT POOL BUILT ON THE FIRST LOAD**, Finder's own shape: an empty slot stays a visible empty column and keeps its
+width, and `-cg_activeColumnCount` says how many have rows. Only the active columns and the empty slots that fit in
+the visible area size the horizontal document, so the pool never becomes 256 columns of scroll travel. The PUBLIC contract is
+10.6's: the delegate answers `-browser:numberOfRowsInColumn:`, fills each row through
+`-browser:willDisplayCell:atRow:column:`, and may answer `-browser:titleOfColumn:`; selecting a row asks for the
+column to its right, a leaf asks for zero rows and adds no column, and `-path`/`-setPath:` are the selected cells'
+strings joined by `-pathSeparator`. Column width is PER COLUMN (`-widthOfColumn:`/`-setWidth:ofColumn:`), the
+separator is `NSSplitView`'s eighteen-point pane-splitter gutter — three two-point rings eight points apart — and it
+is a drag handle in the user-resizing mode. Multiple/empty selection, horizontal scrolling and
+`-scrollColumnToVisible:` are all here.
 
 **`NSBrowserCell` IS THE ROW'S CELL.** It is a text-field cell with the picture and the leaf/loaded pair, drawing
 the sixteen-point image beside the title exactly as the sidebar's cell does. The old
 `-browser:createRowsForColumn:inMatrix:` form is the one part that cannot exist without `NSMatrix`, and the header
 names that absence rather than a stub nobody could call.
+
+**A SELECTION SCROLLS TO THE NEWEST COLUMN, AT THE DOCUMENT'S END.** Selecting a branch opens the column to its
+right, and the clip view goes all the way over so that column is against the right edge; `-scrollColumnToVisible:`
+alone would leave it past the edge (or put it at the left with a blank right). A leaf has no new column, but the
+columns to its right have been truncated, so the selected column is the last one and the same rule shows it. The
+probe checks the clip view's origin against the document's maximum after opening a column.
+
+**AND A FRAME SET RE-TILES THE BROWSER'S OWN SCROLL VIEW.** The browser's face is the `NSScrollView` it owns, and
+`-setFrameSize:` re-tiled it while `-setFrame:` did not — this tier's `NSView -setFrame:` never calls the resize hook.
+A containing view that laid a browser out beside a preview panel (Workspace does) would leave that scroll view at its
+old width, opening a gap on a wider window. `-setFrame:` now re-tiles on a size change, the same rule `NSScrollView`
+and `NSSplitView` follow, and both `tests/browser.m` and Workspace's `column_view.m` measure the width.
 
 **AND THE TABLE'S SELECTION DOOR HAD A USE-AFTER-FREE, FOUND BY THIS CLASS.** A delegate that returns the proposed
 selection set unchanged (which is what a browser does) had that set released before the table copied it, so the copy
@@ -941,7 +994,9 @@ probe is what measures it.
 
 `tests/browser.m` is the probe: a three-root tree, the columns' row counts, the cell titles and leaf flags, a
 branch's two children in column 1, a grandchild in column 2, a leaf adding no column, the path, reloading a column,
-`setPath:`, and the column width reaching the private table.
+`setPath:`, the column width reaching the private table, each column's own vertical scroller, scrolling one column
+without moving another, and a separator drag that widens only the column whose handle it is. The gutter itself is
+measured too: eighteen points wide, with three dark row clusters down its middle for the split-view grip.
 
 ### The segmented control, and a row that acts as one
 
@@ -1050,17 +1105,189 @@ timer, so `-startAnimation:`/`-stopAnimation:` keep the state a caller reads and
 `-isIndeterminate` records the mode and the bar's fill is omitted for it. `tests/progress_indicator.m` checks the
 default range, clamping, `-incrementBy:`, the spinner state and a bitmap's filled/empty halves.
 
+### The platform's named images, and what a template is for
+
+**TWENTY OF APPLE'S `NSImageName…` CONSTANTS NOW HAVE PICTURES, AND THE PICTURES ARE THE PLATFORM'S.** The names
+were declared long before anything drew them: `+[NSImage imageNamed:]` did a bundle lookup, a framework has no
+application bundle, and so `NSImageNameGoLeftTemplate` answered nil and every Back button in this tree was a word.
+The images are now a **generated table of coverage** compiled into the library — no resource directory to install,
+no path to find, the same arrangement as the chrome's marks, which are numbers in `NSWindow.m` rather than XFWM's
+`.xpm` files — with the art in `art/system-images/*.svg` and `tools/system-images.py` turning it into
+`SystemImageMasks.c`. `tests/system_images.m` walks all twenty names and paints two of them.
+
+**A TEMPLATE IS A STENCIL, AND THAT IS WHY THE INK COMES FROM THE CONTROL.** Each glyph is one colour's worth of
+coverage and nothing else: the `<name>` image carries a CGImage mask per size, and `-cg_drawInRect:ink:` clips to
+it and fills with whatever ink the caller names. `NSButtonCell` passes `-cg_inkColor` — the era's grey when
+disabled, white while pressed on the accent, `controlTextColor` otherwise — and `NSToolbar` passes the label's ink,
+dimmed when the item cannot be clicked. That is the whole reason `NSImageNameGoLeftTemplate` is a template on the
+Mac rather than a picture of a grey arrow: the arrow IS the label, in the label's colour, in every state. The public
+`-drawInRect:` still draws the image's own black, which is the honest answer for a caller that did not say.
+
+**THE SIZES THE TIER ASKS FOR ARE THE SIZES THE TABLE CARRIES, AND A STENCIL DRAWN AT ITS OWN SIZE IS SHARP.**
+Each glyph is rasterized at 16, 24 and 32 pixels — a toolbar's small item, its regular item, and the
+high-resolution rep — and each becomes a representation declaring its own size in points, so
+`-bestRepresentationForRect:` and `-cg_templateMaskForRect:` both pick the 24-pixel stencil for a 24-point draw
+rather than scaling the 16-pixel one. That was the second half of "the arrows look like crap": a 16-pixel stencil
+stretched to 24 with a NEAREST-NEIGHBOUR sampler (`cg_image_mask_coverage` had no interpolation at all), which is a
+blocky, dithered arrow. The sampler interpolates now — gated on `shouldInterpolate`, so a native size is untouched —
+and the tint door SNAPS ITS RECTANGLE to whole points, because a fractional origin blends two texels even at a
+native size, and a soft glyph at sixteen points is the other half of the same complaint.
+
+**AND A STENCIL'S EDGE IS A TRAP, WHICH IS WORTH WRITING DOWN.** The fill that carries the ink is a rectangle, and
+a rectangle's own outline is antialiased; `CGContextClipToMask` masks only the pixels INSIDE the rectangle it was
+given, so a fill whose edge sits on the stencil's edge paints its fringe where nothing governs it. MEASURED as a
+one-pixel vertical line beside every toolbar icon, at a third of the ink's strength — so the fill is inset by half a
+point, where the glyph's margin has zero coverage. The same hunt found a real bug in `libagora-drawing`'s clip mask:
+`cg_device_bounds` truncated its device edges with a cast, so a rectangle ending at x.6 never asked the mask about
+that last, partly-covered column at all. Both are one line each, and both are why `tests/system_images.m` counts
+pixels instead of trusting that the door returned YES.
+
+**THE SHAPES ARE DERIVED AND RESTYLED, AND THE PROVENANCE SAYS EXACTLY HOW FAR.** Bootstrap Icons v1.13.2 (MIT,
+© 2019-2024 The Bootstrap Authors) supplies the anchors and proportions on a 16-unit grid; the rendering is this
+tree's own — a 1.5-unit stroke with round caps and joins instead of a filled outline with square terminals, which
+is what makes a glyph read as toolbar art at sixteen points. No SVG text was copied, the notice travels with the
+table, and `art/system-images/PROVENANCE` records the derivation, the version and the command. Twenty of the
+fifty-seven names are drawn (the button set: back, forward, refresh, the two stop faces, add, remove, action,
+full-screen in and out, Quick Look, the path chevron, the three view modes, bookmarks, home and the two Trash
+faces); the rest still answer nil, which is the same answer they gave before and the one `AGSystemImageNamed`
+documents.
+
+### Damage, and what "draw only what changed" needs to mean
+
+**A PARTIAL PAINT IS A CLIP, A SUBSET OF PIXELS AND A WINDOW THAT IS NOT RE-SHOWED.** `NSView` has kept a dirty
+region since the scroll view needed one — `-setNeedsDisplayInRect:`, `-needsDisplayInRect:` and the window's
+`-displayIfNeeded` all consult it — and `NSWindow -cg_drawFrameDirty:` has drawn and copied only that rectangle. Three
+things were missing, and each cost a full repaint on its own:
+
+- **THE RECTANGLE WAS NOT A CLIP.** `-displayRect:` passed it to every `-drawRect:` as an argument and clipped each
+  view to its bounds, so a view that paints its whole bounds (which is most of them, and `WSIconView` said so with a
+  `(void)dirtyRect`) still rasterized everything; only the copy was partial. It is now `CGContextClipToRect` on the
+  rectangle, in the view's own coordinates, before `-drawRect:` — so a partial display costs what the rectangle
+  contains, whatever a subclass does. `tests/display_damage.m` pins it with a view that paints everything on purpose:
+  pixels inside the rectangle are painted, pixels of the same view outside it are not.
+- **THE COMPOSITOR'S FRAME CALLBACK ANSWERED WITH THE WHOLE FRAME.** `-cg_frameCallback` called `-cg_drawFrame`, and
+  because a frame callback arrives DURING the event dispatch it beat the run loop's `-displayIfNeeded` to the dirty
+  region and cleared it — so the damage-aware path almost never ran. It calls `-displayIfNeeded` now, which is the
+  same door the run loop uses: the union of what was invalidated, and the whole frame only when nothing was (a
+  window-level change, such as becoming key).
+- **THE PARTIAL COPY WAS MIRRORED.** The rectangle is in the window's CoreGraphics space — y UP — and both the
+  backing store and the `wl_shm` buffer hold their rows TOP DOWN, so the rows a rectangle names are
+  `_surfaceHeight - y1 .. _surfaceHeight - y0`. Copying `y0 .. y1` copied a band reflected about the window's
+  middle: MEASURED on a live screen, a click two thirds of the way up a window wrote its pixels into blank page the
+  same distance down, so the click appeared to do nothing until a full frame (a window move, a drag) repainted
+  everything. `+cg_bufferRowsForDirtyRect:surfaceHeight:` is that arithmetic by itself, and `tests/display_damage.m`
+  holds it.
+- **THE INVALIDATION STOPPED AT THE RECTANGLE THAT IS STROKED.** In Workspace, the focus ring is stroked ON the
+  highlight's edge, so half the stroke and its antialiasing live outside it; damage that ended at the rectangle left
+  a thin outline in every cell the selection had left. The icon view's invalidation reaches `WSIconHighlightSlop`
+  (two points) past the cell, and its test asserts the exact damage rectangle rather than "the cell is dirty".
+- **`-orderFront:` MARKED AN ALREADY-VISIBLE WINDOW STALE.** `-[NSApplication activateIgnoringOtherApps:]` orders the
+  key window front, and a click activates the application — so every click in a file window re-showed a window that
+  was already on screen, and the show path marked it stale by design. It marks stale only on the transition from
+  hidden to shown now; the raise still happens, which is what the click wanted.
+
+`APPKIT_DRAW_DIAG` prints what each paint was: the dirty rectangle and its milliseconds, or `WHOLE FRAME` for the
+fallback, which is the number a damaged repaint is judged by.
+
+### Auto Layout, and the equations a frame can come from
+
+**`NSLayoutConstraint`, `NSLayoutAnchor` AND THE VIEW'S LAYOUT PASS ARE HERE, AS A DELIBERATE POST-10.6 SLICE.**
+The era pins this tier is checked against are 10.2/10.5/10.6 and Auto Layout is 10.7's; the class is included because
+the thing it is FOR — a view's geometry stated as relationships rather than as arithmetic performed again in every
+resize hook — is a thing a client of this tier needs, and because the tree already carries one 10.7 class
+(`NSDraggingSession`) on the same recorded terms. The header says so where a reader meets the deviation.
+
+**THE EQUATION IS APPLE'S AND IT IS SOLVED IN THE COMMON ANCESTOR'S SPACE.**  `first.attr relation m * second.attr + c`,
+with `=`/`<=`/`>=` and a priority; a single-item constraint has no second side. Every managed view contributes four
+unknowns — x, y, width, height in its superview's coordinates — and each attribute is accumulated up the ancestor chain
+into a linear form, with each parent's flippedness deciding whether y is measured from the top or the bottom. That is
+what lets a constraint relate two COUSINS, not just two siblings, and it is why the flipped-parent probe is one of the
+two a one-level engine would fail. A view named by no active constraint is not managed and is not moved: Auto Layout is
+opt-in per view.
+
+**THE SOLVER IS ITERATIVE PROJECTION, NOT CASSOWARY, AND THE TRADE IS NAMED.** Required constraints (1000) are
+projected fully, last, and TO CONVERGENCE within each sweep. That last clause is a measured correction rather than a
+detail: a leading and a trailing constraint share the view's x and width, so one pass moved the x the other had just
+set, and with an optional intrinsic pull in the same axis a control pinned to both edges of a 700-point parent landed
+at x=76 with an intrinsic width of 10. The required rows now repeat until their own residual is gone, and the break
+is on the NET move across a sweep rather than on the sum of every projection, so a required step that exactly undoes
+an optional one ends the loop instead of burning the sweep budget. Optional constraints move together by a weighted
+average of their projections, so a 750 wish and a 250 wish settle at the 3:1 point between them (175 for 200 and 100)
+rather than at whichever was visited last. The iteration starts from the views' CURRENT frames, which is what keeps an
+underdetermined system where it is instead of jumping to an arbitrary corner. What it does not give is Cassowary's
+incremental tableau or its proof of infeasibility; an unsatisfiable required set is reported by name after the sweeps,
+with the largest residual, rather than silently approximated.
+
+**THE TWO SOURCES OF EQUATIONS NOBODY WROTE ARE TRANSLATED, NOT IGNORED.** A managed view with
+`translatesAutoresizingMaskIntoConstraints` still YES contributes its mask: a sizable axis keeps its two struts and
+moves its size, a fixed axis pins the edges its flexible margins do not release. The gaps are captured from the frame
+and parent size in effect the first time the view is solved — recomputing them every pass would read the parent's NEW
+size against the child's OLD frame and mistake a resize for a larger margin — and the capture is thrown away when the
+mask, the flag or the parent changes. `NSControl` answers Auto Layout's intrinsic-size question with its cell's
+`-cellSize`, so a cell-based control sizes itself through the hugging (DefaultLow) and compression-resistance
+(DefaultHigh) pair, and a required width still wins. A plain view's answer is `NSViewNoIntrinsicMetric` in both Apple
+spellings.
+
+**THE PASS IS DRIVEN FROM THE VIEW AND RUNS ITSELF WHEN THE TREE CHANGES.** `-layoutSubtreeIfNeeded` runs the update
+pass (`-updateConstraints`, once per request), solves the subtree, then calls `-layout` on the views that asked for it;
+a frame set inside the pass cannot start a second one. Adding or removing a constraint, changing a managed view's frame
+or size, adding a view, or changing the translation flag requests the same pass, and the request is a single load when
+no constraint is active anywhere in the process. `tests/auto_layout.m` pins the arithmetic: both flips, the four edges,
+centres, a sibling's edge, required-versus-optional, the priority ratio, intrinsic sizes, a control pinned to four
+edges against its intrinsic pull, a translated mask following its parent, a cousin relation, the two hooks, activation
+ownership, and the bystander a pass leaves alone.
+
+**WHAT IS NOT HERE IS NAMED WHERE IT WOULD BE MET**: the visual-format language (`+constraintsWithVisualFormat:`), the
+margin attributes and `-layoutMargins`, `NSLayoutGuide`, and baseline attributes. The first three have no declaration
+in this tier, and a constraint naming a baseline is refused at activation because a baseline is a font's answer and
+`NSView` has no font to ask. Leading and trailing are read as left and right (there is no per-view layout direction
+yet), and equal-priority conflicts are settled by the weighted projection rather than by a lexicographic tableau.
+
+### The panel, and the alert that asks the question
+
+**`NSPanel` AND `NSAlert` ARE HERE, AND THE PANEL IS WHERE THREE ANSWERS DIFFER FROM A WINDOW'S.** A panel hides when
+the application deactivates (`hidesOnDeactivate` YES, made in its initialiser), it is never the main window (Apple's
+`-canBecomeMainWindow` rule names a panel absolutely, so `NSPanel` overrides the door to NO), and
+`-becomesKeyOnlyIfNeeded` makes a click take the keyboard only when the view under the pointer needs the panel to be
+key. That last one is a real rule rather than a stored flag: the click-to-key step of `NSApplication -sendEvent:` asks
+the window through a private `NSWindow -cg_shouldBecomeKeyForClickAtPoint:`, which `NSPanel` answers by hit-testing its
+content and asking each view on the way up. `NSControl -needsPanelToBecomeKey` is the per-view half, and its answer is
+the control's own `-acceptsFirstResponder` — YES for an editable field, NO for a button, a label or a slider. Before
+this class the view's answer was a bare NO with "there is no panel here to need" beside it, which is the sentence the
+class made false.
+
+**AN ALERT IS A PANEL AT `NSModalPanelWindowLevel`, AND ITS CONTENT IS REAL CONTROLS.** The one panel default it turns
+back off is `hidesOnDeactivate`, because a modal question that vanished with the application would leave a loop with
+nothing to answer. The factory's message and title become the bold line and the window's title; the informative text is the smaller run under it; the icon is a
+view that draws an `NSImage` (the application's icon until a caller sets one); the buttons are `NSButton`s in the order
+they were added, laid out right-to-left so the first is the default; and an optional accessory view spans the width
+between them. The text is wrapped by measurement — this tier's field is one line tall, so `-layout` makes one field per
+wrapped line — and the panel's height is computed from the tallest of the icon and the text, the accessory and the
+button row. The first button carries Return and the second Escape, and because this tier's pump has no key-equivalent
+pass for windows, the alert's panel turns those two keys into clicks itself. `tests/panel_alert.m` measures the panel's
+defaults and click-to-key rule, the alert's fields and button order, a long informative text becoming several fields,
+a changed message being laid out again, an accessory being placed and removed, the three codes 1000/1001/1002 through a
+modal session, Return and Escape through `-sendEvent:`, and the sheet form's attachment and reply — **55 checks**.
+`-runModal` is not called there for the reason `NSApplication.m` gives about its own probe: it is an unbounded loop, and
+a test that called it would hang rather than fail.
+
+**WHAT THE ALERT DOES NOT DO IS NAMED AT ITS DOORS.** The alert style is recorded and changes no pixels — this tier
+paints one panel shape and has no system icon art to choose between — and `-setShowsHelp:`/`-setHelpAnchor:` round-trip
+but grow no help button, because there is no Help system to show (`NSApplication -showHelp:` refuses by name). The sheet form does not order the panel out after
+`-endSheet:returnCode:`; Apple's own callback is the one that dismisses it, which is the same contract
+`NSApplication.h` quotes.
+
 ### Still absent, and why
 
-**SEVEN THINGS THAT USED TO BE ON THIS LIST ARE NOT ANY MORE, AND THE LIST IS CORRECTED RATHER THAN QUIETLY SHRUNK:**
+**EIGHT THINGS THAT USED TO BE ON THIS LIST ARE NOT ANY MORE, AND THE LIST IS CORRECTED RATHER THAN QUIETLY SHRUNK:**
 the SHEETS (`NSApplication -beginSheet:modalForWindow:…` and `-endSheet:returnCode:`, with the attachment and the
 reply dance on `NSWindow`), the FRAME-AUTOSAVE strings, the CURSOR-RECT invalidation, the CHILD-WINDOW list,
-`NSSplitView`, `NSSegmentedControl`/`NSToolbarItemGroup` and `NSPathControl` are all implemented. What is still absent
-is the DRAWER (the class — `-drawers` answers an empty array, which is Apple's own contract), the TOOLBAR'S
-CUSTOMIZATION PALETTE (the toolbar itself is here; the palette refuses by name), the CROSS-PROCESS DRAG SESSION
-(the in-process session, its drag image window, its two protocols and the table's row drag are here; another
+`NSSplitView`, `NSSegmentedControl`/`NSToolbarItemGroup`, `NSPathControl` and `NSPanel`/`NSAlert` are all implemented.
+What is still absent is the DRAWER (the class — `-drawers` answers an empty array, which is Apple's own contract), the
+TOOLBAR'S CUSTOMIZATION PALETTE (the toolbar itself is here; the palette refuses by name), the CROSS-PROCESS DRAG
+SESSION (the in-process session, its drag image window, its two protocols and the table's row drag are here; another
 application's destination and its pasteboard are not, because that is the window server's transport),
-`NSSearchField`, `NSPanel`/`NSAlert`, `NSTabView`, `NSCollectionView`, `NSDocument`, and the
+`NSSearchField`, `NSTabView`, `NSCollectionView`, `NSDocument`, and the
 script-command doors, which are declared and REFUSE by name; what the window's close,
 minimise and zoom buttons DO is now this tier's — each goes through the `-perform…` door its menu item sends — but
 the MINIMISE is

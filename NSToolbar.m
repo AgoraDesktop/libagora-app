@@ -36,6 +36,8 @@
 #import "NSFont.h"
 #import "NSGraphicsContext.h"
 #import "NSImage.h"
+#import "NSImage_internal.h"
+#import <AppKit/NSTrackingArea.h>
 #import "NSMenuItem.h"
 #import "NSStringDrawing.h"
 #import "NSView.h"
@@ -136,6 +138,11 @@ static void fn_announce(NSToolbar *toolbar, NSString *name, NSToolbarItem *item)
 	NSMutableArray *_hostedViews;		/* RETAINED: the custom item views this view has adopted */
 	NSInteger _pressedIndex;		/* index into `_layoutItems`, or -1 */
 	NSInteger _hoverIndex;
+	/* THE AREA THE PRELIGHT IS MADE OF. Without one the hover index was only ever updated by motion the WINDOW
+	 * happened to deliver — which meant a prelight could stay lit after the pointer had left, or never light at
+	 * all before a click. `NSTrackingInVisibleRect` makes the region the view's own, so no re-layout can move it
+	 * out from under the pointer. OWNED (released in `-dealloc`). */
+	NSTrackingArea *_hoverArea;
 }
 - (instancetype)initWithToolbar:(NSToolbar *)toolbar;
 - (void)cg_relayout;
@@ -226,12 +233,18 @@ static void fn_item_rects(NSToolbarItem *item, NSRect rect, NSToolbarDisplayMode
 		_hostedViews = [[NSMutableArray alloc] init];
 		_pressedIndex = -1;
 		_hoverIndex = -1;
+		_hoverArea = nil;
 	}
 	return self;
 }
 
 - (void)dealloc
 {
+	/* THE AREA GOES FIRST: removing it can fire a `-mouseExited:` at this view, and that door redraws. */
+	if (_hoverArea != nil) {
+		[self removeTrackingArea:_hoverArea];
+		[_hoverArea release];
+	}
 	[_layoutItems release];
 	[_layoutOwners release];
 	[_itemRects release];
@@ -541,22 +554,42 @@ static CGFloat fn_standard_width(NSToolbarItem *item, NSToolbarDisplayMode displ
 			/* THE VIEW DRAWS ITSELF, as a real subview. The highlight is still the toolbar's, because it is the
 			 * item that is selected or pressed rather than the control's own face. */
 		}
-		if (selected || active) {
-			NSRect plate = NSInsetRect(rect, 3.0, 4.0);
-			NSBezierPath *path = [NSBezierPath bezierPathWithRoundedRect:plate xRadius:4.0 yRadius:4.0];
+		/* **A PLATE IS FOR AN ENABLED ITEM, AND FOR A PRESS OR A SELECTION — NOT FOR A POINTER THAT HAPPENS TO BE
+		 * RESTING ON IT.** Two rules, and both were wrong:
+		 *
+		 * A BORDERLESS TOOLBAR BUTTON'S BACKGROUND IS THE TOOLBAR'S. The hover wash this used to paint was
+		 * `+controlHighlightColor`, a lighter grey than the chrome face, and it stayed behind when the pointer
+		 * stopped on an item — MEASURED: clicking Back (which then disables, because there is nowhere to go back
+		 * to) left a pale rounded rectangle around the word "Back" that no longer belonged to anything.
+		 *
+		 * AND A DISABLED ITEM DOES NOT HIGHLIGHT AT ALL. That is the other half of the same picture: a control
+		 * that cannot be clicked must not answer the pointer, which is the rule `NSButtonCell` follows for its
+		 * own face too — a disabled button is drawn flat whatever the pointer is doing. Only a PRESS (the item is
+		 * being clicked) and a SELECTION (a mode the toolbar is reporting, like a view switcher) take the accent,
+		 * and the accent is the platform's, the same one a pressed button and a menu's chip wear. */
+		{
+			BOOL pressed = ([item isEnabled] && (NSInteger)i == _pressedIndex);
+			BOOL hovered = ([item isEnabled] && (NSInteger)i == _hoverIndex);
 
-			/* **AND THE CHIP IS THE PLATFORM'S ACCENT, THE SAME ONE A PRESSED BUTTON AND A MENU'S CHIP WEAR.** The
-			 * pressed item takes it whole; a SELECTED item — a mode the toolbar is reporting rather than a press —
-			 * takes it at just over half, which is the pale wash the era's blue was doing here. `+selectedControlColor`
-			 * was a second blue in the same window as everything else's accent. */
-			if (active && (NSInteger)i == _pressedIndex) {
-				[[NSColor cg_accentColor] setFill];
-			} else if (selected) {
-				[[[NSColor cg_accentColor] colorWithAlphaComponent:0.55] setFill];
-			} else {
-				[[NSColor controlHighlightColor] setFill];
+			if (pressed || selected || hovered) {
+				NSRect plate = NSInsetRect(rect, 3.0, 4.0);
+				NSBezierPath *path = [NSBezierPath bezierPathWithRoundedRect:plate xRadius:4.0 yRadius:4.0];
+
+				/* **ONE COLOUR, THREE STRENGTHS: THE ACCENT IS WHAT "THE POINTER IS HERE" LOOKS LIKE.** A press takes
+				 * it whole; a selected item — a mode the toolbar reports — at just over half, so it reads as current
+				 * rather than active; and a PRELIGHT at a quarter, which is enough to answer the pointer without
+				 * making the band look as though a button had been put on it. The prelight used to be
+				 * `+controlHighlightColor`, a grey LIGHTER than the chrome face, which read as a panel appearing
+				 * under the item rather than as the item answering the hand. */
+				if (pressed) {
+					[[NSColor cg_accentColor] setFill];
+				} else if (selected) {
+					[[[NSColor cg_accentColor] colorWithAlphaComponent:0.55] setFill];
+				} else {
+					[[[NSColor cg_accentColor] colorWithAlphaComponent:0.25] setFill];
+				}
+				[path fill];
 			}
-			[path fill];
 		}
 		if ([item view] != nil) {
 			continue;
@@ -574,7 +607,16 @@ static CGFloat fn_standard_width(NSToolbarItem *item, NSToolbarDisplayMode displ
 				if (![item isEnabled]) {
 					CGContextSetAlpha(c, 0.5);
 				}
-				[image drawInRect:imageRect];
+				/* **A TEMPLATE WEARS THE TOOLBAR'S INK, THE SAME RULE THE BUTTON CELL FOLLOWS.** `NSImageNameGoLeftTemplate`
+				 * is a stencil, not a picture of a grey arrow: drawn in its own colour it would be black on every
+				 * toolbar in every state, beside labels that are not. The ink is the label's — dimmed grey for an
+				 * item that cannot be clicked, and the control's ink otherwise. */
+				if (!([image isTemplate]
+				      && [image cg_drawInRect:imageRect
+							 ink:([item isEnabled] ? [NSColor controlTextColor]
+									       : [NSColor disabledControlTextColor])])) {
+					[image drawInRect:imageRect];
+				}
 				if (![item isEnabled]) {
 					CGContextSetAlpha(c, 1.0);
 				}
@@ -681,6 +723,65 @@ static CGFloat fn_standard_width(NSToolbarItem *item, NSToolbarDisplayMode displ
 			}
 		}
 	}
+}
+
+/* **THE PRELIGHT NEEDS AN AREA, AND IT NEEDS ONE THAT KNOWS WHEN THE POINTER LEAVES.** The hover index is read by
+ * the painter, so it has to be right; motion alone is not enough, because a pointer that leaves the band altogether
+ * produces no motion inside it. `NSTrackingInVisibleRect` makes the region the view's own visible rectangle, so a
+ * resized toolbar needs no pass to keep it in step. */
+- (void)cg_installHoverArea
+{
+	if (_hoverArea == nil) {
+		_hoverArea = [[NSTrackingArea alloc] initWithRect:NSZeroRect
+							   options:(NSTrackingMouseEnteredAndExited |
+								    NSTrackingMouseMoved |
+								    NSTrackingActiveInActiveApp |
+								    NSTrackingInVisibleRect)
+							     owner:self userInfo:nil];
+	}
+	if ([self window] != nil) {
+		[self addTrackingArea:_hoverArea];
+	}
+}
+
+- (void)viewDidMoveToWindow
+{
+	[super viewDidMoveToWindow];
+	if ([self window] != nil) {
+		[self cg_installHoverArea];
+	} else if (_hoverArea != nil) {
+		[self removeTrackingArea:_hoverArea];
+		_hoverIndex = -1;
+	}
+}
+
+- (void)updateTrackingAreas
+{
+	[super updateTrackingAreas];
+	[self cg_installHoverArea];
+}
+
+- (void)mouseEntered:(NSEvent *)event
+{
+	NSInteger index = [self indexAtPoint:[self localPointForEvent:event]];
+
+	(void)event;
+	if (index != _hoverIndex) {
+		_hoverIndex = index;
+		[self setNeedsDisplay:YES];
+	}
+	[super mouseEntered:event];
+}
+
+- (void)mouseExited:(NSEvent *)event
+{
+	/* **LEAVING THE BAND PUTS THE PRELIGHT OUT, WHICH IS THE HALF A MOTION-ONLY HOVER DOES NOT DO.** The pointer
+	 * can leave without another motion inside the view, and the plate would stay lit behind it. */
+	if (_hoverIndex != -1) {
+		_hoverIndex = -1;
+		[self setNeedsDisplay:YES];
+	}
+	[super mouseExited:event];
 }
 
 - (void)mouseMoved:(NSEvent *)event

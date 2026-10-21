@@ -255,6 +255,16 @@ NSString *NSFieldEditorUserInfoKey = @"NSFieldEditor";
 	return _cell != nil && [_cell acceptsFirstResponder];
 }
 
+- (BOOL)needsPanelToBecomeKey
+{
+	/* **A CONTROL NEEDS THE PANEL'S KEYBOARD EXACTLY WHEN IT TAKES THE KEYBOARD ITSELF.** This is the per-view half
+	 * of `NSPanel -becomesKeyOnlyIfNeeded`: a panel asks the view under a click whether the click should pull the key
+	 * into the panel, and a control's honest answer is its own `-acceptsFirstResponder` — YES for an editable text
+	 * field (which has a session to open), NO for a button, a label or a slider. The base `NSView` answer is NO, so
+	 * this is the override that makes a panel's text field behave like one. */
+	return [self acceptsFirstResponder];
+}
+
 /* ---- AND THE POINTER ENTERING AND LEAVING, WHICH IS WHERE A PRELIGHT COMES FROM -------------------- */
 
 /* **THE CONTROL OWNS A TRACKING AREA, WHICH IS WHAT REPLACES THE WINDOW'S OLD BLANKET SYNTHESIS.** Before the class
@@ -474,6 +484,19 @@ NSString *NSFieldEditorUserInfoKey = @"NSFieldEditor";
 		return;
 	}
 	[self setFrameSize:[_cell cellSize]];
+}
+
+/* **AND AUTO LAYOUT'S QUESTION IS THE SAME ANSWER WITHOUT THE FRAME SET.** A cell-based control's intrinsic size is
+ * its cell's `-cellSize`: the door `-sizeToFit` already trusts, asked by the engine instead of by a caller who
+ * wanted to see the size. A control with no cell has no opinion, which is why it forwards to the view's sentinel
+ * rather than reporting zero. Invalidation is the caller's: this tier does not observe a cell's title or value, so a
+ * control whose content changed calls `-invalidateIntrinsicContentSize` — the same contract Apple documents. */
+- (NSSize)intrinsicContentSize
+{
+	if (_cell == nil) {
+		return [super intrinsicContentSize];
+	}
+	return [_cell cellSize];
 }
 
 /* ---- AND THE TWO DOORS THAT ASK ABOUT AN EDIT SESSION ------------------------------------------------ */

@@ -330,6 +330,15 @@ typedef NSUInteger NSWindowSharingType;
 	 * makes the first walk a movement by definition. */
 	NSPoint _cg_trackingPoint;
 	BOOL _cg_hasTrackingPoint;
+	/* **A DRAG OWNS THE POINTER, SO THE TRACKING ENGINE STEPS ASIDE WHILE ONE RUNS.** A divider drag is a modal
+	 * gesture, and re-walking a 256-column view tree for every motion event made the drag unusable. The counter
+	 * nests because a drag may be suspended more than once on the way down. */
+	NSInteger _cg_trackingSuspensions;
+	/* THE DRAG GUIDE, DRAWN BY THE WINDOW ABOVE THE VIEW TREE. A view that owns a divider cannot paint over its
+	 * own panes (children draw after it), so the preview line is the window's overlay. Coordinates are CONTENT
+	 * VIEW coordinates. */
+	BOOL _cg_dragGuideActive;
+	NSRect _cg_dragGuideRect;
 	/* **AND WHICH CHROME BUTTON THE POINTER IS OVER, AND WHICH ONE A PRESS BEGAN ON, OR -1.** The chrome's four
 	 * controls are the WINDOW's — there is no view up there — so their two transient states live here, where the
 	 * drawing and the pointer both read them. */
@@ -669,10 +678,10 @@ typedef NSUInteger NSWindowSharingType;
 - (void)setCanHide:(BOOL)flag;
 
 /* `hidesOnDeactivate` — "whether the window is removed from the screen when its application becomes inactive" —
- * default NO for a window. TWO THINGS ARE STATED RATHER THAN COPIED: Apple's default for an NSPanel is YES, and
- * there is no NSPanel in this tree (the class is an open ledger row), so that difference is not implemented; and
- * what this tier does is hide the windows that ARE VISIBLE when the application deactivates and bring them back
- * when it activates, so a window the caller had already ordered out is NOT brought back by us. */
+ * default NO for a window and YES for a PANEL: `NSPanel`'s initialiser is where that difference is made, which is why
+ * this class can keep the plain answer and still be right for both. What this tier does is hide the windows that ARE
+ * VISIBLE when the application deactivates and bring them back when it activates, so a window the caller had already
+ * ordered out is NOT brought back by us. */
 - (BOOL)hidesOnDeactivate;
 - (void)setHidesOnDeactivate:(BOOL)flag;
 
@@ -1047,13 +1056,19 @@ extern double NSAppKitVersionNumberWithDeferredWindowDisplaySupport;
  * SO A BORDERLESS WINDOW ANSWERS NO TO BOTH, and an attempt to make one key is abandoned rather than honoured —
  * which is what `-makeKeyWindow`/`-makeMainWindow` below now do, and the one place this tier's behaviour changes.
  *
- * THE THIRD CONDITION OF THE MAIN RULE IS NOT IMPLEMENTABLE HERE, AND IS STATED RATHER THAN DROPPED: "is not an
- * NSPanel object" cannot be tested because THIS TREE HAS NO NSPanel (the class is an open ledger row, not a
- * declaration — and a forward declaration would mark it shipped for a class that does not exist). A panel in a tree
- * that grows one overrides these doors, which is exactly the route Apple documents for a window whose answer must
- * differ. */
+ * THE THIRD CONDITION OF THE MAIN RULE IS `NSPanel`'S, AND IT NOW HAS A CLASS TO LIVE IN: "is not an NSPanel
+ * object" is implemented by that subclass overriding `-canBecomeMainWindow` to answer NO, which is exactly the route
+ * Apple documents for a window whose answer must differ. This class's own implementation therefore states the rule
+ * for a plain window, and a panel never reaches the visibility and style-mask tests at all. */
 - (BOOL)canBecomeKeyWindow;
 - (BOOL)canBecomeMainWindow;
+
+/* **THE CLICK-TO-KEY QUESTION, WHICH IS A SEAM RATHER THAN AN APPLE DOOR.** `NSApplication` owns the press that makes
+ * a window key and a panel owns the "only when needed" rule, so the question has to cross a file boundary. It travels
+ * here, on this private `cg_` door: a window answers YES (any click may make it key), and `NSPanel` answers with
+ * `-becomesKeyOnlyIfNeeded` and the view under the pointer. The point is in WINDOW coordinates, the same space as
+ * `-sendEvent:`'s `-locationInWindow`. */
+- (BOOL)cg_shouldBecomeKeyForClickAtPoint:(NSPoint)point;
 
 /* ============================================================================================ *
  * FOUR VOCABULARIES, AND THE TWO DOORS THAT CARRY TWO OF THEM.                                   *

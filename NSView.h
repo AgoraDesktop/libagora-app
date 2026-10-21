@@ -50,14 +50,20 @@
  * `-lockFocusIfCanDraw` and the `…ToBase`/`…FromBase` conversions are ABSENT BECAUSE THEY ARE `struck`
  * ROWS: deprecated at this tree's pinned vintage, and the modern replacements
  * (`-cacheDisplayInRect:toBitmapImageRep:`, `-convertPoint:fromView:`) are the ones a caller should
- * have. The responder chain, the layer tree, `NSView`'s layout constraints and its `NSMenu`/tooltip
- * surface each need a subsystem that does not exist here; each is absent rather than stubbed.
+ * have. The responder chain, the layer tree, its `NSMenu`/tooltip surface and its BACKING-SCALE conversions each
+ * need a subsystem that does not exist here; each is absent rather than stubbed. **AUTO LAYOUT USED TO BE ON THAT
+ * LIST AND IS NOT ANY MORE**: `NSView`'s constraints, anchors, intrinsic size and layout pass are implemented in
+ * `NSLayoutConstraint.h`, `NSLayoutAnchor.h` and `NSLayoutSolver.h`, as a DELIBERATE post-10.6 slice whose reason is
+ * recorded at the top of the constraint header — the era pins predate the class, and a client of this tier still
+ * wants a frame stated as a relationship rather than as arithmetic repeated in a resize hook.
  */
 
 #import <AppKit/NSResponder.h>
 #import <AppKit/NSDragging.h>
 #import <AppKit/NSBitmapImageRep.h>
 #import <AppKit/NSTrackingArea.h>
+#import <AppKit/NSLayoutConstraint.h>
+#import <AppKit/NSLayoutAnchor.h>
 /* AND `NSGraphics.h` IS IMPORTED RATHER THAN ASSUMED, because this header USES `NSFocusRingType` for a property and
  * two doors (`-focusRingType`, `-setFocusRingType:`, `+defaultFocusRingType`) and no longer declares it: the type
  * moved to its APPLE home, which is the drawing vocabulary's header. AppKit's own `NSView.h` declares the type itself,
@@ -249,7 +255,32 @@ extern NSString *NSDefinitionPresentationTypeOverlay;
 	NSFocusRingType _focusRingType;
 	NSView *_focusView;
 	CGFloat _frameCenterRotation;
+	/* **AUTO LAYOUT'S OWN STATE, AND NONE OF IT IS A FRAME.** The constraint ARRAY is what a view owns; the two
+	 * booleans are the pass's flags; and the four priorities are the view's answer to "how much do I want my
+	 * intrinsic size" per axis. The engine's unknowns live in the solver for the length of one pass and nowhere
+	 * else, which is what keeps a frame the only persistent geometry in this class. */
+	BOOL _translatesAutoresizingMaskIntoConstraints;
+	NSMutableArray *_constraints;
+	BOOL _needsUpdateConstraints;
+	BOOL _needsLayout;
+	NSLayoutPriority _contentHuggingPriority[2];
+	NSLayoutPriority _contentCompressionResistancePriority[2];
+	/* **THE TRANSLATED MASK IS CAPTURED ONCE, BECAUSE A MASK IS A STATEMENT ABOUT A SIZE THAT WAS.** The engine
+	 * turns a managed view's mask into equations measured against the frame and parent size in effect the first
+	 * time that view is solved; recomputing the gaps every pass would read the parent's NEW size and the child's
+	 * OLD frame, which is exactly the wrong delta. The capture is cleared when the mask or the flag changes and
+	 * when the view moves to another parent. */
+	BOOL _cg_autoresizingCaptured;
+	NSRect _cg_autoresizingFrame;
+	NSSize _cg_autoresizingParentSize;
 }
+
+/* **THE ONE METRIC THAT IS NOT A NUMBER.** Apple's intrinsic size has a sentinel for "this view has no opinion" —
+ * -1 — and its 10.7 spelling was misspelled (`NSViewNoInstrinsicMetric`). Both names are defined so a ported caller
+ * can use either; the value is the same and the engine compares against it rather than against zero, because a
+ * zero-size intrinsic view is a real thing. */
+extern const CGFloat NSViewNoIntrinsicMetric;
+extern const CGFloat NSViewNoInstrinsicMetric;
 
 /* THE DESIGNATED INITIALISER. The frame is given in the SUPERVIEW's coordinates, and the bounds start as
  * the same size at the origin, which is what every view begins as. */
@@ -383,6 +414,10 @@ extern NSString *NSDefinitionPresentationTypeOverlay;
 - (void)viewWillDraw;
 - (void)viewWillStartLiveResize;
 - (void)viewDidEndLiveResize;
+/* **AND THE HOOK A SUBCLASS OVERRIDES, WHICH THE LAYOUT DRIVER CALLS.** Apple's default does nothing, and so does
+ * this one: `-layoutSubtreeIfNeeded` is what solves constraints and reconciles frames, and a `-layout` override is
+ * where a view adds the placement arithmetic equations cannot express. A pass calls it only for views whose
+ * `-needsLayout` is YES, and a frame set made inside it does not start a second pass. */
 - (void)layout;
 /* **AND THE DOOR THAT RECOMPUTES AN AREA'S REGION, WHICH USED TO BE A RECORDED NO-OP.** Apple calls it when the view's
  * geometry changed, and this class calls it from `-cg_frameDidChangeFrom:` — the one place a frame change is noticed.
@@ -483,6 +518,13 @@ extern NSString *NSDefinitionPresentationTypeOverlay;
  * the two classes are where it is used, and because a content view whose subtree has no window is a view whose
  * `-window`, `-nextValidKeyView` and coordinate conversions all answer nothing. */
 - (void)cg_setWindow:(nullable NSWindow *)aWindow;
+
+/* **AND THE MASK TRANSLATION'S LITTLE CACHE, WHICH IS THE SOLVER'S TO READ AND THIS CLASS'S TO INVALIDATE.** The
+ * three doors are the tier's own: `-cg_getCapturedAutoresizingFrame:parentSize:` answers NO until a pass has
+ * captured one, and the setter is what that pass calls. See the ivar for why the capture is not recomputed. */
+- (BOOL)cg_getCapturedAutoresizingFrame:(NSRect *)frame parentSize:(NSSize *)parentSize;
+- (void)cg_setCapturedAutoresizingFrame:(NSRect)frame parentSize:(NSSize)parentSize;
+- (void)cg_clearCapturedAutoresizingFrame;
 
 /* ============================================================================================ *
  * THE VIEW'S PROPERTIES: NINE THAT COMPUTE, AND THE REST THAT STORE OR ANSWER.                   *
@@ -665,6 +707,71 @@ extern NSString *NSDefinitionPresentationTypeOverlay;
 - (void)resizeWithOldSuperviewSize:(NSSize)oldSize;
 - (void)sortSubviewsUsingFunction:(NSInteger (*)(id, id, void *))compare context:(nullable void *)context;
 - (void)removeFromSuperviewWithoutNeedingDisplay;
+
+/* ============================================================================================ *
+ * AUTO LAYOUT — THE VIEW'S HALF.                                                                 *
+ *                                                                                                *
+ * The equations and the engine are `NSLayoutConstraint.h` and `NSLayoutSolver.h`; what lives on   *
+ * this class is the STATE the pass reads and the two doors a caller uses to run it. The rule     *
+ * that ties the three files together is stated once, here: a view named by an active constraint   *
+ * is MANAGED and its frame is a result; a view named by none is untouched, and its frame is a     *
+ * constant the equations may read. Auto Layout is opt-in per view rather than per window.         *
+ * ============================================================================================ */
+
+/* **THE VIEW'S CONSTRAINTS, AND THE OWNER'S ARRAY IS THE ONLY STORE.** `-addConstraint:` makes the constraint
+ * active and puts it in THIS view's array, which is what `-constraints` answers; `-removeConstraint:` is the
+ * reverse. A constraint whose two items have no common ancestor cannot be owned by anybody and is refused by name.
+ * `+[NSLayoutConstraint activateConstraints:]` is the usual door because it computes the owner from the items. */
+- (void)addConstraint:(NSLayoutConstraint *)constraint;
+- (void)removeConstraint:(NSLayoutConstraint *)constraint;
+- (NSArray *)constraints;
+
+/* **THE AUTORESIZING FLAG, AND ITS DEFAULT IS YES** — Apple's default, and the one that makes a view created with a
+ * frame behave as it always did. A managed view with YES contributes equations equivalent to its mask; a view that
+ * wants to be placed by its own constraints sets this to NO, exactly as on Apple's stack. */
+@property BOOL translatesAutoresizingMaskIntoConstraints;
+
+/* THE UPDATE PASS. `-updateConstraints` is the override point where a subclass adds the constraints that depend on
+ * its content; the flag says the pass is due, and `-updateConstraintsIfNeeded` recurses the subtree and calls it.
+ * The default does nothing, because a plain view has nothing to update. */
+- (BOOL)needsUpdateConstraints;
+- (void)setNeedsUpdateConstraints:(BOOL)flag;
+- (void)updateConstraints;
+- (void)updateConstraintsIfNeeded;
+
+/* **THE LAYOUT PASS. `-layoutSubtreeIfNeeded` IS THE DRIVER AND `-layout` IS THE HOOK.** The driver solves the
+ * subtree's equations and reconciles their frames, then calls `-layout` on every view that asked for a pass — which
+ * is where a subclass does arithmetic the equations cannot express. A call made while a pass is already running is
+ * ignored rather than allowed to re-enter, so a frame set inside `-layout` cannot start a second solve. */
+- (BOOL)needsLayout;
+- (void)setNeedsLayout:(BOOL)flag;
+- (void)layoutSubtreeIfNeeded;
+
+/* **THE INTRINSIC SIZE, AND ITS TWO PRIORITIES.** A plain view has no opinion (`NSViewNoIntrinsicMetric`); a control
+ * answers its cell's size. When a view is managed, the engine turns a real intrinsic size into two optional
+ * equations per axis — hugging (`<=`, DefaultLow) and compression resistance (`>=`, DefaultHigh) — which is why a
+ * label with one edge pinned sizes itself and a window can still be resized around it. */
+- (NSSize)intrinsicContentSize;
+- (void)invalidateIntrinsicContentSize;
+- (NSLayoutPriority)contentHuggingPriorityForOrientation:(NSLayoutConstraintOrientation)orientation;
+- (void)setContentHuggingPriority:(NSLayoutPriority)priority
+		  forOrientation:(NSLayoutConstraintOrientation)orientation;
+- (NSLayoutPriority)contentCompressionResistancePriorityForOrientation:(NSLayoutConstraintOrientation)orientation;
+- (void)setContentCompressionResistancePriority:(NSLayoutPriority)priority
+				forOrientation:(NSLayoutConstraintOrientation)orientation;
+
+/* **AND THE ANCHORS.** Each answers a fresh autoreleased anchor naming this view and one attribute. There is no
+ * baseline anchor: a baseline is a font's answer, and this class has no font — see `NSLayoutConstraint.h`. */
+- (NSLayoutXAxisAnchor *)leadingAnchor;
+- (NSLayoutXAxisAnchor *)trailingAnchor;
+- (NSLayoutXAxisAnchor *)leftAnchor;
+- (NSLayoutXAxisAnchor *)rightAnchor;
+- (NSLayoutYAxisAnchor *)topAnchor;
+- (NSLayoutYAxisAnchor *)bottomAnchor;
+- (NSLayoutDimension *)widthAnchor;
+- (NSLayoutDimension *)heightAnchor;
+- (NSLayoutXAxisAnchor *)centerXAnchor;
+- (NSLayoutYAxisAnchor *)centerYAnchor;
 
 /* AND WHAT THE TREE TELLS A CLIENT. Three notifications and one window level, all of them names whose VALUES
  * are their own — the rule this tier follows wherever Apple publishes a symbol and not a string. */

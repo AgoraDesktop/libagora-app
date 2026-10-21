@@ -292,6 +292,47 @@ int main(void)
 		check(eqr([clip frame], NSMakeRect(0.0, 0.0, 200.0, 200.0)),
 		      "and gives the content the whole frame again");
 
+		/* 9. **THE BARS HIDE WHEN THE DOCUMENT FITS.** Autohide is a caller's choice (the default is Apple's NO),
+		 * and the same scroll view is driven through a small document, one that needs only the horizontal bar and
+		 * one that needs both. The bars still EXIST throughout; they are hidden, not removed. */
+		{
+			NSScrollView *autoView = [[NSScrollView alloc] initWithFrame:NSMakeRect(0.0, 0.0, 200.0, 200.0)];
+			NSView *autoDoc = [[NSView alloc] initWithFrame:NSMakeRect(0.0, 0.0, 100.0, 100.0)];
+
+			check(![sv autohidesScrollers], "autohide is OFF by default, which is Apple's default");
+			[autoView setHasVerticalScroller:YES];
+			[autoView setHasHorizontalScroller:YES];
+			[autoView setAutohidesScrollers:YES];
+			[autoView setDocumentView:autoDoc];
+			check([autoView autohidesScrollers] && [autoView hasVerticalScroller]
+			      && [autoView hasHorizontalScroller],
+			      "autohide keeps both bars CONFIGURED");
+			check([[autoView verticalScroller] isHidden] && [[autoView horizontalScroller] isHidden],
+			      "a document that fits hides both bars");
+			check(near([autoView contentSize].width, 200.0) && near([autoView contentSize].height, 200.0),
+			      "and the content takes the space the bars would have used");
+
+			[autoDoc setFrame:NSMakeRect(0.0, 0.0, 300.0, 100.0)];
+			check(![[autoView horizontalScroller] isHidden] && [[autoView verticalScroller] isHidden],
+			      "a wide document shows the horizontal bar and keeps the vertical one hidden");
+			check(near([autoView contentSize].width, 200.0) && near([autoView contentSize].height, 185.0),
+			      "and only the shown bar takes room");
+
+			[autoDoc setFrame:NSMakeRect(0.0, 0.0, 300.0, 300.0)];
+			check(![[autoView verticalScroller] isHidden] && ![[autoView horizontalScroller] isHidden],
+			      "a document larger in both directions shows both bars");
+			check(near([autoView contentSize].width, 185.0) && near([autoView contentSize].height, 185.0),
+			      "and the content is what both of them leave");
+
+			[autoView setAutohidesScrollers:NO];
+			[autoDoc setFrame:NSMakeRect(0.0, 0.0, 100.0, 100.0)];
+			check(![[autoView verticalScroller] isHidden] && ![[autoView horizontalScroller] isHidden],
+			      "turning autohide off brings both bars back even for a document that fits");
+
+			[autoDoc release];
+			[autoView release];
+		}
+
 		[sv release];
 		printf("scroll_view: %d case(s) failed\n", s_failed);
 	}

@@ -38,6 +38,7 @@
  * a window manager's (Kestrel is parked). Each of those is absent rather than stubbed.
  */
 #include "AGWindowServer.h"
+#import "NSWindow_internal.h"
 #import "AGChromeTheme.h"	/* the chrome's control graphics, when an XFWM theme resolves */
 #import "NSToolbar.h"
 #import "NSToolbar_internal.h"	/* the band's height and view, and the toolbar's own seam */
@@ -86,6 +87,8 @@
 /* THE SEAM'S DOORS AND THE STATE THEY KEEP, declared here for the same reason. */
 - (void)cg_handleSeamEvent:(const AGEvent *)event;
 - (void)cg_drawFrame;
+- (void)cg_drawFrameDirty:(NSRect)dirty;
+- (void)cg_drawDragGuideInContext:(CGContextRef)c;
 /* **WHAT THE COMPOSITOR'S FRAME CALLBACK ASKS FOR — AND WHY IT IS NOT JUST `-cg_drawFrame`.** The callback says
  * the last frame was taken; it is an INVITATION to draw again, not an instruction. A window with nothing new to
  * show must DECLINE, or the client draws, commits, is asked again, and drives the whole desktop in a busy loop:
@@ -125,6 +128,7 @@
  * key? is a button held?), so the window is the only object that can do it. Called from three places: the pointer's
  * motion, a mouse event, and the pointer leaving the window. */
 - (void)cg_updateTrackingForPoint:(NSPoint)windowPoint;
+- (void)cg_updateTrackingIfMovedToPoint:(NSPoint)windowPoint;
 - (void)cg_clearTracking;
 /* **AND THE DRAG'S MOVE, MADE ONCE PER PASS AT THE LATEST POINTER RATHER THAN PER EVENT.** The window is moved to
  * the pointer, so applying every motion inside a frame would walk it along the sampled PATH — a fast flick's
@@ -148,6 +152,11 @@
 /* The engine's doors into an area and into the event it builds: declared in every file that uses them and DEFINED by
  * the class that owns the storage — this tree's shape for a `cg_` door that is the tier's own business rather than
  * anybody's API. */
+@interface NSView (AGDirtyUnion)
+- (NSRect)cg_dirtyUnion;
+- (void)cg_clearDirtyRegionRecursive;
+@end
+
 @interface NSTrackingArea (APPKITTrackingEngine)
 - (BOOL)cg_isInside;
 - (void)cg_setInside:(BOOL)flag;
@@ -235,6 +244,8 @@ static const CGFloat fn_BAR_BORDER = 1.0;
  * THE BAR'S FACE IS NOT HERE, because it is not this file's alone: `+cg_chromeFaceColor` is the one surface the title
  * bar and the toolbar band share. */
 static const CGFloat fn_BAR_EDGE = 0.576;	/* #939393 */
+
+/* TEMPORARY: a wall-clock millisecond, so a click and the paint it caused can be put on one timeline. */
 static const CGFloat fn_MARK_INK = 0.475;	/* #797979 */
 static const CGFloat fn_MARK_FAINT = 0.749;	/* #BFBFBF */
 static const CGFloat fn_MARK_HOVER = 0.294;	/* #4B4B4B */
@@ -509,7 +520,10 @@ static NSEvent *fn_translate(NSWindow *w, const AGEvent *e, NSTimeInterval now)
 		 * rather than the application's: Apple updates it on a move the application never sees, and a window that
 		 * only changed its cursor when it also wanted `-mouseMoved:` would leave the wrong one showing for every
 		 * window that did not ask for that message. The arrow is the answer when no view has an opinion. */
-		{
+		/* **A DRAG OWNS THE CURSOR.** Resolving it through the view tree on every motion is both wrong while a
+		 * divider or a split view is dragging (that owner has already pushed its resize cursor) and ruinously
+		 * expensive in a browser with hundreds of columns; the hover answer is only for a move with no button. */
+		if (!dragging) {
 			NSCursor *c = [w cg_cursorForContentPoint:where];
 
 			[(c != nil ? c : [NSCursor arrowCursor]) set];
@@ -520,7 +534,7 @@ static NSEvent *fn_translate(NSWindow *w, const AGEvent *e, NSTimeInterval now)
 		 * `-mouseMoved:`. The engine is handed the position and the event is not built until the return below lets it
 		 * through. MEASURED, when this lived under that line: a pointer resting on a button in an ordinary window
 		 * changed nothing at all. */
-		[w cg_updateTrackingForPoint:where];
+		[w cg_updateTrackingIfMovedToPoint:where];
 		/* A MOVE WITH NO BUTTON IS DELIVERED ONLY IF THE WINDOW ASKED FOR IT — see the header. */
 		if (!dragging && ![w acceptsMouseMovedEvents]) {
 			return nil;
@@ -1935,10 +1949,18 @@ static CGFloat fn_clamp_axis(CGFloat v, CGFloat lo, CGFloat hi)
 	if (![self cg_ensureWindow]) {
 		return;
 	}
-	/* **MARKED STALE BEFORE IT IS SHOWN.** Showing is what asks for the first frame, and the compositor's frame
-	 * callback now DECLINES to draw a window that is not stale — so the show path has to say there IS something
-	 * to draw, or a freshly ordered-in window would never be painted at all. */
-	[self setNeedsDisplay:YES];
+	/* **MARKED STALE BEFORE IT IS SHOWN — AND ONLY WHEN IT IS NOT ALREADY ON THE SCREEN.** Showing is what asks
+	 * for the first frame, and the compositor's frame callback now DECLINES to draw a window that is not stale — so
+	 * the show path has to say there IS something to draw, or a freshly ordered-in window would never be painted at
+	 * all. But `-orderFront:` is ALSO what a click calls, through `-[NSApplication activateIgnoringOtherApps:]`,
+	 * and marking a window that is already visible stale there is a full repaint of every view and every string for
+	 * a click that changed one cell. MEASURED: every click in a file window repainted 900x634 of content AND its
+	 * toolbar, because the activation the application already had re-showed the window it already had. A visible
+	 * window has its pixels; the mark belongs to the transition from hidden to shown, and the raise below is what
+	 * the click actually wanted. */
+	if (!_visible) {
+		[self setNeedsDisplay:YES];
+	}
 	AGWindowShow(_agwindow);
 	/* **`-orderFront:` RAISES, WHICH IS APPLE'S OWN SENTENCE ABOUT IT** — and until now this door only showed the
 	 * window, while `-orderBack:` sent `raise` and therefore did the opposite of its name. A click in another window
@@ -2007,6 +2029,16 @@ static CGFloat fn_clamp_axis(CGFloat v, CGFloat lo, CGFloat hi)
 - (BOOL)canBecomeKeyWindow
 {
 	return ((_styleMask & NSTitledWindowMask) != 0 || (_styleMask & NSResizableWindowMask) != 0);
+}
+
+- (BOOL)cg_shouldBecomeKeyForClickAtPoint:(NSPoint)point
+{
+	/* **A CLICK MAY MAKE AN ORDINARY WINDOW KEY, WHEREVER IT LANDS.** The question exists for `NSPanel`, whose
+	 * `-becomesKeyOnlyIfNeeded` narrows it to clicks on views that want the keyboard; a window has no such rule, so
+	 * the base answer is YES and the point is not consulted. See `NSPanel.m` for the other half and
+	 * `NSApplication -sendEvent:` for the one caller. */
+	(void)point;
+	return YES;
 }
 
 - (NSWindowCollectionBehavior)collectionBehavior
@@ -2841,9 +2873,73 @@ static CGFloat fn_clamp_axis(CGFloat v, CGFloat lo, CGFloat hi)
 	}
 }
 
+- (void)cg_setDragGuideRect:(NSRect)rect
+{
+	if (_cg_dragGuideActive && !NSEqualRects(_cg_dragGuideRect, rect)) {
+		[_contentView setNeedsDisplayInRect:_cg_dragGuideRect];
+	}
+	_cg_dragGuideRect = rect;
+	_cg_dragGuideActive = YES;
+	[_contentView setNeedsDisplayInRect:rect];
+}
+
+- (void)cg_clearDragGuide
+{
+	if (_cg_dragGuideActive) {
+		[_contentView setNeedsDisplayInRect:_cg_dragGuideRect];
+	}
+	_cg_dragGuideActive = NO;
+}
+
+- (void)cg_drawDragGuideInContext:(CGContextRef)c
+{
+	if (!_cg_dragGuideActive || c == NULL) {
+		return;
+	}
+	CGColorRef colour = [[NSColor controlDarkShadowColor] CGColor];
+	CGFloat width = _cg_dragGuideRect.size.width;
+
+	if (width < 1.0) {
+		width = 1.0;
+	}
+	CGContextSetFillColorWithColor(c, colour);
+	CGContextFillRect(c, CGRectMake(_cg_dragGuideRect.origin.x, _cg_dragGuideRect.origin.y,
+					width, _cg_dragGuideRect.size.height));
+}
+
+- (void)cg_suspendTrackingUpdates
+{
+	_cg_trackingSuspensions++;
+}
+
+- (void)cg_resumeTrackingUpdates
+{
+	if (_cg_trackingSuspensions > 0) {
+		_cg_trackingSuspensions--;
+	}
+	if (_cg_trackingSuspensions == 0) {
+		/* One fresh evaluation at the pointer's last position, because the drag may have ended somewhere the
+		 * frozen bits do not describe. */
+		[self cg_updateTrackingForPoint:[self mouseLocationOutsideOfEventStream]];
+	}
+}
+
+- (void)cg_updateTrackingIfMovedToPoint:(NSPoint)windowPoint
+{
+	if (_cg_hasTrackingPoint && windowPoint.x == _cg_trackingPoint.x && windowPoint.y == _cg_trackingPoint.y) {
+		return;
+	}
+	[self cg_updateTrackingForPoint:windowPoint];
+}
+
 - (void)cg_updateTrackingForPoint:(NSPoint)windowPoint
 {
-	NSMutableArray *hits = [[NSMutableArray alloc] init];
+	NSMutableArray *hits;
+
+	if (_cg_trackingSuspensions > 0) {
+		return;
+	}
+	hits = [[NSMutableArray alloc] init];
 	BOOL moved = !_cg_hasTrackingPoint ||
 		     windowPoint.x != _cg_trackingPoint.x || windowPoint.y != _cg_trackingPoint.y;
 	NSUInteger i;
@@ -3185,6 +3281,132 @@ static CGFloat fn_clamp_axis(CGFloat v, CGFloat lo, CGFloat hi)
  * store, and the backing store is then COPIED into the frame the compositor handed over. One copy per frame is
  * the price of a client-side backing store on a protocol whose buffers come and go, and it is what keeps this
  * class's drawing model — and every view coordinate in this tree — what it was. */
+/* **DRAW ONLY WHAT CHANGED.** A full `-cg_drawFrame` fills the whole content surface, walks the whole view tree and
+ * copies the whole frame; a divider drag changes a few strips of one window many times a second, and that full pass
+ * was the difference between a smooth gutter and a crawling one. The dirty rectangle is the union of every
+ * invalidated view below the content view, converted into content coordinates; the caller sees the same surface,
+ * because `_pixels` persists between frames and only the named rectangle is painted and cleared. */
+/* SEE `NSWindow_internal.h`: y-up rectangle into top-down rows, clamped to the surface. */
++ (NSRange)cg_bufferRowsForDirtyRect:(NSRect)dirty surfaceHeight:(NSInteger)surfaceHeight
+{
+	NSInteger y0 = (NSInteger)floor((double)dirty.origin.y);
+	NSInteger y1 = (NSInteger)ceil((double)(dirty.origin.y + dirty.size.height));
+
+	if (y0 < 0) {
+		y0 = 0;
+	}
+	if (y1 > surfaceHeight) {
+		y1 = surfaceHeight;
+	}
+	if (y1 <= y0) {
+		return NSMakeRange(0, 0);
+	}
+	return NSMakeRange((NSUInteger)(surfaceHeight - y1), (NSUInteger)(y1 - y0));
+}
+
+- (void)cg_drawFrameDirty:(NSRect)dirty
+{
+	CGContextRef c;
+	uint32_t *frame;
+	int stride = 0;
+	int y;
+	NSTimeInterval started = [NSDate timeIntervalSinceReferenceDate];
+
+	if (_agwindow == NULL || ![self cg_ensureSurface] || NSIsEmptyRect(dirty)) {
+		return;
+	}
+	if (!AGWindowServerCanWrite(fn_server())) {
+		return;
+	}
+	frame = AGWindowBeginFrame(_agwindow, &stride);
+	if (frame == NULL) {
+		return;
+	}
+	c = (CGContextRef)_surface;
+	if (_opaque) {
+		CGContextSetFillColorWithColor(c, [[self backgroundColor] CGColor]);
+		CGContextFillRect(c, CGRectMake(dirty.origin.x, dirty.origin.y, dirty.size.width, dirty.size.height));
+	} else {
+		CGContextClearRect(c, CGRectMake(dirty.origin.x, dirty.origin.y, dirty.size.width, dirty.size.height));
+	}
+	if (_contentView != nil) {
+		NSGraphicsContext *g = [NSGraphicsContext graphicsContextWithCGContext:_surface flipped:NO];
+		NSGraphicsContext *previous = [[NSGraphicsContext currentContext] retain];
+
+		[NSGraphicsContext setCurrentContext:g];
+		[_contentView displayRect:dirty];
+		[self cg_drawDragGuideInContext:c];
+		[NSGraphicsContext setCurrentContext:previous];
+		[previous release];
+	}
+	/* The chrome is a thin strip and is not part of the content's dirty union: paint it, but do not walk the
+	 * content a second time. */
+	[self cg_drawChromeInContext:[NSGraphicsContext graphicsContextWithCGContext:c flipped:NO]];
+	/* **ONLY THE DIRTY PIXELS CROSS TO THE BUFFER.** The seam hands back ONE persistent wl_shm buffer (see
+	 * `AGWindowBeginFrame`), so rows outside the damaged rectangle already hold the right pixels; copying the whole
+	 * frame on every preview-line step was the remaining per-motion cost.
+	 *
+	 * **AND THE ROWS ARE MIRRORED, WHICH IS THE BUG THIS COPY HAD.** A rectangle here is in the window's own
+	 * CoreGraphics space — y UP, the same space `-cg_drawFrameDirty:` fills and the tree draws in — while both the
+	 * backing store and the `wl_shm` buffer hold their rows TOP DOWN: memory row 0 is the top of the window. So the
+	 * rows a rectangle names are `_surfaceHeight - y1 .. _surfaceHeight - y0`, and copying `y0 .. y1` instead copied
+	 * a band reflected about the middle of the window. MEASURED, and it is exactly what "a click does nothing until
+	 * something else repaints" was: a selection two thirds of the way up the window had its new pixels written into
+	 * a band the same distance DOWN from the middle — usually blank page — while the cell the person clicked kept
+	 * its old picture until a full frame (a window move, a drag) came along to repaint everything.
+	 *
+	 * The X RANGE needs nothing: neither end of the buffer mirrors horizontally. */
+	{
+		int x0 = (int)floor((double)dirty.origin.x);
+		int x1 = (int)ceil((double)(dirty.origin.x + dirty.size.width));
+		NSRange rows = [NSWindow cg_bufferRowsForDirtyRect:dirty surfaceHeight:_surfaceHeight];
+		int y0 = (int)NSMaxRange(rows);
+		int y1 = (int)rows.location;
+
+		if (x0 < 0) x0 = 0;
+		if (x1 > _surfaceWidth) x1 = _surfaceWidth;
+		for (y = y1; y < y0; y++) {
+			uint32_t *row = (uint32_t *)(void *)((char *)frame + (size_t)y * (size_t)stride);
+			const uint32_t *source = (const uint32_t *)(const void *)(_pixels + (size_t)y * (size_t)_surfaceWidth * 4u);
+			NSInteger x;
+
+			if (_opaque) {
+				for (x = x0; x < x1; x++) {
+					row[x] = source[x] | 0xFF000000u;
+				}
+			} else {
+				memcpy(row + x0, source + x0, (size_t)(x1 - x0) * 4u);
+			}
+		}
+	}
+	AGWindowEndFrame(_agwindow);
+	/* **WHAT A PARTIAL PAINT ACTUALLY COSTS, WHICH IS THE NUMBER "DRAW ONLY WHAT CHANGED" IS JUDGED BY.** The
+	 * rectangle, the milliseconds and the frames per second it implies, because a damage rectangle that is right
+	 * and a paint that is still slow is a different bug from a damage rectangle that is the whole window — and the
+	 * two are indistinguishable from the outside. See APPKIT_LOOP_DIAG for the other half (the pass rate). */
+	if (getenv("APPKIT_DRAW_DIAG") != NULL) {
+		static int s_paints;
+		static NSTimeInterval s_last;
+
+		s_paints++;
+		if (s_last == 0.0) {
+			s_last = started;
+		}
+		fprintf(stderr, "  DIAG paint: window %ld dirty %ldx%ld at (%ld,%ld) %.1f ms\n",
+			(long)[self windowNumber], (long)dirty.size.width, (long)dirty.size.height,
+			(long)dirty.origin.x, (long)dirty.origin.y,
+			([NSDate timeIntervalSinceReferenceDate] - started) * 1000.0);
+		if ([NSDate timeIntervalSinceReferenceDate] - s_last >= 1.0) {
+			s_last = [NSDate timeIntervalSinceReferenceDate];
+			s_paints = 0;
+		}
+	}
+	_viewsNeedDisplay = NO;
+	if (_contentView != nil) {
+		[_contentView cg_clearDirtyRegionRecursive];
+	}
+}
+
 - (void)cg_drawFrame
 {
 	NSRect content;
@@ -3273,7 +3495,14 @@ static CGFloat fn_clamp_axis(CGFloat v, CGFloat lo, CGFloat hi)
 		}
 	}
 	AGWindowEndFrame(_agwindow);
+	if (getenv("APPKIT_DRAW_DIAG") != NULL) {
+		fprintf(stderr, "  DIAG paint: window %ld WHOLE FRAME %ldx%ld\n", (long)[self windowNumber],
+			(long)_surfaceWidth, (long)_surfaceHeight);
+	}
 	_viewsNeedDisplay = NO;
+	if (_contentView != nil) {
+		[_contentView cg_clearDirtyRegionRecursive];
+	}
 }
 
 /* **THE FRAME CALLBACK, WHICH DRAWS ONLY WHEN THERE IS SOMETHING TO DRAW.** The compositor saying "the last frame
@@ -3285,7 +3514,15 @@ static CGFloat fn_clamp_axis(CGFloat v, CGFloat lo, CGFloat hi)
 - (void)cg_frameCallback
 {
 	if (_viewsNeedDisplay) {
-		[self cg_drawFrame];
+		/* **THE INVITATION IS ANSWERED WITH THE PARTIAL PAINT, NOT THE WHOLE FRAME.** This used to call
+		 * `-cg_drawFrame`, so the compositor's "your buffer is free" was answered with a full repaint of every
+		 * view and a full copy of the surface — and because it arrives DURING the event dispatch, it beat the run
+		 * loop's `-displayIfNeeded` to the dirty region and cleared it, so the damage-aware path below never ran.
+		 * MEASURED: every click in a file window painted 900x634 whole, whichever view had actually changed.
+		 * `-displayIfNeeded` is the same one door the run loop uses: it asks the content view for its dirty union
+		 * and paints that, falling back to the whole frame only when nothing was invalidated (a window-level
+		 * change like becoming key), which is exactly the case a full paint is for. */
+		[self displayIfNeeded];
 	}
 }
 
@@ -3299,7 +3536,13 @@ static CGFloat fn_clamp_axis(CGFloat v, CGFloat lo, CGFloat hi)
 - (void)displayIfNeeded
 {
 	if (_viewsNeedDisplay) {
-		[self display];
+		NSRect dirty = (_contentView != nil) ? [_contentView cg_dirtyUnion] : NSZeroRect;
+
+		if (!NSIsEmptyRect(dirty)) {
+			[self cg_drawFrameDirty:dirty];
+		} else {
+			[self display];
+		}
 	}
 }
 
@@ -4500,6 +4743,7 @@ static NSUInteger fn_edge_index(NSRectEdge edge)
 	visible = [_contentView bounds];
 	visible.size.height += fn_toolbar_height(self);
 	[_contentView displayRect:visible];
+	[self cg_drawDragGuideInContext:(CGContextRef)_surface];
 	[NSGraphicsContext setCurrentContext:previous];
 	[previous release];
 }

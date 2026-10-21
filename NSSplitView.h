@@ -118,6 +118,8 @@ extern NSString *NSSplitViewDidResizeSubviewsNotification;
 	NSPoint _cg_dragStartPoint;
 	CGFloat _cg_dragStartPosition;
 	BOOL _cg_pushedCursor;
+	CGFloat _cg_dragPreviewCenter;
+	BOOL _cg_dragPreviewActive;
 	/* LAYOUT'S REENTRANCY GATE. A delegate is allowed to set a divider's position while it is being resized,
 	 * and a frame set on a subview may itself be a split view; the gate keeps one adjustment from nesting. */
 	BOOL _cg_adjusting;
@@ -175,6 +177,13 @@ extern NSString *NSSplitViewDidResizeSubviewsNotification;
 @interface NSSplitView (NSDeprecated)
 - (void)setIsPaneSplitter:(BOOL)flag;
 - (BOOL)isPaneSplitter;
+@end
+
+/* AN AGORA-OWNED SEAM: whether a divider drag is in progress. A containing view that does expensive document
+ * layout in `-splitViewDidResizeSubviews:` can defer it to the end of the drag, when the final notification is
+ * posted with the dragging flag already cleared. */
+@interface NSSplitView (AGDividerDragState)
+- (BOOL)cg_isDraggingDivider;
 @end
 
 NS_ASSUME_NONNULL_END

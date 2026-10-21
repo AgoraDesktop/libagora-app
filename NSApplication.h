@@ -23,9 +23,10 @@
  * **THE SHEETS ARE HERE NOW, AND THE SENTENCE THAT SAID THEY WERE NOT IS CORRECTED RATHER THAN DELETED** — the note
  * above about the modal sessions is the same correction a slice earlier. `-beginSheet:modalForWindow:...` and
  * `-endSheet:returnCode:` attach a window to a parent, announce the session (Will and Did) and run the reply dance,
- * which is exactly what this list used to defer. WHAT IS STILL NOT HERE: the standard PANELS (about, colour, font,
- * page layout), the SERVICES menu and the HELP/Toolbar/StatusBar plumbing, which need the frameworks of stages E
- * through I; and the scripting doors, which need an OSA this tree does not have. Each is a later stage's.
+ * which is exactly what this list used to defer. WHAT IS STILL NOT HERE: the standard panel CLASSES (about, colour,
+ * font, page layout) — `NSPanel`, the window a panel is made of, is `NSPanel.h` and is not one of these — the SERVICES
+ * menu and the HELP/Toolbar/StatusBar plumbing, which need the frameworks of stages E through I; and the scripting
+ * doors, which need an OSA this tree does not have. Each is a later stage's.
  */
 
 #import <AppKit/NSResponder.h>
@@ -319,16 +320,14 @@ typedef NSUInteger NSApplicationPresentationOptions;
 - (nullable NSString *)searchString;
 
 /* ============================================================================================ *
- * AND THE THREE ALERT RETURN VALUES, WHICH ARE APPLE'S OWN PUBLISHED NUMBERS.                    *
+ * AND THE THREE ALERT RETURN VALUES HAVE MOVED TO `NSAlert.h`, WHERE APPLE PUTS THEM.             *
  * ============================================================================================ */
 
-/* Its NSAlert.h numbers them 1000, 1001 and 1002 — an enum with real values, not a convention this tree may
- * choose, because a caller compares an alert's `-runModal` result against them. */
-enum {
-	NSAlertFirstButtonReturn = 1000,
-	NSAlertSecondButtonReturn = 1001,
-	NSAlertThirdButtonReturn = 1002
-};
+/* They were declared here while this tree had no `NSAlert` — the numbers are what a caller's `switch` needs, so they
+ * could not wait for the class. Now the class exists, and the constants live beside it: Apple's own `NSAlert.h`
+ * declares `NSAlertFirstButtonReturn`, `NSAlertSecondButtonReturn` and `NSAlertThirdButtonReturn`, and a caller that
+ * includes `<AppKit/NSAlert.h>` gets them. `NSApplication -runModalForWindow:` still returns whatever code it was
+ * stopped with, so a door in this file can answer 1000 without knowing the name. */
 
 /* AND `-userInterfaceLayoutDirection` ANSWERS THE ENUM THIS TIER ALREADY DECLARES — the first draft of this block
  * declared its own and the compiler said `redefinition of enumerator`, which is the tree telling me the type was

@@ -12,9 +12,16 @@
  * `-browser:createRowsForColumn:inMatrix:` form is the one part that cannot exist without `NSMatrix` and is named
  * as absent rather than stubbed.
  *
- * **COLUMNS ARE LAID OUT SIDE BY SIDE AND SCROLL HORIZONTALLY.** The vertical direction is shared by the whole
- * browser: the document view is as tall as the tallest column, and all columns move together. That is the shape this
- * tree's scroll view can give without a second scroll per column.
+ * **THE COLUMNS ARE A 256-SLOT POOL, AND THE EMPTY ONES ARE VISIBLE.** A browser builds all of its column slots
+ * when it loads rather than growing and shrinking the view list: Finder's own shape, and the reason a column's width
+ * survives navigating away from it. The document is only as wide as the active columns OR the visible area,
+ * whichever is wider, so the empty slots to the right show as empty columns while the scrollable document does not
+ * become 256 columns of blank space.
+ *
+ * **COLUMNS ARE LAID OUT SIDE BY SIDE AND SCROLL HORIZONTALLY.** Each column carries its own vertical
+ * `NSScrollView`, so a long folder scrolls without moving its neighbours; the browser's outer scroll view is the
+ * horizontal one. Column widths are per column, and a `NSBrowserUserColumnResizing` browser draws the same
+ * eighteen-point, three-ring gutter `NSSplitView`'s pane splitter uses and makes it a drag handle.
  *
  * Written from `NSBrowser.h` in the MacOSX10.6 SDK.
  */
@@ -73,6 +80,8 @@ enum {
 {
 	id <NSBrowserDelegate> _delegate;	/* NOT RETAINED */
 	NSMutableArray *_tables;		/* RETAINED: NSTableView, one per column */
+	NSMutableArray *_columnScrollViews;	/* RETAINED: NSScrollView, one per column */
+	NSMutableArray *_columnWidths;		/* RETAINED: NSNumber content width per column */
 	NSMutableArray *_columnCounts;		/* RETAINED: NSNumber rows per column */
 	NSMutableArray *_selectedRows;		/* RETAINED: NSNumber, -1 when none */
 	NSMutableArray *_titles;		/* RETAINED: NSString or NSNull per column */
@@ -127,9 +136,14 @@ enum {
 - (nullable NSString *)pathSeparator;
 - (void)setPathSeparator:(nullable NSString *)separator;
 
-/* GEOMETRY AND COLUMN STATE. */
+/* GEOMETRY AND COLUMN STATE. `-columnWidth` is the width a NEW column gets and the width
+ * `-setColumnWidth:` gives every existing one; `-widthOfColumn:`/`-setWidth:ofColumn:` are the per-column pair.
+ * A column's width is its FRAME's: the vertical scroller lives inside it, so a visible bar narrows the table
+ * rather than widening the column. */
 - (CGFloat)columnWidth;
 - (void)setColumnWidth:(CGFloat)width;
+- (CGFloat)widthOfColumn:(NSInteger)column;
+- (void)setWidth:(CGFloat)width ofColumn:(NSInteger)column;
 - (CGFloat)minColumnWidth;
 - (void)setMinColumnWidth:(CGFloat)width;
 - (NSInteger)maxVisibleColumns;
@@ -183,7 +197,10 @@ enum {
  * column owns. */
 - (NSInteger)numberOfRowsInColumn:(NSInteger)column;
 - (NSInteger)cg_columnCount;
+- (NSInteger)cg_activeColumnCount;
 - (nullable NSTableView *)cg_tableForColumn:(NSInteger)column;
+- (nullable NSScrollView *)cg_scrollViewForColumn:(NSInteger)column;
+- (NSRect)cg_dividerFrameForColumn:(NSInteger)column;
 - (nullable NSView *)cg_documentView;
 
 @end

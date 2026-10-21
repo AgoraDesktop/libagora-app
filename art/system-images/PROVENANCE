@@ -1,0 +1,44 @@
+This directory is the SOURCE of the platform's named images, and everything in it is derived rather than copied.
+
+WHAT IS HERE. One `.svg` per glyph, on a 16-unit grid, named for the picture and not for the constant that wears
+it (`go-left.svg`, not `NSImageNameGoLeftTemplate.svg` — three of Apple's names share one picture, and the mapping
+from name to glyph is in `../../tools/system-images.py`). They are drawn as a 1.5-unit stroke with round caps and
+round joins. `../../tools/system-images.py` rasterizes them at 16 and 32 pixels and writes the coverage table the
+library compiles in, so THESE FILES ARE THE ART and the `.c` is the artifact.
+
+WHERE THE SHAPES COME FROM. Bootstrap Icons v1.13.2 — <https://github.com/twbs/icons> — MIT licensed, and its
+notice travels with any copy of the generated table:
+
+    The MIT License (MIT)
+
+    Copyright (c) 2019-2024 The Bootstrap Authors
+
+    Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated
+    documentation files (the "Software"), to deal in the Software without restriction, including without limitation
+    the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and
+    to permit persons to whom the Software is furnished to do so, subject to the following conditions:
+
+    The above copyright notice and this permission notice shall be included in all copies or substantial portions
+    of the Software.
+
+    THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO
+    THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+    AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF
+    CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+    DEALINGS IN THE SOFTWARE.
+
+HOW MUCH OF IT IS BOOTSTRAP'S. **THE ANCHORS AND THE PROPORTIONS, AND NOT THE INK.** Each glyph is the same picture
+Bootstrap draws — an arrow with a barbed head, a stop face that is a ring around a square, a share box with an arrow
+out of its top — drawn on the same 16-unit grid so that Bootstrap's own art and this art can be compared shape for
+shape. What is NOT Bootstrap's is the rendering: their glyphs are filled outlines with square terminals, and these
+are STROKED paths at 1.5 units with round caps and joins, which is what makes them read as the era's toolbar art
+(and, at sixteen points, keeps a hairline from disappearing between pixels). No SVG text was copied; the paths here
+were written against the grid, and `../../tools/system-images.py` computes the arcs, corners and arrow heads from
+parameters rather than transcribing anybody's path data.
+
+WHAT HAPPENS IF YOU CHANGE ONE. Edit the glyph in `../../tools/system-images.py`, run it, and commit the `.svg`,
+the regenerated `SystemImageMasks.c`/`.h` and `SystemImageNames.m`/`.h` together — `./tools/system-images.py --check`
+is what says they still agree. Nothing else in the tree reads these files: the library draws from the table.
+
+THE LICENCE OF THE REST. These files and the generator are Agora's own, MIT, the same as the tree — see
+`../../LICENSE`. The Bootstrap notice above is the one term that travels with the derived geometry.

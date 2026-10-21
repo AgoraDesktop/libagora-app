@@ -1,0 +1,360 @@
+/*
+ * panel_alert — a helper window's three answers, and an alert's content, layout and return codes.
+ *
+ * Copyright © 2026 Kyle J. Cardoza. MIT licensed.
+ * SPDX-License-Identifier: MIT
+ *
+ * WHY THIS EXISTS. `NSPanel` and `NSAlert` are the two classes the file manager's conflict question said it could not
+ * have, and the four `NSWindow` flags a panel is built from (`floating`, `worksWhenModal`, `modalPanel`, `hidesOnDeactivate`)
+ * had been state with no class to own them. This probe asks the questions that class ownership makes answerable:
+ *
+ *   1. A panel's defaults differ from a window's exactly where Apple says they do — `hidesOnDeactivate` YES,
+ *      `canBecomeMainWindow` NO — and the flags it shares with `NSWindow` round-trip.
+ *   2. `-becomesKeyOnlyIfNeeded` is a REAL rule: the click-to-key seam asks the view under the pointer, and an editable
+ *      field says yes where a button and the background say no. That is the half `NSControl -needsPanelToBecomeKey`
+ *      owns, and the reason the door is not just a stored BOOL.
+ *   3. An alert is a PANEL at `NSModalPanelWindowLevel`, its factory arguments become text, title and buttons, and its
+ *      layout puts the first button rightmost with every piece inside the content rect.
+ *   4. The buttons return Apple's codes THROUGH A MODAL SESSION — 1000, 1001, 1002 — and Return and Escape, which this
+ *      tier's pump has no key-equivalent pass for, reach the default and cancel buttons through the panel's own
+ *      `-keyDown:`.
+ *   5. The sheet form attaches the alert to a parent, ends the session on a click, and runs the caller's reply with
+ *      the clicked code. `-runModal` is NOT called here, for the reason `NSApplication.m` gives about its own probe:
+ *      it is an unbounded loop, and a test that called it would hang rather than fail.
+ */
+#import <AppKit/NSAlert.h>
+#import <AppKit/NSApplication.h>
+#import <AppKit/NSButton.h>
+#import <AppKit/NSColor.h>
+#import <AppKit/NSEvent.h>
+#import <AppKit/NSFont.h>
+#import <AppKit/NSImage.h>
+#import <AppKit/NSPanel.h>
+#import <AppKit/NSTextField.h>
+#import <AppKit/NSView.h>
+#import <AppKit/NSWindow.h>
+#import <Foundation/Foundation.h>
+
+#include <stdio.h>
+
+static int s_failed;
+
+static void check(int ok, const char *name)
+{
+	printf("  %s   %s\n", ok ? "ok  " : "FAIL", name);
+	if (!ok) {
+		s_failed++;
+	}
+}
+
+/* A KEY EVENT, built the way the seam builds one: the character is what the panel's handler reads. */
+static NSEvent *fn_key(NSString *characters, NSWindow *window)
+{
+	return [NSEvent keyEventWithType:NSKeyDown
+				location:NSZeroPoint
+			   modifierFlags:0
+			       timestamp:0.0
+			    windowNumber:[window windowNumber]
+				 context:nil
+			      characters:characters
+	     charactersIgnoringModifiers:characters
+			     isARepeat:NO
+			       keyCode:0];
+}
+
+/* THE FIELDS A LAYOUT MAKES, found the way a person finds them: by walking the content view's subtree. The alert's
+ * text is real `NSTextField`s, so a probe can read it rather than infer it from ink. */
+static void fn_collect_fields(NSView *view, NSMutableArray *fields)
+{
+	NSArray *subviews = [view subviews];
+	NSUInteger i;
+
+	for (i = 0; i < [subviews count]; i++) {
+		NSView *child = [subviews objectAtIndex:i];
+
+		if ([child isKindOfClass:[NSTextField class]]) {
+			[fields addObject:child];
+		}
+		fn_collect_fields(child, fields);
+	}
+}
+
+static NSArray *fn_fields(NSWindow *window)
+{
+	NSMutableArray *fields = [NSMutableArray array];
+
+	fn_collect_fields([window contentView], fields);
+	return fields;
+}
+
+static BOOL fn_has_field_text(NSWindow *window, NSString *text)
+{
+	NSArray *fields = fn_fields(window);
+	NSUInteger i;
+
+	for (i = 0; i < [fields count]; i++) {
+		if ([[[fields objectAtIndex:i] stringValue] isEqualToString:text]) {
+			return YES;
+		}
+	}
+	return NO;
+}
+
+/* THE REPLY THE SHEET FORM OWES, with the signature Apple's `NSApplication.h` quotes. */
+@interface SheetReception : NSObject
+{
+	NSInteger _code;
+	BOOL _called;
+}
+- (NSInteger)code;
+- (BOOL)wasCalled;
+@end
+
+@implementation SheetReception
+
+- (NSInteger)code
+{
+	return _code;
+}
+
+- (BOOL)wasCalled
+{
+	return _called;
+}
+
+- (void)sheetDidEnd:(NSWindow *)sheet returnCode:(NSInteger)returnCode contextInfo:(void *)contextInfo
+{
+	(void)sheet;
+	(void)contextInfo;
+	_code = returnCode;
+	_called = YES;
+}
+
+@end
+
+static void test_panel(void)
+{
+	NSPanel *panel = [[NSPanel alloc] initWithContentRect:NSMakeRect(0.0, 0.0, 320.0, 200.0)
+						   styleMask:NSTitledWindowMask
+						     backing:NSBackingStoreBuffered
+						       defer:NO];
+	NSPanel *borderless;
+	NSWindow *window;
+	NSView *content;
+	NSTextField *field;
+	NSButton *button;
+
+	check([panel isKindOfClass:[NSWindow class]], "a panel is a window");
+	check([panel hidesOnDeactivate], "a panel hides when the application deactivates");
+	check(![panel isFloatingPanel], "floating is NO until asked");
+	check(![panel worksWhenModal], "worksWhenModal is NO until asked");
+	check(![panel becomesKeyOnlyIfNeeded], "becomesKeyOnlyIfNeeded is NO until asked");
+	[panel setFloatingPanel:YES];
+	check([panel isFloatingPanel], "the floating flag round-trips");
+	[panel setWorksWhenModal:YES];
+	check([panel worksWhenModal], "the worksWhenModal flag round-trips");
+	check([panel canBecomeKeyWindow], "a titled panel can take the keyboard");
+	check(![panel canBecomeMainWindow], "and it is never the main window");
+	window = [[NSWindow alloc] initWithContentRect:NSMakeRect(0.0, 0.0, 320.0, 200.0)
+					     styleMask:NSTitledWindowMask
+					       backing:NSBackingStoreBuffered
+						 defer:NO];
+	check([window cg_shouldBecomeKeyForClickAtPoint:NSMakePoint(1.0, 1.0)],
+	      "an ordinary window still takes the key from any click");
+	[window release];
+
+	borderless = [[NSPanel alloc] initWithContentRect:NSMakeRect(0.0, 0.0, 320.0, 200.0)
+						styleMask:NSBorderlessWindowMask
+						  backing:NSBackingStoreBuffered
+						    defer:NO];
+	check(![borderless canBecomeKeyWindow], "a borderless panel cannot take the keyboard either");
+
+	/* **THE CLICK-TO-KEY RULE.** With the flag NO every click takes the key; with it YES the view under the point is
+	 * asked, and a field's `-needsPanelToBecomeKey` is YES where a button's and the background's are NO. The panel is
+	 * given a content view first, because this tier's `NSWindow` does not make one on a caller's behalf. */
+	content = [[NSView alloc] initWithFrame:NSMakeRect(0.0, 0.0, 320.0, 200.0)];
+	[panel setContentView:content];
+	[content release];
+	field = [[NSTextField alloc] initWithFrame:NSMakeRect(10.0, 10.0, 100.0, 24.0)];
+	[content addSubview:field];
+	button = [[NSButton alloc] initWithFrame:NSMakeRect(150.0, 10.0, 90.0, 28.0)];
+	[content addSubview:button];
+	check([panel cg_shouldBecomeKeyForClickAtPoint:NSMakePoint(20.0, 20.0)],
+	      "without the flag a click anywhere takes the key");
+	[panel setBecomesKeyOnlyIfNeeded:YES];
+	check([panel cg_shouldBecomeKeyForClickAtPoint:NSMakePoint(20.0, 20.0)],
+	      "an editable field still takes it when the rule is on");
+	check(![panel cg_shouldBecomeKeyForClickAtPoint:NSMakePoint(160.0, 20.0)],
+	      "a button does not");
+	check(![panel cg_shouldBecomeKeyForClickAtPoint:NSMakePoint(250.0, 150.0)],
+	      "and neither does the background");
+	[field release];
+	[button release];
+	[borderless release];
+	[panel release];
+}
+
+static void test_alert_content(void)
+{
+	NSAlert *alert = [NSAlert alertWithMessageText:@"Delete “notes.txt”?"
+					  title:@"Confirm"
+				  defaultButton:@"Delete"
+				alternateButton:@"Cancel"
+				    otherButton:nil];
+	NSWindow *window = [alert window];
+	NSArray *buttons = [alert buttons];
+	NSRect first;
+	NSRect second;
+	NSImage *icon = [[NSImage alloc] initWithSize:NSMakeSize(32.0, 32.0)];
+	NSView *accessory = [[NSView alloc] initWithFrame:NSMakeRect(0.0, 0.0, 200.0, 40.0)];
+
+	check(NSAlertFirstButtonReturn == 1000 && NSAlertSecondButtonReturn == 1001
+	      && NSAlertThirdButtonReturn == 1002, "the three answer codes are Apple's numbers");
+	check([[alert messageText] isEqualToString:@"Delete “notes.txt”?"], "the factory sets the message");
+	check([buttons count] == 2, "and adds the two buttons it was given");
+	check([[buttons objectAtIndex:0] isKindOfClass:[NSButton class]], "a button is an NSButton");
+	check([[[buttons objectAtIndex:0] title] isEqualToString:@"Delete"], "the default button keeps its title");
+	check([[[buttons objectAtIndex:1] title] isEqualToString:@"Cancel"], "the alternate button too");
+	check([window isKindOfClass:[NSPanel class]], "the alert's window is a panel");
+	check(window == [alert window], "and it is made once and reused");
+	check([window level] == NSModalPanelWindowLevel, "at the modal panel level");
+	check([[window title] isEqualToString:@"Confirm"], "the factory's title is the window's");
+	check(![window hidesOnDeactivate], "the alert panel stays put while the application is inactive");
+	check([alert alertStyle] == NSWarningAlertStyle, "a warning is the default style");
+	[alert setAlertStyle:NSCriticalAlertStyle];
+	check([alert alertStyle] == NSCriticalAlertStyle, "and the style round-trips");
+	check(fn_has_field_text(window, @"Delete “notes.txt”?"), "the message is a field in the content");
+	check([[buttons objectAtIndex:0] superview] == [window contentView], "the buttons are subviews of the content");
+	first = [[buttons objectAtIndex:0] frame];
+	second = [[buttons objectAtIndex:1] frame];
+	check(NSMaxX(first) > NSMaxX(second), "the default button is rightmost");
+	check(first.origin.y == second.origin.y, "the buttons share a row");
+	check(NSContainsRect([[window contentView] bounds], first)
+	      && NSContainsRect([[window contentView] bounds], second), "and both are inside the content rect");
+	check([alert icon] == nil || [[alert icon] isKindOfClass:[NSImage class]],
+	      "the default icon is an image or nothing");
+
+	[alert setIcon:icon];
+	check([alert icon] == icon, "a custom icon is the one the alert answers");
+	[icon release];
+
+	/* **A LONG INFORMATIVE TEXT WRAPS INTO MORE THAN ONE FIELD**, which is the only way a one-line field can hold a
+	 * paragraph: the wrap is measured at the text column's width and each line is a field. The count is the check,
+	 * because a single field would mean the text was silently clipped. */
+	[alert setInformativeText:@"This item is used by another application. Deleting it may make that application "
+				  @"unable to open its documents, and the change cannot be undone after the Trash is emptied."];
+	[alert layout];
+	check([fn_fields(window) count] > 2, "a long informative text becomes several line fields");
+	[alert setMessageText:@"A different question"];
+	[alert layout];
+	check(fn_has_field_text(window, @"A different question"), "a changed message is laid out again");
+	check(!fn_has_field_text(window, @"Delete “notes.txt”?"), "and the old one is gone");
+
+	[alert setAccessoryView:accessory];
+	[alert layout];
+	check([accessory superview] == [window contentView], "the accessory is placed in the content");
+	check(NSContainsRect([[window contentView] bounds], [accessory frame]), "and inside its bounds");
+	[alert setAccessoryView:nil];
+	check([accessory superview] == nil, "replacing the accessory takes it out");
+	[accessory release];
+}
+
+static void test_alert_answers(void)
+{
+	NSApplication *application = [NSApplication sharedApplication];
+	NSAlert *alert = [NSAlert alertWithMessageText:@"Save changes?"
+					  title:@"Unsaved"
+				  defaultButton:@"Save"
+				alternateButton:@"Don't Save"
+				    otherButton:@"Cancel"];
+	NSWindow *window = [alert window];
+	NSArray *buttons = [alert buttons];
+	NSModalSession session;
+	NSEvent *event;
+
+	check([buttons count] == 3, "three buttons were added");
+
+	/* **THE THIRD BUTTON, THEN THE SECOND, THEN THE FIRST.** Each session is begun, a button is clicked through
+	 * `-performClick:` (which sends the button's action exactly as a press does), and the session's answer is read
+	 * through `-runModalSession:` rather than `-runModal`, which would loop forever. */
+	session = [application beginModalSessionForWindow:window];
+	check(session != NULL, "a modal session begins on the alert's panel");
+	[[buttons objectAtIndex:2] performClick:nil];
+	check([application runModalSession:session] == NSAlertThirdButtonReturn, "the third button answers 1002");
+	[application endModalSession:session];
+
+	session = [application beginModalSessionForWindow:window];
+	[[buttons objectAtIndex:1] performClick:nil];
+	check([application runModalSession:session] == NSAlertSecondButtonReturn, "the second answers 1001");
+	[application endModalSession:session];
+
+	session = [application beginModalSessionForWindow:window];
+	[[buttons objectAtIndex:0] performClick:nil];
+	check([application runModalSession:session] == NSAlertFirstButtonReturn, "the first answers 1000");
+	[application endModalSession:session];
+
+	/* **THE KEYS, WHICH THE PUMP DOES NOT ROUTE AS KEY EQUIVALENTS.** The event goes through the window's own
+	 * dispatch so the panel's `-keyDown:` is the thing under test. */
+	session = [application beginModalSessionForWindow:window];
+	event = fn_key(@"\r", window);
+	[window sendEvent:event];
+	check([application runModalSession:session] == NSAlertFirstButtonReturn, "Return clicks the default button");
+	[application endModalSession:session];
+
+	session = [application beginModalSessionForWindow:window];
+	event = fn_key(@"\033", window);
+	[window sendEvent:event];
+	check([application runModalSession:session] == NSAlertSecondButtonReturn, "Escape clicks the cancel button");
+	[application endModalSession:session];
+
+	/* AND AN ALERT THAT WAS NEVER RUN RECORDS A CLICK WITHOUT ENDING ANYTHING — the same action, with no session to
+	 * stop, must not send `-stopModalWithCode:` into a loop that is not there. */
+	[[buttons objectAtIndex:1] performClick:nil];
+	check([application modalWindow] == nil, "a click with no session running ends nothing");
+}
+
+static void test_alert_sheet(void)
+{
+	NSApplication *application = [NSApplication sharedApplication];
+	NSWindow *parent = [[NSWindow alloc] initWithContentRect:NSMakeRect(0.0, 0.0, 400.0, 300.0)
+						       styleMask:NSTitledWindowMask
+							 backing:NSBackingStoreBuffered
+							   defer:NO];
+	NSAlert *alert = [NSAlert alertWithMessageText:@"Replace it?"
+					  title:@"Already exists"
+				  defaultButton:@"Replace"
+				alternateButton:@"Cancel"
+				    otherButton:nil];
+	SheetReception *reception = [[SheetReception alloc] init];
+
+	[alert beginSheetModalForWindow:parent
+			  modalDelegate:reception
+			 didEndSelector:@selector(sheetDidEnd:returnCode:contextInfo:)
+			    contextInfo:NULL];
+	check([parent attachedSheet] == [alert window], "the alert is attached as the parent's sheet");
+	check([[alert window] isSheet], "and the panel knows it is one");
+	[[[alert buttons] objectAtIndex:1] performClick:nil];
+	check([reception wasCalled], "the caller's did-end method ran");
+	check([reception code] == NSAlertSecondButtonReturn, "with the clicked button's code");
+	check([parent attachedSheet] == nil, "and the session is over");
+	check(![[alert window] isSheet], "the panel is no longer a sheet");
+
+	[reception release];
+	[parent release];
+}
+
+int main(void)
+{
+	NSApplication *application = [NSApplication sharedApplication];
+
+	setvbuf(stdout, NULL, _IONBF, 0);
+	[application finishLaunching];
+
+	test_panel();
+	test_alert_content();
+	test_alert_answers();
+	test_alert_sheet();
+
+	printf("panel_alert: %s\n", s_failed == 0 ? "all checks passed" : "FAILURES");
+	return s_failed == 0 ? 0 : 1;
+}

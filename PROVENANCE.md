@@ -468,6 +468,215 @@ the fill.
 bitmap whose filled half and empty half must be different ink. The file-operation progress window consumes this
 class; the manager itself is Workspace's.
 
+## 20. The panel and the alert are this repository's own code
+
+**`NSPanel.h`/`.m` AND `NSAlert.h`/`.m` ARE WRITTEN FROM THE 10.6 DECLARATIONS.** The imported AppKit had no panel
+class, so four `NSWindow` flags a panel is built from (`-isFloatingPanel`, `-worksWhenModal`, `-setModalPanel:`,
+`hidesOnDeactivate`) were state with no owner, and `NSWindow -canBecomeMainWindow` shipped a paragraph explaining that
+Apple's "is not an NSPanel object" clause could not be implemented because the class did not exist. That paragraph is
+now a subclass override, which is the route Apple documents.
+
+- **THE PANEL CHANGES THREE ANSWERS AND NOTHING ELSE.** `hidesOnDeactivate` is YES in its initialiser;
+  `-canBecomeMainWindow` is always NO; and `-becomesKeyOnlyIfNeeded` is a real rule rather than a stored BOOL. The rule
+  crosses a file boundary, so it travels on a private `NSWindow -cg_shouldBecomeKeyForClickAtPoint:` door answered YES
+  by a window and overridden by a panel: the panel hit-tests its content and asks each view on the way up. `NSControl`
+  supplies the per-view answer as its own `-acceptsFirstResponder` — YES for an editable field, NO for a button or a
+  label — which is the half `NSView -needsPanelToBecomeKey` had been stubbing with "there is no panel here to need".
+- **THE CLICK-TO-KEY CALL SITE IS `NSApplication -sendEvent:`**, the one place this tier turns a press into key/main
+  state. A panel that did not ask for the restriction behaves like a window, so nothing about an ordinary window's
+  click path changed.
+- **AN ALERT IS A PANEL AT `NSModalPanelWindowLevel` WHOSE CONTENT IS CONTROLS.** It overrides the panel's
+  `hidesOnDeactivate` back to NO, because a modal question that hid with the application would leave the loop running
+  with nothing on the screen. The message and informative text are `NSTextField`s — one FIELD PER WRAPPED LINE, because
+  this tier's field is one line tall, so `-layout` measures the wrap and makes as many fields as it needs — the icon is
+  a private view that draws an `NSImage`, the buttons are
+  `NSButton`s laid out right-to-left with the first rightmost, and an accessory view spans the width above the row.
+- **THE ANSWER IS THE BUTTON'S INDEX.** A click turns its index into Apple's code (1000/1001/1002, then `1000 + index`)
+  and then ends whichever session is running: `-stopModalWithCode:` for `-runModal`, `-endSheet:returnCode:` for the
+  sheet form, and nothing for an alert that was only built. Return and Escape are handled by the alert's private panel
+  subclass, because this tier's pump has no key-equivalent pass for windows; the first button also carries the
+  key equivalents as state, for a caller that provides one.
+- **`-runModal` ORDERS THE PANEL OUT; THE SHEET FORM DOES NOT.** That is Apple's split: a sheet's dismissal belongs to
+  the caller's did-end method, which is the contract `NSApplication.h` already quotes for `-endSheet:returnCode:`.
+- **THE THREE RETURN CONSTANTS MOVED TO `NSAlert.h`**, where Apple's own header declares them. They had lived in
+  `NSApplication.h` only because the alert class did not exist; no consumer in this tree used the old location.
+
+**AND THE FIRST OUTSIDE CLIENT OF THE MODAL SESSION DOORS FOUND AN ABI WART, WHICH IS FIXED.** `NSApplication.h`
+declares `NSModalSession` as a pointer to an INCOMPLETE `struct _NSModalSession`, but `NSApplication.m` defined that
+same tag before the implementation, so the method type encodings included the three fields and the runtime printed
+"Calling [NSApplication -beginModalSessionForWindow:] with incorrect signature" for the first caller outside that file
+(`tests/panel_alert.m`). The private struct now has its own tag (`struct AGModalSession`) and the public one stays
+incomplete, so the encodings match the declaration; the calls are the same calls.
+
+`tests/panel_alert.m` measures the panel's defaults, its click-to-key rule (field YES, button and background NO), the
+alert's fields and button order, wrapping into several fields, re-layout after a text change, the accessory's placement
+and removal, the three codes through a modal session, Return and Escape through `-sendEvent:`, and the sheet form's
+attachment and reply — 55 checks. It does not call `-runModal`: that is an unbounded loop, and the test would hang rather
+than fail.
+
+## 21. Auto Layout's required projection needed a convergence loop
+
+**THE SOLVER'S REQUIRED PASS WAS ONE VISIT PER SWEEP, AND TWO COUPLED DEMANDS ARE NOT SATISFIED BY ONE VISIT.** A
+leading and a trailing constraint share the view's x and width, so projecting the trailing one moved the x the
+leading one had just set. With no optional pull in the same axis the repeated sweeps eventually settled it; with a
+control's intrinsic hugging/compression in that axis the pair settled at a compromise. MEASURED, found by Workspace's
+file window: a text field pinned to both edges of a 700-point parent landed at x=76 with an intrinsic width of 10, and
+the pass printed the unsatisfiable-required warning only when the residual crossed its 1e-3 threshold.
+
+The required rows are now projected **inside each sweep until their own residual is gone**, and the convergence test
+is the **net** move across a sweep rather than the sum of every projection. That second half is what keeps a required
+step that exactly undoes an optional one from burning the whole sweep budget: an ordinary file window was running 400
+sweeps per pass for a fraction of a point. The outer break is now in points (1e-5 for both the required residual and
+the net move), which is far finer than the geometry the tier draws. A genuinely contradictory required set still
+reaches the refusal, whose threshold is orders of magnitude larger.
+
+`tests/auto_layout.m` case 16 is the regression: a control with an intrinsic size pinned to all four edges must fill
+its parent. The fix is what makes `Workspace`'s file window lay out its path bar, split view and status bar with
+constraints at all — see `workspace/PROVENANCE.md`.
+
+## 22. The browser's frame set did not re-tile its own scroll view
+
+**`NSBrowser` OVERRODE `-setFrameSize:` AND NOT `-setFrame:`, AND THIS TIER'S `NSView -setFrame:` DOES NOT CALL
+`-resizeSubviewsWithOldSize:`.** The browser's whole face is the scroll view it owns, and `-tile` is what gives that
+scroll view the browser's bounds. A caller that set the browser's FRAME — which is what a containing view does when it
+lays a browser out beside a preview panel — left the scroll view at its old width. MEASURED in Workspace: widening
+the file window opened a gap between the last browser column and the preview panel, because the browser had grown and
+its scroll view had not.
+
+`-setFrame:` now re-tiles whenever the size changes, which is the same rule `NSScrollView` and `NSSplitView` already
+follow. `tests/browser.m` sets a frame and checks the scroll view's width; Workspace's `tests/column_view.m` checks the
+same width through `-cg_documentView` after resizing the view beside the preview.
+
+## 23. A browser selection scrolls to the newest column, at the document's end
+
+**`-scrollColumnToVisible:` IS NOT THE ANSWER FOR A COLUMN A SELECTION JUST OPENED.** Its rule is "bring this column
+into view", which puts the column's left edge at the clip view's left when it is off to the right — correct for a
+column in the middle, wrong for the newest one, which should be against the right edge with the columns it came from
+behind it. Workspace's column view made the difference visible: clicking a folder opened its children out of sight.
+
+`NSBrowser -tableViewSelectionDidChange:` now scrolls to the document's end when a selection succeeds. The selected
+column is a leaf or a branch, and either way the columns to its right have been truncated or the new one created, so
+the selected/newest column IS the last one. Deselecting keeps the old "bring the selected column into view" rule. The
+private `-cg_scrollToLastColumn` sets the clip view's origin to `documentWidth - clipWidth` (clamped at zero);
+`tests/browser.m` checks that origin after opening a column, and Workspace's `tests/column_view.m` checks the same
+through `-cg_documentView`.
+
+## 24. An image rep drew the same bytes mirrored in a flipped view and an unflipped one
+
+**`NSImageRep -drawInRect:` PASSED THE RECT STRAIGHT TO `CGContextDrawImage`, WHICH PAINTS THROUGH THE CURRENT
+CTM.** The two coordinate systems AppKit builds are both ordinary here: Workspace's Desktop draws with a y-up
+CTM and the file window's flipped `WSIconView` draws with a y-down one. The same image therefore arrived
+vertically mirrored in the two. MEASURED with the vendored Frost theme: its folder icons were upright on the
+Desktop and upside-down in the file window, and swapping the icon bytes' orientation merely moved the fault to
+the other view. The drawn generics had the same split; symmetric document art hid it.
+
+**THE FIX IS THE MIRROR THE Y-UP PATH WAS MISSING.** `-drawInRect:` reads `CGContextGetCTM` and, when the CTM's
+`d` is positive (y grows up), translates to the rect's top and scales y by -1 before drawing, then restores the
+state. `NSGraphicsContext -isFlipped` is not the test: that flag is the WINDOW's statement and stays NO for
+both views, while the CTM is what the view walk actually installs. `tests/image_draw.m` is the regression —
+one red-over-blue rep, one y-up and one y-down context, the same ink at the top of both buffers.
+
+## 25. Browser columns got their own scroll views, and their own widths
+
+**THE OUTER SCROLL VIEW WAS THE ONLY ONE, SO A TALL FOLDER MOVED EVERY COLUMN WITH IT.** The old shape was one
+horizontal `NSScrollView` whose document was as tall as the tallest column; the user asked for columns that
+scroll individually, which is what Finder does. Each column now owns a vertical `NSScrollView` inside the outer
+horizontal one, and the table is that scroll view's document. The outer document is exactly the browser's content
+height, so it has no vertical travel of its own.
+
+**AND A WIDTH IS PER COLUMN.** `NSBrowser` gained `-widthOfColumn:`/`-setWidth:ofColumn:`; `-columnWidth` is now
+the width a NEW column gets and what `-setColumnWidth:` applies to every existing one. `-tile` positions each
+column from the running sum, so a width change moves the columns after it rather than changing a shared step.
+`-widthOfColumn:` is the column's FRAME width, and the vertical scroller lives inside it: a visible bar narrows
+the table rather than widening the column, so `-columnWidth` and the visible column stay the same measure and the
+existing "column width reaches the table" check still holds when the bar is hidden.
+
+**THE COLUMN LIST IS A 256-SLOT POOL, AND THE EMPTY SLOTS ARE COLUMNS.** Finder builds its column view with the
+maximum number of columns already present and leaves the empty ones visible; that is what preserves a column's
+width when navigation steps away from it. `NSBrowser` now builds `AG_BROWSER_COLUMN_POOL` (256) slots when it first
+loads. An empty slot keeps its scroll view, table and width, and drawing it as an empty column is what replaces the
+old gray document background. **ONLY THE VISIBLE COLUMNS SIZE THE HORIZONTAL DOCUMENT:** `-tile` ends the document at
+the last ACTIVE column or the visible width, whichever is farther, and lays out only the active slots plus as many
+empty ones as the visible area holds. The 256-slot pool therefore never becomes 256 columns of horizontal travel;
+the empty slots past the visible area stay where they were built, outside the document. `-cg_activeColumnCount` is
+the seam the tests use for "how many slots have rows".
+
+**THE SEPARATOR IS `NSSplitView`'S PANE-SPLITTER GUTTER, NOT A HAIRLINE OR AN OVERLAY.** The document view owns
+an eighteen-point gap between columns and draws it with the same numbers and colours the split view uses: a
+`windowBackgroundColor` band, `controlDarkShadowColor` rings, two-point radii eight points apart, three of them down
+the middle. That is the grip a person already knows from a split view, and it gives the pointer somewhere to land
+without covering either neighbour's content or scrollbar. `NSBrowserDocumentView` gives the gutter a resize cursor
+and tracks a user drag when `-columnResizingType` is `NSBrowserUserColumnResizing` (Workspace sets it). The
+delegate's `-browser:shouldSizeColumn:forUserResize:toWidth:` may veto the proposal; a double-click asks
+`-browser:sizeToFitWidthOfColumn:`.
+
+`tests/browser.m` now checks the 256-slot pool (`-cg_columnCount` and `-cg_activeColumnCount`), that an empty slot
+is a visible column, the per-column scrollers, that scrolling one column leaves its neighbour's clip view where it
+was, that a width set on one column leaves the others alone, and that a forty-point separator drag widens the left
+column by forty. Workspace's `column_view.m` checks the same pool and visibility, and that the view it builds is in
+the user-resizing mode.
+
+## 26. Scroll bars step aside when the document fits
+
+**`NSScrollView` HAD NO AUTOHIDE, so a configured bar was ink on the window even when the clip view already showed
+the whole document.** The browser columns made it obvious: an empty column and a three-row column each carried a
+bar. `-autohidesScrollers` is now the era's opt-in, and the default stays NO — Apple's default, and the one the
+existing frame arithmetic was written against.
+
+**VISIBILITY IS A PAIR, BECAUSE ONE BAR MAKES THE OTHER NECESSARY.** A vertical bar takes width that can push a
+wide document into needing a horizontal bar, and a horizontal bar takes height that can do the reverse. `-tile`
+therefore asks a small fixed-point question — up to three passes over `(showV, showH)` — and lays the content out
+with only the shown bars taking room. `-hasVerticalScroller`/`-hasHorizontalScroller` still answer YES for a hidden
+bar; the view exists, it is `-isHidden`, and its content space is reclaimed. A document that changes shape announces
+it through the clip view, so `-reflectScrolledClipView:` compares the desired pair with the drawn one and re-tiles
+once when they differ, guarded against its own final reflect.
+
+**THE BROWSER'S COLUMNS OPT IN, AND A WIDTH IS A FRAME WIDTH.** Each column scroll view sets
+`-setAutohidesScrollers:YES`; a short column therefore has no bar, and its table widens into the space the bar
+would have used. That is also why `-widthOfColumn:` is the column's FRAME width rather than its content width: a
+visible bar narrows the table inside the same column. `tests/scroll_view.m` drives both-fits, horizontal-only and
+both-needed, and turns autohide back off; `tests/browser.m` checks a short column hides and a tall one shows.
+
+## 27. A mouse move that had not moved re-walked the whole tracking tree
+
+**THE TRACKING ENGINE RAN ON EVERY POINTER-MOTION EVENT, EVEN WHEN THE POINT WAS THE SAME.** `-cg:walkTrackingInView:`
+visits every subview and every tracking area to decide enters, exits and the cursor; the walk itself is correct, but a
+repeat of the last position can change none of those answers. MEASURED on Workspace in column view after the browser
+grew its 256-column pool: **500 CPU ticks in five seconds** (about one core), with the samples in
+`-cg:walkTrackingInView:`, `-convertRect:toView:` and `-visibleRect` — the pointer was over the window and the event
+stream repeated its position, so the whole tree was walked again and again.
+
+**THE MOTION PATH NOW ASKS WHETHER THE POINT MOVED.** `-cg_updateTrackingIfMovedToPoint:` returns when the point is
+the same as the last one; the motion path uses it, while the callers that need a re-evaluation at a stationary point
+— a key/resign, a button changing under the pointer, a mouse exit — still use the full door. The same measurement
+after the change: **23 ticks in five seconds** (about 5% of a core), with the cursor still resolved on every motion
+before the gate. `tests/tracking_area.m` already pins the engine's enter/exit semantics; this gate only removes a
+repeat that could not change them.
+
+## 28. A gutter drag re-laid out the whole browser for every motion
+
+**THE DIVIDER DRAG CALLED `-tile` ON EVERY MOTION EVENT, AND EVERY COLUMN SLOT WAS A SUBVIEW.** The first browser
+drag profile showed two multipliers stacked: `-setWidth:ofColumn:` re-ran the browser's full layout (both passes,
+every visible column's scroll view and table, the document frame, the cursor rects), and the 256-slot pool kept all
+256 scroll views attached to the document view, so every draw, hit test and tracking walk saw the whole pool.
+MEASURED: a two-second drag cost **146-217 CPU ticks** (73-108% of a core) for 80 motion events.
+
+**THE DRAG NOW SHOWS A LINE, AND THE LAYOUT HAPPENS ONCE.** A divider drag draws a one-point preview line at the
+pointer and nothing else, and **the window draws that line above the view tree** — a split view's own `-drawRect:`
+would be covered by its panes, and a browser's by its column scroll views, so the guide is a window overlay in
+content coordinates rather than a line in the divider's own view. The pane or column is resized when the button
+comes up, with one `-tile` (or `-setWidth:ofColumn:`) for the whole gesture. The slots that are neither active nor inside the visible width are
+**removed from the document view** (their state stays in the pool), which leaves a handful of column views instead
+of 256 for every walk and draw. The tracking engine is suspended for the length of a drag (`NSWindow_internal.h`'s
+two doors), and the hover cursor is no longer resolved mid-drag because the drag owner has already set the cursor it
+wants. `NSWindow -displayIfNeeded` also draws the **union of the dirty subview rectangles** into the persistent
+surface instead of repainting and clearing the whole window, so the preview line costs a few pixels and the release
+costs one layout. The same treatment covers `NSSplitView`'s sidebar gutter and the browser's column gutters; the
+idle fix in §27 remains about 23 ticks per five seconds.
+
+`tests/browser.m` checks that an offscreen empty slot is not attached to the document while the visible one is, and
+the existing drag check still widens exactly the left column by forty points after the release.
+
 ## Keeping in sync
 
 The Fiwix AppKit is the origin and this repository has now diverged from it in the seam. A fix made there

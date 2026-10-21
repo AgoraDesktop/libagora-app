@@ -51,6 +51,8 @@ NS_ASSUME_NONNULL_BEGIN
 	NSBorderType _borderType;
 	NSColor *_backgroundColor;	/* RETAINED: this class's own, not a subview's */
 	BOOL _drawsBackground;
+	BOOL _autohidesScrollers;
+	BOOL _inTile;
 	CGFloat _lineScroll;
 	CGFloat _pageScroll;
 }
@@ -88,6 +90,14 @@ NS_ASSUME_NONNULL_BEGIN
 - (void)setVerticalScroller:(nullable NSScroller *)anObject;
 - (nullable NSScroller *)horizontalScroller;
 - (void)setHorizontalScroller:(nullable NSScroller *)anObject;
+
+/* **A CONFIGURED SCROLLER CAN HIDE WHEN THE DOCUMENT FITS.** `-hasVerticalScroller`/`-hasHorizontalScroller`
+ * answer whether a bar EXISTS; `-autohidesScrollers` decides whether it is drawn when the clip view already shows
+ * the whole document. A hidden bar still exists and still answers `-verticalScroller`/`-horizontalScroller`; the
+ * content expands into the space it would have taken. The default is NO, Apple's own default, so a caller opts
+ * in. */
+- (BOOL)autohidesScrollers;
+- (void)setAutohidesScrollers:(BOOL)flag;
 
 /* AND THE LAYOUT ITSELF, WHICH IS PUBLIC BECAUSE A CALLER THAT CHANGES A BORDER OR A FRAME WANTS IT RE-RUN. */
 - (void)tile;

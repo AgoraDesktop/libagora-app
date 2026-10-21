@@ -145,6 +145,16 @@ extern NSString *NSImageHintInterpolation;
 	NSRect _alignmentRect;
 	BOOL _alignmentRectSet;
 	NSString *_accessibilityDescription;	/* RETAINED (a copy of what was set) */
+	/* **A TEMPLATE'S STENCILS, AND THE REASON `-template` IS NOT JUST A FLAG HERE.** Apple's template image is
+	 * ONE INK drawn from a mask: the artwork carries coverage and nothing else, and the colour comes from
+	 * whatever draws it — a button's ink, a disabled control's grey, a menu's highlight. That needs a mask to
+	 * clip to, so an image that is a template because the PLATFORM made it (see `AGSystemImages`) carries its
+	 * own, one per size the tier draws at. OWNED: released in `-dealloc`. */
+	/* THREE STENCILS, KEYED BY THE SIZE THEY WERE DRAWN AT (16, 24 and 32 points), because the tier draws a
+	 * toolbar's regular item at 24 and its small one at 16 and a scaled stencil is measurably blockier than a
+	 * native one. A slot with no stencil is a NULL and a zero. */
+	CGImageRef _templateMasks[3];
+	NSInteger _templateMaskSizes[3];
 }
 
 /* ============================================================================================ *

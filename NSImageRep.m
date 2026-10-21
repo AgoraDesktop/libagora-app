@@ -236,6 +236,7 @@ static Class fn_class_for_list_member(SEL sel, NSString *want)
 	NSGraphicsContext *ctx = [NSGraphicsContext currentContext];
 	CGImageRef img = [self CGImage];
 	CGContextRef cg;
+	CGAffineTransform ctm;
 
 	/* NO CONTEXT OR NO PIXELS IS A NO, NOT A RAISE — the same rule the context's own members follow. */
 	if (ctx == nil || img == NULL) {
@@ -245,7 +246,24 @@ static Class fn_class_for_list_member(SEL sel, NSString *want)
 	if (cg == NULL) {
 		return NO;
 	}
-	CGContextDrawImage(cg, NSRectToCGRect(rect), img);
+	/* **AN IMAGE IS DRAWN UP-RIGHT IN BOTH A FLIPPED VIEW AND AN UNFLIPPED ONE.** `CGContextDrawImage`
+	 * paints through the current CTM, so the SAME bytes arrive mirrored in the two cases; the Desktop
+	 * (an unflipped view in its own y-up space) and the file window's `WSIconView` (flipped, y-down) are
+	 * exactly that pair. MEASURED: before this, Frost's folder icons were up-right on the Desktop and
+	 * upside-down in the file window. The existing generic art was made for the y-down path, so the
+	 * y-up one is the case that needs the extra mirror. The sign of `d` is the CTM's y direction, and
+	 * it is the value the view walk actually puts there; `NSGraphicsContext -isFlipped` is the
+	 * WINDOW's statement and stays NO for both. */
+	ctm = CGContextGetCTM(cg);
+	if (ctm.d > 0.0) {
+		CGContextSaveGState(cg);
+		CGContextTranslateCTM(cg, rect.origin.x, rect.origin.y + rect.size.height);
+		CGContextScaleCTM(cg, 1.0, -1.0);
+		CGContextDrawImage(cg, CGRectMake(0.0, 0.0, rect.size.width, rect.size.height), img);
+		CGContextRestoreGState(cg);
+	} else {
+		CGContextDrawImage(cg, NSRectToCGRect(rect), img);
+	}
 	return YES;
 }
 

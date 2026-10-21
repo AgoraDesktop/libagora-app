@@ -17,7 +17,10 @@
 #import <AppKit/NSGraphicsContext.h>
 #import <CoreGraphics/CGBitmapContext.h>
 #import <CoreGraphics/CGColorSpace.h>
+#import <AppKit/NSBezierPath.h>
 #import <CoreGraphics/CGContext.h>
+#import "AGSystemImages.h"
+#import "NSImage_internal.h"
 #import <Foundation/NSArray.h>
 #import <Foundation/NSString.h>
 #include <math.h>
@@ -102,9 +105,18 @@ NSString *NSImageNameUserGuest = @"NSImageNameUserGuest";
 + (nullable NSImage *)imageNamed:(NSString *)name
 {
 	NSString *path;
+	NSImage *system;
 
 	if (name == nil) {
 		return nil;
+	}
+	/* **THE PLATFORM'S OWN NAMES COME FIRST, BECAUSE THEY ARE THE PLATFORM'S.** `NSImageNameGoLeftTemplate` is
+	 * not a resource anybody ships — it is AppKit's, and on the Mac it answers whether or not the application
+	 * has a bundle at all. The twenty names `AGSystemImages` draws are answered here; everything else falls
+	 * through to the bundle lookup below, unchanged, which is still the right question for a caller's own art. */
+	system = AGSystemImageNamed(name);
+	if (system != nil) {
+		return system;
 	}
 	path = [[NSBundle mainBundle] pathForImageResource:name];
 	if (path == nil) {
@@ -300,6 +312,16 @@ NSString *NSImageNameUserGuest = @"NSImageNameUserGuest";
 {
 	[_reps release];
 	[_name release];
+	/* THE STENCILS A TEMPLATE CARRIES, if it is one: an image made by `AGSystemImageNamed` owns up to three. */
+	{
+		NSUInteger slot;
+
+		for (slot = 0; slot < 3; slot++) {
+			if (_templateMasks[slot] != NULL) {
+				CGImageRelease(_templateMasks[slot]);
+			}
+		}
+	}
 	/* AND THE DESCRIPTION, which `-setAccessibilityDescription:` COPIED: a copy is this object's to release,
 	 * and the first version of this unit forgot it — a leak per image that had ever been given one. */
 	[_accessibilityDescription release];
@@ -415,6 +437,99 @@ NSString *NSImageNameUserGuest = @"NSImageNameUserGuest";
 		}
 	}
 	return best;
+}
+
+/* ---- TEMPLATES AND THEIR INK --------------------------------------------------------------- */
+
+- (void)cg_setTemplateMask:(CGImageRef)mask forSize:(NSInteger)points
+{
+	NSUInteger slot;
+
+	_template = YES;
+	/* THE SLOT FOR THIS SIZE, or the first empty one: the table is filled once, by size, and a second call for a
+	 * size that is already there replaces it (and releases what it replaced, because this image owns the mask). */
+	for (slot = 0; slot < 3; slot++) {
+		if (_templateMasks[slot] == NULL || _templateMaskSizes[slot] == points) {
+			if (mask != NULL) {
+				CGImageRetain(mask);
+			}
+			if (_templateMasks[slot] != NULL) {
+				CGImageRelease(_templateMasks[slot]);
+			}
+			_templateMasks[slot] = mask;
+			_templateMaskSizes[slot] = points;
+			return;
+		}
+	}
+}
+
+/* **THE STENCIL CLOSEST TO THE RECTANGLE, PREFERRING ONE AT LEAST AS BIG.** A stencil SCALED UP is the case that
+ * looks wrong — it invents pixels the glyph never had — so 24 points wants the 24 stencil, and anything between 24
+ * and 32 gets the 32 (drawn down), not the 24 (drawn up). The sampler interpolates when it has to, and a native
+ * size is untouched by that. */
+- (CGImageRef)cg_templateMaskForRect:(NSRect)rect
+{
+	CGFloat wanted = rect.size.width;
+	CGImageRef best = NULL;
+	NSInteger bestDistance = 0;
+	NSInteger bestSize = 0;
+	NSUInteger slot;
+
+	for (slot = 0; slot < 3; slot++) {
+		NSInteger distance;
+
+		if (_templateMasks[slot] == NULL) {
+			continue;
+		}
+		distance = (NSInteger)labs((long)(_templateMaskSizes[slot] - (NSInteger)(wanted + 0.5)));
+		/* THE CLOSEST, AND ON A TIE THE LARGER: 20 points is as near to 16 as to 24, and the 24 drawn down is a
+		 * better picture than the 16 drawn up. */
+		if (best == NULL || distance < bestDistance ||
+		    (distance == bestDistance && _templateMaskSizes[slot] > bestSize)) {
+			best = _templateMasks[slot];
+			bestDistance = distance;
+			bestSize = _templateMaskSizes[slot];
+		}
+	}
+	return best;
+}
+
+- (BOOL)cg_drawInRect:(NSRect)rect ink:(NSColor *)ink
+{
+	CGImageRef mask = [self cg_templateMaskForRect:rect];
+	NSGraphicsContext *ctx = [NSGraphicsContext currentContext];
+	CGContextRef cg;
+
+	if (mask == NULL || ink == nil || ctx == nil) {
+		return NO;
+	}
+	cg = [ctx CGContext];
+	if (cg == NULL) {
+		return NO;
+	}
+	/* **AND THE RECTANGLE IS SNAPPED TO WHOLE POINTS, WHICH IS WHAT KEEPS A GLYPH SHARP.** A toolbar lays its
+	 * items out from measured label widths, so an icon lands at x.2 or x.6; a stencil sampled at a fractional
+	 * offset is either blocky (nearest) or soft (interpolated) — MEASURED both ways, and both look wrong at sixteen
+	 * points. Snapping the ORIGIN and leaving the SIZE alone is the half that matters: a 24-point stencil drawn in
+	 * a 24-point box on a whole point is a 1:1 sample of its own texels, with no blending at all. */
+	rect.origin.x = floor((double)rect.origin.x + 0.5);
+	rect.origin.y = floor((double)rect.origin.y + 0.5);
+	/* **CLIP TO THE GLYPH AND FILL THE WHOLE RECTANGLE: that IS a template image.** The stencil carries the
+	 * shape, the ink carries the colour, and the two come together here rather than in twenty pre-tinted copies
+	 * of the same picture. `CGContextClipToMask`'s rectangle is in USER space, so a flipped view needs nothing
+	 * extra — the caller's rect is already in the space it draws in. */
+	CGContextSaveGState(cg);
+	CGContextClipToMask(cg, CGRectMake(rect.origin.x, rect.origin.y, rect.size.width, rect.size.height), mask);
+	[ink setFill];
+	/* **THE FILL IS INSET BY HALF A POINT SO ITS OWN EDGE LANDS INSIDE THE STENCIL.** A clipped fill still
+	 * antialiases its own outline, and a stencil only governs the pixels INSIDE the rectangle it was given —
+	 * outside it, CoreGraphics leaves the clip as it was, by design. So a fill whose edge sits on the stencil's
+	 * edge paints a one-pixel fringe where no stencil applies: MEASURED as a vertical line beside every toolbar
+	 * icon, at about a third of the ink's strength. Half a point pulls that fringe in among the glyph's own
+	 * margin, where the coverage is zero and nothing shows. */
+	[[NSBezierPath bezierPathWithRect:NSInsetRect(rect, 0.5, 0.5)] fill];
+	CGContextRestoreGState(cg);
+	return YES;
 }
 
 - (BOOL)drawInRect:(NSRect)rect

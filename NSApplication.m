@@ -1234,7 +1234,12 @@ static double s_last_report;
 		 * before or after this and announce once. */
 		[self activate];
 		[w orderFront:nil];
-		if ([w canBecomeKeyWindow]) {
+		/* **AND WHETHER THE CLICK SHOULD TAKE THE KEY IS THE WINDOW'S QUESTION, NOT THIS PUMP'S.** A window says yes
+		 * to any click; a panel whose `-becomesKeyOnlyIfNeeded` is YES says yes only when the press lands on a view that
+		 * needs the panel to be key — a text field rather than a button or the background. The rule lives on the
+		 * window (`-cg_shouldBecomeKeyForClickAtPoint:`) because a panel's flag is its state and the view under the
+		 * pointer is its content tree; this class owns only the moment. */
+		if ([w canBecomeKeyWindow] && [w cg_shouldBecomeKeyForClickAtPoint:[theEvent locationInWindow]]) {
 			[w makeKeyWindow];
 		}
 		if ([w canBecomeMainWindow]) {
@@ -1604,8 +1609,15 @@ NSString *NSEventTrackingRunLoopMode = @"NSEventTrackingRunLoopMode";
 /* **THE SESSION ITSELF, PRIVATE AND HEAP-ALLOCATED.** Apple's `NSModalSession` is an opaque pointer, so nothing
  * outside this file knows this shape — and what a session has to carry is exactly three things: the window the
  * loop is spending its passes on (BORROWED — the caller owns it), the code it will end with, and whether it has
- * ended. */
-struct _NSModalSession {
+ * ended.
+ *
+ * **AND THE TAG IS NOT `_NSModalSession`, WHICH IS A MATTER OF ABI RATHER THAN TASTE.** `NSApplication.h`
+ * declares `typedef struct _NSModalSession *NSModalSession` with the struct INCOMPLETE, so every caller's method
+ * signature encodes `^{_NSModalSession=}`; if this file DEFINED that tag, the compiler would encode the three
+ * fields into these methods' signatures instead, and the runtime would print "incorrect signature" for every
+ * external `-beginModalSessionForWindow:` (MEASURED with `tests/panel_alert.m`, the first client outside this
+ * file to use the session doors). A private tag keeps the public one opaque in the encoding and the calls quiet. */
+struct AGModalSession {
 	NSWindow *window;
 	NSInteger code;
 	BOOL ended;
@@ -1613,14 +1625,14 @@ struct _NSModalSession {
 
 - (NSModalSession)beginModalSessionForWindow:(NSWindow *)theWindow
 {
-	struct _NSModalSession *s;
+	struct AGModalSession *s;
 
 	if (theWindow == nil) {
 		/* A SESSION WITH NO WINDOW IS NOT A SESSION, and answering NULL is how a caller learns that rather than
 		 * getting a session whose every pass does nothing. */
 		return NULL;
 	}
-	s = (struct _NSModalSession *)calloc(1, sizeof(*s));
+	s = (struct AGModalSession *)calloc(1, sizeof(*s));
 	if (s == NULL) {
 		return NULL;    /* an allocation failure is not a modal session either, and the caller checks this one */
 	}
@@ -1636,7 +1648,7 @@ struct _NSModalSession {
 
 - (NSInteger)runModalSession:(NSModalSession)session
 {
-	struct _NSModalSession *s = (struct _NSModalSession *)session;
+	struct AGModalSession *s = (struct AGModalSession *)(void *)session;
 
 	if (s == NULL) {
 		return NSRunAbortedResponse;
@@ -1681,7 +1693,7 @@ struct _NSModalSession {
 
 - (void)endModalSession:(NSModalSession)session
 {
-	struct _NSModalSession *s = (struct _NSModalSession *)session;
+	struct AGModalSession *s = (struct AGModalSession *)(void *)session;
 
 	if (s == NULL) {
 		return; /* ending no session is not an error, for the reason `-stopModal` with none is not either */
@@ -1722,7 +1734,7 @@ struct _NSModalSession {
 
 - (void)stopModalWithCode:(NSInteger)returnCode
 {
-	struct _NSModalSession *s = (struct _NSModalSession *)_modalSession;
+	struct AGModalSession *s = (struct AGModalSession *)_modalSession;
 
 	/* WITH NO SESSION IN FLIGHT THERE IS NOTHING TO STOP and nothing is announced: `-stopModal` is a message to a
 	 * loop, and a loop that is not running has no reason to hear it. */

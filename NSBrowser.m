@@ -4,10 +4,11 @@
  * Copyright © 2026 Kyle J. Cardoza. MIT licensed — see LICENSE.
  * SPDX-License-Identifier: MIT
  *
- * THE PRIVATE SHAPE: one `NSScrollView`, one document view, one `NSTableView` per column. The browser is the data
- * source and delegate of every one of those tables and maps a sender back to its column by identity. The public
- * shape is the 10.6 delegate: `-browser:numberOfRowsInColumn:` and
- * `-browser:willDisplayCell:atRow:column:`; selecting a row asks the delegate for the column to its right.
+ * THE PRIVATE SHAPE: one horizontal `NSScrollView` around a document view, and one `NSScrollView` per column inside
+ * it, each with an `NSTableView` as its document. The browser is the data source and delegate of every one of those
+ * tables and maps a sender back to its column by identity. The public shape is the 10.6 delegate:
+ * `-browser:numberOfRowsInColumn:` and `-browser:willDisplayCell:atRow:column:`; selecting a row asks the delegate
+ * for the column to its right. Each column scrolls vertically on its own, and its width is its own.
  *
  * THE MATRIX FORM IS THE ONE THING THAT IS NOT HERE. Apple's `-browser:createRowsForColumn:inMatrix:` needs an
  * `NSMatrix`, which this tree has not got; the header names that absence rather than a stub that would never be
@@ -17,23 +18,292 @@
 #import <AppKit/NSBrowserCell.h>
 
 #import <AppKit/NSApplication.h>
+#import <AppKit/NSBezierPath.h>
 #import <AppKit/NSClipView.h>
 #import <AppKit/NSColor.h>
+#import <AppKit/NSCursor.h>
+#import <AppKit/NSScroller.h>
 #import <Foundation/NSIndexSet.h>
 #import <AppKit/NSScrollView.h>
 #import <AppKit/NSTableColumn.h>
 #import <AppKit/NSTableView.h>
 #import <AppKit/NSView.h>
+#import "NSWindow_internal.h"
 #import <Foundation/NSArray.h>
+#import <Foundation/NSDate.h>
 #import <Foundation/NSNumber.h>
 #import <Foundation/NSString.h>
 
 #include <math.h>
 #include <stdio.h>
+#include <stdlib.h>
+#include <time.h>
+#include <stdlib.h>
 
-#define AG_BROWSER_GAP 1.0
+/* **THE GUTTER IS `NSSplitView`'S PANE SPLITTER, DOWN TO ITS THREE RINGS.** The thickness, ring radius and
+ * spacing are the same numbers that class uses, and the fill/stroke pair is its pair: the window's face for the
+ * band and `controlDarkShadowColor` for the rings. Keeping the numbers here rather than reaching into
+ * `NSSplitView.m` is what lets the browser draw the gutter itself while the two still look like one tier. */
+#define AG_BROWSER_GUTTER_THICKNESS	18.0
+#define AG_BROWSER_GUTTER_RING_RADIUS	2.0
+#define AG_BROWSER_GUTTER_RING_SPACING	8.0
+#define AG_BROWSER_GAP			AG_BROWSER_GUTTER_THICKNESS
+/* Finder's column view pre-builds this many column slots; an empty slot is still a visible column and keeps its
+ * width when navigation steps away from it. They do NOT all enter the document: horizontal scrolling is sized by
+ * the active columns or the visible area, never by the whole pool. */
+#define AG_BROWSER_COLUMN_POOL		256
+
+@class NSBrowser;
+
+@interface NSBrowser (NSBrowserPrivateGeometry)
+- (CGFloat)fn_frameWidthForColumn:(NSInteger)column;
+- (void)fn_sizeColumnToFit:(NSInteger)column;
+@end
+
+@interface NSBrowserDocumentView : NSView
+{
+	NSBrowser *_browser;	/* NOT RETAINED: the browser owns this view */
+	NSInteger _dragColumn;
+	CGFloat _dragStartX;
+	CGFloat _dragStartWidth;
+	CGFloat _dragPreviewX;
+	BOOL _dragPreviewActive;
+}
+- (void)setBrowser:(NSBrowser *)browser;
+@end
 
 @interface NSBrowser () <NSTableViewDataSource, NSTableViewDelegate>
+- (void)cg_scrollToLastColumn;
+@end
+
+@implementation NSBrowserDocumentView
+
+- (void)setBrowser:(NSBrowser *)browser
+{
+	_browser = browser;
+}
+
+- (void)drawRect:(NSRect)dirtyRect
+{
+	NSInteger count, i;
+
+	(void)dirtyRect;
+	if (_browser == nil || ![_browser separatesColumns]) {
+		return;
+	}
+	count = [_browser cg_columnCount];
+	{
+		CGFloat x = 0.0;
+
+	for (i = 0; i + 1 < count; i++) {
+		CGFloat frameWidth = [_browser fn_frameWidthForColumn:i];
+		NSRect gap = NSMakeRect(x + frameWidth, 0.0, AG_BROWSER_GAP, NSHeight([self bounds]));
+		NSColor *ink = [NSColor controlDarkShadowColor];
+		CGFloat centerX;
+		CGFloat centerY;
+		NSInteger ring;
+
+		if (x + frameWidth >= NSMaxX([self bounds])) {
+			break;
+		}
+		/* THE GUTTER IS THE WINDOW'S FACE, not the divider colour: the rings are the ink and the wide band
+		 * between the columns is the surface showing through. The three rings are `NSSplitView`'s pane splitter
+		 * grip, two-point radii eight points apart down the middle of an eighteen-point gutter. */
+		[[NSColor windowBackgroundColor] setFill];
+		[[NSBezierPath bezierPathWithRect:gap] fill];
+		[ink setStroke];
+		centerX = NSMidX(gap);
+		centerY = NSMidY(gap);
+		for (ring = -1; ring <= 1; ring++) {
+			NSRect circle = NSMakeRect(centerX - AG_BROWSER_GUTTER_RING_RADIUS,
+						   centerY + (CGFloat)ring * AG_BROWSER_GUTTER_RING_SPACING
+						   - AG_BROWSER_GUTTER_RING_RADIUS,
+						   AG_BROWSER_GUTTER_RING_RADIUS * 2.0,
+						   AG_BROWSER_GUTTER_RING_RADIUS * 2.0);
+			NSBezierPath *path = [NSBezierPath bezierPathWithOvalInRect:circle];
+
+			[path setLineWidth:1.0];
+			[path stroke];
+		}
+		x += frameWidth + AG_BROWSER_GAP;
+	}
+	}
+}
+
+- (void)resetCursorRects
+{
+	NSInteger count, i;
+
+	[super resetCursorRects];
+	if (_browser == nil || ![_browser separatesColumns]
+	    || [_browser columnResizingType] != NSBrowserUserColumnResizing) {
+		return;
+	}
+	count = [_browser cg_columnCount];
+	{
+		CGFloat x = 0.0;
+
+		for (i = 0; i + 1 < count; i++) {
+			CGFloat frameWidth = [_browser fn_frameWidthForColumn:i];
+			NSRect gap = NSMakeRect(x + frameWidth, 0.0, AG_BROWSER_GAP, NSHeight([self bounds]));
+
+			if (x + frameWidth >= NSMaxX([self bounds])) {
+				break;
+			}
+			[self addCursorRect:gap cursor:[NSCursor resizeLeftRightCursor]];
+			x += frameWidth + AG_BROWSER_GAP;
+		}
+	}
+}
+
+- (NSInteger)fn_dividerAtPoint:(NSPoint)point
+{
+	NSInteger count, i;
+
+	if (_browser == nil || ![_browser separatesColumns]
+	    || [_browser columnResizingType] != NSBrowserUserColumnResizing) {
+		return -1;
+	}
+	count = [_browser cg_columnCount];
+	{
+		CGFloat x = 0.0;
+
+		for (i = 0; i + 1 < count; i++) {
+			CGFloat frameWidth = [_browser fn_frameWidthForColumn:i];
+			CGFloat gapX = x + frameWidth;
+
+			if (point.x < gapX) {
+				break;
+			}
+			if (point.x <= gapX + AG_BROWSER_GAP) {
+				return i;
+			}
+			x = gapX + AG_BROWSER_GAP;
+		}
+	}
+	return -1;
+}
+
+- (void)fn_setPreviewX:(CGFloat)x
+{
+	NSWindow *window = [self window];
+
+	_dragPreviewX = x;
+	_dragPreviewActive = YES;
+	if (window != nil) {
+		NSView *content = [window contentView];
+		NSRect line = NSMakeRect(x - 0.5, NSMinY([self bounds]), 1.0, NSHeight([self bounds]));
+
+		[window cg_setDragGuideRect:[content convertRect:line fromView:self]];
+	}
+}
+
+- (void)fn_clearPreview
+{
+	_dragPreviewActive = NO;
+	if ([self window] != nil) {
+		[[self window] cg_clearDragGuide];
+	}
+}
+
+- (void)fn_dragToPoint:(NSPoint)point
+{
+	if (_dragColumn < 0) {
+		return;
+	}
+	[self fn_setPreviewX:point.x];
+}
+
+- (void)fn_applyDragWidth
+{
+	CGFloat width;
+	id <NSBrowserDelegate> delegate;
+
+	if (_dragColumn < 0) {
+		return;
+	}
+	width = _dragStartWidth + (_dragPreviewX - _dragStartX);
+	delegate = [_browser delegate];
+	if (delegate != nil && [delegate respondsToSelector:@selector(browser:shouldSizeColumn:forUserResize:toWidth:)]
+	    && ![delegate browser:_browser shouldSizeColumn:_dragColumn forUserResize:YES toWidth:width]) {
+		return;
+	}
+	[_browser setWidth:width ofColumn:_dragColumn];
+}
+
+- (void)mouseDown:(NSEvent *)event
+{
+	NSPoint point = [self convertPoint:[event locationInWindow] fromView:nil];
+	NSInteger column = [self fn_dividerAtPoint:point];
+
+	if (column < 0) {
+		[super mouseDown:event];
+		return;
+	}
+	if ([event clickCount] >= 2) {
+		[_browser fn_sizeColumnToFit:column];
+		return;
+	}
+	_dragColumn = column;
+	_dragStartX = point.x;
+	_dragStartWidth = [_browser widthOfColumn:column];
+	[self fn_setPreviewX:NSMidX([_browser cg_dividerFrameForColumn:column])];
+	if ([self window] != nil) {
+		[[self window] cg_suspendTrackingUpdates];
+	}
+
+	/* A PROGRAM WITH NO RUN LOOP HAS NO EVENT SOURCE; the probe drives `-mouseDragged:` and `-mouseUp:`. */
+	if (![[NSApplication sharedApplication] isRunning]) {
+		return;
+	}
+	for (;;) {
+		NSEvent *next = [[NSApplication sharedApplication]
+			nextEventMatchingMask:(NSLeftMouseDraggedMask | NSLeftMouseUpMask)
+				    untilDate:[NSDate dateWithTimeIntervalSinceNow:1.0 / 60.0]
+				       inMode:nil dequeue:YES];
+
+		if (next == nil) {
+			[[self window] displayIfNeeded];
+			continue;
+		}
+		[self fn_dragToPoint:[self convertPoint:[next locationInWindow] fromView:nil]];
+		if ([next type] == NSLeftMouseUp) {
+			break;
+		}
+		[[self window] displayIfNeeded];
+	}
+	[self fn_applyDragWidth];
+	_dragColumn = -1;
+	[self fn_clearPreview];
+	if ([self window] != nil) {
+		[[self window] cg_resumeTrackingUpdates];
+	}
+}
+
+- (void)mouseDragged:(NSEvent *)event
+{
+	if (_dragColumn < 0) {
+		[super mouseDragged:event];
+		return;
+	}
+	[self fn_dragToPoint:[self convertPoint:[event locationInWindow] fromView:nil]];
+}
+
+- (void)mouseUp:(NSEvent *)event
+{
+	if (_dragColumn < 0) {
+		[super mouseUp:event];
+		return;
+	}
+	[self fn_dragToPoint:[self convertPoint:[event locationInWindow] fromView:nil]];
+	[self fn_applyDragWidth];
+	_dragColumn = -1;
+	[self fn_clearPreview];
+	if ([self window] != nil) {
+		[[self window] cg_resumeTrackingUpdates];
+	}
+}
+
 @end
 
 @implementation NSBrowser
@@ -47,6 +317,8 @@
 		return nil;
 	}
 	_tables = [[NSMutableArray alloc] init];
+	_columnScrollViews = [[NSMutableArray alloc] init];
+	_columnWidths = [[NSMutableArray alloc] init];
 	_columnCounts = [[NSMutableArray alloc] init];
 	_selectedRows = [[NSMutableArray alloc] init];
 	_titles = [[NSMutableArray alloc] init];
@@ -66,10 +338,16 @@
 	_acceptsArrowKeys = YES;
 	_backgroundColor = [[NSColor whiteColor] retain];
 
-	_documentView = [[NSView alloc] initWithFrame:documentFrame];
+	_documentView = [[NSBrowserDocumentView alloc] initWithFrame:documentFrame];
+	[(NSBrowserDocumentView *)_documentView setBrowser:self];
 	_scrollView = [[NSScrollView alloc] initWithFrame:[self bounds]];
-	[_scrollView setHasVerticalScroller:YES];
+	/* **THE OUTER SCROLL IS HORIZONTAL; EACH COLUMN IS THE VERTICAL ONE.** A shared vertical scroller was the
+	 * shape before the columns got their own scroll views, and it made a tall folder move every column. */
+	[_scrollView setHasVerticalScroller:NO];
 	[_scrollView setHasHorizontalScroller:_hasHorizontalScroller];
+	/* The outer bar is horizontal only, and a browser narrower than its columns keeps it; a browser that
+	 * fits its columns does not. */
+	[_scrollView setAutohidesScrollers:YES];
 	[_scrollView setBorderType:NSNoBorder];
 	[_scrollView setDrawsBackground:YES];
 	[_scrollView setBackgroundColor:[NSColor colorWithCalibratedWhite:0.82 alpha:1.0]];
@@ -81,6 +359,8 @@
 - (void)dealloc
 {
 	[_tables release];
+	[_columnScrollViews release];
+	[_columnWidths release];
 	[_columnCounts release];
 	[_selectedRows release];
 	[_titles release];
@@ -127,6 +407,7 @@
 {
 	NSTableColumn *tableColumn = [[NSTableColumn alloc] initWithIdentifier:@"browser"];
 	NSTableView *table = [[NSTableView alloc] initWithFrame:NSMakeRect(0.0, 0.0, _columnWidth, _rowHeight)];
+	NSScrollView *columnScroll;
 	NSCell *cell = [self newDataCell];
 
 	[tableColumn setWidth:_columnWidth];
@@ -145,8 +426,26 @@
 	[table setDataSource:self];
 	[table setDelegate:self];
 	[table setDoubleAction:@selector(cg_tableDoubleClicked:)];
-	[_documentView addSubview:table];
+	/* **ONE SCROLL VIEW PER COLUMN, AND IT IS THE VERTICAL ONE.** It is the document of the browser's outer
+	 * scroll view, not a sibling of it: the outer view still owns the horizontal travel across the columns. A
+	 * slot starts at ITS OWN x, not at zero: the pool is built before the first tile, and a column left at zero
+	 * would cover the root until it happened to be laid out. */
+	columnScroll = [[NSScrollView alloc] initWithFrame:NSMakeRect(
+						     (CGFloat)column * (_columnWidth
+									+ (_separatesColumns ? AG_BROWSER_GAP : 0.0)),
+						     0.0, _columnWidth, [self bounds].size.height)];
+	[columnScroll setHasVerticalScroller:YES];
+	[columnScroll setAutohidesScrollers:YES];
+	[columnScroll setHasHorizontalScroller:NO];
+	[columnScroll setBorderType:NSNoBorder];
+	[columnScroll setDrawsBackground:YES];
+	[columnScroll setBackgroundColor:_backgroundColor];
+	[columnScroll setDocumentView:table];
+	[_documentView addSubview:columnScroll];
 	[_tables addObject:table];
+	[_columnScrollViews addObject:columnScroll];
+	[_columnWidths addObject:[NSNumber numberWithDouble:_columnWidth]];
+	[columnScroll release];
 	[_columnCounts addObject:[NSNumber numberWithInteger:rows]];
 	[_selectedRows addObject:[NSNumber numberWithInteger:-1]];
 	[_titles addObject:[NSNull null]];
@@ -159,31 +458,36 @@
 
 - (void)ensureColumn:(NSInteger)column rows:(NSInteger)rows
 {
-	if (column < 0) {
+	if (column < 0 || column >= AG_BROWSER_COLUMN_POOL) {
 		return;
+	}
+	while (column >= (NSInteger)[_tables count] && (NSInteger)[_tables count] < AG_BROWSER_COLUMN_POOL) {
+		(void)[self createTableForColumn:(NSInteger)[_tables count] rows:0];
 	}
 	if (column < (NSInteger)[_tables count]) {
 		NSTableView *table = [_tables objectAtIndex:(NSUInteger)column];
 
 		[_columnCounts replaceObjectAtIndex:(NSUInteger)column withObject:[NSNumber numberWithInteger:rows]];
 		[table reloadData];
-		return;
 	}
-	(void)[self createTableForColumn:column rows:rows];
 }
 
+/* **AN EMPTY SLOT IS KEPT, NOT REMOVED.** Navigation back to a shallower column clears the rows in the slots that
+ * followed it, but their scroll views, tables and widths stay: that is what lets a folder's column width survive
+ * stepping away and back, and it is why the pool is built once. */
 - (void)truncateColumnsAfter:(NSInteger)column
 {
+	NSInteger oldActive = [self cg_activeColumnCount];
 	NSInteger i;
 
-	for (i = (NSInteger)[_tables count] - 1; i > column; i--) {
+	for (i = column + 1; i < oldActive && i < (NSInteger)[_tables count]; i++) {
 		NSTableView *table = [_tables objectAtIndex:(NSUInteger)i];
 
-		[table removeFromSuperview];
-		[_tables removeObjectAtIndex:(NSUInteger)i];
-		[_columnCounts removeObjectAtIndex:(NSUInteger)i];
-		[_selectedRows removeObjectAtIndex:(NSUInteger)i];
-		[_titles removeObjectAtIndex:(NSUInteger)i];
+		[_columnCounts replaceObjectAtIndex:(NSUInteger)i withObject:[NSNumber numberWithInteger:0]];
+		[_selectedRows replaceObjectAtIndex:(NSUInteger)i withObject:[NSNumber numberWithInteger:-1]];
+		[_titles replaceObjectAtIndex:(NSUInteger)i withObject:[NSNull null]];
+		[table deselectAll:nil];
+		[table reloadData];
 	}
 	if (_selectedColumn > column) {
 		_selectedColumn = (column >= 0 && column < (NSInteger)[_tables count]) ? column : -1;
@@ -193,13 +497,21 @@
 - (void)loadColumnZero
 {
 	NSInteger rows;
+	NSInteger i;
 
-	[self truncateColumnsAfter:-1];
+	if ([_tables count] == 0) {
+		for (i = 0; i < AG_BROWSER_COLUMN_POOL; i++) {
+			(void)[self createTableForColumn:i rows:0];
+		}
+	} else {
+		[self truncateColumnsAfter:-1];
+	}
 	_selectedColumn = -1;
 	_firstVisibleColumn = 0;
 	rows = [self rowsForColumn:0];
-	if (rows > 0) {
-		(void)[self createTableForColumn:0 rows:rows];
+	if ([_tables count] > 0) {
+		[_columnCounts replaceObjectAtIndex:0 withObject:[NSNumber numberWithInteger:rows]];
+		[[_tables objectAtIndex:0] reloadData];
 	}
 	[self tile];
 	[self scrollColumnToVisible:0];
@@ -253,6 +565,18 @@
 {
 	if (column >= 0 && column < (NSInteger)[_columnCounts count]) {
 		return [[_columnCounts objectAtIndex:(NSUInteger)column] integerValue];
+	}
+	return 0;
+}
+
+- (NSInteger)cg_activeColumnCount
+{
+	NSInteger i;
+
+	for (i = (NSInteger)[_columnCounts count] - 1; i >= 0; i--) {
+		if ([[_columnCounts objectAtIndex:(NSUInteger)i] integerValue] > 0) {
+			return i + 1;
+		}
 	}
 	return 0;
 }
@@ -495,7 +819,14 @@
 		}
 	}
 	[self tile];
-	[self scrollColumnToVisible:(row >= 0) ? column : _selectedColumn];
+	/* **A SELECTION IS NAVIGATION, SO THE NEWEST COLUMN IS THE ONE TO SHOW.** Selecting a branch has already created
+	 * (or kept) the column to its right above; scrolling to the selected column alone leaves that new column off the
+	 * right edge. Deselecting keeps the old rule, because there is no new column to show. */
+	if (row >= 0) {
+		[self cg_scrollToLastColumn];
+	} else {
+		[self scrollColumnToVisible:_selectedColumn];
+	}
 	if (!_inProgrammaticSelection && [self action] != NULL) {
 		[[NSApplication sharedApplication] sendAction:[self action] to:[self target] from:self];
 	}
@@ -529,44 +860,175 @@
 - (NSBrowserColumnResizingType)columnResizingType { return _columnResizingType; }
 - (NSColor *)backgroundColor { return _backgroundColor; }
 
+/* ---- THE PER-COLUMN GEOMETRY ---------------------------------------------------------------- */
+
+- (CGFloat)widthOfColumn:(NSInteger)column
+{
+	if (column >= 0 && column < (NSInteger)[_columnWidths count]) {
+		return (CGFloat)[[_columnWidths objectAtIndex:(NSUInteger)column] doubleValue];
+	}
+	return _columnWidth;
+}
+
+- (CGFloat)fn_frameWidthForColumn:(NSInteger)column
+{
+	/* A COLUMN'S WIDTH IS ITS FRAME'S. The vertical scroller lives INSIDE it, so a visible bar narrows the
+	 * table rather than widening the column — which is what makes `-columnWidth` and the visible column the
+	 * same measure, and what keeps the width door's old contract with the private table. */
+	return [self widthOfColumn:column];
+}
+
+- (CGFloat)fn_xOriginForColumn:(NSInteger)column
+{
+	CGFloat gap = _separatesColumns ? AG_BROWSER_GAP : 0.0;
+	CGFloat x = 0.0;
+	NSInteger i;
+
+	for (i = 0; i < column && i < (NSInteger)[_tables count]; i++) {
+		x += [self fn_frameWidthForColumn:i] + gap;
+	}
+	return x;
+}
+
+/* **A COLUMN THAT CANNOT BE SEEN IS NOT A SUBVIEW.** The pool keeps every slot's state, but only the active slots
+ * and the empty ones inside the visible width are attached to the document; the other 250-odd views would otherwise
+ * be walked by every draw, hit test and tracking-area pass. */
+- (void)fn_attachColumn:(NSInteger)column
+{
+	NSScrollView *columnScroll;
+
+	if (column < 0 || column >= (NSInteger)[_columnScrollViews count]) {
+		return;
+	}
+	columnScroll = [_columnScrollViews objectAtIndex:(NSUInteger)column];
+	if ([columnScroll superview] != _documentView) {
+		[_documentView addSubview:columnScroll];
+	}
+}
+
+- (void)fn_detachColumn:(NSInteger)column
+{
+	NSScrollView *columnScroll;
+
+	if (column < 0 || column >= (NSInteger)[_columnScrollViews count]) {
+		return;
+	}
+	columnScroll = [_columnScrollViews objectAtIndex:(NSUInteger)column];
+	if ([columnScroll superview] == _documentView) {
+		[columnScroll removeFromSuperview];
+	}
+}
+
+- (void)setWidth:(CGFloat)width ofColumn:(NSInteger)column
+{
+	if (column < 0 || column >= (NSInteger)[_columnWidths count]) {
+		return;
+	}
+	if (width < _minColumnWidth) {
+		width = _minColumnWidth;
+	}
+	[_columnWidths replaceObjectAtIndex:(NSUInteger)column withObject:[NSNumber numberWithDouble:width]];
+	[self tile];
+}
+
+- (void)fn_sizeColumnToFit:(NSInteger)column
+{
+	if (_delegate != nil && [_delegate respondsToSelector:@selector(browser:sizeToFitWidthOfColumn:)]) {
+		CGFloat width = [_delegate browser:self sizeToFitWidthOfColumn:column];
+
+		if (width > 0.0) {
+			[self setWidth:width ofColumn:column];
+		}
+	}
+}
+
 - (void)tile
 {
 	CGFloat gap = _separatesColumns ? AG_BROWSER_GAP : 0.0;
-	CGFloat step = _columnWidth + gap;
-	CGFloat maxHeight = [self bounds].size.height;
-	NSUInteger i;
+	NSSize available = [NSScrollView contentSizeForFrameSize:[self bounds].size
+							  hasHorizontalScroller:_hasHorizontalScroller
+							    hasVerticalScroller:NO
+								     borderType:NSNoBorder];
+	NSInteger pass;
+	NSInteger active = [self cg_activeColumnCount];
 
-	for (i = 0; i < [_tables count]; i++) {
-		NSInteger rows = [[_columnCounts objectAtIndex:i] integerValue];
-		CGFloat tableHeight = (CGFloat)rows * _rowHeight;
-
-		if (tableHeight > maxHeight) {
-			maxHeight = tableHeight;
-		}
-	}
-	{
-		/* THE CLIP VIEW CENTRES A DOCUMENT SMALLER THAN ITSELF, so one column in a wide browser would sit in the
-		 * middle. The document is made at least as wide as the browser; the column stays at the left edge. */
-		CGFloat documentWidth = (CGFloat)[_tables count] * step;
-
-		if (documentWidth < [self bounds].size.width) {
-			documentWidth = [self bounds].size.width;
-		}
-		[_documentView setFrame:NSMakeRect(0.0, 0.0, documentWidth, maxHeight)];
-	}
-	for (i = 0; i < [_tables count]; i++) {
-		NSTableView *table = [_tables objectAtIndex:i];
-		NSArray *columns = [table tableColumns];
-
-		[table setFrame:NSMakeRect((CGFloat)i * step, 0.0, _columnWidth, maxHeight)];
-		if ([columns count] > 0) {
-			[[columns objectAtIndex:0] setWidth:_columnWidth];
-		}
-	}
 	[_scrollView setFrame:[self bounds]];
 	[_scrollView setHasHorizontalScroller:_hasHorizontalScroller];
+	[_scrollView setHasVerticalScroller:NO];
 	[_scrollView setBackgroundColor:_separatesColumns ? [NSColor colorWithCalibratedWhite:0.82 alpha:1.0] : _backgroundColor];
-	[_scrollView tile];
+
+	/* **THE OUTER HORIZONTAL BAR CAN HIDE, AND HIDING IT MAKES THE CLIP VIEW TALLER.** The first pass lays
+	 * the columns out for the content size the configured bar would leave; if the outer bar chose to hide, the
+	 * second pass re-lays them into the taller content and widens the document to the new content width so the
+	 * columns stay at the left rather than being centred by the clip view. */
+	for (pass = 0; pass < 2; pass++) {
+		CGFloat x = 0.0;
+		CGFloat documentWidth;
+		NSUInteger i;
+
+		/* Laid-out slots are the active ones plus as many empty ones as the visible width holds; the rest stay at
+		 * the x they were born at, outside the document. The DOCUMENT is sized by the active columns only, so the
+		 * pool never becomes horizontal scroll travel. */
+		for (i = 0; i < [_tables count] && ((NSInteger)i < active || x < available.width); i++) {
+			NSTableView *table = [_tables objectAtIndex:i];
+			NSScrollView *columnScroll = [_columnScrollViews objectAtIndex:i];
+			NSArray *columns;
+			CGFloat frameWidth = [self fn_frameWidthForColumn:(NSInteger)i];
+			NSSize content;
+			CGFloat tableHeight;
+
+			/* **THE COLUMN'S OWN SETTINGS ARE ALREADY MADE.** Re-setting the scroller, the autohide
+			 * policy and the background here re-tiled the scroll view three more times per column per pass. */
+			[columnScroll setFrame:NSMakeRect(x, 0.0, frameWidth, available.height)];
+			content = [columnScroll contentSize];
+			tableHeight = (CGFloat)[[_columnCounts objectAtIndex:i] integerValue] * _rowHeight;
+			if (tableHeight < content.height) {
+				tableHeight = content.height;
+			}
+			[table setFrame:NSMakeRect(0.0, 0.0, content.width, tableHeight)];
+			/* THE TABLE'S HEIGHT IS WHAT DECIDES WHETHER THE COLUMN'S BAR IS NEEDED, so the scroll view tiles a
+			 * second time now that the height exists. If the bar has just hidden, the content is wider by the
+			 * bar's width and the table takes that width; the height cannot change because this scroll view has
+			 * no horizontal bar of its own. */
+			[columnScroll tile];
+			content = [columnScroll contentSize];
+			if (tableHeight < content.height) {
+				tableHeight = content.height;
+			}
+			[table setFrame:NSMakeRect(0.0, 0.0, content.width, tableHeight)];
+			columns = [table tableColumns];
+			if ([columns count] > 0) {
+				[[columns objectAtIndex:0] setWidth:content.width];
+			}
+			[self fn_attachColumn:(NSInteger)i];
+			x += frameWidth + gap;
+		}
+		for (; i < [_tables count]; i++) {
+			[self fn_detachColumn:(NSInteger)i];
+		}
+		/* **ONLY THE ACTIVE COLUMNS (AND THE EMPTIES THAT FIT BESIDE THEM) SIZE THE DOCUMENT.** The 256 slots exist
+		 * so navigation keeps their widths, but the ones beyond the visible area do not become horizontal scroll
+		 * travel: `documentWidth` ends at the last active column or the visible width, whichever is farther. */
+		documentWidth = (active > 0) ? ([self fn_xOriginForColumn:active] - gap) : 0.0;
+		if (documentWidth < available.width) {
+			documentWidth = available.width;
+		}
+		[_documentView setFrame:NSMakeRect(0.0, 0.0, documentWidth, available.height)];
+		[_scrollView tile];
+		{
+			NSSize actual = [_scrollView contentSize];
+
+			if (fabs(actual.width - available.width) < 0.01
+			    && fabs(actual.height - available.height) < 0.01) {
+				break;
+			}
+			available = actual;
+		}
+	}
+	[_documentView setNeedsDisplay:YES];
+	if ([_documentView window] != nil) {
+		[[_documentView window] invalidateCursorRectsForView:_documentView];
+	}
 	_firstVisibleColumn = [self firstVisibleColumn];
 }
 
@@ -582,20 +1044,51 @@
 	[self tile];
 }
 
+/* **A FRAME CHANGE RE-TILES, AND `-setFrameSize:` ALONE DID NOT COVER IT.** The browser's whole face is the scroll
+ * view inside it, and `-tile` is what gives that scroll view the browser's bounds. `NSView -setFrame:` does not call
+ * `-resizeSubviewsWithOldSize:` in this tier, so a caller that set a browser's FRAME — which is what a containing
+ * view does when it lays out a browser beside a preview panel — left the scroll view at its old width. MEASURED in
+ * Workspace: widening the file window put a gap between the column browser and the preview panel. The class that
+ * owns the scroll view is the class that has to re-tile it. */
+- (void)setFrame:(NSRect)frameRect
+{
+	NSSize oldSize = [self frame].size;
+
+	[super setFrame:frameRect];
+	if (oldSize.width != frameRect.size.width || oldSize.height != frameRect.size.height) {
+		[self tile];
+	}
+}
+
 - (void)setColumnWidth:(CGFloat)width
 {
+	NSUInteger i;
+
 	if (width < _minColumnWidth) {
 		width = _minColumnWidth;
 	}
 	_columnWidth = width;
+	for (i = 0; i < [_columnWidths count]; i++) {
+		[_columnWidths replaceObjectAtIndex:i withObject:[NSNumber numberWithDouble:width]];
+	}
 	[self tile];
 }
 
 - (void)setMinColumnWidth:(CGFloat)width
 {
+	NSUInteger i;
+
 	_minColumnWidth = (width > 0.0) ? width : 1.0;
 	if (_columnWidth < _minColumnWidth) {
 		_columnWidth = _minColumnWidth;
+	}
+	for (i = 0; i < [_columnWidths count]; i++) {
+		CGFloat current = (CGFloat)[[_columnWidths objectAtIndex:i] doubleValue];
+
+		if (current < _minColumnWidth) {
+			[_columnWidths replaceObjectAtIndex:i
+						 withObject:[NSNumber numberWithDouble:_minColumnWidth]];
+		}
 	}
 	[self tile];
 }
@@ -653,7 +1146,14 @@
 }
 
 - (void)setTitleHeight:(CGFloat)height { _titleHeight = height; }
-- (void)setColumnResizingType:(NSBrowserColumnResizingType)type { _columnResizingType = type; }
+- (void)setColumnResizingType:(NSBrowserColumnResizingType)type
+{
+	_columnResizingType = type;
+	[_documentView setNeedsDisplay:YES];
+	if ([_documentView window] != nil) {
+		[[_documentView window] invalidateCursorRectsForView:_documentView];
+	}
+}
 
 - (void)setBackgroundColor:(NSColor *)color
 {
@@ -664,55 +1164,108 @@
 	_backgroundColor = color;
 	for (i = 0; i < [_tables count]; i++) {
 		[[_tables objectAtIndex:i] setBackgroundColor:_backgroundColor];
+		[[_columnScrollViews objectAtIndex:i] setBackgroundColor:_backgroundColor];
 	}
 	[self tile];
 }
 
 - (NSInteger)numberOfVisibleColumns
 {
-	CGFloat step = _columnWidth + (_separatesColumns ? AG_BROWSER_GAP : 0.0);
-	NSInteger visible = (NSInteger)floor([self bounds].size.width / step);
+	CGFloat origin = [[_scrollView contentView] bounds].origin.x;
+	CGFloat right = origin + [[_scrollView contentView] bounds].size.width;
+	NSInteger visible = 0;
+	NSInteger i;
 
-	if (visible < 1) visible = 1;
-	if (visible > (NSInteger)[_tables count]) visible = (NSInteger)[_tables count];
+	for (i = 0; i < (NSInteger)[_tables count]; i++) {
+		CGFloat x = [self fn_xOriginForColumn:i];
+		CGFloat columnRight = x + [self fn_frameWidthForColumn:i];
+
+		if (columnRight > origin && x < right) {
+			visible++;
+		}
+	}
+	if (visible < 1 && [_tables count] > 0) {
+		visible = 1;
+	}
+	if (_maxVisibleColumns > 0 && visible > _maxVisibleColumns) {
+		visible = _maxVisibleColumns;
+	}
 	return visible;
 }
 
 - (NSInteger)firstVisibleColumn
 {
-	CGFloat step = _columnWidth + (_separatesColumns ? AG_BROWSER_GAP : 0.0);
-	CGFloat x = [[_scrollView contentView] bounds].origin.x;
+	CGFloat origin = [[_scrollView contentView] bounds].origin.x;
+	NSInteger i;
 
-	return (NSInteger)floor(x / step);
+	for (i = 0; i < (NSInteger)[_tables count]; i++) {
+		CGFloat right = [self fn_xOriginForColumn:i] + [self fn_frameWidthForColumn:i];
+
+		if (right > origin) {
+			return i;
+		}
+	}
+	return 0;
 }
 
 - (NSInteger)lastVisibleColumn
 {
-	NSInteger first = [self firstVisibleColumn];
+	CGFloat origin = [[_scrollView contentView] bounds].origin.x;
+	CGFloat right = origin + [[_scrollView contentView] bounds].size.width;
+	NSInteger last = [self firstVisibleColumn];
+	NSInteger i;
 
-	return first + [self numberOfVisibleColumns] - 1;
+	for (i = last; i < (NSInteger)[_tables count]; i++) {
+		CGFloat x = [self fn_xOriginForColumn:i];
+
+		if (x < right) {
+			last = i;
+		} else {
+			break;
+		}
+	}
+	return last;
 }
 
 - (void)scrollColumnToVisible:(NSInteger)column
 {
-	CGFloat step;
 	CGFloat x;
 	CGFloat origin;
 	CGFloat width;
 	NSPoint point;
 
-	if (column < 0) {
+	if (column < 0 || column >= (NSInteger)[_tables count]) {
 		return;
 	}
-	step = _columnWidth + (_separatesColumns ? AG_BROWSER_GAP : 0.0);
-	x = (CGFloat)column * step;
+	x = [self fn_xOriginForColumn:column];
 	width = [[_scrollView contentView] bounds].size.width;
 	origin = [[_scrollView contentView] bounds].origin.x;
-	if (x < origin || x + _columnWidth > origin + width) {
+	if (x < origin || x + [self fn_frameWidthForColumn:column] > origin + width) {
 		point = NSMakePoint(x, 0.0);
 		[[_scrollView contentView] scrollToPoint:point];
 		[_scrollView reflectScrolledClipView:[_scrollView contentView]];
 	}
+	_firstVisibleColumn = [self firstVisibleColumn];
+}
+
+/* **THE END OF THE DOCUMENT, WHICH IS WHERE A NEW COLUMN BELONGS.** `-scrollColumnToVisible:` answers "is this
+ * column in view" by putting its left edge at the clip view's left when it is not, which is right for a column in the
+ * middle and wrong for the newest one: the final column would sit at the left with empty document to its right.
+ * A selection that opens a column is navigation, and Finder's rule is that the NEW column is the one the person is
+ * looking at — so the clip view goes to the document's far end and the last column lands against the right edge. */
+- (void)cg_scrollToLastColumn
+{
+	CGFloat width = [[_scrollView contentView] bounds].size.width;
+	CGFloat documentWidth = [_documentView frame].size.width;
+	CGFloat origin = documentWidth - width;
+	NSPoint point;
+
+	if (origin < 0.0) {
+		origin = 0.0;
+	}
+	point = NSMakePoint(origin, 0.0);
+	[[_scrollView contentView] scrollToPoint:point];
+	[_scrollView reflectScrolledClipView:[_scrollView contentView]];
 	_firstVisibleColumn = [self firstVisibleColumn];
 }
 
@@ -790,6 +1343,22 @@
 {
 	return (column >= 0 && column < (NSInteger)[_tables count])
 		? [_tables objectAtIndex:(NSUInteger)column] : nil;
+}
+- (NSScrollView *)cg_scrollViewForColumn:(NSInteger)column
+{
+	return (column >= 0 && column < (NSInteger)[_columnScrollViews count])
+		? [_columnScrollViews objectAtIndex:(NSUInteger)column] : nil;
+}
+- (NSRect)cg_dividerFrameForColumn:(NSInteger)column
+{
+	NSRect frame;
+
+	if (column < 0 || column + 1 >= (NSInteger)[_tables count] || !_separatesColumns) {
+		return NSZeroRect;
+	}
+	frame = [_documentView frame];
+	return NSMakeRect([self fn_xOriginForColumn:column] + [self fn_frameWidthForColumn:column],
+			  0.0, AG_BROWSER_GAP, frame.size.height);
 }
 - (NSView *)cg_documentView { return _documentView; }
 

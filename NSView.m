@@ -26,8 +26,17 @@
 #import <AppKit/NSTextInput.h>
 #import <AppKit/NSEvent.h>
 #import <AppKit/NSDragging.h>
+#import <AppKit/NSLayoutSolver.h>
+#import <AppKit/NSLayoutAnchor_internal.h>
 #include <stdio.h>
 #include <string.h>
+
+/* **THE INTRINSIC SIZE'S ONE SENTINEL, IN BOTH OF APPLE'S SPELLINGS.** The value is -1 and the engine compares
+ * against the NAME rather than against zero: a view whose content is genuinely nothing has an intrinsic size of
+ * zero, which is a different statement from "this view has no opinion". The misspelled spelling is 10.7's and is
+ * kept because a ported caller may still use it. */
+const CGFloat NSViewNoIntrinsicMetric = -1.0;
+const CGFloat NSViewNoInstrinsicMetric = -1.0;
 
 /* A POINT FROM A VIEW'S OWN SYSTEM INTO ITS SUPERVIEW'S, AND BACK. The flip is the entire difference,
  * AND IT IS THE COMPARISON OF TWO FLIPS RATHER THAN ONE VIEW'S — which is the bug the probe found after
@@ -135,6 +144,11 @@ static NSRect fn_intersect(NSRect a, NSRect b)
 - (void)cg_markCursorRectsStale;
 - (void)cg_rebuildStaleCursorRects;
 - (NSUInteger)cg_cursorRectCount;
+/* AND THE LAYOUT PASS'S THREE STEPS, which are this file's and not the public header's: the pass guard is what
+ * keeps a frame set inside the pass from starting another, and the hooks are the recursion the driver owns. */
+- (void)cg_runLayoutPass;
+- (void)cg_callLayoutHooks;
+- (void)cg_requestLayout;
 @end
 
 /* **THE TRACKING ENGINE'S DOOR INTO AN AREA, declared here because this is the file that writes the verdict.** The
@@ -241,6 +255,19 @@ static NSRect fn_intersect(NSRect a, NSRect b)
 	_cursorRectsStale = YES;
 	_subviews = nil;
 	_superview = nil;
+	/* **AUTO LAYOUT'S DEFAULTS ARE APPLE'S, AND BOTH ARE STATEMENTS RATHER THAN BLANK FILL.** A view created with a
+	 * frame keeps behaving as one: the translated-mask flag is YES until a caller turns it off. Its intrinsic
+	 * priorities are the two Apple names — DefaultLow for hugging, DefaultHigh for compression resistance — so a
+	 * control that adopts its cell's size is held together more strongly than it is held apart, which is the
+	 * asymmetry a stack of labels needs. */
+	_translatesAutoresizingMaskIntoConstraints = YES;
+	_constraints = nil;
+	_needsUpdateConstraints = YES;
+	_needsLayout = YES;
+	_contentHuggingPriority[NSLayoutConstraintOrientationHorizontal] = NSLayoutPriorityDefaultLow;
+	_contentHuggingPriority[NSLayoutConstraintOrientationVertical] = NSLayoutPriorityDefaultLow;
+	_contentCompressionResistancePriority[NSLayoutConstraintOrientationHorizontal] = NSLayoutPriorityDefaultHigh;
+	_contentCompressionResistancePriority[NSLayoutConstraintOrientationVertical] = NSLayoutPriorityDefaultHigh;
 	return self;
 }
 
@@ -262,6 +289,21 @@ static NSRect fn_intersect(NSRect a, NSRect b)
 	}
 	[_cg_registeredDraggedTypes release];
 	[_cg_inputContext release];
+	/* **A CONSTRAINT OUTLIVES ITS VIEW ONLY IF SOMEONE ELSE RETAINS IT, AND AN ACTIVE ONE MUST NOT.** The owner's
+	 * array is the only retain, so removing every constraint here drops that retain; the flag and the owner link are
+	 * cleared first, while the view is still a valid object, so a constraint held by a caller afterwards is honestly
+	 * inactive instead of pointing at freed memory. */
+	if (_constraints != nil) {
+		NSUInteger i;
+
+		for (i = 0; i < [_constraints count]; i++) {
+			NSLayoutConstraint *constraint = [_constraints objectAtIndex:i];
+
+			[constraint cg_setOwner:nil];
+			[constraint cg_setActiveFlag:NO];
+		}
+		[_constraints release];
+	}
 	[super dealloc];
 }
 
@@ -589,8 +631,10 @@ static NSRect fn_intersect(NSRect a, NSRect b)
 
 - (void)layout
 {
-	/* THE LAYOUT PASS APPLE'S DOOR DESCRIBES: this tier lays a view out from frames and parent-relative masks, so a
-	 * plain view has no second pass to run and this is where a subclass would add one. */
+	/* THE OVERRIDE POINT, AND NOW IT IS CALLED. `-layoutSubtreeIfNeeded` solves the subtree's constraints, writes
+	 * their frames, and then calls this on every view whose `-needsLayout` was YES. A plain view has no arithmetic
+	 * of its own to add, which is why the body stays empty; a subclass that wants to place something the equations
+	 * cannot express overrides this, and a frame set made here does not start a second pass. */
 }
 
 - (void)updateTrackingAreas
@@ -1051,7 +1095,7 @@ static NSRect fn_intersect(NSRect a, NSRect b)
 
 - (BOOL)needsPanelToBecomeKey
 {
-	return NO;	/* Apple's answer for a plain view, and there is no panel here to need */
+	return NO;	/* Apple's answer for a plain view: a view that needs the key says so by overriding this. */
 }
 
 - (BOOL)inFullScreenMode
@@ -1135,6 +1179,8 @@ FN_VIEW_PAIR(setPostsBoundsChangedNotifications, postsBoundsChangedNotifications
 - (void)setAutoresizingMask:(NSUInteger)mask
 {
 	_autoresizingMask = mask;
+	/* THE GAPS DESCRIBED THE OLD MASK, so the capture no longer describes this view. */
+	[self cg_clearCapturedAutoresizingFrame];
 }
 
 - (nullable NSString *)toolTip
@@ -1473,12 +1519,26 @@ NSString *NSDefinitionPresentationTypeOverlay = @"Overlay";
 	NSRect previousFrame = _frame;
 
 	_frame = frameRect;
+	/* **THE RECTANGLE THE VIEW JUST LEFT BELONGS TO THE SUPERVIEW NOW.** A moved view cannot paint where it no
+	 * longer is, so the parent has to repaint the vacated strip; without this a damage-region draw leaves the old
+	 * column or pane behind. */
+	if (_superview != nil && (previousFrame.origin.x != _frame.origin.x
+				  || previousFrame.origin.y != _frame.origin.y
+				  || previousFrame.size.width != _frame.size.width
+				  || previousFrame.size.height != _frame.size.height)) {
+		[_superview setNeedsDisplayInRect:previousFrame];
+	}
 	/* THE SIZE IS SHARED AND THE ORIGINS ARE NOT — see the header for what this deliberately does not
 	 * model (a bounds origin that is a scroll offset). */
 	_bounds = NSMakeRect(_bounds.origin.x, _bounds.origin.y, frameRect.size.width,
 			     frameRect.size.height);
 	_needsDisplay = YES;
 	[self cg_frameDidChangeFrom:previousFrame];
+	/* **A FRAME SET IS A REQUEST, NOT A VERDICT, FOR A MANAGED VIEW.** If an active constraint names this view its
+	 * next layout pass will write the frame the equations want; if none does, the frame stands and the request is
+	 * the fast path's single load. */
+	_needsLayout = YES;
+	[self cg_requestLayout];
 }
 
 - (NSRect)bounds
@@ -1537,7 +1597,21 @@ NSString *NSDefinitionPresentationTypeOverlay = @"Overlay";
 
 - (void)setHidden:(BOOL)flag
 {
-	_hidden = flag ? YES : NO;
+	BOOL hidden = flag ? YES : NO;
+
+	if (_hidden == hidden) {
+		return;
+	}
+	_hidden = hidden;
+	/* **THE PIXELS THE VIEW USED TO OCCUPY ARE NOW SOMEONE ELSE'S TO PAINT.** Hiding a subview changes what the
+	 * tree draws but does not, by itself, make the parent redraw the rectangle the subview leaves behind — MEASURED
+	 * on the browser's autohiding horizontal bar, whose ink stayed on the window after it hid. The frame is in the
+	 * SUPERVIEW's coordinates, which is exactly what the invalidation wants. */
+	if (_superview != nil) {
+		[_superview setNeedsDisplayInRect:_frame];
+	} else {
+		[self setNeedsDisplay:YES];
+	}
 }
 
 - (NSArray *)subviews
@@ -1570,12 +1644,20 @@ NSString *NSDefinitionPresentationTypeOverlay = @"Overlay";
 	 * TOLD, before it is in the array and after, which is what lets a subclass follow its context — the
 	 * window it is now in and the superview it now has. */
 	[aView viewWillMoveToSuperview:self];
+	/* A TRANSLATED MASK IS MEASURED AGAINST ONE PARENT, so a view that arrives somewhere new has its capture thrown
+	 * away; the next pass records the gaps in THIS parent. */
+	[aView cg_clearCapturedAutoresizingFrame];
 	/* THE ARRAY OWNS IT (it retains), and the borrowed link is set from here because `_superview` is
 	 * PROTECTED and only a method of this class may write another instance's. */
 	[_subviews addObject:aView];
 	aView->_superview = self;
 	[aView cg_setWindow:_window];
 	[aView viewDidMoveToSuperview];
+	/* **A NEW CHILD MAY ALREADY BE NAMED BY AN EQUATION** — a constraint can be built before its second view is in a
+	 * tree, and it becomes solvable the moment the two views share an ancestor. The parent asks for a pass rather
+	 * than leaving the new child at whatever frame its constructor chose. */
+	_needsLayout = YES;
+	[self cg_requestLayout];
 }
 
 - (void)removeFromSuperview
@@ -1596,6 +1678,10 @@ NSString *NSDefinitionPresentationTypeOverlay = @"Overlay";
 	_superview = nil;
 	[parent->_subviews removeObjectIdenticalTo:self];
 	[self viewDidMoveToSuperview];
+	/* THE PARENT'S EQUATIONS MAY HAVE NAMED THIS VIEW, and they are now unsolvable rather than solved differently:
+	 * the constraint is still active, so the next pass will refuse it by name (its item is out of the subtree). A
+	 * request here keeps the remaining views consistent immediately, which is what a caller removing a pane wants. */
+	[parent cg_requestLayout];
 	[self release];
 }
 
@@ -1903,6 +1989,43 @@ const CGFloat NSFullScreenModeWindowLevel = 100.0;
 	return NSIntersectsRect(_dirtyRect, rect);
 }
 
+/* **THE UNION OF EVERY INVALIDATED PART BELOW THIS VIEW, IN THIS VIEW'S COORDINATES.** A window that wants to draw
+ * only what changed cannot ask one view's dirty rect: the request may sit on a descendant. This walks the (now
+ * small, because offscreen browser columns are detached) tree once and converts each dirty child rectangle up. */
+- (NSRect)cg_dirtyUnion
+{
+	NSRect unionRect = NSZeroRect;
+	BOOL any = NO;
+	NSUInteger i;
+
+	if (_hasDirtyRect) {
+		unionRect = _dirtyRect;
+		any = YES;
+	}
+	for (i = 0; i < [_subviews count]; i++) {
+		NSView *child = [_subviews objectAtIndex:i];
+		NSRect childRect = [child cg_dirtyUnion];
+
+		if (!NSIsEmptyRect(childRect)) {
+			NSRect inSelf = [self convertRect:childRect fromView:child];
+
+			unionRect = any ? NSUnionRect(unionRect, inSelf) : inSelf;
+			any = YES;
+		}
+	}
+	return any ? unionRect : NSZeroRect;
+}
+
+- (void)cg_clearDirtyRegionRecursive
+{
+	NSUInteger i;
+
+	[self cg_clearDirtyRegion];
+	for (i = 0; i < [_subviews count]; i++) {
+		[[_subviews objectAtIndex:i] cg_clearDirtyRegionRecursive];
+	}
+}
+
 - (void)cg_clearDirtyRegion
 {
 	_hasDirtyRect = NO;
@@ -1936,6 +2059,14 @@ const CGFloat NSFullScreenModeWindowLevel = 100.0;
 	if (cg != NULL) {
 		CGContextSaveGState(cg);
 		CGContextTranslateCTM(cg, -_bounds.origin.x, -_bounds.origin.y);
+		/* **AND THE RECTANGLE IS A CLIP, NOT ADVICE.** Every view below still draws — the tree is walked whole —
+		 * so a partial display was only ever partial in which ROWS were copied: each `-drawRect:` painted its
+		 * entire bounds and the rasterizer threw away everything outside the region. MEASURED, that is why a click
+		 * in a file window still cost 20-45 ms after the window began drawing "only what changed": the icon view
+		 * drew every folder and every name for a selection that moved two cells. The clip is what makes the walk
+		 * cheap, and it is the SAME rectangle the caller asked for, converted into this view's coordinates by the
+		 * parent's `-convertRect:toView:` and by the bounds translate above. */
+		CGContextClipToRect(cg, rect);
 	}
 	if (NSIntersectsRect(rect, _bounds)) {
 		[self drawRect:rect];
@@ -2043,6 +2174,11 @@ const CGFloat NSFullScreenModeWindowLevel = 100.0;
 	[self resizeSubviewsWithOldSize:old];
 
 	[self cg_frameDidChangeFrom:previousFrame];
+	/* **AND THE EQUATIONS ARE RE-SOLVED, BECAUSE A SIZE CHANGE IS THE MOST COMMON THING THEY EXIST FOR.** A pass is
+	 * requested from the topmost view and is a no-op with no active constraint; inside a pass the request returns
+	 * immediately, which is what keeps the engine's own frame writes from recursing. */
+	_needsLayout = YES;
+	[self cg_requestLayout];
 }
 
 - (void)setBoundsOrigin:(NSPoint)newOrigin
@@ -2152,9 +2288,10 @@ const CGFloat NSFullScreenModeWindowLevel = 100.0;
 /* ---- THE ARRANGEMENT DOORS ------------------------------------------------------------------ */
 
 /* THE HOOK A LAYOUT OVERRIDES, and its default is Apple's: every subview is told the superview's old size, so
- * a subclass's override has somewhere to run. THE AUTORESIZING MASKS THEMSELVES ARE NOT HERE — that is the
- * springs-and-struts slice, and `-resizeWithOldSuperviewSize:`'s default doing nothing is exactly what Apple's
- * does when no mask is set. */
+ * a subclass's override has somewhere to run. THE AUTORESIZING MASKS ARE NOT INTERPRETED HERE: frame-based layout
+ * in this tier is still frames and an override, and a mask reaches the geometry through AUTO LAYOUT, where the
+ * engine translates it for the views that participate in constraints. A view that uses neither keeps the frame it
+ * was given, which is what `-resizeWithOldSuperviewSize:`'s default does. */
 - (void)resizeSubviewsWithOldSize:(NSSize)oldSize
 {
 	NSUInteger i;
@@ -2167,6 +2304,317 @@ const CGFloat NSFullScreenModeWindowLevel = 100.0;
 - (void)resizeWithOldSuperviewSize:(NSSize)oldSize
 {
 	(void)oldSize;
+}
+
+/* ============================================================================================ *
+ * AUTO LAYOUT — THE STATE, THE ANCHORS, AND THE PASS.                                           *
+ *                                                                                                *
+ * The equations live in `NSLayoutConstraint.m`, the arithmetic in `NSLayoutSolver.m`, and this    *
+ * section is the view's half: the array it owns, the flags a pass reads, the intrinsic-size      *
+ * priorities, and the anchors. `-layoutSubtreeIfNeeded` is the driver; every automatic call      *
+ * (a frame size, a constraint added or removed, a subview arriving) funnels into the same        *
+ * `-cg_requestLayout`, which solves from the TOPMOST view so an equation is never half-solved.   *
+ * ============================================================================================ */
+
+/* **THE PASS GUARD IS WHAT MAKES A SOLVE RE-ENTRANT-SAFE.** The engine writes frames with `-setFrame:`, and a
+ * `-layout` override may too; either would otherwise ask for another pass while this one is mid-flight, with the
+ * first pass's answers half written. The solver's flag is process-wide because a pass is, and the request below is
+ * the one place that decides when a pass is due. */
+- (void)cg_runLayoutPass
+{
+	if (AGLayoutIsInPass()) {
+		return;
+	}
+	AGLayoutEnterPass();
+	[self updateConstraintsIfNeeded];
+	AGLayoutSolveSubtree(self);
+	[self cg_callLayoutHooks];
+	AGLayoutLeavePass();
+}
+
+- (void)cg_callLayoutHooks
+{
+	NSUInteger i;
+
+	if (_needsLayout) {
+		_needsLayout = NO;
+		[self layout];
+	}
+	for (i = 0; i < [_subviews count]; i++) {
+		[[_subviews objectAtIndex:i] cg_callLayoutHooks];
+	}
+}
+
+- (void)cg_requestLayout
+{
+	NSView *root;
+
+	if (AGLayoutIsInPass()) {
+		return;
+	}
+	/* **NO ACTIVE CONSTRAINT ANYWHERE IS THE FAST PATH, AND IT IS THE COMMON ONE.** Every frame set in this tier asks
+	 * this question; with nothing activated the answer is a single load and no tree walk, so the frame-based code
+	 * that predates Auto Layout costs what it always did. */
+	if ([NSLayoutConstraint cg_activeConstraintCount] == 0) {
+		return;
+	}
+	root = self;
+	while ([root superview] != nil) {
+		root = [root superview];
+	}
+	/* **AND THE SUBTREE HAS TO HAVE ONE TOO.** The count is process-wide; a window whose own tree holds no
+	 * equation should not run an update pass just because another window has one. The check walks this root only,
+	 * and only after the count said there is something active somewhere. */
+	if (!AGLayoutSubtreeHasConstraints(root)) {
+		return;
+	}
+	[root cg_runLayoutPass];
+}
+
+- (BOOL)cg_getCapturedAutoresizingFrame:(NSRect *)frame parentSize:(NSSize *)parentSize
+{
+	if (!_cg_autoresizingCaptured) {
+		return NO;
+	}
+	if (frame != NULL) {
+		*frame = _cg_autoresizingFrame;
+	}
+	if (parentSize != NULL) {
+		*parentSize = _cg_autoresizingParentSize;
+	}
+	return YES;
+}
+
+- (void)cg_setCapturedAutoresizingFrame:(NSRect)frame parentSize:(NSSize)parentSize
+{
+	_cg_autoresizingCaptured = YES;
+	_cg_autoresizingFrame = frame;
+	_cg_autoresizingParentSize = parentSize;
+}
+
+- (void)cg_clearCapturedAutoresizingFrame
+{
+	_cg_autoresizingCaptured = NO;
+}
+
+- (BOOL)needsLayout
+{
+	return _needsLayout;
+}
+
+- (void)setNeedsLayout:(BOOL)flag
+{
+	_needsLayout = flag ? YES : NO;
+}
+
+- (void)layoutSubtreeIfNeeded
+{
+	[self cg_runLayoutPass];
+}
+
+- (BOOL)needsUpdateConstraints
+{
+	return _needsUpdateConstraints;
+}
+
+- (void)setNeedsUpdateConstraints:(BOOL)flag
+{
+	_needsUpdateConstraints = flag ? YES : NO;
+}
+
+- (void)updateConstraints
+{
+	/* A PLAIN VIEW HAS NOTHING TO UPDATE, which is Apple's default and the reason this is an override point rather
+	 * than a place the class invents constraints. A subclass that adds equations from its content calls
+	 * `-setNeedsUpdateConstraints:YES` when that content changes. */
+}
+
+- (void)updateConstraintsIfNeeded
+{
+	NSUInteger i;
+
+	if (_needsUpdateConstraints) {
+		_needsUpdateConstraints = NO;
+		[self updateConstraints];
+	}
+	for (i = 0; i < [_subviews count]; i++) {
+		[[_subviews objectAtIndex:i] updateConstraintsIfNeeded];
+	}
+}
+
+- (NSArray *)constraints
+{
+	return (_constraints != nil) ? (NSArray *)_constraints : [NSArray array];
+}
+
+- (void)addConstraint:(NSLayoutConstraint *)constraint
+{
+	if (constraint == nil) {
+		return;
+	}
+	if (_constraints == nil) {
+		_constraints = [[NSMutableArray alloc] init];
+	}
+	if ([_constraints indexOfObjectIdenticalTo:constraint] != NSNotFound) {
+		return;
+	}
+	/* **AN ACTIVE CONSTRAINT HAS EXACTLY ONE OWNER.** Adding it to a second view would put two copies of one equation
+	 * into a pass whose gather walks the tree, and removing it from one would leave the other solving a constraint
+	 * the caller believes is gone. The second add is refused by name rather than silently duplicated. */
+	if ([constraint isActive] && [constraint cg_owner] != self) {
+		fprintf(stderr, "APPKIT-REFUSE: -[NSView addConstraint:] was handed a constraint that is already owned by "
+				"another view; deactivate it there before adding it here\n");
+		return;
+	}
+	[_constraints addObject:constraint];
+	[constraint cg_setOwner:self];
+	[constraint cg_setActiveFlag:YES];
+	_needsLayout = YES;
+	[self cg_requestLayout];
+}
+
+- (void)removeConstraint:(NSLayoutConstraint *)constraint
+{
+	NSUInteger index;
+
+	if (constraint == nil || _constraints == nil) {
+		return;
+	}
+	index = [_constraints indexOfObjectIdenticalTo:constraint];
+	if (index == NSNotFound) {
+		return;
+	}
+	/* HELD ACROSS THE REMOVAL: the array may be the only retain, and the layout request below names the view that
+	 * used to own it. The constraint is released only after that pass has read the tree without it. */
+	[constraint retain];
+	[_constraints removeObjectAtIndex:index];
+	[constraint cg_setOwner:nil];
+	[constraint cg_setActiveFlag:NO];
+	_needsLayout = YES;
+	[self cg_requestLayout];
+	[constraint release];
+}
+
+- (BOOL)translatesAutoresizingMaskIntoConstraints
+{
+	return _translatesAutoresizingMaskIntoConstraints;
+}
+
+- (void)setTranslatesAutoresizingMaskIntoConstraints:(BOOL)flag
+{
+	if ((flag ? YES : NO) == _translatesAutoresizingMaskIntoConstraints) {
+		return;
+	}
+	_translatesAutoresizingMaskIntoConstraints = flag ? YES : NO;
+	[self cg_clearCapturedAutoresizingFrame];
+	_needsLayout = YES;
+	[self cg_requestLayout];
+}
+
+- (NSSize)intrinsicContentSize
+{
+	/* NO OPINION IS THE PLAIN VIEW'S ANSWER, and it is the sentinel rather than zero: a zero-size intrinsic view is
+	 * a view that wants to be nothing, which is a statement, and this view has none to make. */
+	return NSMakeSize(NSViewNoIntrinsicMetric, NSViewNoIntrinsicMetric);
+}
+
+- (void)invalidateIntrinsicContentSize
+{
+	/* THE SIZE IS COMPUTED WHEN ASKED, so there is no cached number to throw away; what invalidation means here is
+	 * that the next pass must ask again, which is exactly a layout request. */
+	_needsLayout = YES;
+	[self cg_requestLayout];
+}
+
+- (NSLayoutPriority)contentHuggingPriorityForOrientation:(NSLayoutConstraintOrientation)orientation
+{
+	return _contentHuggingPriority[(orientation == NSLayoutConstraintOrientationVertical) ? 1 : 0];
+}
+
+- (void)setContentHuggingPriority:(NSLayoutPriority)priority
+		  forOrientation:(NSLayoutConstraintOrientation)orientation
+{
+	if (!(priority > 0.0f)) {
+		priority = 0.0f;
+	}
+	if (priority > NSLayoutPriorityRequired) {
+		priority = NSLayoutPriorityRequired;
+	}
+	_contentHuggingPriority[(orientation == NSLayoutConstraintOrientationVertical) ? 1 : 0] = priority;
+	_needsLayout = YES;
+	[self cg_requestLayout];
+}
+
+- (NSLayoutPriority)contentCompressionResistancePriorityForOrientation:(NSLayoutConstraintOrientation)orientation
+{
+	return _contentCompressionResistancePriority[(orientation == NSLayoutConstraintOrientationVertical) ? 1 : 0];
+}
+
+- (void)setContentCompressionResistancePriority:(NSLayoutPriority)priority
+				forOrientation:(NSLayoutConstraintOrientation)orientation
+{
+	if (!(priority > 0.0f)) {
+		priority = 0.0f;
+	}
+	if (priority > NSLayoutPriorityRequired) {
+		priority = NSLayoutPriorityRequired;
+	}
+	_contentCompressionResistancePriority[(orientation == NSLayoutConstraintOrientationVertical) ? 1 : 0] = priority;
+	_needsLayout = YES;
+	[self cg_requestLayout];
+}
+
+/* **THE ANCHORS, EACH A FRESH AUTORELEASED OBJECT.** A view does not cache them: an anchor is four words of state
+ * (the view and an attribute), and a cache would have to be invalidated by nothing while keeping four extra objects
+ * alive per view. The anchor borrows the view, so the fresh object costs no ownership. */
+- (NSLayoutXAxisAnchor *)leadingAnchor
+{
+	return [NSLayoutXAxisAnchor cg_anchorWithItem:self attribute:NSLayoutAttributeLeading];
+}
+
+- (NSLayoutXAxisAnchor *)trailingAnchor
+{
+	return [NSLayoutXAxisAnchor cg_anchorWithItem:self attribute:NSLayoutAttributeTrailing];
+}
+
+- (NSLayoutXAxisAnchor *)leftAnchor
+{
+	return [NSLayoutXAxisAnchor cg_anchorWithItem:self attribute:NSLayoutAttributeLeft];
+}
+
+- (NSLayoutXAxisAnchor *)rightAnchor
+{
+	return [NSLayoutXAxisAnchor cg_anchorWithItem:self attribute:NSLayoutAttributeRight];
+}
+
+- (NSLayoutYAxisAnchor *)topAnchor
+{
+	return [NSLayoutYAxisAnchor cg_anchorWithItem:self attribute:NSLayoutAttributeTop];
+}
+
+- (NSLayoutYAxisAnchor *)bottomAnchor
+{
+	return [NSLayoutYAxisAnchor cg_anchorWithItem:self attribute:NSLayoutAttributeBottom];
+}
+
+- (NSLayoutDimension *)widthAnchor
+{
+	return [NSLayoutDimension cg_anchorWithItem:self attribute:NSLayoutAttributeWidth];
+}
+
+- (NSLayoutDimension *)heightAnchor
+{
+	return [NSLayoutDimension cg_anchorWithItem:self attribute:NSLayoutAttributeHeight];
+}
+
+- (NSLayoutXAxisAnchor *)centerXAnchor
+{
+	return [NSLayoutXAxisAnchor cg_anchorWithItem:self attribute:NSLayoutAttributeCenterX];
+}
+
+- (NSLayoutYAxisAnchor *)centerYAnchor
+{
+	return [NSLayoutYAxisAnchor cg_anchorWithItem:self attribute:NSLayoutAttributeCenterY];
 }
 
 /* AN INSERTION SORT OVER THE COMPARISON FUNCTION, and it is written out rather than delegating because this
