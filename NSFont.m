@@ -308,9 +308,27 @@ static NSFont *apk_ui_font(CTFontUIFontType type, CGFloat size)
 
 + (NSFont *)monospacedSystemFontOfSize:(CGFloat)fontSize weight:(NSFontWeight)weight
 {
-	/* THE TWO FACES THIS TIER SHIPS, chosen by the weight rather than pretending a static face has an axis. */
-	return [self fontWithName:(weight >= NSFontWeightSemibold ? @"DejaVuSansMono-Bold" : @"DejaVuSansMono")
-			     size:fontSize];
+	/* **THE FIXED-PITCH ROLE, NOT A HARDCODED DISTRIBUTION FACE.** This door used to name `DejaVuSansMono`
+	 * directly, which made one host's default the AppKit's answer on every machine and put the choice in the wrong
+	 * tier: Core Text owns the fixed-pitch preference list now (`AGORA_MONO_FONT`, defaulting to IBM Plex Mono),
+	 * and this door asks for the role. The emphasized case copies the role's face WITH the bold trait, so it
+	 * answers NULL rather than passing a regular face off as bold when the family has no bold member — the same
+	 * rule `CTFontCreateUIFontForLanguage` applies to its own emphasized roles. */
+	NSFont *base = apk_ui_font(kCTFontUserFixedPitchFontType, fontSize);
+
+	if (base != nil && weight >= NSFontWeightSemibold) {
+		CTFontRef bold = CTFontCreateCopyWithSymbolicTraits((CTFontRef)base->_font, fontSize, NULL,
+							   kCTFontBoldTrait, kCTFontBoldTrait);
+
+		if (bold != NULL) {
+			NSFont *answer = apk_font_take(bold);
+
+			if (answer != nil) {
+				return answer;
+			}
+		}
+	}
+	return base;
 }
 
 + (CGFloat)systemFontSize
