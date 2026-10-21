@@ -327,9 +327,11 @@ typedef enum {
 + (nullable NSGraphicsContext *)graphicsContextWithBitmapImageRep:(nullable NSBitmapImageRep *)bitmapRep;
 
 /* AND THE GENERAL FACTORY. Its destination may be a window, a mutable data, a representation or a URL, and
- * THIS TREE HAS ONE OF THE FOUR: the representation is honoured and the other three are refused BY NAME —
- * a data or a URL destination means the POSTSCRIPT or PDF output formats, and there is no encoder here to
- * produce either. */
+ * THIS TREE HONOURS ONE OF THE FOUR: the representation. THE OTHER THREE ARE REFUSED BY NAME, and the PDF half
+ * has changed ground: Core Graphics DOES write PDF now (`CGPDFContext`), but these attributes carry no page
+ * size, and a PDF page is a sized thing — so a data or URL destination is not turned into one here. The sized
+ * routes are `CGPDFContextCreate` and `-[NSView dataWithPDFInsideRect:]`; a window destination is the display
+ * seam. PostScript still has no encoder. */
 + (nullable NSGraphicsContext *)graphicsContextWithAttributes:(nullable NSDictionary *)attributes;
 
 /* ============================================================================================ *

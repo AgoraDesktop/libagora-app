@@ -624,7 +624,7 @@ extern const CGFloat NSViewNoInstrinsicMetric;
  * declares all seven, so they were always owed HERE, on the class whose rows they are. The signatures are
  * Apple's, including the ones that differ from the window's (`at:(NSPoint)viewLocation`). */
 - (nullable NSData *)dataWithEPSInsideRect:(NSRect)rect;	/* needs a PDF/EPS producer: this tree's CG has none */
-- (nullable NSData *)dataWithPDFInsideRect:(NSRect)rect;	/* the same substrate, and the PDF half is parked */
+- (nullable NSData *)dataWithPDFInsideRect:(NSRect)rect;	/* a CGPDFContext page; see the .m for the frame */
 - (void)print:(nullable id)sender;			/* needs the printing system (NSPrintOperation) */
 
 /* ============================================================================================ *

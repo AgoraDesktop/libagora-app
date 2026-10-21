@@ -840,7 +840,7 @@ typedef NSUInteger NSWindowSharingType;
  * and a drag session are no longer on that list: `-setToolbar:` attaches one (`tests/toolbar.m`) and
  * `-dragImage:...` forwards to the content view's session (`tests/drag_session.m`, `tests/drag_seam.m`). */
 - (nullable NSData *)dataWithEPSInsideRect:(NSRect)rect;	/* needs a PDF/EPS producer: this tree's CG has none */
-- (nullable NSData *)dataWithPDFInsideRect:(NSRect)rect;	/* the same substrate, and the PDF half is parked */
+- (nullable NSData *)dataWithPDFInsideRect:(NSRect)rect;	/* the content view's PDF page */
 - (void)print:(nullable id)sender;			/* needs the printing system (NSPrintOperation) */
 - (void)dragImage:(nullable NSImage *)anImage		/* forwards to the content view's drag session */
 		   at:(NSPoint)baseLocation

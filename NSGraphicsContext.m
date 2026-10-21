@@ -563,9 +563,14 @@ NSInteger NSNumberOfColorComponents(NSString *colorSpaceName)
 		}
 		return g;
 	}
+	/* THE PDF WRITER EXISTS; THIS DOOR STILL DOES NOT BUILD ONE FROM THESE ATTRIBUTES, and the reason is
+	 * the attributes rather than the writer: they carry no page size, and a PDF page is a sized thing. The
+	 * sized routes are CGPDFContextCreate and -[NSView dataWithPDFInsideRect:]. A window destination is the
+	 * display seam, which is a different subject. */
 	fprintf(stderr, "APPKIT-REFUSE: +graphicsContextWithAttributes: has ONE destination it can honour — "
-			"an NSBitmapImageRep — and a MutableData, a URL or a window destination means the "
-			"PostScript or PDF output formats or the display seam, neither of which exists here\n");
+			"an NSBitmapImageRep. A MutableData or URL destination carries no page size, so a PDF page "
+			"cannot be made from it here; use CGPDFContextCreate or -[NSView dataWithPDFInsideRect:]. A "
+			"window destination is the display seam\n");
 	return nil;
 }
 

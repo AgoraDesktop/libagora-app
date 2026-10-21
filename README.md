@@ -1434,6 +1434,31 @@ proves the identifier → bundle → `CFBundleName` → Icon Services chain, wit
 a snapshot whose only row is at a desktop level proves the furniture split, and that a click on it asks for a window
 rather than raising one.
 
+### PDF: the view's page, the rep, and the pasteboard
+
+**THREE DOORS THAT REFUSED BY NAME ARE NOW ONE CHAIN, AND EACH LINK IS THE ROLE IT SHOULD HAVE.** `-[NSView
+dataWithPDFInsideRect:]` makes a `CGPDFContext` over a mutable data, wraps it in an `NSGraphicsContext` and calls the
+ordinary `-displayRectIgnoringOpacity:context:` walk, so a view's own `-drawRect:`, its subviews and their clips all
+reach the page without a second drawing path; `-writePDFInsideRect:toPasteboard:` puts those bytes on a pasteboard as
+`NSPDFPboardType`; and `NSPDFImageRep` parses them back with `CGPDFDocument`, counts the pages and draws one.
+
+**THE REP DRAWS VECTOR, AND THAT IS THE POINT OF KEEPING A PDF.** `-drawInRect:` maps the current page's crop box with
+`CGPDFPageGetDrawingTransform` and calls `CGContextDrawPDFPage`, at whatever scale the destination asks for — the
+renderer that landed in `libagora-drawing`. `-CGImage` is the RENDERED FALLBACK the base class's single-image seam
+needs, at the page's own size, and the queue/`NSImage` path gets that. The class registers itself with `NSImageRep`
+and answers `%PDF-`, `pdf` and `NSPDFPboardType`, so the registry finds it the way it finds `NSBitmapImageRep`.
+
+**THE ORIENTATION RULE IS THE ONE THING A PDF REP CANNOT COPY FROM AN IMAGE REP.** `NSImageRep`'s draw chooses its
+mirror from the sign of the CTM's `d`, which works because a bitmap's device y runs down and its default user y runs
+up. A PDF page's device y runs UP, so the same sign means the opposite thing; the rep therefore asks
+`CGBitmapContextGetData` whether the destination has a surface, and pairs that with the sign. MEASURED by
+`tests/pdf_app.m` in both the bitmap case and the PDF-export case, plus a flipped view's three rectangles, the
+pasteboard type, a two-page document and the current-page clamp — 24 checks, no window and no compositor.
+
+What is still absent on this subject: `-dataWithEPSInsideRect:` and PostScript output, PRINTING (`NSPrintOperation`
+still refuses), and `+graphicsContextWithAttributes:` still does not turn a data destination into a PDF page — the
+attributes carry no page size, so the sized routes above are the ones to use.
+
 ### Still absent, and why
 
 **NINE THINGS THAT USED TO BE ON THIS LIST ARE NOT ANY MORE, AND THE LIST IS CORRECTED RATHER THAN QUIETLY SHRUNK:**

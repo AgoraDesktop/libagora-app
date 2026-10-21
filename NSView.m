@@ -21,6 +21,7 @@
 #import <AppKit/NSGraphicsContext.h>
 #import <AppKit/NSWindow.h>
 #import <AppKit/NSGraphicsContext.h>
+#import <AppKit/NSPasteboard.h>
 #import <AppKit/NSImage.h>
 #import <AppKit/NSTextInputContext.h>
 #import <AppKit/NSTextInput.h>
@@ -28,6 +29,9 @@
 #import <AppKit/NSDragging.h>
 #import <AppKit/NSLayoutSolver.h>
 #import <AppKit/NSLayoutAnchor_internal.h>
+#include <CoreGraphics/CGDataConsumer.h>
+#include <CoreGraphics/CGPDFContext.h>
+#include <Foundation/NSData.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -1120,8 +1124,18 @@ static NSString * const AGCoderConstraintsKey = @"constraints";
 
 - (void)writePDFInsideRect:(NSRect)rect toPasteboard:(NSPasteboard *)pasteboard
 {
-	(void)rect; (void)pasteboard;
-	fn_refuse_window("-writePDFInsideRect:toPasteboard:", "the PDF substrate, which this tree parked");
+	NSData *data;
+
+	if (pasteboard == nil) {
+		fn_refuse_window("-writePDFInsideRect:toPasteboard:", "a pasteboard");
+		return;
+	}
+	data = [self dataWithPDFInsideRect:rect];
+	if (data == nil) {
+		return;
+	}
+	[pasteboard declareTypes:[NSArray arrayWithObject:NSPDFPboardType] owner:nil];
+	[pasteboard setData:data forType:NSPDFPboardType];
 }
 
 - (BOOL)dragFile:(NSString *)filename fromRect:(NSRect)rect slideBack:(BOOL)aFlag event:(NSEvent *)event
@@ -1559,9 +1573,54 @@ NSString *NSDefinitionPresentationTypeOverlay = @"Overlay";
 
 - (nullable NSData *)dataWithPDFInsideRect:(NSRect)rect
 {
-	(void)rect;
-	fn_refuse_window("-dataWithPDFInsideRect:", "the PDF substrate, which this tree parked");
-	return nil;
+	CFMutableDataRef pdf;
+	CGDataConsumerRef consumer;
+	CGContextRef cg;
+	NSGraphicsContext *context;
+	NSData *data;
+	CGRect page;
+
+	if (rect.size.width <= 0.0 || rect.size.height <= 0.0) {
+		fn_refuse_window("-dataWithPDFInsideRect:", "a rectangle with a positive width and height");
+		return nil;
+	}
+	pdf = CFDataCreateMutable(kCFAllocatorDefault, 0);
+	if (pdf == NULL) {
+		return nil;
+	}
+	consumer = CGDataConsumerCreateWithCFData(pdf);
+	if (consumer == NULL) {
+		CFRelease(pdf);
+		return nil;
+	}
+	page = CGRectMake(0.0, 0.0, rect.size.width, rect.size.height);
+	cg = CGPDFContextCreate(consumer, &page, NULL);
+	CGDataConsumerRelease(consumer);
+	if (cg == NULL) {
+		CFRelease(pdf);
+		return nil;
+	}
+	context = [NSGraphicsContext graphicsContextWithCGContext:cg flipped:YES];
+	if (context == nil) {
+		CGContextRelease(cg);
+		CFRelease(pdf);
+		return nil;
+	}
+	CGPDFContextBeginPage(cg, NULL);
+	/* **THE RECT BECOMES THE PAGE, AND THE VIEW'S SPACE IS Y-DOWN.** A view draws in the orientation its
+	 * window's surface gives it, which is the y-down one (`-cacheDisplayInRect:` builds its canvas with
+	 * `flipped:YES` for the same reason). The page is y-up, so the requested rectangle is translated to the
+	 * page's origin and then mirrored; after this the view's own `-displayRect:` walk needs no changes. */
+	CGContextTranslateCTM(cg, -rect.origin.x, -rect.origin.y);
+	CGContextTranslateCTM(cg, 0.0, rect.size.height);
+	CGContextScaleCTM(cg, 1.0, -1.0);
+	[self displayRectIgnoringOpacity:rect context:context];
+	CGPDFContextEndPage(cg);
+	CGPDFContextClose(cg);
+	data = [NSData dataWithBytes:CFDataGetBytePtr(pdf) length:(NSUInteger)CFDataGetLength(pdf)];
+	CGContextRelease(cg);
+	CFRelease(pdf);
+	return data;
 }
 
 - (void)print:(id)sender

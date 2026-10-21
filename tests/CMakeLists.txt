@@ -686,6 +686,16 @@ target_link_libraries(image_draw PRIVATE App)
 add_test(NAME appkit-image-draw COMMAND image_draw)
 set_tests_properties(appkit-image-draw PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
 
+# **THE PDF CHAIN: VIEW -> BYTES -> REP -> PIXELS.** No window and no compositor: a flipped probe view writes a
+# page through -dataWithPDFInsideRect:, the same bytes go onto a pasteboard under NSPDFPboardType, NSPDFImageRep
+# parses them back, and both the page and the rep's vector draw are read as pixels. The second half asks the
+# multi-page doors that a view cannot exercise.
+add_executable(pdf_app pdf_app.m)
+target_link_libraries(pdf_app PRIVATE App)
+
+add_test(NAME appkit-pdf COMMAND pdf_app)
+set_tests_properties(appkit-pdf PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
+
 # The package form of the RTF document: TXT.rtf plus one file per attachment, and the reference between them.
 add_executable(text_rtfd text_rtfd.m)
 target_link_libraries(text_rtfd PRIVATE App)

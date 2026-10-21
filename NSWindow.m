@@ -4776,9 +4776,15 @@ static NSUInteger fn_edge_index(NSRectEdge edge)
 
 - (nullable NSData *)dataWithPDFInsideRect:(NSRect)rect
 {
-	(void)rect;
-	fn_refuse_window("-dataWithPDFInsideRect:", "the PDF substrate, which this tree parked");
-	return nil;
+	NSView *content = [self contentView];
+
+	if (content == nil) {
+		fn_refuse_window("-dataWithPDFInsideRect:", "a content view to draw");
+		return nil;
+	}
+	/* THE RECT IS IN THE WINDOW'S BASE COORDINATES, which is what `-convertRect:fromView:nil` converts
+	 * from; the content view then draws itself into a page of that size. */
+	return [content dataWithPDFInsideRect:[content convertRect:rect fromView:nil]];
 }
 
 - (void)print:(id)sender
