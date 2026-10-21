@@ -4389,6 +4389,14 @@ static NSWindow *fn_main_window(NSWindow *except)
 		[previous resignKeyWindow];
 	}
 	_key = YES;
+	/* **AND THE SERVER IS TOLD, BECAUSE THE SEAT IS ITS.** Until this door existed the key flag was local: a click
+	 * focused the window through the pointer path, and a programmatic `-makeKeyWindow` — `-makeKeyAndOrderFront:`,
+	 * a `-showWindow:` — left the keyboard wherever it was. MEASURED as a reopened Workspace window that was
+	 * frontmost in the window list while typing still went to the desktop behind it. Only a window that is ON THE
+	 * GLASS may take it: a key window is a window a person can type into. */
+	if (_visible && _agwindow != NULL) {
+		AGWindowTakeFocus((AGWindow *)_agwindow);
+	}
 	/* **THE APPLICATION'S `-keyWindow` MOVES WITH THE WINDOW'S OWN FLAG**, whichever door caused the change: a
 	 * click, `-makeKeyWindow`, or a previous key window resigning. Keeping the two in one place is what stops
 	 * `-isKeyWindow` and `-keyWindow` from disagreeing. */

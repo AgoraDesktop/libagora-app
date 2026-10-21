@@ -2161,6 +2161,21 @@ void AGWindowLower(AGWindow *window)
 	}
 }
 
+void AGWindowTakeFocus(AGWindow *window)
+{
+	if (window == NULL || window->agora == NULL) {
+		return;
+	}
+	/* **ASKED ONLY OF A COMPOSITOR THAT DECLARED IT.** An `xdg-shell` compositor has no such door and an older
+	 * Agora one has no such request; sending it anyway is a protocol error on the connection this application
+	 * shares with everything else it draws. */
+	if (wl_proxy_get_version((struct wl_proxy *)window->agora) < 5) {
+		return;
+	}
+	agora_window_take_focus(window->agora);
+	wl_display_flush(window->server->display);
+}
+
 void AGWindowServerMenuBarArea(AGWindowServer *server, int *x, int *y, int *width, int *height)
 {
 	if (x != NULL) {

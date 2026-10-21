@@ -296,6 +296,11 @@ void AGWindowSetStatusItem(AGWindow *window, int length);
 /* BRING THE WINDOW TO THE FRONT OF ITS LEVEL — the Mac's `-orderFront:`. It is not a level change and not a
  * claim on the keyboard: who has FOCUS is the user's click together with `-makeKeyAndOrderFront:`. */
 void AGWindowRaise(AGWindow *window);
+/* **AND THE ONE AN APPLICATION NEEDS FOR ITS OWN WINDOWS: MAKE THIS ONE KEY.** `-makeKeyWindow` is an application
+ * saying which of ITS windows receives the keys, and the seat is the server's — so the sentence has to cross, or the
+ * window comes forward and the keyboard stays behind. It does not restack and it cannot name anybody else's window.
+ * A compositor that does not speak `agora_window` version 5 never hears it. */
+void AGWindowTakeFocus(AGWindow *window);
 /* SEND IT TO THE BACK OF ITS LEVEL — the Mac's `-orderBack:`. The same level, the other end of it. */
 void AGWindowLower(AGWindow *window);
 

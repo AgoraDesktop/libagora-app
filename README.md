@@ -1418,7 +1418,9 @@ raises the ordinary windows — **back to front, the order the list already hold
 forward without reversing its windows** — or, when there are none, sends `agora_shell.reopen_window` and lets the
 application answer what "reopen" means. The AppKit puts that answer to the delegate as
 `-applicationShouldHandleReopen:hasVisibleWindows:`, with "visible" measured against the same ordinary band; Work-
-space answers it by opening a file window, which is Finder's answer for the same click.
+space answers it by opening a file window, which is Finder's answer for the same click. **And the new window takes
+the keyboard**, because `-makeKeyWindow` now crosses the seam as `agora_window.take_focus` — before that door
+existed, a programmatic key change was local state and the focus stayed on whatever the pointer had last clicked.
 
 **AND A BRIDGE BUG FOUND WHILE WIRING IT, NAMED RATHER THAN WORKED AROUND QUIETLY.** Passing an `NSURL` into a Core
 Foundation URL door ABORTS in this tree — `-[NSURL _cfurl]` is compiled with an opaque `struct __CFURL` while Core
