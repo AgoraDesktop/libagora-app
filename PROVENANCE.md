@@ -677,6 +677,45 @@ idle fix in §27 remains about 23 ticks per five seconds.
 `tests/browser.m` checks that an offscreen empty slot is not attached to the document while the visible one is, and
 the existing drag check still widens exactly the left column by forty points after the release.
 
+## 29. The search field's ornaments are cells, and its text rect is the one rect
+
+**`NSSearchField` AND `NSSearchFieldCell` ARE WRITTEN FROM THE 10.6 DECLARATIONS.** The SDK publishes the two ornament
+cells as `NSButtonCell`s, the three rectangles, the recents list and its autosave name, the template menu with four
+placeholder tags, and the two sending flags. That is the surface here; the control adds only the recents forwards and a
+press that hit-tests the ornaments before it opens a field session.
+
+- **THE DEFAULT ORNAMENTS ARE DRAWN GLYPHS, NOT IMAGES.** The magnifier is a ring and a handle, the clear button a
+  disc with a cross, both at the toolbar's sixteen-point measure. A caller that sets an image on either cell gets the
+  ordinary button drawing instead, so the drawn mark is a default rather than a closed door. The magnifier's handle
+  reads the CTM's sign, which is the same question `NSTextFieldCell` asks before it places a baseline: "down" is
+  negative y in a window and positive y in a flipped bitmap.
+- **THE TEXT RECT IS THE SINGLE LAYOUT ANSWER.** `-drawingRectForBounds:` returns `-searchTextRectForBounds:`, and
+  the drawn string, the placeholder and the editor all read it. The editor is therefore placed between the ornaments
+  by the same arithmetic that insets the text, which the probe checks by comparing the editor's frame with that rect.
+- **THE CLEAR SLOT IS RESERVED WHETHER OR NOT THE BUTTON IS DRAWN.** The button appears with the first character, and
+  a layout that gave it room only then would move the editor — under the caret — on that keystroke. Its visibility
+  follows the LIVE text (the editor's while a session runs), so it appears and disappears as a person types rather
+  than at the end of the edit.
+- **A PROGRAMMATIC WRITE IS NOT A KEYSTROKE.** Writing a value through `-setStringValue:` tells a live editor, and
+  the editor's change notification is the same one a key produces. A flag around the write keeps the clear button and
+  a chosen recent from sending twice; the door that wrote the value sends once, deliberately.
+- **THE RECENTS ADOPT THE LIST THEY ARE GIVEN, IN EITHER ORDER.** Setting the autosave name loads what is stored under
+  it and also saves the list the cell already has, so "name first" and "searches first" mean the same thing. A repeat
+  moves to the front, the limit clamps at 0...254 with -1 as ten, and the built menu is a copy of the template with the
+  tagged placeholders replaced — the template itself is never mutated. **AND A TERM IS REMEMBERED ONLY WHEN A TEMPLATE
+  IS SET**, which is the SDK's "if cleared, then we don't track recents": without one the magnifier is a plain
+  "search now" and Return commits the value without adding it to a list no menu could show.
+- **AND THE PROBE FOUND THAT SELECTOR IDENTITY IS NOT POINTER EQUALITY.** The test compared a cell's action with `==`
+  against `@selector(search:)` and it failed while `sel_getName` answered `search:` for both: this runtime can hand out
+  distinct selector pointers for one name across separately compiled images. `sel_isEqual` is the comparison, and the
+  test uses it. `-sendAction:to:` resolves by name and was never affected.
+
+`tests/search_field.m` measures the defaults, the three rectangles and the measured width that pays for both slots,
+the glyph ink and the hidden clear button, the press that misses the text, the editor's rect, the delayed/immediate/
+whole-string sending rules with the timer fired by hand, a programmatic write that adds no send, the bounded deduped
+recents, both autosave orders, the template menu's tagged placement, choosing a recent, and the ornament cells'
+target/action pairing — **74 checks**.
+
 ## Keeping in sync
 
 The Fiwix AppKit is the origin and this repository has now diverged from it in the seam. A fix made there

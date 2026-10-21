@@ -22,7 +22,9 @@ BROWSER: the columns of a Finder-style column view, each a table over the same d
 the next column. Under all of it is a DRAG SESSION: a source begins a drag from a view, the composed image floats in a window of its own, and a
 destination in ANY window of the application is found by screen point and answers the dragged types. And beside the
 windows there is now a PANEL and an ALERT: a helper window that takes the keyboard only when a field asks it to, and a
-question with buttons whose answers are Apple's 1000/1001/1002.
+question with buttons whose answers are Apple's 1000/1001/1002. And a SEARCH FIELD: a text field with a magnifier
+that opens the recents and a clear button that empties it, whose typing sends the control's action after a pause, on
+every key, or on Return — the caller's choice.
 
 The classes here come from the Fiwix AppKit (same author, same licence — see `PROVENANCE.md`), and they
 talked to an X server: `NSWindow.m` called `XOpenDisplay`, `XCreateSimpleWindow`, `XMapWindow`, `XPutImage`
@@ -111,6 +113,7 @@ tests/
   browser.m                     the BROWSER: columns, the delegate's cells, the selection, the path and the width
   progress_indicator.m          the PROGRESS INDICATOR: range, clamp, spinner state and the bar's ink
   panel_alert.m                 the PANEL and the ALERT: the click-to-key rule, the content and the two ways to run it
+  search_field.m                the SEARCH FIELD: two ornaments, the sending rules, the timer and the recents menu
   image_draw.m                  an image rep draws UP in a y-up and a y-down context alike
   control_drag.m                and what a DRAG costs: forty motions, and how many frames the window committed
   run-*-headless.sh             ctest: a compositor with a virtual monitor (no desktop input involved)
@@ -546,6 +549,18 @@ the compositor is really gone.
   on the CONTROL reaches the CELL, and the NEXT session's EDITOR is configured from it — while a field with the flags
   OFF gets a plain editor, so the check cannot pass against an editor that is always rich. What still does not happen
   is named rather than implied: no paragraph model in the cell — so the flags travel and nothing obeys them yet.
+- **And the search field is a field with two ornaments** (`ctest`, offscreen + a real session): `NSSearchFieldCell`
+  publishes the three rectangles a caller needs — the text's, the magnifier's and the clear button's — and the text
+  rect is the one `-drawingRectForBounds:` answer, so the drawn value, the placeholder and the EDITOR all sit between
+  the ornaments; the editor's frame is checked against that rect. The clear button exists from birth and is DRAWN
+  only once there is text (read out of the ink: the slot is empty in one render and carries a disc in the next),
+  while its slot is reserved either way so the caret does not jump on the first character. A press is hit-tested by
+  the control BEFORE the text field opens a session, so the clear button clears and sends without leaving a caret in
+  an empty field, and a press between the ornaments opens the session as usual. The probe fires the partial-string
+  timer BY HAND (the run loop is the test's own absence), checks that the immediate rule sends on the change and the
+  whole-string rule only on Return, that a programmatic write does not send a second time, and that a Return adds the
+  term to a bounded, deduped recents list. The template menu is built from the four tagged placeholders, and choosing
+  a recent sends once. **74 checks.**
 - **The chrome** (`ctest`, offscreen): the title bar is Greybird's, DRAWN — a one-point outline and a white row
   over the face, round corners, an eight-by-nine X, an eight-by-two minus and an eight-by-eight plus in the
   theme's greys and its blue under a
@@ -1277,17 +1292,65 @@ but grow no help button, because there is no Help system to show (`NSApplication
 `-endSheet:returnCode:`; Apple's own callback is the one that dismisses it, which is the same contract
 `NSApplication.h` quotes.
 
+### The search field, and the two ornaments a field can carry
+
+**`NSSearchField` AND `NSSearchFieldCell` ARE WRITTEN FROM THE 10.6 DECLARATIONS, AND THE ORNAMENTS ARE CELLS BECAUSE
+THE SDK SAYS THEY ARE.** `-searchButtonCell` and `-cancelButtonCell` are real `NSButtonCell`s that a caller may read,
+replace or reset; the host computes their rectangles, draws them over its own face and answers their clicks. The
+default pair has no image: the magnifier and the clear disc are DRAWN, at the same sixteen-point measure the toolbar's
+marks use, and the handle's direction is read from the CTM's sign so the magnifier points down in a window (y up) and
+in a flipped bitmap (y down). A caller that sets an image gets ordinary button ink — the glyph is the default picture,
+not the only one the cell can have.
+
+**THE TEXT RECT IS THE ONE OVERRIDE, AND THE CANCEL SLOT IS ALWAYS RESERVED.** `-drawingRectForBounds:` answers
+`-searchTextRectForBounds:`, which is the rectangle strictly between the ornaments; the drawn value, the placeholder
+and the field EDITOR all read it, so the three cannot disagree and the caret is between the glyphs rather than over
+them. The clear button is drawn only when there is text, but its slot is part of the layout from the beginning — a
+button that appeared with the first typed character would otherwise move the editor under the caret on that same
+keystroke. `tests/search_field.m` checks the editor's frame against that rect and the rect against the ornaments.
+
+**TYPING SENDS THE CONTROL'S ACTION, WITH THREE RULES AND ONE EXCEPTION.** `-sendsWholeSearchString` sends only on
+Return or the magnifier; `-sendsSearchStringImmediately` sends on every change; the default arms a 0.25-second timer
+that restarts with each change, so a word is one search rather than six. The action sent is the CONTROL's pair — a
+caller writes its handler against the field — and the ornament cells' target is the cell, so replacing one does not
+disturb it. The exception is a value the CODE writes: `-setStringValue:` tells a live editor, which produces the same
+change notification a keystroke does, so a programmatic flag keeps the clear button and a chosen recent to one send
+rather than two. The probe fires the pending timer by hand, because a run loop is what it does not have.
+
+**THE RECENTS ARE THE CELL'S, BOUNDED AND DEDUPED, AND THE MENU IS BUILT FROM THE TEMPLATE'S TAGS.** A repeat moves
+to the front, `-maximumRecents` clamps at 0...254 (-1 is ten), and a `-recentsAutosaveName` stores the list in
+`NSUserDefaults` under that name and loads what is already there — in either order, because setting the name also
+saves the list it now owns. The four `NSSearchFieldRecents…Tag` placeholders say where the title, the recents, the
+clear item and the "no recents" item go; the template itself is never mutated, because the built menu is a copy.
+**WITH NO TEMPLATE THERE IS NO RECENTS UI AND NO TRACKING** — the SDK's own sentence is "if cleared, then we don't track
+recents" — so the magnifier is a plain "search now" and Return commits the value without remembering it; a caller that
+wants a list without a menu sets it with `-setRecentSearches:`.
+
+**WHAT IT DOES NOT DO IS NAMED AT ITS DOORS.** `NSSearchFieldDelegate` is 10.11's, so it is not declared; the recents
+titles are the caller's template strings rather than localized defaults, because this tier has no localized strings of
+its own; the partial-string delay is a fixed 0.25 seconds rather than a settable interval (the SDK publishes no
+setter for it); the default ornaments carry no `NSImage`, so a caller that asks for one and wants it drawn must set
+it; and showing the recents menu is `NSMenu`'s blocking tracking session, which is why a test reads the built menu
+through `-cg_searchMenu` instead of popping it.
+
+**AND THE PROBE FOUND A RUNTIME FACT WORTH WRITING DOWN.** It compared a cell's action with `==` against
+`@selector(search:)` and the comparison failed while `sel_getName` returned the same string for both. This runtime can
+hand out distinct selector pointers for one name across the images that were compiled separately, so SEL identity is
+`sel_isEqual`, not pointer equality; `tests/search_field.m` uses the former. `-sendAction:to:` looks the selector up by
+name and was never affected — the test was.
+
 ### Still absent, and why
 
-**EIGHT THINGS THAT USED TO BE ON THIS LIST ARE NOT ANY MORE, AND THE LIST IS CORRECTED RATHER THAN QUIETLY SHRUNK:**
+**NINE THINGS THAT USED TO BE ON THIS LIST ARE NOT ANY MORE, AND THE LIST IS CORRECTED RATHER THAN QUIETLY SHRUNK:**
 the SHEETS (`NSApplication -beginSheet:modalForWindow:…` and `-endSheet:returnCode:`, with the attachment and the
 reply dance on `NSWindow`), the FRAME-AUTOSAVE strings, the CURSOR-RECT invalidation, the CHILD-WINDOW list,
-`NSSplitView`, `NSSegmentedControl`/`NSToolbarItemGroup`, `NSPathControl` and `NSPanel`/`NSAlert` are all implemented.
+`NSSplitView`, `NSSegmentedControl`/`NSToolbarItemGroup`, `NSPathControl`, `NSPanel`/`NSAlert` and `NSSearchField` are
+all implemented.
 What is still absent is the DRAWER (the class — `-drawers` answers an empty array, which is Apple's own contract), the
 TOOLBAR'S CUSTOMIZATION PALETTE (the toolbar itself is here; the palette refuses by name), the CROSS-PROCESS DRAG
 SESSION (the in-process session, its drag image window, its two protocols and the table's row drag are here; another
 application's destination and its pasteboard are not, because that is the window server's transport),
-`NSSearchField`, `NSTabView`, `NSCollectionView`, `NSDocument`, and the
+`NSTabView`, `NSCollectionView`, `NSDocument`, and the
 script-command doors, which are declared and REFUSE by name; what the window's close,
 minimise and zoom buttons DO is now this tier's — each goes through the `-perform…` door its menu item sends — but
 the MINIMISE is

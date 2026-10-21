@@ -804,3 +804,13 @@ add_executable(panel_alert panel_alert.m)
 target_link_libraries(panel_alert PRIVATE App m)
 add_test(NAME appkit-panel-alert COMMAND panel_alert)
 set_tests_properties(appkit-panel-alert PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
+
+# **THE SEARCH FIELD: A FIELD WITH A MAGNIFIER AND A CLEAR BUTTON.** The three rectangles and the measurement that
+# pays for both slots, the glyph ink and the clear button that is absent until there is text, the press that misses
+# the text and starts no session, the delayed/immediate/whole-string sending rules with the timer fired by hand, and
+# the recents list, its autosave and the template menu built from the four tagged placeholders. Offscreen: a bitmap,
+# a real field editor and no run loop.
+add_executable(search_field search_field.m)
+target_link_libraries(search_field PRIVATE App m)
+add_test(NAME appkit-search-field COMMAND search_field)
+set_tests_properties(appkit-search-field PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
