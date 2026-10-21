@@ -26,6 +26,18 @@ question with buttons whose answers are Apple's 1000/1001/1002. And a SEARCH FIE
 that opens the recents and a clear button that empties it, whose typing sends the control's action after a pause, on
 every key, or on Return — the caller's choice.
 
+**And a nib is now a thing this tier can READ AND WRITE.** `NSNib.h` is a format rather than a refusal: a keyed
+archive whose root is `{AGNibVersion, AGNibTopLevelObjects, AGNibConnections}`, with outlets and actions as connection
+records naming the file's owner by placeholder. The classes a design file may name are archivable — `NSResponder`,
+`NSView`, `NSControl`, `NSCell`, `NSWindow`, `NSMenu`, `NSMenuItem`, `NSTableColumn`, `NSFont`, `NSColor`,
+`NSImage` — each conforming to `NSSecureCoding` and implementing both coding methods, and each archiving its DESIGN
+properties rather than its live graph (a view's window, a window's surface and a cell's control view are all absent by
+construction). The reader decodes with secure coding on and an EXTENSIBLE allow-list (`+registerDesignClass:` for an
+application's own subclasses), and it refuses — before instantiating anything — an archive that names a class outside
+that list. `NSViewController -loadView` loads a nib with the controller as its owner; `NSWindowController`'s archive
+now carries its window. The verification is `tests/nib_roundtrip.m`: a tree with a control, a cell, an outlet and an
+action, archived, written to a file, read back and compared, plus the three refusals.
+
 The classes here come from the Fiwix AppKit (same author, same licence — see `PROVENANCE.md`), and they
 talked to an X server: `NSWindow.m` called `XOpenDisplay`, `XCreateSimpleWindow`, `XMapWindow`, `XPutImage`
 and `XNextEvent` directly, and `NSScreen.m` opened the display for its own size. Agora's display target is
@@ -692,6 +704,14 @@ These are properties of the protocol rather than gaps, and each is written at th
   `-orderBack:` change the screen when the compositor speaks `agora-shell`, and only this object's state when it
   speaks bare `xdg-shell`. `-orderFrontRegardless` deliberately shows without raising, and `-miniaturize:` is
   still only a state because no iconify exists.
+- **How much of the screen a window takes is SAID, not derived, and the door is Agora-owned.**
+  `-cg_setReservedEdge:amount:` reserves a strip along one edge of the output and every application's
+  `-visibleFrame` shrinks by it — which is the Dock's one real request, since the Mac's window server works the
+  same number out of the Dock's frame through a private CGS call Agora has no answer for. It is deliberately not
+  an Apple API: the reservation belongs to the WINDOW (it dies with it, so a crashed Dock leaves no phantom
+  strip), a second call MOVES it rather than adding one, and `amount:` 0 gives it back — which is what an
+  autohiding Dock says before it hides. `tests/appkit_window.m` asserts both directions against Agora's own
+  server and skips the block on a stock compositor, which has no work area to move.
 - **There is no Expose.** The client owns the pixels; a repaint is asked for by the frame callback, which is
   why `-display` and the seam's frame handler both end in the same draw.
 - **The screen is an output.** `NSScreen` asks the seam, which learns the size from `wl_output`; with no

@@ -74,7 +74,7 @@ extern NSString *NSMenuDidEndTrackingNotification;
 - (BOOL)validateMenuItem:(NSMenuItem *)menuItem;
 @end
 
-@interface NSMenu : NSObject
+@interface NSMenu : NSObject <NSSecureCoding>
 {
 	NSString *_title;			/* RETAINED (a copy of what was set) */
 	NSMutableArray *_items;			/* RETAINED: the menu OWNS its items */

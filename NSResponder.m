@@ -46,6 +46,43 @@
 
 @implementation NSResponder
 
+/* ============================================================================================
+ * ARCHIVING: THE ROOT OF EVERY DESIGN CLASS'S CHAIN, AND THE PLACE THE CHAIN STARTS CHAINING.
+ * ============================================================================================ */
+
+/* THE KEYS ARE PROPERTY NAMES, because the format's vocabulary is the public API rather than a private dialect: a
+ * design file says `interfaceStyle` because that is what a caller sets, and a reader can be checked against the
+ * header. Two things are deliberately NOT here — `_nextResponder`, which is the shape of a LIVE chain rather than
+ * the shape of a design (a container rebuilds it), and `_menu`, which IS archived: a context menu is part of a
+ * design and `NSMenu` is on the reader's allow-list. */
+static NSString * const AGCoderInterfaceStyleKey = @"interfaceStyle";
+static NSString * const AGCoderMenuKey = @"menu";
+
+/* **`NSObject` IS NOT ARCHIVABLE, SO THIS IS WHERE THE CHAIN STOPS.** `-encodeWithCoder:` here does NOT call
+ * `[super encodeWithCoder:]` — there is no such method to reach, and sending it would be an unrecognized selector at
+ * archive time. Every class BELOW this one does chain, which is what makes a view's archive carry its responder
+ * state and what `NSViewController`'s note was waiting for. */
+- (void)encodeWithCoder:(NSCoder *)aCoder
+{
+	[aCoder encodeInteger:(NSInteger)_interfaceStyle forKey:AGCoderInterfaceStyleKey];
+	[aCoder encodeObject:_menu forKey:AGCoderMenuKey];
+}
+
+- (instancetype)initWithCoder:(NSCoder *)aDecoder
+{
+	self = [super init];
+	if (self != nil) {
+		_interfaceStyle = (NSInterfaceStyle)[aDecoder decodeIntegerForKey:AGCoderInterfaceStyleKey];
+		_menu = [[aDecoder decodeObjectForKey:AGCoderMenuKey] retain];
+	}
+	return self;
+}
+
++ (BOOL)supportsSecureCoding
+{
+	return YES;
+}
+
 /* ------------------------------------------------------------------------- */
 /* The chain                                                                  */
 /* ------------------------------------------------------------------------- */

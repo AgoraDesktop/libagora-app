@@ -232,7 +232,7 @@ typedef NSUInteger NSControlSize;
 
 
 
-@interface NSCell : NSObject
+@interface NSCell : NSObject <NSSecureCoding>
 {
 	/* APPLE'S OWN LAYOUT IS A BITFIELD STRUCT (`struct __CFlags`), and this tier's is plain ivars: the layout is
 	 * ours, which is the rule the plan applies to every private field — what must match Apple is the SURFACE. */

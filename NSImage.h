@@ -89,7 +89,7 @@ typedef NSUInteger NSImageLoadStatus;
 extern NSString *NSImageHintCTM;
 extern NSString *NSImageHintInterpolation;
 
-@interface NSImage : NSObject
+@interface NSImage : NSObject <NSSecureCoding>
 {
 	/* THE REPS, AS AN IMMUTABLE SNAPSHOT: `-representations` hands a caller an array it cannot use to
 	 * reach in and change this image behind its back, which is the same rule Apple's accessor keeps. */

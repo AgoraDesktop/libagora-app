@@ -45,6 +45,255 @@
 
 @implementation NSCell
 
+/* ============================================================================================
+ * ARCHIVING: THE DESIGN SUBSET OF A CELL, WHICH IS MOST OF IT.
+ * ============================================================================================ */
+
+/* **THE KEYS ARE PROPERTY NAMES, AND THE OMISSIONS ARE THE INTERESTING PART.** What is NOT here: `_target` (a
+ * connection — see `NSNib.h`, because the target is either the file's owner or another object in the same archive and
+ * both are connections rather than values), `_controlView` (borrowed: the control sets it when it adopts the cell),
+ * `_highlighted` (transient: a cell is lit while a mouse is down and a design has no mouse), `_mouseInside`,
+ * `_mouseDownFlags` and `_actionMask` (tracking state). Everything else is what a design file may say, so everything
+ * else is encoded — including the ones whose default is not zero, which are the ones a decode would otherwise get
+ * silently wrong. */
+static NSString * const AGCoderCellEnabledKey = @"enabled";
+static NSString * const AGCoderCellBorderedKey = @"bordered";
+static NSString * const AGCoderCellBezeledKey = @"bezeled";
+static NSString * const AGCoderCellEditableKey = @"editable";
+static NSString * const AGCoderCellSelectableKey = @"selectable";
+static NSString * const AGCoderCellScrollableKey = @"scrollable";
+static NSString * const AGCoderCellContinuousKey = @"continuous";
+static NSString * const AGCoderCellAllowsUndoKey = @"allowsUndo";
+static NSString * const AGCoderCellAllowsEditingAttrsKey = @"allowsEditingTextAttributes";
+static NSString * const AGCoderCellImportsGraphicsKey = @"importsGraphics";
+static NSString * const AGCoderCellAllowsMixedStateKey = @"allowsMixedState";
+static NSString * const AGCoderCellWrapsKey = @"wraps";
+static NSString * const AGCoderCellTruncatesKey = @"truncatesLastVisibleLine";
+static NSString * const AGCoderCellSingleLineKey = @"usesSingleLineMode";
+static NSString * const AGCoderCellSendsOnEndKey = @"sendsActionOnEndEditing";
+static NSString * const AGCoderCellRefusesFirstResponderKey = @"refusesFirstResponder";
+static NSString * const AGCoderCellShowsFirstResponderKey = @"showsFirstResponder";
+static NSString * const AGCoderCellWantsMarkedTextKey = @"wantsNotificationForMarkedText";
+static NSString * const AGCoderCellOpaqueKey = @"opaque";
+static NSString * const AGCoderCellControlSizeKey = @"controlSize";
+static NSString * const AGCoderCellControlTintKey = @"controlTint";
+static NSString * const AGCoderCellBackgroundStyleKey = @"backgroundStyle";
+static NSString * const AGCoderCellTypeKey = @"cellType";
+static NSString * const AGCoderCellValueKey = @"objectValue";
+static NSString * const AGCoderCellTitleKey = @"title";
+static NSString * const AGCoderCellStateKey = @"state";
+static NSString * const AGCoderCellTagKey = @"tag";
+static NSString * const AGCoderCellKeyEquivalentKey = @"keyEquivalent";
+static NSString * const AGCoderCellMnemonicKey = @"mnemonicLocation";
+static NSString * const AGCoderCellMenuKey = @"menu";
+static NSString * const AGCoderCellImageKey = @"image";
+static NSString * const AGCoderCellFormatterKey = @"formatter";
+static NSString * const AGCoderCellFontKey = @"font";
+static NSString * const AGCoderCellAlignmentKey = @"alignment";
+static NSString * const AGCoderCellLineBreakKey = @"lineBreakMode";
+static NSString * const AGCoderCellBaseWritingKey = @"baseWritingDirection";
+static NSString * const AGCoderCellFocusRingKey = @"focusRingType";
+static NSString * const AGCoderCellLayoutDirectionKey = @"userInterfaceLayoutDirection";
+static NSString * const AGCoderCellAttributeKey = @"cellAttribute";
+static NSString * const AGCoderCellActionKey = @"action";
+
+- (void)encodeWithCoder:(NSCoder *)aCoder
+{
+	/* A CELL'S SUPERCLASS IS `NSObject`, which is not archivable, so this is the bottom of the chain for a cell —
+	 * unlike a view's, which chains into `NSResponder`. */
+	[aCoder encodeBool:_enabled forKey:AGCoderCellEnabledKey];
+	[aCoder encodeBool:_bordered forKey:AGCoderCellBorderedKey];
+	[aCoder encodeBool:_bezeled forKey:AGCoderCellBezeledKey];
+	[aCoder encodeBool:_editable forKey:AGCoderCellEditableKey];
+	[aCoder encodeBool:_selectable forKey:AGCoderCellSelectableKey];
+	[aCoder encodeBool:_scrollable forKey:AGCoderCellScrollableKey];
+	[aCoder encodeBool:_continuous forKey:AGCoderCellContinuousKey];
+	[aCoder encodeBool:_allowsUndo forKey:AGCoderCellAllowsUndoKey];
+	[aCoder encodeBool:_allowsEditingTextAttributes forKey:AGCoderCellAllowsEditingAttrsKey];
+	[aCoder encodeBool:_importsGraphics forKey:AGCoderCellImportsGraphicsKey];
+	[aCoder encodeBool:_allowsMixedState forKey:AGCoderCellAllowsMixedStateKey];
+	[aCoder encodeBool:_wraps forKey:AGCoderCellWrapsKey];
+	[aCoder encodeBool:_truncatesLastVisibleLine forKey:AGCoderCellTruncatesKey];
+	[aCoder encodeBool:_usesSingleLineMode forKey:AGCoderCellSingleLineKey];
+	[aCoder encodeBool:_sendsActionOnEndEditing forKey:AGCoderCellSendsOnEndKey];
+	[aCoder encodeBool:_refusesFirstResponder forKey:AGCoderCellRefusesFirstResponderKey];
+	[aCoder encodeBool:_showsFirstResponder forKey:AGCoderCellShowsFirstResponderKey];
+	[aCoder encodeBool:_wantsNotificationForMarkedText forKey:AGCoderCellWantsMarkedTextKey];
+	[aCoder encodeBool:_opaque forKey:AGCoderCellOpaqueKey];
+	[aCoder encodeInteger:(NSInteger)_controlSize forKey:AGCoderCellControlSizeKey];
+	[aCoder encodeInteger:(NSInteger)_controlTint forKey:AGCoderCellControlTintKey];
+	[aCoder encodeInteger:(NSInteger)_backgroundStyle forKey:AGCoderCellBackgroundStyleKey];
+	[aCoder encodeInteger:(NSInteger)_type forKey:AGCoderCellTypeKey];
+	[aCoder encodeObject:_objectValue forKey:AGCoderCellValueKey];
+	[aCoder encodeObject:_title forKey:AGCoderCellTitleKey];
+	[aCoder encodeInteger:_state forKey:AGCoderCellStateKey];
+	[aCoder encodeInteger:_tag forKey:AGCoderCellTagKey];
+	[aCoder encodeObject:_keyEquivalent forKey:AGCoderCellKeyEquivalentKey];
+	[aCoder encodeInteger:(NSInteger)_mnemonicLocation forKey:AGCoderCellMnemonicKey];
+	[aCoder encodeObject:_menu forKey:AGCoderCellMenuKey];
+	[aCoder encodeObject:_image forKey:AGCoderCellImageKey];
+	[aCoder encodeObject:_formatter forKey:AGCoderCellFormatterKey];
+	[aCoder encodeObject:_font forKey:AGCoderCellFontKey];
+	[aCoder encodeInteger:(NSInteger)_alignment forKey:AGCoderCellAlignmentKey];
+	[aCoder encodeInteger:(NSInteger)_lineBreakMode forKey:AGCoderCellLineBreakKey];
+	[aCoder encodeInteger:(NSInteger)_baseWritingDirection forKey:AGCoderCellBaseWritingKey];
+	[aCoder encodeInteger:(NSInteger)_focusRingType forKey:AGCoderCellFocusRingKey];
+	[aCoder encodeInteger:(NSInteger)_userInterfaceLayoutDirection forKey:AGCoderCellLayoutDirectionKey];
+	[aCoder encodeInteger:(NSInteger)_cellAttribute forKey:AGCoderCellAttributeKey];
+	/* **THE ACTION IS AN OBJECT'S ABSENCE RATHER THAN AN OBJECT, so it is archived by NAME.** A `SEL` is not
+	 * archivable — `-encodeObject:` on one would box a pointer — and `NSStringFromSelector` is the spelling both ends can
+	 * agree on. A nil action is a nil string and comes back nil. */
+	[aCoder encodeObject:(_action != NULL) ? NSStringFromSelector(_action) : nil forKey:AGCoderCellActionKey];
+}
+
+- (instancetype)initWithCoder:(NSCoder *)aDecoder
+{
+	self = [super init];
+	if (self == nil) {
+		return nil;
+	}
+	/* **THE THREE DEFAULTS THAT ARE NOT ZERO, REPEATED FROM `-init` BECAUSE A DECODE DOES NOT RUN IT.** A decoded cell
+	 * and a built cell must answer the same questions the same way, and these three are the ones storage's zeroing gets
+	 * wrong: enabled, the mnemonic index and the two layout enums. */
+	_enabled = YES;
+	_mnemonicLocation = NSNotFound;
+	_alignment = NSNaturalTextAlignment;
+	_baseWritingDirection = NSWritingDirectionNatural;
+
+	if ([aDecoder containsValueForKey:AGCoderCellEnabledKey]) {
+		_enabled = [aDecoder decodeBoolForKey:AGCoderCellEnabledKey];
+	}
+	if ([aDecoder containsValueForKey:AGCoderCellBorderedKey]) {
+		_bordered = [aDecoder decodeBoolForKey:AGCoderCellBorderedKey];
+	}
+	if ([aDecoder containsValueForKey:AGCoderCellBezeledKey]) {
+		_bezeled = [aDecoder decodeBoolForKey:AGCoderCellBezeledKey];
+	}
+	if ([aDecoder containsValueForKey:AGCoderCellEditableKey]) {
+		_editable = [aDecoder decodeBoolForKey:AGCoderCellEditableKey];
+	}
+	if ([aDecoder containsValueForKey:AGCoderCellSelectableKey]) {
+		_selectable = [aDecoder decodeBoolForKey:AGCoderCellSelectableKey];
+	}
+	if ([aDecoder containsValueForKey:AGCoderCellScrollableKey]) {
+		_scrollable = [aDecoder decodeBoolForKey:AGCoderCellScrollableKey];
+	}
+	if ([aDecoder containsValueForKey:AGCoderCellContinuousKey]) {
+		_continuous = [aDecoder decodeBoolForKey:AGCoderCellContinuousKey];
+	}
+	if ([aDecoder containsValueForKey:AGCoderCellAllowsUndoKey]) {
+		_allowsUndo = [aDecoder decodeBoolForKey:AGCoderCellAllowsUndoKey];
+	}
+	if ([aDecoder containsValueForKey:AGCoderCellAllowsEditingAttrsKey]) {
+		_allowsEditingTextAttributes = [aDecoder decodeBoolForKey:AGCoderCellAllowsEditingAttrsKey];
+	}
+	if ([aDecoder containsValueForKey:AGCoderCellImportsGraphicsKey]) {
+		_importsGraphics = [aDecoder decodeBoolForKey:AGCoderCellImportsGraphicsKey];
+	}
+	if ([aDecoder containsValueForKey:AGCoderCellAllowsMixedStateKey]) {
+		_allowsMixedState = [aDecoder decodeBoolForKey:AGCoderCellAllowsMixedStateKey];
+	}
+	if ([aDecoder containsValueForKey:AGCoderCellWrapsKey]) {
+		_wraps = [aDecoder decodeBoolForKey:AGCoderCellWrapsKey];
+	}
+	if ([aDecoder containsValueForKey:AGCoderCellTruncatesKey]) {
+		_truncatesLastVisibleLine = [aDecoder decodeBoolForKey:AGCoderCellTruncatesKey];
+	}
+	if ([aDecoder containsValueForKey:AGCoderCellSingleLineKey]) {
+		_usesSingleLineMode = [aDecoder decodeBoolForKey:AGCoderCellSingleLineKey];
+	}
+	if ([aDecoder containsValueForKey:AGCoderCellSendsOnEndKey]) {
+		_sendsActionOnEndEditing = [aDecoder decodeBoolForKey:AGCoderCellSendsOnEndKey];
+	}
+	if ([aDecoder containsValueForKey:AGCoderCellRefusesFirstResponderKey]) {
+		_refusesFirstResponder = [aDecoder decodeBoolForKey:AGCoderCellRefusesFirstResponderKey];
+	}
+	if ([aDecoder containsValueForKey:AGCoderCellShowsFirstResponderKey]) {
+		_showsFirstResponder = [aDecoder decodeBoolForKey:AGCoderCellShowsFirstResponderKey];
+	}
+	if ([aDecoder containsValueForKey:AGCoderCellWantsMarkedTextKey]) {
+		_wantsNotificationForMarkedText = [aDecoder decodeBoolForKey:AGCoderCellWantsMarkedTextKey];
+	}
+	if ([aDecoder containsValueForKey:AGCoderCellOpaqueKey]) {
+		_opaque = [aDecoder decodeBoolForKey:AGCoderCellOpaqueKey];
+	}
+	if ([aDecoder containsValueForKey:AGCoderCellControlSizeKey]) {
+		_controlSize = (NSControlSize)[aDecoder decodeIntegerForKey:AGCoderCellControlSizeKey];
+	}
+	if ([aDecoder containsValueForKey:AGCoderCellControlTintKey]) {
+		_controlTint = (NSControlTint)[aDecoder decodeIntegerForKey:AGCoderCellControlTintKey];
+	}
+	if ([aDecoder containsValueForKey:AGCoderCellBackgroundStyleKey]) {
+		_backgroundStyle = (NSBackgroundStyle)[aDecoder decodeIntegerForKey:AGCoderCellBackgroundStyleKey];
+	}
+	if ([aDecoder containsValueForKey:AGCoderCellTypeKey]) {
+		_type = (NSCellType)[aDecoder decodeIntegerForKey:AGCoderCellTypeKey];
+	}
+	if ([aDecoder containsValueForKey:AGCoderCellAttributeKey]) {
+		_cellAttribute = (unsigned long)[aDecoder decodeIntegerForKey:AGCoderCellAttributeKey];
+	}
+	if ([aDecoder containsValueForKey:AGCoderCellValueKey]) {
+		_objectValue = [[aDecoder decodeObjectForKey:AGCoderCellValueKey] retain];
+	}
+	if ([aDecoder containsValueForKey:AGCoderCellTitleKey]) {
+		_title = [[aDecoder decodeObjectForKey:AGCoderCellTitleKey] copy];
+	}
+	if ([aDecoder containsValueForKey:AGCoderCellStateKey]) {
+		_state = [aDecoder decodeIntegerForKey:AGCoderCellStateKey];
+	}
+	if ([aDecoder containsValueForKey:AGCoderCellTagKey]) {
+		_tag = [aDecoder decodeIntegerForKey:AGCoderCellTagKey];
+	}
+	if ([aDecoder containsValueForKey:AGCoderCellKeyEquivalentKey]) {
+		_keyEquivalent = [[aDecoder decodeObjectForKey:AGCoderCellKeyEquivalentKey] copy];
+	}
+	if ([aDecoder containsValueForKey:AGCoderCellMnemonicKey]) {
+		_mnemonicLocation = (NSUInteger)[aDecoder decodeIntegerForKey:AGCoderCellMnemonicKey];
+	}
+	if ([aDecoder containsValueForKey:AGCoderCellMenuKey]) {
+		_menu = [[aDecoder decodeObjectForKey:AGCoderCellMenuKey] retain];
+	}
+	if ([aDecoder containsValueForKey:AGCoderCellImageKey]) {
+		_image = [[aDecoder decodeObjectForKey:AGCoderCellImageKey] retain];
+	}
+	if ([aDecoder containsValueForKey:AGCoderCellFormatterKey]) {
+		_formatter = [[aDecoder decodeObjectForKey:AGCoderCellFormatterKey] retain];
+	}
+	if ([aDecoder containsValueForKey:AGCoderCellFontKey]) {
+		_font = [[aDecoder decodeObjectForKey:AGCoderCellFontKey] retain];
+	}
+	if ([aDecoder containsValueForKey:AGCoderCellAlignmentKey]) {
+		_alignment = (NSTextAlignment)[aDecoder decodeIntegerForKey:AGCoderCellAlignmentKey];
+	}
+	if ([aDecoder containsValueForKey:AGCoderCellLineBreakKey]) {
+		_lineBreakMode = (NSLineBreakMode)[aDecoder decodeIntegerForKey:AGCoderCellLineBreakKey];
+	}
+	if ([aDecoder containsValueForKey:AGCoderCellBaseWritingKey]) {
+		_baseWritingDirection =
+			(NSWritingDirection)[aDecoder decodeIntegerForKey:AGCoderCellBaseWritingKey];
+	}
+	if ([aDecoder containsValueForKey:AGCoderCellFocusRingKey]) {
+		_focusRingType = (NSFocusRingType)[aDecoder decodeIntegerForKey:AGCoderCellFocusRingKey];
+	}
+	if ([aDecoder containsValueForKey:AGCoderCellLayoutDirectionKey]) {
+		_userInterfaceLayoutDirection =
+			(NSUserInterfaceLayoutDirection)[aDecoder decodeIntegerForKey:AGCoderCellLayoutDirectionKey];
+	}
+	if ([aDecoder containsValueForKey:AGCoderCellActionKey]) {
+		NSString *name = [aDecoder decodeObjectForKey:AGCoderCellActionKey];
+
+		if ([name isKindOfClass:[NSString class]]) {
+			_action = NSSelectorFromString(name);
+		}
+	}
+	return self;
+}
+
++ (BOOL)supportsSecureCoding
+{
+	return YES;
+}
+
 - (instancetype)init
 {
 	if ((self = [super init]) != nil) {

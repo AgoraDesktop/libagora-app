@@ -42,7 +42,7 @@
 
 NS_ASSUME_NONNULL_BEGIN
 
-@interface NSControl : NSView
+@interface NSControl : NSView <NSSecureCoding>
 {
 	/* THE CELL IS THE ONLY THING THIS CLASS OWNS. Everything else it appears to hold — the value, the target, the
 	 * action, the font, the alignment — is the cell's, and the doors below are forwards. */

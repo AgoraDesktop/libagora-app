@@ -22,7 +22,7 @@ NS_ASSUME_NONNULL_BEGIN
 
 @class NSWindow;
 
-@interface NSWindowController : NSResponder <NSCoding>
+@interface NSWindowController : NSResponder <NSSecureCoding>
 {
 	NSWindow *_window;			/* RETAINED: a controller owns the window it manages */
 	NSString *_windowNibName;		/* copied */

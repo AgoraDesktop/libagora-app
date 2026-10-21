@@ -3,40 +3,103 @@
  * SPDX-License-Identifier: MIT
  */
 /*
- * NSNib.h — a nib, and exactly how far this tier goes with one (stage C).
+ * NSNib.h — a nib, the first-party format it is written in, and the rules its reader keeps.
  *
- * **A NIB IS AN ARCHIVED OBJECT GRAPH, AND THIS TIER HAS NO READER FOR ONE.** Apple's nib file is its own
- * schema — class names, connection records, the keyed shape of a whole window — and that schema is not
- * published. So the split this class makes is the honest one, stated here rather than discovered by a caller:
+ * **THIS HEADER USED TO REFUSE THE DECODING DOORS BY NAME, AND THAT REFUSAL HAS BEEN CLOSED RATHER THAN
+ * OVERRIDDEN.** What it said was that a nib is an archived object graph in Apple's own unpublished schema, that a
+ * guessed schema would be a WRONG VALUE rather than an unfinished feature, and that closing the gap needed "a
+ * first-party interface format for THIS AppKit — an emitter and a reader this tree owns". That format now exists,
+ * and it is described in full below. What is still refused, deliberately and for the original reason, is APPLE'S
+ * schema: `-initWithContentsOfURL:` reads a file in the format below and no other, and a file that is not one is
+ * reported as such rather than misinterpreted.
  *
- *   * THE SOURCE IS REAL. `-initWithContentsOfURL:` and `-initWithNibNamed:bundle:` resolve and HOLD the nib,
- *     which is also Apple's own contract — a nib is not read until it is instantiated, so recording the source
- *     is the whole of what these two doors do in Apple's implementation too.
- *   * THE DECODING IS REFUSED BY NAME. `-instantiateNibWithExternalNameTable:` and its owner/top-level-objects
- *     form are what would walk the archive and build the objects; they answer NO and say why, because a
- *     guessed nib schema would be a WRONG VALUE rather than an unfinished feature — the same ground this
- *     tree's other refusals stand on.
+ * ============================ THE FORMAT: "AGNib", version 1 ============================
  *
- * WHAT WOULD CLOSE THE GAP is a first-party interface format for THIS AppKit — an emitter and a reader this
- * tree owns, the way the interface side of the retired C++ kit owned one — and that is a unit of its own
- * rather than something to infer from Apple's bytes.
+ * A NIB IS A KEYED ARCHIVE. The bytes are whatever `NSKeyedArchiver` writes — a property list with the `$objects`
+ * table, the `$class` chain and object identity preserved — because that machinery already exists in
+ * `libagora-base` and inventing a second serialiser would be inventing a second set of bugs. What this class OWNS
+ * is the ROOT's shape, which is three keys:
  *
- * AND `NSCoding` IS DELIBERATELY NOT ADOPTED, though Apple's class conforms: a conformance PROMISES
- * `-initWithCoder:` and `-encodeWithCoder:`, and no row in this class's ledger carries either. A conformance
- * whose methods are missing is a promise the class cannot keep at run time — the trap this tree has recorded
- * under declared-but-undefined — so it is absent and said so.
+ *   {
+ *     "AGNibVersion"          : 1,
+ *     "AGNibTopLevelObjects"  : [ <object>, ... ],
+ *     "AGNibConnections"      : [ <connection>, ... ]
+ *   }
+ *
+ *   * A TOP-LEVEL OBJECT is a window or a view that the nib owns: the objects a caller receives in the
+ *     `topLevelObjects` out-parameter, in the order the file lists them.
+ *   * A CONNECTION is one of two dictionaries, and this is the whole connection vocabulary:
+ *
+ *       OUTLET  { "AGNibConnectionSource"      : <object>,
+ *                 "AGNibConnectionKeyPath"     : "delegate",
+ *                 "AGNibConnectionDestination" : <object> | "NSNibFileOwner" }
+ *
+ *       ACTION  { "AGNibConnectionSource"      : <control>,
+ *                 "AGNibConnectionAction"      : "doTheThing:",
+ *                 "AGNibConnectionDestination" : <object> | "NSNibFileOwner" }
+ *
+ *     An OUTLET is applied with `-setValue:forKeyPath:` on the source. An ACTION is applied as the pair
+ *     `-setTarget:`/`-setAction:` on the source, the destination being the target. `"NSNibFileOwner"` is the
+ *     PLACEHOLDER for the owner handed to `-instantiateNibWithOwner:topLevelObjects:` — the owner is not in the
+ *     archive, so it is named rather than encoded, which is the same reason Apple's nib has a file's owner.
+ *
+ * **IDENTITY IS THE REASON CONNECTIONS ARE SEPARATE FROM THE OBJECTS RATHER THAN A PROPERTY ON THEM.** A connection
+ * names two objects, and `NSKeyedArchiver` writes an object reachable twice ONCE; so a connection's source and
+ * destination are the same table entries the top-level objects use, and a graph where a control's target is also a
+ * top-level object decodes to one object, not two. That is also why a CONTROL'S TARGET IS NOT ARCHIVED AS A VALUE:
+ * a target is either the file's owner (absent from the archive) or another object in it, and both cases are a
+ * connection. `NSCell`'s target is therefore not encoded, and a nib that wants one says so with an ACTION
+ * connection.
+ *
+ * ============================ THE RULES THE READER KEEPS ============================
+ *
+ * 1. SECURE DECODING IS ON AND THE ALLOW-LIST IS THIS CLASS'S. The archive names classes, and decoding an archive
+ *    of class names into a live process is the classic remote-code-execution shape — `NSCoding.h` records that the
+ *    enforcement used to be missing, and `NSKeyedUnarchiver` now refuses a class that does not claim
+ *    `NSSecureCoding` or is not in the allowed set, BEFORE it is instantiated. `+supportedClasses` is the set this
+ *    reader passes, so a design file from outside the project cannot name a class this tree did not agree to build.
+ *    Every class in that set conforms to `NSSecureCoding` and every one of them implements BOTH coding methods
+ *    itself — see rule 3.
+ * 2. AN UNKNOWN KEY IS IGNORED, AND A MISSING ONE LEAVES THE CLASS'S OWN DEFAULT. That is what makes the format
+ *    forward-compatible in the direction that matters: a file written by a newer tree is read by an older one, with
+ *    the properties that older tree does not know still at their defaults. It is NOT backwards-compatible — a file
+ *    that needs a newer class will hit rule 3's census when the older tree tries to instantiate it.
+ * 3. A CLASS THAT INHERITS CODING MAY LOSE STATE, AND THE READER MEASURES RATHER THAN ASSUMES. `-initWithCoder:` is
+ *    inherited, so an `NSButtonCell` whose class forgot to implement it decodes through `NSCell`'s — silently, with
+ *    the button's own ivars at their defaults. That is the drift trap this format has to survive, and the measurement
+ *    is `class_getInstanceSize`: a subclass that adds NO instance storage has nothing an inherited method can drop and
+ *    is accepted (a plain `NSView` subclass that exists to be one thing on screen is a legitimate design class), while
+ *    a subclass that adds storage and inherits its coding is REFUSED. `+classesInheritingCoding` answers the classes
+ *    on the allow-list that fail that measurement, and `-instantiateNibWithOwner:topLevelObjects:` refuses an archive
+ *    that NAMES one rather than decoding it into a half-empty object.
+ * 4. NOTHING RUNTIME IS ARCHIVED. A view's window, superview and cursor rects, a window's surface and framebuffer,
+ *    a cell's control view, a menu item's parent menu: each is state of a LIVE OBJECT GRAPH and not of a design. A
+ *    nib that carried them would resurrect pointers into a process that no longer exists. The classes' coding
+ *    methods encode their DESIGN properties and say so where they do it.
  */
+
 #ifndef APPKIT_NSNIB_H
 #define APPKIT_NSNIB_H
 
-#import <Foundation/NSArray.h>
-#import <Foundation/NSBundle.h>
-#import <Foundation/NSDictionary.h>
-#import <Foundation/NSObject.h>
-#import <Foundation/NSString.h>
-#import <Foundation/NSURL.h>
+#import <Foundation/Foundation.h>
 
 NS_ASSUME_NONNULL_BEGIN
+
+/* THE ROOT'S THREE KEYS, whose values are their own names — this tree's rule wherever a name is published. */
+extern NSString * const NSNibFormatVersionKey;		/* "AGNibVersion" */
+extern NSString * const NSNibTopLevelObjectsKey;	/* "AGNibTopLevelObjects" */
+extern NSString * const NSNibConnectionsKey;		/* "AGNibConnections" */
+
+/* AND A CONNECTION'S FOUR, of which an outlet uses three and an action uses three. */
+extern NSString * const NSNibConnectionSourceKey;	/* "AGNibConnectionSource" */
+extern NSString * const NSNibConnectionKeyPathKey;	/* "AGNibConnectionKeyPath" */
+extern NSString * const NSNibConnectionActionKey;	/* "AGNibConnectionAction" */
+extern NSString * const NSNibConnectionDestinationKey;	/* "AGNibConnectionDestination" */
+
+/* THE OWNER'S PLACEHOLDER. A file that wires a control's action to its owner writes this where the target would be,
+ * because the owner is the caller's object and not the archive's. Its value is a string rather than an object so that
+ * a decoder can recognize it before it tries to send it a message. */
+extern NSString * const NSNibFileOwner;
 
 @interface NSNib : NSObject
 {
@@ -48,29 +111,74 @@ NS_ASSUME_NONNULL_BEGIN
 }
 
 /* THE TWO WAYS IN. Both answer nil for a source they cannot even RECORD — a nil URL or a nil name — which is
- * stricter than Apple's nonnull spelling and is what the implementation accepts; the header says what it does
- * rather than what Apple's does. */
+ * stricter than Apple's nonnull spelling and is what the implementation accepts. */
 - (nullable instancetype)initWithContentsOfURL:(nullable NSURL *)nibFileURL;
 - (nullable instancetype)initWithNibNamed:(nullable NSString *)nibName bundle:(nullable NSBundle *)bundle;
 
-/* AND THE TWO DOORS THAT WOULD DECODE ONE — REFUSED BY NAME, answering NO, for the reason the class note gives.
- * `-instantiateNibWithOwner:topLevelObjects:` does not even write through its out-parameter when it refuses:
- * a caller's array is left exactly as it was rather than set to an empty one that would read as "instantiated,
- * nothing in it". */
-- (BOOL)instantiateNibWithExternalNameTable:(NSDictionary *)nameTable;
-/* AND THE OUT-PARAMETER IS ANNOTATED AT BOTH LEVELS, which an `NSArray **` requires and Apple's own era
- * header — written before nullability — leaves bare: the ARRAY POINTER may be nil and the array it would
- * receive is nil until a decode succeeds, which here is never. */
+/* ============================ READING ============================ */
+
+/* THE DOOR THAT BUILDS THE GRAPH, AND IT IS THE ONE APPLE HAS. On success the top-level objects are written through
+ * the out-parameter, in file order, and the connections have been applied; on FAILURE the out-parameter is left
+ * EXACTLY AS IT WAS rather than set to an empty array that would read as "instantiated, nothing in it". An owner may
+ * be nil, in which case a connection naming the file's owner is REFUSED — a nib that wires its owner's action to
+ * nothing is an error, not a no-op. */
 - (BOOL)instantiateNibWithOwner:(nullable id)owner
                topLevelObjects:(NSArray * _Nullable * _Nullable)topLevelObjects;
 
-@end
+/* AND APPLE'S OLDER NAME TABLE FORM, kept because it is the door some callers use. It reads `NSNibOwner` out of the
+ * table, and fills `NSNibTopLevelObjects` when that value is a mutable array. A table whose top-level slot is not a
+ * mutable array is refused rather than silently ignored. */
+- (BOOL)instantiateNibWithExternalNameTable:(NSDictionary *)nameTable;
 
-/* THE TWO KEYS A NAME TABLE CARRIES, whose values are their own names — this tree's rule wherever Apple
- * publishes a symbol and no string. `NSNibOwner` is the object the nib's connections are made TO, and
- * `NSNibTopLevelObjects` is what a name table receives them IN. */
+/* THE TWO KEYS A NAME TABLE CARRIES, whose values are their own names. `NSNibOwner` is the object the nib's
+ * connections are made TO, and `NSNibTopLevelObjects` is what a name table receives them IN. */
 extern NSString *NSNibOwner;
 extern NSString *NSNibTopLevelObjects;
+
+/* ============================ WRITING ============================ */
+
+/* THE FORMAT'S VERSION THIS TREE WRITES AND READS. */
++ (NSInteger)formatVersion;
+
+/* **THE READER'S ALLOW-LIST, AND A WRITER'S CONTRACT WITH ITSELF.** Every class this set names conforms to
+ * `NSSecureCoding` and implements both coding methods; rule 3 above is the check that stays true. A design file that
+ * names a class outside this set is refused before instantiation, which is the whole security story.
+ *
+ * **A DESIGN FILE'S CLASSES ARE NOT ALL APPKIT'S, which is why the list is EXTENSIBLE RATHER THAN CLOSED.** A nib names
+ * the APPLICATION's view subclasses — that is the whole point of a nib — and an application registers those with
+ * `+registerDesignClass:` at launch. Registration is where rule 3 is enforced: a class that inherits its coding, or
+ * that does not claim `NSSecureCoding`, is REFUSED at registration rather than at read time, so a program learns about
+ * the mistake once rather than every time a file names the class. */
++ (NSSet *)supportedClasses;
+
+/* REGISTERS ONE OF THE APPLICATION'S OWN DESIGN CLASSES. Answers NO — and registers nothing — for a class that
+ * inherits either coding method or does not conform to `NSSecureCoding`, which is the same gate the AppKit's own list is
+ * held to. Answers YES for a class already registered. */
++ (BOOL)registerDesignClass:(Class)cls;
+
+/* AND WHETHER A CLASS IS ON THE ALLOW-LIST, asked before a caller bothers to archive with it. */
++ (BOOL)isSupportedClass:(Class)cls;
+
+/* **THE CENSUS THAT KEEPS RULE 3 HONEST.** Answers the classes on the allow-list that add instance storage of their own
+ * yet inherit a coding method instead of implementing it — the classes that would decode into a half-empty object. An
+ * empty set is the only healthy answer, and the round-trip test asserts it. */
++ (NSSet *)classesInheritingCoding;
+
+/* THE WRITER. Builds the three-key root from the objects and connections and answers the archive's bytes; nil for a
+ * nil or empty object list, because a nib that owns nothing is not a nib. */
++ (nullable NSData *)archivedDataWithTopLevelObjects:(NSArray *)objects
+                                         connections:(nullable NSArray *)connections;
+
+/* AND THE TWO CONNECTION BUILDERS, so that a caller does not spell the four keys by hand. `destination` may be
+ * `NSNibFileOwner` (the string) to name the file's owner. */
++ (NSDictionary *)outletConnectionFrom:(id)source
+				    to:(nullable id)destination
+			     keyPath:(NSString *)keyPath;
++ (NSDictionary *)actionConnectionFrom:(id)source
+				    to:(nullable id)destination
+				action:(NSString *)selectorName;
+
+@end
 
 NS_ASSUME_NONNULL_END
 

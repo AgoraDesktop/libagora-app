@@ -46,7 +46,7 @@
 
 NS_ASSUME_NONNULL_BEGIN
 
-@interface NSMenuItem : NSObject
+@interface NSMenuItem : NSObject <NSSecureCoding>
 {
 	NSString *_title;			/* RETAINED (a copy of what was set) */
 	NSAttributedString *_attributedTitle;	/* RETAINED (a copy) */

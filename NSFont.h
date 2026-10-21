@@ -114,7 +114,7 @@ extern NSFontTextStyle NSFontTextStyleTitle3;
  * too, because they come from the engine and the engine can have nothing to say. */
 NS_ASSUME_NONNULL_BEGIN
 
-@interface NSFont : NSObject
+@interface NSFont : NSObject <NSSecureCoding>
 {
 	@public
 	/* **THE SUBSTRATE, AND IT IS PRIVATE — WHICH IS THE WHOLE OF THE BRIDGE** (the `@public` is for this

@@ -599,6 +599,246 @@ static void fn_ag_frame(void *context, uint32_t time_ms)
 
 @implementation NSWindow
 
+/* ============================================================================================
+ * ARCHIVING: THE DESIGN SUBSET OF A WINDOW, AND THE LONGER LIST OF THINGS THAT ARE NOT IN IT.
+ * ============================================================================================ */
+
+/* **A WINDOW HAS 116 IVARS AND ABOUT THIRTY OF THEM ARE A DESIGN.** The rest are the surface, the pixel buffer, the
+ * compositor handle, the chrome drag and resize state, the event queue, the sheet linkage and the two cached click
+ * samples — all state of a window that is RUNNING, none of it a property a design file can state. They are absent by
+ * construction rather than by omission, and that is why a decoded window opens its OWN surface instead of pointing at
+ * the archiver's address space.
+ *
+ * **WHAT IS NOT ARCHIVED AND HAS A NAME:** `_delegate` (an object with behaviour, not a design), `_windowController`
+ * (the controller owns the window, not the other way round), `_firstResponder` and `_initialFirstResponder` (a focus
+ * RING is a runtime walk and a first responder is who has the keyboard NOW), `_toolbar` (a toolbar's items are a
+ * delegate's answers), `_fieldEditor` (owned by the window and re-made on demand), and `_documentEdited` (a fact about a
+ * document's saved state, which a freshly decoded window has not got). `_delegate` in particular is the one a nib
+ * normally DOES wire — and it is wired as a CONNECTION, which is the vocabulary `NSNib.h` publishes. */
+static NSString * const AGCoderWindowFrameKey = @"frame";
+static NSString * const AGCoderWindowStyleMaskKey = @"styleMask";
+static NSString * const AGCoderWindowBackingKey = @"backingType";
+static NSString * const AGCoderWindowTitleKey = @"title";
+static NSString * const AGCoderWindowMinSizeKey = @"minSize";
+static NSString * const AGCoderWindowMaxSizeKey = @"maxSize";
+static NSString * const AGCoderWindowContentMinSizeKey = @"contentMinSize";
+static NSString * const AGCoderWindowContentMaxSizeKey = @"contentMaxSize";
+static NSString * const AGCoderWindowLevelKey = @"level";
+static NSString * const AGCoderWindowHasShadowKey = @"hasShadow";
+static NSString * const AGCoderWindowOpaqueKey = @"opaque";
+static NSString * const AGCoderWindowAlphaKey = @"alphaValue";
+static NSString * const AGCoderWindowShowsResizeKey = @"showsResizeIndicator";
+static NSString * const AGCoderWindowResizeIncrementsKey = @"resizeIncrements";
+static NSString * const AGCoderWindowAspectRatioKey = @"aspectRatio";
+static NSString * const AGCoderWindowContentIncrementsKey = @"contentResizeIncrements";
+static NSString * const AGCoderWindowContentAspectKey = @"contentAspectRatio";
+static NSString * const AGCoderWindowReleasedWhenClosedKey = @"releasedWhenClosed";
+static NSString * const AGCoderWindowHidesOnDeactivateKey = @"hidesOnDeactivate";
+static NSString * const AGCoderWindowExcludedFromWindowsMenuKey = @"excludedFromWindowsMenu";
+static NSString * const AGCoderWindowFrameAutosaveKey = @"frameAutosaveName";
+static NSString * const AGCoderWindowRepresentedURLKey = @"representedURL";
+static NSString * const AGCoderWindowRepresentedFilenameKey = @"representedFilename";
+static NSString * const AGCoderWindowCollectionBehaviorKey = @"collectionBehavior";
+static NSString * const AGCoderWindowAcceptsMouseMovedKey = @"acceptsMouseMovedEvents";
+static NSString * const AGCoderWindowAutodisplayKey = @"autodisplay";
+static NSString * const AGCoderWindowIgnoresMouseKey = @"ignoresMouseEvents";
+static NSString * const AGCoderWindowMovableKey = @"movable";
+static NSString * const AGCoderWindowMovableByBackgroundKey = @"movableByWindowBackground";
+static NSString * const AGCoderWindowWorksWhenModalKey = @"worksWhenModal";
+static NSString * const AGCoderWindowFloatingPanelKey = @"floatingPanel";
+static NSString * const AGCoderWindowOneShotKey = @"oneShot";
+static NSString * const AGCoderWindowShowsToolbarButtonKey = @"showsToolbarButton";
+static NSString * const AGCoderWindowPreservesContentKey = @"preservesContentDuringLiveResize";
+static NSString * const AGCoderWindowBackgroundColorKey = @"backgroundColor";
+static NSString * const AGCoderWindowContentViewKey = @"contentView";
+
+- (void)encodeWithCoder:(NSCoder *)aCoder
+{
+	[super encodeWithCoder:aCoder];
+
+	[aCoder encodeRect:_frame forKey:AGCoderWindowFrameKey];
+	[aCoder encodeInteger:(NSInteger)_styleMask forKey:AGCoderWindowStyleMaskKey];
+	[aCoder encodeInteger:(NSInteger)_backing forKey:AGCoderWindowBackingKey];
+	[aCoder encodeObject:_title forKey:AGCoderWindowTitleKey];
+	[aCoder encodeSize:_minSize forKey:AGCoderWindowMinSizeKey];
+	[aCoder encodeSize:_maxSize forKey:AGCoderWindowMaxSizeKey];
+	[aCoder encodeSize:_contentMinSize forKey:AGCoderWindowContentMinSizeKey];
+	[aCoder encodeSize:_contentMaxSize forKey:AGCoderWindowContentMaxSizeKey];
+	[aCoder encodeInteger:_level forKey:AGCoderWindowLevelKey];
+	[aCoder encodeBool:_hasShadow forKey:AGCoderWindowHasShadowKey];
+	[aCoder encodeBool:_opaque forKey:AGCoderWindowOpaqueKey];
+	[aCoder encodeDouble:(double)_alphaValue forKey:AGCoderWindowAlphaKey];
+	[aCoder encodeBool:_showsResizeIndicator forKey:AGCoderWindowShowsResizeKey];
+	[aCoder encodeSize:_resizeIncrements forKey:AGCoderWindowResizeIncrementsKey];
+	[aCoder encodeSize:_aspectRatio forKey:AGCoderWindowAspectRatioKey];
+	[aCoder encodeSize:_contentResizeIncrements forKey:AGCoderWindowContentIncrementsKey];
+	[aCoder encodeSize:_contentAspectRatio forKey:AGCoderWindowContentAspectKey];
+	[aCoder encodeBool:_releasedWhenClosed forKey:AGCoderWindowReleasedWhenClosedKey];
+	[aCoder encodeBool:_hidesOnDeactivate forKey:AGCoderWindowHidesOnDeactivateKey];
+	[aCoder encodeBool:_excludedFromWindowsMenu forKey:AGCoderWindowExcludedFromWindowsMenuKey];
+	[aCoder encodeObject:_frameAutosaveName forKey:AGCoderWindowFrameAutosaveKey];
+	[aCoder encodeObject:_representedURL forKey:AGCoderWindowRepresentedURLKey];
+	[aCoder encodeObject:_representedFilename forKey:AGCoderWindowRepresentedFilenameKey];
+	[aCoder encodeInteger:(NSInteger)_cg_collectionBehavior forKey:AGCoderWindowCollectionBehaviorKey];
+	[aCoder encodeBool:_acceptsMouseMoved forKey:AGCoderWindowAcceptsMouseMovedKey];
+	[aCoder encodeBool:_autodisplay forKey:AGCoderWindowAutodisplayKey];
+	[aCoder encodeBool:_ignoresMouseEvents forKey:AGCoderWindowIgnoresMouseKey];
+	[aCoder encodeBool:_cg_movableByBackground forKey:AGCoderWindowMovableByBackgroundKey];
+	[aCoder encodeBool:_worksWhenModal forKey:AGCoderWindowWorksWhenModalKey];
+	[aCoder encodeBool:_floatingPanel forKey:AGCoderWindowFloatingPanelKey];
+	[aCoder encodeBool:_oneShot forKey:AGCoderWindowOneShotKey];
+	[aCoder encodeBool:_showsToolbarButton forKey:AGCoderWindowShowsToolbarButtonKey];
+	[aCoder encodeBool:_preservesContentDuringLiveResize forKey:AGCoderWindowPreservesContentKey];
+	[aCoder encodeObject:_backgroundColor forKey:AGCoderWindowBackgroundColorKey];
+	[aCoder encodeObject:_contentView forKey:AGCoderWindowContentViewKey];
+}
+
+- (instancetype)initWithCoder:(NSCoder *)aDecoder
+{
+	NSRect frame;
+	NSUInteger mask = 0;
+	NSBackingStoreType backing = NSBackingStoreBuffered;
+
+	/* **THE DESIGNATED INITIALISER RUNS FIRST, AND THAT IS DELIBERATE.** `-initWithContentRect:styleMask:backing:defer:`
+	 * is where a window's defaults, its surface and its content view are made — decode-time must not re-implement that,
+	 * because a second copy is a second place for the two to disagree. The archived properties are applied ON TOP, which
+	 * is also why the frame is set twice: once as the content rect the initialiser needs, once as the frame the file
+	 * actually said. */
+	frame = [aDecoder decodeRectForKey:AGCoderWindowFrameKey];
+	if ([aDecoder containsValueForKey:AGCoderWindowStyleMaskKey]) {
+		mask = (NSUInteger)[aDecoder decodeIntegerForKey:AGCoderWindowStyleMaskKey];
+	}
+	if ([aDecoder containsValueForKey:AGCoderWindowBackingKey]) {
+		backing = (NSBackingStoreType)[aDecoder decodeIntegerForKey:AGCoderWindowBackingKey];
+	}
+	self = [self initWithContentRect:frame styleMask:mask backing:backing defer:NO];
+	if (self == nil) {
+		return nil;
+	}
+	/* THE RESPONDER HALF. `-initWithContentRect:…` chains to `NSResponder -init`, which does not run a decode, so the
+	 * archived interface style and context menu are applied here rather than being silently defaulted. */
+	{
+		NSResponder *responder = [[NSResponder alloc] initWithCoder:aDecoder];
+
+		if (responder != nil) {
+			[self setInterfaceStyle:[responder interfaceStyle]];
+			[self setMenu:[responder menu]];
+			[responder release];
+		}
+	}
+	[self setFrame:frame display:NO];
+
+	if ([aDecoder containsValueForKey:AGCoderWindowTitleKey]) {
+		[self setTitle:[aDecoder decodeObjectForKey:AGCoderWindowTitleKey]];
+	}
+	if ([aDecoder containsValueForKey:AGCoderWindowMinSizeKey]) {
+		_minSize = [aDecoder decodeSizeForKey:AGCoderWindowMinSizeKey];
+	}
+	if ([aDecoder containsValueForKey:AGCoderWindowMaxSizeKey]) {
+		_maxSize = [aDecoder decodeSizeForKey:AGCoderWindowMaxSizeKey];
+	}
+	if ([aDecoder containsValueForKey:AGCoderWindowContentMinSizeKey]) {
+		_contentMinSize = [aDecoder decodeSizeForKey:AGCoderWindowContentMinSizeKey];
+	}
+	if ([aDecoder containsValueForKey:AGCoderWindowContentMaxSizeKey]) {
+		_contentMaxSize = [aDecoder decodeSizeForKey:AGCoderWindowContentMaxSizeKey];
+	}
+	if ([aDecoder containsValueForKey:AGCoderWindowLevelKey]) {
+		_level = [aDecoder decodeIntegerForKey:AGCoderWindowLevelKey];
+	}
+	if ([aDecoder containsValueForKey:AGCoderWindowHasShadowKey]) {
+		_hasShadow = [aDecoder decodeBoolForKey:AGCoderWindowHasShadowKey];
+	}
+	if ([aDecoder containsValueForKey:AGCoderWindowOpaqueKey]) {
+		_opaque = [aDecoder decodeBoolForKey:AGCoderWindowOpaqueKey];
+	}
+	if ([aDecoder containsValueForKey:AGCoderWindowAlphaKey]) {
+		_alphaValue = (CGFloat)[aDecoder decodeDoubleForKey:AGCoderWindowAlphaKey];
+	}
+	if ([aDecoder containsValueForKey:AGCoderWindowShowsResizeKey]) {
+		_showsResizeIndicator = [aDecoder decodeBoolForKey:AGCoderWindowShowsResizeKey];
+	}
+	if ([aDecoder containsValueForKey:AGCoderWindowResizeIncrementsKey]) {
+		_resizeIncrements = [aDecoder decodeSizeForKey:AGCoderWindowResizeIncrementsKey];
+	}
+	if ([aDecoder containsValueForKey:AGCoderWindowAspectRatioKey]) {
+		_aspectRatio = [aDecoder decodeSizeForKey:AGCoderWindowAspectRatioKey];
+	}
+	if ([aDecoder containsValueForKey:AGCoderWindowContentIncrementsKey]) {
+		_contentResizeIncrements = [aDecoder decodeSizeForKey:AGCoderWindowContentIncrementsKey];
+	}
+	if ([aDecoder containsValueForKey:AGCoderWindowContentAspectKey]) {
+		_contentAspectRatio = [aDecoder decodeSizeForKey:AGCoderWindowContentAspectKey];
+	}
+	if ([aDecoder containsValueForKey:AGCoderWindowReleasedWhenClosedKey]) {
+		_releasedWhenClosed = [aDecoder decodeBoolForKey:AGCoderWindowReleasedWhenClosedKey];
+	}
+	if ([aDecoder containsValueForKey:AGCoderWindowHidesOnDeactivateKey]) {
+		_hidesOnDeactivate = [aDecoder decodeBoolForKey:AGCoderWindowHidesOnDeactivateKey];
+	}
+	if ([aDecoder containsValueForKey:AGCoderWindowExcludedFromWindowsMenuKey]) {
+		_excludedFromWindowsMenu = [aDecoder decodeBoolForKey:AGCoderWindowExcludedFromWindowsMenuKey];
+	}
+	if ([aDecoder containsValueForKey:AGCoderWindowFrameAutosaveKey]) {
+		_frameAutosaveName = [[aDecoder decodeObjectForKey:AGCoderWindowFrameAutosaveKey] copy];
+	}
+	if ([aDecoder containsValueForKey:AGCoderWindowRepresentedURLKey]) {
+		_representedURL = [[aDecoder decodeObjectForKey:AGCoderWindowRepresentedURLKey] retain];
+	}
+	if ([aDecoder containsValueForKey:AGCoderWindowRepresentedFilenameKey]) {
+		_representedFilename = [[aDecoder decodeObjectForKey:AGCoderWindowRepresentedFilenameKey] copy];
+	}
+	if ([aDecoder containsValueForKey:AGCoderWindowCollectionBehaviorKey]) {
+		_cg_collectionBehavior = (NSUInteger)[aDecoder decodeIntegerForKey:AGCoderWindowCollectionBehaviorKey];
+	}
+	if ([aDecoder containsValueForKey:AGCoderWindowAcceptsMouseMovedKey]) {
+		_acceptsMouseMoved = [aDecoder decodeBoolForKey:AGCoderWindowAcceptsMouseMovedKey];
+	}
+	if ([aDecoder containsValueForKey:AGCoderWindowAutodisplayKey]) {
+		_autodisplay = [aDecoder decodeBoolForKey:AGCoderWindowAutodisplayKey];
+	}
+	if ([aDecoder containsValueForKey:AGCoderWindowIgnoresMouseKey]) {
+		_ignoresMouseEvents = [aDecoder decodeBoolForKey:AGCoderWindowIgnoresMouseKey];
+	}
+	if ([aDecoder containsValueForKey:AGCoderWindowMovableByBackgroundKey]) {
+		_cg_movableByBackground = [aDecoder decodeBoolForKey:AGCoderWindowMovableByBackgroundKey];
+		_cg_movableByBackgroundSet = YES;
+	}
+	if ([aDecoder containsValueForKey:AGCoderWindowWorksWhenModalKey]) {
+		_worksWhenModal = [aDecoder decodeBoolForKey:AGCoderWindowWorksWhenModalKey];
+	}
+	if ([aDecoder containsValueForKey:AGCoderWindowFloatingPanelKey]) {
+		_floatingPanel = [aDecoder decodeBoolForKey:AGCoderWindowFloatingPanelKey];
+	}
+	if ([aDecoder containsValueForKey:AGCoderWindowOneShotKey]) {
+		_oneShot = [aDecoder decodeBoolForKey:AGCoderWindowOneShotKey];
+	}
+	if ([aDecoder containsValueForKey:AGCoderWindowShowsToolbarButtonKey]) {
+		_showsToolbarButton = [aDecoder decodeBoolForKey:AGCoderWindowShowsToolbarButtonKey];
+	}
+	if ([aDecoder containsValueForKey:AGCoderWindowPreservesContentKey]) {
+		_preservesContentDuringLiveResize = [aDecoder decodeBoolForKey:AGCoderWindowPreservesContentKey];
+	}
+	if ([aDecoder containsValueForKey:AGCoderWindowBackgroundColorKey]) {
+		_backgroundColor = [[aDecoder decodeObjectForKey:AGCoderWindowBackgroundColorKey] retain];
+	}
+	/* AND THE CONTENT VIEW LAST, THROUGH `-setContentView:`, because that door is what puts it on screen and hands it the
+	 * window — the same reason a view's children go through `-addSubview:`. */
+	if ([aDecoder containsValueForKey:AGCoderWindowContentViewKey]) {
+		id view = [aDecoder decodeObjectForKey:AGCoderWindowContentViewKey];
+
+		if ([view isKindOfClass:[NSView class]]) {
+			[self setContentView:view];
+		}
+	}
+	return self;
+}
+
++ (BOOL)supportsSecureCoding
+{
+	return YES;
+}
+
 /* **THE CONNECTION THIS PROCESS USES, ASKED FOR RATHER THAN MADE AGAIN.** A Wayland client has ONE connection to
  * its compositor and this file is where it is made. Anything else that needs to ASK THE SERVER A QUESTION — the
  * application asking where its OWN menus may begin — has to use the same one: a second `AGWindowServerConnect`

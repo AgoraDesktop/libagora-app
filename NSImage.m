@@ -37,6 +37,44 @@ NSString *NSImageNameGoLeftTemplate = @"NSImageNameGoLeftTemplate";
 
 @implementation NSImage
 
+/* ============================================================================================
+ * ARCHIVING: AN IMAGE IS A REFERENCE BY NAME, NOT ITS PIXELS.
+ * ============================================================================================ */
+
+/* **A DESIGN FILE NAMES AN IMAGE AND DOES NOT CARRY IT.** The alternative — archiving the representations and their
+ * bytes — would turn a text-mergeable design into a binary blob and duplicate what `+imageNamed:` already resolves, so
+ * what is written is the NAME and what is rebuilt is `+imageNamed:`'s answer. An image with no name is one nothing can
+ * look up, and it decodes as the empty image this class's `-init` makes rather than as a failure of the whole nib. */
+static NSString * const AGCoderImageNameKey = @"name";
+
+- (void)encodeWithCoder:(NSCoder *)aCoder
+{
+	[aCoder encodeObject:[self name] forKey:AGCoderImageNameKey];
+}
+
+- (instancetype)initWithCoder:(NSCoder *)aDecoder
+{
+	NSString *name = [aDecoder decodeObjectForKey:AGCoderImageNameKey];
+	NSImage *named = nil;
+
+	if ([name isKindOfClass:[NSString class]]) {
+		named = [NSImage imageNamed:name];
+	}
+	if (named != nil) {
+		return [named retain];
+	}
+	self = [super init];
+	if (self != nil && [name isKindOfClass:[NSString class]]) {
+		[self setName:name];
+	}
+	return self;
+}
+
++ (BOOL)supportsSecureCoding
+{
+	return YES;
+}
+
 /* THE NAMED IMAGES: the same values the header declares, defined here because a constant is a
  * definition and this tree's rule is that nothing is declared without one. THE COMPOSITING OPERATIONS
  * ARE NOT HERE — NSGraphicsContext.h declares and defines them. */

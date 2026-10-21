@@ -80,7 +80,7 @@ enum {
 };
 typedef NSUInteger NSInterfaceStyle;
 
-@interface NSResponder : NSObject
+@interface NSResponder : NSObject <NSSecureCoding>
 {
 	/* NOT RETAINED, and it cannot be: a chain whose links retained each other would be a cycle, and a view
 	 * hierarchy would leak its root. Apple's is not retained either. */

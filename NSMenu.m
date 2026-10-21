@@ -73,6 +73,79 @@ NSString *NSMenuDidEndTrackingNotification = @"NSMenuDidEndTrackingNotification"
 
 @implementation NSMenu
 
+/* ============================================================================================
+ * ARCHIVING: THE ITEMS, AND THE BACK-LINKS THAT ARE NOT THEM.
+ * ============================================================================================ */
+
+/* **AN ITEM'S `_menu` IS A BACK-LINK, SO THE MENU ARCHIVES ITS ITEMS AND NEVER THE OTHER WAY ROUND.** `-addItem:`
+ * sets each item's `_menu` on the way in, which means the link is rebuilt by the container — the same rule a view's
+ * superview follows. What is NOT archived: `_tracking`, `_menuView`, `_trackingWindow`, `_highlightedItem`,
+ * `_openSubmenu`, `_dismissedAt` and the rest of the tracking state, because a menu that is not open has none of it. */
+static NSString * const AGCoderMenuTitleKey = @"title";
+static NSString * const AGCoderMenuItemsKey = @"items";
+static NSString * const AGCoderMenuMinimumWidthKey = @"minimumWidth";
+static NSString * const AGCoderMenuShowsStateColumnKey = @"showsStateColumn";
+static NSString * const AGCoderMenuAutoenablesKey = @"autoenablesItems";
+static NSString * const AGCoderMenuFontKey = @"font";
+static NSString * const AGCoderMenuChangedMessagesKey = @"menuChangedMessagesEnabled";
+
+- (void)encodeWithCoder:(NSCoder *)aCoder
+{
+	[aCoder encodeObject:_title forKey:AGCoderMenuTitleKey];
+	[aCoder encodeObject:_items forKey:AGCoderMenuItemsKey];
+	[aCoder encodeDouble:(double)_minimumWidth forKey:AGCoderMenuMinimumWidthKey];
+	[aCoder encodeBool:_showsStateColumn forKey:AGCoderMenuShowsStateColumnKey];
+	[aCoder encodeBool:_autoenablesItems forKey:AGCoderMenuAutoenablesKey];
+	[aCoder encodeObject:_font forKey:AGCoderMenuFontKey];
+	[aCoder encodeBool:_menuChangedMessagesEnabled forKey:AGCoderMenuChangedMessagesKey];
+}
+
+- (instancetype)initWithCoder:(NSCoder *)aDecoder
+{
+	NSString *title = [aDecoder decodeObjectForKey:AGCoderMenuTitleKey];
+
+	self = [self initWithTitle:([title isKindOfClass:[NSString class]]) ? title : @""];
+	if (self == nil) {
+		return nil;
+	}
+	/* THE ITEMS, IN FILE ORDER, THROUGH `-addItem:` — the door that sets each item's menu back-link. */
+	{
+		id items = [aDecoder decodeObjectForKey:AGCoderMenuItemsKey];
+		NSUInteger i;
+
+		if ([items isKindOfClass:[NSArray class]]) {
+			for (i = 0; i < [(NSArray *)items count]; i++) {
+				id item = [(NSArray *)items objectAtIndex:i];
+
+				if ([item isKindOfClass:[NSMenuItem class]]) {
+					[self addItem:item];
+				}
+			}
+		}
+	}
+	if ([aDecoder containsValueForKey:AGCoderMenuMinimumWidthKey]) {
+		_minimumWidth = (CGFloat)[aDecoder decodeDoubleForKey:AGCoderMenuMinimumWidthKey];
+	}
+	if ([aDecoder containsValueForKey:AGCoderMenuShowsStateColumnKey]) {
+		_showsStateColumn = [aDecoder decodeBoolForKey:AGCoderMenuShowsStateColumnKey];
+	}
+	if ([aDecoder containsValueForKey:AGCoderMenuAutoenablesKey]) {
+		_autoenablesItems = [aDecoder decodeBoolForKey:AGCoderMenuAutoenablesKey];
+	}
+	if ([aDecoder containsValueForKey:AGCoderMenuFontKey]) {
+		_font = [[aDecoder decodeObjectForKey:AGCoderMenuFontKey] retain];
+	}
+	if ([aDecoder containsValueForKey:AGCoderMenuChangedMessagesKey]) {
+		_menuChangedMessagesEnabled = [aDecoder decodeBoolForKey:AGCoderMenuChangedMessagesKey];
+	}
+	return self;
+}
+
++ (BOOL)supportsSecureCoding
+{
+	return YES;
+}
+
 - (instancetype)init
 {
 	return [self initWithTitle:@""];
@@ -1452,16 +1525,5 @@ static const CGFloat NSMenuStateColumnWidth = 20.0;
 	return NO;
 }
 
-/* ---- AND THE DECODER DOOR ---------------------------------------------------------------------- */
-
-- (nullable instancetype)initWithCoder:(NSCoder *)coder
-{
-	(void)coder;
-	/* SAME GROUND AS NSMenuItem's: Apple's key set for an archived menu is not published, and a guessed one is
-	 * a WRONG MENU rather than an unfinished door — a menu is a tree, so a guess is wrong in every row at once. */
-	fprintf(stderr, "APPKIT-REFUSE: -initWithCoder: needs Apple's published key set for an archived menu, and "
-			"this duplication has not got one. Build the menu in code instead\n");
-	return nil;
-}
 
 @end

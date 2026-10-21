@@ -194,6 +194,168 @@ static NSRect fn_intersect(NSRect a, NSRect b)
 
 @implementation NSView
 
+/* ============================================================================================
+ * ARCHIVING: THE DESIGN SUBSET OF A VIEW, AND THE LINE BETWEEN A DESIGN AND A LIVE TREE.
+ * ============================================================================================ */
+
+/* THE KEYS ARE PROPERTY NAMES, so that a design file's vocabulary is the public API and a reader can be checked
+ * against the header rather than against a dialect this file invented. */
+static NSString * const AGCoderFrameKey = @"frame";
+static NSString * const AGCoderHiddenKey = @"hidden";
+static NSString * const AGCoderTagKey = @"tag";
+static NSString * const AGCoderAutoresizingMaskKey = @"autoresizingMask";
+static NSString * const AGCoderAutoresizesSubviewsKey = @"autoresizesSubviews";
+static NSString * const AGCoderAlphaValueKey = @"alphaValue";
+static NSString * const AGCoderToolTipKey = @"toolTip";
+static NSString * const AGCoderTranslatesMaskKey = @"translatesAutoresizingMaskIntoConstraints";
+static NSString * const AGCoderPostsFrameChangesKey = @"postsFrameChangedNotifications";
+static NSString * const AGCoderPostsBoundsChangesKey = @"postsBoundsChangedNotifications";
+static NSString * const AGCoderFocusRingTypeKey = @"focusRingType";
+static NSString * const AGCoderHuggingHorizontalKey = @"contentHuggingPriorityHorizontal";
+static NSString * const AGCoderHuggingVerticalKey = @"contentHuggingPriorityVertical";
+static NSString * const AGCoderResistanceHorizontalKey = @"contentCompressionResistancePriorityHorizontal";
+static NSString * const AGCoderResistanceVerticalKey = @"contentCompressionResistancePriorityVertical";
+static NSString * const AGCoderSubviewsKey = @"subviews";
+
+/* **WHAT IS ARCHIVED IS THE DESIGN, AND WHAT IS NOT IS THE LIVE TREE.** A view's `_window`, `_superview` and
+ * `_nextKeyView` are BORROWED LINKS INTO A PROCESS: the parent rebuilds the first two when it adds a child, and the
+ * third is a CONNECTION (see `NSNib.h`) rather than a value. The cursor rects, the dirty region, the tracking areas,
+ * the registered drag types, the input context and every `_cg_` cache are state of a view that is RUNNING, and a
+ * decoded view has not run yet — so they are absent, and their absence is the reason a nib can be read into a fresh
+ * process at all.
+ *
+ * THE CONSTRAINTS ARE THE ONE DELIBERATE OMISSION WITH A NAMED CAUSE: `NSLayoutConstraint` has no coding methods yet,
+ * so a view's `_constraints` cannot be archived. What IS archived is `translatesAutoresizingMaskIntoConstraints` and
+ * the four priority integers, so a decoded view starts in the right MODE and the file's mask relationships hold; the
+ * equations themselves are the next unit, and they are omitted rather than half-written. */
+- (void)encodeWithCoder:(NSCoder *)aCoder
+{
+	/* THE CHAIN IS REAL NOW: `NSResponder` gained its coding methods, so a view's archive carries its interface style
+	 * and its context menu as well as the view state. */
+	[super encodeWithCoder:aCoder];
+
+	[aCoder encodeRect:_frame forKey:AGCoderFrameKey];
+	[aCoder encodeBool:_hidden forKey:AGCoderHiddenKey];
+	[aCoder encodeInteger:_tag forKey:AGCoderTagKey];
+	[aCoder encodeInteger:(NSInteger)_autoresizingMask forKey:AGCoderAutoresizingMaskKey];
+	[aCoder encodeBool:_autoresizesSubviews forKey:AGCoderAutoresizesSubviewsKey];
+	[aCoder encodeDouble:(double)_alphaValue forKey:AGCoderAlphaValueKey];
+	[aCoder encodeObject:_toolTip forKey:AGCoderToolTipKey];
+	[aCoder encodeBool:_translatesAutoresizingMaskIntoConstraints forKey:AGCoderTranslatesMaskKey];
+	[aCoder encodeBool:_postsFrameChangedNotifications forKey:AGCoderPostsFrameChangesKey];
+	[aCoder encodeBool:_postsBoundsChangedNotifications forKey:AGCoderPostsBoundsChangesKey];
+	[aCoder encodeInteger:(NSInteger)_focusRingType forKey:AGCoderFocusRingTypeKey];
+	[aCoder encodeDouble:(double)_contentHuggingPriority[0] forKey:AGCoderHuggingHorizontalKey];
+	[aCoder encodeDouble:(double)_contentHuggingPriority[1] forKey:AGCoderHuggingVerticalKey];
+	[aCoder encodeDouble:(double)_contentCompressionResistancePriority[0] forKey:AGCoderResistanceHorizontalKey];
+	[aCoder encodeDouble:(double)_contentCompressionResistancePriority[1] forKey:AGCoderResistanceVerticalKey];
+	/* AND THE CHILDREN, IN BACK-TO-FRONT ORDER — the array's order IS the drawing and hit-testing order, so it is
+	 * archived rather than sorted or derived. */
+	[aCoder encodeObject:_subviews forKey:AGCoderSubviewsKey];
+}
+
+- (instancetype)initWithCoder:(NSCoder *)aDecoder
+{
+	self = [super initWithCoder:aDecoder];
+	if (self == nil) {
+		return nil;
+	}
+	/* **THE DEFAULTS AN IVAR CANNOT GIVE, REPEATED HERE BECAUSE A DECODE DOES NOT RUN `-initWithFrame:`.** These are
+	 * Apple's defaults and the same ones the designated initialiser sets; a view read from a file and a view built in
+	 * code must start in the same state, or a nib would be a third semantics. */
+	_autoresizesSubviews = YES;
+	_postsBoundsChangedNotifications = YES;
+	_postsFrameChangedNotifications = YES;
+	_wantsDefaultClipping = YES;
+	_needsDisplay = YES;
+	_cursorRectsStale = YES;
+	_needsUpdateConstraints = YES;
+	_needsLayout = YES;
+	_contentHuggingPriority[0] = NSLayoutPriorityDefaultLow;
+	_contentHuggingPriority[1] = NSLayoutPriorityDefaultLow;
+	_contentCompressionResistancePriority[0] = NSLayoutPriorityDefaultHigh;
+	_contentCompressionResistancePriority[1] = NSLayoutPriorityDefaultHigh;
+
+	/* AND THEN WHATEVER THE FILE ACTUALLY SAID, which is why every one of these asks `-containsValueForKey:` first: an
+	 * ABSENT key must leave the default above standing, and that is what makes an older tree able to read a newer file
+	 * (see rule 2 in `NSNib.h`). */
+	if ([aDecoder containsValueForKey:AGCoderFrameKey]) {
+		_frame = [aDecoder decodeRectForKey:AGCoderFrameKey];
+	}
+	if ([aDecoder containsValueForKey:AGCoderHiddenKey]) {
+		_hidden = [aDecoder decodeBoolForKey:AGCoderHiddenKey];
+	}
+	if ([aDecoder containsValueForKey:AGCoderTagKey]) {
+		_tag = [aDecoder decodeIntegerForKey:AGCoderTagKey];
+	}
+	if ([aDecoder containsValueForKey:AGCoderAutoresizingMaskKey]) {
+		_autoresizingMask = (NSUInteger)[aDecoder decodeIntegerForKey:AGCoderAutoresizingMaskKey];
+	}
+	if ([aDecoder containsValueForKey:AGCoderAutoresizesSubviewsKey]) {
+		_autoresizesSubviews = [aDecoder decodeBoolForKey:AGCoderAutoresizesSubviewsKey];
+	}
+	if ([aDecoder containsValueForKey:AGCoderAlphaValueKey]) {
+		_alphaValue = (CGFloat)[aDecoder decodeDoubleForKey:AGCoderAlphaValueKey];
+	}
+	if ([aDecoder containsValueForKey:AGCoderToolTipKey]) {
+		_toolTip = [[aDecoder decodeObjectForKey:AGCoderToolTipKey] retain];
+	}
+	if ([aDecoder containsValueForKey:AGCoderTranslatesMaskKey]) {
+		_translatesAutoresizingMaskIntoConstraints =
+			[aDecoder decodeBoolForKey:AGCoderTranslatesMaskKey];
+	}
+	if ([aDecoder containsValueForKey:AGCoderPostsFrameChangesKey]) {
+		_postsFrameChangedNotifications = [aDecoder decodeBoolForKey:AGCoderPostsFrameChangesKey];
+	}
+	if ([aDecoder containsValueForKey:AGCoderPostsBoundsChangesKey]) {
+		_postsBoundsChangedNotifications = [aDecoder decodeBoolForKey:AGCoderPostsBoundsChangesKey];
+	}
+	if ([aDecoder containsValueForKey:AGCoderFocusRingTypeKey]) {
+		_focusRingType = (NSFocusRingType)[aDecoder decodeIntegerForKey:AGCoderFocusRingTypeKey];
+	}
+	if ([aDecoder containsValueForKey:AGCoderHuggingHorizontalKey]) {
+		_contentHuggingPriority[0] = (NSLayoutPriority)[aDecoder decodeDoubleForKey:AGCoderHuggingHorizontalKey];
+	}
+	if ([aDecoder containsValueForKey:AGCoderHuggingVerticalKey]) {
+		_contentHuggingPriority[1] = (NSLayoutPriority)[aDecoder decodeDoubleForKey:AGCoderHuggingVerticalKey];
+	}
+	if ([aDecoder containsValueForKey:AGCoderResistanceHorizontalKey]) {
+		_contentCompressionResistancePriority[0] =
+			(NSLayoutPriority)[aDecoder decodeDoubleForKey:AGCoderResistanceHorizontalKey];
+	}
+	if ([aDecoder containsValueForKey:AGCoderResistanceVerticalKey]) {
+		_contentCompressionResistancePriority[1] =
+			(NSLayoutPriority)[aDecoder decodeDoubleForKey:AGCoderResistanceVerticalKey];
+	}
+	/* THE BOUNDS ARE THE FRAME'S SIZE AT THE ORIGIN, which is what every view starts as; a scroll offset is runtime
+	 * state and is not in a design. */
+	_bounds = NSMakeRect(0.0, 0.0, _frame.size.width, _frame.size.height);
+
+	/* **THE CHILDREN GO THROUGH `-addSubview:` AND NOT INTO THE ARRAY DIRECTLY.** That door is what sets each child's
+	 * `_superview`, hands it the window and sends the two move calls, so a decoded tree is wired exactly as a built one
+	 * is — and its order is the file's order, because it is added in array order. */
+	{
+		id children = [aDecoder decodeObjectForKey:AGCoderSubviewsKey];
+		NSUInteger i;
+
+		if ([children isKindOfClass:[NSArray class]]) {
+			for (i = 0; i < [(NSArray *)children count]; i++) {
+				id child = [(NSArray *)children objectAtIndex:i];
+
+				if ([child isKindOfClass:[NSView class]]) {
+					[self addSubview:child];
+				}
+			}
+		}
+	}
+	return self;
+}
+
++ (BOOL)supportsSecureCoding
+{
+	return YES;
+}
+
 /* ---- THE VIEW'S THREE: ONE STORED, ONE ANSWERED, ONE COMPOSED ------------------------------------- */
 
 - (void)setAlphaValue:(CGFloat)viewAlpha

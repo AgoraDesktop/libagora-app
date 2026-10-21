@@ -35,6 +35,45 @@ NSString *NSFieldEditorUserInfoKey = @"NSFieldEditor";
 
 @implementation NSControl
 
+/* ============================================================================================
+ * ARCHIVING: THE CELL AND THE ONE FLAG THIS CLASS OWNS.
+ * ============================================================================================ */
+
+/* **A CONTROL ARCHIVES ITS CELL AND NOTHING ELSE, BECAUSE IT OWNS NOTHING ELSE.** Every value a design file can set
+ * on a control — the title, the value, the alignment, the target and the action — is the CELL's, and the doors above
+ * are forwards. A second copy here would be a second place for the two to disagree, which is the same rule the header
+ * states. The `-cg_hoverArea` is tracking state of a control that is running and is NOT archived. */
+static NSString * const AGCoderCellKey = @"cell";
+static NSString * const AGCoderIgnoresMultiClickKey = @"ignoresMultiClick";
+
+- (void)encodeWithCoder:(NSCoder *)aCoder
+{
+	[super encodeWithCoder:aCoder];
+	[aCoder encodeObject:_cell forKey:AGCoderCellKey];
+	[aCoder encodeBool:_ignoresMultiClick forKey:AGCoderIgnoresMultiClickKey];
+}
+
+- (instancetype)initWithCoder:(NSCoder *)aDecoder
+{
+	self = [super initWithCoder:aDecoder];
+	if (self != nil) {
+		/* **THE CELL GOES THROUGH `-setCell:` SO THAT IT IS TOLD WHERE IT IS DRAWN.** That door is what sets the cell's
+		 * `-controlView`, and a decoded cell with a nil control view would highlight itself into nothing. */
+		if ([aDecoder containsValueForKey:AGCoderCellKey]) {
+			[self setCell:[aDecoder decodeObjectForKey:AGCoderCellKey]];
+		}
+		if ([aDecoder containsValueForKey:AGCoderIgnoresMultiClickKey]) {
+			_ignoresMultiClick = [aDecoder decodeBoolForKey:AGCoderIgnoresMultiClickKey];
+		}
+	}
+	return self;
+}
+
++ (BOOL)supportsSecureCoding
+{
+	return YES;
+}
+
 - (instancetype)initWithFrame:(NSRect)frameRect
 {
 	self = [super initWithFrame:frameRect];

@@ -105,7 +105,7 @@ extern NSString *NSSystemColorsDidChangeNotification;
  * case where a version constant's value IS published, so it is transcribed rather than left open. */
 #define NSAppKitVersionNumberWithPatternColorLeakFix 641.0
 
-@interface NSColor : NSObject <NSCopying>
+@interface NSColor : NSObject <NSCopying, NSSecureCoding>
 {
 	CGColorRef _cgColor;    /* RETAINED, and the only state this class has */
 }

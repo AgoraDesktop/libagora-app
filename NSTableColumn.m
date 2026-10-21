@@ -24,6 +24,87 @@
 
 @implementation NSTableColumn
 
+/* ============================================================================================
+ * ARCHIVING: A COLUMN IS ITS IDENTIFIER, ITS WIDTHS AND ITS TWO CELLS.
+ * ============================================================================================ */
+
+/* **`_tableView` IS A BACK-LINK AND IS NOT ARCHIVED.** The table sets it when the column is added, which is the same
+ * rule a view's superview and a menu item's menu follow: the container rebuilds it. Everything else a column holds is
+ * what a design file says about it. */
+static NSString * const AGCoderColumnIdentifierKey = @"identifier";
+static NSString * const AGCoderColumnWidthKey = @"width";
+static NSString * const AGCoderColumnMinWidthKey = @"minWidth";
+static NSString * const AGCoderColumnMaxWidthKey = @"maxWidth";
+static NSString * const AGCoderColumnHeaderCellKey = @"headerCell";
+static NSString * const AGCoderColumnDataCellKey = @"dataCell";
+static NSString * const AGCoderColumnResizingKey = @"resizingMask";
+static NSString * const AGCoderColumnEditableKey = @"editable";
+static NSString * const AGCoderColumnHiddenKey = @"hidden";
+static NSString * const AGCoderColumnToolTipKey = @"headerToolTip";
+static NSString * const AGCoderColumnSortKey = @"sortDescriptorPrototype";
+
+- (void)encodeWithCoder:(NSCoder *)aCoder
+{
+	[aCoder encodeObject:_identifier forKey:AGCoderColumnIdentifierKey];
+	[aCoder encodeDouble:(double)_width forKey:AGCoderColumnWidthKey];
+	[aCoder encodeDouble:(double)_minWidth forKey:AGCoderColumnMinWidthKey];
+	[aCoder encodeDouble:(double)_maxWidth forKey:AGCoderColumnMaxWidthKey];
+	[aCoder encodeObject:_headerCell forKey:AGCoderColumnHeaderCellKey];
+	[aCoder encodeObject:_dataCell forKey:AGCoderColumnDataCellKey];
+	[aCoder encodeInteger:(NSInteger)_resizingMask forKey:AGCoderColumnResizingKey];
+	[aCoder encodeBool:_editable forKey:AGCoderColumnEditableKey];
+	[aCoder encodeBool:_hidden forKey:AGCoderColumnHiddenKey];
+	[aCoder encodeObject:_headerToolTip forKey:AGCoderColumnToolTipKey];
+	[aCoder encodeObject:_sortDescriptorPrototype forKey:AGCoderColumnSortKey];
+}
+
+- (instancetype)initWithCoder:(NSCoder *)aDecoder
+{
+	self = [super init];
+	if (self == nil) {
+		return nil;
+	}
+	if ([aDecoder containsValueForKey:AGCoderColumnIdentifierKey]) {
+		[self setIdentifier:[aDecoder decodeObjectForKey:AGCoderColumnIdentifierKey]];
+	}
+	if ([aDecoder containsValueForKey:AGCoderColumnWidthKey]) {
+		_width = (CGFloat)[aDecoder decodeDoubleForKey:AGCoderColumnWidthKey];
+	}
+	if ([aDecoder containsValueForKey:AGCoderColumnMinWidthKey]) {
+		_minWidth = (CGFloat)[aDecoder decodeDoubleForKey:AGCoderColumnMinWidthKey];
+	}
+	if ([aDecoder containsValueForKey:AGCoderColumnMaxWidthKey]) {
+		_maxWidth = (CGFloat)[aDecoder decodeDoubleForKey:AGCoderColumnMaxWidthKey];
+	}
+	if ([aDecoder containsValueForKey:AGCoderColumnHeaderCellKey]) {
+		[self setHeaderCell:[aDecoder decodeObjectForKey:AGCoderColumnHeaderCellKey]];
+	}
+	if ([aDecoder containsValueForKey:AGCoderColumnDataCellKey]) {
+		[self setDataCell:[aDecoder decodeObjectForKey:AGCoderColumnDataCellKey]];
+	}
+	if ([aDecoder containsValueForKey:AGCoderColumnResizingKey]) {
+		_resizingMask = (NSUInteger)[aDecoder decodeIntegerForKey:AGCoderColumnResizingKey];
+	}
+	if ([aDecoder containsValueForKey:AGCoderColumnEditableKey]) {
+		_editable = [aDecoder decodeBoolForKey:AGCoderColumnEditableKey];
+	}
+	if ([aDecoder containsValueForKey:AGCoderColumnHiddenKey]) {
+		_hidden = [aDecoder decodeBoolForKey:AGCoderColumnHiddenKey];
+	}
+	if ([aDecoder containsValueForKey:AGCoderColumnToolTipKey]) {
+		_headerToolTip = [[aDecoder decodeObjectForKey:AGCoderColumnToolTipKey] copy];
+	}
+	if ([aDecoder containsValueForKey:AGCoderColumnSortKey]) {
+		_sortDescriptorPrototype = [[aDecoder decodeObjectForKey:AGCoderColumnSortKey] retain];
+	}
+	return self;
+}
+
++ (BOOL)supportsSecureCoding
+{
+	return YES;
+}
+
 - (instancetype)initWithIdentifier:(id)identifier
 {
 	self = [super init];

@@ -30,6 +30,140 @@
 
 @implementation NSMenuItem
 
+/* ============================================================================================
+ * ARCHIVING: AN ITEM IS ITS TITLE, ITS KEY EQUIVALENT AND WHAT IT DOES.
+ * ============================================================================================ */
+
+/* **THE ACTION IS ARCHIVED BY NAME AND THE TARGET IS NOT ARCHIVED AT ALL.** A `SEL` is not an object; a target is a
+ * CONNECTION (see `NSNib.h`), because the object an item sends its action to is either the file's owner or another
+ * object in the same archive. `_menu` and `_parentItem` are BACK-LINKS the containers rebuild, so they are absent for the
+ * same reason a view's superview is. `_highlighted` is tracking state and is absent for the same reason a cell's is. */
+static NSString * const AGCoderItemTitleKey = @"title";
+static NSString * const AGCoderItemAttributedTitleKey = @"attributedTitle";
+static NSString * const AGCoderItemKeyEquivalentKey = @"keyEquivalent";
+static NSString * const AGCoderItemKeyModifiersKey = @"keyEquivalentModifierMask";
+static NSString * const AGCoderItemToolTipKey = @"toolTip";
+static NSString * const AGCoderItemSubmenuKey = @"submenu";
+static NSString * const AGCoderItemRepresentedKey = @"representedObject";
+static NSString * const AGCoderItemViewKey = @"view";
+static NSString * const AGCoderItemImageKey = @"image";
+static NSString * const AGCoderItemOnImageKey = @"onStateImage";
+static NSString * const AGCoderItemOffImageKey = @"offStateImage";
+static NSString * const AGCoderItemMixedImageKey = @"mixedStateImage";
+static NSString * const AGCoderItemActionKey = @"action";
+static NSString * const AGCoderItemTagKey = @"tag";
+static NSString * const AGCoderItemStateKey = @"state";
+static NSString * const AGCoderItemIndentationKey = @"indentationLevel";
+static NSString * const AGCoderItemMnemonicKey = @"mnemonicLocation";
+static NSString * const AGCoderItemEnabledKey = @"enabled";
+static NSString * const AGCoderItemAlternateKey = @"alternate";
+static NSString * const AGCoderItemHiddenKey = @"hidden";
+static NSString * const AGCoderItemSeparatorKey = @"separator";
+
+- (void)encodeWithCoder:(NSCoder *)aCoder
+{
+	[aCoder encodeObject:_title forKey:AGCoderItemTitleKey];
+	[aCoder encodeObject:_attributedTitle forKey:AGCoderItemAttributedTitleKey];
+	[aCoder encodeObject:_keyEquivalent forKey:AGCoderItemKeyEquivalentKey];
+	[aCoder encodeInteger:(NSInteger)_keyEquivalentModifierMask forKey:AGCoderItemKeyModifiersKey];
+	[aCoder encodeObject:_toolTip forKey:AGCoderItemToolTipKey];
+	[aCoder encodeObject:_submenu forKey:AGCoderItemSubmenuKey];
+	[aCoder encodeObject:_representedObject forKey:AGCoderItemRepresentedKey];
+	[aCoder encodeObject:_view forKey:AGCoderItemViewKey];
+	[aCoder encodeObject:_image forKey:AGCoderItemImageKey];
+	[aCoder encodeObject:_onStateImage forKey:AGCoderItemOnImageKey];
+	[aCoder encodeObject:_offStateImage forKey:AGCoderItemOffImageKey];
+	[aCoder encodeObject:_mixedStateImage forKey:AGCoderItemMixedImageKey];
+	[aCoder encodeObject:(_action != NULL) ? NSStringFromSelector(_action) : nil forKey:AGCoderItemActionKey];
+	[aCoder encodeInteger:_tag forKey:AGCoderItemTagKey];
+	[aCoder encodeInteger:_state forKey:AGCoderItemStateKey];
+	[aCoder encodeInteger:_indentationLevel forKey:AGCoderItemIndentationKey];
+	[aCoder encodeInteger:(NSInteger)_mnemonicLocation forKey:AGCoderItemMnemonicKey];
+	[aCoder encodeBool:_enabled forKey:AGCoderItemEnabledKey];
+	[aCoder encodeBool:_alternate forKey:AGCoderItemAlternateKey];
+	[aCoder encodeBool:_hidden forKey:AGCoderItemHiddenKey];
+	[aCoder encodeBool:_separator forKey:AGCoderItemSeparatorKey];
+}
+
+- (instancetype)initWithCoder:(NSCoder *)aDecoder
+{
+	NSString *title = [aDecoder decodeObjectForKey:AGCoderItemTitleKey];
+	NSString *equivalent = [aDecoder decodeObjectForKey:AGCoderItemKeyEquivalentKey];
+	NSString *actionName = [aDecoder decodeObjectForKey:AGCoderItemActionKey];
+	SEL action = NULL;
+
+	if ([actionName isKindOfClass:[NSString class]]) {
+		action = NSSelectorFromString(actionName);
+	}
+	self = [self initWithTitle:([title isKindOfClass:[NSString class]]) ? title : @""
+			   action:action
+		   keyEquivalent:([equivalent isKindOfClass:[NSString class]]) ? equivalent : @""];
+	if (self == nil) {
+		return nil;
+	}
+	if ([aDecoder containsValueForKey:AGCoderItemAttributedTitleKey]) {
+		[self setAttributedTitle:[aDecoder decodeObjectForKey:AGCoderItemAttributedTitleKey]];
+	}
+	if ([aDecoder containsValueForKey:AGCoderItemKeyModifiersKey]) {
+		[self setKeyEquivalentModifierMask:
+			(NSUInteger)[aDecoder decodeIntegerForKey:AGCoderItemKeyModifiersKey]];
+	}
+	if ([aDecoder containsValueForKey:AGCoderItemToolTipKey]) {
+		[self setToolTip:[aDecoder decodeObjectForKey:AGCoderItemToolTipKey]];
+	}
+	if ([aDecoder containsValueForKey:AGCoderItemSubmenuKey]) {
+		[self setSubmenu:[aDecoder decodeObjectForKey:AGCoderItemSubmenuKey]];
+	}
+	if ([aDecoder containsValueForKey:AGCoderItemRepresentedKey]) {
+		[self setRepresentedObject:[aDecoder decodeObjectForKey:AGCoderItemRepresentedKey]];
+	}
+	if ([aDecoder containsValueForKey:AGCoderItemViewKey]) {
+		[self setView:[aDecoder decodeObjectForKey:AGCoderItemViewKey]];
+	}
+	if ([aDecoder containsValueForKey:AGCoderItemImageKey]) {
+		[self setImage:[aDecoder decodeObjectForKey:AGCoderItemImageKey]];
+	}
+	if ([aDecoder containsValueForKey:AGCoderItemOnImageKey]) {
+		[self setOnStateImage:[aDecoder decodeObjectForKey:AGCoderItemOnImageKey]];
+	}
+	if ([aDecoder containsValueForKey:AGCoderItemOffImageKey]) {
+		[self setOffStateImage:[aDecoder decodeObjectForKey:AGCoderItemOffImageKey]];
+	}
+	if ([aDecoder containsValueForKey:AGCoderItemMixedImageKey]) {
+		[self setMixedStateImage:[aDecoder decodeObjectForKey:AGCoderItemMixedImageKey]];
+	}
+	if ([aDecoder containsValueForKey:AGCoderItemTagKey]) {
+		[self setTag:[aDecoder decodeIntegerForKey:AGCoderItemTagKey]];
+	}
+	if ([aDecoder containsValueForKey:AGCoderItemStateKey]) {
+		[self setState:[aDecoder decodeIntegerForKey:AGCoderItemStateKey]];
+	}
+	if ([aDecoder containsValueForKey:AGCoderItemIndentationKey]) {
+		[self setIndentationLevel:[aDecoder decodeIntegerForKey:AGCoderItemIndentationKey]];
+	}
+	if ([aDecoder containsValueForKey:AGCoderItemMnemonicKey]) {
+		[self setMnemonicLocation:(NSUInteger)[aDecoder decodeIntegerForKey:AGCoderItemMnemonicKey]];
+	}
+	if ([aDecoder containsValueForKey:AGCoderItemEnabledKey]) {
+		[self setEnabled:[aDecoder decodeBoolForKey:AGCoderItemEnabledKey]];
+	}
+	if ([aDecoder containsValueForKey:AGCoderItemAlternateKey]) {
+		[self setAlternate:[aDecoder decodeBoolForKey:AGCoderItemAlternateKey]];
+	}
+	if ([aDecoder containsValueForKey:AGCoderItemHiddenKey]) {
+		[self setHidden:[aDecoder decodeBoolForKey:AGCoderItemHiddenKey]];
+	}
+	if ([aDecoder containsValueForKey:AGCoderItemSeparatorKey]) {
+		_separator = [aDecoder decodeBoolForKey:AGCoderItemSeparatorKey];
+	}
+	return self;
+}
+
++ (BOOL)supportsSecureCoding
+{
+	return YES;
+}
+
 /* ---- THE CONSTRUCTORS -------------------------------------------------------------------------- */
 
 - (instancetype)initWithTitle:(NSString *)string
@@ -490,18 +624,5 @@ static BOOL s_usesUserKeyEquivalents = NO;	/* OFF, which is Apple's default and 
 	return [table objectForKey:[self title]];
 }
 
-/* ---- AND THE DECODER DOOR ---------------------------------------------------------------------- */
-
-- (nullable instancetype)initWithCoder:(NSCoder *)coder
-{
-	(void)coder;
-	/* APPLE'S KEY SET IS NOT PUBLISHED, and this tree will not guess it: a guessed key set is a WRONG MENU
-	 * rather than an unfinished door, which is the same ground NSNib's decoding doors stand on. A caller that
-	 * built its menu in code gets the same menu; a caller that archived one gets this sentence. */
-	fprintf(stderr, "APPKIT-REFUSE: -initWithCoder: needs Apple's published key set for an archived menu "
-			"item, and this duplication has not got one — a guessed key set is a wrong menu rather than "
-			"an unfinished one. Build the menu in code instead\n");
-	return nil;
-}
 
 @end

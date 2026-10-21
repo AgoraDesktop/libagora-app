@@ -204,7 +204,7 @@ enum {
 };
 typedef NSUInteger NSWindowSharingType;
 
-@interface NSWindow : NSResponder
+@interface NSWindow : NSResponder <NSSecureCoding>
 {
 	/* **THE SHEET'S STATE.** A SHEET IS AN ORDINARY WINDOW THAT ONE OTHER WINDOW HAS ATTACHED, and the attachment
 	 * is the only thing that makes it one — so the state is two references and no more. `_cg_sheetParent` is the

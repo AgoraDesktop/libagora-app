@@ -24,12 +24,14 @@ NS_ASSUME_NONNULL_BEGIN
 @class NSBundle;
 @class NSView;
 
-/* **WHAT THIS CLASS DOES WITH A NIB, AND WHY IT REFUSES.** Apple's `-loadView` loads the nib named in the
- * initialiser with `NSNib` and takes the view from the file's owner's `view` outlet. `NSNib` is a class this tier
- * has not got, so a nib name here is REFUSED BY NAME — an empty view handed back for a nib that never loaded would
- * be a window onto nothing, and the caller could not tell. A controller whose view is SET (`-setView:`) is the
- * whole of what this tier can do, and it is what the era's own documentation recommends anyway. */
-@interface NSViewController : NSResponder <NSCoding>
+/* **WHAT THIS CLASS DOES WITH A NIB, AND WHY IT NOW LOADS ONE.** Apple's `-loadView` loads the nib named in the
+ * initialiser with `NSNib` and takes the view from the file's owner's `view` outlet. That was refused here while
+ * `NSNib` had no reader; the reader exists now (see `NSNib.h`), so `-loadView` instantiates the nib with SELF as the
+ * owner — which is what makes the file's owner's `view` outlet land on this controller — and falls back to the first
+ * `NSView` among the nib's top-level objects when the file does not wire an owner outlet. A nib that cannot be read is
+ * an EXCEPTION rather than an empty view, because a controller showing nothing while claiming to have loaded is the
+ * failure mode this class exists to make impossible. */
+@interface NSViewController : NSResponder <NSSecureCoding>
 {
 	NSString *_nibName;
 	NSBundle *_nibBundle;

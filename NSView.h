@@ -182,7 +182,7 @@ extern NSString *NSDefinitionPresentationTypeKey;
 extern NSString *NSDefinitionPresentationTypeDictionaryApplication;
 extern NSString *NSDefinitionPresentationTypeOverlay;
 
-@interface NSView : NSResponder <NSDraggingDestination>
+@interface NSView : NSResponder <NSDraggingDestination, NSSecureCoding>
 {
 	/* THE FRAME IS THE VIEW IN ITS SUPERVIEW; THE BOUNDS ARE ITS OWN SYSTEM. See the note above for the
 	 * relationship this layer keeps simple. */

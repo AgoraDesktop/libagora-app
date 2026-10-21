@@ -90,6 +90,46 @@ static CGFloat fn_text_style_size(NSFontTextStyle style)
 
 @implementation NSFont
 
+/* ============================================================================================
+ * ARCHIVING: A FONT IS ITS NAME AND ITS SIZE.
+ * ============================================================================================ */
+
+/* **THE CLASS'S STATE IS A `CTFontRef`, WHICH IS A LIVE HANDLE AND NOT AN ARCHIVABLE VALUE — so a font is archived as
+ * the two things a design file can actually specify and the two things `+fontWithName:size:` can rebuild it from.** The
+ * matrix is not archived: a design that needs a transformed font is a design this format does not express, and saying so
+ * here is cheaper than a transformed archive that decodes into the identity. */
+static NSString * const AGCoderFontNameKey = @"fontName";
+static NSString * const AGCoderFontSizeKey = @"pointSize";
+
+- (void)encodeWithCoder:(NSCoder *)aCoder
+{
+	[aCoder encodeObject:[self fontName] forKey:AGCoderFontNameKey];
+	[aCoder encodeDouble:(double)[self pointSize] forKey:AGCoderFontSizeKey];
+}
+
+- (instancetype)initWithCoder:(NSCoder *)aDecoder
+{
+	NSString *name = [aDecoder decodeObjectForKey:AGCoderFontNameKey];
+	CGFloat size = (CGFloat)[aDecoder decodeDoubleForKey:AGCoderFontSizeKey];
+	NSFont *font = nil;
+
+	if ([name isKindOfClass:[NSString class]]) {
+		font = [NSFont fontWithName:name size:size];
+	}
+	if (font == nil) {
+		/* A NAME THIS MACHINE HAS NOT GOT IS THE FONT SYSTEM'S ANSWER RATHER THAN AN ARCHIVE'S FAILURE: a design file
+		 * written on one machine is read on another, and `+fontWithName:size:` already substitutes. Answering nil here
+		 * would fail the whole nib over a missing typeface. */
+		font = [NSFont systemFontOfSize:size];
+	}
+	return [font retain];
+}
+
++ (BOOL)supportsSecureCoding
+{
+	return YES;
+}
+
 - (void)dealloc
 {
 	/* THE ONE THING THIS CLASS OWNS. `_matrix` is a plain array and needs nothing. */

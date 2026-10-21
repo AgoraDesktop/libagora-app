@@ -814,3 +814,12 @@ add_executable(search_field search_field.m)
 target_link_libraries(search_field PRIVATE App m)
 add_test(NAME appkit-search-field COMMAND search_field)
 set_tests_properties(appkit-search-field PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
+
+# **THE FIRST-PARTY NIB FORMAT'S ROUND TRIP.** Views, a control, a cell, an outlet and an action — archived, written
+# as a file, read back, and compared. It needs no display: it builds views rather than windows, which is why it always
+# runs. The three refusals it asserts (a class outside the allow-list, a class that only inherits coding, a file that is
+# not a nib) are the format's security rules and are tested here rather than trusted.
+add_executable(nib_roundtrip nib_roundtrip.m)
+target_link_libraries(nib_roundtrip PRIVATE App)
+add_test(NAME appkit-nib-roundtrip COMMAND nib_roundtrip)
+set_tests_properties(appkit-nib-roundtrip PROPERTIES ENVIRONMENT "${_agora_app_test_env}")

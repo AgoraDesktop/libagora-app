@@ -71,21 +71,12 @@ static NSString * const FNAutosaveKey = @"NSWindowControllerFrameAutosaveName";
 
 - (void)encodeWithCoder:(NSCoder *)aCoder
 {
-	/* **THE WINDOW IS ENCODED ONLY IF IT CAN BE, AND IN THIS TIER IT CANNOT.** Apple's `NSWindow` is archivable;
-	 * this tree's is not, and `-encodeObject:` on an object that does not answer `-encodeWithCoder:` raises — so a
-	 * controller carrying a window would archive into an exception. The guard is stated rather than silent: the
-	 * window is simply not in the archive, and the note says which change makes it possible. */
-	if (_window != nil && [_window respondsToSelector:@selector(encodeWithCoder:)]) {
-		[aCoder encodeObject:_window forKey:FNWindowKey];
-	} else {
-		/* **THE KEY IS WRITTEN EVEN WHEN THE VALUE IS NIL, AND IT IS A SEMANTIC CHOICE RATHER THAN A WORKAROUND.**
-		 * An ABSENT key and a key WRITTEN AS NIL are different things to a decoder, and `-containsValueForKey:`
-		 * is the door that tells them apart: this archive says "the window key exists and its value is nil",
-		 * not "nothing was written here". (When this code was written the distinction was FORCED — the decoder
-		 * raised on an absent key, a defect since FIXED, dec-63d4d098671d7f21 — and the note is kept because the
-		 * reason to write the key outlives the bug that made it necessary.) */
-		[aCoder encodeObject:nil forKey:FNWindowKey];
-	}
+	/* **THE WINDOW IS ENCODED NOW, AND THE GUARD THAT STOOD HERE IS GONE BECAUSE ITS REASON IS GONE.** `NSWindow` is
+	 * archivable in this tier (see its coding methods), so a controller's window travels with it — and the archive
+	 * carries the window's whole design subtree, which is what makes a window controller a thing a nib can hold. The nil
+	 * case still WRITES THE KEY, which is a semantic choice rather than a workaround. */
+	[super encodeWithCoder:aCoder];
+	[aCoder encodeObject:_window forKey:FNWindowKey];
 	[aCoder encodeObject:_windowNibName forKey:FNNibNameKey];
 	[aCoder encodeObject:_windowNibPath forKey:FNNibPathKey];
 	[aCoder encodeObject:_frameAutosaveName forKey:FNAutosaveKey];
@@ -93,7 +84,7 @@ static NSString * const FNAutosaveKey = @"NSWindowControllerFrameAutosaveName";
 
 - (instancetype)initWithCoder:(NSCoder *)aDecoder
 {
-	self = [super init];
+	self = [super initWithCoder:aDecoder];
 	if (self != nil) {
 		[self setWindow:[aDecoder decodeObjectForKey:FNWindowKey]];
 		_windowNibName = [[aDecoder decodeObjectForKey:FNNibNameKey] retain];
@@ -101,6 +92,11 @@ static NSString * const FNAutosaveKey = @"NSWindowControllerFrameAutosaveName";
 		[self setWindowFrameAutosaveName:[aDecoder decodeObjectForKey:FNAutosaveKey]];
 	}
 	return self;
+}
+
++ (BOOL)supportsSecureCoding
+{
+	return YES;
 }
 
 /* ---- THE NAMES, THE WINDOW, AND THE LOAD ------------------------------------------------------ */

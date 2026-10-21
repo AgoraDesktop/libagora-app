@@ -3,6 +3,7 @@
  * © 2026 Kyle J. Cardozo. MIT licence (see LICENSE at the repository root).
  */
 #import <AppKit/NSViewController.h>
+#import <AppKit/NSNib.h>
 #import <AppKit/NSView.h>
 #import <Foundation/NSArray.h>
 #import <Foundation/NSDictionary.h>
@@ -19,29 +20,38 @@ static NSString * const FNNibNameKey = @"NSViewControllerNibName";
 static NSString * const FNNibBundleKey = @"NSViewControllerNibBundle";
 static NSString * const FNRepresentedObjectKey = @"NSViewControllerRepresentedObject";
 static NSString * const FNTitleKey = @"NSViewControllerTitle";
+static NSString * const FNViewKey = @"NSViewControllerView";
 
 @implementation NSViewController
 
-/* AND THE TWO METHODS `NSCoding` REQUIRES. **THEY DO NOT CHAIN TO THE SUPERCLASS, AND THAT IS A FOOTPRINT OF THIS
- * TIER RATHER THAN A CHOICE**: Apple's `NSResponder` is archivable, this tree's is not, so there is no super
- * implementation to reach. When it gains one, these two must chain — and the note is here rather than in a commit
- * message because that is where the person making the change will be. */
++ (BOOL)supportsSecureCoding
+{
+	return YES;
+}
+
+/* AND THE TWO METHODS `NSCoding` REQUIRES. **THEY CHAIN NOW, WHICH IS WHAT THE NOTE HERE ASKED FOR.** `NSResponder`
+ * gained its coding methods, so a controller's archive carries its responder state as well as the four values below —
+ * and the omission this comment used to record ("they do not chain to the superclass, and that is a footprint of this
+ * tier") is closed rather than left standing. */
 - (void)encodeWithCoder:(NSCoder *)aCoder
 {
+	[super encodeWithCoder:aCoder];
 	[aCoder encodeObject:_nibName forKey:FNNibNameKey];
 	[aCoder encodeObject:_nibBundle forKey:FNNibBundleKey];
 	[aCoder encodeObject:_representedObject forKey:FNRepresentedObjectKey];
 	[aCoder encodeObject:_title forKey:FNTitleKey];
+	[aCoder encodeObject:_view forKey:FNViewKey];
 }
 
 - (instancetype)initWithCoder:(NSCoder *)aDecoder
 {
-	self = [super init];
+	self = [super initWithCoder:aDecoder];
 	if (self != nil) {
 		_nibName = [[aDecoder decodeObjectForKey:FNNibNameKey] retain];
 		_nibBundle = [[aDecoder decodeObjectForKey:FNNibBundleKey] retain];
 		_representedObject = [[aDecoder decodeObjectForKey:FNRepresentedObjectKey] retain];
 		_title = [[aDecoder decodeObjectForKey:FNTitleKey] retain];
+		_view = [[aDecoder decodeObjectForKey:FNViewKey] retain];
 	}
 	return self;
 }
@@ -111,9 +121,43 @@ static NSString * const FNTitleKey = @"NSViewControllerTitle";
 		[NSException raise:NSInternalInconsistencyException
 			    format:@"-loadView: no nib name and no view: set a view with -setView: or override -loadView"];
 	}
-	[NSException raise:NSInternalInconsistencyException
-		    format:@"-loadView: loading nib `%@` needs NSNib, which this tier does not ship yet — set the view "
-			   "with -setView: or override -loadView", _nibName];
+	/* **THE NIB IS LOADED WITH THIS CONTROLLER AS ITS OWNER**, which is what makes a `view` outlet on the file's
+	 * owner land on `-setView:` and what makes an action wired to the owner reach this object. */
+	{
+		NSNib *nib = [[NSNib alloc] initWithNibNamed:_nibName bundle:_nibBundle];
+		NSArray *objects = nil;
+
+		if (nib == nil) {
+			[NSException raise:NSInternalInconsistencyException
+				    format:@"-loadView: `%@` is not a recordable nib name", _nibName];
+		}
+		if (![nib instantiateNibWithOwner:self topLevelObjects:&objects]) {
+			[nib release];
+			[NSException raise:NSInternalInconsistencyException
+				    format:@"-loadView: the nib `%@` could not be instantiated (see NSNib's stderr for the "
+					   "refusal)", _nibName];
+		}
+		[nib release];
+		/* **AND IF THE FILE DID NOT WIRE THE OWNER'S `view` OUTLET, THE FIRST TOP-LEVEL VIEW IS THE VIEW.** Apple's
+		 * nibs wire the outlet; a hand-written one need not, and taking the only view in the file is what makes the
+		 * simple case simple without making the wired case ambiguous. */
+		if (_view == nil && [objects isKindOfClass:[NSArray class]]) {
+			NSUInteger i;
+
+			for (i = 0; i < [objects count]; i++) {
+				id object = [objects objectAtIndex:i];
+
+				if ([object isKindOfClass:[NSView class]]) {
+					[self setView:object];
+					break;
+				}
+			}
+		}
+	}
+	if (_view == nil) {
+		[NSException raise:NSInternalInconsistencyException
+			    format:@"-loadView: the nib `%@` instantiated but produced no view", _nibName];
+	}
 }
 
 - (id)representedObject

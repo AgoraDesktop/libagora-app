@@ -34,7 +34,7 @@ enum {
 	NSTableColumnUserResizingMask = (1 << 1)
 };
 
-@interface NSTableColumn : NSObject
+@interface NSTableColumn : NSObject <NSSecureCoding>
 {
 	id _identifier;				/* COPIED: the name the delegate and the table find the column by */
 	NSTableView *_tableView;		/* NOT RETAINED: the table owns its columns */

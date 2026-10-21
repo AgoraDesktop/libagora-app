@@ -186,6 +186,45 @@ NSString *NSSystemColorsDidChangeNotification = @"NSSystemColorsDidChangeNotific
 
 @implementation NSColor
 
+/* ============================================================================================
+ * ARCHIVING: A COLOUR IS FOUR COMPONENTS AND THE SPACE THEY MEAN.
+ * ============================================================================================ */
+
+/* **THE STATE IS A `CGColorRef`, WHICH IS NOT ARCHIVABLE — so a colour is archived as the four components its own
+ * getters answer, and rebuilt through `+colorWithCalibratedRed:green:blue:alpha:`.** The components are read through the
+ * public doors rather than out of the `CGColor`, which is the same discipline every other class here follows: the
+ * archive records what a design file SAID, and a getter is where this tree states what that is. */
+static NSString * const AGCoderColorRedKey = @"redComponent";
+static NSString * const AGCoderColorGreenKey = @"greenComponent";
+static NSString * const AGCoderColorBlueKey = @"blueComponent";
+static NSString * const AGCoderColorAlphaKey = @"alphaComponent";
+
+- (void)encodeWithCoder:(NSCoder *)aCoder
+{
+	[aCoder encodeDouble:(double)[self redComponent] forKey:AGCoderColorRedKey];
+	[aCoder encodeDouble:(double)[self greenComponent] forKey:AGCoderColorGreenKey];
+	[aCoder encodeDouble:(double)[self blueComponent] forKey:AGCoderColorBlueKey];
+	[aCoder encodeDouble:(double)[self alphaComponent] forKey:AGCoderColorAlphaKey];
+}
+
+- (instancetype)initWithCoder:(NSCoder *)aDecoder
+{
+	CGFloat red = (CGFloat)[aDecoder decodeDoubleForKey:AGCoderColorRedKey];
+	CGFloat green = (CGFloat)[aDecoder decodeDoubleForKey:AGCoderColorGreenKey];
+	CGFloat blue = (CGFloat)[aDecoder decodeDoubleForKey:AGCoderColorBlueKey];
+	CGFloat alpha = 1.0;
+
+	if ([aDecoder containsValueForKey:AGCoderColorAlphaKey]) {
+		alpha = (CGFloat)[aDecoder decodeDoubleForKey:AGCoderColorAlphaKey];
+	}
+	return [[NSColor colorWithCalibratedRed:red green:green blue:blue alpha:alpha] retain];
+}
+
++ (BOOL)supportsSecureCoding
+{
+	return YES;
+}
+
 /* THE FOUR GREYS ARE BUILT ONCE, LAZILY, AND KEPT FOREVER — the same shape the fifteen singletons below
  * have, and for the same reason: they are VALUES, so a caller who asks twice should get the same object.
  * `+initialize` is the place because the names are globals a caller may read at any time. */
