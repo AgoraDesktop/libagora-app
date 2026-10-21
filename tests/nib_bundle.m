@@ -54,18 +54,9 @@ static void check(int ok, const char *name)
 @implementation BundleController
 @end
 
-/* A SOURCE WITH THE OWNER'S `view` OUTLET WIRED, and one without it. */
-static const char *kWithOwnerSource =
-	"{ version = 1;\n"
-	"  objects = (\n"
-	"    { id = \"content\"; class = NSView;\n"
-	"      properties = { frame = \"0 0 240 120\"; tag = 7; };\n"
-	"      subviews = (\n"
-	"        { class = NSView; properties = { frame = \"8 8 40 20\"; tag = 8; }; }\n"
-	"      ); }\n"
-	"  );\n"
-	"  connections = ( { source = owner; keyPath = \"view\"; destination = \"content\"; } );\n"
-	"}\n";
+/* **THE ONE SOURCE IS A FILE IN THE REPOSITORY** (`fixtures/Main.nibsource`), read from a path the harness passes in.
+ * Every other fixture here is a C string inside a test binary; a design file that cannot be opened in an editor is a
+ * design file nobody can look at, and this one is also what `ibtool compile` is documented with. */
 
 static const char *kWithoutOwnerSource =
 	"{ version = 1;\n"
@@ -83,9 +74,10 @@ static BOOL write_file(NSString *path, NSData *data)
 	return [data writeToFile:path atomically:YES];
 }
 
-int main(void)
+int main(int argc, char **argv)
 {
 	NSAutoreleasePool *pool = [[NSAutoreleasePool alloc] init];
+	NSString *fixturePath = (argc > 1) ? [NSString stringWithUTF8String:argv[1]] : nil;
 	NSString *bundlePath = @"/tmp/agora-nib-bundle/Fixture.app";
 	NSString *resources = [bundlePath stringByAppendingPathComponent:@"Contents/Resources"];
 	NSBundle *bundle;
@@ -99,10 +91,14 @@ int main(void)
 
 	/* AND THE TWO NIBS, COMPILED FROM SOURCE RATHER THAN CHECKED IN. */
 	{
-		NSData *archive = [NSNibSource archiveFromSourceData:
-			[NSData dataWithBytes:kWithOwnerSource length:strlen(kWithOwnerSource)] error:&error];
+		NSData *archive;
 
-		check(archive != nil, "the owner-wired source compiles");
+		check(fixturePath != nil, "the harness passed the fixture's path");
+		archive = [NSNibSource archiveFromSourceFile:fixturePath error:&error];
+		if (archive == nil) {
+			fprintf(stderr, "  (%s)\n", [(error != nil ? error : @"?") UTF8String]);
+		}
+		check(archive != nil, "the checked-in fixture COMPILES");
 		check(write_file([resources stringByAppendingPathComponent:@"Main.nib"], archive),
 		      "and was written into Contents/Resources/Main.nib");
 
@@ -148,7 +144,8 @@ int main(void)
 		view = [controller view];	/* THE LOAD HAPPENS HERE, not in the initialiser */
 		check(view != nil, "-view loaded the nib and answered the owner's view");
 		check([view tag] == 7, "the view is the one the nib named (by tag)");
-		check([[view subviews] count] == 1, "and it came with its subtree");
+		check([[view subviews] count] == 2,
+		      "and it came with its subtree (the fixture's heading and button)");
 		check([controller view] == view, "asking again answers the SAME view — the load happens once");
 		[controller release];
 	}

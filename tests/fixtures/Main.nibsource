@@ -1,0 +1,33 @@
+// The fixture an application would ship: a window's content view with a heading and a button.
+//
+// This file is CHECKED IN, which is the point — every other nib fixture in this repository lives inside a test
+// binary as a C string, and a design file that cannot be opened in an editor is a design file nobody can look at.
+// `ibtool compile tests/fixtures/Main.nibsource out.nib` is how a person uses it.
+{
+  version = 1;
+  objects = (
+    {
+      id = "content";
+      class = NSView;
+      properties = { frame = "0 0 240 120"; tag = 7; };
+      subviews = (
+        {
+          id = "heading";
+          class = NSTextField;
+          properties = { frame = "12 84 216 20"; };
+          cell = { class = NSTextFieldCell; properties = { title = "Hello, Agora"; }; };
+        }
+        {
+          id = "button";
+          class = NSButton;
+          properties = { frame = "8 8 40 20"; };
+          cell = { class = NSButtonCell; properties = { title = "Go"; bordered = YES; }; };
+        }
+      );
+    }
+  );
+  connections = (
+    { source = owner; keyPath = "view"; destination = "content"; }
+    { source = "button"; action = "go:"; destination = owner; }
+  );
+}

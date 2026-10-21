@@ -833,13 +833,27 @@ target_link_libraries(nib_compile PRIVATE App)
 add_test(NAME appkit-nib-compile COMMAND nib_compile)
 set_tests_properties(appkit-nib-compile PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
 
+# **A WINDOW OUT OF A NIB, ON A COMPOSITOR, DRAWING.** The one coding path in the format that had never run: a window's
+# -initWithCoder: derives the frame/style/backing, calls the DESIGNATED INITIALISER, and puts the archived content view
+# back through -setContentView:. It needs a real compositor (the wall every other nib test deliberately avoids), so it
+# runs under the AppKit's headless wrapper and SKIPS 77 without one. The assertion that matters is the DRAW COUNT: a
+# decoded window that is never asked to draw is a window that only looks like one.
+add_executable(nib_window nib_window.m NSNibSource.m)
+target_link_libraries(nib_window PRIVATE App)
+add_test(NAME appkit-nib-window
+  COMMAND "${CMAKE_CURRENT_SOURCE_DIR}/run-appkit-headless.sh" "$<TARGET_FILE:nib_window>" 3
+	  "all nib-window assertions passed")
+set_tests_properties(appkit-nib-window PROPERTIES SKIP_RETURN_CODE 77
+  ENVIRONMENT "${_agora_app_test_env}")
+
 # **A NIB IN A BUNDLE, LOADED BY NAME, INTO A VIEW CONTROLLER.** Every other nib test used a PATH; an application says
 # `initWithNibName:bundle:` and lets the bundle find Contents/Resources/Main.nib. This builds a real bundle-shaped
 # directory, compiles two nibs into it from source, and then does what an application does — including the two branches
 # nothing else touches: the name lookup and NSViewController's owner outlet.
 add_executable(nib_bundle nib_bundle.m NSNibSource.m)
 target_link_libraries(nib_bundle PRIVATE App)
-add_test(NAME appkit-nib-bundle COMMAND nib_bundle)
+add_test(NAME appkit-nib-bundle COMMAND nib_bundle
+	"${CMAKE_CURRENT_SOURCE_DIR}/fixtures/Main.nibsource")
 set_tests_properties(appkit-nib-bundle PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
 # **THE FORMAT'S COMMAND LINE, AND ITS TEST.** `ibtool` is the reason a design file can be checked by a shell rather than
 # by a person clicking: `dump`, `validate` and `roundtrip` read the same archives the reader does, with no display and no

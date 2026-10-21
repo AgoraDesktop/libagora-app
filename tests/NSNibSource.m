@@ -880,6 +880,14 @@ static id ag_build_object(NSDictionary *record, NSDictionary *registry, NSString
 						[object setFrame:rect];
 						continue;
 					}
+					/* **A WINDOW'S FRAME GOES THROUGH ITS OWN DOOR**, which is `-setFrame:display:` and not `-setFrame:` —
+					 * a window has no plain frame setter, so the generic KVC path below would raise for the one property
+					 * every window nib states. */
+					if ([key isEqualToString:@"frame"] &&
+					    [object respondsToSelector:@selector(setFrame:display:)]) {
+						[object setFrame:rect display:NO];
+						continue;
+					}
 					if ([key isEqualToString:@"bounds"] && [object respondsToSelector:@selector(setBoundsSize:)]) {
 						[object setBoundsSize:rect.size];
 						continue;
