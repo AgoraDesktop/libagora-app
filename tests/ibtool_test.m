@@ -20,6 +20,8 @@
 #import <AppKit/NSButton.h>
 #import <AppKit/NSButtonCell.h>
 
+#include <string.h>
+
 #import <Foundation/Foundation.h>
 
 #include <stdio.h>
@@ -153,6 +155,44 @@ int main(int argc, char **argv)
 	check(status == 0, "roundtrip exits 0");
 	check([output rangeOfString:@"roundtrip: identical"].location != NSNotFound,
 	      "the archive survives decode and re-encode unchanged");
+
+	/* ---- compile --------------------------------------------------------------------------------- */
+	/* **THE SOURCE HALF OF THE TOOL, DRIVEN THE SAME WAY.** A text source goes in, a nib comes out, and the file it wrote
+	 * is then VALIDATED by the same tool — the compiler and the reader agreeing about what a nib is. */
+	{
+		const char *sourceText =
+			"{ version = 1; objects = ( { class = NSView;"
+			" properties = { frame = \"0 0 200 100\"; tag = 5; }; } ); }\n";
+		NSString *sourcePath = @"/tmp/agora-ibtool-source.nibsource";
+		NSString *outPath = @"/tmp/agora-ibtool-compiled.nib";
+
+		check([[NSData dataWithBytes:sourceText length:strlen(sourceText)] writeToFile:sourcePath
+										      atomically:YES],
+		      "a text source was written");
+		output = run_ibtool(tool, [NSArray arrayWithObjects:@"compile", sourcePath, outPath, nil],
+				    &status);
+		check(status == 0, "compile exits 0 for a good source");
+		check([output rangeOfString:@"compiled"].location != NSNotFound, "compile says what it did");
+
+		output = run_ibtool(tool, [NSArray arrayWithObjects:@"validate", outPath, nil], &status);
+		check(status == 0, "what compile wrote is a nib the reader accepts");
+
+		output = run_ibtool(tool, [NSArray arrayWithObjects:@"dump", outPath, nil], &status);
+		check([output rangeOfString:@"tag=5"].location != NSNotFound,
+		      "the compiled file carries the property from the SOURCE");
+
+		/* AND A SOURCE THAT MUST NOT COMPILE: the refusal names the key. */
+		{
+			const char *bad = "{ version = 1; objects = ( { class = NSView; freckles = 1; } ); }\n";
+
+			[[NSData dataWithBytes:bad length:strlen(bad)] writeToFile:sourcePath atomically:YES];
+			output = run_ibtool(tool, [NSArray arrayWithObjects:@"compile", sourcePath, outPath, nil],
+					    &status);
+			check(status == 1, "compile exits 1 for a source it refuses");
+			check([output rangeOfString:@"freckles"].location != NSNotFound,
+			      "and the refusal names the key");
+		}
+	}
 
 	/* AND A VERB THAT DOES NOT EXIST IS A USAGE ERROR RATHER THAN A SILENT SUCCESS. */
 	output = run_ibtool(tool, [NSArray arrayWithObjects:@"frobnicate", goodPath, nil], &status);

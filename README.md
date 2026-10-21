@@ -38,11 +38,16 @@ place them (`NSButton`, `NSTextField`, `NSSlider`, `NSSegmentedControl`, `NSPopU
 `NSTableColumn`, `NSFont`, `NSColor`, `NSImage`) — each conforming to `NSSecureCoding`, each implementing both coding
 methods or adding no storage to inherit them for, and each archiving its DESIGN properties rather than its live graph
 (a view's window, a window's surface, a cell's control view, a table's rows and a segmented cell's private segment
-record are all absent by construction). The reader decodes with secure coding on and an EXTENSIBLE allow-list (`+registerDesignClass:` for an
+record are all absent by construction), and `NSLayoutConstraint` archives the equations themselves. The reader decodes with secure coding on and an EXTENSIBLE allow-list (`+registerDesignClass:` for an
 application's own subclasses), and it refuses — before instantiating anything — an archive that names a class outside
 that list. `NSViewController -loadView` loads a nib with the controller as its owner; `NSWindowController`'s archive
-now carries its window. The verification is `tests/nib_roundtrip.m`: a tree with a control, a cell, an outlet and an
-action, archived, written to a file, read back and compared, plus the three refusals.
+now carries its window. **The source is TEXT and the archive is its product:** `tests/NSNibSource.h` is a
+OpenStep-shaped text format (dictionaries, arrays, quoted strings, and bare words TYPED as numbers or booleans) whose
+compiler builds the objects, applies properties through KVC, wires the equations and archives the result, refusing an
+unknown key, an unknown class, an undeclared reference or a bad geometry string by name. `tests/ibtool.m` drives it:
+`dump`, `validate`, `roundtrip` and `compile`. The verification is `tests/nib_roundtrip.m` (a tree with a control, a
+cell, an outlet, an action and constraints that decode and then LAY OUT), `tests/nib_compile.m` (a source compiled and
+six ways it must not compile) and `tests/ibtool_test.m` (the tool run for real).
 
 The classes here come from the Fiwix AppKit (same author, same licence — see `PROVENANCE.md`), and they
 talked to an X server: `NSWindow.m` called `XOpenDisplay`, `XCreateSimpleWindow`, `XMapWindow`, `XPutImage`

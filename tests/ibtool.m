@@ -19,8 +19,13 @@
  *   validate <file>    the reader's own checks, without instantiating anything and without needing an owner; exit 1 with
  *                      a sentence when the file would be refused
  *   roundtrip <file>   decode, re-encode and compare the two dumps — the format's closure, as a command
+ *   compile <source> <out.nib>
+ *                      the TEXT SOURCE (see NSNibSource.h) into the archive a nib is; the same three checks the reader
+ *                      makes are applied to what was built before it is written
  *   help               this text
  */
+#import "NSNibSource.h"
+
 #import <AppKit/NSNib.h>
 #import <AppKit/NSView.h>
 #import <AppKit/NSWindow.h>
@@ -34,13 +39,14 @@
 
 static void usage(void)
 {
-	printf("usage: ibtool <verb> <file.nib>\n"
+	printf("usage: ibtool <verb> <file> [<out.nib>]\n"
 	       "       ibtool help\n"
 	       "\n"
 	       "verbs:\n"
 	       "  dump       what the archive says: version, objects, connections\n"
 	       "  validate   the reader's checks, instantiated by nobody and needing no owner\n"
-	       "  roundtrip  decode, re-encode, and compare — the format's closure\n");
+	       "  roundtrip  decode, re-encode, and compare — the format's closure\n"
+	       "  compile    a TEXT SOURCE into a nib: ibtool compile in.nibsource out.nib\n");
 }
 
 /* **A DESIGN FACT, ASKED THROUGH THE PUBLIC DOORS RATHER THAN OUT OF AN IVAR.** The dump describes what a CALLER can see:
@@ -212,6 +218,43 @@ int main(int argc, char **argv)
 		usage();
 		[pool release];
 		return 2;
+	}
+	/* **`compile` IS THE ONE VERB THAT WRITES**, so it is handled before the read-only path below and takes two files. */
+	if (strcmp(argv[1], "compile") == 0) {
+		NSString *reason = nil;
+		NSData *archive;
+
+		if (argc < 4) {
+			fprintf(stderr, "ibtool: compile needs a source and an output path\n");
+			usage();
+			[pool release];
+			return 2;
+		}
+		archive = [NSNibSource archiveFromSourceFile:[NSString stringWithUTF8String:argv[2]]
+						       error:&reason];
+		if (archive == nil) {
+			printf("%s: refused — %s\n", argv[2],
+			       [(reason != nil ? reason : @"unknown") UTF8String]);
+			[pool release];
+			return 1;
+		}
+		/* AND THE FILE IT JUST BUILT GOES BACK THROUGH THE READER'S OWN CHECKS before it is written, because a
+		 * compiler that emits a file its reader refuses has hidden the bug in the artifact rather than here. */
+		reason = [NSNib refusalReasonForArchiveData:archive];
+		if (reason != nil) {
+			printf("%s: compiled to a file the reader refuses — %s\n", argv[2],
+			       [reason UTF8String]);
+			[pool release];
+			return 1;
+		}
+		if (![archive writeToFile:[NSString stringWithUTF8String:argv[3]] atomically:YES]) {
+			fprintf(stderr, "ibtool: cannot write %s\n", argv[3]);
+			[pool release];
+			return 2;
+		}
+		printf("%s: compiled %lu bytes to %s\n", argv[2], (unsigned long)[archive length], argv[3]);
+		[pool release];
+		return 0;
 	}
 
 	{

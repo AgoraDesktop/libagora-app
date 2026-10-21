@@ -824,11 +824,20 @@ target_link_libraries(nib_roundtrip PRIVATE App)
 add_test(NAME appkit-nib-roundtrip COMMAND nib_roundtrip)
 set_tests_properties(appkit-nib-roundtrip PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
 
+# **THE TEXT SOURCE, AND THE COMPILER THAT MAKES THE ARCHIVE FROM IT.** `NSNibSource` parses the OpenStep-shaped source
+# (dictionaries, arrays, quoted strings, and bare words TYPED as numbers or booleans) and compiles it into a nib — the
+# same split as `.xib` and `.nib`, and the one that makes a design something git can review. `nib_compile` asserts the
+# good case, the typed words, and six refusals that must each NAME what was wrong.
+add_executable(nib_compile nib_compile.m NSNibSource.m)
+target_link_libraries(nib_compile PRIVATE App)
+add_test(NAME appkit-nib-compile COMMAND nib_compile)
+set_tests_properties(appkit-nib-compile PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
+
 # **THE FORMAT'S COMMAND LINE, AND ITS TEST.** `ibtool` is the reason a design file can be checked by a shell rather than
 # by a person clicking: `dump`, `validate` and `roundtrip` read the same archives the reader does, with no display and no
 # owner. The test RUNS the tool — the only honest way to test an executable — and builds its own fixture, because this
 # repository commits no binaries.
-add_executable(ibtool ibtool.m)
+add_executable(ibtool ibtool.m NSNibSource.m)
 target_link_libraries(ibtool PRIVATE App)
 set_target_properties(ibtool PROPERTIES ENABLE_EXPORTS ON)
 
