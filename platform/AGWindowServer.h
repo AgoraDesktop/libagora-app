@@ -118,8 +118,21 @@ typedef void (*AGActivationFunction)(void *context, int active);
 
 typedef struct AGWindowServer AGWindowServer;
 
-/* Connect to the display named by $WAYLAND_DISPLAY, or the default one. NULL if there is none. */
+/* Connect to the display named by $WAYLAND_DISPLAY, or the default one. NULL if there is none. **THIS MAKES A NEW,
+ * INDEPENDENT CONNECTION** and the caller owns it — which is what a test or a probe wants. An application wants
+ * the one below. */
 AGWindowServer *AGWindowServerConnect(void);
+
+/* **THE PROCESS'S ONE CONNECTION, MADE ON FIRST USE.** AppKit has a single window server, and every part of it —
+ * a window that places itself, a screen that is asked for `-visibleFrame`, the menu bar, the window list — has to
+ * be looking at the SAME event queue. Two connections is two caches: an event that arrives on one is invisible to
+ * the other, so a work area announced to the windows would never reach the screen that reports it.
+ *
+ * MEASURED, which is why this exists: `NSScreen` used to call `AGWindowServerConnect` on every ask, so a view
+ * reading `-visibleFrame` once a frame opened 902 connections in five seconds — and each of them got the work area
+ * at bind and never again. This is the one accessor `NSWindow` and `NSScreen` both use; it is never disconnected,
+ * because the application lives as long as it does. */
+AGWindowServer *AGWindowServerShared(void);
 void AGWindowServerDisconnect(AGWindowServer *server);
 
 /* Read and dispatch everything already queued; returns the number dispatched, or -1 if the connection is
@@ -198,6 +211,12 @@ void AGWindowShow(AGWindow *window);
 void AGWindowHide(AGWindow *window);
 void AGWindowSetTitle(AGWindow *window, const char *title);
 
+/* **WHICH APPLICATION THIS WINDOW BELONGS TO, IN THE MAC'S VOCABULARY: THE BUNDLE IDENTIFIER.** The server records it
+ * for its own use — a shell component groups windows by it — and AppKit supplies `[[NSBundle mainBundle]
+ * bundleIdentifier]` without asking. It used to be a constant in this file, which is why every Agora application
+ * was the same application to anything that asked. */
+void AGWindowSetAppID(AGWindow *window, const char *app_id);
+
 /* **THE APPLICATION'S FRAME, AND ON A COMPOSITOR THAT CAN BE TOLD, IT IS HONOURED.** Where the window goes and
  * how big it is, in the output's coordinates (y downwards, as the display has them). This is the Mac's
  * `-setFrame:display:`: the application states a frame and the server writes it down — the only thing that
@@ -212,6 +231,31 @@ void AGWindowSetFrame(AGWindow *window, int x, int y, int width, int height);
  * that a menu window and a status item and the Dock can be ordered against each other without this layer having
  * anticipated any of them. */
 void AGWindowSetLevel(AGWindow *window, int level);
+
+/* **AND HOW MUCH OF THE SCREEN IT TAKES FOR ITSELF — the one thing a Dock has to be able to say.** Apple's window
+ * server learns this from the Dock's own window frame through a private CGS call Agora has no answer for, so here
+ * the owner SAYS: `amount` pixels along `edge` leave the work area, and every application's `NSScreen.visibleFrame`
+ * shrinks by them from that moment on. The seam reads the result through `AGWindowServerWorkArea`, which is what
+ * `-constrainFrameRect:toScreen:` is checked against.
+ *
+ * Nothing here moves the window — `AGWindowSetFrame` is unaffected, and the two are separate answers to separate
+ * questions. A window has ONE reservation, so asking again MOVES it (a Dock dragged from the bottom to the side);
+ * `amount` 0 releases it, which is what an autohiding Dock says before it hides. The reservation dies with the
+ * window, so a client that crashes does not leave a strip missing for ever. A compositor that speaks only
+ * `xdg-shell` has no door for this and records nothing. */
+enum {
+	AGWindowEdgeTop = 0,
+	AGWindowEdgeBottom = 1,
+	AGWindowEdgeLeft = 2,
+	AGWindowEdgeRight = 3
+};
+void AGWindowSetReserved(AGWindow *window, int edge, int amount);
+
+/* **AND WHETHER A CLICK ON THE WINDOW MAY GIVE ITS APPLICATION THE KEYBOARD.** True for every ordinary window and
+ * what a Dock switches off: clicking one of its tiles activates the application the tile names, and a Dock that took
+ * the keyboard would take the menu bar with it. The window still receives every pointer event; it just never becomes
+ * the application in front. A compositor that does not speak Agora's protocol has no door for it. */
+void AGWindowSetActivatable(AGWindow *window, int activatable);
 
 /* **WHETHER THIS WINDOW'S PIXELS CARRY ALPHA.** A transparent window's shm buffer is ARGB8888 and the compositor
  * blends it over what is behind (source-over, in `window-server/src/output.c`); an opaque window's is XRGB8888 and
@@ -259,15 +303,71 @@ int AGWindowIsConfigured(const AGWindow *window);
 void AGWindowSetEventHandler(AGWindow *window, AGEventFunction function, void *context);
 void AGWindowSetFrameHandler(AGWindow *window, AGFrameFunction function, void *context);
 
+/* ============================================================================================ *
+ * WHAT A SHELL COMPONENT IS TOLD: THE WINDOW LIST.                                                      *
+ *                                                                                                *
+ * **THE DOCK'S DATA SOURCE, AND AN APPLICATION'S ONE EXCEPTION TO "MY OWN WINDOWS ONLY".** An  *
+ * ordinary client knows its own windows and has no business knowing anyone else's. A shell       *
+ * component's job is the opposite — it shows what is running — and it cannot learn that from its *
+ * own process. So it asks, and the server re-sends the whole snapshot whenever the set changes: *
+ * a title, a map or unmap, a level, a visibility, or the keyboard moving.                        *
+ *                                                                                                *
+ * It is a SNAPSHOT and not a delta, because a desktop has thirty windows and a person is what     *
+ * changes them: a client that missed one is corrected by the next. The callback is handed the     *
+ * finished list, never a half-built one, and it must not keep the pointer.                        *
+ * ============================================================================================ */
+
+/* MORE WINDOWS THAN THIS AND THE LIST IS TRUNCATED, which is stated rather than discovered: a desktop with sixty-
+ * four windows has stopped being a desktop a Dock can usefully show, and the alternative is an allocation in an
+ * event callback. */
+#define AG_WINDOW_LIST_MAX 64
+
+typedef struct AGWindowInfo {
+	unsigned int id;		/* the handle AGWindowActivate and AGWindowRequestClose take */
+	char app_id[128];		/* the bundle identifier the application declared */
+	char title[256];
+	int level;			/* the integer level; a shell ignores menus and the bar by it */
+	int visible;
+	int active;			/* this window has the keyboard — the only "frontmost" there is */
+} AGWindowInfo;
+
+typedef void (*AGWindowListFunction)(void *context, const AGWindowInfo *windows, int count);
+
+/* Ask to be told. Idempotent: the LAST handler wins, and a NULL handler stops the snapshots. A compositor that does
+ * not speak `agora_shell` version 3 never calls it, which is the same silence every other Agora-only door has. */
+void AGWindowListSetHandler(AGWindowServer *server, AGWindowListFunction function, void *context);
+
+/* **AND THE TWO THINGS A SHELL DOES TO SOMEBODY ELSE'S WINDOW.** `AGWindowActivate` is a click on a Dock tile: the
+ * window is raised in its level AND takes the keyboard, which is what makes the application's own menu bar follow.
+ * `AGWindowRequestClose` is Quit: the application is ASKED through its own close path and decides — a client that
+ * refuses stays open, exactly as it does when its close button is pressed. An id nothing answers is ignored. */
+void AGWindowActivate(AGWindowServer *server, unsigned int id);
+void AGWindowRequestClose(AGWindowServer *server, unsigned int id);
+
 /* WHETHER THIS APPLICATION HAS THE KEYBOARD, and a door to be told when that changes. Zero when the connection is
  * NULL, which is the honest answer for "no server, no focus". */
 int AGWindowServerIsActive(AGWindowServer *server);
 void AGWindowServerSetActivationHandler(AGWindowServer *server, AGActivationFunction function, void *context);
 
-/* The pixel buffer to draw into, or NULL when the compositor still holds the previous one — in which case
- * the caller must NOT draw and should wait for the frame handler. `*stride` receives the row pitch in
- * BYTES. Pixels are 0x00RRGGBB. */
+/* The pixel buffer to draw into, or NULL when the compositor still holds the one a frame would go in — in which
+ * case the caller must NOT draw and should wait for the frame handler. `*stride` receives the row pitch in BYTES.
+ * Pixels are 0x00RRGGBB.
+ *
+ * **AND THE BUFFER HANDED BACK IS NOT THE ONE ON THE SCREEN, WHICH IS THE ONLY REASON THIS IS SAFE TO DRAW ON.**
+ * A window keeps two of them: one the compositor is showing and one this process owns, swapped at `AGWindowEndFrame`
+ * and given back by the compositor when the commit that replaces it arrives. So the pixels a caller gets are one
+ * frame behind what a person is looking at, and a caller that paints only part of the surface must repaint whatever
+ * changed since that buffer was last painted — see `_cg_paintMissing` in `NSWindow.h` for the ledger AppKit keeps,
+ * and the note at the top of `AGWindowServer-Wayland.c` for why one buffer is a blink a person can see. A pointer
+ * that stays the same from one frame to the next is not promised, and a caller that caches it across frames is
+ * caching something the seam may have replaced. */
 uint32_t *AGWindowBeginFrame(AGWindow *window, int *stride);
+
+/* **THE SAME DOOR, WITH THE BUFFER'S OWN SIZE AS WELL AS ITS PITCH.** The drawing surface IS the frame now — the
+ * seam hands back the memory the compositor will sample — so a caller that sizes its own bitmap has to ask the
+ * buffer rather than the window: a resize the compositor is still holding leaves the two momentarily different, and
+ * the window's number would be the wrong one. */
+uint32_t *AGWindowBeginFrameSized(AGWindow *window, int *stride, int *width, int *height);
 
 /* Hand the frame to the compositor and ask for the next one. Does nothing when no frame is begun. */
 void AGWindowEndFrame(AGWindow *window);

@@ -833,6 +833,16 @@ target_link_libraries(nib_compile PRIVATE App)
 add_test(NAME appkit-nib-compile COMMAND nib_compile)
 set_tests_properties(appkit-nib-compile PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
 
+# **A NIB IN A BUNDLE, LOADED BY NAME, INTO A VIEW CONTROLLER.** Every other nib test used a PATH; an application says
+# `initWithNibName:bundle:` and lets the bundle find Contents/Resources/Main.nib. This builds a real bundle-shaped
+# directory, compiles two nibs into it from source, and then does what an application does — including the two branches
+# nothing else touches: the name lookup and NSViewController's owner outlet.
+add_executable(nib_bundle nib_bundle.m NSNibSource.m)
+target_link_libraries(nib_bundle PRIVATE App)
+add_test(NAME appkit-nib-bundle COMMAND nib_bundle
+	"${CMAKE_CURRENT_SOURCE_DIR}/fixtures/Main.nibsource")
+set_tests_properties(appkit-nib-bundle PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
+
 # **A WINDOW OUT OF A NIB, ON A COMPOSITOR, DRAWING.** The one coding path in the format that had never run: a window's
 # -initWithCoder: derives the frame/style/backing, calls the DESIGNATED INITIALISER, and puts the archived content view
 # back through -setContentView:. It needs a real compositor (the wall every other nib test deliberately avoids), so it
@@ -846,15 +856,6 @@ add_test(NAME appkit-nib-window
 set_tests_properties(appkit-nib-window PROPERTIES SKIP_RETURN_CODE 77
   ENVIRONMENT "${_agora_app_test_env}")
 
-# **A NIB IN A BUNDLE, LOADED BY NAME, INTO A VIEW CONTROLLER.** Every other nib test used a PATH; an application says
-# `initWithNibName:bundle:` and lets the bundle find Contents/Resources/Main.nib. This builds a real bundle-shaped
-# directory, compiles two nibs into it from source, and then does what an application does — including the two branches
-# nothing else touches: the name lookup and NSViewController's owner outlet.
-add_executable(nib_bundle nib_bundle.m NSNibSource.m)
-target_link_libraries(nib_bundle PRIVATE App)
-add_test(NAME appkit-nib-bundle COMMAND nib_bundle
-	"${CMAKE_CURRENT_SOURCE_DIR}/fixtures/Main.nibsource")
-set_tests_properties(appkit-nib-bundle PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
 # **THE PROJECT BUILDER ROLE'S FIRST PIECE: A BUNDLE FOR MORE THAN ONE MACHINE.** Apple's universal binary is a Mach-O
 # container; the ELF loaders here have none, so a universal Agora bundle is one complete binary per platform plus a
 # manifest table that NAMES them (`AGBundleExecutables`, resolved by NSBundle against `uname`). The tool writes it and the
@@ -880,3 +881,23 @@ add_executable(ibtool_test ibtool_test.m)
 target_link_libraries(ibtool_test PRIVATE App)
 add_test(NAME appkit-ibtool COMMAND ibtool_test "$<TARGET_FILE:ibtool>")
 set_tests_properties(appkit-ibtool PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
+
+# **AND THE WORKSPACE SERVICES: WHAT IS RUNNING, WHAT OPENS A FILE, AND AN ICON.** The snapshot diff and the
+# application objects need no compositor (the rows are fed in directly), and the registry-backed doors measure the
+# identifier → bundle → name → icon chain against a fixture bundle the test writes itself.
+add_executable(workspace_services workspace_services.m)
+# **AND LAUNCH SERVICES ON THIS TEST'S OWN LINE**, because the test calls `LSRegisterURL` itself — the fixture bundle
+# has to exist before the AppKit's doors can resolve it, and registering it is the fixture's job rather than the
+# AppKit's. A shared library's PRIVATE dependency is not propagated, which is what the link error says.
+target_link_libraries(workspace_services PRIVATE App AgoraLaunchServices::LaunchServices)
+add_test(NAME appkit-workspace-services COMMAND workspace_services)
+set_tests_properties(appkit-workspace-services PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
+
+# **AND WHERE A POPPED-UP MENU'S PANEL ACTUALLY GOES**, which is the one arithmetic a Dock at a screen edge exposed:
+# the point is in the VIEW's coordinates and the frame is on the SCREEN, and taking the first as the second put the
+# Dock's context menu at x = 20 on the left edge of the display. No compositor needed for the conversions; the
+# right-edge clamp skips when no screen has described itself.
+add_executable(menu_placement menu_placement.m)
+target_link_libraries(menu_placement PRIVATE App)
+add_test(NAME appkit-menu-placement COMMAND menu_placement)
+set_tests_properties(appkit-menu-placement PROPERTIES ENVIRONMENT "${_agora_app_test_env}")

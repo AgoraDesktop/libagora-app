@@ -32,6 +32,9 @@
  *      the two faces rather than against a number.
  *   6. THE FOURTH MARK IS A TRIANGLE: eight wide at its top, narrowing to two at its point, at the right end and
  *      clear of the bar's own edge. A pill — what stood there before — is the same width top and bottom.
+ *      **AND IT IS THERE ONLY ON A WINDOW THAT HAS A TOOLBAR**: the right end of a toolbar-less window's strip is
+ *      bare, which is checked first and is the policy; the triangle's SHAPE is then checked on a window that has a
+ *      band for it to toggle (`fn_chrome_button_present` is where the difference is made).
  *   7. A title too long for the room between the two blocks is CUT rather than run under them.
  */
 #import <AppKit/NSWindow.h>
@@ -459,14 +462,49 @@ int main(void)
 			[rep release];
 		}
 
-		/* 7. **THE FOURTH MARK IS THE THEME'S TRIANGLE, AND ITS SHAPE IS THE CLAIM.** Eight wide on its base row and
-		 * narrower on every row below it, down to a point: that is a filled triangle, and a pill — which is what
-		 * stood at this end before — is the same width on every row and would fail every line of this. */
+		/* 7. **THE FOURTH MARK IS THERE WHEN THERE IS A TOOLBAR TO TOGGLE, AND NOT BEFORE.** Two halves, because
+		 * both are claims: a window with no toolbar draws NOTHING at that end (a mark whose only action would be a
+		 * no-op is a promise the window cannot keep), and a window with one draws the theme's TRIANGLE — eight wide
+		 * on its base row and narrower on every row below it, down to a point, where a pill is the same width on
+		 * every row and would fail every line of that. */
 		{
 			NSBitmapImageRep *rep = draw_chrome(w);
+			int x, inked = 0;
+
+			for (x = xMenu; x < CW; x++) {
+				if (ink_at(rep, x, 10)) {
+					inked++;
+				}
+			}
+			check(inked == 0,
+			      "a window with NO toolbar draws nothing at the strip's right end — the pill is the toolbar's");
+			[rep release];
+		}
+		{
+			/* **THE BAND IS WHAT MAKES THE DIFFERENCE, SO THE MARK IS CHECKED ON A WINDOW THAT HAS ONE.** The rep is
+			 * the frame's own height, which `-setToolbar:` grows by the band, so the strip is still the top rows of
+			 * it and every scan below asks the pixels exactly as the toolbar-less half did. */
+			NSWindow *withBand = [[NSWindow alloc] initWithContentRect:NSMakeRect(0.0, 0.0, (CGFloat)CW, (CGFloat)CH)
+				styleMask:(NSTitledWindowMask | NSClosableWindowMask | NSMiniaturizableWindowMask | NSResizableWindowMask)
+				backing:NSBackingStoreBuffered defer:NO];
+			NSToolbar *toolbar = [[NSToolbar alloc] initWithIdentifier:@"AGWindowChromeProbe"];
+			NSBitmapImageRep *rep;
 			int widths[STRIP], i, rows = 0, nextToEdge = 0;
 			int t0 = 0, t1 = 0, t2 = 0, t3 = 0;
+			int height;
 
+			[withBand setTitle:@"Controls"];
+			[withBand setToolbar:toolbar];
+			height = (int)[withBand frame].size.height;
+			rep = new_rep(CW, height);
+			{
+				NSGraphicsContext *ctx = [NSGraphicsContext graphicsContextWithBitmapImageRep:rep];
+
+				[NSGraphicsContext setCurrentContext:ctx];
+				[[NSColor whiteColor] setFill];
+				[[NSBezierPath bezierPathWithRect:NSMakeRect(0.0, 0.0, (CGFloat)CW, (CGFloat)height)] fill];
+				[withBand cg_drawChromeInContext:ctx];
+			}
 			memset(widths, 0, sizeof widths);
 			/* **THE TRIANGLE'S ROWS COME FROM THE TRIANGLE.** Writing down "rows 2..8" here was the first
 			 * version and it measured zero, because the mark sits nine rows lower than that — a probe with a
@@ -488,7 +526,7 @@ int main(void)
 			printf("  (note: the triangle's rows are %d,%d,%d,%d,%d,%d wide)\n",
 			       widths[0], widths[1], widths[2], widths[3], widths[4], widths[5]);
 			check(rows >= 5 && widths[0] == MARK_W,
-			      "the toolbar mark is EIGHT WIDE at its top");
+			      "a window WITH a toolbar draws the pill, EIGHT WIDE at its top");
 			check(rows >= 5 && widths[rows - 1] < widths[0] && widths[rows - 1] <= 2,
 			      "and narrows to a point at the bottom — a triangle, not a pill");
 			{
@@ -508,6 +546,8 @@ int main(void)
 			}
 			check(nextToEdge >= 8, "and it stands clear of the bar's own end, as the left block does");
 			[rep release];
+			[toolbar release];
+			[withBand release];
 		}
 
 		/* 8. **AND A TITLE WITH NO ROOM IS CUT RATHER THAN ALLOWED TO RUN UNDER A MARK.** The window here is 160
@@ -519,7 +559,10 @@ int main(void)
 				backing:NSBackingStoreBuffered defer:NO];
 			NSBitmapImageRep *rep;
 			int bandLeft = 48 + 11 + 2;
-			int bandRight = 160 - 19 - 2;
+			/* **THE RIGHT BLOCK IS THE STRIP'S EDGE ALONE HERE**, because this window has no toolbar and so no
+			 * pill: `fn_chrome_layout`'s `rightBlock` is the edge on its own, and a scan that assumed the mark was
+			 * still there would be measuring a band the title does not have. */
+			int bandRight = 160 - 8 - 2;
 
 			[narrow setTitle:@"A Title Far Longer Than Any Of This Window's Chrome Could Ever Hope To Fit"];
 			rep = new_rep(160, FH);
@@ -536,7 +579,7 @@ int main(void)
 			 * title has to itself, and "the ink is inside it with air at both ends" is the claim that the title was
 			 * CUT. */
 			check(mark_box(rep, bandLeft, bandRight, &lo, &hi, &top, &bot)
-			      && lo > 48 + 11 && hi < 160 - 19,
+			      && lo > 48 + 11 && hi < 160 - 8,
 			      "an over-long title is CUT, and its ink stays clear of both blocks");
 			[rep release];
 			[narrow release];

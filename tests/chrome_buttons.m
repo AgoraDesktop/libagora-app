@@ -30,9 +30,9 @@
  *   3. A press that slides off and comes BACK does perform it, which is the same pair read the other way and the
  *      reason the pressed ink is the POINTER's state rather than the press's.
  *   4. The minus MINIATURIZES.
- *   5. The pill performs NOTHING ON THIS WINDOW: it is the toolbar toggle and this window has no toolbar, so it must
- *      not stand in for another button. (`tests/toolbar.m` is the other half: the same pill toggles a window that has
- *      one.)
+ *   5. The pill IS NOT THERE ON THIS WINDOW AT ALL: it is the toolbar's button, and this window has no toolbar — so
+ *      the strip's right end is bare and a click there is a click on the handle, not on a mark that would do nothing.
+ *      (`tests/toolbar.m` is the other half: a window WITH a toolbar has the pill, and it toggles the band.)
  *   6. The X ASKS THE DELEGATE: a refused `-windowShouldClose:` leaves the window open, and an allowed one closes
  *      it — which is the whole difference between performing `-performClose:` and calling `-close` directly.
  */
@@ -288,14 +288,16 @@ int main(void)
 		       (double)[[window contentView] frame].size.width,
 		       (double)[[window contentView] frame].size.height);
 
-		/* THE FOUR BUTTONS HAVE TO EXIST BEFORE ANYTHING CAN BE PRESSED, and a strip with none in it would make
-		 * every check below fail for the wrong reason. The style mask asks for all four. */
+		/* THE BUTTONS HAVE TO EXIST BEFORE ANYTHING CAN BE PRESSED, and a strip with none in it would make every
+		 * check below fail for the wrong reason. The style mask asks for all four marks — and gets THREE, because
+		 * the fourth is the toolbar's and this window has no toolbar. */
 		check(button_box(window, AGChromeButtonClose).size.width > 0.0
 		      && button_box(window, AGChromeButtonHide).size.width > 0.0
 		      && button_box(window, AGChromeButtonMaximize).size.width > 0.0
-		      && button_box(window, AGChromeButtonMenu).size.width > 0.0
 		      && bare_chrome_point(window).x > 0.0,
-		      "the window's style mask puts four buttons and a bare handle in the strip");
+		      "the window's style mask puts three buttons and a bare handle in the strip");
+		check(button_box(window, AGChromeButtonMenu).size.width == 0.0,
+		      "and NO pill — it is the toolbar's button and this window has no toolbar");
 
 		/* 1. THE PLUS ZOOMS, AND A SECOND CLICK UNZOOMS. */
 		before = [window frame];
@@ -332,15 +334,30 @@ int main(void)
 		click_button(application, window, AGChromeButtonHide);
 		check([window isMiniaturized], "a click on the MINIMIZE button miniaturizes the window");
 
-		/* 5. THE FOURTH MARK PERFORMS NOTHING ON A WINDOW WITH NO TOOLBAR. It is the toolbar toggle, there is nothing attached,
-		 * and the one thing it must not do in the meantime is stand in for another button. */
+		/* 5. **A WINDOW WITH NO TOOLBAR HAS NO PILL, SO THE STRIP'S RIGHT END IS THE HANDLE.** The mark exists to
+		 * toggle a band, and there is no band; drawing it anyway was a control whose only action was a no-op. What is
+		 * asserted is the absence AND the consequence: a click where the mark would have been is a click on the bare
+		 * strip, which is to say it takes no button and changes nothing. */
 		before = [window frame];
-		click_button(application, window, AGChromeButtonMenu);
+		{
+			NSRect content = [window contentRectForFrameRect:[window frame]];
+			CGFloat stripY = content.size.height + ([window frame].size.height - content.size.height) / 2.0;
+			/* THE PLACE THE MARK WOULD OCCUPY: the strip's own eight-point edge and an eleven-point box inside it,
+			 * asked of the same door the pointer uses rather than recomputed from the layout. */
+			NSPoint where = NSMakePoint(content.size.width - 8.0 - 5.5, stripY);
+			AGEvent down = press_at(window, where);
+			AGEvent up = release_at(window, where);
+
+			check([window cg_chromeButtonAtPoint:where] < 0,
+			      "the point where a toolbar's pill would be is in NO button");
+			deliver(application, window, &down);
+			deliver(application, window, &up);
+		}
 		check(![window isZoomed] && [window isMiniaturized]
 		      && [window frame].origin.x == before.origin.x && [window frame].origin.y == before.origin.y
 		      && [window frame].size.width == before.size.width
 		      && [window frame].size.height == before.size.height,
-		      "a click on the TOOLBAR MARK changes nothing — it is the toggle and this window has no toolbar");
+		      "and a click there changes nothing — it lands on the handle, not on a mark");
 		check([window windowNumber] != -1, "and the window is still here");
 
 		/* 6. THE X ASKS THE DELEGATE, WHICH IS THE DIFFERENCE BETWEEN THE BUTTON AND `-close`. */

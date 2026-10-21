@@ -30,7 +30,8 @@
  * class) and THE CHILD-WINDOW LIST (`-addChildWindow:ordered:`, `-childWindows`, `-parentWindow`) are all
  * IMPLEMENTED; so is the screen measurement, which is `NSScreen`'s own row and is used (`+mainScreen`). THE TOOLBAR
  * IS HERE TOO: `-setToolbar:` attaches an `NSToolbar`, `-contentRectForFrameRect:` reserves the band it needs, and
- * the chrome's pill toggles it. WHAT REMAINS ABSENT: the DRAWER (the CLASS — this class answers `-drawers` with an
+ * the chrome's pill toggles it — the pill being laid out only when a toolbar is attached (`-showsToolbarButton:`
+ * can suppress it on a window that has one, and a window with none has no such mark at all). WHAT REMAINS ABSENT: the DRAWER (the CLASS — this class answers `-drawers` with an
  * empty array, which is Apple's own contract for a window without one) and the SCRIPT-COMMAND DOORS, which are
  * declared and REFUSE by name because the scripting suite is not here. The window's BUTTONS are a window manager's
  * business (Kestrel, which will draw them, is parked). Each of those is absent rather than stubbed.
@@ -431,13 +432,23 @@ typedef NSUInteger NSWindowSharingType;
 	NSInteger _clickCount;
 	NSPoint _lastClick;
 	NSTimeInterval _lastClickTime;
-	/* THE BACKING STORE. The window's content is drawn into this and then COPIED into the frame the window
-	 * server hands over — one copy per frame, which is the price of a client-side backing store on a protocol
-	 * whose buffers come and go. */
+	/* **THE BACKING STORE IS THE FRAME.** The content draws into the memory the window server handed over, so
+	 * there is no client-side copy: `_pixels` is the seam's buffer — a GPU mapping where the compositor imports
+	 * one, shared memory otherwise — and CoreGraphics rasterizes straight into it. */
 	void *_surface;         /* the CGContextRef the content draws into, or NULL */
-	unsigned char *_pixels; /* the buffer behind it, which is also what is copied */
+	unsigned char *_pixels; /* the seam's pixels, which is also what the compositor samples */
+	BOOL _ownsPixels;       /* the pixels are this class's to free (they are not, on either seam path) */
 	int _surfaceWidth;      /* the size the two above were made for, so a resize can remake them */
 	int _surfaceHeight;
+	/* **AND WHAT EACH OF THE SEAM'S TWO BUFFERS IS MISSING.** The seam hands out one buffer while the other is on
+	 * the glass (see `AGWindowServer-Wayland.c`: one buffer is a repaint a person watches happen), so the buffer a
+	 * partial paint lands in last held the frame BEFORE the one being shown — the region that changed since is
+	 * still the older picture there, and painting only this pass's damage would leave it. The pair is keyed by the
+	 * pixels pointer rather than by a slot number because that is the only thing that survives a reallocation; a
+	 * pointer with no record means the buffer's content is not known at all, and the paint that finds it paints
+	 * the whole frame. */
+	void *_cg_paintPixels[2];
+	NSRect _cg_paintMissing[2];
 	BOOL _viewsNeedDisplay;
 }
 
@@ -607,6 +618,25 @@ typedef NSUInteger NSWindowSharingType;
  * centred" needs and what a live screenshot alone cannot give (see `tests/window_chrome.m`). The context is the
  * caller's and is not retained. */
 - (void)cg_drawChromeInContext:(nullable NSGraphicsContext *)context;
+
+/* **HOW MUCH OF THE SCREEN THIS WINDOW TAKES FOR ITSELF — AGORA-OWNED, AND IT IS NOT AN APPLE API.** `NSScreen`
+ * declares `-visibleFrame` as the frame minus the menu bar and the Dock, and on the Mac the window server works the
+ * Dock's share out of the Dock's own window frame through a private CGS call Agora has no answer for. So here the
+ * OWNER SAYS: `amount` points along `edge` (in `NSRectEdge`'s Cocoa vocabulary, so `NSMinYEdge` is the bottom, where
+ * a Dock usually is) leave every application's `-visibleFrame`, and `amount` 0 gives them back.
+ *
+ * This is the door the Dock is built on and the only thing it does to the screen's arithmetic; an ordinary window
+ * never asks. The reservation belongs to the WINDOW, so it dies with it — a Dock that crashes does not leave the
+ * desktop short of a strip. Nothing here moves this window: `-setFrame:display:` is a separate answer to a separate
+ * question. A compositor that speaks only `xdg-shell` has no door for it and records nothing. */
+- (void)cg_setReservedEdge:(NSRectEdge)edge amount:(CGFloat)amount;
+
+/* **AND WHETHER A CLICK ON THIS WINDOW MAY MAKE ITS APPLICATION THE ACTIVE ONE.** YES for every ordinary window and
+ * what the Dock says NO to: clicking a Dock tile must activate the application the tile names, and a Dock that took
+ * the keyboard would take the menu bar with it. A non-activatable window still receives every pointer event — it can
+ * be clicked and dragged — it simply never becomes the application in front. Agora-owned, like the reservation above,
+ * and for the same reason: the Mac has no public door because its Dock is not an `NSWindow` at all. */
+- (void)cg_setActivatable:(BOOL)flag;
 
 /* **AND THE TOOLBAR'S TWO SEAMS, WHICH ARE THE WINDOW'S BECAUSE THE BAND IS THE WINDOW'S GEOMETRY.** The toolbar
  * is a real subview of the content view, so the live path needs no painter; these two are what a test (and the
@@ -910,6 +940,12 @@ typedef NSUInteger NSWindowSharingType;
  * which is the same shape `-collectionBehavior` and the miniwindow doors already use. */
 - (void)setAlphaValue:(CGFloat)alphaValue;
 - (CGFloat)alphaValue;
+/* THE WINDOW'S BACKGROUND COLOUR, AND WHETHER IT IS OPAQUE AT ALL. `_opaque` decides the seam buffer's FORMAT
+ * (opaque XRGB or transparent ARGB) and is read when the window is first created, so an application that wants a
+ * translucent window says so BEFORE `-orderFront:`. `-backgroundColor` is the fill behind the content view. */
+- (NSColor *)backgroundColor;
+- (void)setBackgroundColor:(NSColor *)colour;
+
 - (void)setOpaque:(BOOL)opaque;
 - (BOOL)isOpaque;
 - (void)setHasShadow:(BOOL)hasShadow;

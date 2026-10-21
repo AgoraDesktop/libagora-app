@@ -65,16 +65,13 @@ enum {
  * door takes one, so the name is API rather than decoration. */
 typedef NSInteger NSApplicationActivationPolicy;
 
-/* THE ACTIVATION OPTIONS AND THE LAYOUT DIRECTION, both read from Apple's own 10.6 header rather than guessed:
- * `1 << 0` / `1 << 1` for the options and `0` / `1` for the direction. THE OPTIONS ARE APPLE'S `NSRunningApplication.h`
- * DECLARATIONS — the ledger carries each under BOTH owners for exactly that reason — and only this class's copy can
- * be shipped here, because the other owner is a class this tree has not declared. */
-enum {
-	NSApplicationActivateAllWindows = 1 << 0,
-	NSApplicationActivateIgnoringOtherApps = 1 << 1
-};
-typedef NSUInteger NSApplicationActivationOptions;
-
+/* THE ACTIVATION OPTIONS, WHICH USED TO BE DECLARED HERE. They are Apple's `NSRunningApplication.h` declarations,
+ * and this header used to carry the copy with a note that the class that owns them on the Mac had not been declared
+ * in this tree. `NSRunningApplication` exists now, so they live there, where Apple has them — include
+ * `<AppKit/NSRunningApplication.h>` to use them. Nothing in this class took one, which is why moving them broke
+ * nothing.
+ *
+ * `NSUserInterfaceLayoutDirection` is this header's own and stays. */
 enum {
 	NSUserInterfaceLayoutDirectionLeftToRight = 0,
 	NSUserInterfaceLayoutDirectionRightToLeft = 1

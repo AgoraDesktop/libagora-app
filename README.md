@@ -624,13 +624,23 @@ the compositor is really gone.
   window dragged by its edge DISAPPEARED for the whole drag — a mid-drag capture had the wallpaper where it had
   been — and came back on the release, because the release was what marked it. The test now holds both halves of
   that asymmetry: a resize marks the window stale and a move leaves it alone.
-  **AND THE OUTGOING BUFFER OUTLIVES THE ATTACH THAT REPLACES IT.** A surface's current buffer is the last one
-  ATTACHED — a `wl_buffer`'s release means the compositor has finished drawing with it, NOT that the surface has
-  stopped showing it — so a resize that freed the buffer it was replacing left the surface with none, and a surface
-  with no buffer is not composited and not even hit-tested. MEASURED, with a capture at every step of a drag: 21 of
-  25 captures had no window in them at all; after the seam keeps the outgoing buffer until the new one is attached,
-  0 of 25. `tests/window.c` holds the half a headless test can: a deferred resize must finish, so a frame is asked
-  for at the new size and the stride it arrives with is the size that was given.
+  **AND THE SAME RULE IS WHY A WINDOW HAS TWO BUFFERS.** A surface's current buffer is the last one ATTACHED — a
+  `wl_buffer`'s release means the compositor has finished drawing with it, NOT that the surface has stopped showing
+  it — so a resize that freed the buffer it was replacing left the surface with none, and a surface with no buffer
+  is not composited and not even hit-tested. MEASURED, with a capture at every step of a drag: 21 of 25 captures had
+  no window in them at all. `tests/window.c` holds the half a headless test can: a deferred resize must finish, so a
+  frame is asked for at the new size and the stride it arrives with is the size that was given.
+  **AND A FRAME IS NEVER DRAWN INTO THE BUFFER THE SCREEN IS SHOWING.** With one buffer per window the only place to
+  paint was the pixels on the glass: the compositor released the buffer after a composite and went on treating it as
+  the surface's content, so the whole repaint — background fill, view tree, chrome — happened under a screen that
+  could photograph it. Any composite that landed inside that window (another window committing, which is what a
+  focus change IS) put a half-drawn window up. MEASURED, capturing the nested output at 60 Hz through a click from
+  one window to another: one frame changed 62% of a window's pixels and showed BOTH windows part-painted, for about
+  a tenth of a second. A window now has two buffers — one on the glass, one being drawn — and the compositor gives
+  the replaced one back only when the commit that replaces it arrives (`window-server/src/surface.c`).
+  **A PARTIAL PAINT THEREFORE HAS TO KNOW WHAT ITS BUFFER IS MISSING**, because the buffer it lands in is one frame
+  behind the visible one; `_cg_paintMissing` widens the damage to the region that changed since, and a buffer with
+  no record at all (the first frame, a resize) is painted whole.
 - **The inside of a scroll view** (`ctest`, offscreen): `NSClipView`'s arithmetic in exact points — a short
   document is CENTRED rather than pinned (a 40-wide document in a 100-wide clip sits at -30), a long one stops at
   the far edge (300-100 by 200-100) and never shows blank space, `-documentVisibleRect` answers in the DOCUMENT's
@@ -722,7 +732,9 @@ These are properties of the protocol rather than gaps, and each is written at th
   an Apple API: the reservation belongs to the WINDOW (it dies with it, so a crashed Dock leaves no phantom
   strip), a second call MOVES it rather than adding one, and `amount:` 0 gives it back — which is what an
   autohiding Dock says before it hides. `tests/appkit_window.m` asserts both directions against Agora's own
-  server and skips the block on a stock compositor, which has no work area to move.
+  server and skips the block on a stock compositor, which has no work area to move. **And its second Agora-owned
+  door is `-cg_setActivatable:`**: a window that says NO never takes the keyboard when clicked, which is what keeps
+  a Dock from taking the menu bar with it — the pointer still reaches it, and the focus stays where it was.
 - **There is no Expose.** The client owns the pixels; a repaint is asked for by the frame callback, which is
   why `-display` and the seam's frame handler both end in the same draw.
 - **The screen is an output.** `NSScreen` asks the seam, which learns the size from `wl_output`; with no
@@ -871,7 +883,10 @@ window's frame by the band's height — 52 points regular, 38 small — and leav
 gives that height back. `-contentRectForFrameRect:` is the one place that knows, so the content view, the min/max
 constraint conversion and the title bar all agree on where the content ends and the chrome begins. The chrome's
 fourth mark sends `-toggleToolbarShown:`, the same door a menu item would send and the same one the toolbar's own
-visibility uses.
+visibility uses — **and that mark exists only when there is a toolbar to toggle**, which is Apple's own rule as well
+as this tree's: the pill is the toolbar's button, so a window without one has a bare strip at its right end rather
+than a control whose only action is a no-op. `-showsToolbarButton:` (default YES, Apple's) takes it away on a window
+that DOES have a toolbar, and hiding the band does not remove it — the pill is how the band comes back.
 
 **ONE COLOUR, THREE STRENGTHS: THE ACCENT IS WHAT "THE POINTER IS HERE" LOOKS LIKE.** A borderless item's background
 is the band's until something answers it, and the plate that answers is the platform accent — a PRESS takes it whole,
@@ -910,8 +925,9 @@ know rather than pretending to understand one.
 `tests/toolbar.m` is what holds the four contracts together: it attaches a toolbar and measures the frame, walks the
 delegate's default list through insertions and removals, checks a validator that changes its item while answering,
 clicks an item through the view and reads the selection, round-trips the configuration dictionary, and draws the band
-into a bitmap to find its ground, its baseline and a label. `tests/chrome_buttons.m` still presses the fourth mark on
-a window with NO toolbar, where the door is correctly quiet.
+into a bitmap to find its ground, its baseline and a label. `tests/chrome_buttons.m` is the other side of the same
+rule: on a window with NO toolbar there is no fourth mark at all, so it presses the point where one would be and
+checks that no button took it.
 
 ### The table view, and the header that stays put
 
@@ -1370,6 +1386,39 @@ hand out distinct selector pointers for one name across the images that were com
 `sel_isEqual`, not pointer equality; `tests/search_field.m` uses the former. `-sendAction:to:` looks the selector up by
 name and was never affected — the test was.
 
+### The workspace services, and what "running" can mean without a session
+
+**`NSWorkspace` IS APPKIT'S FACE OVER THREE COMPONENTS, AND THE ONLY THING IT ADDS IS THE LIVE SET.** Launch
+Services answers what opens a file and what a bundle is; Icon Services draws the icon; the window server says what is
+running. `NSWorkspace` is where an application asks all three, plus `NSRunningApplication` — one live object per
+bundle identifier — and the three notifications a Dock reacts to: *launched*, *terminated*, *activated*.
+
+**IT IS DRIVEN BY THE WINDOW SERVER'S WINDOW LIST, WHICH IS A SNAPSHOT.** `agora_shell.get_window_list` sends
+`begin`, a row per window, `done`, and re-sends the whole thing whenever a window appears, goes away, changes title
+or level or visibility, or when the keyboard moves. `-cg_applyWindowList:count:` is the whole model: it diffs two
+snapshots into the three transitions and updates the objects. Two consequences worth stating:
+
+- the list is **as current as the application's event loop**, because that is where the snapshot is dispatched — a
+  client that never pumps never hears;
+- and an unchanged snapshot announces **nothing**, because the diff is by identifier and window set, not by the
+  arrival of an event. A pumping client would otherwise get a launch storm.
+
+**THREE DEVIATIONS, EACH AT THE DOOR THAT CARRIES IT.** An application with no windows is not in
+`-runningApplications`, because a connection is the only liveness this tree has — the Mac would list it, and the
+`session` component is what will. `-processIdentifier` is **0**, because the window server knows a client and not a
+pid. And `-terminate` is a request: every window gets `agora_window.close`, the application decides, and
+`-forceTerminate` answers NO because a `SIGKILL` needs the session too. `-launchDate` is nil for the same reason.
+
+**AND A BRIDGE BUG FOUND WHILE WIRING IT, NAMED RATHER THAN WORKED AROUND QUIETLY.** Passing an `NSURL` into a Core
+Foundation URL door ABORTS in this tree — `-[NSURL _cfurl]` is compiled with an opaque `struct __CFURL` while Core
+Foundation's call site encodes a complete one, so the runtime refuses the call with "incorrect signature".
+`NSWorkspace` crosses that line through the URL's absolute string (a real bridge the two runtimes agree on, the same
+one `WSItemKind` already relies on), and the fix belongs in `_cfurl`'s declaration.
+
+`tests/workspace_services.m` is the proof — **37 checks** — and it feeds the snapshots in directly, because the diff
+is the interesting half and the compositor half is the window-list probe's. A fixture bundle the test writes itself
+proves the identifier → bundle → `CFBundleName` → Icon Services chain, with no display and no application launched.
+
 ### Still absent, and why
 
 **NINE THINGS THAT USED TO BE ON THIS LIST ARE NOT ANY MORE, AND THE LIST IS CORRECTED RATHER THAN QUIETLY SHRUNK:**
@@ -1387,8 +1436,9 @@ minimise and zoom buttons DO is now this tier's — each goes through the `-perf
 the MINIMISE is
 still only a state the window marks and announces, because there is no Dock to put a miniaturized window in and no
 iconify in the protocol (Kestrel is parked). The chrome's fourth mark toggles the window's toolbar (`tests/toolbar.m`);
-a window with no toolbar has nothing to toggle, which is the case `tests/chrome_buttons.m` presses. The three
-symbols beside it ARE buttons, and that same probe presses them. The `NSTextInput` PROTOCOL is here and `NSTextView` answers it (`tests/text_marked_text.m`), and the
+a window with no toolbar does not show the mark at all, which is what `tests/chrome_buttons.m` presses at — and
+`tests/window_chrome.m` checks in pixels, on the same window both ways round. The three symbols beside it ARE
+buttons, and that same probe presses them. The `NSTextInput` PROTOCOL is here and `NSTextView` answers it (`tests/text_marked_text.m`), and the
 input-method CONTEXT is here too (`tests/text_input_context.m`), and SO IS THE METHOD (`tests/text_input_method.m`):
 `AGInputMethod` is a dead-key table the context sends keys to first. AND THE CANDIDATE LIST IS HERE TOO — this
 sentence said it was owed, and the note thirty lines below already said it had landed, so the two contradicted each

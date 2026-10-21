@@ -14,8 +14,15 @@ one repository's code moving to another's rather than third-party code arriving.
 | Licence | MIT, © 2026 Kyle J. Cardoza — see [`LICENSE`](LICENSE) |
 
 What is **not** imported, and is this repository's own: `platform/` — the window-server seam and the keyboard
-translation — and `tests/`. They are why this component can build at all: the AppKit it came from is linked
-against an X server and this one is not.
+translation — `tests/`, and the **workspace services** (`NSWorkspace.h`, `NSRunningApplication.h`), which are written
+here from the 10.6 SDK's headers because the AppKit that came from Fiwix has no session backing to adapt. They are
+why this component can build at all: the AppKit it came from is linked against an X server and this one is not.
+
+`NSStatusItem.h`, `NSWorkspace.h` and `NSRunningApplication.h` are transcribed in Apple's spelling from the MacOSX10.6
+SDK headers (`Versions/C/Headers/`), the same recipe `libagora-text/PROVENANCE.md` records for its own; the
+IMPLEMENTATIONS are this repository's and are backs onto Agora's own components, never Apple's code. Where an Apple
+door cannot be honoured here the header says so at the door (`NSRunningApplication -forceTerminate`, `-launchDate`),
+and `tests/owed_census.txt` counts them like every other owed note in this library.
 
 ## What was changed, and why
 
@@ -715,6 +722,28 @@ the glyph ink and the hidden clear button, the press that misses the text, the e
 whole-string sending rules with the timer fired by hand, a programmatic write that adds no send, the bounded deduped
 recents, both autosave orders, the template menu's tagged placement, choosing a recent, and the ornament cells'
 target/action pairing — **74 checks**.
+
+## 30. The toolbar band between its controls is the window's drag handle
+
+**A PRESS ON THE BAND THAT MISSED EVERY CONTROL DID NOTHING.** It is outside the title bar's rectangle
+(`fn_pointInChrome`), outside the content's, and the toolbar's own view answers "no item" for it — so the widest
+part of a window with a toolbar was a strip of dead pixels, and in the demo's controls window that is the flexible
+space, most of the band's width.
+
+`NSWindow` now takes hold of the window there, by the same path, the same grab arithmetic and the same deferred
+move the title bar already used: `fn_pointInToolbarBand` answers whether the point is in the band, and asks
+`NSToolbar -cg_pointIsOverControl:` before saying yes. The toolbar answers with **`fn_item_acts`, the predicate its
+own click path uses** — so a separator, a space and a flexible space are the window's (they are drawn, and they do
+nothing), an item with a custom view is not, and a control cannot be inert for a click and a handle for a drag at
+the same time. A borderless window keeps no handle: it is the same rule the title bar follows. `-isMovable` still
+decides, and the resize bands are still asked first.
+
+The seam is `NSToolbar_internal.h`'s fourth door, because the item rectangles live in the private `NSToolbarView`
+and re-deriving them in `NSWindow.m` is how the two would drift.
+
+`tests/toolbar.m` adds four checks: a drag between the controls moves the window by the pointer's own delta, a press
+on a control does not move it, the run of non-control points is wider than any gap between items (which is the
+flexible space being the handle rather than an item), and an immovable window does not move at all.
 
 ## Keeping in sync
 

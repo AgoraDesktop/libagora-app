@@ -1022,7 +1022,6 @@ static const CGFloat NSMenuStateColumnWidth = 20.0;
 	NSSize size;
 
 	(void)item;
-	(void)view;
 	if (_tracking) {
 		fprintf(stderr, "APPKIT-REFUSE: -popUpMenuPositioningItem:atLocation:inView: cannot begin a session "
 				"while one is already up — one menu at a time is the shape of this tier's tracking\n");
@@ -1058,8 +1057,53 @@ static const CGFloat NSMenuStateColumnWidth = 20.0;
 	if (size.width <= 0.0) {
 		size.width = 120.0;	/* a floor, because a menu narrower than this is not usable */
 	}
-	/* THE FRAME HANGS BELOW-LEFT OF THE POINT, which is where a menu opens from a click. */
-	_trackingFrame = NSMakeRect(location.x, location.y - size.height, size.width, size.height);
+	/* **THE POINT COMES IN THE VIEW'S COORDINATES, AND THE FRAME GOES OUT IN SCREEN COORDINATES.** Apple's contract
+	 * for `atLocation:` is the VIEW's system — screen coordinates only when the view is nil — and this method used
+	 * to take the number as if it were already on the screen. MEASURED, in the Dock: its window is 64 points wide at
+	 * x = 1216, a tile's point is x ≈ 20 IN THE WINDOW, and the menu opened at x = 20 on the LEFT SIDE OF THE
+	 * SCREEN. A menu is placed by its window's frame, and a frame is absolute; the conversion is not optional.
+	 *
+	 * The two doors are the ones Cocoa has: the view's point to the window's (`-convertPoint:toView:` with nil), and
+	 * the window's to the screen's (`-convertBaseToScreen:`). */
+	{
+		NSPoint base = location;
+
+		if (view != nil) {
+			NSView *inView = (NSView *)view;
+			NSWindow *window = [inView window];
+
+			if (window != nil) {
+				base = [window convertBaseToScreen:[inView convertPoint:location toView:nil]];
+			}
+		}
+		/* THE FRAME HANGS BELOW-LEFT OF THE POINT, which is where a menu opens from a click. */
+		_trackingFrame = NSMakeRect(base.x, base.y - size.height, size.width, size.height);
+
+		/* **AND IT IS KEPT ON THE SCREEN, BECAUSE A DOCK IS AT AN EDGE.** A menu that opened to the right of a click
+		 * on the right-hand Dock would hang off the screen and be clipped, which is how a menu becomes unreadable at
+		 * exactly the place a person is looking. The Mac's answer is the same: open away from the edge. A screen that
+		 * has not described itself yet (no compositor) is not a screen to clamp against, so the clamp is skipped
+		 * rather than guessed. */
+		{
+			NSRect screen = [[NSScreen mainScreen] frame];
+
+			if (screen.size.width > 0.0 && screen.size.height > 0.0) {
+				if (_trackingFrame.origin.x + _trackingFrame.size.width > NSMaxX(screen)) {
+					_trackingFrame.origin.x = NSMaxX(screen) - _trackingFrame.size.width;
+				}
+				if (_trackingFrame.origin.x < NSMinX(screen)) {
+					_trackingFrame.origin.x = NSMinX(screen);
+				}
+				if (_trackingFrame.origin.y < NSMinY(screen)) {
+					/* NO ROOM BELOW THE POINT: open ABOVE it, which is the other side a menu can hang from. */
+					_trackingFrame.origin.y = base.y;
+				}
+				if (_trackingFrame.origin.y + _trackingFrame.size.height > NSMaxY(screen)) {
+					_trackingFrame.origin.y = NSMaxY(screen) - _trackingFrame.size.height;
+				}
+			}
+		}
+	}
 	/* **AND THE VIEW THAT FILLS IT, MADE BEFORE THE WINDOW IS SHOWN** so that the first display has something to
 	 * draw: a window whose content is set after it is on the screen has been on the screen empty. */
 	[_menuView setFrame:NSMakeRect(0.0, 0.0, _trackingFrame.size.width, _trackingFrame.size.height)];
@@ -1178,6 +1222,11 @@ static const CGFloat NSMenuStateColumnWidth = 20.0;
 	}
 }
 
+- (NSRect)cg_trackingFrame
+{
+	return _trackingFrame;
+}
+
 - (BOOL)cg_takeDismissedAt:(NSPoint *)where
 {
 	if (!_hasDismissedAt) {
@@ -1269,7 +1318,15 @@ static const CGFloat NSMenuStateColumnWidth = 20.0;
 				"menu at — a context menu with no place to open is not a context menu\n");
 		return;
 	}
+	/* **THE EVENT IS IN THE WINDOW'S COORDINATES AND THE INSTANCE DOOR TAKES THE VIEW'S.** They agree for a view that
+	 * fills its window, which is why passing the event's point straight through looked right for a menu inside a
+	 * normal window — and a Dock's view is 64 points wide at x = 1216, so "looked right" is the whole bug. */
 	where = [event locationInWindow];
+	if (view != nil) {
+		if ([(NSView *)view window] != nil) {
+			where = [(NSView *)view convertPoint:where fromView:nil];
+		}
+	}
 	[menu popUpMenuPositioningItem:nil atLocation:where inView:view];
 }
 

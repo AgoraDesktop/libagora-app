@@ -50,7 +50,16 @@ kill -TERM "${SPID}" 2>/dev/null
 wait "${SPID}" 2>/dev/null
 SPID=""
 status=$?
-echo "${output}" | grep -E "appkit_(window|status):"
+echo "${output}" | grep -E "appkit_(window|status|dock):"
+
+# **AND THE DOCK'S SHARE WAS ACTUALLY ASKED FOR.** The reserve assertions live in the client, where the numbers are;
+# what this checks is that they RAN — a block deleted from the test must not leave a green run behind, which is the
+# one way a passing test is worse than a failing one.
+dock_lines=$(printf '%s\n' "${output}" | grep -c "appkit_dock:")
+if [ "${dock_lines}" -lt 2 ]; then
+	echo "FAIL: the client said nothing about a reservation (${dock_lines} dock line(s))" >&2
+	exit 1
+fi
 
 line=$(printf '%s\n' "${output}" | grep -m1 "frame .* visibleFrame")
 if [ -z "${line}" ]; then

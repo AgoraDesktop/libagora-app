@@ -333,6 +333,12 @@ extern NSString *NSMenuDidEndTrackingNotification;
  * session ended any other way — a pick, a key, a programmatic cancel — because there is then nothing to re-open. */
 - (BOOL)cg_takeDismissedAt:(NSPoint *)where;
 
+/* **WHERE THE MENU'S PANEL ACTUALLY IS, IN SCREEN COORDINATES — the session's own answer, for a test.** It is the
+ * frame the tracking window was made with, computed from the caller's point and the view's window, so a caller can
+ * assert that a menu opened in a window at x = 1216 is placed at x ≈ 1216 and not at the screen's left edge (which is
+ * what it did before the conversion was added). Meaningless before the first `popUp…` of the session. */
+- (NSRect)cg_trackingFrame;
+
 - (void)cancelTracking;
 
 /* **BEGIN A SESSION AND RETURN, LEAVING THE LOOP TO THE CALLER.** What the MENU BAR needs: it owns the session for a

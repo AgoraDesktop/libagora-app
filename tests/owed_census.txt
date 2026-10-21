@@ -28,6 +28,7 @@ NSApplication.h                      1
 NSBezierPath.h                       3
 NSButtonCell.h                       1
 NSCell.h                             3
+NSRunningApplication.h               2
 NSEvent.h                            1
 NSGraphicsContext.h                  1
 NSMenu.h                             4
@@ -35,4 +36,4 @@ NSPasteboard.h                       1
 NSResponder.h                        1
 NSSplitView.h                        1
 
-# total: 17
+# total: 19

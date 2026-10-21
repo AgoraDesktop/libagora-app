@@ -660,6 +660,23 @@ static CGFloat fn_standard_width(NSToolbarItem *item, NSToolbarDisplayMode displ
 	return -1;
 }
 
+/* **WHETHER THE POINT IS ON SOMETHING THE POINTER CAN USE, WHICH IS NOT THE SAME AS "ON AN ITEM".** A separator and
+ * both spaces are items the layout places and the painter draws, and a press on one does nothing — so they belong to
+ * the window's drag handle, not to the toolbar. This is the same `fn_item_acts` the click path uses, so a spacer
+ * cannot be inert for a click and a handle for a drag at the same time. */
+- (BOOL)pointIsOverActingItem:(NSPoint)point
+{
+	NSInteger index = [self indexAtPoint:point];
+	NSToolbarItem *item;
+
+	if (index < 0 || (NSUInteger)index >= [_layoutItems count]) {
+		return NO;
+	}
+	item = [_layoutItems objectAtIndex:index];
+	/* A CUSTOM VIEW IS A CONTROL whatever its identifier says: the band is not a handle under it. */
+	return [item view] != nil || fn_item_acts(item);
+}
+
 - (NSPoint)localPointForEvent:(NSEvent *)event
 {
 	NSPoint p = [event locationInWindow];
@@ -893,6 +910,7 @@ static NSString * const AGCoderToolbarBaselineKey = @"showsBaselineSeparator";
 {
 	return YES;
 }
+
 
 - (instancetype)initWithIdentifier:(NSString *)identifier
 {
@@ -1397,6 +1415,23 @@ static NSString * const AGCoderToolbarBaselineKey = @"showsBaselineSeparator";
 	}
 	[_window cg_toolbarLayoutChanged];
 	[self fn_saveConfiguration];
+}
+
+- (BOOL)cg_pointIsOverControl:(NSPoint)pointInWindow
+{
+	NSToolbarView *view = (NSToolbarView *)[self cg_view];
+	NSPoint p;
+
+	/* A HIDDEN TOOLBAR HAS NO CONTROL THE POINTER CAN REACH, whatever the layout still remembers. */
+	if (view == nil || ![self isVisible]) {
+		return NO;
+	}
+	/* THE SAME ARITHMETIC `-localPointForEvent:` USES, and deliberately the same: the item rectangles are laid out in
+	 * the view's own space, and a conversion that disagreed with the view's own event path would answer "on a
+	 * control" for a press the view itself reads as "between items". */
+	p = NSMakePoint(pointInWindow.x - [view frame].origin.x,
+	                pointInWindow.y - [view frame].origin.y);
+	return [view pointIsOverActingItem:p];
 }
 
 @end

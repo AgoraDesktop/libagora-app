@@ -139,6 +139,13 @@
 - (void)cg_applyPendingResize;
 /* AND THE FRAME A RESIZE IS AIMING AT, FROM THE POINTER'S OWN POSITION — which is where the delegate is asked. */
 - (NSRect)cg_frameForResizeToPoint:(NSPoint)globalPoint;
+/* **AND THE BOOKKEEPING FOR A SEAM THAT ALTERNATES TWO BUFFERS.** Which buffer a frame is about to be drawn into,
+ * which slot that buffer owns, and what it is missing — see the note on `_cg_paintMissing` in `NSWindow.h`. */
+- (NSInteger)cg_paintSlotForPixels:(void *)pixels;
+- (NSInteger)cg_claimPaintSlotForPixels:(void *)pixels;
+- (void)cg_recordPaintInSlot:(NSInteger)slot rect:(NSRect)painted;
+- (NSRect)cg_wholeFrameRect;
+- (NSRect)cg_chromeRect;
 /* **AND WHERE A CHROME BUTTON IS, in WINDOW coordinates.** The painter and the pointer ask the one function, so
  * a hovered button cannot be a different rectangle from a drawn one. */
 - (NSInteger)cg_chromeButtonAtPoint:(NSPoint)windowPoint;
@@ -213,7 +220,10 @@ static const CGFloat fn_CHROME_EDGE = 8.0;	/* the strip's own padding, at either
  * mark EIGHT POINTS WIDE and NINE TALL, whose strokes are TWO points thick — so those are the numbers here. The
  * four boxes are all one size now: the toolbar toggle wears the theme's own MENU mark, a filled triangle eight by
  * six, where this chrome used to draw a pill of its own invention at the far end. A mark that is not one of the
- * theme's is a mark that does not belong on its bar. */
+ * theme's is a mark that does not belong on its bar.
+ *
+ * **AND THE FOURTH BOX IS ONLY DRAWN WHEN THE WINDOW HAS A TOOLBAR** — `fn_chrome_button_present` decides, and the
+ * size below is the size for the windows that get it. */
 static const CGFloat fn_MARK_WIDTH = 8.0;	/* the mark, across */
 static const CGFloat fn_MARK_HEIGHT = 9.0;	/* the X's and the minus's; the plus is eight and the triangle six */
 static const CGFloat fn_MARK_CHEVRON = 6.0;
@@ -318,7 +328,17 @@ static BOOL fn_chrome_button_present(NSWindow *w, AGChromeButton button)
 	case AGChromeButtonClose:    return (mask & NSClosableWindowMask) != 0;
 	case AGChromeButtonHide:     return (mask & NSMiniaturizableWindowMask) != 0;
 	case AGChromeButtonMaximize: return (mask & NSResizableWindowMask) != 0;
-	case AGChromeButtonMenu:     return (mask & NSTitledWindowMask) != 0;
+	/* **AND THE PILL IS THERE ONLY WHEN THERE IS A TOOLBAR FOR IT TO TOGGLE.** It is the toolbar's button — the one
+	 * mark in the strip that is not about the window — so a window with no toolbar was drawing a control whose only
+	 * action was a no-op (`-toggleToolbarShown:` with nothing attached), which is a mark that promises something the
+	 * window cannot do. A WINDOW THAT HAS ONE KEEPS IT WHETHER THE BAND IS SHOWING OR NOT, because hiding a toolbar
+	 * is not the same as not having one: the pill is how the band comes back.
+	 *
+	 * `-showsToolbarButton` is the second half of the same question and Apple's own property — a window that sets it
+	 * NO wants the pill gone with the toolbar still attached, which is a caller choosing to reach the band from a
+	 * menu instead. It defaults to YES in `-initWithContentRect:…`, which is Apple's default too. */
+	case AGChromeButtonMenu:
+		return (mask & NSTitledWindowMask) != 0 && [w toolbar] != nil && [w showsToolbarButton];
 	default:                     return NO;
 	}
 }
@@ -423,7 +443,7 @@ static void fn_activation(void *context, int active)
 static AGWindowServer *fn_server(void)
 {
 	if (s_server == NULL) {
-		s_server = AGWindowServerConnect();
+		s_server = AGWindowServerShared();
 		if (s_server != NULL) {
 			AGWindowServerSetActivationHandler(s_server, fn_activation, NULL);
 		}
@@ -971,6 +991,10 @@ static NSString * const AGCoderWindowContentViewKey = @"contentView";
 	_contentAspectRatio = NSMakeSize(0.0, 0.0);
 	_alphaValue = 1.0;
 	_opaque = YES;
+	/* AND THE PILL IS THE TOOLBAR'S, SO IT IS ON UNTIL SOMEBODY SAYS OTHERWISE — Apple's own default for
+	 * `-showsToolbarButton`. It only has anything to show on a window that HAS a toolbar: see
+	 * `fn_chrome_button_present`. */
+	_showsToolbarButton = YES;
 	/* NO BUTTON IS UNDER THE POINTER AND NONE IS PRESSED, which -1 says: index 0 is a real button. */
 	_cg_hoverChrome = -1;
 	_cg_pressedChrome = -1;
@@ -1353,6 +1377,29 @@ static BOOL fn_pointInChrome(NSWindow *w, NSPoint p)
 	}
 }
 
+/* **AND THE TOOLBAR BAND IS THE WINDOW'S TOO, EXCEPT WHERE AN ITEM SITS.** A press between the items used to go
+ * nowhere: it is outside the title bar's rectangle and outside the content's, and the band itself has no control.
+ * On the Mac that press moves the window, which is what makes a toolbar a place to take hold of rather than a strip
+ * of dead pixels. The items are asked FIRST — through the toolbar's own hit test, so this cannot disagree with what
+ * the toolbar would do with the same press — and only the space between and around them becomes a handle.
+ *
+ * A BORDERLESS WINDOW KEEPS NO HANDLE, which is `fn_pointInChrome`'s rule applied to the band as well: a window
+ * with no chrome is a window the application placed itself. */
+static BOOL fn_pointInToolbarBand(NSWindow *w, NSPoint p)
+{
+	NSRect content = [w contentRectForFrameRect:[w frame]];
+	CGFloat height = fn_toolbar_height(w);
+
+	if (height <= 0.0 || ![w hasTitleBar]) {
+		return NO;
+	}
+	if (!(p.x >= 0.0 && p.x < content.size.width
+	      && p.y >= content.size.height && p.y < content.size.height + height)) {
+		return NO;
+	}
+	return ![[w toolbar] cg_pointIsOverControl:p];
+}
+
 /* ============================================================================================ *
  * THE FRAME'S OWN EDGES, WHICH ARE THE WINDOW'S OTHER HANDLE.                                   *
  *                                                                                                *
@@ -1671,6 +1718,41 @@ static void fn_draw_chrome(CGContextRef c, NSWindow *w, NSRect content)
 	AGWindowSetStatusItem(_agwindow, (int)length);
 }
 
+/* **AND WHETHER A CLICK ON IT MAY MAKE THE APPLICATION ACTIVE.** The Dock's own answer is NO; everything else says
+ * nothing and keeps the ordinary click-to-focus. The window is still clickable — this is the keyboard and the menu
+ * bar, not the pointer. */
+- (void)cg_setActivatable:(BOOL)flag
+{
+	if (![self cg_ensureWindow]) {
+		return;
+	}
+	AGWindowSetActivatable(_agwindow, flag ? 1 : 0);
+}
+
+/* **AND THE OTHER THING A WINDOW CAN SAY ABOUT THE SCREEN ITSELF: HOW MUCH OF IT IS THIS WINDOW'S.** The Dock is
+ * the client this exists for, and the Mac's answer to the same question is not a public API — its window server
+ * derives `-visibleFrame` from the Dock's window frame privately. Agora's protocol carries the number instead, so
+ * the translation here is only the vocabulary: `NSRectEdge` is Cocoa's, and the seam's edges are the SCREEN's
+ * (top, bottom, left, right), which is why this is a switch rather than a cast.
+ *
+ * `NSMinYEdge` is the BOTTOM because Cocoa's y grows upward — the one mapping in here that a reader will want to
+ * check twice, and the one a Dock at the bottom of the screen uses. */
+- (void)cg_setReservedEdge:(NSRectEdge)edge amount:(CGFloat)amount
+{
+	int platform_edge;
+
+	if (![self cg_ensureWindow]) {
+		return;
+	}
+	switch (edge) {
+	case NSMinXEdge: platform_edge = AGWindowEdgeLeft; break;
+	case NSMaxXEdge: platform_edge = AGWindowEdgeRight; break;
+	case NSMaxYEdge: platform_edge = AGWindowEdgeTop; break;
+	case NSMinYEdge:
+	default:         platform_edge = AGWindowEdgeBottom; break;
+	}
+	AGWindowSetReserved(_agwindow, platform_edge, (int)(amount > 0.0 ? amount : 0.0));
+}
 - (BOOL)cg_ensureWindow
 {
 	AGWindowServer *server = fn_server();
@@ -1698,6 +1780,15 @@ static void fn_draw_chrome(CGContextRef c, NSWindow *w, NSRect content)
 		return NO;
 	}
 	_agwindow = AGWindowCreate(server, w, h, _title != nil ? [_title UTF8String] : NULL);
+	/* **AND WHICH APPLICATION IT IS, FROM THE BUNDLE RATHER THAN A CONSTANT.** The seam used to write
+	 * "org.agora.AppKit" into every window, so a shell component grouping windows by application saw one
+	 * application; `NSBundle` already answers this and the app does not have to know it asked. A process with no
+	 * bundle (a test binary) has no identifier, which is empty and reads as "not an application". */
+	if (_agwindow != NULL) {
+		NSString *identifier = [[NSBundle mainBundle] bundleIdentifier];
+
+		AGWindowSetAppID(_agwindow, identifier != nil ? [identifier UTF8String] : "");
+	}
 	/* **THE SEAM IS TOLD BEFORE THE FIRST FRAME**, because a transparent window's shm buffer must be ARGB8888 and
 	 * the format is decided when the buffer is made. An opaque window says so too, so the two states are always
 	 * stated rather than defaulted into. */
@@ -2768,10 +2859,11 @@ static CGFloat fn_clamp_axis(CGFloat v, CGFloat lo, CGFloat hi)
 				[self setNeedsDisplay:YES];
 				return;
 			}
-			/* **A PRESS ON THE CHROME THAT MISSED A BUTTON IS A MOVE.** The title bar is the window's handle, and
-			 * `-isMovable` is the flag Apple's own header says decides it — so a window that refuses to be moved keeps
-			 * its chrome to itself. The grab point is remembered; see the drag case below for the arithmetic. */
-			if ([self isMovable] && fn_pointInChrome(self, p)) {
+			/* **A PRESS ON THE CHROME, OR ON THE TOOLBAR BETWEEN ITS ITEMS, IS A MOVE.** The title bar is the window's
+			 * handle, the band below it is the same strip with controls in it, and `-isMovable` is the flag Apple's own
+			 * header says decides it — so a window that refuses to be moved keeps its chrome to itself. The grab point is
+			 * remembered; see the drag case below for the arithmetic. */
+			if ([self isMovable] && (fn_pointInChrome(self, p) || fn_pointInToolbarBand(self, p))) {
 				_cg_draggingChrome = YES;
 				_cg_dragGrab = p;
 				/* **AND WHICH POINTER THE DRAG WILL USE: the compositor's absolute one if the PRESS carried it, the
@@ -3083,9 +3175,10 @@ static CGFloat fn_clamp_axis(CGFloat v, CGFloat lo, CGFloat hi)
  * button's behaviour too. Sending `-close`, `-miniaturize:` and `-zoom:` from here instead would be a second road
  * to each that skips every question the first one asks.
  *
- * **AND THE PILL IS THE TOOLBAR TOGGLE.** It sends `-toggleToolbarShown:`, which is the same door a menu item
- * sends and the same door the toolbar's own visibility uses; a window with no toolbar has nothing to toggle and the
- * door is quiet, which is the behaviour the mark had before there was an `NSToolbar` to attach. */
+ * **AND THE PILL IS THE TOOLBAR TOGGLE, WHICH IS WHY A WINDOW WITHOUT A TOOLBAR DOES NOT SHOW ONE AT ALL.** It
+ * sends `-toggleToolbarShown:`, the same door a menu item sends and the same door the toolbar's own visibility uses.
+ * The mark is laid out only when there is a toolbar to toggle (`fn_chrome_button_present`), so this case is reached
+ * by a window that has one; a quiet door here is the belt to that braces rather than the mechanism. */
 - (void)cg_performChromeButton:(NSInteger)index
 {
 	switch ((AGChromeButton)index) {
@@ -3253,12 +3346,12 @@ static CGFloat fn_clamp_axis(CGFloat v, CGFloat lo, CGFloat hi)
 
 /* THE SURFACE IS THE CONTENT RECT'S, MADE ON DEMAND AND REMADE WHEN THAT RECT CHANGES SIZE — the size is
  * read back off the context rather than kept in a second ivar, so the two cannot disagree about it. */
-- (BOOL)cg_ensureSurface
+- (BOOL)cg_ensureSurfaceWithPixels:(unsigned char *)pixels stride:(int)stride
 {
 	NSInteger w, h;
 	CGColorSpaceRef cs;
 
-	if (![self cg_ensureWindow]) {
+	if (![self cg_ensureWindow] || pixels == NULL || stride <= 0) {
 		return NO;
 	}
 	/* **THE SURFACE IS THE FRAME, NOT THE CONTENT** — client-side decoration (appkit-plan §6 D6). The window owns
@@ -3273,12 +3366,16 @@ static CGFloat fn_clamp_axis(CGFloat v, CGFloat lo, CGFloat hi)
 	}
 	if (_surface != NULL) {
 		if ((NSInteger)CGBitmapContextGetWidth(_surface) == w &&
-		    (NSInteger)CGBitmapContextGetHeight(_surface) == h) {
+		    (NSInteger)CGBitmapContextGetHeight(_surface) == h &&
+		    (int)CGBitmapContextGetBytesPerRow(_surface) == stride &&
+		    _pixels == pixels) {
 			return YES;
 		}
 		CGContextRelease(_surface);
 		_surface = NULL;
-		free(_pixels);
+		if (_ownsPixels) {
+			free(_pixels);
+		}
 		_pixels = NULL;
 	}
 	/* THE FORMAT IS THE SEAM'S OWN, AND IT IS THE SAME PATTERN FOR THE SAME REASON: the seam's frame buffer is
@@ -3293,22 +3390,26 @@ static CGFloat fn_clamp_axis(CGFloat v, CGFloat lo, CGFloat hi)
 	 * the desktop in grey coverage while the renderer underneath could have done better. A window's frame has no
 	 * transparency to represent — its shadow is the SERVER's, around the frame and not in it — so this is the
 	 * honest format for it as well as the one that makes the text look right. */
-	_pixels = calloc((size_t)w * (size_t)h * 4u, 1);
-	if (_pixels == NULL) {
-		return NO;
+	/* **THE PIXELS ARE THE SEAM'S, AND THAT IS THE POINT.** The backing store used to be `calloc`'d here and then
+	 * copied into the wire buffer every frame; now the wire buffer IS the surface, so the copy is not made cheaper,
+	 * it does not exist. `_ownsPixels` stays because a caller with no seam could still supply its own memory, and
+	 * freeing the seam's would be a free of a GPU mapping. */
+	if (_ownsPixels) {
+		free(_pixels);
 	}
+	_pixels = pixels;
+	_ownsPixels = NO;
 	cs = CGColorSpaceCreateDeviceRGB();
 	/* **A TRANSPARENT WINDOW'S SURFACE CARRIES ALPHA AND AN OPAQUE ONE'S DOES NOT**, and the two are the same word
 	 * with the fourth byte treated differently. `NoneSkipFirst` is what lets CoreGraphics smooth text — an alpha
 	 * channel switches sub-pixel coverage off — so an opaque window keeps it; `PremultipliedFirst` is what a
 	 * transparent window's pixels must be, because the compositor BLENDS them (source-over) and premultiplied BGRA
 	 * is exactly what ARGB8888 little-endian holds. */
-	_surface = CGBitmapContextCreate(_pixels, (size_t)w, (size_t)h, 8, (size_t)w * 4u, cs,
+	_surface = CGBitmapContextCreate(_pixels, (size_t)w, (size_t)h, 8, (size_t)stride, cs,
 					 _opaque ? (uint32_t)(kCGImageAlphaNoneSkipFirst | kCGBitmapByteOrder32Little)
 						 : (uint32_t)(kCGImageAlphaPremultipliedFirst | kCGBitmapByteOrder32Little));
 	CGColorSpaceRelease(cs);
 	if (_surface == NULL) {
-		free(_pixels);
 		_pixels = NULL;
 		return NO;
 	}
@@ -3517,15 +3618,20 @@ static CGFloat fn_clamp_axis(CGFloat v, CGFloat lo, CGFloat hi)
 	return frame;
 }
 
-/* DRAW AND PRESENT. The content view is drawn through an `NSGraphicsContext` over this window's own backing
- * store, and the backing store is then COPIED into the frame the compositor handed over. One copy per frame is
- * the price of a client-side backing store on a protocol whose buffers come and go, and it is what keeps this
- * class's drawing model — and every view coordinate in this tree — what it was. */
-/* **DRAW ONLY WHAT CHANGED.** A full `-cg_drawFrame` fills the whole content surface, walks the whole view tree and
- * copies the whole frame; a divider drag changes a few strips of one window many times a second, and that full pass
- * was the difference between a smooth gutter and a crawling one. The dirty rectangle is the union of every
- * invalidated view below the content view, converted into content coordinates; the caller sees the same surface,
- * because `_pixels` persists between frames and only the named rectangle is painted and cleared. */
+/* DRAW AND PRESENT. The content view draws through an `NSGraphicsContext` over the pixels the seam handed over, so
+ * there is no copy — the buffer CoreGraphics writes IS the buffer the compositor samples. */
+/* **DRAW ONLY WHAT CHANGED.** A full `-cg_drawFrame` fills the whole content surface and walks the whole view tree;
+ * a divider drag changes a few strips of one window many times a second, and that full pass was the difference
+ * between a smooth gutter and a crawling one. The dirty rectangle is the union of every invalidated view below the
+ * content view, converted into content coordinates; only the named rectangle is painted and cleared.
+ *
+ * **AND THE RECTANGLE IS WIDENED TO WHAT THE BUFFER IS MISSING, BECAUSE THE SEAM HAS TWO OF THEM.** A partial paint
+ * leans on the pixels outside its damage still being right, which was true while a window had one buffer and is not
+ * any more: the seam alternates two (one on the glass, one being drawn — see `AGWindowServer-Wayland.c`), so the
+ * buffer this pass lands in last held the frame BEFORE the one a person is looking at. The region that changed since
+ * is the other buffer's damage, and it is added here — the pair of records in `NSWindow.h` is that ledger. A buffer
+ * with no record at all (the first frame, a resize, a reallocation) is painted whole, which is the only honest
+ * answer about pixels nobody has described. */
 /* SEE `NSWindow_internal.h`: y-up rectangle into top-down rows, clamped to the surface. */
 + (NSRange)cg_bufferRowsForDirtyRect:(NSRect)dirty surfaceHeight:(NSInteger)surfaceHeight
 {
@@ -3544,23 +3650,105 @@ static CGFloat fn_clamp_axis(CGFloat v, CGFloat lo, CGFloat hi)
 	return NSMakeRange((NSUInteger)(surfaceHeight - y1), (NSUInteger)(y1 - y0));
 }
 
+/* **WHICH OF THE SEAM'S TWO BUFFERS THIS IS, BY ITS PIXELS.** -1 means neither of the two on record, which is what a
+ * buffer that has just been made looks like. The pointer is the identity because it is the one thing about a buffer
+ * that survives a reallocation without this class having to be told. */
+- (NSInteger)cg_paintSlotForPixels:(void *)pixels
+{
+	NSInteger i;
+
+	for (i = 0; i < 2; i++) {
+		if (_cg_paintPixels[i] == pixels) {
+			return i;
+		}
+	}
+	return -1;
+}
+
+/* THE SLOT A NEW POINTER IS RECORDED IN: one nothing holds, or the older of the two. A THIRD BUFFER MEANS ONE OF
+ * THE TWO RECORDS DESCRIBES SOMETHING GONE, and then neither can be trusted to describe the live ones either — both
+ * start again from "unknown", which is a whole-frame paint and not a wrong partial one. */
+- (NSInteger)cg_claimPaintSlotForPixels:(void *)pixels
+{
+	NSInteger slot = (_cg_paintPixels[0] == NULL) ? 0 : ((_cg_paintPixels[1] == NULL) ? 1 : 0);
+
+	if (_cg_paintPixels[slot] != NULL) {
+		_cg_paintPixels[1 - slot] = NULL;
+		_cg_paintMissing[1 - slot] = NSZeroRect;
+	}
+	_cg_paintPixels[slot] = pixels;
+	_cg_paintMissing[slot] = NSZeroRect;
+	return slot;
+}
+
+/* **WHAT WAS PAINTED IS CURRENT IN THIS BUFFER AND MISSING FROM THE OTHER ONE.** That single sentence is the whole of
+ * the ledger: a buffer is current where it was last painted, so every later paint into the other buffer is a
+ * difference this one does not have. Union rather than replace, because a run of paints into one buffer accumulates
+ * damage the other has not seen. */
+- (void)cg_recordPaintInSlot:(NSInteger)slot rect:(NSRect)painted
+{
+	NSInteger other = slot ^ 1;
+
+	_cg_paintMissing[slot] = NSZeroRect;
+	_cg_paintMissing[other] = NSUnionRect(_cg_paintMissing[other], painted);
+}
+
+/* THE WHOLE FRAME, in the space these rectangles live in (see `+cg_bufferRowsForDirtyRect:` for the mirroring). */
+- (NSRect)cg_wholeFrameRect
+{
+	return NSMakeRect(0.0, 0.0, _frame.size.width, _frame.size.height);
+}
+
+/* AND THE STRIP THE DIRTY PATH PAINTS WHATEVER THE CONTENT'S DAMAGE WAS, because the chrome is above the content and
+ * is not part of that union. */
+- (NSRect)cg_chromeRect
+{
+	NSRect whole = [self cg_wholeFrameRect];
+	NSRect content = [self contentRectForFrameRect:_frame];
+	CGFloat bottom = content.size.height;
+
+	if (bottom < 0.0) {
+		bottom = 0.0;
+	}
+	if (bottom > whole.size.height) {
+		bottom = whole.size.height;
+	}
+	return NSMakeRect(0.0, bottom, whole.size.width, whole.size.height - bottom);
+}
+
 - (void)cg_drawFrameDirty:(NSRect)dirty
 {
 	CGContextRef c;
 	uint32_t *frame;
 	int stride = 0;
-	int y;
+	NSInteger slot;
 	NSTimeInterval started = [NSDate timeIntervalSinceReferenceDate];
 
-	if (_agwindow == NULL || ![self cg_ensureSurface] || NSIsEmptyRect(dirty)) {
+	if (_agwindow == NULL || NSIsEmptyRect(dirty)) {
 		return;
 	}
 	if (!AGWindowServerCanWrite(fn_server())) {
 		return;
 	}
+	/* **THE FRAME IS ASKED FOR BEFORE THE SURFACE IS CHOSEN, BECAUSE THE FRAME IS THE SURFACE.** Drawing used to
+	 * happen first and be copied after; now the buffer the compositor will sample is the context's pixels, so a
+	 * refused frame is refused before a single pixel is drawn. */
 	frame = AGWindowBeginFrame(_agwindow, &stride);
 	if (frame == NULL) {
 		return;
+	}
+	if (![self cg_ensureSurfaceWithPixels:(unsigned char *)frame stride:stride]) {
+		return;
+	}
+	/* **AND THE DAMAGE BECOMES WHAT THIS BUFFER IS MISSING, NOT ONLY WHAT THE VIEWS CHANGED.** A partial paint
+	 * keeps every pixel outside its rectangle, which is right for the buffer that was on the glass and wrong for
+	 * this one: see the note above this method. A buffer nobody has described is painted whole. */
+	slot = [self cg_paintSlotForPixels:frame];
+	if (slot < 0) {
+		slot = [self cg_claimPaintSlotForPixels:frame];
+		dirty = [self cg_wholeFrameRect];
+	} else if (!NSIsEmptyRect(_cg_paintMissing[slot])) {
+		dirty = NSUnionRect(dirty, _cg_paintMissing[slot]);
 	}
 	c = (CGContextRef)_surface;
 	if (_opaque) {
@@ -3582,43 +3770,13 @@ static CGFloat fn_clamp_axis(CGFloat v, CGFloat lo, CGFloat hi)
 	/* The chrome is a thin strip and is not part of the content's dirty union: paint it, but do not walk the
 	 * content a second time. */
 	[self cg_drawChromeInContext:[NSGraphicsContext graphicsContextWithCGContext:c flipped:NO]];
-	/* **ONLY THE DIRTY PIXELS CROSS TO THE BUFFER.** The seam hands back ONE persistent wl_shm buffer (see
-	 * `AGWindowBeginFrame`), so rows outside the damaged rectangle already hold the right pixels; copying the whole
-	 * frame on every preview-line step was the remaining per-motion cost.
-	 *
-	 * **AND THE ROWS ARE MIRRORED, WHICH IS THE BUG THIS COPY HAD.** A rectangle here is in the window's own
-	 * CoreGraphics space — y UP, the same space `-cg_drawFrameDirty:` fills and the tree draws in — while both the
-	 * backing store and the `wl_shm` buffer hold their rows TOP DOWN: memory row 0 is the top of the window. So the
-	 * rows a rectangle names are `_surfaceHeight - y1 .. _surfaceHeight - y0`, and copying `y0 .. y1` instead copied
-	 * a band reflected about the middle of the window. MEASURED, and it is exactly what "a click does nothing until
-	 * something else repaints" was: a selection two thirds of the way up the window had its new pixels written into
-	 * a band the same distance DOWN from the middle — usually blank page — while the cell the person clicked kept
-	 * its old picture until a full frame (a window move, a drag) came along to repaint everything.
-	 *
-	 * The X RANGE needs nothing: neither end of the buffer mirrors horizontally. */
-	{
-		int x0 = (int)floor((double)dirty.origin.x);
-		int x1 = (int)ceil((double)(dirty.origin.x + dirty.size.width));
-		NSRange rows = [NSWindow cg_bufferRowsForDirtyRect:dirty surfaceHeight:_surfaceHeight];
-		int y0 = (int)NSMaxRange(rows);
-		int y1 = (int)rows.location;
-
-		if (x0 < 0) x0 = 0;
-		if (x1 > _surfaceWidth) x1 = _surfaceWidth;
-		for (y = y1; y < y0; y++) {
-			uint32_t *row = (uint32_t *)(void *)((char *)frame + (size_t)y * (size_t)stride);
-			const uint32_t *source = (const uint32_t *)(const void *)(_pixels + (size_t)y * (size_t)_surfaceWidth * 4u);
-			NSInteger x;
-
-			if (_opaque) {
-				for (x = x0; x < x1; x++) {
-					row[x] = source[x] | 0xFF000000u;
-				}
-			} else {
-				memcpy(row + x0, source + x0, (size_t)(x1 - x0) * 4u);
-			}
-		}
-	}
+	/* **AND THERE IS NO COPY ANY MORE, WHICH IS THE WHOLE OF THIS CHANGE.** The cells above drew straight into the
+	 * seam's buffer, so the pixels the compositor samples are the pixels CoreGraphics just wrote. The old block
+	 * here mirrored y-up rectangles into top-down rows and ORed in an opaque alpha — both jobs that were needed
+	 * only because a private backing store sat between the drawing and the wire. With one buffer there is nothing
+	 * to mirror: `_surface` has held the buffer's rows all along. The alpha fix-up is not needed either, and for
+	 * the reason its own note gave — an opaque window's format is XRGB8888, whose fourth byte the compositor does
+	 * not read — while a transparent one is ARGB8888 and CoreGraphics filled its alpha. */
 	AGWindowEndFrame(_agwindow);
 	/* **WHAT A PARTIAL PAINT ACTUALLY COSTS, WHICH IS THE NUMBER "DRAW ONLY WHAT CHANGED" IS JUDGED BY.** The
 	 * rectangle, the milliseconds and the frames per second it implies, because a damage rectangle that is right
@@ -3641,6 +3799,7 @@ static CGFloat fn_clamp_axis(CGFloat v, CGFloat lo, CGFloat hi)
 			s_paints = 0;
 		}
 	}
+	[self cg_recordPaintInSlot:slot rect:NSUnionRect(dirty, [self cg_chromeRect])];
 	_viewsNeedDisplay = NO;
 	if (_contentView != nil) {
 		[_contentView cg_clearDirtyRegionRecursive];
@@ -3653,9 +3812,9 @@ static CGFloat fn_clamp_axis(CGFloat v, CGFloat lo, CGFloat hi)
 	CGContextRef c;
 	uint32_t *frame;
 	int stride = 0;
-	int y;
+	NSInteger slot;
 
-	if (_agwindow == NULL || ![self cg_ensureSurface]) {
+	if (_agwindow == NULL) {
 		return;
 	}
 	/* **AND NOBODY DRAWS INTO A CONNECTION THAT CANNOT TAKE IT.** A window drawn faster than the output can absorb
@@ -3688,6 +3847,15 @@ static CGFloat fn_clamp_axis(CGFloat v, CGFloat lo, CGFloat hi)
 		}
 		return;
 	}
+	if (![self cg_ensureSurfaceWithPixels:(unsigned char *)frame stride:stride]) {
+		return;
+	}
+	/* **AND THE BUFFER THIS FRAME LANDS IN IS NOW CURRENT EVERYWHERE**, which is what the ledger is told at the end:
+	 * the whole frame is painted here, so the other buffer's next partial paint is allowed to leave pixels alone. */
+	slot = [self cg_paintSlotForPixels:frame];
+	if (slot < 0) {
+		slot = [self cg_claimPaintSlotForPixels:frame];
+	}
 	c = (CGContextRef)_surface;
 	content = [self contentRectForFrameRect:_frame];
 	/* **THE TWO HALVES OF A CLIENT-SIDE-DECORATED FRAME, IN THE ORDER THEY STACK.** The surface is the FRAME (see
@@ -3708,33 +3876,13 @@ static CGFloat fn_clamp_axis(CGFloat v, CGFloat lo, CGFloat hi)
 	}
 	/* THE CHROME, THROUGH THE SAME DOOR A TEST USES — see `-cg_drawChromeInContext:` for why it is a method. */
 	[self cg_drawChromeInContext:[NSGraphicsContext graphicsContextWithCGContext:c flipped:NO]];
-	for (y = 0; y < _surfaceHeight; y++) {
-		uint32_t *row = (uint32_t *)(void *)((char *)frame + (size_t)y * (size_t)stride);
-		const uint32_t *source = (const uint32_t *)(const void *)(_pixels + (size_t)y * (size_t)_surfaceWidth * 4u);
-		NSInteger x;
-
-		/* **AND THE FRAME IS HANDED OVER OPAQUE, WHICH IS A FACT ITS OWN FORMAT CANNOT CARRY.** The surface is
-		 * `kCGImageAlphaNoneSkipFirst` because THAT is what lets the text be smoothed (an alpha channel is what
-		 * switches sub-pixel coverage off in CoreGraphics), and an `X` format HAS NO ALPHA CHANNEL: the fourth byte
-		 * of every pixel this window draws is left exactly as it was, and every one of them is ZERO. READ AS ARGB
-		 * THE WINDOW IS THEREFORE FULLY TRANSPARENT — MEASURED, which is how this was found — and what keeps it on
-		 * screen is two accidents downstream: the seam's `wl_shm` buffers are `XRGB8888`, so the compositor treats
-		 * them as opaque, and the compositor ORs in `0xFF000000` when it copies them. TWO ACCIDENTS HOLDING ONE
-		 * PROMISE IS NOT A PROMISE. A window is opaque, and this is where its pixels are handed over, so this is
-		 * where that is said: the copy is a copy with the alpha set, and it costs a word-at-a-time loop where it
-		 * used to be a `memcpy` — the same pass over the same bytes, with the top byte decided instead of copied. */
-		if (_opaque) {
-			for (x = 0; x < _surfaceWidth; x++) {
-				row[x] = source[x] | 0xFF000000u;
-			}
-		} else {
-			/* **A TRANSPARENT WINDOW'S COPY IS A COPY.** Premultiplied BGRA is exactly what ARGB8888 little-endian
-			 * holds, so the alpha byte is the pixel's own and setting it would make the window opaque — that byte is
-			 * the window's transparency, and the compositor blends on it. */
-			memcpy(row, source, (size_t)_surfaceWidth * 4u);
-		}
-	}
+	/* **AND THE WHOLE-FRAME PATH LOST ITS COPY TOO, FOR THE SAME REASON AS THE DIRTY ONE.** The context's pixels
+	 * are the seam's buffer, so `_pixels` and the attached buffer are one allocation; the per-row pass that used
+	 * to mirror, copy and OR an opaque alpha here was the price of two buffers, and there is now one. An opaque
+	 * window's buffer is XRGB8888 (the fourth byte is not read) and a transparent one's is ARGB8888 (CoreGraphics
+	 * wrote the alpha), so neither needs the fix-up the block above used to perform. */
 	AGWindowEndFrame(_agwindow);
+	[self cg_recordPaintInSlot:slot rect:[self cg_wholeFrameRect]];
 	if (getenv("APPKIT_DRAW_DIAG") != NULL) {
 		fprintf(stderr, "  DIAG paint: window %ld WHOLE FRAME %ldx%ld\n", (long)[self windowNumber],
 			(long)_surfaceWidth, (long)_surfaceHeight);
@@ -3963,7 +4111,10 @@ const CGFloat NSScreenSaverWindowLevel = 1000.0;
 	 *
 	 * THE MASK'S CONTRIBUTION HERE IS STILL ONLY WHETHER THERE IS ANY CHROME AT ALL, because this tree has no named
 	 * style-mask bits yet — the style mask is a plain integer (see the header) — so a decorated window pays for the
-	 * symbols and a borderless one pays for nothing. Apple's answer also depends on WHICH symbols, through bits this
+	 * symbols and a borderless one pays for nothing. **AND IT ALWAYS PAYS FOR THE PILL, WHICH A WINDOW MAY NOT HAVE**:
+	 * a class method has no instance to ask whether a toolbar is attached, and a minimum width is a promise about
+	 * the title rather than an exact sum — so this stays deliberately roomy rather than narrow for the windows that
+	 * never show the mark (`fn_chrome_button_present` is where that is decided). Apple's answer also depends on WHICH symbols, through bits this
 	 * tree has not named; that is the owed part, stated. It is deliberately conservative in the meantime: a window
 	 * whose mask draws no close button still gets the whole block's worth of room, which is room it does not need
 	 * rather than a title it cannot read. */
@@ -4850,7 +5001,11 @@ static NSUInteger fn_edge_index(NSRectEdge edge)
 	if (_surface != NULL) {
 		CGContextRelease(_surface);
 		_surface = NULL;
-		free(_pixels);
+		/* **THE PIXELS ARE THE SEAM'S NOW, SO THEY ARE NOT FREED HERE.** Dropping the context is enough to make the
+		 * next draw remake it against whatever buffer the window has then. */
+		if (_ownsPixels) {
+			free(_pixels);
+		}
 		_pixels = NULL;
 	}
 	[self setNeedsDisplay:YES];
@@ -4881,9 +5036,17 @@ static NSUInteger fn_edge_index(NSRectEdge edge)
 	return _showsResizeIndicator;
 }
 
+/* **AND THE PILL APPEARS OR GOES WITH IT, WHICH IS THE WHOLE OF WHAT THE PROPERTY IS FOR.** A flag that only a
+ * painter reads and nothing invalidates is a flag that takes effect at the next unrelated repaint — here the title
+ * bar is marked stale on the transition, because the mark's presence is part of the strip's layout and not only its
+ * ink. */
 - (void)setShowsToolbarButton:(BOOL)show
 {
+	if (_showsToolbarButton == show) {
+		return;
+	}
 	_showsToolbarButton = show;
+	[self setNeedsDisplay:YES];
 }
 
 - (BOOL)showsToolbarButton
@@ -4936,6 +5099,10 @@ static NSUInteger fn_edge_index(NSRectEdge edge)
 	[aToolbar cg_setWindow:self];
 	[self setFrame:[self frameRectForContentRect:content] display:YES];
 	[self cg_toolbarLayoutChanged];
+	/* **AND THE CHROME IS STALE BECAUSE THE PILL IS THE TOOLBAR'S.** Attaching one gives the title bar a fourth mark
+	 * and detaching one takes it away, and a strip whose ink was decided before the toolbar arrived would draw the
+	 * wrong set until something else repainted it. */
+	[self setNeedsDisplay:YES];
 }
 
 /* **THE ONE PLACE THE BAND'S GEOMETRY IS WRITTEN.** `NSToolbar` asks for it when it is shown, hidden or resized; this

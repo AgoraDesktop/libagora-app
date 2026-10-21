@@ -39,6 +39,12 @@ NS_ASSUME_NONNULL_BEGIN
 - (void)cg_setWindow:(nullable NSWindow *)window;
 /* "SOMETHING THE VIEW DRAWS CHANGED" — an item was added or removed, a label or image moved, a mode switched. */
 - (void)cg_layoutChanged;
+/* **"IS THIS POINT ON SOMETHING THE POINTER CAN USE?", IN WINDOW COORDINATES — the question `NSWindow` asks before
+ * it decides the band is a drag handle.** A control is the item's; the band between controls — and over a separator
+ * or either space, which are drawn but do nothing — is the window's, the way the title bar is. Asking the toolbar
+ * rather than re-deriving the item rectangles in `NSWindow.m` is what keeps the drag handle and the item's own click
+ * from disagreeing about which is which. */
+- (BOOL)cg_pointIsOverControl:(NSPoint)pointInWindow;
 @end
 
 @interface NSToolbarItem (AGToolbarSeam)

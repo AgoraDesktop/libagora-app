@@ -26,6 +26,20 @@
  *      happened — calling it on either one alone stalls the loop, because the other is what frees the
  *      buffer.
  *
+ * **AND THERE ARE TWO BUFFERS PER WINDOW, BECAUSE ONE BUFFER IS A BLINK A PERSON CAN SEE.** With one, the buffer
+ * the compositor is SHOWING is also the only place a frame can be drawn: the compositor releases it after a
+ * composite and goes on treating it as the surface's content, so the whole repaint — the background fill, the view
+ * tree, the chrome — happens inside pixels that are still on the glass. Any composite that lands in that window
+ * (another window committing, which is what a focus change IS) puts a half-drawn window on the screen. MEASURED,
+ * capturing the nested output at 60 Hz through a click from one window to another: 59% of one window's pixels
+ * changed in a single captured frame, and the frame showed both windows part-painted, for about eight frames.
+ *
+ * So `buffer` is what the compositor has and `spare` is what a frame is drawn into; `AGWindowEndFrame` attaches the
+ * spare and they swap. The compositor gives a buffer back when the commit that REPLACES it arrives (`surface.c`),
+ * which is exactly the moment painting into it becomes safe — that pairing is the whole of the fix, and it is why
+ * neither side alone is enough: double buffering under a release-per-frame compositor still paints a buffer the
+ * compositor is sampling, because that release does not mean "I have moved on".
+ *
  * `xdg-shell` IS THE BOOTSTRAP PROTOCOL, NOT THE DESTINATION. It is what a stock compositor speaks today;
  * Agora's own window server will want more (layers for the menu bar and dock, client-side chrome, sheets),
  * and it is behind this interface precisely so that can change without NSWindow noticing.
@@ -49,6 +63,30 @@
 #include "xdg-shell-client-protocol.h"
 #include "agora-shell-client-protocol.h"
 
+/* **AND THE GPU-BUFFER PATH, WHEN THE BUILD HAS IT.** `AG_HAVE_DMABUF` is the CMake option's decision, not a
+ * runtime one: without it this file still allocates shared memory and every window works, which is why the
+ * fallback is the ABSENCE of the code below rather than a flag someone has to remember to set. */
+struct gbm_bo;
+
+#ifdef AG_HAVE_DMABUF
+#include <gbm.h>
+
+#include "linux-dmabuf-v1-client-protocol.h"
+
+#ifdef __linux__
+#include <sys/ioctl.h>
+#include <linux/dma-buf.h>
+#endif
+
+/* THE DRM VOCABULARY, SPELLED HERE RATHER THAN PULLED IN FROM libdrm. `gbm.h` does not need `<drm_fourcc.h>`, and
+ * a fourcc is an integer — a header-only dependency on libdrm's include path for three constants is not one. */
+#define AG_FOURCC(a, b, c, d) \
+	((uint32_t)(a) | ((uint32_t)(b) << 8) | ((uint32_t)(c) << 16) | ((uint32_t)(d) << 24))
+#define AG_DRM_FORMAT_XRGB8888 AG_FOURCC('X', 'R', '2', '4')
+#define AG_DRM_FORMAT_ARGB8888 AG_FOURCC('A', 'R', '2', '4')
+#define AG_DRM_FORMAT_MOD_LINEAR 0ULL
+#endif /* AG_HAVE_DMABUF */
+
 /* ---------------------------------------------------------------------------------------------------
  * the shm buffer
  * --------------------------------------------------------------------------------------------------- */
@@ -61,6 +99,14 @@ struct AGBuffer {
 	int stride;			/* bytes per row */
 	size_t size;
 	int busy;			/* the compositor holds it until wl_buffer.release */
+	/* **AND WHEN THE PIXELS ARE A GPU BUFFER RATHER THAN A MAPPING.** `bo` non-NULL means `pixels` is GBM's own
+	 * mapping of GPU memory and `dmabuf_fd` is the descriptor kept for `DMA_BUF_IOCTL_SYNC`; the shared-memory path
+	 * leaves all three zero and `pixels` is an `mmap` that `ag_buffer_dispose` unmaps. The two lifetimes are
+	 * genuinely different — one is `munmap`, the other is unmap-the-bo then destroy-it — which is why the disposal
+	 * has to ask which kind it has. */
+	struct gbm_bo *bo;
+	void *map_data;
+	int dmabuf_fd;
 };
 
 struct AGWindow {
@@ -78,6 +124,10 @@ struct AGWindow {
 	int frame_height;
 	int has_frame;
 	int level;
+	/* **WHICH APPLICATION THIS WINDOW BELONGS TO.** The bundle identifier, empty until the owner says otherwise —
+	 * it used to be the constant "org.agora.AppKit" written into `AGWindowCreate`, which made every Agora
+	 * application the same application to anything that asked. */
+	char app_id[128];
 	/* **WHETHER THIS WINDOW'S PIXELS CARRY ALPHA**, which decides the shm buffer's FORMAT: ARGB8888 when set,
 	 * XRGB8888 when not. The compositor blends a transparent buffer over what is behind it. */
 	int transparent;
@@ -90,27 +140,29 @@ struct AGWindow {
 	int global_y;
 	int has_global;
 
+	/* **TWO BUFFERS, AND THEY SWAP: `buffer` IS ON THE SCREEN AND `spare` IS WHAT A FRAME IS DRAWN INTO.**
+	 * Painting the buffer the compositor is showing is what made a focus change blink — see the note at the top of
+	 * this file — so a frame is drawn into the one the compositor does NOT have, and `AGWindowEndFrame` attaches it.
+	 * `AGBuffer.busy` follows the compositor's release, one flag per buffer. */
 	struct AGBuffer buffer;
-	/* **AND THE BUFFER THAT IS STILL ON SCREEN WHILE A DIFFERENT ONE IS BEING MADE.** A resize cannot free the
-	 * buffer the compositor is showing: the surface's CURRENT buffer is the last one ATTACHED, and destroying it
-	 * makes the surface have none at all — which the compositor draws as nothing and does not even hit-test. The
-	 * outgoing buffer is moved here instead and freed when the new one has been attached, and THE CONNECTION'S OWN
-	 * ORDER IS WHAT MAKES THAT SAFE: the attach and the destroy travel in that order on one connection, so by the
-	 * time the compositor frees this one it has already taken the new one. MEASURED, the version that freed it in
-	 * place made a window dragged by its edge FLICKER — gone for a frame at a time, for the whole drag. */
-	struct AGBuffer retiring;
-	int has_retiring;
+	struct AGBuffer spare;
 	struct wl_callback *frame_cb;
 
 	int asked_width;		/* what the compositor last asked for; 0 means "you choose" */
 	int asked_height;
+	/* **AND A SIZE ASKED FOR WHILE A FRAME IS BEING DRAWN.** A resize cannot land under the frame that asked for
+	 * it: the caller holds the old buffer's pointer and its stride, and `AGWindowWidth` would already be the new
+	 * one — MEASURED, that is a write past the end of a 640x400 mapping with 680x430's dimensions, and it
+	 * segfaulted. The request waits here and is made when the buffer comes back. */
+	int pending_width;
+	int pending_height;
 	int width;			/* the real, configured size */
 	int height;
 	int configured;
 	int begun;			/* between BeginFrame and EndFrame */
 
-	/* The frame handler runs only when frame_done AND release have both happened. `frame_ready` is the
-	 * first half, `buffer.busy == 0` the second. */
+	/* The frame handler runs only when `frame_done` has arrived AND the buffer a frame would be drawn into is this
+	 * process's again. `frame_ready` is the first half, `spare.busy == 0` the second. */
 	int frame_ready;
 	uint32_t last_frame_time;
 
@@ -127,6 +179,20 @@ struct AGWindowServer {
 	struct wl_registry *registry;
 	struct wl_compositor *compositor;
 	struct wl_shm *shm;
+	/* **AND THE GPU-BUFFER GLOBAL, WHEN THE COMPOSITOR OFFERS ONE.** NULL when it does not — a compositor running
+	 * the CPU renderer advertises nothing to import — and then every window keeps the shared-memory path. The
+	 * advertised (format, modifier) pairs are kept because the client may only allocate what the server said it can
+	 * sample; allocating anything else is a `failed` event at `create` time with no diagnosis. */
+#ifdef AG_HAVE_DMABUF
+	struct zwp_linux_dmabuf_v1 *dmabuf;
+	struct gbm_device *gbm;
+	int gbm_fd;
+	struct {
+		uint32_t format;
+		uint64_t modifier;
+	} dmabuf_formats[64];
+	int dmabuf_format_count;
+#endif
 	struct xdg_wm_base *wm_base;
 	struct wl_seat *seat;
 	struct wl_keyboard *keyboard;
@@ -158,6 +224,17 @@ struct AGWindowServer {
 
 	AGKeyboard *keyboard_state;
 	int keymap_seen;
+
+	/* **THE WINDOW LIST, FOR A SHELL COMPONENT.** Asked for lazily (`AGWindowListSetHandler`) because the snapshot is
+	 * re-sent on every window change and an ordinary application must not pay for a Dock's bookkeeping. The rows
+	 * are built between `begin` and `done` and handed over whole: the callback sees a SNAPSHOT, never a half-built
+	 * list. */
+	struct agora_window_list *window_list;
+	AGWindowListFunction list_fn;
+	void *list_context;
+	AGWindowInfo list_rows[AG_WINDOW_LIST_MAX];
+	int list_count;
+	int list_in_snapshot;
 
 	AGWindow *windows;
 	AGWindow *keyboard_focus;
@@ -217,12 +294,12 @@ static void ag_window_deliver(AGWindow *window, const AGEvent *event)
 	}
 }
 
-/* Call the frame handler if — and only if — the compositor has taken the last frame AND given the buffer
- * back. Either one alone would draw into a buffer the compositor still owns, or wait for a callback that
- * already arrived. */
+/* Call the frame handler if — and only if — the compositor has taken the last frame AND given back the buffer a
+ * frame would be drawn into. Either one alone would draw into a buffer the compositor still owns, or wait for a
+ * callback that already arrived. */
 static void ag_window_maybe_frame(AGWindow *window)
 {
-	if (window == NULL || !window->frame_ready || window->buffer.busy || window->begun) {
+	if (window == NULL || !window->frame_ready || window->spare.busy || window->begun) {
 		return;
 	}
 	window->frame_ready = 0;
@@ -276,7 +353,9 @@ static int ag_create_shm_file(size_t size)
 	return fd;
 }
 
+static int ag_buffer_make(AGWindow *window, struct AGBuffer *slot, int width, int height);
 static void ag_window_resize(AGWindow *window, int width, int height);
+static void ag_window_apply_pending_resize(AGWindow *window);
 
 /* LET GO OF A BUFFER'S RESOURCES, whichever of the two it is. */
 static void ag_buffer_dispose(struct AGBuffer *buffer)
@@ -284,6 +363,21 @@ static void ag_buffer_dispose(struct AGBuffer *buffer)
 	if (buffer->buffer != NULL) {
 		wl_buffer_destroy(buffer->buffer);
 	}
+#ifdef AG_HAVE_DMABUF
+	if (buffer->bo != NULL) {
+		/* **THE GPU BUFFER IS UNMAPPED FIRST AND DESTROYED SECOND**, and the descriptor last: the mapping belongs
+		 * to the bo, and the bo's destroy is what drops this process's reference to the memory. */
+		if (buffer->map_data != NULL) {
+			gbm_bo_unmap(buffer->bo, buffer->map_data);
+		}
+		gbm_bo_destroy(buffer->bo);
+		if (buffer->dmabuf_fd >= 0) {
+			close(buffer->dmabuf_fd);
+		}
+		memset(buffer, 0, sizeof *buffer);
+		return;
+	}
+#endif
 	if (buffer->pixels != NULL) {
 		munmap(buffer->pixels, buffer->size);
 	}
@@ -293,23 +387,26 @@ static void ag_buffer_dispose(struct AGBuffer *buffer)
 static void buffer_release(void *data, struct wl_buffer *wl_buffer)
 {
 	AGWindow *window = data;
+	struct AGBuffer *slot;
 
-	/* **THE RELEASE NAMES ITS BUFFER, AND WITH TWO ALIVE AT ONCE THAT MATTERS.** A window mid-resize has the
-	 * outgoing buffer waiting to be freed; its release is not the one a frame is waiting for. */
-	if (window->has_retiring && wl_buffer == window->retiring.buffer) {
-		window->retiring.busy = 0;
+	/* **THE RELEASE NAMES ITS BUFFER, AND WITH TWO ALIVE AT ONCE THAT MATTERS: it says WHICH SLOT is this process's
+	 * again.** `buffer` is the one that was on the glass; `spare` is the one the commit that replaced it gave
+	 * back, and either can be the one a release names. */
+	if (window->buffer.buffer == wl_buffer) {
+		slot = &window->buffer;
+	} else if (window->spare.buffer == wl_buffer) {
+		slot = &window->spare;
+	} else {
 		return;
 	}
-	if (wl_buffer != window->buffer.buffer) {
-		return;
-	}
-	window->buffer.busy = 0;
+	slot->busy = 0;
 	/* **AND A SIZE THAT WAS ASKED FOR WHILE IT WAS HELD IS MADE NOW.** A resize cannot free a buffer the
-	 * compositor is drawing (see `ag_window_resize`), so it leaves the request in the window's own size — which is
-	 * exactly the comparison here: the buffer no longer matches the window, and THIS is the moment the old one
-	 * becomes this process's again. */
-	if (window->buffer.width != window->width || window->buffer.height != window->height) {
-		ag_window_resize(window, window->width, window->height);
+	 * compositor is drawing (see `ag_window_resize`), so it leaves the request in the window's own size —
+	 * exactly the comparison here: the buffer no longer matches the window, and THIS is the moment it becomes
+	 * this process's again. Only the DRAWING slot is remade; the one on the glass keeps its pixels until it is
+	 * replaced. */
+	if (slot == &window->spare) {
+		ag_window_apply_pending_resize(window);
 	}
 	ag_window_maybe_frame(window);
 }
@@ -318,7 +415,282 @@ static const struct wl_buffer_listener buffer_listener = {
 	buffer_release,
 };
 
+/* ---------------------------------------------------------------------------------------------------
+ * the GPU buffer, when the compositor can import one
+ * --------------------------------------------------------------------------------------------------- */
+
+#ifdef AG_HAVE_DMABUF
+
+/* **THE PAIRS THE SERVER SAYS IT CAN SAMPLE.** A v3 compositor sends `format` followed by one `modifier` per pair;
+ * a v1/v2 one sends only `format`, and LINEAR is the layout the protocol assumes in that case. Recording both forms
+ * the same way means the allocation code asks one question — "is this (format, modifier) advertised?" — and never
+ * has to know which version answered. */
+static void ag_dmabuf_record(AGWindowServer *server, uint32_t format, uint64_t modifier)
+{
+	int i;
+
+	for (i = 0; i < server->dmabuf_format_count; i++) {
+		if (server->dmabuf_formats[i].format == format &&
+		    server->dmabuf_formats[i].modifier == modifier) {
+			return;
+		}
+	}
+	if (server->dmabuf_format_count >= (int)(sizeof server->dmabuf_formats /
+						 sizeof server->dmabuf_formats[0])) {
+		return;
+	}
+	server->dmabuf_formats[server->dmabuf_format_count].format = format;
+	server->dmabuf_formats[server->dmabuf_format_count].modifier = modifier;
+	server->dmabuf_format_count++;
+}
+
+static void ag_dmabuf_format(void *data, struct zwp_linux_dmabuf_v1 *dmabuf, uint32_t format)
+{
+	AGWindowServer *server = data;
+
+	/* Only a v1/v2 server arrives here with nothing following: LINEAR is what the protocol assumes without a
+	 * modifier event, and it is the one layout every driver can sample. */
+	if (wl_proxy_get_version((struct wl_proxy *)dmabuf) < 3) {
+		ag_dmabuf_record(server, format, AG_DRM_FORMAT_MOD_LINEAR);
+	}
+}
+
+static void ag_dmabuf_modifier(void *data, struct zwp_linux_dmabuf_v1 *dmabuf, uint32_t format,
+			       uint32_t modifier_hi, uint32_t modifier_lo)
+{
+	(void)dmabuf;
+	ag_dmabuf_record(data, format, ((uint64_t)modifier_hi << 32) | (uint64_t)modifier_lo);
+}
+
+static const struct zwp_linux_dmabuf_v1_listener ag_dmabuf_listener = {
+	ag_dmabuf_format,
+	ag_dmabuf_modifier,
+};
+
+/* **LINEAR IF IT IS OFFERED, AND ONLY OTHERWISE THE FIRST PAIR.** A tiled modifier would be the faster allocation,
+ * but LINEAR is the one this client can also map for CoreGraphics to draw into — the whole point of this path — and
+ * choosing a tiled one would mean the CPU could no longer write the pixels it is about to hand over. */
+static int ag_dmabuf_pick(AGWindowServer *server, uint32_t format, uint64_t *modifier)
+{
+	int i, found = 0;
+
+	for (i = 0; i < server->dmabuf_format_count; i++) {
+		if (server->dmabuf_formats[i].format != format) {
+			continue;
+		}
+		if (!found || server->dmabuf_formats[i].modifier == AG_DRM_FORMAT_MOD_LINEAR) {
+			*modifier = server->dmabuf_formats[i].modifier;
+			found = 1;
+		}
+	}
+	return found;
+}
+
+/* ONE DEVICE PER PROCESS, OPENED ON FIRST USE. The render node is the one a compositor samples from and the one
+ * that does not need DRM master. */
+static int ag_gbm_ready(AGWindowServer *server)
+{
+	static const char *const nodes[] = { "/dev/dri/renderD128", "/dev/dri/renderD129", "/dev/dri/card0" };
+	size_t i;
+
+	if (server->gbm != NULL) {
+		return 1;
+	}
+	for (i = 0; i < sizeof nodes / sizeof nodes[0]; i++) {
+		server->gbm_fd = open(nodes[i], O_RDWR | O_CLOEXEC);
+		if (server->gbm_fd < 0) {
+			continue;
+		}
+		server->gbm = gbm_create_device(server->gbm_fd);
+		if (server->gbm != NULL) {
+			return 1;
+		}
+		close(server->gbm_fd);
+		server->gbm_fd = -1;
+	}
+	return 0;
+}
+
+/* **THE BUFFER THE WINDOW DRAWS INTO AND THE COMPOSITOR SAMPLES, AS ONE PIECE OF MEMORY.** This is the whole of the
+ * client half: the mapping GBM hands back IS what `AGWindowBeginFrame` returns, so CoreGraphics rasterizes where the
+ * GPU will read and the per-frame copy from a private backing store disappears. `-1` means "use shared memory", and
+ * every failure below is that answer rather than an error — a client that refused to open a window because its GPU
+ * path did not work would be worse than one that copies pixels. */
+static int ag_buffer_create_dmabuf(AGWindow *window, struct AGBuffer *slot, int width, int height)
+{
+	AGWindowServer *server = window->server;
+	struct zwp_linux_buffer_params_v1 *params;
+	struct gbm_bo *bo;
+	uint32_t format = window->transparent ? AG_DRM_FORMAT_ARGB8888 : AG_DRM_FORMAT_XRGB8888;
+	uint64_t modifier = AG_DRM_FORMAT_MOD_LINEAR;
+	uint32_t stride = 0, offset;
+	void *map, *map_data = NULL;
+	int fd;
+
+	if (server->dmabuf == NULL || server->dmabuf_format_count == 0) {
+		return -1;
+	}
+	/* **AN ESCAPE HATCH FOR A DRIVER BUG, AND FOR A/B TESTING.** The path is new enough that "does it happen
+	 * without the GPU buffer?" is the first question anyone will ask, and it should be answerable without a
+	 * rebuild. */
+	if (getenv("AG_NO_DMABUF") != NULL) {
+		return -1;
+	}
+	if (getenv("AG_WINDOW_DIAG") != NULL) {
+		fprintf(stderr, "  DIAG dmabuf: trying %dx%d, %d format(s) advertised\n",
+			width, height, server->dmabuf_format_count);
+	}
+	if (!ag_dmabuf_pick(server, format, &modifier)) {
+		return -1;
+	}
+	if (!ag_gbm_ready(server)) {
+		return -1;
+	}
+	bo = gbm_bo_create_with_modifiers(server->gbm, (uint32_t)width, (uint32_t)height, format, &modifier, 1);
+	if (bo == NULL) {
+		return -1;
+	}
+	map = gbm_bo_map(bo, 0, 0, (uint32_t)width, (uint32_t)height,
+			 GBM_BO_TRANSFER_READ | GBM_BO_TRANSFER_WRITE, &stride, &map_data);
+	if (map == NULL || map == MAP_FAILED) {
+		gbm_bo_destroy(bo);
+		return -1;
+	}
+	fd = gbm_bo_get_fd(bo);
+	if (fd < 0) {
+		gbm_bo_unmap(bo, map_data);
+		gbm_bo_destroy(bo);
+		return -1;
+	}
+	offset = gbm_bo_get_offset(bo, 0);
+	params = zwp_linux_dmabuf_v1_create_params(server->dmabuf);
+	zwp_linux_buffer_params_v1_add(params, fd, 0, offset, stride,
+				       (uint32_t)(modifier >> 32), (uint32_t)modifier);
+	slot->buffer = zwp_linux_buffer_params_v1_create_immed(params, width, height, format, 0);
+	zwp_linux_buffer_params_v1_destroy(params);
+	if (slot->buffer == NULL) {
+		close(fd);
+		gbm_bo_unmap(bo, map_data);
+		gbm_bo_destroy(bo);
+		return -1;
+	}
+	slot->bo = bo;
+	slot->map_data = map_data;
+	slot->dmabuf_fd = fd;	/* kept for DMA_BUF_IOCTL_SYNC; the params request dups its own */
+	slot->pixels = map;
+	slot->width = width;
+	slot->height = height;
+	slot->stride = (int)stride;
+	slot->size = (size_t)stride * (size_t)height;
+	slot->busy = 0;
+	if (getenv("AG_WINDOW_DIAG") != NULL) {
+		fprintf(stderr, "  DIAG dmabuf: %dx%d stride %u format 0x%08x modifier 0x%016llx\n",
+			width, height, stride, format, (unsigned long long)modifier);
+	}
+	return 0;
+}
+
+/* **CPU WRITES HAVE TO BE VISIBLE BEFORE THE HANDOVER.** A GPU buffer is not ordinary memory: on an architecture
+ * with a non-coherent mapping the writes sit in a cache until something flushes them, and the compositor would
+ * sample a stale frame. `DMA_BUF_IOCTL_SYNC` is the protocol's own answer — START around the writes and END before
+ * the commit — and a driver that does not need it answers the ioctl cheaply. */
+static void ag_buffer_sync(struct AGBuffer *buffer, int start)
+{
+#ifdef __linux__
+	if (buffer->bo != NULL && buffer->dmabuf_fd >= 0) {
+		struct dma_buf_sync sync;
+
+		memset(&sync, 0, sizeof sync);
+		sync.flags = DMA_BUF_SYNC_WRITE | (start ? DMA_BUF_SYNC_START : DMA_BUF_SYNC_END);
+		ioctl(buffer->dmabuf_fd, DMA_BUF_IOCTL_SYNC, &sync);
+	}
+#else
+	(void)buffer;
+	(void)start;
+#endif
+}
+
+#else /* !AG_HAVE_DMABUF */
+
+static int ag_buffer_create_dmabuf(AGWindow *window, struct AGBuffer *slot, int width, int height)
+{
+	(void)window;
+	(void)slot;
+	(void)width;
+	(void)height;
+	return -1;
+}
+
+static void ag_buffer_sync(struct AGBuffer *buffer, int start)
+{
+	(void)buffer;
+	(void)start;
+}
+
+#endif /* AG_HAVE_DMABUF */
+
 static void ag_window_resize(AGWindow *window, int width, int height)
+{
+	/* **THE SIZE IS REMEMBERED WHATEVER HAPPENS, so a DEFERRED resize is not a lost one.** The window's own size
+	 * is the record of what was asked for, and the drawing buffer's is what exists — the pair is the whole of the
+	 * state a release needs to finish the job. */
+	window->width = width;
+	window->height = height;
+	if (width <= 0 || height <= 0) {
+		return;
+	}
+	/* **AND THIS MAKES THE DRAWING BUFFER, NEVER THE ONE ON THE GLASS.** The buffer the compositor is showing is
+	 * not this process's to free — freeing it makes the surface have NO buffer at all, which the compositor draws
+	 * as nothing and does not even hit-test; MEASURED, a window dragged by its edge FLICKERED for the whole drag
+	 * when every resize freed the very buffer that was on screen. It also does not need remaking: it is replaced
+	 * by the next `AGWindowEndFrame`, and the release that follows is when THIS slot — the one that was on the
+	 * glass a moment ago — is made at the new size. */
+	if (window->spare.busy) {
+		if (getenv("AG_WINDOW_DIAG") != NULL) {
+			fprintf(stderr, "  DIAG resize: DEFERRED to %dx%d (the drawing buffer %dx%d is still held)\n",
+				width, height, window->spare.width, window->spare.height);
+		}
+		return;
+	}
+	if (window->spare.buffer != NULL) {
+		if (window->spare.width == width && window->spare.height == height) {
+			return;
+		}
+		ag_buffer_dispose(&window->spare);
+	}
+	if (ag_buffer_make(window, &window->spare, width, height) != 0) {
+		/* A refused allocation leaves the slot empty, which `AGWindowBeginFrameSized` answers with a refused
+		 * paint rather than a window that draws into nothing. */
+		return;
+	}
+}
+
+/* **A RESIZE THAT WAS ASKED FOR UNDER A FRAME IS MADE HERE, ONCE THE DRAWING SLOT IS FREE.** There are two doors
+ * into this and both matter: a release makes the slot free after a commit, and a window whose FIRST commit had
+ * nothing to replace never gets a release at all — so the next `AGWindowBeginFrameSized` is the door that has to
+ * look. MEASURED, without the second door: `tests/window.c` asked for 680x430 between two frames and went on
+ * drawing 640-wide, because the only commit so far had no previous buffer to release. */
+static void ag_window_apply_pending_resize(AGWindow *window)
+{
+	int width = window->width;
+	int height = window->height;
+
+	if (window->pending_width > 0) {
+		width = window->pending_width;
+		height = window->pending_height;
+		window->pending_width = 0;
+		window->pending_height = 0;
+	}
+	if (width != window->width || height != window->height ||
+	    window->spare.width != width || window->spare.height != height) {
+		ag_window_resize(window, width, height);
+	}
+}
+
+/* **ONE BUFFER, MADE INTO WHICHEVER SLOT IS ASKED FOR.** It is the same allocation for the frame that is about to
+ * be drawn and for the one that replaces it on the glass, because a swapchain's two halves are the same kind of
+ * thing; what differs is only who owns them at a given moment, and that is `busy`. */
+static int ag_buffer_make(AGWindow *window, struct AGBuffer *slot, int width, int height)
 {
 	int stride = width * 4;
 	size_t size = (size_t)stride * (size_t)height;
@@ -326,51 +698,42 @@ static void ag_window_resize(AGWindow *window, int width, int height)
 	int fd;
 	void *data;
 
-	/* **THE SIZE IS REMEMBERED WHATEVER HAPPENS, so a DEFERRED resize is not a lost one.** The window's own size
-	 * is the record of what was asked for, and the buffer's is what exists — the pair is the whole of the state a
-	 * release needs to finish the job. */
-	window->width = width;
-	window->height = height;
-	/* **AND A BUFFER THE COMPOSITOR IS HOLDING IS NOT THIS PROCESS'S TO FREE.** Freeing it does not merely waste
-	 * it: the compositor drops the surface's buffer, and A SURFACE WITH NO BUFFER IS NOT THERE AT ALL — it is not
-	 * drawn, and it is not even hit-tested. MEASURED, a window dragged by its edge FLICKERED, disappearing for a
-	 * frame at a time for the whole drag, because every resize freed the very buffer that was on screen. The
-	 * release is what makes it free again, and `buffer_release` is where the deferred size is made. */
-	if (window->buffer.buffer != NULL && window->buffer.busy) {
-		return;
+	memset(slot, 0, sizeof *slot);
+	/* **A GPU BUFFER IF THE COMPOSITOR CAN SAMPLE ONE, AND SHARED MEMORY OTHERWISE.** The choice is made per buffer
+	 * rather than once at startup because the two paths differ only in how the pixels get made, and a compositor that
+	 * stops offering the global — or a machine where GBM cannot open a device — must still get a window. */
+	if (ag_buffer_create_dmabuf(window, slot, width, height) == 0) {
+		wl_buffer_add_listener(slot->buffer, &buffer_listener, window);
+		return 0;
 	}
-	if (window->buffer.buffer != NULL) {
-		/* **THE ONE LEAVING IS KEPT, NOT FREED** — see the note on `retiring`. Whatever was already waiting there
-		 * has been replaced by an attached buffer and is safe to let go now. */
-		ag_buffer_dispose(&window->retiring);
-		window->retiring = window->buffer;
-		window->has_retiring = 1;
-		memset(&window->buffer, 0, sizeof window->buffer);
-	}
-	fd = ag_create_shm_file(size);
-	if (fd < 0) {
+	fd = ag_create_shm_file(size);	if (fd < 0) {
 		ag_server_error(window->server, "shm_open");
-		return;
+		return -1;
 	}
 	data = mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
 	if (data == MAP_FAILED) {
 		ag_server_error(window->server, "mmap");
 		close(fd);
-		return;
+		return -1;
 	}
 	pool = wl_shm_create_pool(window->server->shm, fd, (int32_t)size);
-	window->buffer.buffer = wl_shm_pool_create_buffer(pool, 0, width, height, stride,
-							  window->transparent ? WL_SHM_FORMAT_ARGB8888 : WL_SHM_FORMAT_XRGB8888);
+	slot->buffer = wl_shm_pool_create_buffer(pool, 0, width, height, stride,
+						 window->transparent ? WL_SHM_FORMAT_ARGB8888 : WL_SHM_FORMAT_XRGB8888);
 	wl_shm_pool_destroy(pool);
 	close(fd);
+	if (slot->buffer == NULL) {
+		munmap(data, size);
+		return -1;
+	}
 
-	window->buffer.pixels = data;
-	window->buffer.width = width;
-	window->buffer.height = height;
-	window->buffer.stride = stride;
-	window->buffer.size = size;
-	window->buffer.busy = 0;
-	wl_buffer_add_listener(window->buffer.buffer, &buffer_listener, window);
+	slot->pixels = data;
+	slot->width = width;
+	slot->height = height;
+	slot->stride = stride;
+	slot->size = size;
+	slot->busy = 0;
+	wl_buffer_add_listener(slot->buffer, &buffer_listener, window);
+	return 0;
 }
 
 /* ---------------------------------------------------------------------------------------------------
@@ -392,9 +755,9 @@ static const struct wl_callback_listener frame_listener = {
 	frame_done,
 };
 
-uint32_t *AGWindowBeginFrame(AGWindow *window, int *stride)
+uint32_t *AGWindowBeginFrameSized(AGWindow *window, int *stride, int *width, int *height)
 {
-	if (window == NULL || !window->configured || window->buffer.buffer == NULL) {
+	if (window == NULL || !window->configured) {
 		/* **AND THE REASON IS NAMED, BECAUSE A DIAGNOSTIC THAT GUESSES IS WORSE THAN NONE.** The window's draw
 		 * used to report every refusal as "the compositor still holds its buffer" — WHICH WAS MY INTERPRETATION AND
 		 * NOT THE CONDITION: this door refuses for three different reasons, and on a protocol with no configure the
@@ -402,56 +765,88 @@ uint32_t *AGWindowBeginFrame(AGWindow *window, int *stride)
 		if (getenv("APPKIT_DRAW_DIAG") != NULL) {
 			fprintf(stderr, "  DIAG begin: refused — %s\n",
 				window == NULL ? "no window"
-				: !window->configured ? "NOT CONFIGURED (and this protocol sends no configure)"
-				: "the buffer has not been created");
-		}
-		/* **THE RAW STATE, NOT A LABEL.** A label is a reading, and this session has paid twice for readings: a
-		 * diagnostic that said "the compositor holds the buffer" for four different conditions sent two rounds
-		 * into buffer lifetime, and the next version fired on ordinary behaviour. These five numbers are the whole
-		 * answer and none of them is an interpretation. */
-		if (getenv("APPKIT_DRAW_DIAG") != NULL) {
-			fprintf(stderr, "  DIAG begin: refused — frame_ready=%d busy=%d begun=%d configured=%d"
-					" have_buffer=%d\n", window->frame_ready, window->buffer.busy, window->begun,
-				window->configured, window->buffer.buffer != NULL);
+				: "NOT CONFIGURED (and this protocol sends no configure)");
 		}
 		return NULL;
-	}
-	/* **AND A BUFFER OF THE WRONG SIZE IS NOT ONE TO DRAW INTO.** A resize the compositor was still holding
-	 * arrives as a window whose size and whose buffer disagree — the buffer is the old one, kept alive on purpose
-	 * (see `ag_window_resize`) so the window stays ON SCREEN while the hand moves. Handing it to a caller that has
-	 * just resized its own pixels would draw the new frame into the old extent — the caller's copy is written per
-	 * ROW of ITS OWN width — so this refuses instead, the compositor keeps showing the old buffer, and the size is
-	 * made good on the release. A REFUSED FRAME IS NOT A MISSING WINDOW; THAT IS THE WHOLE POINT. */
-	if (window->buffer.width != window->width || window->buffer.height != window->height) {
-		if (getenv("APPKIT_DRAW_DIAG") != NULL) {
-			fprintf(stderr, "  DIAG begin: refused — the buffer is %dx%d and the window is %dx%d\n",
-				window->buffer.width, window->buffer.height, window->width, window->height);
-		}
-		return NULL;
-	}
-	if (window->buffer.busy) {
-		if (getenv("APPKIT_DRAW_DIAG") != NULL) {
-			/* **THE RAW STATE, BECAUSE THE LABEL IS WHAT MISLED ME.** This branch's message sent two rounds into
-			 * buffer lifetime; the numbers say which of the four conditions is actually true, and a number cannot be
-			 * misread the way a sentence can. */
-			fprintf(stderr, "  DIAG begin: refused — frame_ready=%d busy=%d begun=%d configured=%d"
-					" have_buffer=%d\n", window->frame_ready, window->buffer.busy, window->begun,
-				window->configured, window->buffer.buffer != NULL);
-		}
-		return NULL;		/* the compositor still owns it */
 	}
 	if (window->begun) {
-		return window->buffer.pixels;
+		/* **A SECOND FRAME CANNOT START INSIDE THE FIRST.** A re-entrant handler is a caller that would be
+		 * handed the same pixels while the outer one still intends to commit them — and the out-parameters are
+		 * the buffer's, not the window's, so they are filled here too rather than left stale. */
+		if (stride != NULL) {
+			*stride = window->spare.stride;
+		}
+		if (width != NULL) {
+			*width = window->spare.width;
+		}
+		if (height != NULL) {
+			*height = window->spare.height;
+		}
+		return window->spare.pixels;
+	}
+	/* **THE FRAME IS DRAWN INTO THE BUFFER THE COMPOSITOR IS NOT SHOWING.** `buffer` is on the glass until the
+	 * commit at the end of this frame replaces it, so painting there would put the repaint itself on the screen —
+	 * the blink this swapchain exists for (see the top of this file). The slot is made on demand, at the window's
+	 * own size, and a slot the compositor still holds is waited for rather than drawn into: the release is what
+	 * makes it this process's again, and it arrives with the commit that replaced it. */
+	if (window->spare.busy) {
+		if (getenv("APPKIT_DRAW_DIAG") != NULL) {
+			/* **THE RAW STATE, BECAUSE THE LABEL IS WHAT MISLED ME.** This branch's message sent two rounds into
+			 * buffer lifetime; the numbers say which of the conditions is actually true, and a number cannot be
+			 * misread the way a sentence can. */
+			fprintf(stderr, "  DIAG begin: refused — frame_ready=%d busy=%d begun=%d configured=%d"
+					" have_buffer=%d\n", window->frame_ready, window->spare.busy, window->begun,
+				window->configured, window->spare.buffer != NULL);
+		}
+		return NULL;		/* the compositor still owns the drawing slot */
+	}
+	/* **A SIZE ASKED FOR BETWEEN FRAMES IS MADE HERE**, because the other door into it is a buffer release and a
+	 * window's first commit never gets one — see `ag_window_apply_pending_resize`. */
+	ag_window_apply_pending_resize(window);
+	if (window->spare.buffer == NULL || window->spare.pixels == NULL) {
+		/* **A WINDOW WITH NO PIXELS IS NOT A WINDOW TO DRAW ON.** The allocation refused — no shm file, no
+		 * mapping — so this pass draws nothing and the next one asks again, which is the same answer a refused
+		 * paint gives everywhere else. */
+		if (getenv("APPKIT_DRAW_DIAG") != NULL) {
+			fprintf(stderr, "  DIAG begin: refused — the drawing buffer could not be made (%dx%d)\n",
+				window->width, window->height);
+		}
+		return NULL;
 	}
 	window->begun = 1;
-	if (stride != NULL) {
-		*stride = window->buffer.stride;
+	if (getenv("AG_WINDOW_DIAG") != NULL) {
+		fprintf(stderr, "  DIAG frame: window %dx%d buffer %dx%d stride %d pixels %p%s\n",
+			window->width, window->height, window->spare.width, window->spare.height,
+			window->spare.stride, (void *)window->spare.pixels,
+			window->spare.bo != NULL ? " (dmabuf)" : " (shm)");
 	}
-	return window->buffer.pixels;
+	/* **THE CPU'S WRITES BEGIN HERE.** See `ag_buffer_sync`: START before drawing and END at the commit is the pair
+	 * a non-coherent mapping needs, and a shared-memory buffer makes both a no-op. */
+	ag_buffer_sync(&window->spare, 1);
+	if (stride != NULL) {
+		*stride = window->spare.stride;
+	}
+	if (width != NULL) {
+		*width = window->spare.width;
+	}
+	if (height != NULL) {
+		*height = window->spare.height;
+	}
+	return window->spare.pixels;
+}
+
+/* THE UNCHANGED DOOR, AND ITS THREE CALLERS KEEP IT.** The sized variant exists because the drawing surface IS the
+ * frame now: CoreGraphics is told the buffer's own height, so a client that used the window's size instead would
+ * write past the end of a buffer that had not caught up with a resize. */
+uint32_t *AGWindowBeginFrame(AGWindow *window, int *stride)
+{
+	return AGWindowBeginFrameSized(window, stride, NULL, NULL);
 }
 
 void AGWindowEndFrame(AGWindow *window)
 {
+	struct AGBuffer drawn;
+
 	if (window == NULL || !window->begun) {
 		return;
 	}
@@ -465,17 +860,20 @@ void AGWindowEndFrame(AGWindow *window)
 		window->frame_cb = wl_surface_frame(window->surface);
 		wl_callback_add_listener(window->frame_cb, &frame_listener, window);
 	}
+	/* **THE FRAME JUST PAINTED BECOMES THE ONE ON THE GLASS, AND THE ONE THAT WAS BECOMES THE DRAWING SLOT.** The
+	 * old one is not this process's yet: it stays `busy` until the compositor's release arrives, which it sends
+	 * with THIS commit — the commit is what replaces it, and that is the moment the compositor has finished with
+	 * it. Nothing is freed here; that pairing is what keeps a window from painting pixels the screen is showing. */
+	drawn = window->spare;
+	window->spare = window->buffer;
+	window->buffer = drawn;
 	window->buffer.busy = 1;
+	/* **AND THE PIXELS LEAVE THIS PROCESS'S CACHE BEFORE THEY LEAVE THIS PROCESS.** The GPU may sample the buffer the
+	 * moment the compositor sees the commit; END is what makes the writes in it visible. */
+	ag_buffer_sync(&window->buffer, 0);
 	wl_surface_attach(window->surface, window->buffer.buffer, 0, 0);
 	wl_surface_damage_buffer(window->surface, 0, 0, window->buffer.width, window->buffer.height);
 	wl_surface_commit(window->surface);
-	/* **AND NOW THE ONE IT REPLACED IS THIS PROCESS'S AGAIN.** The attach above is what takes it off the screen,
-	 * and the destroy travels after it on the same connection — so the compositor has already moved on by the time
-	 * it is freed. */
-	if (window->has_retiring) {
-		ag_buffer_dispose(&window->retiring);
-		window->has_retiring = 0;
-	}
 	/* WHEN THE CALLER CAME HERE FROM `AGWindowShow`, THE FLUSH ALREADY HAPPENED — before the frame was asked
 	 * for and therefore before this commit. Flushing here means the frame just handed over does not wait for
 	 * something else to push it out. */
@@ -552,11 +950,11 @@ static void xdg_surface_configure(void *data, struct xdg_surface *xdg_surface, u
 	if (height <= 0) {
 		height = window->height;
 	}
-	if (window->buffer.buffer == NULL || width != window->buffer.width || height != window->buffer.height) {
-		ag_window_resize(window, width, height);
-	}
 	window->width = width;
 	window->height = height;
+	/* **THE DRAWING SLOT IS WHAT HAS TO MATCH THE CONFIGURED SIZE**, and `ag_window_resize` makes it when the
+	 * compositor is not holding it — a window resized under a frame is made good on the release. */
+	ag_window_resize(window, width, height);
 	window->configured = 1;
 
 	memset(&event, 0, sizeof event);
@@ -987,6 +1385,104 @@ static const struct agora_window_listener agora_window_listener = {
 	agora_window_pointer_global,
 };
 
+/* ============================================================================================ *
+ * THE WINDOW LIST, WHICH ONLY A SHELL COMPONENT ASKS FOR.                                              *
+ * ============================================================================================ */
+static void window_list_begin(void *data, struct agora_window_list *list)
+{
+	AGWindowServer *server = data;
+
+	(void)list;
+	server->list_count = 0;
+	server->list_in_snapshot = 1;
+}
+
+static void window_list_window(void *data, struct agora_window_list *list, uint32_t id, const char *app_id,
+			       const char *title, int32_t level, int32_t visible, int32_t active)
+{
+	AGWindowServer *server = data;
+	AGWindowInfo *info;
+
+	(void)list;
+	if (server->list_count >= AG_WINDOW_LIST_MAX) {
+		return;	/* truncated rather than allocated: see the header's note on the cap */
+	}
+	info = &server->list_rows[server->list_count++];
+	info->id = id;
+	snprintf(info->app_id, sizeof info->app_id, "%s", app_id != NULL ? app_id : "");
+	snprintf(info->title, sizeof info->title, "%s", title != NULL ? title : "");
+	info->level = (int)level;
+	info->visible = (int)visible;
+	info->active = (int)active;
+}
+
+static void window_list_done(void *data, struct agora_window_list *list)
+{
+	AGWindowServer *server = data;
+
+	(void)list;
+	server->list_in_snapshot = 0;
+	/* **THE CALLBACK SEES A FINISHED SNAPSHOT AND NOT A STREAM.** A row that arrives without its `done` is a
+	 * list that has not been told everything yet, and drawing it would make a window flicker out and back. */
+	if (server->list_fn != NULL) {
+		server->list_fn(server->list_context, server->list_rows, server->list_count);
+	}
+}
+
+static const struct agora_window_list_listener window_list_listener = {
+	window_list_begin,
+	window_list_window,
+	window_list_done,
+};
+
+void AGWindowListSetHandler(AGWindowServer *server, AGWindowListFunction function, void *context)
+{
+	if (server == NULL) {
+		return;
+	}
+	server->list_fn = function;
+	server->list_context = context;
+	if (function == NULL || server->shell == NULL) {
+		return;
+	}
+	/* **ASKED FOR THE FIRST TIME HERE, AND ONLY HERE.** The snapshot is re-sent on every window change, so a client
+	 * that never asks must not be sent one — which is every application. `get_window_list` is a version 3 request,
+	 * so a compositor that speaks an older Agora protocol simply never answers, which is the same silence every
+	 * other door this seam lacks has. */
+	if (server->window_list == NULL) {
+		if (wl_proxy_get_version((struct wl_proxy *)server->shell) < 3) {
+			return;
+		}
+		server->window_list = agora_shell_get_window_list(server->shell);
+		agora_window_list_add_listener(server->window_list, &window_list_listener, server);
+	}
+	wl_display_flush(server->display);
+}
+
+void AGWindowActivate(AGWindowServer *server, unsigned int id)
+{
+	if (server == NULL || server->shell == NULL) {
+		return;
+	}
+	if (wl_proxy_get_version((struct wl_proxy *)server->shell) < 3) {
+		return;
+	}
+	agora_shell_activate_window(server->shell, id);
+	wl_display_flush(server->display);
+}
+
+void AGWindowRequestClose(AGWindowServer *server, unsigned int id)
+{
+	if (server == NULL || server->shell == NULL) {
+		return;
+	}
+	if (wl_proxy_get_version((struct wl_proxy *)server->shell) < 3) {
+		return;
+	}
+	agora_shell_close_window(server->shell, id);
+	wl_display_flush(server->display);
+}
+
 static void registry_global(void *data, struct wl_registry *registry, uint32_t name, const char *interface,
 			    uint32_t version)
 {
@@ -999,6 +1495,15 @@ static void registry_global(void *data, struct wl_registry *registry, uint32_t n
 						      version < 4 ? version : 4);
 	} else if (strcmp(interface, wl_shm_interface.name) == 0) {
 		server->shm = wl_registry_bind(registry, name, &wl_shm_interface, 1);
+#ifdef AG_HAVE_DMABUF
+	} else if (strcmp(interface, zwp_linux_dmabuf_v1_interface.name) == 0) {
+		/* **v3 IS THE FLAT LIST, AND THIS CLIENT NEEDS NOTHING MORE.** v4's feedback answers "which device and
+		 * which modifiers are fast" — a multi-GPU question; a client on one GPU needs the list, and binding low
+		 * enough to be understood is better than asking for events a server may not send. */
+		server->dmabuf = wl_registry_bind(registry, name, &zwp_linux_dmabuf_v1_interface,
+						 version < 3 ? version : 3);
+		zwp_linux_dmabuf_v1_add_listener(server->dmabuf, &ag_dmabuf_listener, server);
+#endif
 	} else if (strcmp(interface, xdg_wm_base_interface.name) == 0) {
 		server->wm_base = wl_registry_bind(registry, name, &xdg_wm_base_interface,
 						   version < 2 ? version : 2);
@@ -1022,8 +1527,13 @@ static void registry_global(void *data, struct wl_registry *registry, uint32_t n
 		/* **AGORA'S OWN PROTOCOL, IF IT IS THERE.** It is what can carry the frame, the level and the work
 		 * area; a stock compositor will not offer it, and then this seam falls back to `xdg-shell` and the
 		 * window is placed by whoever is in charge — a difference a caller can see through
-		 * `AGWindowServerWorkArea` and through its frame being recorded rather than obeyed. */
-		server->shell = wl_registry_bind(registry, name, &agora_shell_interface, 1);
+		 * `AGWindowServerWorkArea` and through its frame being recorded rather than obeyed.
+		 *
+		 * **ASKED FOR AT THE HIGHEST VERSION THIS SEAM UNDERSTANDS, CAPPED BY THE COMPOSITOR'S.** The shell's own
+		 * requests matter now: `get_window_list`, `activate_window` and `close_window` arrived in 3, and a window
+		 * made from a shell bound at 2 is a version 2 window whose `set_reserved` is the last thing it has. */
+		server->shell = wl_registry_bind(registry, name, &agora_shell_interface,
+						version < 4 ? version : 4);
 	}
 }
 
@@ -1040,6 +1550,19 @@ static const struct wl_registry_listener registry_listener = {
 /* ---------------------------------------------------------------------------------------------------
  * the public surface
  * --------------------------------------------------------------------------------------------------- */
+
+/* **THE PROCESS'S ONE CONNECTION.** Not thread-safe on purpose: AppKit is single-threaded here (the run loop is
+ * the main thread's), and a lock would suggest a concurrency nobody has. A failed connect is not cached, so a
+ * later attempt can succeed once there is a display. */
+AGWindowServer *AGWindowServerShared(void)
+{
+	static AGWindowServer *s_shared;
+
+	if (s_shared == NULL) {
+		s_shared = AGWindowServerConnect();
+	}
+	return s_shared;
+}
 
 AGWindowServer *AGWindowServerConnect(void)
 {
@@ -1119,6 +1642,17 @@ void AGWindowServerDisconnect(AGWindowServer *server)
 	if (server->shm != NULL) {
 		wl_shm_destroy(server->shm);
 	}
+#ifdef AG_HAVE_DMABUF
+	if (server->dmabuf != NULL) {
+		zwp_linux_dmabuf_v1_destroy(server->dmabuf);
+	}
+	if (server->gbm != NULL) {
+		gbm_device_destroy(server->gbm);
+		if (server->gbm_fd >= 0) {
+			close(server->gbm_fd);
+		}
+	}
+#endif
 	if (server->compositor != NULL) {
 		wl_compositor_destroy(server->compositor);
 	}
@@ -1327,7 +1861,9 @@ AGWindow *AGWindowCreate(AGWindowServer *server, int width, int height, const ch
 		if (title != NULL) {
 			agora_window_set_title(window->agora, title);
 		}
-		agora_window_set_app_id(window->agora, "org.agora.AppKit");
+		if (window->app_id[0] != '\0') {
+			agora_window_set_app_id(window->agora, window->app_id);
+		}
 		agora_window_set_frame(window->agora, window->has_frame ? window->frame_x : 0,
 				       window->has_frame ? window->frame_y : 0, window->width, window->height);
 		ag_window_resize(window, window->width, window->height);
@@ -1340,7 +1876,9 @@ AGWindow *AGWindowCreate(AGWindowServer *server, int width, int height, const ch
 		if (title != NULL) {
 			xdg_toplevel_set_title(window->toplevel, title);
 		}
-		xdg_toplevel_set_app_id(window->toplevel, "org.agora.AppKit");
+		if (window->app_id[0] != '\0') {
+			xdg_toplevel_set_app_id(window->toplevel, window->app_id);
+		}
 		/* AN EMPTY COMMIT GIVES THE SURFACE ITS ROLE and is what asks for the first configure. The window has
 		 * no size until that arrives. */
 		wl_surface_commit(window->surface);
@@ -1358,10 +1896,9 @@ void AGWindowDestroy(AGWindow *window)
 	if (window->frame_cb != NULL) {
 		wl_callback_destroy(window->frame_cb);
 	}
-	if (window->has_retiring) {
-		ag_buffer_dispose(&window->retiring);
-		window->has_retiring = 0;
-	}
+	/* **BOTH SLOTS, because a window owns two buffers now.** The one on the glass is destroyed too: the surface
+	 * is going away in this same teardown, so there is nothing left to show it on. */
+	ag_buffer_dispose(&window->spare);
 	ag_buffer_dispose(&window->buffer);
 	if (window->agora != NULL) {
 		agora_window_destroy(window->agora);
@@ -1430,12 +1967,17 @@ void AGWindowSetFrame(AGWindow *window, int x, int y, int width, int height)
 	window->frame_x = x;
 	window->frame_y = y;
 	window->has_frame = 1;
-	/* A RESIZE MAKES THE BACKING STORE AGAIN, and only when the compositor is not holding it: the buffer that
-	 * is on screen is not this process's to free. */
+	/* **A RESIZE MAKES THE DRAWING SLOT AGAIN, AND LEAVES THE PIXELS ON THE GLASS ALONE.** A frame that replaces
+	 * what is showing is committed when the next one is drawn, so the window never has to lose its buffer to
+	 * change size — see `ag_window_resize`. */
 	if (width > 0 && height > 0 && (width != window->width || height != window->height)) {
-		window->width = width;
-		window->height = height;
-		if (window->configured && !window->buffer.busy) {
+		if (window->begun) {
+			/* **NOT UNDER A FRAME THAT IS BEING DRAWN.** The caller is mid-draw with the old buffer's pointer
+			 * and pitch; changing the size now would make its `AGWindowWidth` disagree with its buffer. The
+			 * request is remembered and made on the release — see `buffer_release`. */
+			window->pending_width = width;
+			window->pending_height = height;
+		} else {
 			ag_window_resize(window, width, height);
 		}
 	}
@@ -1457,6 +1999,35 @@ void AGWindowSetLevel(AGWindow *window, int level)
 	}
 }
 
+/* **THE STRIP OF SCREEN THIS WINDOW TAKES, WHICH IS THE DOCK'S ONE REAL REQUEST.** The server's work area is the
+ * output minus the furniture; the menu bar is the server's own share and this is the client's. There is nothing to
+ * remember on this side: the answer comes back on `agora_output.work_area`, which is what `AGWindowServerWorkArea`
+ * reads, so a client that asks and then asks again is asking the screen rather than a cache it keeps.
+ *
+ * A stock `xdg-shell` compositor has no door for it, and this says so by doing nothing rather than by recording a
+ * number nobody would ever read. A window has ONE reservation, so asking again moves it — see the protocol's
+ * `set_reserved` and `NSWindow -cg_setReservedEdge:amount:`, which is the door AppKit puts on this. */
+/* **AND WHETHER A CLICK ON THIS WINDOW MAY GIVE ITS APPLICATION THE KEYBOARD.** The Dock says no: clicking one of
+ * its tiles must activate the application the tile names, and a Dock that took the keyboard would take the menu bar
+ * with it. A window that says nothing keeps the ordinary behaviour. */
+void AGWindowSetActivatable(AGWindow *window, int activatable)
+{
+	if (window == NULL || window->agora == NULL) {
+		return;
+	}
+	agora_window_set_activatable(window->agora, activatable ? 1 : 0);
+	wl_display_flush(window->server->display);
+}
+
+void AGWindowSetReserved(AGWindow *window, int edge, int amount)
+{
+	if (window == NULL || window->agora == NULL) {
+		return;
+	}
+	agora_window_set_reserved(window->agora, (uint32_t)edge, amount > 0 ? amount : 0);
+	wl_display_flush(window->server->display);
+}
+
 /* **THE FORMAT IS CHOSEN WHEN THE BUFFER IS MADE, SO A BUFFER ALREADY MADE HAS TO GO.** A BUSY one is on screen
  * and is left alone — a window that flips transparency mid-life keeps its old buffer until the next one is made,
  * said here rather than assumed — but in practice this is called before the first frame, when there is none. */
@@ -1468,19 +2039,17 @@ void AGWindowSetTransparent(AGWindow *window, int transparent)
 		return;
 	}
 	window->transparent = wanted;
-	/* **A BUFFER ALREADY MADE HAS THE OLD FORMAT, so it is let go AND REMADE.** MEASURED: the version that only let
-	 * it go left the window with NO buffer at all, and `AGWindowBeginFrame` then refused to paint it for ever —
-	 * which is what made an icon window show nothing. The remake is the same path a resize takes, so a window whose
-	 * size is not yet known is remade by the frame set that follows. */
-	if (window->buffer.buffer != NULL && !window->buffer.busy) {
+	/* **THE DRAWING SLOT HAS THE OLD FORMAT, so it is let go AND REMADE.** MEASURED: the version that only let it
+	 * go left the window with NO buffer at all, and `AGWindowBeginFrame` then refused to paint it for ever — which
+	 * is what made an icon window show nothing. The remake is the same path a resize takes, so a window whose size
+	 * is not yet known is remade by the frame set that follows. The buffer on the glass keeps its format until the
+	 * next commit replaces it, which is one frame of the old one and the only alternative to dropping it. */
+	if (window->spare.buffer != NULL && !window->spare.busy) {
 		int width = window->width;
 		int height = window->height;
 
-		ag_buffer_dispose(&window->buffer);
-		memset(&window->buffer, 0, sizeof window->buffer);
-		if (width > 0 && height > 0) {
-			ag_window_resize(window, width, height);
-		}
+		ag_buffer_dispose(&window->spare);
+		ag_window_resize(window, width, height);
 	}
 }
 
@@ -1601,10 +2170,37 @@ void AGWindowServerWorkArea(AGWindowServer *server, int *x, int *y, int *width, 
 
 void AGWindowSetTitle(AGWindow *window, const char *title)
 {
-	if (window != NULL && window->toplevel != NULL && title != NULL) {
-		xdg_toplevel_set_title(window->toplevel, title);
-		wl_display_flush(window->server->display);
+	if (window == NULL) {
+		return;
 	}
+	/* **BOTH ROLES, BECAUSE A TITLE IS THE WINDOW'S AND NOT THE PROTOCOL'S.** This used to write to
+	 * `window->toplevel` only, so on Agora's own server a window's title was whatever it was created with and a
+	 * later `-setTitle:` went nowhere — which a shell listing titles would have shown as a window that never
+	 * renames itself. */
+	if (window->agora != NULL) {
+		agora_window_set_title(window->agora, title != NULL ? title : "");
+	} else if (window->toplevel != NULL) {
+		xdg_toplevel_set_title(window->toplevel, title != NULL ? title : "");
+	}
+	wl_display_flush(window->server->display);
+}
+
+/* **AND THE APPLICATION'S OWN NAME, WHICH A SHELL GROUPS BY.** The Mac's vocabulary is the bundle identifier, and
+ * AppKit supplies it from `NSBundle` without being asked. It is recorded on the window as well as sent, because a
+ * window made before the caller could name it would otherwise reach the server anonymous — which is exactly what
+ * the constant this replaces made every window. */
+void AGWindowSetAppID(AGWindow *window, const char *app_id)
+{
+	if (window == NULL) {
+		return;
+	}
+	snprintf(window->app_id, sizeof window->app_id, "%s", app_id != NULL ? app_id : "");
+	if (window->agora != NULL) {
+		agora_window_set_app_id(window->agora, window->app_id);
+	} else if (window->toplevel != NULL) {
+		xdg_toplevel_set_app_id(window->toplevel, window->app_id);
+	}
+	wl_display_flush(window->server->display);
 }
 
 int AGWindowWidth(const AGWindow *window)

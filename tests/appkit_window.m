@@ -15,6 +15,12 @@
  * GREEN one at the BOTTOM-right prove the size and the orientation together; and a bar that moves with the
  * clock can only move if the compositor keeps asking for frames.
  *
+ * **AND IT RESERVES A STRIP AS A DOCK WOULD.** After the window has drawn, a second, borderless window at
+ * `NSDockWindowLevel` takes 96 points at the bottom through `-cg_setReservedEdge:amount:` and the test asserts
+ * that `-visibleFrame` shrinks by exactly that — then gives it back and asserts it came back. That is the whole
+ * of `agora_window.set_reserved` seen from AppKit: the number a Dock has to be able to say, and the number
+ * `-constrainFrameRect:toScreen:` is checked against.
+ *
  *   appkit_window [--seconds N] [--width W] [--height H]
  *
  * It exits 0 after N seconds (default 3), and prints what it saw so a headless run can assert on it.
@@ -37,6 +43,28 @@
 #include <time.h>
 
 #define EVDEV_KEY_ESC 1
+
+/* HOW MANY POINTS THE DOCK-SHAPED WINDOW BELOW RESERVES, and the number the script's assertions derive from. */
+#define DOCK_RESERVE 96
+
+/* ONE PUMP, REACHED FOR BY THE TWO PLACES THAT HAVE TO WAIT FOR THE SERVER TO ANSWER something that is not an
+ * ordinary event: the reserve below and the release after it. It is the application's own pump, not the seam's. */
+static void pump_for(NSTimeInterval interval)
+{
+	NSApplication *application = [NSApplication sharedApplication];
+	NSDate *deadline = [NSDate dateWithTimeIntervalSinceNow:interval];
+
+	while ([deadline timeIntervalSinceNow] > 0.0) {
+		NSEvent *event = [application nextEventMatchingMask:NSAnyEventMask
+						  untilDate:[NSDate dateWithTimeIntervalSinceNow:0.01]
+						     inMode:nil
+						    dequeue:YES];
+
+		if (event != nil) {
+			[application sendEvent:event];
+		}
+	}
+}
 
 /* HOW MANY TIMES THE VIEW WAS ASKED TO DRAW. This is the assertion: `-drawRect:` is reached only through the
  * seam's frame callback, which fires only after the compositor has CONFIGURED the window — so a non-zero count
@@ -189,6 +217,70 @@ int main(int argc, char **argv)
 			if (event != nil) {
 				[application sendEvent:event];
 				events++;
+			}
+		}
+
+		/* **AND A STRIP RESERVED THE WAY A DOCK RESERVES ONE, THEN GIVEN BACK.** Everything about this is invisible in
+		 * the screenshot — no pixel moves and no window moves — so the assertion is the NUMBER `-visibleFrame`
+		 * answers. Both directions are checked: a reservation that never arrives and one that never lifts are two
+		 * different bugs, and a cache that is only written once would pass a test that asked only the first. */
+		{
+			NSScreen *screen = [NSScreen mainScreen];
+			NSRect before = [screen visibleFrame];
+			NSWindow *dock;
+			NSRect reserved;
+			NSRect released;
+
+			/* **ONLY A COMPOSITOR THAT RESERVES ANYTHING CAN MOVE A WORK AREA.** The other runner for this test
+			 * uses a stock headless compositor, whose `-visibleFrame` IS the frame because it owns no furniture
+			 * and has no door for a reservation — so there is nothing to move and pretending otherwise would
+			 * fail a correct stack. The Agora runner asserts that these lines are PRESENT, so this skip cannot
+			 * hide a reservation that stopped working there. */
+			if (before.size.height >= [screen frame].size.height) {
+				fprintf(stderr, "appkit_dock: skipped — this compositor reserves no furniture, so a reservation "
+					"has no work area to move\n");
+			} else {
+				dock = [[NSWindow alloc] initWithContentRect:NSMakeRect(0.0, 0.0, before.size.width, DOCK_RESERVE)
+								  styleMask:NSBorderlessWindowMask
+								    backing:NSBackingStoreBuffered
+								      defer:NO];
+				/* THE LEVEL IS THE POINT: this is a DOCK-shaped window, not an ordinary one, and the level is
+				 * the only thing that says so — the server orders by the integer and a reservation is not a
+				 * special case for it. */
+				[dock setLevel:NSDockWindowLevel];
+				[dock orderFront:nil];
+				[dock cg_setReservedEdge:NSMinYEdge amount:DOCK_RESERVE];
+				pump_for(0.3);
+				reserved = [screen visibleFrame];
+				fprintf(stderr, "appkit_dock: %gx%g -> %gx%g at (%g,%g) with %d reserved at the bottom\n",
+					(double)before.size.width, (double)before.size.height,
+					(double)reserved.size.width, (double)reserved.size.height,
+					(double)reserved.origin.x, (double)reserved.origin.y, DOCK_RESERVE);
+				if (reserved.size.height != before.size.height - DOCK_RESERVE
+				    || reserved.size.width != before.size.width
+				    || reserved.origin.y != before.origin.y + DOCK_RESERVE) {
+					fprintf(stderr, "appkit_dock: THE RESERVATION DID NOT SHRINK THE WORK AREA\n");
+					return 1;
+				}
+				/* AND THE WINDOW ITSELF DID NOT MOVE: `-visibleFrame` is a fact about the SCREEN, and a
+				 * reservation is not a frame. This is the one line that keeps the two questions apart. */
+				if ([dock frame].origin.x != 0.0 || [dock frame].origin.y != 0.0) {
+					fprintf(stderr, "appkit_dock: THE RESERVING WINDOW WAS MOVED\n");
+					return 1;
+				}
+
+				[dock cg_setReservedEdge:NSMinYEdge amount:0];
+				pump_for(0.3);
+				released = [screen visibleFrame];
+				fprintf(stderr, "appkit_dock: released -> %gx%g at (%g,%g)\n", (double)released.size.width,
+					(double)released.size.height, (double)released.origin.x, (double)released.origin.y);
+				if (!NSEqualRects(released, before)) {
+					fprintf(stderr, "appkit_dock: THE WORK AREA DID NOT COME BACK\n");
+					return 1;
+				}
+				[dock close];
+				[dock release];
+				pump_for(0.1);
 			}
 		}
 

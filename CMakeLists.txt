@@ -54,6 +54,12 @@ find_package(libobjc CONFIG REQUIRED)          # -> objc
 find_package(Foundation CONFIG REQUIRED)
 find_package(AgoraDrawing CONFIG REQUIRED)
 find_package(AgoraText CONFIG REQUIRED)
+# **AND THE TWO SERVICES `NSWorkspace` IS A FACE OVER.** Launch Services answers what opens a file and what a
+# bundle is; Icon Services draws an icon. Both are PRIVATE links: `NSWorkspace.h` names only Foundation types, so a
+# consumer of the AppKit does not reach them itself — the same dependency Apple's AppKit has on the two frameworks,
+# and the direction `WORKSPACE-PLAN.md` §2 and `COCOA-10.11-SURFACE-PLAN.md` §A6 already assign.
+find_package(AgoraLaunchServices CONFIG REQUIRED)
+find_package(AgoraIconServices CONFIG REQUIRED)
 
 # ---------------------------------------------------------------------------
 # xdg-shell: generated from the system's protocol XML
@@ -118,6 +124,39 @@ add_custom_target(agora-shell-bindings
     "${_generated}/agora-shell-protocol.c")
 
 # ---------------------------------------------------------------------------
+# GPU BUFFERS (optional)
+#
+# `zwp_linux_dmabuf_v1` lets a window's pixels live in GPU memory the compositor samples directly, instead of in
+# shared memory it reads and uploads. It is OPTIONAL in the same way the nested backend is: gbm is what allocates
+# the buffer on a render node, and a build without it keeps the shared-memory path untouched. The protocol is
+# generated from the system's copy rather than vendored, like the other two.
+# ---------------------------------------------------------------------------
+pkg_check_modules(GBM IMPORTED_TARGET gbm)
+if(GBM_FOUND)
+  find_file(LINUX_DMABUF_XML
+    NAMES linux-dmabuf-v1.xml
+    PATHS /usr/share/wayland-protocols/stable/linux-dmabuf
+    NO_DEFAULT_PATH REQUIRED)
+  add_custom_command(
+    OUTPUT "${_generated}/linux-dmabuf-v1-client-protocol.h"
+    COMMAND ${WAYLAND_SCANNER} client-header "${LINUX_DMABUF_XML}"
+            "${_generated}/linux-dmabuf-v1-client-protocol.h"
+    DEPENDS "${LINUX_DMABUF_XML}" VERBATIM)
+  add_custom_command(
+    OUTPUT "${_generated}/linux-dmabuf-v1-protocol.c"
+    COMMAND ${WAYLAND_SCANNER} private-code "${LINUX_DMABUF_XML}"
+            "${_generated}/linux-dmabuf-v1-protocol.c"
+    DEPENDS "${LINUX_DMABUF_XML}" VERBATIM)
+  add_custom_target(linux-dmabuf-bindings
+    DEPENDS
+      "${_generated}/linux-dmabuf-v1-client-protocol.h"
+      "${_generated}/linux-dmabuf-v1-protocol.c")
+  message(STATUS "libagora-app: dma-buf window buffers: on (gbm)")
+else()
+  message(STATUS "libagora-app: dma-buf window buffers: off (no gbm) — windows use shared memory")
+endif()
+
+# ---------------------------------------------------------------------------
 # The library
 # ---------------------------------------------------------------------------
 file(GLOB APP_SOURCES CONFIGURE_DEPENDS
@@ -125,12 +164,23 @@ file(GLOB APP_SOURCES CONFIGURE_DEPENDS
   "${CMAKE_CURRENT_SOURCE_DIR}/*.c"
   "${CMAKE_CURRENT_SOURCE_DIR}/platform/*.c")
 
+set(_app_dmabuf_sources "")
+if(GBM_FOUND)
+  set(_app_dmabuf_sources "${_generated}/linux-dmabuf-v1-protocol.c")
+endif()
+
 add_library(App SHARED
   ${APP_SOURCES}
   "${_generated}/xdg-shell-protocol.c"
-  "${_generated}/agora-shell-protocol.c")
+  "${_generated}/agora-shell-protocol.c"
+  ${_app_dmabuf_sources})
 
 add_dependencies(App xdg-shell-bindings agora-shell-bindings)
+if(GBM_FOUND)
+  add_dependencies(App linux-dmabuf-bindings)
+  target_compile_definitions(App PRIVATE AG_HAVE_DMABUF)
+  target_link_libraries(App PRIVATE PkgConfig::GBM)
+endif()
 
 set_target_properties(App PROPERTIES OUTPUT_NAME agora-app)
 
@@ -150,6 +200,8 @@ target_link_libraries(App
     AgoraDrawing::Drawing
     AgoraText::Text
   PRIVATE
+    AgoraLaunchServices::LaunchServices
+    AgoraIconServices::IconServices
     PkgConfig::WAYLAND_CLIENT
     PkgConfig::XKBCOMMON)
 

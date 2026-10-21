@@ -39,6 +39,12 @@
 - (void)cg_performChromeButton:(NSInteger)index;
 @end
 
+/* AND THE DRAG'S MOVE IS DEFERRED TO THE END OF A PASS, so a probe has to make that pass — the same door
+ * `tests/chrome_theme.m` declares for the title bar. */
+@interface NSWindow (AGToolbarDragTest)
+- (void)cg_applyPendingDrag;
+@end
+
 #define TW 400
 #define TH 300
 
@@ -184,11 +190,16 @@ static int same_colour(NSColor *a, NSColor *b, double tol)
 }
 @end
 
-static NSEvent *mouse(int type, NSPoint where, NSInteger windowNumber)
+static NSEvent *mouse_at(int type, NSPoint where, NSInteger windowNumber, double when)
 {
 	return [NSEvent mouseEventWithType:(NSEventType)type location:where modifierFlags:0
-				 timestamp:0.0 windowNumber:windowNumber context:nil
+				 timestamp:when windowNumber:windowNumber context:nil
 				 eventNumber:0 clickCount:1 pressure:1.0f];
+}
+
+static NSEvent *mouse(int type, NSPoint where, NSInteger windowNumber)
+{
+	return mouse_at(type, where, windowNumber, 0.0);
 }
 
 int main(void)
@@ -520,7 +531,72 @@ int main(void)
 		[contentRep release];
 	}
 
-	/* 9. THE TOGGLE DOORS, INCLUDING THE CHROME'S PILL. */
+	/* 9. **THE BAND BETWEEN THE ITEMS IS A DRAG HANDLE; THE ITEMS ARE NOT.** A press on the strip that misses every
+	 * item used to reach the toolbar's view, which answered "no item" and did nothing — a strip of dead pixels the
+	 * width of the window. It now takes hold of the window, the way the title bar above it already did, and the two
+	 * halves are in different files: `NSWindow` owns the gesture, `NSToolbar` owns the answer to "is this an item". */
+	{
+		NSRect dragBefore = [window frame];
+		CGFloat bandY = TH + [toolbar cg_toolbarHeight] / 2.0;
+		CGFloat itemX = -1.0, freeX = -1.0, x, run = 0.0, longest = 0.0;
+
+		/* THE SCAN STARTS INSIDE THE RESIZE BANDS (five points at each end), so a sample is never an edge's. */
+		for (x = 8.0; x < (CGFloat)TW - 8.0; x += 1.0) {
+			if ([toolbar cg_pointIsOverControl:NSMakePoint(x, bandY)]) {
+				if (itemX < 0.0) itemX = x;
+				run = 0.0;
+			} else {
+				if (freeX < 0.0) freeX = x;
+				run += 1.0;
+				if (run > longest) longest = run;
+			}
+		}
+		check(itemX >= 0.0 && freeX >= 0.0,
+		      "the band has both a control and a point that is not one to take hold of");
+		/* **AND THE FLEXIBLE SPACE IS THE WINDOW'S, NOT AN ITEM'S.** The delegate's list has one, so the run of
+		 * non-control points between the last real item and the one after it is WIDE; a toolbar that called a
+		 * flexible space a control would leave only the few points of air around each item, and this band would be
+		 * un-draggable in exactly the place a hand aims for. */
+		check(longest > 40.0, "the flexible space between items is part of the handle, not an item");
+
+		if (freeX >= 0.0) {
+			[window sendEvent:mouse_at(NSLeftMouseDown, NSMakePoint(freeX, bandY), [window windowNumber], 0.0)];
+			[window sendEvent:mouse_at(NSLeftMouseDragged, NSMakePoint(freeX + 40.0, bandY), [window windowNumber], 0.01)];
+			[window sendEvent:mouse_at(NSLeftMouseUp, NSMakePoint(freeX + 40.0, bandY), [window windowNumber], 0.02)];
+			[window cg_applyPendingDrag];	/* the pass would do this; the probe makes the pass */
+			check(near([window frame].origin.x, dragBefore.origin.x + 40.0)
+			      && near([window frame].origin.y, dragBefore.origin.y),
+			      "a drag on the TOOLBAR between its items moves the window by the pointer's own delta");
+		}
+
+		if (itemX >= 0.0) {
+			NSRect itemBefore = [window frame];
+
+			[window sendEvent:mouse_at(NSLeftMouseDown, NSMakePoint(itemX, bandY), [window windowNumber], 0.0)];
+			[window sendEvent:mouse_at(NSLeftMouseDragged, NSMakePoint(itemX + 40.0, bandY), [window windowNumber], 0.01)];
+			[window sendEvent:mouse_at(NSLeftMouseUp, NSMakePoint(itemX + 40.0, bandY), [window windowNumber], 0.02)];
+			[window cg_applyPendingDrag];
+			check(near([window frame].origin.x, itemBefore.origin.x)
+			      && near([window frame].origin.y, itemBefore.origin.y),
+			      "and a press on an ITEM does not: the item keeps its pixels");
+		}
+
+		/* A WINDOW THAT MAY NOT MOVE KEEPS ITS BAND. `-isMovable` is the switch Apple's header names. */
+		[window setMovable:NO];
+		if (freeX >= 0.0) {
+			NSRect lockedBefore = [window frame];
+
+			[window sendEvent:mouse_at(NSLeftMouseDown, NSMakePoint(freeX, bandY), [window windowNumber], 0.0)];
+			[window sendEvent:mouse_at(NSLeftMouseDragged, NSMakePoint(freeX + 40.0, bandY), [window windowNumber], 0.01)];
+			[window sendEvent:mouse_at(NSLeftMouseUp, NSMakePoint(freeX + 40.0, bandY), [window windowNumber], 0.02)];
+			[window cg_applyPendingDrag];
+			check(near([window frame].origin.x, lockedBefore.origin.x),
+			      "and an immovable window does not move from the band either");
+		}
+		[window setMovable:YES];
+	}
+
+	/* 10. THE TOGGLE DOORS, INCLUDING THE CHROME'S PILL. */
 	[window toggleToolbarShown:nil];
 	check(![toolbar isVisible], "-toggleToolbarShown: hides the toolbar");
 	check([window frame].size.height == before.size.height, "and the frame shrinks back to the chrome and content");
@@ -531,7 +607,7 @@ int main(void)
 	[window cg_performChromeButton:AGChromeButtonMenu];
 	check([toolbar isVisible], "and toggles it back");
 
-	/* 10. REMOVING THE TOOLBAR GIVES THE BAND BACK. */
+	/* 11. REMOVING THE TOOLBAR GIVES THE BAND BACK. */
 	frame = [window frame];
 	[window setToolbar:nil];
 	check([window toolbar] == nil, "a window can lose its toolbar");

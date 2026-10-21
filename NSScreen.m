@@ -25,13 +25,14 @@ NSString *NSDeviceIsScreen = @"NSDeviceIsScreen";
 NSString *NSDeviceIsPrinter = @"NSDeviceIsPrinter";
 NSString *NSScreenColorSpaceDidChangeNotification = @"NSScreenColorSpaceDidChangeNotification";
 
-/* ONE CONNECTION, MADE ON DEMAND — the same connection `NSWindow` uses, because the seam keeps one per process
- * and asking here is simply how a screen learns anything about the output. */
+/* HOW A SCREEN REACHES THE PROCESS'S ONE CONNECTION — the same one `NSWindow` uses. The seam owns the caching
+ * (`AGWindowServerShared`), because two caches is two connections, which is what this file used to have and what
+ * a `-visibleFrame` in a draw loop turned into a connection per frame. */
 static NSScreen *s_main;
 
 static AGWindowServer *fn_screen_server(void)
 {
-	return AGWindowServerConnect();
+	return AGWindowServerShared();
 }
 
 @implementation NSScreen

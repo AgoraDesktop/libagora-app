@@ -181,8 +181,12 @@ int main(void)
 
 				check(is_rgb(at_win(rep, close_x() + s_buttonW / 2, y), 0.0, 1.0, 0.0),
 				      "a window that is NOT key draws the theme's INACTIVE close button");
-				check(is_rgb(at_win(rep, menu_x() + s_buttonW / 2, y), 0.5, 0.5, 0.5),
-				      "and the menu button is at the RIGHT edge, in its inactive colour");
+				/* **AND THE MENU BUTTON IS NOT THERE ON A WINDOW WITH NO TOOLBAR.** It is the toolbar's mark, laid out
+				 * only when there is a band to toggle (`fn_chrome_button_present`), so what is at that end is the theme's
+				 * own title bar showing through — not the button's inactive grey. The positive half of the claim is
+				 * below, on a window that has a toolbar. */
+				check(!is_rgb(at_win(rep, menu_x() + s_buttonW / 2, y), 0.5, 0.5, 0.5),
+				      "and a window with NO toolbar draws no menu button at the RIGHT edge");
 				/* **AND THE BAR ITSELF IS THE THEME'S, NOT A FLAT FILL.** The corners are `top-left`/`top-right` and
 				 * the middle is `title-1`…`title-5` tiled, so these three name a piece each: a chrome that read only
 				 * the buttons would leave all three at the frame colour. */
@@ -193,6 +197,47 @@ int main(void)
 				check(is_rgb(at_win(rep, 85, y), 0x20 / 255.0, 0x20 / 255.0, 0x20 / 255.0),
 				      "and its title pieces TILED between them");
 				[rep release];
+			}
+
+			/* 4b. **AND THE MENU BUTTON IS THERE WHEN THE WINDOW HAS A TOOLBAR**, which is the other half of 4: the
+			 * theme's own inactive `menu` art, at the right edge. Its ROW comes from the frame rather than from the
+			 * toolbar's height — the strip's bottom is the frame's top less the title bar, by construction, so the one
+			 * number the painter uses is this one too. */
+			{
+				NSWindow *withBand = [[NSWindow alloc] initWithContentRect:NSMakeRect(0.0, 0.0, (CGFloat)CW, (CGFloat)CH)
+					styleMask:(NSTitledWindowMask | NSClosableWindowMask | NSMiniaturizableWindowMask
+						   | NSResizableWindowMask)
+					backing:NSBackingStoreBuffered defer:NO];
+				NSToolbar *toolbar = [[NSToolbar alloc] initWithIdentifier:@"AGChromeThemeProbe"];
+				NSBitmapImageRep *rep;
+				int height;
+				int buttonY;
+				BOOL found;
+
+				[withBand setTitle:@"Theme"];
+				[withBand setToolbar:toolbar];
+				height = (int)[withBand frame].size.height;
+				buttonY = (int)((CGFloat)height - [theme titleBarHeight] + (CGFloat)s_buttonH / 2.0);
+				rep = new_rep(CW, height);
+				{
+					NSGraphicsContext *ctx = [NSGraphicsContext graphicsContextWithBitmapImageRep:rep];
+
+					[NSGraphicsContext setCurrentContext:ctx];
+					[[NSColor whiteColor] setFill];
+					[[NSBezierPath bezierPathWithRect:NSMakeRect(0.0, 0.0, (CGFloat)CW, (CGFloat)height)] fill];
+					[withBand cg_drawChromeInContext:ctx];
+				}
+				found = is_rgb([rep colorAtX:menu_x() + s_buttonW / 2 y:height - 1 - buttonY], 0.5, 0.5, 0.5);
+				printf("  (note: the toolbar window's frame is %d tall, the menu button's row %d, its colour %.2f,%.2f,%.2f)\n",
+				       height, buttonY,
+				       [[rep colorAtX:menu_x() + s_buttonW / 2 y:height - 1 - buttonY] redComponent],
+				       [[rep colorAtX:menu_x() + s_buttonW / 2 y:height - 1 - buttonY] greenComponent],
+				       [[rep colorAtX:menu_x() + s_buttonW / 2 y:height - 1 - buttonY] blueComponent]);
+				check(found,
+				      "a window WITH a toolbar draws the theme's menu button at the RIGHT edge");
+				[rep release];
+				[toolbar release];
+				[withBand release];
 			}
 
 			/* 5. **THE KEY WINDOW DRAWS THE ACTIVE ART.** `-makeKeyWindow` is the real door, so what is tested is
