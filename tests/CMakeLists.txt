@@ -855,6 +855,19 @@ target_link_libraries(nib_bundle PRIVATE App)
 add_test(NAME appkit-nib-bundle COMMAND nib_bundle
 	"${CMAKE_CURRENT_SOURCE_DIR}/fixtures/Main.nibsource")
 set_tests_properties(appkit-nib-bundle PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
+# **THE PROJECT BUILDER ROLE'S FIRST PIECE: A BUNDLE FOR MORE THAN ONE MACHINE.** Apple's universal binary is a Mach-O
+# container; the ELF loaders here have none, so a universal Agora bundle is one complete binary per platform plus a
+# manifest table that NAMES them (`AGBundleExecutables`, resolved by NSBundle against `uname`). The tool writes it and the
+# test OPENS what it wrote — the writer and the reader are two halves of one decision, and checking only the files would
+# be checking the half that cannot be wrong in an interesting way.
+add_executable(agora_bundler agora_bundler.m)
+target_link_libraries(agora_bundler PRIVATE App)
+
+add_executable(bundler_test bundler_test.m)
+target_link_libraries(bundler_test PRIVATE App)
+add_test(NAME appkit-bundler COMMAND bundler_test "$<TARGET_FILE:agora_bundler>")
+set_tests_properties(appkit-bundler PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
+
 # **THE FORMAT'S COMMAND LINE, AND ITS TEST.** `ibtool` is the reason a design file can be checked by a shell rather than
 # by a person clicking: `dump`, `validate` and `roundtrip` read the same archives the reader does, with no display and no
 # owner. The test RUNS the tool — the only honest way to test an executable — and builds its own fixture, because this
