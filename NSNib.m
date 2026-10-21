@@ -50,6 +50,7 @@
 #import <AppKit/NSOutlineView.h>
 #import <AppKit/NSSplitView.h>
 #import <AppKit/NSToolbar.h>
+#import <AppKit/NSLayoutConstraint.h>
 #import <AppKit/NSWindow.h>
 #import <AppKit/NSMenu.h>
 #import <AppKit/NSMenuItem.h>
@@ -214,6 +215,8 @@ static Class const *fn_design_classes(NSUInteger *countOut)
 		classes[count++] = [NSOutlineView class];
 		classes[count++] = [NSSplitView class];
 		classes[count++] = [NSToolbar class];
+		/* AND THE EQUATIONS, without which a nib could state a frame but never a relationship. */
+		classes[count++] = [NSLayoutConstraint class];
 		classes[count++] = [NSWindow class];
 		classes[count++] = [NSMenu class];
 		classes[count++] = [NSMenuItem class];
@@ -462,6 +465,59 @@ static NSMutableSet *g_registered_class_names = nil;
 		}
 	}
 	return bad;
+}
+
+/* ---- THE VALIDATOR'S DOOR ------------------------------------------------------------------- */
+
++ (NSString *)refusalReasonForArchiveData:(NSData *)data
+{
+	id plist;
+	id root;
+	id version;
+	id objects;
+	NSString *refused;
+	NSError *error = nil;
+
+	if (data == nil) {
+		return @"the file could not be read";
+	}
+	plist = [NSPropertyListSerialization propertyListWithData:data
+							  options:NSPropertyListImmutable
+							   format:NULL
+							    error:&error];
+	if (![plist isKindOfClass:[NSDictionary class]]) {
+		return [NSString stringWithFormat:@"not a property list%@%@",
+			(error != nil) ? @": " : @"",
+			(error != nil) ? [error localizedDescription] : @""];
+	}
+	refused = fn_first_refused_class_name(plist);
+	if (refused != nil) {
+		return [NSString stringWithFormat:@"it names %@, which this reader may not build "
+				   "(see +supportedClasses and +classesInheritingCoding)", refused];
+	}
+	/* AND THE ROOT'S SHAPE, WHICH IS THE SAME CHECK THE READER MAKES — a file can be class-clean and still not be a nib. */
+	root = [NSKeyedUnarchiver unarchivedObjectOfClasses:[NSNib supportedClasses] fromData:data error:&error];
+	if (![root isKindOfClass:[NSDictionary class]]) {
+		return [NSString stringWithFormat:@"it does not decode into a nib root%@%@",
+			(error != nil) ? @": " : @"",
+			(error != nil) ? [error localizedDescription] : @""];
+	}
+	version = [(NSDictionary *)root objectForKey:NSNibFormatVersionKey];
+	if (![version isKindOfClass:[NSNumber class]]) {
+		return [NSString stringWithFormat:@"the root has no %@", NSNibFormatVersionKey];
+	}
+	if ([(NSNumber *)version integerValue] > AGCodingFormatVersion) {
+		return [NSString stringWithFormat:@"it is version %ld and this tree reads %ld",
+			(long)[(NSNumber *)version integerValue], (long)AGCodingFormatVersion];
+	}
+	objects = [(NSDictionary *)root objectForKey:NSNibTopLevelObjectsKey];
+	if (![objects isKindOfClass:[NSArray class]]) {
+		return [NSString stringWithFormat:@"the root has no %@ array", NSNibTopLevelObjectsKey];
+	}
+	if ([(NSArray *)objects count] == 0) {
+		return @"it owns no top-level objects, so it is not a nib";
+	}
+	return nil;
 }
 
 /* ---- THE TWO WAYS IN ------------------------------------------------------------------------- */

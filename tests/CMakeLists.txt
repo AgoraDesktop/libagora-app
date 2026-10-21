@@ -823,3 +823,16 @@ add_executable(nib_roundtrip nib_roundtrip.m)
 target_link_libraries(nib_roundtrip PRIVATE App)
 add_test(NAME appkit-nib-roundtrip COMMAND nib_roundtrip)
 set_tests_properties(appkit-nib-roundtrip PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
+
+# **THE FORMAT'S COMMAND LINE, AND ITS TEST.** `ibtool` is the reason a design file can be checked by a shell rather than
+# by a person clicking: `dump`, `validate` and `roundtrip` read the same archives the reader does, with no display and no
+# owner. The test RUNS the tool — the only honest way to test an executable — and builds its own fixture, because this
+# repository commits no binaries.
+add_executable(ibtool ibtool.m)
+target_link_libraries(ibtool PRIVATE App)
+set_target_properties(ibtool PROPERTIES ENABLE_EXPORTS ON)
+
+add_executable(ibtool_test ibtool_test.m)
+target_link_libraries(ibtool_test PRIVATE App)
+add_test(NAME appkit-ibtool COMMAND ibtool_test "$<TARGET_FILE:ibtool>")
+set_tests_properties(appkit-ibtool PROPERTIES ENVIRONMENT "${_agora_app_test_env}")

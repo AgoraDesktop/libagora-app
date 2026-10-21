@@ -216,6 +216,7 @@ static NSString * const AGCoderHuggingVerticalKey = @"contentHuggingPriorityVert
 static NSString * const AGCoderResistanceHorizontalKey = @"contentCompressionResistancePriorityHorizontal";
 static NSString * const AGCoderResistanceVerticalKey = @"contentCompressionResistancePriorityVertical";
 static NSString * const AGCoderSubviewsKey = @"subviews";
+static NSString * const AGCoderConstraintsKey = @"constraints";
 
 /* **WHAT IS ARCHIVED IS THE DESIGN, AND WHAT IS NOT IS THE LIVE TREE.** A view's `_window`, `_superview` and
  * `_nextKeyView` are BORROWED LINKS INTO A PROCESS: the parent rebuilds the first two when it adds a child, and the
@@ -224,10 +225,15 @@ static NSString * const AGCoderSubviewsKey = @"subviews";
  * decoded view has not run yet — so they are absent, and their absence is the reason a nib can be read into a fresh
  * process at all.
  *
- * THE CONSTRAINTS ARE THE ONE DELIBERATE OMISSION WITH A NAMED CAUSE: `NSLayoutConstraint` has no coding methods yet,
- * so a view's `_constraints` cannot be archived. What IS archived is `translatesAutoresizingMaskIntoConstraints` and
- * the four priority integers, so a decoded view starts in the right MODE and the file's mask relationships hold; the
- * equations themselves are the next unit, and they are omitted rather than half-written. */
+ * THE CONSTRAINTS ARE ARCHIVED NOW, WHICH IS WHAT MAKES A NIB ABLE TO STATE A RELATIONSHIP RATHER THAN A FRAME.
+ * `NSLayoutConstraint` has its coding methods, so a view's `_constraints` travel with it — and the decoder adopts each one
+ * through `-addConstraint:`, which is the door that re-establishes the OWNER link and the active flag that a constraint
+ * cannot carry (see its own note). The translate-mask flag and the four priorities still travel separately, because they
+ * are the view's **mode** rather than its equations.
+ *
+ * THE ORDER OF THE DECODE MATTERS AND IS THE REASON THE CONSTRAINTS COME LAST: a constraint names two views, and the
+ * only way those names resolve is for the views to be IN THE GRAPH already — which the subviews decode above
+ * guarantees, because decoding a child's own fields has finished by the time the array hands it back. */
 - (void)encodeWithCoder:(NSCoder *)aCoder
 {
 	/* THE CHAIN IS REAL NOW: `NSResponder` gained its coding methods, so a view's archive carries its interface style
@@ -252,6 +258,9 @@ static NSString * const AGCoderSubviewsKey = @"subviews";
 	/* AND THE CHILDREN, IN BACK-TO-FRONT ORDER — the array's order IS the drawing and hit-testing order, so it is
 	 * archived rather than sorted or derived. */
 	[aCoder encodeObject:_subviews forKey:AGCoderSubviewsKey];
+	/* AND THE EQUATIONS THE VIEW OWNS, last for the same reason the children are written: the order a reader rebuilds in
+	 * is the order a dependency has. */
+	[aCoder encodeObject:_constraints forKey:AGCoderConstraintsKey];
 }
 
 - (instancetype)initWithCoder:(NSCoder *)aDecoder
@@ -344,6 +353,25 @@ static NSString * const AGCoderSubviewsKey = @"subviews";
 
 				if ([child isKindOfClass:[NSView class]]) {
 					[self addSubview:child];
+				}
+			}
+		}
+	}
+	/* **AND THEN THE CONSTRAINTS, WHICH NAME VIEWS AND THEREFORE COME AFTER THEM.** Each one is adopted through
+	 * `-addConstraint:` — the door that sets the OWNER and the active flag — and its active flag is cleared first because
+	 * that door refuses a constraint it believes another view already owns. The refusal is right for a caller and wrong
+	 * here: an archive records the flag, not the owner, so the flag must be re-derived from the adoption itself. */
+	{
+		id constraints = [aDecoder decodeObjectForKey:AGCoderConstraintsKey];
+		NSUInteger i;
+
+		if ([constraints isKindOfClass:[NSArray class]]) {
+			for (i = 0; i < [(NSArray *)constraints count]; i++) {
+				id constraint = [(NSArray *)constraints objectAtIndex:i];
+
+				if ([constraint isKindOfClass:[NSLayoutConstraint class]]) {
+					[(NSLayoutConstraint *)constraint cg_setActiveFlag:NO];
+					[self addConstraint:(NSLayoutConstraint *)constraint];
 				}
 			}
 		}

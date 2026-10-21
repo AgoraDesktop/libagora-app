@@ -30,8 +30,10 @@
 #import <AppKit/NSSegmentedCell.h>
 #import <AppKit/NSSlider.h>
 #import <AppKit/NSSliderCell.h>
+#import <AppKit/NSLayoutConstraint.h>
 #import <Foundation/Foundation.h>
 
+#include <math.h>
 #include <stdio.h>
 
 static int g_failures = 0;
@@ -315,6 +317,128 @@ int main(void)
 				check([owner actionFired], "the owner's action method ran");
 			}
 		}
+	}
+
+	/* ---- 3b. THE EQUATIONS, AND WHETHER THE DECODED TREE ACTUALLY LAYS OUT --------------------- */
+	/* **A CONSTRAINT THAT DECODES AND DOES NOTHING IS NOT A CONSTRAINT.** So this half does not stop at comparing the
+	 * equation's numbers: it lays the decoded tree out and asserts the FRAMES the equations dictate, which is the only
+	 * evidence that the archive carried the relationship rather than a description of one. */
+	{
+		NibTestView *root = [[NibTestView alloc] initWithFrame:NSMakeRect(0.0, 0.0, 400.0, 300.0)];
+		NibTestView *subject = [[NibTestView alloc] initWithFrame:NSMakeRect(0.0, 0.0, 0.0, 0.0)];
+		NSMutableArray *equations = [[NSMutableArray alloc] init];
+		NSLayoutConstraint *loose;
+		NSData *layoutData;
+		NSNib *layoutNib;
+		NSArray *layoutObjects = nil;
+
+		[subject setTranslatesAutoresizingMaskIntoConstraints:NO];
+		[root addSubview:subject];
+
+		[equations addObject:[NSLayoutConstraint constraintWithItem:subject
+								 attribute:NSLayoutAttributeWidth
+								 relatedBy:NSLayoutRelationEqual
+								    toItem:nil
+								 attribute:NSLayoutAttributeNotAnAttribute
+								multiplier:1.0
+								  constant:120.0]];
+		[equations addObject:[NSLayoutConstraint constraintWithItem:subject
+								 attribute:NSLayoutAttributeHeight
+								 relatedBy:NSLayoutRelationEqual
+								    toItem:nil
+								 attribute:NSLayoutAttributeNotAnAttribute
+								multiplier:1.0
+								  constant:40.0]];
+		[equations addObject:[NSLayoutConstraint constraintWithItem:subject
+								 attribute:NSLayoutAttributeLeft
+								 relatedBy:NSLayoutRelationEqual
+								    toItem:root
+								 attribute:NSLayoutAttributeLeft
+								multiplier:1.0
+								  constant:10.0]];
+		[equations addObject:[NSLayoutConstraint constraintWithItem:subject
+								 attribute:NSLayoutAttributeTop
+								 relatedBy:NSLayoutRelationEqual
+								    toItem:root
+								 attribute:NSLayoutAttributeTop
+								multiplier:1.0
+								  constant:20.0]];
+		/* **AND ONE EQUATION THAT IS NOT ADOPTED, WHICH IS HOW PRIORITY AND THE IDENTIFIER GET EXERCISED WITHOUT THE
+		 * SOLVER'S ANSWER DEPENDING ON THEM.** An optional constraint competes with the required set and settles
+		 * part-way by design — that is the solver's documented behaviour, not something an archive should have to pin —
+		 * so the priority/identifier round trip is asserted on a constraint the layout does not have to satisfy. */
+		loose = [NSLayoutConstraint constraintWithItem:subject
+						    attribute:NSLayoutAttributeHeight
+						    relatedBy:NSLayoutRelationEqual
+						       toItem:nil
+						    attribute:NSLayoutAttributeNotAnAttribute
+						   multiplier:1.0
+						     constant:90.0];
+		[loose setPriority:750.0];
+		[loose setIdentifier:@"loose height"];
+
+		[root addConstraint:[equations objectAtIndex:0]];
+		[root addConstraint:[equations objectAtIndex:1]];
+		[root addConstraint:[equations objectAtIndex:2]];
+		[root addConstraint:[equations objectAtIndex:3]];
+
+		/* THE SOURCE TREE LAYS OUT, so the archive is written by a tree that already satisfies its own equations. */
+		[root layoutSubtreeIfNeeded];
+		check(fabs([subject frame].size.width - 120.0) < 1e-6,
+		      "the built tree lays out to its width equation");
+
+		layoutData = [NSNib archivedDataWithTopLevelObjects:
+			[NSArray arrayWithObjects:root, loose, nil] connections:nil];
+		check(layoutData != nil, "a constrained tree archives");
+		[layoutData writeToFile:@"/tmp/agora-nib-layout.nib" atomically:YES];
+		layoutNib = [[NSNib alloc] initWithContentsOfURL:
+			[NSURL fileURLWithPath:@"/tmp/agora-nib-layout.nib"]];
+		check([layoutNib instantiateNibWithOwner:nil topLevelObjects:&layoutObjects],
+		      "a constrained tree decodes");
+		[layoutNib release];
+
+		check([layoutObjects count] == 2, "the constrained tree and the loose equation both came back");
+		if ([layoutObjects count] == 2) {
+			NSView *droot = [layoutObjects objectAtIndex:0];
+			NSLayoutConstraint *dloose = [layoutObjects objectAtIndex:1];
+			NSArray *dsubviews = [droot subviews];
+
+			check([[droot constraints] count] == 4, "all four equations came back");
+			check([dsubviews count] == 1, "the constrained view came back with its parent");
+			if ([dsubviews count] == 1) {
+				NSView *dsubject = [dsubviews objectAtIndex:0];
+				NSUInteger i;
+
+				check(![dsubject translatesAutoresizingMaskIntoConstraints],
+				      "the constrained view's translate-mask flag round-tripped");
+				(void)i;
+				check([dloose isKindOfClass:[NSLayoutConstraint class]],
+				      "a standalone equation stays an equation");
+				check([dloose priority] == 750.0, "an equation's priority round-tripped");
+				check([[dloose identifier] isEqualToString:@"loose height"],
+				      "an equation's identifier round-tripped");
+				check([dloose constant] == 90.0, "an equation's constant round-tripped");
+				check([dloose firstItem] == dsubject,
+				      "an equation's item is the DECODED view, by identity, not a copy");
+				/* **AND THE PROOF: THE DECODED TREE LAYS ITSELF OUT.** 400x300 unflipped, a 120x40 child at
+				 * left+10 and top+20 means x=10 and y=300-20-40=240. */
+				[droot layoutSubtreeIfNeeded];
+				/* **THE FRAMES ARE COMPARED WITH A TOLERANCE, WHICH IS A FACT ABOUT THE SOLVER RATHER THAN A
+				 * WEAKENED ASSERTION.** The equations are solved by iterative projection through `CGFloat` arithmetic,
+				 * so `300 - 20 - 40` is not required to land on 240.0 to the last bit; what a round trip must preserve
+				 * is the RELATIONSHIP, and a millionth of a point is far below anything a layout can show. */
+				check(fabs([dsubject frame].size.width - 120.0) < 1e-6,
+				      "the decoded width equation produced a width");
+				check(fabs([dsubject frame].size.height - 40.0) < 1e-6,
+				      "the decoded height equation produced a height");
+				check(fabs([dsubject frame].origin.x - 10.0) < 1e-6,
+				      "the decoded left equation produced an origin");
+				check(fabs([dsubject frame].origin.y - 240.0) < 1e-6,
+				      "the decoded top equation produced the flipped origin");
+			}
+		}
+		[equations release];
+		[root release];
 	}
 
 	/* ---- 4. THE REFUSAL ---------------------------------------------------------------------- */

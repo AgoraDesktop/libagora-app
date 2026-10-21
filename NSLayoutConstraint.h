@@ -105,7 +105,7 @@ extern const NSLayoutPriority NSLayoutPriorityFittingSizeCompression;
  * THE CONSTRAINT.                                                                               *
  * ============================================================================================ */
 
-@interface NSLayoutConstraint : NSObject
+@interface NSLayoutConstraint : NSObject <NSSecureCoding>
 {
 	/* THE TWO SIDES ARE BORROWED, as a view's superview is: a constraint is a statement ABOUT views, and retaining
 	 * them would let one equation keep a whole window alive after the window let go. The OWNER — the view whose

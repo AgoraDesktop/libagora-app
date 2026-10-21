@@ -159,6 +159,14 @@ extern NSString *NSNibTopLevelObjects;
 /* AND WHETHER A CLASS IS ON THE ALLOW-LIST, asked before a caller bothers to archive with it. */
 + (BOOL)isSupportedClass:(Class)cls;
 
+/* **THE VALIDATOR'S DOOR, AND IT IS FOR A TOOL RATHER THAN FOR AN APPLICATION.** The reader's checks are the same three
+ * that guard `-instantiateNibWithOwner:topLevelObjects:` — the object table is a plist, so its class names can be checked
+ * WITHOUT building anything — and a command-line validator wants exactly that: an answer of "this file would be refused,
+ * and here is the name" with nothing instantiated and no owner required. Answers nil when the file would be accepted, and
+ * a sentence naming the first problem when it would not (a class outside the allow-list, a class that would lose state, a
+ * root of the wrong shape, or bytes that are not a property list at all). */
++ (nullable NSString *)refusalReasonForArchiveData:(NSData *)data;
+
 /* **THE CENSUS THAT KEEPS RULE 3 HONEST.** Answers the classes on the allow-list that add instance storage of their own
  * yet inherit a coding method instead of implementing it — the classes that would decode into a half-empty object. An
  * empty set is the only healthy answer, and the round-trip test asserts it. */

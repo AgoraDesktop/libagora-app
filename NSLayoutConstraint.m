@@ -93,6 +93,89 @@ static NSView *fn_owner_for_items(id view1, id view2)
 
 @implementation NSLayoutConstraint
 
+/* ============================================================================================
+ * ARCHIVING: THE EQUATION, ITS TWO SIDES AND ITS PRIORITY — AND NOT ITS OWNER.
+ * ============================================================================================ */
+
+/* **`_owner` IS A BACK-LINK AND IS ABSENT, BECAUSE OWNERSHIP IS AN ACT RATHER THAN A VALUE.** A constraint is owned by the
+ * view whose `-addConstraint:` was called, and that door also sets `_active`; a decoder that restored the owner field
+ * directly would leave a constraint the pass never gathers. So the archive carries the EQUATION and the view that owns
+ * it re-establishes the rest when it adopts it — the same rule a view's superview and a menu item's menu follow.
+ *
+ * `_active` IS archived even so, because a constraint can exist unowned: a design file may carry an equation that is
+ * deactivated, and a decoded one that came back active without an owner would be a constraint the solver could not find. */
+static NSString * const AGCoderConstraintFirstItemKey = @"firstItem";
+static NSString * const AGCoderConstraintSecondItemKey = @"secondItem";
+static NSString * const AGCoderConstraintFirstAttributeKey = @"firstAttribute";
+static NSString * const AGCoderConstraintSecondAttributeKey = @"secondAttribute";
+static NSString * const AGCoderConstraintRelationKey = @"relation";
+static NSString * const AGCoderConstraintMultiplierKey = @"multiplier";
+static NSString * const AGCoderConstraintConstantKey = @"constant";
+static NSString * const AGCoderConstraintPriorityKey = @"priority";
+static NSString * const AGCoderConstraintIdentifierKey = @"identifier";
+static NSString * const AGCoderConstraintActiveKey = @"active";
+
+- (void)encodeWithCoder:(NSCoder *)aCoder
+{
+	/* THE ITEMS ARE ENCODED AS OBJECTS AND NOT AS REFERENCES, which is what makes a constraint's tree implicit: whichever
+	 * views the equation names are pulled into the same archive, once, and come back as the same objects. */
+	[aCoder encodeObject:_firstItem forKey:AGCoderConstraintFirstItemKey];
+	[aCoder encodeObject:_secondItem forKey:AGCoderConstraintSecondItemKey];
+	[aCoder encodeInteger:(NSInteger)_firstAttribute forKey:AGCoderConstraintFirstAttributeKey];
+	[aCoder encodeInteger:(NSInteger)_secondAttribute forKey:AGCoderConstraintSecondAttributeKey];
+	[aCoder encodeInteger:(NSInteger)_relation forKey:AGCoderConstraintRelationKey];
+	[aCoder encodeDouble:(double)_multiplier forKey:AGCoderConstraintMultiplierKey];
+	[aCoder encodeDouble:(double)_constant forKey:AGCoderConstraintConstantKey];
+	[aCoder encodeDouble:(double)_priority forKey:AGCoderConstraintPriorityKey];
+	[aCoder encodeObject:_identifier forKey:AGCoderConstraintIdentifierKey];
+	[aCoder encodeBool:_active forKey:AGCoderConstraintActiveKey];
+}
+
+- (instancetype)initWithCoder:(NSCoder *)aDecoder
+{
+	self = [super init];
+	if (self == nil) {
+		return nil;
+	}
+	/* **THE TWO ITEMS ARE ASSIGNED AND NOT RETAINED, WHICH IS THIS CLASS'S OWN CONTRACT.** Apple's properties are
+	 * `assign` — a constraint does not own the views it relates — and an archive that retained them would turn every
+	 * equation into an owner. The graph that decoded them keeps them alive. */
+	_firstItem = [aDecoder decodeObjectForKey:AGCoderConstraintFirstItemKey];
+	_secondItem = [aDecoder decodeObjectForKey:AGCoderConstraintSecondItemKey];
+	if ([aDecoder containsValueForKey:AGCoderConstraintFirstAttributeKey]) {
+		_firstAttribute = (NSLayoutAttribute)[aDecoder decodeIntegerForKey:AGCoderConstraintFirstAttributeKey];
+	}
+	if ([aDecoder containsValueForKey:AGCoderConstraintSecondAttributeKey]) {
+		_secondAttribute = (NSLayoutAttribute)[aDecoder decodeIntegerForKey:AGCoderConstraintSecondAttributeKey];
+	}
+	if ([aDecoder containsValueForKey:AGCoderConstraintRelationKey]) {
+		_relation = (NSLayoutRelation)[aDecoder decodeIntegerForKey:AGCoderConstraintRelationKey];
+	}
+	if ([aDecoder containsValueForKey:AGCoderConstraintMultiplierKey]) {
+		_multiplier = (CGFloat)[aDecoder decodeDoubleForKey:AGCoderConstraintMultiplierKey];
+	} else {
+		_multiplier = 1.0;
+	}
+	if ([aDecoder containsValueForKey:AGCoderConstraintConstantKey]) {
+		_constant = (CGFloat)[aDecoder decodeDoubleForKey:AGCoderConstraintConstantKey];
+	}
+	if ([aDecoder containsValueForKey:AGCoderConstraintPriorityKey]) {
+		_priority = (NSLayoutPriority)[aDecoder decodeDoubleForKey:AGCoderConstraintPriorityKey];
+	}
+	if ([aDecoder containsValueForKey:AGCoderConstraintIdentifierKey]) {
+		_identifier = [[aDecoder decodeObjectForKey:AGCoderConstraintIdentifierKey] copy];
+	}
+	if ([aDecoder containsValueForKey:AGCoderConstraintActiveKey]) {
+		_active = [aDecoder decodeBoolForKey:AGCoderConstraintActiveKey];
+	}
+	return self;
+}
+
++ (BOOL)supportsSecureCoding
+{
+	return YES;
+}
+
 + (instancetype)constraintWithItem:(id)view1
 			 attribute:(NSLayoutAttribute)attr1
 			 relatedBy:(NSLayoutRelation)relation
