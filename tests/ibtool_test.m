@@ -221,9 +221,13 @@ int main(int argc, char **argv)
 		check(before != nil && [before isEqualToString:after],
 		      "nib -> text -> nib produces the SAME DUMP (the format is closed)");
 
-		/* AND A FILE IT CANNOT EXPRESS IS A REFUSAL THAT NAMES THE PROPERTY, not a silently thinner nib. */
+		/* **AND A PROPERTY THAT NEEDS A LITERAL IS WRITTEN AS ONE, NOT REFUSED.** A colour was the case the decompiler
+		 * used to refuse; with `@color(…)` it round-trips like any other value, and this asserts that the literal
+		 * appears in the text and that the file still compiles back to the same dump. */
 		{
 			NSString *coloredPath = @"/tmp/agora-ibtool-colored.nib";
+			NSString *coloredText = @"/tmp/agora-ibtool-colored.nibsource";
+			NSString *coloredBack = @"/tmp/agora-ibtool-colored-again.nib";
 			NSTextField *field = [[NSTextField alloc] initWithFrame:NSMakeRect(0.0, 0.0, 80.0, 22.0)];
 
 			[[field cell] setTextColor:[NSColor redColor]];
@@ -233,13 +237,32 @@ int main(int argc, char **argv)
 			      "a nib with a colour-valued property was written");
 			[field release];
 
-			output = run_ibtool(tool, [NSArray arrayWithObjects:@"decompile", coloredPath, textPath, nil],
+			output = run_ibtool(tool, [NSArray arrayWithObjects:@"decompile", coloredPath, coloredText, nil],
 					    &status);
-			check(status == 1, "decompile REFUSES a property the grammar cannot express");
-			check([output rangeOfString:@"textColor"].location != NSNotFound,
-			      "and the refusal names the key");
-			check([output rangeOfString:@"NSColor"].location != NSNotFound,
-			      "and the class of the value it could not write");
+			check(status == 0, "a colour-valued property decompiles");
+			check([output rangeOfString:@"decompiled"].location != NSNotFound, "and says so");
+
+			{
+				NSString *written = [NSString stringWithContentsOfFile:coloredText];
+
+				check([written rangeOfString:@"@color(#"].location != NSNotFound,
+				      "the colour was written as a @color literal");
+				check([written rangeOfString:@"textColor"].location != NSNotFound,
+				      "and under the property's own name");
+			}
+
+			output = run_ibtool(tool, [NSArray arrayWithObjects:@"compile", coloredText, coloredBack, nil],
+					    &status);
+			check(status == 0, "the literal compiles back");
+			{
+				NSString *beforeDump = run_ibtool(tool, [NSArray arrayWithObjects:@"dump", coloredPath, nil],
+								  &status);
+				NSString *afterDump = run_ibtool(tool, [NSArray arrayWithObjects:@"dump", coloredBack, nil],
+								 &status);
+
+				check(beforeDump != nil && [beforeDump isEqualToString:afterDump],
+				      "and the colour nib survives the round trip unchanged");
+			}
 		}
 	}
 

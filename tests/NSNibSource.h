@@ -16,6 +16,19 @@
  * difference from Apple's OpenStep reader, and it exists because a design says `tag = 41` rather than `tag = "41"` and a
  * compiler should not have to guess which one a caller meant.
  *
+ * **AND ONE VALUE FORM THAT IS NOT A WORD: THE LITERAL.** A property whose value is an OBJECT — a colour, a font, an
+ * image — is written with an `@`, a name and a parenthesised body, because `properties` otherwise holds only what a
+ * person can type:
+ *
+ *   textColor = @color(#ff0000);          // six digits, opaque
+ *   themeColor = @color(#0a0a0aff);       // eight digits, with alpha
+ *   tint       = @color(orange);          // one of a dozen names
+ *   font       = @font("Helvetica Neue" 13);
+ *   image      = @image(icon-run);
+ *
+ * A literal is built by the compiler and applied through KVC like any other value; one it cannot build — a colour that
+ * is not hex, a font this machine has not got, an image nothing is named — is a refusal that names the property.
+ *
  * Comments are a double slash to the end of the line, and the usual block form.
  *
  *   {
@@ -87,10 +100,10 @@ NS_ASSUME_NONNULL_BEGIN
  *     become the words and strings this grammar already has.
  *   * A STRUCTURAL ONE IS EMITTED AS STRUCTURE: `subviews`, `cell`, `contentView` and a window's `contentView` become
  *     nested objects, and the connections are rebuilt from the archive's own records.
- *   * AN OBJECT-VALUED PROPERTY IT CANNOT EXPRESS IS A REFUSAL, NAMED: a colour, a font, an image, a menu on a cell. The
- *     grammar has no value literal for those yet — `color = "#ff0000"` is a decision about syntax and a palette that has
- *     not been made — and inventing one inside a decompiler would be the wrong place to make it. The refusal names the
- *     object and the key so the gap is a sentence rather than a silently missing line of text.
+ *   * A COLOUR, A FONT AND AN IMAGE ARE WRITTEN AS LITERALS (`@color(…)`, `@font(…)`, `@image(…)`), so the three objects a
+ *     property map cannot otherwise hold round-trip.
+ *   * AN OBJECT-VALUED PROPERTY THAT IS NONE OF THOSE — a menu on a cell, a formatter, anything with no literal — is a
+ *     REFUSAL that names the object and the key, rather than a line quietly left out.
  *
  * It also cannot recover what the archive never carried: a class's own idea of what a property MEANT, and any state the
  * coding methods deliberately leave out (a target, a delegate, a window's surface). */

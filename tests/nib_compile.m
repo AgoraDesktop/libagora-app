@@ -27,6 +27,10 @@
 #import <AppKit/NSCell.h>
 #import <AppKit/NSButton.h>
 #import <AppKit/NSButtonCell.h>
+#import <AppKit/NSTextField.h>
+#import <AppKit/NSTextFieldCell.h>
+#import <AppKit/NSColor.h>
+#import <AppKit/NSFont.h>
 #import <AppKit/NSLayoutConstraint.h>
 
 #import <Foundation/Foundation.h>
@@ -279,6 +283,107 @@ int main(void)
 			      [reason rangeOfString:[NSString stringWithUTF8String:cases[i].mentions]].location !=
 			      NSNotFound,
 			      (i < 7) ? "…and the refusal names what was wrong" : "…and names it");
+		}
+	}
+
+	/* ---- 5. THE VALUE LITERALS ------------------------------------------------------------------ */
+	/* **THE THREE OBJECTS A PROPERTY MAP COULD NOT HOLD.** `@color(…)`, `@font(…)` and `@image(…)` are how a colour, a
+	 * font and an image are written; each is built by the compiler and lands on the object through KVC. */
+	{
+		struct {
+			const char *what;
+			const char *source;
+		} good[] = {
+			{ "a hex colour compiles",
+			  "{ version = 1; objects = ( { class = NSTextField;"
+			  " cell = { class = NSTextFieldCell; properties = { textColor = @color(#ff0000); }; }; } ); }" },
+			{ "an eight-digit colour carries its alpha",
+			  "{ version = 1; objects = ( { class = NSTextField;"
+			  " cell = { class = NSTextFieldCell; properties = { textColor = @color(#00ff0080); }; }; } ); }" },
+			{ "a named colour compiles",
+			  "{ version = 1; objects = ( { class = NSTextField;"
+			  " cell = { class = NSTextFieldCell; properties = { textColor = @color(orange); }; }; } ); }" },
+			{ "a font compiles",
+			  "{ version = 1; objects = ( { class = NSTextField;"
+			  " cell = { class = NSTextFieldCell; properties = { font = @font(\"Helvetica\" 13); }; }; } ); }" },
+		};
+		NSUInteger i;
+
+		for (i = 0; i < sizeof(good) / sizeof(good[0]); i++) {
+			NSString *reason = nil;
+			NSData *built = [NSNibSource archiveFromSourceData:source(good[i].source) error:&reason];
+
+			check(built != nil, good[i].what);
+			if (built == nil && reason != nil) {
+				printf("      (%s)\n", [reason UTF8String]);
+			}
+		}
+		/* AND THE VALUES ACTUALLY LANDED. */
+		{
+			NSString *reason = nil;
+			NSData *built = [NSNibSource archiveFromSourceData:source(good[0].source) error:&reason];
+			NSString *path = @"/tmp/agora-literal.nib";
+
+			[built writeToFile:path atomically:YES];
+			{
+				NSNib *nib = [[NSNib alloc] initWithContentsOfURL:[NSURL fileURLWithPath:path]];
+				NSArray *top = nil;
+
+				if ([nib instantiateNibWithOwner:nil topLevelObjects:&top] && [top count] == 1) {
+					NSCell *cell = [(NSTextField *)[top objectAtIndex:0] cell];
+					NSColor *colour = [cell textColor];
+
+					check(colour != nil, "the colour reached the cell");
+					check(fabs([colour redComponent] - 1.0) < 0.01 &&
+					      fabs([colour greenComponent]) < 0.01 &&
+					      fabs([colour blueComponent]) < 0.01,
+					      "and it is the red the source asked for");
+				}
+				[nib release];
+			}
+		}
+		/* AND THE REFUSALS. */
+		{
+			struct {
+				const char *what;
+				const char *source;
+				const char *mentions;
+			} bad[] = {
+				{ "a colour that is not hex is refused",
+				  "{ version = 1; objects = ( { class = NSTextField; cell = { class = NSTextFieldCell;"
+				  " properties = { textColor = @color(#zzzzzz); }; }; } ); }", "@color" },
+				{ "a font this machine has not got is refused",
+				  "{ version = 1; objects = ( { class = NSTextField; cell = { class = NSTextFieldCell;"
+				  " properties = { font = @font(\"NoSuchFontAtAll\" 12); }; }; } ); }", "NoSuchFontAtAll" },
+				{ "a font with no size is refused",
+				  "{ version = 1; objects = ( { class = NSTextField; cell = { class = NSTextFieldCell;"
+				  " properties = { font = @font(\"Helvetica\"); }; }; } ); }", "@font" },
+				{ "an unknown literal is refused",
+				  "{ version = 1; objects = ( { class = NSView; properties = { tag = 1; }; } );"
+				  " }", NULL },
+			};
+			NSUInteger i;
+
+			for (i = 0; i < sizeof(bad) / sizeof(bad[0]) - 1; i++) {
+				NSString *reason = nil;
+				NSData *built = [NSNibSource archiveFromSourceData:source(bad[i].source) error:&reason];
+
+				check(built == nil, bad[i].what);
+				check(reason != nil && [reason rangeOfString:[NSString stringWithUTF8String:bad[i].mentions]]
+							  .location != NSNotFound,
+				      "…and the refusal names what was wrong");
+			}
+			/* THE UNKNOWN LITERAL, written separately because its own message is the one that has to list the three. */
+			{
+				NSString *reason = nil;
+				NSData *built = [NSNibSource archiveFromSourceData:
+					source("{ version = 1; objects = ( { class = NSView; properties ="
+					       " { tag = @widget(1); }; } ); }") error:&reason];
+
+				check(built == nil, "an unknown literal is refused");
+				check(reason != nil && [reason rangeOfString:@"@widget"].location != NSNotFound,
+				      "…naming it");
+			}
 		}
 	}
 

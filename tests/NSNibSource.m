@@ -23,6 +23,9 @@
 #import <AppKit/NSCell.h>
 #import <AppKit/NSWindow.h>
 #import <AppKit/NSLayoutConstraint.h>
+#import <AppKit/NSFont.h>
+#import <AppKit/NSColor.h>
+#import <AppKit/NSImage.h>
 
 #import <Foundation/NSArray.h>
 #import <Foundation/NSCharacterSet.h>
@@ -336,6 +339,73 @@ static NSArray *ag_array(AGSrc *s)
 	return [array autorelease];
 }
 
+/* **A VALUE LITERAL, WHICH IS THE ONE THING A PROPERTY MAP COULD NOT SAY.** A colour, a font and an image are objects,
+ * and the grammar's `properties` block holds values a person can type: so they get a literal spelling that is
+ * UNAMBIGUOUS in the value position — an `@` a name and a parenthesised body:
+ *
+ *   textColor = @color(#ff0000);      themeColor = @color(#0a0a0aff);   tint = @color(orange);
+ *   font      = @font("Helvetica Neue" 13);
+ *   image     = @image(icon-run);
+ *
+ * The body is kept as TEXT and parsed by the compiler, because each literal's shape is the compiler's business and this
+ * function's job is to find its edges. A quoted string inside the body may contain a `)`.
+ */
+static id ag_literal(AGSrc *s)
+{
+	size_t nameStart;
+	size_t bodyStart;
+	NSString *name;
+	NSString *body;
+	NSMutableData *buffer;
+	BOOL quoted = NO;
+
+	ag_advance(s);	/* the @ */
+	nameStart = s->pos;
+	if (!ag_is_word_char(ag_peek(s))) {
+		ag_error(s, @"line %u: an @ must be followed by a literal's name", s->line);
+		return nil;
+	}
+	while (!ag_at_end(s) && ag_is_word_char(ag_peek(s))) {
+		ag_advance(s);
+	}
+	name = [[[NSString alloc] initWithBytes:s->bytes + nameStart
+					length:s->pos - nameStart
+				      encoding:NSUTF8StringEncoding] autorelease];
+	if (!ag_expect(s, '(', "\"(\" after a literal's name")) {
+		return nil;
+	}
+	bodyStart = s->pos;
+	buffer = [[NSMutableData alloc] init];
+	for (;;) {
+		char c;
+
+		if (ag_at_end(s)) {
+			ag_error(s, @"line %u: the literal @%s is never closed", s->line, [name UTF8String]);
+			[buffer release];
+			return nil;
+		}
+		c = ag_peek(s);
+		if (c == '"') {
+			quoted = !quoted;
+		}
+		if (c == ')' && !quoted) {
+			ag_advance(s);
+			break;
+		}
+		[buffer appendBytes:&c length:1];
+		ag_advance(s);
+	}
+	(void)bodyStart;
+	body = [[[NSString alloc] initWithBytes:[buffer bytes]
+					 length:[buffer length]
+				       encoding:NSUTF8StringEncoding] autorelease];
+	[buffer release];
+	return [NSDictionary dictionaryWithObjectsAndKeys:
+		name, @"$literal",
+		[body stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]], @"$value",
+		nil];
+}
+
 static id ag_value(AGSrc *s)
 {
 	ag_skip(s);
@@ -350,6 +420,8 @@ static id ag_value(AGSrc *s)
 		return ag_array(s);
 	case '"':
 		return ag_string(s);
+	case '@':
+		return ag_literal(s);
 	default:
 		if (!ag_is_word_char(ag_peek(s)) || ag_peek(s) == ';' || ag_peek(s) == ',' ||
 		    ag_peek(s) == ')' || ag_peek(s) == '}' || ag_peek(s) == '=') {
@@ -453,6 +525,146 @@ static BOOL ag_parse_rect(NSString *text, NSRect *rectOut)
 	rectOut->size.width = w;
 	rectOut->size.height = h;
 	return ok;
+}
+
+/* ============================================================================================
+ * A VALUE LITERAL, BUILT
+ * ============================================================================================ */
+
+static NSColor *ag_color_from_hex(NSString *text, NSString **error);
+
+/* THE NAMED COLOURS, by the words a person would type. Apple's own names are the long ones (`redColor`); the literal's
+ * vocabulary is the short one, and the table is small on purpose: a colour that is not here is written as hex. */
+static NSColor *ag_named_color(NSString *name)
+{
+	struct {
+		const char *word;
+		NSColor *(*make)(void);
+	} table[] = {
+		{ "black",   NULL }, { "white", NULL }, { "red", NULL }, { "green", NULL },
+		{ "blue",    NULL }, { "cyan",  NULL }, { "magenta", NULL }, { "yellow", NULL },
+		{ "orange",  NULL }, { "purple", NULL }, { "brown", NULL }, { "gray", NULL },
+	};
+	(void)table;
+	if ([name isEqualToString:@"black"]) { return [NSColor blackColor]; }
+	if ([name isEqualToString:@"white"]) { return [NSColor whiteColor]; }
+	if ([name isEqualToString:@"red"]) { return [NSColor redColor]; }
+	if ([name isEqualToString:@"green"]) { return [NSColor greenColor]; }
+	if ([name isEqualToString:@"blue"]) { return [NSColor blueColor]; }
+	if ([name isEqualToString:@"cyan"]) { return [NSColor cyanColor]; }
+	if ([name isEqualToString:@"magenta"]) { return [NSColor magentaColor]; }
+	if ([name isEqualToString:@"yellow"]) { return [NSColor yellowColor]; }
+	if ([name isEqualToString:@"orange"]) { return [NSColor orangeColor]; }
+	if ([name isEqualToString:@"purple"]) { return [NSColor purpleColor]; }
+	if ([name isEqualToString:@"brown"]) { return [NSColor brownColor]; }
+	if ([name isEqualToString:@"gray"]) { return [NSColor grayColor]; }
+	return nil;
+}
+
+static NSColor *ag_color_from_hex(NSString *text, NSString **error)
+{
+	unsigned int red = 0, green = 0, blue = 0, alpha = 255;
+	size_t length = [text length];
+
+	if ([text hasPrefix:@"#"]) {
+		text = [text substringFromIndex:1];
+		length = [text length];
+	}
+	if (length != 6 && length != 8) {
+		*error = [NSString stringWithFormat:@"@color(%@) needs six or eight hex digits", text];
+		return nil;
+	}
+	{
+		unsigned long long value = 0;
+		NSScanner *scanner = [NSScanner scannerWithString:text];
+
+		if (![scanner scanHexLongLong:&value] || ![scanner isAtEnd]) {
+			*error = [NSString stringWithFormat:@"@color(%@) is not hexadecimal", text];
+			return nil;
+		}
+		if (length == 8) {
+			red = (unsigned int)((value >> 24) & 0xFF);
+			green = (unsigned int)((value >> 16) & 0xFF);
+			blue = (unsigned int)((value >> 8) & 0xFF);
+			alpha = (unsigned int)(value & 0xFF);
+		} else {
+			red = (unsigned int)((value >> 16) & 0xFF);
+			green = (unsigned int)((value >> 8) & 0xFF);
+			blue = (unsigned int)(value & 0xFF);
+		}
+	}
+	return [NSColor colorWithCalibratedRed:(CGFloat)red / 255.0
+					green:(CGFloat)green / 255.0
+					 blue:(CGFloat)blue / 255.0
+					alpha:(CGFloat)alpha / 255.0];
+}
+
+/* THE LITERAL'S BODY, AS A STRING OR A STRING AND A NUMBER. A font's name may have spaces and is therefore quoted; a
+ * literal that needs only one word may leave it bare (`@image(icon-run)`), which is what makes the common case short. */
+static NSString *ag_first_word(NSString *body, NSString * *restOut)
+{
+	NSScanner *scanner = [NSScanner scannerWithString:body];
+	NSString *word = nil;
+
+	if ([body hasPrefix:@"\""]) {
+		NSString *quoted = nil;
+
+		if ([scanner scanString:@"\"" intoString:NULL] && [scanner scanUpToString:@"\"" intoString:&quoted]) {
+			(void)[scanner scanString:@"\"" intoString:NULL];
+			word = quoted;
+		}
+	} else {
+		(void)[scanner scanUpToCharactersFromSet:[NSCharacterSet whitespaceCharacterSet]
+				     intoString:&word];
+	}
+	if (restOut != NULL) {
+		*restOut = [body substringFromIndex:[scanner scanLocation]];
+	}
+	return word;
+}
+
+/* THE THREE LITERALS, EACH IN ONE PLACE SO THE COMPILER AND THE ERROR MESSAGE CANNOT DISAGREE ABOUT THE SYNTAX. */
+static id ag_object_from_literal(NSDictionary *literal, NSString **error)
+{
+	NSString *name = [literal objectForKey:@"$literal"];
+	NSString *body = [literal objectForKey:@"$value"];
+
+	if ([name isEqualToString:@"color"]) {
+		NSColor *named = ag_named_color(body);
+
+		if (named != nil) {
+			return named;
+		}
+		return ag_color_from_hex(body, error);
+	}
+	if ([name isEqualToString:@"font"]) {
+		NSString *rest = nil;
+		NSString *fontName = ag_first_word(body, &rest);
+		NSScanner *scanner = [NSScanner scannerWithString:(rest != nil) ? rest : @""];
+		double size = 0.0;
+		NSFont *font;
+
+		if (fontName == nil || ![scanner scanDouble:&size] || size <= 0.0) {
+			*error = [NSString stringWithFormat:@"@font(%@) needs a name and a size: @font(\"Helvetica\" 12)", body];
+			return nil;
+		}
+		font = [NSFont fontWithName:fontName size:(CGFloat)size];
+		if (font == nil) {
+			*error = [NSString stringWithFormat:@"@font: this machine has no font named \"%@\"", fontName];
+		}
+		return font;
+	}
+	if ([name isEqualToString:@"image"]) {
+		NSString *imageName = ag_first_word(body, NULL);
+		NSImage *image = (imageName != nil) ? [NSImage imageNamed:imageName] : nil;
+
+		if (image == nil) {
+			*error = [NSString stringWithFormat:@"@image: there is no image named \"%@\"", imageName];
+		}
+		return image;
+	}
+	*error = [NSString stringWithFormat:@"@%@ is not a literal this format has (color, font, image)", name];
+	return nil;
 }
 
 static id ag_resolve(NSDictionary *registry, NSString *name)
@@ -622,6 +834,30 @@ static id ag_build_object(NSDictionary *record, NSDictionary *registry, NSString
 				id value = [properties objectForKey:key];
 				BOOL geometry = [key isEqualToString:@"frame"] || [key isEqualToString:@"bounds"];
 
+				/* **A LITERAL IS BUILT HERE, BEFORE ANY OTHER RULE SEES IT.** `@color(…)` and its siblings arrive from the
+				 * parser as a marked dictionary; the compiler is the half that knows what each one MEANS, and a literal it
+				 * cannot build (a colour that is not hex, a font this machine has not got) is a refusal by name. */
+				if ([value isKindOfClass:[NSDictionary class]] &&
+				    [(NSDictionary *)value objectForKey:@"$literal"] != nil) {
+					NSString *literalError = nil;
+					id built = ag_object_from_literal(value, &literalError);
+
+					if (built == nil) {
+						*error = [NSString stringWithFormat:@"\"%@\": %@", key,
+							  (literalError != nil) ? literalError : @"the literal could not be built"];
+						[object release];
+						return nil;
+					}
+					@try {
+						[object setValue:built forKey:key];
+					} @catch (NSException *exception) {
+						*error = [NSString stringWithFormat:@"\"%@\" did not take \"%@\": %@", className,
+							  key, [exception reason]];
+						[object release];
+						return nil;
+					}
+					continue;
+				}
 				if (![value isKindOfClass:[NSString class]] && !geometry) {
 					/* scalars arrive already typed from the parser; objects are not expressible in a property map */
 					if ([value isKindOfClass:[NSDictionary class]] || [value isKindOfClass:[NSArray class]]) {
@@ -906,6 +1142,46 @@ static NSString *ag_relation_name(NSLayoutRelation relation);
 	return nil;
 }
 
+/* **THE THREE OBJECT-VALUED PROPERTIES, AS THE LITERALS THE COMPILER BUILDS BACK.** A colour is emitted as hex (six digits
+ * when it is opaque, eight when it is not), a font as its PostScript name and size, and an image as its name — the same
+ * three spellings the header documents, so `decompile` and `compile` are inverses on the values a design actually sets.
+ * Answers nil for anything else, and the caller falls back to a scalar or refuses. */
+- (NSString *)literalText:(id)value
+{
+	if ([value isKindOfClass:[NSColor class]]) {
+		CGFloat red = [(NSColor *)value redComponent];
+		CGFloat green = [(NSColor *)value greenComponent];
+		CGFloat blue = [(NSColor *)value blueComponent];
+		CGFloat alpha = [(NSColor *)value alphaComponent];
+		unsigned int r = (unsigned int)(red * 255.0 + 0.5);
+		unsigned int g = (unsigned int)(green * 255.0 + 0.5);
+		unsigned int b = (unsigned int)(blue * 255.0 + 0.5);
+		unsigned int a = (unsigned int)(alpha * 255.0 + 0.5);
+
+		if (a == 255) {
+			return [NSString stringWithFormat:@"@color(#%02x%02x%02x)", r, g, b];
+		}
+		return [NSString stringWithFormat:@"@color(#%02x%02x%02x%02x)", r, g, b, a];
+	}
+	if ([value isKindOfClass:[NSFont class]]) {
+		NSString *name = [(NSFont *)value fontName];
+
+		if (name == nil) {
+			return nil;
+		}
+		return [NSString stringWithFormat:@"@font(\"%@\" %g)", name, (double)[(NSFont *)value pointSize]];
+	}
+	if ([value isKindOfClass:[NSImage class]]) {
+		NSString *name = [(NSImage *)value name];
+
+		if (name == nil) {
+			return nil;
+		}
+		return [NSString stringWithFormat:@"@image(%@)", name];
+	}
+	return nil;
+}
+
 /* THE PROPERTIES AN OBJECT CAN STATE, as `key = value;` lines. Anything object-valued that is not structure is a
  * REFUSAL, because this grammar has no literal for it yet. */
 - (BOOL)writePropertiesOf:(id)object indent:(NSString *)indent
@@ -958,11 +1234,13 @@ static NSString *ag_relation_name(NSLayoutRelation relation);
 		if (value == nil) {
 			continue;
 		}
-		text = [self scalarText:value];
+		text = [self literalText:value];
 		if (text == nil) {
-			[self fail:@"%@'s \"%@\" is a %@, and this grammar has no literal for one (a colour, a font or an "
-				"image needs a value syntax this format has not got)", NSStringFromClass([object class]), key,
-				NSStringFromClass([value class])];
+			text = [self scalarText:value];
+		}
+		if (text == nil) {
+			[self fail:@"%@'s \"%@\" is a %@, and this grammar has no literal for one",
+				NSStringFromClass([object class]), key, NSStringFromClass([value class])];
 			[lines release];
 			return NO;
 		}
