@@ -64,7 +64,7 @@ typedef enum {
 	NSInlineBezelStyle = 15
 } NSBezelStyle;
 
-@interface NSButtonCell : NSActionCell
+@interface NSButtonCell : NSActionCell <NSSecureCoding>
 {
 	/* THE THREE FLAGS AND THE STATE THIS SLICE ADDS. `_alternateTitle` is a COPY and is therefore the one new thing
 	 * `-dealloc` has to release; `_backgroundColor` and `_sound` are bare pointers, since both outlive a cell. */

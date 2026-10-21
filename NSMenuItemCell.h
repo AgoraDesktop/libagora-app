@@ -53,7 +53,7 @@ NS_ASSUME_NONNULL_BEGIN
 #define APPKIT_MENU_RIGHT_PADDING  14.0
 #define APPKIT_MENU_ITEM_GAP       18.0
 
-@interface NSMenuItemCell : NSButtonCell
+@interface NSMenuItemCell : NSButtonCell <NSSecureCoding>
 {
 	/* NOT RETAINED, AND THAT IS APPLE'S ARRANGEMENT: a cell belongs to the menu view it draws in and points AT
 	 * the item it draws, so retaining here would make the item and its cell own each other. */

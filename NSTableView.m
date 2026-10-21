@@ -81,6 +81,151 @@ NSString *NSTableViewColumnDidResizeNotification = @"NSTableViewColumnDidResizeN
 
 @implementation NSTableView
 
+/* ============================================================================================
+ * ARCHIVING: THE COLUMNS AND THE LOOK, NOT THE ROWS THE DATA SOURCE SUPPLIES.
+ * ============================================================================================ */
+/* **A TABLE'S ROWS ARE NOT IN IT.** The row count, the selected indexes, the edited row and column, the cached row tops
+ * and heights, the type-select buffer and the drag's five pieces of state are all what happens when a table is RUNNING
+ * against a data source; the data source and delegate are CONNECTIONS. What a design says is its COLUMNS (which are
+ * archivable objects), its geometry, its colours, its grid, its selection style and its behaviour flags. The columns go
+ * back through `-addTableColumn:`, which is the door that re-parents each column onto this table. */
+static NSString * const AGCoderTableColumnsKey = @"tableColumns";
+static NSString * const AGCoderTableHeaderViewKey = @"headerView";
+static NSString * const AGCoderTableCornerViewKey = @"cornerView";
+static NSString * const AGCoderTableBackgroundKey = @"backgroundColor";
+static NSString * const AGCoderTableGridColorKey = @"gridColor";
+static NSString * const AGCoderTableRowHeightKey = @"rowHeight";
+static NSString * const AGCoderTableIntercellKey = @"intercellSpacing";
+static NSString * const AGCoderTableGridStyleKey = @"gridStyleMask";
+static NSString * const AGCoderTableAutosaveKey = @"autosaveName";
+static NSString * const AGCoderTableAutosaveColumnsKey = @"autosaveTableColumns";
+static NSString * const AGCoderTableAutoresizeKey = @"columnAutoresizingStyle";
+static NSString * const AGCoderTableHighlightKey = @"selectionHighlightStyle";
+static NSString * const AGCoderTableDoubleActionKey = @"doubleAction";
+static NSString * const AGCoderTableReorderKey = @"allowsColumnReordering";
+static NSString * const AGCoderTableResizeKey = @"allowsColumnResizing";
+static NSString * const AGCoderTableMultipleKey = @"allowsMultipleSelection";
+static NSString * const AGCoderTableEmptyKey = @"allowsEmptySelection";
+static NSString * const AGCoderTableColumnSelectionKey = @"allowsColumnSelection";
+static NSString * const AGCoderTableAlternatingKey = @"usesAlternatingRowBackgroundColors";
+static NSString * const AGCoderTableTypeSelectKey = @"allowsTypeSelect";
+
+- (void)encodeWithCoder:(NSCoder *)aCoder
+{
+	[super encodeWithCoder:aCoder];
+	[aCoder encodeObject:_tableColumns forKey:AGCoderTableColumnsKey];
+	[aCoder encodeObject:_headerView forKey:AGCoderTableHeaderViewKey];
+	[aCoder encodeObject:_cornerView forKey:AGCoderTableCornerViewKey];
+	[aCoder encodeObject:_backgroundColor forKey:AGCoderTableBackgroundKey];
+	[aCoder encodeObject:_gridColor forKey:AGCoderTableGridColorKey];
+	[aCoder encodeDouble:(double)_rowHeight forKey:AGCoderTableRowHeightKey];
+	[aCoder encodeSize:_intercellSpacing forKey:AGCoderTableIntercellKey];
+	[aCoder encodeInteger:(NSInteger)_gridStyleMask forKey:AGCoderTableGridStyleKey];
+	[aCoder encodeObject:_autosaveName forKey:AGCoderTableAutosaveKey];
+	[aCoder encodeBool:_autosaveTableColumns forKey:AGCoderTableAutosaveColumnsKey];
+	[aCoder encodeInteger:(NSInteger)_columnAutoresizingStyle forKey:AGCoderTableAutoresizeKey];
+	[aCoder encodeInteger:(NSInteger)_selectionHighlightStyle forKey:AGCoderTableHighlightKey];
+	[aCoder encodeObject:(_doubleAction != NULL) ? NSStringFromSelector(_doubleAction) : nil
+		      forKey:AGCoderTableDoubleActionKey];
+	[aCoder encodeBool:_allowsColumnReordering forKey:AGCoderTableReorderKey];
+	[aCoder encodeBool:_allowsColumnResizing forKey:AGCoderTableResizeKey];
+	[aCoder encodeBool:_allowsMultipleSelection forKey:AGCoderTableMultipleKey];
+	[aCoder encodeBool:_allowsEmptySelection forKey:AGCoderTableEmptyKey];
+	[aCoder encodeBool:_allowsColumnSelection forKey:AGCoderTableColumnSelectionKey];
+	[aCoder encodeBool:_usesAlternatingRowBackgroundColors forKey:AGCoderTableAlternatingKey];
+	[aCoder encodeBool:_allowsTypeSelect forKey:AGCoderTableTypeSelectKey];
+}
+
+- (instancetype)initWithCoder:(NSCoder *)aDecoder
+{
+	self = [super initWithCoder:aDecoder];
+	if (self == nil) {
+		return nil;
+	}
+	if ([aDecoder containsValueForKey:AGCoderTableHeaderViewKey]) {
+		_headerView = [[aDecoder decodeObjectForKey:AGCoderTableHeaderViewKey] retain];
+	}
+	if ([aDecoder containsValueForKey:AGCoderTableCornerViewKey]) {
+		_cornerView = [[aDecoder decodeObjectForKey:AGCoderTableCornerViewKey] retain];
+	}
+	if ([aDecoder containsValueForKey:AGCoderTableBackgroundKey]) {
+		_backgroundColor = [[aDecoder decodeObjectForKey:AGCoderTableBackgroundKey] retain];
+	}
+	if ([aDecoder containsValueForKey:AGCoderTableGridColorKey]) {
+		_gridColor = [[aDecoder decodeObjectForKey:AGCoderTableGridColorKey] retain];
+	}
+	if ([aDecoder containsValueForKey:AGCoderTableRowHeightKey]) {
+		_rowHeight = [aDecoder decodeDoubleForKey:AGCoderTableRowHeightKey];
+	}
+	if ([aDecoder containsValueForKey:AGCoderTableGridStyleKey]) {
+		_gridStyleMask = [aDecoder decodeIntegerForKey:AGCoderTableGridStyleKey];
+	}
+	if ([aDecoder containsValueForKey:AGCoderTableAutosaveKey]) {
+		_autosaveName = [[aDecoder decodeObjectForKey:AGCoderTableAutosaveKey] copy];
+	}
+	if ([aDecoder containsValueForKey:AGCoderTableAutosaveColumnsKey]) {
+		_autosaveTableColumns = [aDecoder decodeBoolForKey:AGCoderTableAutosaveColumnsKey];
+	}
+	if ([aDecoder containsValueForKey:AGCoderTableAutoresizeKey]) {
+		_columnAutoresizingStyle = (NSTableViewColumnAutoresizingStyle)[aDecoder decodeIntegerForKey:AGCoderTableAutoresizeKey];
+	}
+	if ([aDecoder containsValueForKey:AGCoderTableHighlightKey]) {
+		_selectionHighlightStyle = (NSTableViewSelectionHighlightStyle)[aDecoder decodeIntegerForKey:AGCoderTableHighlightKey];
+	}
+	if ([aDecoder containsValueForKey:AGCoderTableReorderKey]) {
+		_allowsColumnReordering = [aDecoder decodeBoolForKey:AGCoderTableReorderKey];
+	}
+	if ([aDecoder containsValueForKey:AGCoderTableResizeKey]) {
+		_allowsColumnResizing = [aDecoder decodeBoolForKey:AGCoderTableResizeKey];
+	}
+	if ([aDecoder containsValueForKey:AGCoderTableMultipleKey]) {
+		_allowsMultipleSelection = [aDecoder decodeBoolForKey:AGCoderTableMultipleKey];
+	}
+	if ([aDecoder containsValueForKey:AGCoderTableEmptyKey]) {
+		_allowsEmptySelection = [aDecoder decodeBoolForKey:AGCoderTableEmptyKey];
+	}
+	if ([aDecoder containsValueForKey:AGCoderTableColumnSelectionKey]) {
+		_allowsColumnSelection = [aDecoder decodeBoolForKey:AGCoderTableColumnSelectionKey];
+	}
+	if ([aDecoder containsValueForKey:AGCoderTableAlternatingKey]) {
+		_usesAlternatingRowBackgroundColors = [aDecoder decodeBoolForKey:AGCoderTableAlternatingKey];
+	}
+	if ([aDecoder containsValueForKey:AGCoderTableTypeSelectKey]) {
+		_allowsTypeSelect = [aDecoder decodeBoolForKey:AGCoderTableTypeSelectKey];
+	}
+	if ([aDecoder containsValueForKey:AGCoderTableIntercellKey]) {
+		_intercellSpacing = [aDecoder decodeSizeForKey:AGCoderTableIntercellKey];
+	}
+	if ([aDecoder containsValueForKey:AGCoderTableDoubleActionKey]) {
+		NSString *name = [aDecoder decodeObjectForKey:AGCoderTableDoubleActionKey];
+
+		if ([name isKindOfClass:[NSString class]]) {
+			_doubleAction = NSSelectorFromString(name);
+		}
+	}
+	if ([aDecoder containsValueForKey:AGCoderTableColumnsKey]) {
+		id columns = [aDecoder decodeObjectForKey:AGCoderTableColumnsKey];
+		NSUInteger i;
+
+		if ([columns isKindOfClass:[NSArray class]]) {
+			for (i = 0; i < [(NSArray *)columns count]; i++) {
+				id column = [(NSArray *)columns objectAtIndex:i];
+
+				if ([column isKindOfClass:[NSTableColumn class]]) {
+					[self addTableColumn:column];
+				}
+			}
+		}
+	}
+	return self;
+}
+
++ (BOOL)supportsSecureCoding
+{
+	return YES;
+}
+
+
 - (instancetype)initWithFrame:(NSRect)frameRect
 {
 	self = [super initWithFrame:frameRect];

@@ -31,7 +31,7 @@
 
 NS_ASSUME_NONNULL_BEGIN
 
-@interface NSScrollerCell : NSActionCell
+@interface NSScrollerCell : NSActionCell <NSSecureCoding>
 {
 	/* THE VALUE PAIR. Both live in [0, 1]; the clamp is at the setter below so nothing else has to repeat it. */
 	CGFloat _floatValue;

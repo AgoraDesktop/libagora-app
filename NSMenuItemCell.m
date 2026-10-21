@@ -39,6 +39,43 @@ static NSColor *fn_item_ink(BOOL enabled, BOOL highlighted);
 
 @implementation NSMenuItemCell
 
+/* ============================================================================================
+ * ARCHIVING: THE ONE DESIGN FACT, NOT THE FOUR MEASUREMENTS.
+ * ============================================================================================ */
+/* **THE WIDTHS ARE MEASUREMENTS AND THE ITEM IS A BACK-LINK.** `_stateImageWidth`, `_imageWidth`, `_titleWidth` and
+ * `_keyEquivalentWidth` are what a LAYOUT PASS computed from a title and a font, and they are recomputed the moment the
+ * decoded cell is sized — archiving them would freeze a number that depends on the text metrics of the machine that
+ * wrote the file. `_needsSizing`/`_needsDisplay` are the flags that say so, and `_menuItem` is the item this cell draws,
+ * set by the item when it adopts the cell. `_bold` is the design. */
+static NSString * const AGCoderMenuItemBoldKey = @"bold";
+
+- (void)encodeWithCoder:(NSCoder *)aCoder
+{
+	[super encodeWithCoder:aCoder];
+	[aCoder encodeBool:_bold forKey:AGCoderMenuItemBoldKey];
+}
+
+- (instancetype)initWithCoder:(NSCoder *)aDecoder
+{
+	self = [super initWithCoder:aDecoder];
+	if (self == nil) {
+		return nil;
+	}
+	if ([aDecoder containsValueForKey:AGCoderMenuItemBoldKey]) {
+		_bold = [aDecoder decodeBoolForKey:AGCoderMenuItemBoldKey];
+	}
+	/* A DECODED CELL NEEDS SIZING, because its widths are absent by design. */
+	_needsSizing = YES;
+	_needsDisplay = YES;
+	return self;
+}
+
++ (BOOL)supportsSecureCoding
+{
+	return YES;
+}
+
+
 - (instancetype)init
 {
 	if ((self = [super init]) != nil) {
@@ -631,13 +668,5 @@ static NSColor *fn_item_ink(BOOL enabled, BOOL highlighted)
  * AND WHAT THE INHERITED DOOR DOES NOT CHANGE IS WHAT THIS CELL DRAWS: a title stored on the cell is state the
  * drawing doors do not read — the item's title is what `-drawTitleWithFrame:inView:` will use — which is the fact the
  * original refusal was reaching for. It is a fact about the DRAWING, though, not a reason to refuse a constructor. */
-
-- (nullable instancetype)initWithCoder:(NSCoder *)coder
-{
-	(void)coder;
-	fprintf(stderr, "APPKIT-REFUSE: -initWithCoder: needs Apple's published key set for an archived cell, and "
-			"this duplication has not got one\n");
-	return nil;
-}
 
 @end

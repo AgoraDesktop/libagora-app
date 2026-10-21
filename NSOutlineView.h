@@ -80,7 +80,7 @@ extern NSString *NSOutlineViewItemDidCollapseNotification;
 - (void)outlineViewSelectionIsChanging:(NSNotification *)notification;
 @end
 
-@interface NSOutlineView : NSTableView
+@interface NSOutlineView : NSTableView <NSSecureCoding>
 {
 	NSMutableArray *_rootItems;		/* RETAINED: the roots' borrowed objects are not retained, the array is */
 	NSMutableArray *_flattenedItems;	/* RETAINED: item identity, depth-first */

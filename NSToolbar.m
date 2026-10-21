@@ -819,6 +819,81 @@ static CGFloat fn_standard_width(NSToolbarItem *item, NSToolbarDisplayMode displ
 
 @implementation NSToolbar
 
+/* ============================================================================================
+ * ARCHIVING: THE IDENTIFIERS AND THE LOOK, BECAUSE THE ITEMS ARE THE DELEGATE'S.
+ * ============================================================================================ */
+/* **A TOOLBAR'S ITEMS ARE ITS DELEGATE'S ANSWERS, NOT ITS OWN CONTENT.** Apple's model is that the delegate supplies items
+ * for identifiers and the toolbar keeps the identifiers; a nib therefore carries the IDENTIFIER LIST, the display and size
+ * modes, and the visibility and customisation flags, and the items are rebuilt when the toolbar meets its delegate — which
+ * a nib wires as a CONNECTION. That also keeps `NSToolbarItem` (a class with its own view and target) out of the format
+ * until it needs to be in it. `_toolbarView`, `_window` and `_supportsAutosave` are runtime. */
+static NSString * const AGCoderToolbarIdentifierKey = @"identifier";
+static NSString * const AGCoderToolbarItemIdentifiersKey = @"itemIdentifiers";
+static NSString * const AGCoderToolbarSelectedItemKey = @"selectedItemIdentifier";
+static NSString * const AGCoderToolbarDisplayModeKey = @"displayMode";
+static NSString * const AGCoderToolbarSizeModeKey = @"sizeMode";
+static NSString * const AGCoderToolbarVisibleKey = @"visible";
+static NSString * const AGCoderToolbarCustomizationKey = @"allowsUserCustomization";
+static NSString * const AGCoderToolbarAutosavesKey = @"autosavesConfiguration";
+static NSString * const AGCoderToolbarBaselineKey = @"showsBaselineSeparator";
+
+- (void)encodeWithCoder:(NSCoder *)aCoder
+{
+	[aCoder encodeObject:_identifier forKey:AGCoderToolbarIdentifierKey];
+	[aCoder encodeObject:_itemIdentifiers forKey:AGCoderToolbarItemIdentifiersKey];
+	[aCoder encodeObject:_selectedItemIdentifier forKey:AGCoderToolbarSelectedItemKey];
+	[aCoder encodeInteger:(NSInteger)_displayMode forKey:AGCoderToolbarDisplayModeKey];
+	[aCoder encodeInteger:(NSInteger)_sizeMode forKey:AGCoderToolbarSizeModeKey];
+	[aCoder encodeBool:_visible forKey:AGCoderToolbarVisibleKey];
+	[aCoder encodeBool:_allowsUserCustomization forKey:AGCoderToolbarCustomizationKey];
+	[aCoder encodeBool:_autosavesConfiguration forKey:AGCoderToolbarAutosavesKey];
+	[aCoder encodeBool:_showsBaselineSeparator forKey:AGCoderToolbarBaselineKey];
+}
+
+- (instancetype)initWithCoder:(NSCoder *)aDecoder
+{
+	NSString *identifier = [aDecoder decodeObjectForKey:AGCoderToolbarIdentifierKey];
+
+	self = [self initWithIdentifier:([identifier isKindOfClass:[NSString class]]) ? identifier : @""];
+	if (self == nil) {
+		return nil;
+	}
+	if ([aDecoder containsValueForKey:AGCoderToolbarItemIdentifiersKey]) {
+		id identifiers = [aDecoder decodeObjectForKey:AGCoderToolbarItemIdentifiersKey];
+
+		if ([identifiers isKindOfClass:[NSArray class]]) {
+			_itemIdentifiers = [[NSMutableArray alloc] initWithArray:identifiers];
+		}
+	}
+	if ([aDecoder containsValueForKey:AGCoderToolbarSelectedItemKey]) {
+		_selectedItemIdentifier = [[aDecoder decodeObjectForKey:AGCoderToolbarSelectedItemKey] copy];
+	}
+	if ([aDecoder containsValueForKey:AGCoderToolbarDisplayModeKey]) {
+		_displayMode = (NSToolbarDisplayMode)[aDecoder decodeIntegerForKey:AGCoderToolbarDisplayModeKey];
+	}
+	if ([aDecoder containsValueForKey:AGCoderToolbarSizeModeKey]) {
+		_sizeMode = (NSToolbarSizeMode)[aDecoder decodeIntegerForKey:AGCoderToolbarSizeModeKey];
+	}
+	if ([aDecoder containsValueForKey:AGCoderToolbarVisibleKey]) {
+		_visible = [aDecoder decodeBoolForKey:AGCoderToolbarVisibleKey];
+	}
+	if ([aDecoder containsValueForKey:AGCoderToolbarCustomizationKey]) {
+		_allowsUserCustomization = [aDecoder decodeBoolForKey:AGCoderToolbarCustomizationKey];
+	}
+	if ([aDecoder containsValueForKey:AGCoderToolbarAutosavesKey]) {
+		_autosavesConfiguration = [aDecoder decodeBoolForKey:AGCoderToolbarAutosavesKey];
+	}
+	if ([aDecoder containsValueForKey:AGCoderToolbarBaselineKey]) {
+		_showsBaselineSeparator = [aDecoder decodeBoolForKey:AGCoderToolbarBaselineKey];
+	}
+	return self;
+}
+
++ (BOOL)supportsSecureCoding
+{
+	return YES;
+}
+
 - (instancetype)initWithIdentifier:(NSString *)identifier
 {
 	self = [super init];

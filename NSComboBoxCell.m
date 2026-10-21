@@ -26,6 +26,55 @@
  * rather than a decoration. */
 @implementation NSComboBoxCell
 
+/* ============================================================================================
+ * ARCHIVING: A COMBO BOX'S ITEMS, ITS SELECTION AND ITS BEHAVIOUR.
+ * ============================================================================================ */
+static NSString * const AGCoderComboValuesKey = @"objectValues";
+static NSString * const AGCoderComboSelectedKey = @"selectedIndex";
+static NSString * const AGCoderComboVisibleItemsKey = @"numberOfVisibleItems";
+static NSString * const AGCoderComboCompletesKey = @"completes";
+static NSString * const AGCoderComboDataSourceKey = @"usesDataSource";
+
+- (void)encodeWithCoder:(NSCoder *)aCoder
+{
+	[super encodeWithCoder:aCoder];
+	[aCoder encodeObject:_objectValues forKey:AGCoderComboValuesKey];
+	[aCoder encodeInteger:_selectedIndex forKey:AGCoderComboSelectedKey];
+	[aCoder encodeInteger:_numberOfVisibleItems forKey:AGCoderComboVisibleItemsKey];
+	[aCoder encodeBool:_completes forKey:AGCoderComboCompletesKey];
+	[aCoder encodeBool:_usesDataSource forKey:AGCoderComboDataSourceKey];
+}
+
+- (instancetype)initWithCoder:(NSCoder *)aDecoder
+{
+	self = [super initWithCoder:aDecoder];
+	if (self == nil) {
+		return nil;
+	}
+	if ([aDecoder containsValueForKey:AGCoderComboValuesKey]) {
+		_objectValues = [[aDecoder decodeObjectForKey:AGCoderComboValuesKey] mutableCopy];
+	}
+	if ([aDecoder containsValueForKey:AGCoderComboSelectedKey]) {
+		_selectedIndex = [aDecoder decodeIntegerForKey:AGCoderComboSelectedKey];
+	}
+	if ([aDecoder containsValueForKey:AGCoderComboVisibleItemsKey]) {
+		_numberOfVisibleItems = [aDecoder decodeIntegerForKey:AGCoderComboVisibleItemsKey];
+	}
+	if ([aDecoder containsValueForKey:AGCoderComboCompletesKey]) {
+		_completes = [aDecoder decodeBoolForKey:AGCoderComboCompletesKey];
+	}
+	if ([aDecoder containsValueForKey:AGCoderComboDataSourceKey]) {
+		_usesDataSource = [aDecoder decodeBoolForKey:AGCoderComboDataSourceKey];
+	}
+	return self;
+}
+
++ (BOOL)supportsSecureCoding
+{
+	return YES;
+}
+
+
 - (instancetype)initTextCell:(NSString *)stringValue
 {
 	self = [super initTextCell:stringValue];

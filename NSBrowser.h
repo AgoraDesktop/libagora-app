@@ -76,7 +76,7 @@ enum {
 - (CGFloat)browser:(NSBrowser *)sender sizeToFitWidthOfColumn:(NSInteger)column;
 @end
 
-@interface NSBrowser : NSControl
+@interface NSBrowser : NSControl <NSSecureCoding>
 {
 	id <NSBrowserDelegate> _delegate;	/* NOT RETAINED */
 	NSMutableArray *_tables;		/* RETAINED: NSTableView, one per column */

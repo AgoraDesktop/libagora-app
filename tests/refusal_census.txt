@@ -9,7 +9,7 @@
 # build, in BOTH directions — a file with a refusal it does not list fails, and a listed count that has moved fails.
 # Changing this file is therefore the deliberate act of adding or removing a refusal, and the diff says which.
 #
-# THE FORMAT IS `file count`, one per line, and the total is the sum: 141.
+# THE FORMAT IS `file count`, one per line, and the total is the sum: 140.
 
 NSApplication.m                      3
 NSAttributedStringRTF.m              4
@@ -29,7 +29,7 @@ NSImageRep.m                         3
 NSTextList.m                         2
 NSMenu.m                            18
 NSMenuItem.m                         0
-NSMenuItemCell.m                     3
+NSMenuItemCell.m                     2
 NSNib.m                              0
 NSPasteboard.m                       6
 NSPopUpButtonCell.m                  1
@@ -40,4 +40,4 @@ NSView.m                             3
 NSViewController.m                   1
 NSWindow.m                          13
 
-# total: 141
+# total: 140

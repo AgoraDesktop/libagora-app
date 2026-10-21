@@ -211,6 +211,69 @@ static NSMenuItem *fn_copy_menu_item(NSMenuItem *source)
 
 @implementation NSSearchFieldCell
 
+/* ============================================================================================
+ * ARCHIVING: A SEARCH FIELD'S TWO ORNAMENTS, ITS MENU AND ITS BEHAVIOUR.
+ * ============================================================================================ */
+/* **THE USER'S RECENT SEARCHES ARE NOT A DESIGN.** `_recentSearches` is what somebody typed on a machine, and a nib that
+ * carried it would hand one person's history to the next. `_partialStringTimer`, `_cancelVisible` and
+ * `_programmaticChange` are the state of a session. The two ornament cells and the menu template are the design, and
+ * they are archivable objects. */
+static NSString * const AGCoderSearchWholeStringKey = @"sendsWholeSearchString";
+static NSString * const AGCoderSearchImmediatelyKey = @"sendsSearchStringImmediately";
+static NSString * const AGCoderSearchMaximumRecentsKey = @"maximumRecents";
+static NSString * const AGCoderSearchButtonCellKey = @"searchButtonCell";
+static NSString * const AGCoderSearchCancelCellKey = @"cancelButtonCell";
+static NSString * const AGCoderSearchMenuTemplateKey = @"searchMenuTemplate";
+static NSString * const AGCoderSearchAutosaveNameKey = @"recentsAutosaveName";
+
+- (void)encodeWithCoder:(NSCoder *)aCoder
+{
+	[super encodeWithCoder:aCoder];
+	[aCoder encodeBool:_sendsWholeSearchString forKey:AGCoderSearchWholeStringKey];
+	[aCoder encodeBool:_sendsSearchStringImmediately forKey:AGCoderSearchImmediatelyKey];
+	[aCoder encodeInteger:_maximumRecents forKey:AGCoderSearchMaximumRecentsKey];
+	[aCoder encodeObject:_searchButtonCell forKey:AGCoderSearchButtonCellKey];
+	[aCoder encodeObject:_cancelButtonCell forKey:AGCoderSearchCancelCellKey];
+	[aCoder encodeObject:_searchMenuTemplate forKey:AGCoderSearchMenuTemplateKey];
+	[aCoder encodeObject:_recentsAutosaveName forKey:AGCoderSearchAutosaveNameKey];
+}
+
+- (instancetype)initWithCoder:(NSCoder *)aDecoder
+{
+	self = [super initWithCoder:aDecoder];
+	if (self == nil) {
+		return nil;
+	}
+	if ([aDecoder containsValueForKey:AGCoderSearchWholeStringKey]) {
+		_sendsWholeSearchString = [aDecoder decodeBoolForKey:AGCoderSearchWholeStringKey];
+	}
+	if ([aDecoder containsValueForKey:AGCoderSearchImmediatelyKey]) {
+		_sendsSearchStringImmediately = [aDecoder decodeBoolForKey:AGCoderSearchImmediatelyKey];
+	}
+	if ([aDecoder containsValueForKey:AGCoderSearchMaximumRecentsKey]) {
+		_maximumRecents = [aDecoder decodeIntegerForKey:AGCoderSearchMaximumRecentsKey];
+	}
+	if ([aDecoder containsValueForKey:AGCoderSearchButtonCellKey]) {
+		_searchButtonCell = [[aDecoder decodeObjectForKey:AGCoderSearchButtonCellKey] retain];
+	}
+	if ([aDecoder containsValueForKey:AGCoderSearchCancelCellKey]) {
+		_cancelButtonCell = [[aDecoder decodeObjectForKey:AGCoderSearchCancelCellKey] retain];
+	}
+	if ([aDecoder containsValueForKey:AGCoderSearchMenuTemplateKey]) {
+		_searchMenuTemplate = [[aDecoder decodeObjectForKey:AGCoderSearchMenuTemplateKey] retain];
+	}
+	if ([aDecoder containsValueForKey:AGCoderSearchAutosaveNameKey]) {
+		_recentsAutosaveName = [[aDecoder decodeObjectForKey:AGCoderSearchAutosaveNameKey] copy];
+	}
+	return self;
+}
+
++ (BOOL)supportsSecureCoding
+{
+	return YES;
+}
+
+
 - (instancetype)initTextCell:(NSString *)stringValue
 {
 	self = [super initTextCell:stringValue];

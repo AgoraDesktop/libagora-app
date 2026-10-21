@@ -10,6 +10,18 @@
 
 @implementation NSSearchField
 
+/* ============================================================================================
+ * ARCHIVING: NOTHING OF ITS OWN: ITS ORNAMENTS, MENU AND BEHAVIOUR ARE ITS CELL'S.
+ * ============================================================================================ */
+/* Its ornaments, menu and behaviour are its CELL's. A class with no instance storage can inherit both coding methods — `class_getInstanceSize` is what
+ * says so, and `NSNib`'s census accepts exactly that case. The conformance is declared so the allow-list's
+ * `-conformsToProtocol:` question answers YES. */
++ (BOOL)supportsSecureCoding
+{
+	return YES;
+}
+
+
 /* **THE INITIALISER SWAPS THE CELL, AND THEN SETS THE FOUR FLAGS AND THE PLACEHOLDER ON IT.** `NSTextField`'s
  * initialiser has already made a text field cell and applied its defaults, so this is the same field with the one
  * subclass that owns the ornaments — there is no second window model, no second editor and no second face. */

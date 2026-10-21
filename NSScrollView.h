@@ -35,7 +35,7 @@ NS_ASSUME_NONNULL_BEGIN
 @class NSScroller;
 @class NSEvent;
 
-@interface NSScrollView : NSView
+@interface NSScrollView : NSView <NSSecureCoding>
 {
 	/* **ALL THREE ARE BORROWED, BECAUSE THE TREE OWNS EVERY ONE OF THEM.** The content view and the scrollers are
 	 * SUBVIEWS — `-addSubview:` is what retains them — so a second owning pointer would be a second owner of a thing

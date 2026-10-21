@@ -54,7 +54,7 @@ NS_ASSUME_NONNULL_BEGIN
 #define NSSearchFieldClearRecentsMenuItemTag	1002
 #define NSSearchFieldNoRecentsMenuItemTag	1003
 
-@interface NSSearchFieldCell : NSTextFieldCell
+@interface NSSearchFieldCell : NSTextFieldCell <NSSecureCoding>
 {
 	/* **THE THREE FLAGS THE SDK PACKS INTO A BITFIELD, KEPT AS THE VALUES THEY ARE.** A bitfield here would save
 	 * nothing worth the code that reads it, and the era's limits are enforced in the setters where a caller can see

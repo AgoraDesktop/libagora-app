@@ -20,6 +20,29 @@
 
 @implementation NSTextField
 
+/* ============================================================================================
+ * ARCHIVING: NOTHING BUT THE CHAIN, BECAUSE THE ONLY MEMBER IS A CONNECTION.
+ * ============================================================================================ */
+/* **THIS CLASS'S ONE IVAR IS `_delegate`, AND A DELEGATE IS A CONNECTION.** It is the object that answers the field's
+ * questions, it lives in the caller's graph rather than in the file, and `NSNib.h` is where that is spelled. So the
+ * coding methods are here to CHAIN — the field's design state is `NSTextFieldCell`'s and `NSControl`'s, and both are
+ * archived through `-super` — and there is deliberately no key of this class's own. */
+- (void)encodeWithCoder:(NSCoder *)aCoder
+{
+	[super encodeWithCoder:aCoder];
+}
+
+- (instancetype)initWithCoder:(NSCoder *)aDecoder
+{
+	return [super initWithCoder:aDecoder];
+}
+
++ (BOOL)supportsSecureCoding
+{
+	return YES;
+}
+
+
 /* **THE INITIALISER IS THE ONE DOOR WITH A DECISION IN IT, AND THE DECISION IS THE CELL.** `NSControl`'s
  * `-initWithFrame:` makes no cell at all; a field wants the one that owns a face, a string and a session. The frame is
  * re-measured only when the caller gave a degenerate one, which is the same contract `NSComboBox` and `NSPopUpButton`

@@ -46,7 +46,7 @@ typedef enum {
 	NSPopUpArrowAtCenter = 1
 } NSPopUpArrowPosition;
 
-@interface NSPopUpButtonCell : NSButtonCell
+@interface NSPopUpButtonCell : NSButtonCell <NSSecureCoding>
 {
 	/* **THERE IS NO `_menu` HERE: THE MENU IS THE FIELD THIS CLASS INHERITS**, and what this class changes is HOW
 	 * THAT FIELD IS KEPT. `NSCell`'s `menu` is NOT retained and says why — "a menu outlives the cell that may raise

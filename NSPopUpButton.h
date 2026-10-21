@@ -26,7 +26,7 @@
 
 NS_ASSUME_NONNULL_BEGIN
 
-@interface NSPopUpButton : NSButton
+@interface NSPopUpButton : NSButton <NSSecureCoding>
 
 /* **THE TWO WAYS IN.** `-initWithFrame:` is inherited and means `pullsDown:NO` — a button whose menu is a list of
  * CHOICES, which is what a caller who says nothing means. `-initWithFrame:pullsDown:` is the other one, and a

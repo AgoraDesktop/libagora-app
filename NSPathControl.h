@@ -37,7 +37,7 @@ NS_ASSUME_NONNULL_BEGIN
 @protocol NSDraggingInfo;
 @protocol NSPathControlDelegate;
 
-@interface NSPathControl : NSControl
+@interface NSPathControl : NSControl <NSSecureCoding>
 {
 	NSDragOperation _cgLocalMask;
 	NSDragOperation _cgNonLocalMask;

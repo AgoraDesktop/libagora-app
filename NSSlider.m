@@ -20,6 +20,18 @@
 
 @implementation NSSlider
 
+/* ============================================================================================
+ * ARCHIVING: NOTHING OF ITS OWN: ITS RANGE, VALUE AND TICKS ARE ITS CELL'S, SO THE CONTROL ITSELF HAS NOTHING TO ADD.
+ * ============================================================================================ */
+/* Its range, value and ticks are its CELL's, so the control itself has nothing to add. A class with no instance storage can inherit both coding methods — `class_getInstanceSize` is what
+ * says so, and `NSNib`'s census accepts exactly that case. The conformance is declared so the allow-list's
+ * `-conformsToProtocol:` question answers YES. */
++ (BOOL)supportsSecureCoding
+{
+	return YES;
+}
+
+
 - (instancetype)initWithFrame:(NSRect)frameRect
 {
 	self = [super initWithFrame:frameRect];

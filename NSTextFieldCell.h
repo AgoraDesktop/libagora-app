@@ -55,7 +55,7 @@ enum {
 };
 typedef NSUInteger NSTextFieldBezelStyle;
 
-@interface NSTextFieldCell : NSActionCell
+@interface NSTextFieldCell : NSActionCell <NSSecureCoding>
 {
 	/* THE FACE'S OWN TWO COLOURS. The background is what the field shows when it draws one, and it is WHITE by
 	 * default because that is what a field is: the surface a value is written ON rather than a control's raised face.

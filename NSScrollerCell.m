@@ -39,6 +39,48 @@
 
 @implementation NSScrollerCell
 
+/* ============================================================================================
+ * ARCHIVING: THE KNOB'S VALUE AND ITS SHARE, NOT THE DRAG.
+ * ============================================================================================ */
+/* **A DRAG IN PROGRESS IS NOT A DESIGN.** `_hitPart`, `_grabDelta`, `_lastFrame` and `_repeatDeadline` are the state of a
+ * tracked knob and a decoded cell has never been touched; what a file can say is where the knob sits and how much of the
+ * track it takes. `_arrowsPosition` is a look, so it is here too. */
+static NSString * const AGCoderScrollerValueKey = @"floatValue";
+static NSString * const AGCoderScrollerProportionKey = @"knobProportion";
+static NSString * const AGCoderScrollerArrowsKey = @"arrowsPosition";
+
+- (void)encodeWithCoder:(NSCoder *)aCoder
+{
+	[super encodeWithCoder:aCoder];
+	[aCoder encodeDouble:_floatValue forKey:AGCoderScrollerValueKey];
+	[aCoder encodeDouble:_knobProportion forKey:AGCoderScrollerProportionKey];
+	[aCoder encodeInteger:(NSInteger)_arrowsPosition forKey:AGCoderScrollerArrowsKey];
+}
+
+- (instancetype)initWithCoder:(NSCoder *)aDecoder
+{
+	self = [super initWithCoder:aDecoder];
+	if (self == nil) {
+		return nil;
+	}
+	if ([aDecoder containsValueForKey:AGCoderScrollerValueKey]) {
+		_floatValue = [aDecoder decodeDoubleForKey:AGCoderScrollerValueKey];
+	}
+	if ([aDecoder containsValueForKey:AGCoderScrollerProportionKey]) {
+		_knobProportion = [aDecoder decodeDoubleForKey:AGCoderScrollerProportionKey];
+	}
+	if ([aDecoder containsValueForKey:AGCoderScrollerArrowsKey]) {
+		_arrowsPosition = [aDecoder decodeIntegerForKey:AGCoderScrollerArrowsKey];
+	}
+	return self;
+}
+
++ (BOOL)supportsSecureCoding
+{
+	return YES;
+}
+
+
 - (instancetype)init
 {
 	self = [super init];

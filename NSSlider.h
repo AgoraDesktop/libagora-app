@@ -30,7 +30,7 @@
 
 NS_ASSUME_NONNULL_BEGIN
 
-@interface NSSlider : NSControl
+@interface NSSlider : NSControl <NSSecureCoding>
 
 /* THE CELL, MADE AND INSTALLED. `-value` IS NOT A DOOR HERE — a slider's value is `-doubleValue`, five doors up. */
 - (instancetype)initWithFrame:(NSRect)frameRect;

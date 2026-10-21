@@ -54,7 +54,7 @@
 
 NS_ASSUME_NONNULL_BEGIN
 
-@interface NSTextField : NSControl
+@interface NSTextField : NSControl <NSSecureCoding>
 {
 	/* **THE DELEGATE IS THE FIELD'S OWN, WHICH IS WHY IT IS HERE AND NOT ON `NSControl`.** Not every control edits text
 	 * — a button has no session to be told about — so a delegate is a fact about the controls that do, and Apple keeps

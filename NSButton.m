@@ -13,6 +13,38 @@
 
 @implementation NSButton
 
+/* ============================================================================================
+ * ARCHIVING: ONE FLAG, BECAUSE THE BUTTON'S FACE IS ITS CELL'S.
+ * ============================================================================================ */
+/* **A BUTTON ADDS ONE IVAR AND IT IS NOT ITS TITLE.** Everything a caller thinks of as the button — the title, the
+ * alternate title, the image, the bezel, the button type — lives on the CELL, which is why `NSButtonCell`'s coding is
+ * the long one and this class's is a single flag. Spring-loading is the button's own. */
+static NSString * const AGCoderButtonSpringLoadedKey = @"springLoaded";
+
+- (void)encodeWithCoder:(NSCoder *)aCoder
+{
+	[super encodeWithCoder:aCoder];
+	[aCoder encodeBool:_springLoaded forKey:AGCoderButtonSpringLoadedKey];
+}
+
+- (instancetype)initWithCoder:(NSCoder *)aDecoder
+{
+	self = [super initWithCoder:aDecoder];
+	if (self == nil) {
+		return nil;
+	}
+	if ([aDecoder containsValueForKey:AGCoderButtonSpringLoadedKey]) {
+		_springLoaded = [aDecoder decodeBoolForKey:AGCoderButtonSpringLoadedKey];
+	}
+	return self;
+}
+
++ (BOOL)supportsSecureCoding
+{
+	return YES;
+}
+
+
 - (instancetype)initWithFrame:(NSRect)frameRect
 {
 	self = [super initWithFrame:frameRect];

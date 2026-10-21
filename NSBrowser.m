@@ -308,6 +308,135 @@
 
 @implementation NSBrowser
 
+/* ============================================================================================
+ * ARCHIVING: THE COLUMNS' SHAPE AND THE BROWSER'S BEHAVIOUR, NOT ITS SCROLL VIEWS.
+ * ============================================================================================ */
+/* **THE THIRTY MEMBERS SPLIT INTO TWO KINDS AND ONLY ONE OF THEM IS A DESIGN.** The tables, column scroll views, column
+ * widths and selected rows are what the browser BUILT while it was running — they are recreated from the design the
+ * moment the decoded browser is laid out — and the delegate and data source are CONNECTIONS. What a file can state is
+ * the geometry, the behaviour flags, the prototype cell, the class whose cells it makes, and the background colour. A
+ * `Class` is archived by NAME, which is the only spelling an archive can carry. */
+static NSString * const AGCoderBrowserColumnWidthKey = @"columnWidth";
+static NSString * const AGCoderBrowserMinColumnWidthKey = @"minColumnWidth";
+static NSString * const AGCoderBrowserRowHeightKey = @"rowHeight";
+static NSString * const AGCoderBrowserTitleHeightKey = @"titleHeight";
+static NSString * const AGCoderBrowserMaxColumnsKey = @"maxVisibleColumns";
+static NSString * const AGCoderBrowserResizingTypeKey = @"columnResizingType";
+static NSString * const AGCoderBrowserPathSeparatorKey = @"pathSeparator";
+static NSString * const AGCoderBrowserDoubleActionKey = @"doubleAction";
+static NSString * const AGCoderBrowserSeparatesKey = @"separatesColumns";
+static NSString * const AGCoderBrowserMultipleKey = @"allowsMultipleSelection";
+static NSString * const AGCoderBrowserEmptyKey = @"allowsEmptySelection";
+static NSString * const AGCoderBrowserHScrollerKey = @"hasHorizontalScroller";
+static NSString * const AGCoderBrowserTitlesKey = @"takesTitleFromPreviousColumn";
+static NSString * const AGCoderBrowserArrowsKey = @"acceptsArrowKeys";
+static NSString * const AGCoderBrowserArrowActionKey = @"sendsActionOnArrowKeys";
+static NSString * const AGCoderBrowserBackgroundKey = @"backgroundColor";
+static NSString * const AGCoderBrowserCellClassKey = @"cellClass";
+static NSString * const AGCoderBrowserCellPrototypeKey = @"cellPrototype";
+
+- (void)encodeWithCoder:(NSCoder *)aCoder
+{
+	[super encodeWithCoder:aCoder];
+	[aCoder encodeDouble:_columnWidth forKey:AGCoderBrowserColumnWidthKey];
+	[aCoder encodeDouble:_minColumnWidth forKey:AGCoderBrowserMinColumnWidthKey];
+	[aCoder encodeDouble:_rowHeight forKey:AGCoderBrowserRowHeightKey];
+	[aCoder encodeDouble:_titleHeight forKey:AGCoderBrowserTitleHeightKey];
+	[aCoder encodeInteger:_maxVisibleColumns forKey:AGCoderBrowserMaxColumnsKey];
+	[aCoder encodeInteger:(NSInteger)_columnResizingType forKey:AGCoderBrowserResizingTypeKey];
+	[aCoder encodeObject:_pathSeparator forKey:AGCoderBrowserPathSeparatorKey];
+	[aCoder encodeObject:(_doubleAction != NULL) ? NSStringFromSelector(_doubleAction) : nil
+		      forKey:AGCoderBrowserDoubleActionKey];
+	[aCoder encodeBool:_separatesColumns forKey:AGCoderBrowserSeparatesKey];
+	[aCoder encodeBool:_allowsMultipleSelection forKey:AGCoderBrowserMultipleKey];
+	[aCoder encodeBool:_allowsEmptySelection forKey:AGCoderBrowserEmptyKey];
+	[aCoder encodeBool:_hasHorizontalScroller forKey:AGCoderBrowserHScrollerKey];
+	[aCoder encodeBool:_takesTitleFromPreviousColumn forKey:AGCoderBrowserTitlesKey];
+	[aCoder encodeBool:_acceptsArrowKeys forKey:AGCoderBrowserArrowsKey];
+	[aCoder encodeBool:_sendsActionOnArrowKeys forKey:AGCoderBrowserArrowActionKey];
+	[aCoder encodeObject:_backgroundColor forKey:AGCoderBrowserBackgroundKey];
+	[aCoder encodeObject:(_cellClass != Nil) ? NSStringFromClass(_cellClass) : nil
+		      forKey:AGCoderBrowserCellClassKey];
+	[aCoder encodeObject:_cellPrototype forKey:AGCoderBrowserCellPrototypeKey];
+}
+
+- (instancetype)initWithCoder:(NSCoder *)aDecoder
+{
+	self = [super initWithCoder:aDecoder];
+	if (self == nil) {
+		return nil;
+	}
+	if ([aDecoder containsValueForKey:AGCoderBrowserColumnWidthKey]) {
+		_columnWidth = [aDecoder decodeDoubleForKey:AGCoderBrowserColumnWidthKey];
+	}
+	if ([aDecoder containsValueForKey:AGCoderBrowserMinColumnWidthKey]) {
+		_minColumnWidth = [aDecoder decodeDoubleForKey:AGCoderBrowserMinColumnWidthKey];
+	}
+	if ([aDecoder containsValueForKey:AGCoderBrowserRowHeightKey]) {
+		_rowHeight = [aDecoder decodeDoubleForKey:AGCoderBrowserRowHeightKey];
+	}
+	if ([aDecoder containsValueForKey:AGCoderBrowserTitleHeightKey]) {
+		_titleHeight = [aDecoder decodeDoubleForKey:AGCoderBrowserTitleHeightKey];
+	}
+	if ([aDecoder containsValueForKey:AGCoderBrowserMaxColumnsKey]) {
+		_maxVisibleColumns = [aDecoder decodeIntegerForKey:AGCoderBrowserMaxColumnsKey];
+	}
+	if ([aDecoder containsValueForKey:AGCoderBrowserResizingTypeKey]) {
+		_columnResizingType = (NSBrowserColumnResizingType)[aDecoder decodeIntegerForKey:AGCoderBrowserResizingTypeKey];
+	}
+	if ([aDecoder containsValueForKey:AGCoderBrowserPathSeparatorKey]) {
+		_pathSeparator = [[aDecoder decodeObjectForKey:AGCoderBrowserPathSeparatorKey] copy];
+	}
+	if ([aDecoder containsValueForKey:AGCoderBrowserSeparatesKey]) {
+		_separatesColumns = [aDecoder decodeBoolForKey:AGCoderBrowserSeparatesKey];
+	}
+	if ([aDecoder containsValueForKey:AGCoderBrowserMultipleKey]) {
+		_allowsMultipleSelection = [aDecoder decodeBoolForKey:AGCoderBrowserMultipleKey];
+	}
+	if ([aDecoder containsValueForKey:AGCoderBrowserEmptyKey]) {
+		_allowsEmptySelection = [aDecoder decodeBoolForKey:AGCoderBrowserEmptyKey];
+	}
+	if ([aDecoder containsValueForKey:AGCoderBrowserHScrollerKey]) {
+		_hasHorizontalScroller = [aDecoder decodeBoolForKey:AGCoderBrowserHScrollerKey];
+	}
+	if ([aDecoder containsValueForKey:AGCoderBrowserTitlesKey]) {
+		_takesTitleFromPreviousColumn = [aDecoder decodeBoolForKey:AGCoderBrowserTitlesKey];
+	}
+	if ([aDecoder containsValueForKey:AGCoderBrowserArrowsKey]) {
+		_acceptsArrowKeys = [aDecoder decodeBoolForKey:AGCoderBrowserArrowsKey];
+	}
+	if ([aDecoder containsValueForKey:AGCoderBrowserArrowActionKey]) {
+		_sendsActionOnArrowKeys = [aDecoder decodeBoolForKey:AGCoderBrowserArrowActionKey];
+	}
+	if ([aDecoder containsValueForKey:AGCoderBrowserBackgroundKey]) {
+		_backgroundColor = [[aDecoder decodeObjectForKey:AGCoderBrowserBackgroundKey] retain];
+	}
+	if ([aDecoder containsValueForKey:AGCoderBrowserCellPrototypeKey]) {
+		_cellPrototype = [[aDecoder decodeObjectForKey:AGCoderBrowserCellPrototypeKey] retain];
+	}
+	if ([aDecoder containsValueForKey:AGCoderBrowserDoubleActionKey]) {
+		NSString *name = [aDecoder decodeObjectForKey:AGCoderBrowserDoubleActionKey];
+
+		if ([name isKindOfClass:[NSString class]]) {
+			_doubleAction = NSSelectorFromString(name);
+		}
+	}
+	if ([aDecoder containsValueForKey:AGCoderBrowserCellClassKey]) {
+		NSString *name = [aDecoder decodeObjectForKey:AGCoderBrowserCellClassKey];
+
+		if ([name isKindOfClass:[NSString class]]) {
+			_cellClass = NSClassFromString(name);
+		}
+	}
+	return self;
+}
+
++ (BOOL)supportsSecureCoding
+{
+	return YES;
+}
+
+
 - (instancetype)initWithFrame:(NSRect)frameRect
 {
 	NSRect documentFrame = NSMakeRect(0.0, 0.0, frameRect.size.width, frameRect.size.height);

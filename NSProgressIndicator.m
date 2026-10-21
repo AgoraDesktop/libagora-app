@@ -14,6 +14,68 @@
 
 @implementation NSProgressIndicator
 
+/* ============================================================================================
+ * ARCHIVING: THE RANGE, THE STYLE AND WHETHER IT SPINS.
+ * ============================================================================================ */
+/* **THIS ONE IS ALL DESIGN, WHICH IS THE OTHER HALF OF THE POINT.** An indicator has no cell in this tier: its range, its
+ * value, its style and whether it is determinate are its OWN state, so every one of them is here. `_animating` is
+ * included because "spins when the window opens" is a design decision, not a timestamp. */
+static NSString * const AGCoderProgressMinKey = @"minValue";
+static NSString * const AGCoderProgressMaxKey = @"maxValue";
+static NSString * const AGCoderProgressValueKey = @"doubleValue";
+static NSString * const AGCoderProgressIndeterminateKey = @"indeterminate";
+static NSString * const AGCoderProgressAnimatingKey = @"animating";
+static NSString * const AGCoderProgressDisplayedKey = @"displayedWhenStopped";
+static NSString * const AGCoderProgressStyleKey = @"style";
+
+- (void)encodeWithCoder:(NSCoder *)aCoder
+{
+	[super encodeWithCoder:aCoder];
+	[aCoder encodeDouble:_minValue forKey:AGCoderProgressMinKey];
+	[aCoder encodeDouble:_maxValue forKey:AGCoderProgressMaxKey];
+	[aCoder encodeDouble:_doubleValue forKey:AGCoderProgressValueKey];
+	[aCoder encodeBool:_indeterminate forKey:AGCoderProgressIndeterminateKey];
+	[aCoder encodeBool:_animating forKey:AGCoderProgressAnimatingKey];
+	[aCoder encodeBool:_displayedWhenStopped forKey:AGCoderProgressDisplayedKey];
+	[aCoder encodeInteger:(NSInteger)_style forKey:AGCoderProgressStyleKey];
+}
+
+- (instancetype)initWithCoder:(NSCoder *)aDecoder
+{
+	self = [super initWithCoder:aDecoder];
+	if (self == nil) {
+		return nil;
+	}
+	if ([aDecoder containsValueForKey:AGCoderProgressMinKey]) {
+		_minValue = [aDecoder decodeDoubleForKey:AGCoderProgressMinKey];
+	}
+	if ([aDecoder containsValueForKey:AGCoderProgressMaxKey]) {
+		_maxValue = [aDecoder decodeDoubleForKey:AGCoderProgressMaxKey];
+	}
+	if ([aDecoder containsValueForKey:AGCoderProgressValueKey]) {
+		_doubleValue = [aDecoder decodeDoubleForKey:AGCoderProgressValueKey];
+	}
+	if ([aDecoder containsValueForKey:AGCoderProgressIndeterminateKey]) {
+		_indeterminate = [aDecoder decodeBoolForKey:AGCoderProgressIndeterminateKey];
+	}
+	if ([aDecoder containsValueForKey:AGCoderProgressAnimatingKey]) {
+		_animating = [aDecoder decodeBoolForKey:AGCoderProgressAnimatingKey];
+	}
+	if ([aDecoder containsValueForKey:AGCoderProgressDisplayedKey]) {
+		_displayedWhenStopped = [aDecoder decodeBoolForKey:AGCoderProgressDisplayedKey];
+	}
+	if ([aDecoder containsValueForKey:AGCoderProgressStyleKey]) {
+		_style = (NSProgressIndicatorStyle)[aDecoder decodeIntegerForKey:AGCoderProgressStyleKey];
+	}
+	return self;
+}
+
++ (BOOL)supportsSecureCoding
+{
+	return YES;
+}
+
+
 - (instancetype)initWithFrame:(NSRect)frameRect
 {
 	self = [super initWithFrame:frameRect];

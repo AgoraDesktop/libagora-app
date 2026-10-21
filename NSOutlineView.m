@@ -60,6 +60,62 @@ NSString *NSOutlineViewItemDidCollapseNotification = @"NSOutlineViewItemDidColla
 
 @implementation NSOutlineView
 
+/* ============================================================================================
+ * ARCHIVING: THE INDENTATION AND THE OUTLINE COLUMN, NOT THE TREE.
+ * ============================================================================================ */
+/* **THE FIVE ARRAYS ARE A TREE THIS VIEW BUILT FROM A DATA SOURCE** — the roots, the flattened rows, their levels and
+ * what is expanded — and none of them survives a decode with any meaning, because the source is a connection and the
+ * tree is its answer. The outline column and the four indentation flags are the design. */
+static NSString * const AGCoderOutlineColumnKey = @"outlineTableColumn";
+static NSString * const AGCoderOutlineIndentationKey = @"indentationPerLevel";
+static NSString * const AGCoderOutlineMarkerKey = @"indentationMarkerFollowsCell";
+static NSString * const AGCoderOutlineAutoresizeKey = @"autoresizesOutlineColumn";
+static NSString * const AGCoderOutlineAutosaveKey = @"autosaveExpandedItems";
+
+- (void)encodeWithCoder:(NSCoder *)aCoder
+{
+	[super encodeWithCoder:aCoder];
+	[aCoder encodeObject:_outlineTableColumn forKey:AGCoderOutlineColumnKey];
+	[aCoder encodeDouble:(double)_indentationPerLevel forKey:AGCoderOutlineIndentationKey];
+	[aCoder encodeBool:_indentationMarkerFollowsCell forKey:AGCoderOutlineMarkerKey];
+	[aCoder encodeBool:_autoresizesOutlineColumn forKey:AGCoderOutlineAutoresizeKey];
+	[aCoder encodeBool:_autosaveExpandedItems forKey:AGCoderOutlineAutosaveKey];
+}
+
+- (instancetype)initWithCoder:(NSCoder *)aDecoder
+{
+	self = [super initWithCoder:aDecoder];
+	if (self == nil) {
+		return nil;
+	}
+	if ([aDecoder containsValueForKey:AGCoderOutlineIndentationKey]) {
+		_indentationPerLevel = [aDecoder decodeDoubleForKey:AGCoderOutlineIndentationKey];
+	}
+	if ([aDecoder containsValueForKey:AGCoderOutlineMarkerKey]) {
+		_indentationMarkerFollowsCell = [aDecoder decodeBoolForKey:AGCoderOutlineMarkerKey];
+	}
+	if ([aDecoder containsValueForKey:AGCoderOutlineAutoresizeKey]) {
+		_autoresizesOutlineColumn = [aDecoder decodeBoolForKey:AGCoderOutlineAutoresizeKey];
+	}
+	if ([aDecoder containsValueForKey:AGCoderOutlineAutosaveKey]) {
+		_autosaveExpandedItems = [aDecoder decodeBoolForKey:AGCoderOutlineAutosaveKey];
+	}
+	if ([aDecoder containsValueForKey:AGCoderOutlineColumnKey]) {
+		id column = [aDecoder decodeObjectForKey:AGCoderOutlineColumnKey];
+
+		if ([column isKindOfClass:[NSTableColumn class]]) {
+			[self setOutlineTableColumn:column];
+		}
+	}
+	return self;
+}
+
++ (BOOL)supportsSecureCoding
+{
+	return YES;
+}
+
+
 - (instancetype)initWithFrame:(NSRect)frameRect
 {
 	self = [super initWithFrame:frameRect];

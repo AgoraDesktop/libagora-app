@@ -78,6 +78,83 @@ static NSColor *fn_path_default_background(NSPathStyle style)
 
 @implementation NSPathCell
 
+/* ============================================================================================
+ * ARCHIVING: A PATH'S COMPONENTS, ITS URL AND ITS STYLE.
+ * ============================================================================================ */
+/* **`_clickedCell` AND `_hoveredCell` ARE WHAT THE POINTER IS DOING** and are absent; `_delegate` is a CONNECTION. The
+ * components themselves are `NSPathComponentCell`s — real archivable cells — so a path round-trips as a path. The double
+ * action is a selector and is archived by name, the way every action in this format is. */
+static NSString * const AGCoderPathCellsKey = @"cells";
+static NSString * const AGCoderPathURLKey = @"url";
+static NSString * const AGCoderPathBackgroundColorKey = @"backgroundColor";
+static NSString * const AGCoderPathBackgroundUserSetKey = @"cgBackgroundUserSet";
+static NSString * const AGCoderPathAllowedTypesKey = @"allowedTypes";
+static NSString * const AGCoderPathDoubleActionKey = @"doubleAction";
+static NSString * const AGCoderPathStyleKey = @"pathStyle";
+static NSString * const AGCoderPathPlaceholderKey = @"placeholderString";
+static NSString * const AGCoderPathPlaceholderAttributedKey = @"placeholderAttributedString";
+
+- (void)encodeWithCoder:(NSCoder *)aCoder
+{
+	[super encodeWithCoder:aCoder];
+	[aCoder encodeObject:_cells forKey:AGCoderPathCellsKey];
+	[aCoder encodeObject:_url forKey:AGCoderPathURLKey];
+	[aCoder encodeObject:_backgroundColor forKey:AGCoderPathBackgroundColorKey];
+	[aCoder encodeBool:_cgBackgroundUserSet forKey:AGCoderPathBackgroundUserSetKey];
+	[aCoder encodeObject:_allowedTypes forKey:AGCoderPathAllowedTypesKey];
+	[aCoder encodeObject:(_doubleAction != NULL) ? NSStringFromSelector(_doubleAction) : nil
+		      forKey:AGCoderPathDoubleActionKey];
+	[aCoder encodeInteger:(NSInteger)_pathStyle forKey:AGCoderPathStyleKey];
+	[aCoder encodeObject:_placeholderString forKey:AGCoderPathPlaceholderKey];
+	[aCoder encodeObject:_placeholderAttributedString forKey:AGCoderPathPlaceholderAttributedKey];
+}
+
+- (instancetype)initWithCoder:(NSCoder *)aDecoder
+{
+	self = [super initWithCoder:aDecoder];
+	if (self == nil) {
+		return nil;
+	}
+	if ([aDecoder containsValueForKey:AGCoderPathCellsKey]) {
+		_cells = [[aDecoder decodeObjectForKey:AGCoderPathCellsKey] mutableCopy];
+	}
+	if ([aDecoder containsValueForKey:AGCoderPathURLKey]) {
+		_url = [[aDecoder decodeObjectForKey:AGCoderPathURLKey] copy];
+	}
+	if ([aDecoder containsValueForKey:AGCoderPathBackgroundColorKey]) {
+		_backgroundColor = [[aDecoder decodeObjectForKey:AGCoderPathBackgroundColorKey] retain];
+	}
+	if ([aDecoder containsValueForKey:AGCoderPathBackgroundUserSetKey]) {
+		_cgBackgroundUserSet = [aDecoder decodeBoolForKey:AGCoderPathBackgroundUserSetKey];
+	}
+	if ([aDecoder containsValueForKey:AGCoderPathAllowedTypesKey]) {
+		_allowedTypes = [[aDecoder decodeObjectForKey:AGCoderPathAllowedTypesKey] copy];
+	}
+	if ([aDecoder containsValueForKey:AGCoderPathStyleKey]) {
+		_pathStyle = [aDecoder decodeIntegerForKey:AGCoderPathStyleKey];
+	}
+	if ([aDecoder containsValueForKey:AGCoderPathPlaceholderKey]) {
+		_placeholderString = [[aDecoder decodeObjectForKey:AGCoderPathPlaceholderKey] copy];
+	}
+	if ([aDecoder containsValueForKey:AGCoderPathPlaceholderAttributedKey]) {
+		_placeholderAttributedString = [[aDecoder decodeObjectForKey:AGCoderPathPlaceholderAttributedKey] copy];
+	}
+	if ([aDecoder containsValueForKey:AGCoderPathDoubleActionKey]) {
+		NSString *name = [aDecoder decodeObjectForKey:AGCoderPathDoubleActionKey];
+
+		if ([name isKindOfClass:[NSString class]]) {
+			_doubleAction = NSSelectorFromString(name);
+		}
+	}
+	return self;
+}
+
++ (BOOL)supportsSecureCoding
+{
+	return YES;
+}
+
+
 - (instancetype)init
 {
 	self = [super init];

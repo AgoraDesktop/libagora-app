@@ -19,6 +19,16 @@
 
 @implementation NSTableHeaderCell
 
+/* ============================================================================================
+ * ARCHIVING: NOTHING EITHER: A HEADER CELL IS ITS FIELD CELL.
+ * ============================================================================================ */
+/* The same shape as `NSActionCell`: no instance storage of its own, so the inherited coding is complete by measurement
+ * rather than by assumption. */
++ (BOOL)supportsSecureCoding
+{
+	return YES;
+}
+
 - (instancetype)initTextCell:(NSString *)aString
 {
 	self = [super initTextCell:aString];

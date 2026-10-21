@@ -29,10 +29,16 @@ every key, or on Return — the caller's choice.
 **And a nib is now a thing this tier can READ AND WRITE.** `NSNib.h` is a format rather than a refusal: a keyed
 archive whose root is `{AGNibVersion, AGNibTopLevelObjects, AGNibConnections}`, with outlets and actions as connection
 records naming the file's owner by placeholder. The classes a design file may name are archivable — `NSResponder`,
-`NSView`, `NSControl`, `NSCell`, `NSWindow`, `NSMenu`, `NSMenuItem`, `NSTableColumn`, `NSFont`, `NSColor`,
-`NSImage` — each conforming to `NSSecureCoding` and implementing both coding methods, and each archiving its DESIGN
-properties rather than its live graph (a view's window, a window's surface and a cell's control view are all absent by
-construction). The reader decodes with secure coding on and an EXTENSIBLE allow-list (`+registerDesignClass:` for an
+`NSView`, `NSControl`, the whole cell family (`NSCell`, `NSActionCell`, `NSTextFieldCell`, `NSButtonCell`,
+`NSBrowserCell`, `NSComboBoxCell`, `NSMenuItemCell`, `NSPathCell`, `NSPathComponentCell`, `NSPopUpButtonCell`,
+`NSScrollerCell`, `NSSearchFieldCell`, `NSSegmentedCell`, `NSSliderCell`, `NSTableHeaderCell`), the controls that
+place them (`NSButton`, `NSTextField`, `NSSlider`, `NSSegmentedControl`, `NSPopUpButton`, `NSSearchField`,
+`NSComboBox`, `NSPathControl`, `NSProgressIndicator`, `NSBrowser`), the containers (`NSScrollView`, `NSTableView`,
+`NSOutlineView`, `NSSplitView`, `NSToolbar`), and the value and menu classes (`NSWindow`, `NSMenu`, `NSMenuItem`,
+`NSTableColumn`, `NSFont`, `NSColor`, `NSImage`) — each conforming to `NSSecureCoding`, each implementing both coding
+methods or adding no storage to inherit them for, and each archiving its DESIGN properties rather than its live graph
+(a view's window, a window's surface, a cell's control view, a table's rows and a segmented cell's private segment
+record are all absent by construction). The reader decodes with secure coding on and an EXTENSIBLE allow-list (`+registerDesignClass:` for an
 application's own subclasses), and it refuses — before instantiating anything — an archive that names a class outside
 that list. `NSViewController -loadView` loads a nib with the controller as its owner; `NSWindowController`'s archive
 now carries its window. The verification is `tests/nib_roundtrip.m`: a tree with a control, a cell, an outlet and an

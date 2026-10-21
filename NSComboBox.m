@@ -20,6 +20,18 @@
 
 @implementation NSComboBox
 
+/* ============================================================================================
+ * ARCHIVING: NOTHING OF ITS OWN: ITS ITEMS, SELECTION AND BEHAVIOUR ARE ITS CELL'S.
+ * ============================================================================================ */
+/* Its items, selection and behaviour are its CELL's. A class with no instance storage can inherit both coding methods — `class_getInstanceSize` is what
+ * says so, and `NSNib`'s census accepts exactly that case. The conformance is declared so the allow-list's
+ * `-conformsToProtocol:` question answers YES. */
++ (BOOL)supportsSecureCoding
+{
+	return YES;
+}
+
+
 - (instancetype)initWithFrame:(NSRect)frameRect
 {
 	self = [super initWithFrame:frameRect];

@@ -30,6 +30,131 @@
 
 @implementation NSButtonCell
 
+/* ============================================================================================
+ * ARCHIVING: A BUTTON'S TWO TITLES, ITS TWO IMAGES AND ITS BEZEL.
+ * ============================================================================================ */
+/* **WHAT IS ABSENT: THE SOUND, AND ONLY FOR A NAMED REASON.** `_sound` is an `NSSound`, a class this tier does not ship
+ * — an archive cannot carry a class the process has no implementation of, and inventing one would be a wrong value
+ * rather than an unfinished feature. Everything else a button's FACE is, is here. `_periodicDelay` and
+ * `_periodicInterval` are included because they are part of a design's feel rather than a measurement of a running
+ * control. */
+static NSString * const AGCoderButtonTransparentKey = @"transparent";
+static NSString * const AGCoderButtonBorderOnlyInsideKey = @"showsBorderOnlyWhileMouseInside";
+static NSString * const AGCoderButtonImageDimsKey = @"imageDimsWhenDisabled";
+static NSString * const AGCoderButtonAlternateTitleKey = @"alternateTitle";
+static NSString * const AGCoderButtonBackgroundColorKey = @"backgroundColor";
+static NSString * const AGCoderButtonImagePositionKey = @"imagePosition";
+static NSString * const AGCoderButtonHighlightsByKey = @"highlightsBy";
+static NSString * const AGCoderButtonShowsStateByKey = @"showsStateBy";
+static NSString * const AGCoderButtonKeyModifiersKey = @"keyEquivalentModifierMask";
+static NSString * const AGCoderButtonTypeKey = @"buttonType";
+static NSString * const AGCoderButtonBezelStyleKey = @"bezelStyle";
+static NSString * const AGCoderButtonAlternateImageKey = @"alternateImage";
+static NSString * const AGCoderButtonAttributedTitleKey = @"attributedTitle";
+static NSString * const AGCoderButtonAttributedAlternateTitleKey = @"attributedAlternateTitle";
+static NSString * const AGCoderButtonKeyFontKey = @"keyEquivalentFont";
+static NSString * const AGCoderButtonImageScalingKey = @"imageScaling";
+static NSString * const AGCoderButtonPeriodicDelayKey = @"periodicDelay";
+static NSString * const AGCoderButtonPeriodicIntervalKey = @"periodicInterval";
+static NSString * const AGCoderButtonMaxAcceleratorKey = @"maxAcceleratorLevel";
+
+- (void)encodeWithCoder:(NSCoder *)aCoder
+{
+	[super encodeWithCoder:aCoder];
+	[aCoder encodeBool:_transparent forKey:AGCoderButtonTransparentKey];
+	[aCoder encodeBool:_showsBorderOnlyWhileMouseInside forKey:AGCoderButtonBorderOnlyInsideKey];
+	[aCoder encodeBool:_imageDimsWhenDisabled forKey:AGCoderButtonImageDimsKey];
+	[aCoder encodeObject:_alternateTitle forKey:AGCoderButtonAlternateTitleKey];
+	[aCoder encodeObject:_backgroundColor forKey:AGCoderButtonBackgroundColorKey];
+	[aCoder encodeInteger:(NSInteger)_imagePosition_bc forKey:AGCoderButtonImagePositionKey];
+	[aCoder encodeInteger:_highlightsBy forKey:AGCoderButtonHighlightsByKey];
+	[aCoder encodeInteger:_showsStateBy forKey:AGCoderButtonShowsStateByKey];
+	[aCoder encodeInteger:(NSInteger)_keyEquivalentModifierMask_bc forKey:AGCoderButtonKeyModifiersKey];
+	[aCoder encodeInteger:(NSInteger)_buttonType forKey:AGCoderButtonTypeKey];
+	[aCoder encodeInteger:(NSInteger)_bezelStyle forKey:AGCoderButtonBezelStyleKey];
+	[aCoder encodeObject:_alternateImage forKey:AGCoderButtonAlternateImageKey];
+	[aCoder encodeObject:_attributedTitle forKey:AGCoderButtonAttributedTitleKey];
+	[aCoder encodeObject:_attributedAlternateTitle forKey:AGCoderButtonAttributedAlternateTitleKey];
+	[aCoder encodeObject:_keyEquivalentFont forKey:AGCoderButtonKeyFontKey];
+	[aCoder encodeInteger:(NSInteger)_imageScaling forKey:AGCoderButtonImageScalingKey];
+	[aCoder encodeDouble:(double)_periodicDelay forKey:AGCoderButtonPeriodicDelayKey];
+	[aCoder encodeDouble:(double)_periodicInterval forKey:AGCoderButtonPeriodicIntervalKey];
+	[aCoder encodeInteger:_maxAcceleratorLevel forKey:AGCoderButtonMaxAcceleratorKey];
+}
+
+- (instancetype)initWithCoder:(NSCoder *)aDecoder
+{
+	self = [super initWithCoder:aDecoder];
+	if (self == nil) {
+		return nil;
+	}
+	if ([aDecoder containsValueForKey:AGCoderButtonTransparentKey]) {
+		_transparent = [aDecoder decodeBoolForKey:AGCoderButtonTransparentKey];
+	}
+	if ([aDecoder containsValueForKey:AGCoderButtonBorderOnlyInsideKey]) {
+		_showsBorderOnlyWhileMouseInside = [aDecoder decodeBoolForKey:AGCoderButtonBorderOnlyInsideKey];
+	}
+	if ([aDecoder containsValueForKey:AGCoderButtonImageDimsKey]) {
+		_imageDimsWhenDisabled = [aDecoder decodeBoolForKey:AGCoderButtonImageDimsKey];
+	}
+	if ([aDecoder containsValueForKey:AGCoderButtonAlternateTitleKey]) {
+		_alternateTitle = [[aDecoder decodeObjectForKey:AGCoderButtonAlternateTitleKey] copy];
+	}
+	if ([aDecoder containsValueForKey:AGCoderButtonBackgroundColorKey]) {
+		_backgroundColor = [[aDecoder decodeObjectForKey:AGCoderButtonBackgroundColorKey] retain];
+	}
+	if ([aDecoder containsValueForKey:AGCoderButtonImagePositionKey]) {
+		_imagePosition_bc = (NSCellImagePosition)[aDecoder decodeIntegerForKey:AGCoderButtonImagePositionKey];
+	}
+	if ([aDecoder containsValueForKey:AGCoderButtonHighlightsByKey]) {
+		_highlightsBy = [aDecoder decodeIntegerForKey:AGCoderButtonHighlightsByKey];
+	}
+	if ([aDecoder containsValueForKey:AGCoderButtonShowsStateByKey]) {
+		_showsStateBy = [aDecoder decodeIntegerForKey:AGCoderButtonShowsStateByKey];
+	}
+	if ([aDecoder containsValueForKey:AGCoderButtonKeyModifiersKey]) {
+		_keyEquivalentModifierMask_bc = (NSUInteger)[aDecoder decodeIntegerForKey:AGCoderButtonKeyModifiersKey];
+	}
+	if ([aDecoder containsValueForKey:AGCoderButtonTypeKey]) {
+		_buttonType = (NSButtonType)[aDecoder decodeIntegerForKey:AGCoderButtonTypeKey];
+	}
+	if ([aDecoder containsValueForKey:AGCoderButtonBezelStyleKey]) {
+		_bezelStyle = (NSBezelStyle)[aDecoder decodeIntegerForKey:AGCoderButtonBezelStyleKey];
+	}
+	if ([aDecoder containsValueForKey:AGCoderButtonAlternateImageKey]) {
+		_alternateImage = [[aDecoder decodeObjectForKey:AGCoderButtonAlternateImageKey] retain];
+	}
+	if ([aDecoder containsValueForKey:AGCoderButtonAttributedTitleKey]) {
+		_attributedTitle = [[aDecoder decodeObjectForKey:AGCoderButtonAttributedTitleKey] copy];
+	}
+	if ([aDecoder containsValueForKey:AGCoderButtonAttributedAlternateTitleKey]) {
+		_attributedAlternateTitle =
+			[[aDecoder decodeObjectForKey:AGCoderButtonAttributedAlternateTitleKey] copy];
+	}
+	if ([aDecoder containsValueForKey:AGCoderButtonKeyFontKey]) {
+		_keyEquivalentFont = [[aDecoder decodeObjectForKey:AGCoderButtonKeyFontKey] retain];
+	}
+	if ([aDecoder containsValueForKey:AGCoderButtonImageScalingKey]) {
+		_imageScaling = (NSImageScaling)[aDecoder decodeIntegerForKey:AGCoderButtonImageScalingKey];
+	}
+	if ([aDecoder containsValueForKey:AGCoderButtonPeriodicDelayKey]) {
+		_periodicDelay = (float)[aDecoder decodeDoubleForKey:AGCoderButtonPeriodicDelayKey];
+	}
+	if ([aDecoder containsValueForKey:AGCoderButtonPeriodicIntervalKey]) {
+		_periodicInterval = (float)[aDecoder decodeDoubleForKey:AGCoderButtonPeriodicIntervalKey];
+	}
+	if ([aDecoder containsValueForKey:AGCoderButtonMaxAcceleratorKey]) {
+		_maxAcceleratorLevel = [aDecoder decodeIntegerForKey:AGCoderButtonMaxAcceleratorKey];
+	}
+	return self;
+}
+
++ (BOOL)supportsSecureCoding
+{
+	return YES;
+}
+
+
 - (instancetype)init
 {
 	if ((self = [super init]) != nil) {

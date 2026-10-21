@@ -59,7 +59,7 @@ typedef NSInteger NSPathStyle;
 - (void)pathCell:(NSPathCell *)pathCell willPopUpMenu:(NSMenu *)menu;
 @end
 
-@interface NSPathCell : NSActionCell
+@interface NSPathCell : NSActionCell <NSSecureCoding>
 {
 	NSMutableArray *_cells;			/* RETAINED: NSPathComponentCell objects */
 	NSPathComponentCell *_clickedCell;	/* BORROWED: a cell in `_cells`, valid while the action is sent */

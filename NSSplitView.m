@@ -127,6 +127,48 @@ static CGFloat fn_axis_length(NSSize size, BOOL vertical)
 
 @implementation NSSplitView
 
+/* ============================================================================================
+ * ARCHIVING: WHICH WAY IT DIVIDES, HOW, AND WHAT IT IS CALLED.
+ * ============================================================================================ */
+/* **THIRTEEN OF THE SIXTEEN BELONG TO A DIVIDER BEING DRAGGED** — the collapsed set and its saved sizes, the drag's index,
+ * start point, start position, preview and cursor — and the remaining two `_cg` flags are autosave bookkeeping. What a
+ * design says is the orientation, the divider style and the autosave name; the delegate is a connection. */
+static NSString * const AGCoderSplitVerticalKey = @"vertical";
+static NSString * const AGCoderSplitDividerStyleKey = @"dividerStyle";
+static NSString * const AGCoderSplitAutosaveKey = @"autosaveName";
+
+- (void)encodeWithCoder:(NSCoder *)aCoder
+{
+	[super encodeWithCoder:aCoder];
+	[aCoder encodeBool:_vertical forKey:AGCoderSplitVerticalKey];
+	[aCoder encodeInteger:(NSInteger)_dividerStyle forKey:AGCoderSplitDividerStyleKey];
+	[aCoder encodeObject:_autosaveName forKey:AGCoderSplitAutosaveKey];
+}
+
+- (instancetype)initWithCoder:(NSCoder *)aDecoder
+{
+	self = [super initWithCoder:aDecoder];
+	if (self == nil) {
+		return nil;
+	}
+	if ([aDecoder containsValueForKey:AGCoderSplitVerticalKey]) {
+		_vertical = [aDecoder decodeBoolForKey:AGCoderSplitVerticalKey];
+	}
+	if ([aDecoder containsValueForKey:AGCoderSplitDividerStyleKey]) {
+		_dividerStyle = (NSSplitViewDividerStyle)[aDecoder decodeIntegerForKey:AGCoderSplitDividerStyleKey];
+	}
+	if ([aDecoder containsValueForKey:AGCoderSplitAutosaveKey]) {
+		_autosaveName = [[aDecoder decodeObjectForKey:AGCoderSplitAutosaveKey] copy];
+	}
+	return self;
+}
+
++ (BOOL)supportsSecureCoding
+{
+	return YES;
+}
+
+
 - (instancetype)initWithFrame:(NSRect)frameRect
 {
 	self = [super initWithFrame:frameRect];

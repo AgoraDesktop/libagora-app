@@ -18,7 +18,7 @@
 
 NS_ASSUME_NONNULL_BEGIN
 
-@interface NSBrowserCell : NSTextFieldCell
+@interface NSBrowserCell : NSTextFieldCell <NSSecureCoding>
 {
 	BOOL _leaf;
 	BOOL _loaded;

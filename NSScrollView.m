@@ -37,6 +37,88 @@ static CGFloat fn_border_width(NSBorderType type)
 
 @implementation NSScrollView
 
+/* ============================================================================================
+ * ARCHIVING: THE DOCUMENT VIEW, THE TWO SCROLLERS AND THE LOOK.
+ * ============================================================================================ */
+/* **A SCROLL VIEW IS THE ONE VIEW WHOSE MOST IMPORTANT CHILD IS NOT IN `_subviews`.** `_contentView` is the clip view the
+ * document lives in, and it is put back through `-setContentView:` — the door that re-parents and re-tiles — rather than
+ * by adding a subview, which is the same "use the door that has the side effect" rule the rest of this format follows.
+ * `_inTile` is the layout pass's re-entry flag and is absent. */
+static NSString * const AGCoderScrollContentViewKey = @"contentView";
+static NSString * const AGCoderScrollHeaderViewKey = @"headerView";
+static NSString * const AGCoderScrollVScrollerKey = @"verticalScroller";
+static NSString * const AGCoderScrollHScrollerKey = @"horizontalScroller";
+static NSString * const AGCoderScrollBorderKey = @"borderType";
+static NSString * const AGCoderScrollBackgroundKey = @"backgroundColor";
+static NSString * const AGCoderScrollDrawsBackgroundKey = @"drawsBackground";
+static NSString * const AGCoderScrollAutohideKey = @"autohidesScrollers";
+static NSString * const AGCoderScrollLineKey = @"lineScroll";
+static NSString * const AGCoderScrollPageKey = @"pageScroll";
+
+- (void)encodeWithCoder:(NSCoder *)aCoder
+{
+	[super encodeWithCoder:aCoder];
+	[aCoder encodeObject:_contentView forKey:AGCoderScrollContentViewKey];
+	[aCoder encodeObject:_headerView forKey:AGCoderScrollHeaderViewKey];
+	[aCoder encodeObject:_vScroller forKey:AGCoderScrollVScrollerKey];
+	[aCoder encodeObject:_hScroller forKey:AGCoderScrollHScrollerKey];
+	[aCoder encodeInteger:(NSInteger)_borderType forKey:AGCoderScrollBorderKey];
+	[aCoder encodeObject:_backgroundColor forKey:AGCoderScrollBackgroundKey];
+	[aCoder encodeBool:_drawsBackground forKey:AGCoderScrollDrawsBackgroundKey];
+	[aCoder encodeBool:_autohidesScrollers forKey:AGCoderScrollAutohideKey];
+	[aCoder encodeDouble:(double)_lineScroll forKey:AGCoderScrollLineKey];
+	[aCoder encodeDouble:(double)_pageScroll forKey:AGCoderScrollPageKey];
+}
+
+- (instancetype)initWithCoder:(NSCoder *)aDecoder
+{
+	self = [super initWithCoder:aDecoder];
+	if (self == nil) {
+		return nil;
+	}
+	if ([aDecoder containsValueForKey:AGCoderScrollHeaderViewKey]) {
+		_headerView = [[aDecoder decodeObjectForKey:AGCoderScrollHeaderViewKey] retain];
+	}
+	if ([aDecoder containsValueForKey:AGCoderScrollVScrollerKey]) {
+		_vScroller = [[aDecoder decodeObjectForKey:AGCoderScrollVScrollerKey] retain];
+	}
+	if ([aDecoder containsValueForKey:AGCoderScrollHScrollerKey]) {
+		_hScroller = [[aDecoder decodeObjectForKey:AGCoderScrollHScrollerKey] retain];
+	}
+	if ([aDecoder containsValueForKey:AGCoderScrollBorderKey]) {
+		_borderType = (NSBorderType)[aDecoder decodeIntegerForKey:AGCoderScrollBorderKey];
+	}
+	if ([aDecoder containsValueForKey:AGCoderScrollBackgroundKey]) {
+		_backgroundColor = [[aDecoder decodeObjectForKey:AGCoderScrollBackgroundKey] retain];
+	}
+	if ([aDecoder containsValueForKey:AGCoderScrollDrawsBackgroundKey]) {
+		_drawsBackground = [aDecoder decodeBoolForKey:AGCoderScrollDrawsBackgroundKey];
+	}
+	if ([aDecoder containsValueForKey:AGCoderScrollAutohideKey]) {
+		_autohidesScrollers = [aDecoder decodeBoolForKey:AGCoderScrollAutohideKey];
+	}
+	if ([aDecoder containsValueForKey:AGCoderScrollLineKey]) {
+		_lineScroll = [aDecoder decodeDoubleForKey:AGCoderScrollLineKey];
+	}
+	if ([aDecoder containsValueForKey:AGCoderScrollPageKey]) {
+		_pageScroll = [aDecoder decodeDoubleForKey:AGCoderScrollPageKey];
+	}
+	if ([aDecoder containsValueForKey:AGCoderScrollContentViewKey]) {
+		id clip = [aDecoder decodeObjectForKey:AGCoderScrollContentViewKey];
+
+		if ([clip isKindOfClass:[NSClipView class]]) {
+			[self setContentView:clip];
+		}
+	}
+	return self;
+}
+
++ (BOOL)supportsSecureCoding
+{
+	return YES;
+}
+
+
 /* ---- THE TWO CONVERSIONS, WHICH MUST AGREE WITH `-tile` ------------------------------------------------- */
 
 + (NSSize)frameSizeForContentSize:(NSSize)contentSize

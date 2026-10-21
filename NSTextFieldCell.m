@@ -17,6 +17,64 @@
 
 @implementation NSTextFieldCell
 
+/* ============================================================================================
+ * ARCHIVING: A FIELD CELL'S FACE, AND NOT ITS EDIT SESSION.
+ * ============================================================================================ */
+/* **THE EDITOR IS NOT THE CELL'S TO ARCHIVE.** `_cg_editor` is a field editor borrowed for the length of a session and
+ * `_editorDelegate` is the object it reports to — one is runtime state and the other is a CONNECTION, so both are absent
+ * and a decoded field cell starts idle, exactly as a built one does. */
+static NSString * const AGCoderFieldBackgroundColorKey = @"backgroundColor";
+static NSString * const AGCoderFieldTextColorKey = @"textColor";
+static NSString * const AGCoderFieldDrawsBackgroundKey = @"drawsBackground";
+static NSString * const AGCoderFieldBezelStyleKey = @"bezelStyle";
+static NSString * const AGCoderFieldPlaceholderKey = @"placeholderString";
+static NSString * const AGCoderFieldPlaceholderAttributedKey = @"placeholderAttributedString";
+
+- (void)encodeWithCoder:(NSCoder *)aCoder
+{
+	[super encodeWithCoder:aCoder];
+	[aCoder encodeObject:_backgroundColor forKey:AGCoderFieldBackgroundColorKey];
+	[aCoder encodeObject:_textColor forKey:AGCoderFieldTextColorKey];
+	[aCoder encodeBool:_drawsBackground forKey:AGCoderFieldDrawsBackgroundKey];
+	[aCoder encodeInteger:(NSInteger)_bezelStyle forKey:AGCoderFieldBezelStyleKey];
+	[aCoder encodeObject:_placeholderString forKey:AGCoderFieldPlaceholderKey];
+	[aCoder encodeObject:_placeholderAttributedString forKey:AGCoderFieldPlaceholderAttributedKey];
+}
+
+- (instancetype)initWithCoder:(NSCoder *)aDecoder
+{
+	self = [super initWithCoder:aDecoder];
+	if (self == nil) {
+		return nil;
+	}
+	if ([aDecoder containsValueForKey:AGCoderFieldBackgroundColorKey]) {
+		_backgroundColor = [[aDecoder decodeObjectForKey:AGCoderFieldBackgroundColorKey] retain];
+	}
+	if ([aDecoder containsValueForKey:AGCoderFieldTextColorKey]) {
+		_textColor = [[aDecoder decodeObjectForKey:AGCoderFieldTextColorKey] retain];
+	}
+	if ([aDecoder containsValueForKey:AGCoderFieldDrawsBackgroundKey]) {
+		_drawsBackground = [aDecoder decodeBoolForKey:AGCoderFieldDrawsBackgroundKey];
+	}
+	if ([aDecoder containsValueForKey:AGCoderFieldBezelStyleKey]) {
+		_bezelStyle = (NSTextFieldBezelStyle)[aDecoder decodeIntegerForKey:AGCoderFieldBezelStyleKey];
+	}
+	if ([aDecoder containsValueForKey:AGCoderFieldPlaceholderKey]) {
+		_placeholderString = [[aDecoder decodeObjectForKey:AGCoderFieldPlaceholderKey] copy];
+	}
+	if ([aDecoder containsValueForKey:AGCoderFieldPlaceholderAttributedKey]) {
+		_placeholderAttributedString =
+			[[aDecoder decodeObjectForKey:AGCoderFieldPlaceholderAttributedKey] copy];
+	}
+	return self;
+}
+
++ (BOOL)supportsSecureCoding
+{
+	return YES;
+}
+
+
 - (instancetype)initTextCell:(NSString *)stringValue
 {
 	self = [super initTextCell:stringValue];

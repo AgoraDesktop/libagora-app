@@ -22,6 +22,14 @@
 #import <AppKit/NSView.h>
 #import <AppKit/NSControl.h>
 #import <AppKit/NSCell.h>
+#import <AppKit/NSButton.h>
+#import <AppKit/NSButtonCell.h>
+#import <AppKit/NSTextField.h>
+#import <AppKit/NSTextFieldCell.h>
+#import <AppKit/NSSegmentedControl.h>
+#import <AppKit/NSSegmentedCell.h>
+#import <AppKit/NSSlider.h>
+#import <AppKit/NSSliderCell.h>
 #import <Foundation/Foundation.h>
 
 #include <stdio.h>
@@ -80,6 +88,10 @@ int main(void)
 	NibTestView *childB;
 	NSControl *control;
 	NSCell *cell;
+	NSButton *button;
+	NSTextField *field;
+	NSSegmentedControl *segmented;
+	NSSlider *slider;
 	NSArray *objects = nil;
 	NSArray *connections;
 	NibTestOwner *owner;
@@ -132,10 +144,44 @@ int main(void)
 	[control setTag:13];
 	[cell release];
 
+	/* **AND A REAL BUTTON, FIELD, SEGMENTED CONTROL AND SLIDER**, which is what proves the SUBCLASSES carry their own
+	 * state rather than decoding through `NSCell`. Each one sets something only its own class has. */
+	button = [[NSButton alloc] initWithFrame:NSMakeRect(7.0, 8.0, 100.0, 24.0)];
+	[button setTitle:@"Press"];
+	[button setAlternateTitle:@"Pressed"];
+	[button setButtonType:NSMomentaryPushInButton];
+	[button setBezelStyle:NSRoundedBezelStyle];
+
+	field = [[NSTextField alloc] initWithFrame:NSMakeRect(9.0, 10.0, 140.0, 22.0)];
+	[field setStringValue:@"typed"];
+	[field setDrawsBackground:YES];
+	[field setTextColor:[NSColor redColor]];
+
+	segmented = [[NSSegmentedControl alloc] initWithFrame:NSMakeRect(11.0, 12.0, 180.0, 24.0)];
+	[segmented setSegmentCount:3];
+	[segmented setLabel:@"one" forSegment:0];
+	[segmented setLabel:@"two" forSegment:1];
+	[segmented setLabel:@"three" forSegment:2];
+	[segmented setSelectedSegment:2];
+
+	slider = [[NSSlider alloc] initWithFrame:NSMakeRect(13.0, 14.0, 160.0, 20.0)];
+	[slider setMinValue:-5.0];
+	[slider setMaxValue:42.0];
+	[slider setDoubleValue:7.5];
+	[slider setNumberOfTickMarks:11];
+
 	/* THE ORDER IS THE ASSERTION: A goes in before B, and the archive must return them in that order. */
 	[container addSubview:childA];
 	[container addSubview:childB];
 	[container addSubview:control];
+	[container addSubview:button];
+	[container addSubview:field];
+	[container addSubview:segmented];
+	[container addSubview:slider];
+	[button release];
+	[field release];
+	[segmented release];
+	[slider release];
 	[childA release];
 	[childB release];
 	[control release];
@@ -187,8 +233,8 @@ int main(void)
 		      "the container's tool tip round-tripped");
 		check([decoded alphaValue] == 0.5, "the container's alpha round-tripped");
 
-		check([subviews count] == 3, "all three subviews came back");
-		if ([subviews count] == 3) {
+		check([subviews count] == 7, "all seven subviews came back");
+		if ([subviews count] == 7) {
 			NSView *a = [subviews objectAtIndex:0];
 			NSView *b = [subviews objectAtIndex:1];
 			NSControl *c = [subviews objectAtIndex:2];
@@ -220,6 +266,42 @@ int main(void)
 				check([decodedCell controlView] == c,
 				      "the decoded cell was told which control draws it");
 			}
+
+				NSButton *db = [subviews objectAtIndex:3];
+				NSTextField *df = [subviews objectAtIndex:4];
+				NSSegmentedControl *ds = [subviews objectAtIndex:5];
+				NSSlider *dl = [subviews objectAtIndex:6];
+
+				/* **THE SUBCLASS'S OWN STATE, WHICH IS THE POINT OF THE WHOLE UNIT.** If a class had inherited
+				 * `NSCell`'s coding instead of implementing its own, each of these would come back at its default
+				 * and the assertion is what would say so. */
+				check([db isKindOfClass:[NSButton class]], "the button kept its class");
+				check([[db title] isEqualToString:@"Press"], "the button's title round-tripped");
+				check([[db alternateTitle] isEqualToString:@"Pressed"],
+				      "the BUTTON's own alternate title round-tripped");
+				check([[db cell] bezelStyle] == NSRoundedBezelStyle,
+				      "the button cell's bezel style round-tripped");
+				check([[db cell] buttonType] == NSMomentaryPushInButton,
+				      "the button cell's type round-tripped");
+
+				check([df isKindOfClass:[NSTextField class]], "the field kept its class");
+				check([[df stringValue] isEqualToString:@"typed"], "the field's value round-tripped");
+				check([[df cell] drawsBackground], "the FIELD cell's background flag round-tripped");
+				check([[[df cell] textColor] isEqual:[NSColor redColor]],
+				      "the field cell's text colour round-tripped as a colour");
+
+				check([ds isKindOfClass:[NSSegmentedControl class]], "the segmented control kept its class");
+				check([[ds cell] segmentCount] == 3, "all three segments came back");
+				check([[[ds cell] labelForSegment:1] isEqualToString:@"two"],
+				      "a segment's label round-tripped");
+				check([[ds cell] selectedSegment] == 2,
+				      "the SEGMENTED cell's own selection round-tripped");
+
+				check([dl isKindOfClass:[NSSlider class]], "the slider kept its class");
+				check([[dl cell] minValue] == -5.0, "the slider cell's minimum round-tripped");
+				check([[dl cell] maxValue] == 42.0, "the slider cell's maximum round-tripped");
+				check([[dl cell] doubleValue] == 7.5, "the slider cell's value round-tripped");
+				check([[dl cell] numberOfTickMarks] == 11, "the slider cell's tick count round-tripped");
 
 			/* ---- 3. THE CONNECTIONS ---------------------------------------------------------- */
 			check([owner titleField] == c, "the outlet connection reached the file's owner");

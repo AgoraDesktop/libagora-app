@@ -25,7 +25,7 @@ enum {
 	NSProgressIndicatorSpinningStyle = 1
 };
 
-@interface NSProgressIndicator : NSControl
+@interface NSProgressIndicator : NSControl <NSSecureCoding>
 {
 	double _minValue;
 	double _maxValue;

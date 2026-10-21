@@ -55,7 +55,7 @@ typedef enum {
 	NSTickMarkRight = NSTickMarkBelow
 } NSTickMarkPosition;
 
-@interface NSSliderCell : NSActionCell
+@interface NSSliderCell : NSActionCell <NSSecureCoding>
 {
 	/* THE RANGE, THE VALUE AND THE LIE OF THE TRACK. `_sliderValue` is the value ITSELF rather than a fraction, so
 	 * that `-setMinValue:`/`-setMaxValue:` moving the ends under a standing value is a visible clamp rather than a

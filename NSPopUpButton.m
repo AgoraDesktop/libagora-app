@@ -15,6 +15,18 @@
 
 @implementation NSPopUpButton
 
+/* ============================================================================================
+ * ARCHIVING: NOTHING OF ITS OWN: ITS PULL-DOWN FLAG AND SELECTION ARE ITS CELL'S.
+ * ============================================================================================ */
+/* Its pull-down flag and selection are its CELL's. A class with no instance storage can inherit both coding methods — `class_getInstanceSize` is what
+ * says so, and `NSNib`'s census accepts exactly that case. The conformance is declared so the allow-list's
+ * `-conformsToProtocol:` question answers YES. */
++ (BOOL)supportsSecureCoding
+{
+	return YES;
+}
+
+
 - (instancetype)initWithFrame:(NSRect)frameRect pullsDown:(BOOL)pullDown
 {
 	self = [super initWithFrame:frameRect];

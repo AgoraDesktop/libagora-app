@@ -28,7 +28,7 @@
 
 NS_ASSUME_NONNULL_BEGIN
 
-@interface NSSearchField : NSTextField
+@interface NSSearchField : NSTextField <NSSecureCoding>
 
 /* **THE RECENTS ARE THE CELL'S LIST, FORWARDED.** The setter replaces the list (an empty or nil array clears it), and
  * the getter answers a copy, which is Apple's contract and the one that keeps a caller from mutating the field's

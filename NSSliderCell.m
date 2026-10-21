@@ -74,6 +74,69 @@
 
 @implementation NSSliderCell
 
+/* ============================================================================================
+ * ARCHIVING: THE RANGE, THE VALUE AND THE TICKS.
+ * ============================================================================================ */
+/* **`_vertical` IS DERIVED AND IS THEREFORE ABSENT.** A slider's orientation is a fact about the FRAME it is drawn in —
+ * a taller-than-wide slider is vertical — so archiving the flag as well would let a file contradict its own geometry, and
+ * the decoder would have to choose which one it believed. The range, the value, the tick marks and the increment are
+ * what a design actually says. */
+static NSString * const AGCoderSliderMinKey = @"minValue";
+static NSString * const AGCoderSliderMaxKey = @"maxValue";
+static NSString * const AGCoderSliderValueKey = @"sliderValue";
+static NSString * const AGCoderSliderTypeKey = @"sliderType";
+static NSString * const AGCoderSliderTicksKey = @"numberOfTickMarks";
+static NSString * const AGCoderSliderTickPositionKey = @"tickMarkPosition";
+static NSString * const AGCoderSliderAltIncrementKey = @"altIncrementValue";
+
+- (void)encodeWithCoder:(NSCoder *)aCoder
+{
+	[super encodeWithCoder:aCoder];
+	[aCoder encodeDouble:_minValue forKey:AGCoderSliderMinKey];
+	[aCoder encodeDouble:_maxValue forKey:AGCoderSliderMaxKey];
+	[aCoder encodeDouble:_sliderValue forKey:AGCoderSliderValueKey];
+	[aCoder encodeInteger:(NSInteger)_sliderType forKey:AGCoderSliderTypeKey];
+	[aCoder encodeInteger:_numberOfTickMarks forKey:AGCoderSliderTicksKey];
+	[aCoder encodeInteger:(NSInteger)_tickMarkPosition forKey:AGCoderSliderTickPositionKey];
+	[aCoder encodeDouble:_altIncrementValue forKey:AGCoderSliderAltIncrementKey];
+}
+
+- (instancetype)initWithCoder:(NSCoder *)aDecoder
+{
+	self = [super initWithCoder:aDecoder];
+	if (self == nil) {
+		return nil;
+	}
+	if ([aDecoder containsValueForKey:AGCoderSliderMinKey]) {
+		_minValue = [aDecoder decodeDoubleForKey:AGCoderSliderMinKey];
+	}
+	if ([aDecoder containsValueForKey:AGCoderSliderMaxKey]) {
+		_maxValue = [aDecoder decodeDoubleForKey:AGCoderSliderMaxKey];
+	}
+	if ([aDecoder containsValueForKey:AGCoderSliderValueKey]) {
+		_sliderValue = [aDecoder decodeDoubleForKey:AGCoderSliderValueKey];
+	}
+	if ([aDecoder containsValueForKey:AGCoderSliderTypeKey]) {
+		_sliderType = [aDecoder decodeIntegerForKey:AGCoderSliderTypeKey];
+	}
+	if ([aDecoder containsValueForKey:AGCoderSliderTicksKey]) {
+		_numberOfTickMarks = [aDecoder decodeIntegerForKey:AGCoderSliderTicksKey];
+	}
+	if ([aDecoder containsValueForKey:AGCoderSliderTickPositionKey]) {
+		_tickMarkPosition = [aDecoder decodeIntegerForKey:AGCoderSliderTickPositionKey];
+	}
+	if ([aDecoder containsValueForKey:AGCoderSliderAltIncrementKey]) {
+		_altIncrementValue = [aDecoder decodeDoubleForKey:AGCoderSliderAltIncrementKey];
+	}
+	return self;
+}
+
++ (BOOL)supportsSecureCoding
+{
+	return YES;
+}
+
+
 - (instancetype)init
 {
 	self = [super init];

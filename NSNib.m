@@ -21,6 +21,35 @@
 #import <AppKit/NSView.h>
 #import <AppKit/NSControl.h>
 #import <AppKit/NSCell.h>
+#import <AppKit/NSActionCell.h>
+#import <AppKit/NSTextFieldCell.h>
+#import <AppKit/NSButtonCell.h>
+#import <AppKit/NSBrowserCell.h>
+#import <AppKit/NSComboBoxCell.h>
+#import <AppKit/NSMenuItemCell.h>
+#import <AppKit/NSPathCell.h>
+#import <AppKit/NSPathComponentCell.h>
+#import <AppKit/NSPopUpButtonCell.h>
+#import <AppKit/NSScrollerCell.h>
+#import <AppKit/NSSearchFieldCell.h>
+#import <AppKit/NSSegmentedCell.h>
+#import <AppKit/NSSliderCell.h>
+#import <AppKit/NSTableHeaderCell.h>
+#import <AppKit/NSButton.h>
+#import <AppKit/NSTextField.h>
+#import <AppKit/NSSlider.h>
+#import <AppKit/NSSegmentedControl.h>
+#import <AppKit/NSPopUpButton.h>
+#import <AppKit/NSSearchField.h>
+#import <AppKit/NSComboBox.h>
+#import <AppKit/NSPathControl.h>
+#import <AppKit/NSProgressIndicator.h>
+#import <AppKit/NSBrowser.h>
+#import <AppKit/NSScrollView.h>
+#import <AppKit/NSTableView.h>
+#import <AppKit/NSOutlineView.h>
+#import <AppKit/NSSplitView.h>
+#import <AppKit/NSToolbar.h>
 #import <AppKit/NSWindow.h>
 #import <AppKit/NSMenu.h>
 #import <AppKit/NSMenuItem.h>
@@ -148,7 +177,43 @@ static Class const *fn_design_classes(NSUInteger *countOut)
 		classes[count++] = [NSResponder class];
 		classes[count++] = [NSView class];
 		classes[count++] = [NSControl class];
+		/* THE CELLS, IN HIERARCHY ORDER: the base, the pass-through, and then every subclass whose face a design file
+		 * can state. Each one implements its own coding — the census asserts it, and `class_getInstanceSize` is what
+		 * separates a subclass with nothing to lose (NSActionCell, NSTableHeaderCell) from one that would silently drop
+		 * its state. */
 		classes[count++] = [NSCell class];
+		classes[count++] = [NSActionCell class];
+		classes[count++] = [NSTextFieldCell class];
+		classes[count++] = [NSButtonCell class];
+		classes[count++] = [NSBrowserCell class];
+		classes[count++] = [NSComboBoxCell class];
+		classes[count++] = [NSMenuItemCell class];
+		classes[count++] = [NSPathCell class];
+		classes[count++] = [NSPathComponentCell class];
+		classes[count++] = [NSPopUpButtonCell class];
+		classes[count++] = [NSScrollerCell class];
+		classes[count++] = [NSSearchFieldCell class];
+		classes[count++] = [NSSegmentedCell class];
+		classes[count++] = [NSSliderCell class];
+		classes[count++] = [NSTableHeaderCell class];
+		/* AND THE CONTROLS THAT PLACE THEM, each of which adds little of its own because its face is its cell's. */
+		classes[count++] = [NSButton class];
+		classes[count++] = [NSTextField class];
+		classes[count++] = [NSSlider class];
+		classes[count++] = [NSSegmentedControl class];
+		classes[count++] = [NSPopUpButton class];
+		classes[count++] = [NSSearchField class];
+		classes[count++] = [NSComboBox class];
+		classes[count++] = [NSPathControl class];
+		classes[count++] = [NSProgressIndicator class];
+		classes[count++] = [NSBrowser class];
+		/* AND THE CONTAINERS: a table's columns, an outline over it, the scroll view that clips one, a split's two
+		 * panes, and a window's toolbar. */
+		classes[count++] = [NSScrollView class];
+		classes[count++] = [NSTableView class];
+		classes[count++] = [NSOutlineView class];
+		classes[count++] = [NSSplitView class];
+		classes[count++] = [NSToolbar class];
 		classes[count++] = [NSWindow class];
 		classes[count++] = [NSMenu class];
 		classes[count++] = [NSMenuItem class];

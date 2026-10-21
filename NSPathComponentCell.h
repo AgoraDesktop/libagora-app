@@ -26,7 +26,7 @@ NS_ASSUME_NONNULL_BEGIN
 @class NSImage;
 @class NSURL;
 
-@interface NSPathComponentCell : NSTextFieldCell
+@interface NSPathComponentCell : NSTextFieldCell <NSSecureCoding>
 {
 	/* THE PICTURE IS `NSCell`'S OWN `_image`; this class re-declares the pair because Apple does, and adds the URL. */
 	NSURL *_url;		/* RETAINED */

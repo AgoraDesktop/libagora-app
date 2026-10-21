@@ -53,6 +53,50 @@
 
 @implementation NSPopUpButtonCell
 
+/* ============================================================================================
+ * ARCHIVING: PULL-DOWN OR POP-UP, AND WHICH ITEM IS CHOSEN.
+ * ============================================================================================ */
+static NSString * const AGCoderPopUpPullsDownKey = @"pullsDown";
+static NSString * const AGCoderPopUpPreferredEdgeKey = @"preferredEdge";
+static NSString * const AGCoderPopUpArrowPositionKey = @"arrowPosition";
+static NSString * const AGCoderPopUpSelectedIndexKey = @"selectedIndex";
+
+- (void)encodeWithCoder:(NSCoder *)aCoder
+{
+	[super encodeWithCoder:aCoder];
+	[aCoder encodeBool:_pullsDown forKey:AGCoderPopUpPullsDownKey];
+	[aCoder encodeInteger:(NSInteger)_preferredEdge forKey:AGCoderPopUpPreferredEdgeKey];
+	[aCoder encodeInteger:(NSInteger)_arrowPosition forKey:AGCoderPopUpArrowPositionKey];
+	[aCoder encodeInteger:_selectedIndex forKey:AGCoderPopUpSelectedIndexKey];
+}
+
+- (instancetype)initWithCoder:(NSCoder *)aDecoder
+{
+	self = [super initWithCoder:aDecoder];
+	if (self == nil) {
+		return nil;
+	}
+	if ([aDecoder containsValueForKey:AGCoderPopUpPullsDownKey]) {
+		_pullsDown = [aDecoder decodeBoolForKey:AGCoderPopUpPullsDownKey];
+	}
+	if ([aDecoder containsValueForKey:AGCoderPopUpPreferredEdgeKey]) {
+		_preferredEdge = [aDecoder decodeIntegerForKey:AGCoderPopUpPreferredEdgeKey];
+	}
+	if ([aDecoder containsValueForKey:AGCoderPopUpArrowPositionKey]) {
+		_arrowPosition = [aDecoder decodeIntegerForKey:AGCoderPopUpArrowPositionKey];
+	}
+	if ([aDecoder containsValueForKey:AGCoderPopUpSelectedIndexKey]) {
+		_selectedIndex = [aDecoder decodeIntegerForKey:AGCoderPopUpSelectedIndexKey];
+	}
+	return self;
+}
+
++ (BOOL)supportsSecureCoding
+{
+	return YES;
+}
+
+
 - (instancetype)initTextCell:(NSString *)stringValue pullsDown:(BOOL)pullDown
 {
 	self = [super initTextCell:stringValue];

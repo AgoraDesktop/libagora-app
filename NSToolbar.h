@@ -94,7 +94,7 @@ extern NSString *NSToolbarAllowsUserCustomizationKey;
 - (void)toolbarDidRemoveItem:(NSNotification *)notification;
 @end
 
-@interface NSToolbar : NSObject
+@interface NSToolbar : NSObject <NSSecureCoding>
 {
 	NSString *_identifier;			/* COPIED: the toolbar's name, and the defaults key's stem */
 	NSMutableArray *_items;			/* RETAINED: the toolbar owns the items it was given */

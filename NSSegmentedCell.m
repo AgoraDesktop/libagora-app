@@ -155,6 +155,148 @@ static NSRect fn_image_rect_in_box(NSImage *image, NSRect box, NSImageScaling sc
 
 @implementation NSSegmentedCell
 
+/* ============================================================================================
+ * ARCHIVING: THE SEGMENTS, AS PLIST VALUES RATHER THAN AS THE PRIVATE RECORD.
+ * ============================================================================================ */
+/* **THE PRIVATE `AGSegmentItem` IS DELIBERATELY NOT IN THE ARCHIVE.** It is this file's storage layout, and a format is
+ * not a place to publish one: a design file that named it would break the day the record changed, and the reader would
+ * have to allow a class nothing outside this file can construct. So each segment is written as a DICTIONARY of the eight
+ * things a segment IS — the label, the image, the menu, the tool tip, the width, the tag, whether it is enabled and
+ * whether it is selected, and how the image scales — and decoded back into the record. The archive names only classes
+ * the format publishes. */
+static NSString * const AGCoderSegmentsKey = @"segmentItems";
+static NSString * const AGCoderSegmentSelectedKey = @"selectedSegment";
+static NSString * const AGCoderSegmentKeySegmentKey = @"keySegment";
+static NSString * const AGCoderSegmentTrackingKey = @"trackingMode";
+static NSString * const AGCoderSegmentStyleKey = @"segmentStyle";
+
+/* THE EIGHT KEYS OF A SEGMENT'S DICTIONARY, whose values are their own names. */
+static NSString * const AGSegmentLabelKey = @"label";
+static NSString * const AGSegmentImageKey = @"image";
+static NSString * const AGSegmentMenuKey = @"menu";
+static NSString * const AGSegmentToolTipKey = @"toolTip";
+static NSString * const AGSegmentWidthKey = @"width";
+static NSString * const AGSegmentTagKey = @"tag";
+static NSString * const AGSegmentEnabledKey = @"enabled";
+static NSString * const AGSegmentSelectedKey = @"selected";
+static NSString * const AGSegmentScalingKey = @"imageScaling";
+
+- (void)encodeWithCoder:(NSCoder *)aCoder
+{
+	NSMutableArray *records = [[NSMutableArray alloc] init];
+	NSUInteger i;
+
+	[super encodeWithCoder:aCoder];
+	for (i = 0; i < [_segmentItems count]; i++) {
+		AGSegmentItem *item = (AGSegmentItem *)[_segmentItems objectAtIndex:i];
+		NSMutableDictionary *record = [[NSMutableDictionary alloc] init];
+
+		if (item->label != nil) {
+			[record setObject:item->label forKey:AGSegmentLabelKey];
+		}
+		if (item->image != nil) {
+			[record setObject:item->image forKey:AGSegmentImageKey];
+		}
+		if (item->menu != nil) {
+			[record setObject:item->menu forKey:AGSegmentMenuKey];
+		}
+		if (item->toolTip != nil) {
+			[record setObject:item->toolTip forKey:AGSegmentToolTipKey];
+		}
+		[record setObject:[NSNumber numberWithDouble:(double)item->width] forKey:AGSegmentWidthKey];
+		[record setObject:[NSNumber numberWithInteger:item->tag] forKey:AGSegmentTagKey];
+		[record setObject:[NSNumber numberWithBool:item->enabled] forKey:AGSegmentEnabledKey];
+		[record setObject:[NSNumber numberWithBool:item->selected] forKey:AGSegmentSelectedKey];
+		[record setObject:[NSNumber numberWithInteger:(NSInteger)item->imageScaling]
+			   forKey:AGSegmentScalingKey];
+		[records addObject:record];
+		[record release];
+	}
+	[aCoder encodeObject:records forKey:AGCoderSegmentsKey];
+	[records release];
+	[aCoder encodeInteger:_selectedSegment forKey:AGCoderSegmentSelectedKey];
+	[aCoder encodeInteger:_keySegment forKey:AGCoderSegmentKeySegmentKey];
+	[aCoder encodeInteger:(NSInteger)_trackingMode forKey:AGCoderSegmentTrackingKey];
+	[aCoder encodeInteger:(NSInteger)_segmentStyle forKey:AGCoderSegmentStyleKey];
+}
+
+- (instancetype)initWithCoder:(NSCoder *)aDecoder
+{
+	self = [super initWithCoder:aDecoder];
+	if (self == nil) {
+		return nil;
+	}
+	_segmentItems = [[NSMutableArray alloc] init];
+	if ([aDecoder containsValueForKey:AGCoderSegmentsKey]) {
+		id records = [aDecoder decodeObjectForKey:AGCoderSegmentsKey];
+		NSUInteger i;
+
+		if ([records isKindOfClass:[NSArray class]]) {
+			for (i = 0; i < [(NSArray *)records count]; i++) {
+				id record = [(NSArray *)records objectAtIndex:i];
+				AGSegmentItem *item;
+				id value;
+
+				if (![record isKindOfClass:[NSDictionary class]]) {
+					continue;
+				}
+				item = [[AGSegmentItem alloc] init];
+				value = [(NSDictionary *)record objectForKey:AGSegmentLabelKey];
+				if ([value isKindOfClass:[NSString class]]) {
+					item->label = [(NSString *)value copy];
+				}
+				item->image = [[(NSDictionary *)record objectForKey:AGSegmentImageKey] retain];
+				item->menu = [[(NSDictionary *)record objectForKey:AGSegmentMenuKey] retain];
+				value = [(NSDictionary *)record objectForKey:AGSegmentToolTipKey];
+				if ([value isKindOfClass:[NSString class]]) {
+					item->toolTip = [(NSString *)value copy];
+				}
+				value = [(NSDictionary *)record objectForKey:AGSegmentWidthKey];
+				if ([value isKindOfClass:[NSNumber class]]) {
+					item->width = (CGFloat)[(NSNumber *)value doubleValue];
+				}
+				value = [(NSDictionary *)record objectForKey:AGSegmentTagKey];
+				if ([value isKindOfClass:[NSNumber class]]) {
+					item->tag = [(NSNumber *)value integerValue];
+				}
+				value = [(NSDictionary *)record objectForKey:AGSegmentEnabledKey];
+				item->enabled = [value isKindOfClass:[NSNumber class]] ? [(NSNumber *)value boolValue] : YES;
+				value = [(NSDictionary *)record objectForKey:AGSegmentSelectedKey];
+				if ([value isKindOfClass:[NSNumber class]]) {
+					item->selected = [(NSNumber *)value boolValue];
+				}
+				value = [(NSDictionary *)record objectForKey:AGSegmentScalingKey];
+				if ([value isKindOfClass:[NSNumber class]]) {
+					item->imageScaling = (NSImageScaling)[(NSNumber *)value integerValue];
+				}
+				[_segmentItems addObject:item];
+				[item release];
+			}
+		}
+	}
+	if ([aDecoder containsValueForKey:AGCoderSegmentSelectedKey]) {
+		_selectedSegment = [aDecoder decodeIntegerForKey:AGCoderSegmentSelectedKey];
+	}
+	if ([aDecoder containsValueForKey:AGCoderSegmentKeySegmentKey]) {
+		_keySegment = [aDecoder decodeIntegerForKey:AGCoderSegmentKeySegmentKey];
+	}
+	if ([aDecoder containsValueForKey:AGCoderSegmentTrackingKey]) {
+		_trackingMode = (NSSegmentSwitchTracking)[aDecoder decodeIntegerForKey:AGCoderSegmentTrackingKey];
+	}
+	if ([aDecoder containsValueForKey:AGCoderSegmentStyleKey]) {
+		_segmentStyle = (NSSegmentStyle)[aDecoder decodeIntegerForKey:AGCoderSegmentStyleKey];
+	}
+	/* THE PRESSED SEGMENT IS ABSENT, so a decoded cell has no press in progress. */
+	_pressedSegment = -1;
+	return self;
+}
+
++ (BOOL)supportsSecureCoding
+{
+	return YES;
+}
+
+
 - (instancetype)init
 {
 	self = [super init];

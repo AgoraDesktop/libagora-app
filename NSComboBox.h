@@ -26,7 +26,7 @@
 
 NS_ASSUME_NONNULL_BEGIN
 
-@interface NSComboBox : NSTextField
+@interface NSComboBox : NSTextField <NSSecureCoding>
 
 - (instancetype)initWithFrame:(NSRect)frameRect;
 

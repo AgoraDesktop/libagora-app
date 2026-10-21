@@ -18,7 +18,7 @@
 
 NS_ASSUME_NONNULL_BEGIN
 
-@interface NSTableHeaderCell : NSTextFieldCell
+@interface NSTableHeaderCell : NSTextFieldCell <NSSecureCoding>
 
 /* THE TWO SORT-INDICATOR DOORS. The rectangle is the room the mark may use; the default is a small square at the
  * right edge. */

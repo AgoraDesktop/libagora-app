@@ -42,7 +42,7 @@ typedef NSUInteger NSSegmentSwitchTracking;
 @class NSMutableArray;
 @class NSString;
 
-@interface NSSegmentedCell : NSActionCell
+@interface NSSegmentedCell : NSActionCell <NSSecureCoding>
 {
 	NSMutableArray *_segmentItems;		/* RETAINED: one private record per segment */
 	NSInteger _selectedSegment;		/* -1 means none */

@@ -38,7 +38,7 @@
 
 NS_ASSUME_NONNULL_BEGIN
 
-@interface NSComboBoxCell : NSTextFieldCell
+@interface NSComboBoxCell : NSTextFieldCell <NSSecureCoding>
 {
 	/* **THE LIST IS THE OBJECTS THEMSELVES, IN APPLE'S OWN VOCABULARY.** A combo box's rows are typed `id` — the
 	 * docs' name for the door is `-addItemWithObjectValue:` — because a combo box may hold something other than a

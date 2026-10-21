@@ -101,7 +101,7 @@ extern NSString *NSSplitViewDidResizeSubviewsNotification;
 
 @end
 
-@interface NSSplitView : NSView
+@interface NSSplitView : NSView <NSSecureCoding>
 {
 	id <NSSplitViewDelegate> _delegate;		/* NOT RETAINED: a delegate is a client of its subject */
 	BOOL _vertical;

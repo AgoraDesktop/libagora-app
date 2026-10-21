@@ -27,7 +27,7 @@
 
 NS_ASSUME_NONNULL_BEGIN
 
-@interface NSActionCell : NSCell
+@interface NSActionCell : NSCell <NSSecureCoding>
 
 @end
 

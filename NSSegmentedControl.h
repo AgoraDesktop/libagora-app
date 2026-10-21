@@ -46,7 +46,7 @@ enum {
 };
 typedef NSInteger NSSegmentStyle;
 
-@interface NSSegmentedControl : NSControl
+@interface NSSegmentedControl : NSControl <NSSecureCoding>
 
 /* THE SEGMENTS. A count of zero is a control with no face and no track. */
 - (void)setSegmentCount:(NSInteger)count;

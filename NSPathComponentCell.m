@@ -27,6 +27,35 @@
 
 @implementation NSPathComponentCell
 
+/* ============================================================================================
+ * ARCHIVING: ONE URL, WHICH IS THE WHOLE COMPONENT.
+ * ============================================================================================ */
+static NSString * const AGCoderPathComponentURLKey = @"url";
+
+- (void)encodeWithCoder:(NSCoder *)aCoder
+{
+	[super encodeWithCoder:aCoder];
+	[aCoder encodeObject:_url forKey:AGCoderPathComponentURLKey];
+}
+
+- (instancetype)initWithCoder:(NSCoder *)aDecoder
+{
+	self = [super initWithCoder:aDecoder];
+	if (self == nil) {
+		return nil;
+	}
+	if ([aDecoder containsValueForKey:AGCoderPathComponentURLKey]) {
+		_url = [[aDecoder decodeObjectForKey:AGCoderPathComponentURLKey] copy];
+	}
+	return self;
+}
+
++ (BOOL)supportsSecureCoding
+{
+	return YES;
+}
+
+
 - (instancetype)init
 {
 	self = [super init];

@@ -145,7 +145,7 @@ extern NSString *NSTableViewColumnDidResizeNotification;
 - (void)tableViewSelectionIsChanging:(NSNotification *)notification;
 @end
 
-@interface NSTableView : NSControl <NSUserInterfaceValidations>
+@interface NSTableView : NSControl <NSUserInterfaceValidations, NSSecureCoding>
 {
 	NSMutableArray *_tableColumns;		/* RETAINED: the table owns its columns */
 	id _dataSource;				/* NOT RETAINED */

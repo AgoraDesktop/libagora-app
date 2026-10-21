@@ -36,6 +36,30 @@
 
 @implementation NSPathControl
 
+/* ============================================================================================
+ * ARCHIVING: NOTHING: DRAG MASKS, A TRACKING AREA AND A DELEGATE.
+ * ============================================================================================ */
+/* **ALL FOUR MEMBERS ARE STATE OF A CONTROL THAT IS RUNNING OR A CONNECTION.** The two `_cg` drag masks are what the
+ * current drag session is allowed to do, the tracking area is installed when the control enters a window, and the
+ * delegate is the object that answers for it — which a nib wires with a CONNECTION, not with a value. The path itself is
+ * the CONTROL's CELL (`NSPathCell`), which does archive its components. */
+
+- (void)encodeWithCoder:(NSCoder *)aCoder
+{
+	[super encodeWithCoder:aCoder];
+}
+
+- (instancetype)initWithCoder:(NSCoder *)aDecoder
+{
+	return [super initWithCoder:aDecoder];
+}
+
++ (BOOL)supportsSecureCoding
+{
+	return YES;
+}
+
+
 - (instancetype)initWithFrame:(NSRect)frameRect
 {
 	self = [super initWithFrame:frameRect];

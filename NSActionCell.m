@@ -16,4 +16,16 @@
 
 @implementation NSActionCell
 
+/* ============================================================================================
+ * ARCHIVING: NOTHING, AND THAT IS THE POINT.
+ * ============================================================================================ */
+/* **THIS CLASS ADDS NO STORAGE, SO IT ADDS NO CODING.** `NSCell`'s methods are exactly right for it, and the census in
+ * `NSNib` accepts an inherited method when `class_getInstanceSize` says there is nothing to lose — which for this class
+ * is the truth rather than an exemption. The conformance is declared so that `-conformsToProtocol:` answers what the
+ * allow-list asks. */
++ (BOOL)supportsSecureCoding
+{
+	return YES;
+}
+
 @end

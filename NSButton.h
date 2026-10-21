@@ -24,7 +24,7 @@
 
 NS_ASSUME_NONNULL_BEGIN
 
-@interface NSButton : NSControl
+@interface NSButton : NSControl <NSSecureCoding>
 {
 	/* THE ONE PIECE OF STATE THE COMPLETING SLICE ADDS, and the only one a BUTTON owns rather than its cell: whether
 	 * the button SPRINGS OPEN its menu while the pointer rests on it, which is a property of the view's behaviour and
