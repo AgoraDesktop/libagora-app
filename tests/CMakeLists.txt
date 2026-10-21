@@ -833,6 +833,14 @@ target_link_libraries(nib_compile PRIVATE App)
 add_test(NAME appkit-nib-compile COMMAND nib_compile)
 set_tests_properties(appkit-nib-compile PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
 
+# **A NIB IN A BUNDLE, LOADED BY NAME, INTO A VIEW CONTROLLER.** Every other nib test used a PATH; an application says
+# `initWithNibName:bundle:` and lets the bundle find Contents/Resources/Main.nib. This builds a real bundle-shaped
+# directory, compiles two nibs into it from source, and then does what an application does — including the two branches
+# nothing else touches: the name lookup and NSViewController's owner outlet.
+add_executable(nib_bundle nib_bundle.m NSNibSource.m)
+target_link_libraries(nib_bundle PRIVATE App)
+add_test(NAME appkit-nib-bundle COMMAND nib_bundle)
+set_tests_properties(appkit-nib-bundle PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
 # **THE FORMAT'S COMMAND LINE, AND ITS TEST.** `ibtool` is the reason a design file can be checked by a shell rather than
 # by a person clicking: `dump`, `validate` and `roundtrip` read the same archives the reader does, with no display and no
 # owner. The test RUNS the tool — the only honest way to test an executable — and builds its own fixture, because this
