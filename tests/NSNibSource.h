@@ -79,6 +79,23 @@ NS_ASSUME_NONNULL_BEGIN
 /* AND THE SAME TWO OVER A FILE, which is how the tool uses them and how a caller will. */
 + (nullable NSData *)archiveFromSourceFile:(NSString *)path error:(NSString * _Nullable * _Nullable)error;
 
+/* **THE OTHER DIRECTION: AN ARCHIVE BACK INTO SOURCE.** This is what makes the format CLOSED — a file can be opened,
+ * edited as text and compiled again — and it is also how an archive produced by an older tree becomes text a person can
+ * read. It is deliberately limited, and it fails closed on what it cannot express:
+ *
+ *   * A SCALAR PROPERTY IS EMITTED. Numbers, booleans, strings, and the three geometry values (a rect, a size, a point)
+ *     become the words and strings this grammar already has.
+ *   * A STRUCTURAL ONE IS EMITTED AS STRUCTURE: `subviews`, `cell`, `contentView` and a window's `contentView` become
+ *     nested objects, and the connections are rebuilt from the archive's own records.
+ *   * AN OBJECT-VALUED PROPERTY IT CANNOT EXPRESS IS A REFUSAL, NAMED: a colour, a font, an image, a menu on a cell. The
+ *     grammar has no value literal for those yet — `color = "#ff0000"` is a decision about syntax and a palette that has
+ *     not been made — and inventing one inside a decompiler would be the wrong place to make it. The refusal names the
+ *     object and the key so the gap is a sentence rather than a silently missing line of text.
+ *
+ * It also cannot recover what the archive never carried: a class's own idea of what a property MEANT, and any state the
+ * coding methods deliberately leave out (a target, a delegate, a window's surface). */
++ (nullable NSData *)sourceFromArchiveData:(NSData *)archive error:(NSString * _Nullable * _Nullable)error;
+
 @end
 
 NS_ASSUME_NONNULL_END

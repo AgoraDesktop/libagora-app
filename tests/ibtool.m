@@ -22,6 +22,10 @@
  *   compile <source> <out.nib>
  *                      the TEXT SOURCE (see NSNibSource.h) into the archive a nib is; the same three checks the reader
  *                      makes are applied to what was built before it is written
+ *   decompile <in.nib> <out.nibsource>
+ *                      the archive back into text — the format closed in both directions. It refuses what the source
+ *                      grammar cannot express (an object-valued property such as a colour or a font) rather than
+ *                      dropping it
  *   help               this text
  */
 #import "NSNibSource.h"
@@ -46,7 +50,8 @@ static void usage(void)
 	       "  dump       what the archive says: version, objects, connections\n"
 	       "  validate   the reader's checks, instantiated by nobody and needing no owner\n"
 	       "  roundtrip  decode, re-encode, and compare — the format's closure\n"
-	       "  compile    a TEXT SOURCE into a nib: ibtool compile in.nibsource out.nib\n");
+	       "  compile    a TEXT SOURCE into a nib: ibtool compile in.nibsource out.nib\n"
+	       "  decompile  a nib back into text:    ibtool decompile in.nib out.nibsource\n");
 }
 
 /* **A DESIGN FACT, ASKED THROUGH THE PUBLIC DOORS RATHER THAN OUT OF AN IVAR.** The dump describes what a CALLER can see:
@@ -219,6 +224,40 @@ int main(int argc, char **argv)
 		[pool release];
 		return 2;
 	}
+	if (strcmp(argv[1], "decompile") == 0) {
+		NSString *reason = nil;
+		NSData *written;
+		NSData *archive;
+
+		if (argc < 4) {
+			fprintf(stderr, "ibtool: decompile needs a nib and an output path\n");
+			usage();
+			[pool release];
+			return 2;
+		}
+		archive = [NSData dataWithContentsOfFile:[NSString stringWithUTF8String:argv[2]]];
+		if (archive == nil) {
+			fprintf(stderr, "ibtool: cannot read %s\n", argv[2]);
+			[pool release];
+			return 2;
+		}
+		written = [NSNibSource sourceFromArchiveData:archive error:&reason];
+		if (written == nil) {
+			printf("%s: refused — %s\n", argv[2],
+			       [(reason != nil ? reason : @"unknown") UTF8String]);
+			[pool release];
+			return 1;
+		}
+		if (![written writeToFile:[NSString stringWithUTF8String:argv[3]] atomically:YES]) {
+			fprintf(stderr, "ibtool: cannot write %s\n", argv[3]);
+			[pool release];
+			return 2;
+		}
+		printf("%s: decompiled %lu bytes to %s\n", argv[2], (unsigned long)[written length], argv[3]);
+		[pool release];
+		return 0;
+	}
+
 	/* **`compile` IS THE ONE VERB THAT WRITES**, so it is handled before the read-only path below and takes two files. */
 	if (strcmp(argv[1], "compile") == 0) {
 		NSString *reason = nil;

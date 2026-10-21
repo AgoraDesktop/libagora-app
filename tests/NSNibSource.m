@@ -421,12 +421,24 @@ static BOOL ag_parse_rect(NSString *text, NSRect *rectOut)
 	double x, y, w, h;
 	BOOL ok;
 
+	/* **TWO NUMBERS ARE A SIZE AND FOUR ARE A RECT**, and which one a property wants is the property's business — this
+	 * returns a rect either way, with the size's numbers read into the SIZE and the origin left at zero. A single number,
+	 * or five, is a mistake in the file and is refused. */
 	if (![scanner scanDouble:&x]) {
 		return NO;
 	}
 	if (![scanner scanDouble:&y]) {
 		return NO;
 	}
+	if ([scanner isAtEnd]) {
+		rectOut->origin.x = 0.0;
+		rectOut->origin.y = 0.0;
+		rectOut->size.width = x;
+		rectOut->size.height = y;
+		return YES;
+	}
+	w = 0.0;
+	h = 0.0;
 	if (![scanner scanDouble:&w]) {
 		return NO;
 	}
@@ -636,6 +648,22 @@ static id ag_build_object(NSDictionary *record, NSDictionary *registry, NSString
 						[object setBoundsSize:rect.size];
 						continue;
 					}
+					/* ANY OTHER GEOMETRY PROPERTY TAKES THE VALUE KVC ALREADY UNDERSTANDS: an `NSValue` rect when the
+					 * string had four numbers, a size when it had two. That is what makes `minSize = "80 60"` work without
+					 * a table of which properties are sizes. */
+					@try {
+						[object setValue:([value rangeOfString:@" "].location != NSNotFound &&
+								  [value componentsSeparatedByString:@" "].count > 2)
+							? [NSValue valueWithRect:rect]
+							: [NSValue valueWithSize:rect.size]
+							   forKey:key];
+					} @catch (NSException *exception) {
+						*error = [NSString stringWithFormat:@"\"%@\" did not take \"%@\": %@", className,
+							  key, [exception reason]];
+						[object release];
+						return nil;
+					}
+					continue;
 				}
 				@try {
 					[object setValue:value forKey:key];
@@ -716,6 +744,359 @@ static id ag_build_object(NSDictionary *record, NSDictionary *registry, NSString
 		}
 	}
 	return [object autorelease];
+}
+
+/* ============================================================================================
+ * THE DECOMPILER'S TWO HELPERS
+ * ============================================================================================ */
+
+/* **THE KEY VOCABULARY IS READ OFF THE CODER RATHER THAN TABULATED HERE.** A decompiler that kept its own list of which
+ * property each class codes would be a second copy of every `-encodeWithCoder:` in the tree, and the two copies would
+ * drift the first time a class gained a key. So each object is archived ON ITS OWN, once, and the keys of that little
+ * archive's root entry ARE the keys the class codes — the coder remains the only definition. What KVC then reads is the
+ * LIVE value, which is what the source should say. */
+static NSArray *ag_coded_keys_for_object(id object)
+{
+	NSData *data = [NSKeyedArchiver archivedDataWithRootObject:object];
+	id plist;
+	id objects;
+	id first;
+
+	if (data == nil) {
+		return nil;
+	}
+	plist = [NSPropertyListSerialization propertyListWithData:data
+							  options:NSPropertyListImmutable
+							   format:NULL
+							    error:NULL];
+	if (![plist isKindOfClass:[NSDictionary class]]) {
+		return nil;
+	}
+	objects = [(NSDictionary *)plist objectForKey:@"$objects"];
+	if (![objects isKindOfClass:[NSArray class]] || [(NSArray *)objects count] < 2) {
+		return nil;
+	}
+	first = [(NSArray *)objects objectAtIndex:1];
+	if (![first isKindOfClass:[NSDictionary class]]) {
+		return nil;
+	}
+	return [(NSDictionary *)first allKeys];
+}
+
+/* THE KEYS THAT ARE STRUCTURE RATHER THAN PROPERTIES, because they are emitted as nested objects and connections. */
+static BOOL ag_is_structural_key(NSString *key)
+{
+	return [key isEqualToString:@"subviews"] || [key isEqualToString:@"constraints"] ||
+	       [key isEqualToString:@"cell"] || [key isEqualToString:@"contentView"];
+}
+
+static NSString *ag_attribute_name(NSLayoutAttribute attribute);
+static NSString *ag_relation_name(NSLayoutRelation relation);
+
+@interface AGNibWriter : NSObject
+{
+	NSMutableString *_out;
+	NSMutableDictionary *_ids;	/* object -> name, by identity */
+	NSUInteger _next;
+	NSString *_error;
+}
+@end
+
+@implementation AGNibWriter
+
+- (instancetype)init
+{
+	self = [super init];
+	if (self != nil) {
+		_out = [[NSMutableString alloc] init];
+		_ids = [[NSMutableDictionary alloc] init];
+		_next = 1;
+	}
+	return self;
+}
+
+- (void)dealloc
+{
+	[_out release];
+	[_ids release];
+	[_error release];
+	[super dealloc];
+}
+
+- (NSString *)error
+{
+	return _error;
+}
+
+- (NSString *)takeOutput
+{
+	return [[_out copy] autorelease];
+}
+
+- (void)fail:(NSString *)format, ...
+{
+	va_list args;
+
+	if (_error != nil) {
+		return;
+	}
+	va_start(args, format);
+	_error = [[NSString alloc] initWithFormat:format arguments:args];
+	va_end(args);
+}
+
+/* A NAME FOR AN OBJECT, STABLE WITHIN ONE RUN AND DERIVED FROM ITS CLASS, because a person reads this file. */
+- (NSString *)nameFor:(id)object
+{
+	NSString *existing = [_ids objectForKey:[NSValue valueWithPointer:object]];
+
+	if (existing != nil) {
+		return existing;
+	}
+	{
+		NSString *name = [NSString stringWithFormat:@"%@%lu",
+				  [NSStringFromClass([object class]) lowercaseString],
+				  (unsigned long)_next++];
+
+		[_ids setObject:name forKey:[NSValue valueWithPointer:object]];
+		return name;
+	}
+}
+
+/* **A SCALAR, AS THE WORDS THIS GRAMMAR ALREADY HAS**: a number as a word, a string quoted, a geometry value as the
+ * `"x y w h"` form the compiler parses for `frame`. Answers nil for something it cannot express, and leaves the CALLER to
+ * refuse with the key's name. */
+- (NSString *)scalarText:(id)value
+{
+	if ([value isKindOfClass:[NSNumber class]]) {
+		const char *type = [(NSNumber *)value objCType];
+
+		if (type != NULL && (strcmp(type, @encode(BOOL)) == 0 || strcmp(type, "c") == 0)) {
+			return [(NSNumber *)value boolValue] ? @"YES" : @"NO";
+		}
+		if (type != NULL && (strcmp(type, @encode(double)) == 0 || strcmp(type, @encode(float)) == 0)) {
+			return [NSString stringWithFormat:@"%.17g", [(NSNumber *)value doubleValue]];
+		}
+		return [NSString stringWithFormat:@"%lld", (long long)[(NSNumber *)value longLongValue]];
+	}
+	if ([value isKindOfClass:[NSString class]]) {
+		return [NSString stringWithFormat:@"\"%@\"",
+			[(NSString *)value stringByReplacingOccurrencesOfString:@"\"" withString:@"\\\""]];
+	}
+	if ([value isKindOfClass:[NSValue class]]) {
+		const char *type = [(NSValue *)value objCType];
+		NSRect rect;
+
+		if (type != NULL && strcmp(type, @encode(NSRect)) == 0) {
+			rect = [(NSValue *)value rectValue];
+			return [NSString stringWithFormat:@"\"%g %g %g %g\"", (double)rect.origin.x,
+				(double)rect.origin.y, (double)rect.size.width, (double)rect.size.height];
+		}
+		if (type != NULL && strcmp(type, @encode(NSSize)) == 0) {
+			NSSize size = [(NSValue *)value sizeValue];
+
+			return [NSString stringWithFormat:@"\"%g %g\"", (double)size.width, (double)size.height];
+		}
+		if (type != NULL && strcmp(type, @encode(NSPoint)) == 0) {
+			NSPoint point = [(NSValue *)value pointValue];
+
+			return [NSString stringWithFormat:@"\"%g %g\"", (double)point.x, (double)point.y];
+		}
+	}
+	return nil;
+}
+
+/* THE PROPERTIES AN OBJECT CAN STATE, as `key = value;` lines. Anything object-valued that is not structure is a
+ * REFUSAL, because this grammar has no literal for it yet. */
+- (BOOL)writePropertiesOf:(id)object indent:(NSString *)indent
+{
+	NSArray *keys = ag_coded_keys_for_object(object);
+	NSUInteger i;
+	NSMutableArray *lines = [[NSMutableArray alloc] init];
+
+	if (keys == nil) {
+		[self fail:@"%@ could not be asked what it codes", NSStringFromClass([object class])];
+		[lines release];
+		return NO;
+	}
+	for (i = 0; i < [keys count]; i++) {
+		NSString *key = [keys objectAtIndex:i];
+		id value;
+		NSString *text;
+
+		if (ag_is_structural_key(key)) {
+			continue;
+		}
+		/* **A SELECTOR IS NOT A PROPERTY THIS GRAMMAR CAN STATE**, and KVC hands one back as the string
+		 * `"<null selector>"` — which would compile into a nonsense selector. The ACTION that matters is the connection,
+		 * which this file emits from the archive's own records; a cell's or a browser's action alone is skipped. */
+		if ([key isEqualToString:@"action"] || [key isEqualToString:@"doubleAction"]) {
+			continue;
+		}
+		/* **`frame` IS READ THROUGH ITS OWN DOOR.** Key Value Coding cannot box an `NSRect` on this tree's KVC — the
+		 * getter returns a struct and `-valueForKey:` has no type to box it with — so the one geometry property a design
+		 * file states is read directly rather than skipped. Everything else goes through KVC, and a key it cannot read is
+		 * skipped rather than refused (a selector is the case that matters: a cell's `action` is not a property a source
+		 * can state, and the connection that carried it is emitted instead). */
+		if ([key isEqualToString:@"frame"] && [object isKindOfClass:[NSView class]]) {
+			NSRect frame = [(NSView *)object frame];
+
+			text = [NSString stringWithFormat:@"\"%g %g %g %g\"", (double)frame.origin.x,
+				(double)frame.origin.y, (double)frame.size.width, (double)frame.size.height];
+			[lines addObject:[NSString stringWithFormat:@"%@  %@ = %@;", indent, key, text]];
+			continue;
+		}
+		value = nil;
+		@try {
+			value = [object valueForKey:key];
+		} @catch (NSException *exception) {
+			/* A KEY THE CODER WRITES BUT KVC CANNOT READ is not a property a source can state — a good example is a
+			 * cell's `action`, a selector. It is SKIPPED and named rather than refused: the archive keeps it, and a
+			 * source that drops a selector keeps the connection that actually carried it. */
+			continue;
+		}
+		if (value == nil) {
+			continue;
+		}
+		text = [self scalarText:value];
+		if (text == nil) {
+			[self fail:@"%@'s \"%@\" is a %@, and this grammar has no literal for one (a colour, a font or an "
+				"image needs a value syntax this format has not got)", NSStringFromClass([object class]), key,
+				NSStringFromClass([value class])];
+			[lines release];
+			return NO;
+		}
+		[lines addObject:[NSString stringWithFormat:@"%@  %@ = %@;", indent, key, text]];
+	}
+	if ([lines count] > 0) {
+		[_out appendFormat:@"%@properties = {\n", indent];
+		for (i = 0; i < [lines count]; i++) {
+			[_out appendFormat:@"%@\n", [lines objectAtIndex:i]];
+		}
+		[_out appendFormat:@"%@};\n", indent];
+	}
+	[lines release];
+	return YES;
+}
+
+/* THE ID IS WRITTEN BEFORE THE BODY so that a name is stable for the whole file even when an object refers to itself
+ * (a menu item's submenu, a view constrained to its own parent). */
+- (BOOL)writeObject:(id)object indent:(NSString *)indent isTopLevel:(BOOL)topLevel
+{
+	(void)topLevel;
+	NSString *inner = [indent stringByAppendingString:@"  "];
+	/* **EVERY OBJECT IS NAMED, NOT ONLY THE TOP-LEVEL ONES.** A connection and a constraint refer to a view by `id`, and
+	 * those views are usually SUBVIEWS — so a name emitted only for top-level objects would leave the common case
+	 * unwritable. The names are generated and stable within one decompile (see `-nameFor:`), and the compiler registers
+	 * an `id` wherever it appears. */
+	NSString *name = [self nameFor:object];
+	NSArray *subviews = nil;
+
+	[_out appendFormat:@"%@{\n", indent];
+	[_out appendFormat:@"%@  id = \"%@\";\n", inner, name];
+	[_out appendFormat:@"%@  class = %@;\n", inner, NSStringFromClass([object class])];
+	if (![self writePropertiesOf:object indent:[inner stringByAppendingString:@"  "]]) {
+		return NO;
+	}
+	/* **A NESTED OBJECT IS A DICTIONARY VALUE, SO IT ENDS WITH A SEMICOLON** — `cell = { … };` — and its own body is
+	 * indented from here rather than from column zero, which is what makes the file readable as text. */
+	if ([object isKindOfClass:[NSControl class]] && [(NSControl *)object cell] != nil) {
+		[_out appendFormat:@"%@  cell = ", inner];
+		if (![self writeObject:[(NSControl *)object cell]
+				indent:[inner stringByAppendingString:@"  "]
+			    isTopLevel:NO]) {
+			return NO;
+		}
+		[_out appendString:@";\n"];
+	}
+	if ([object isKindOfClass:[NSWindow class]] && [(NSWindow *)object contentView] != nil) {
+		[_out appendFormat:@"%@  contentView = ", inner];
+		if (![self writeObject:[(NSWindow *)object contentView]
+				indent:[inner stringByAppendingString:@"  "]
+			    isTopLevel:NO]) {
+			return NO;
+		}
+		[_out appendString:@";\n"];
+	}
+	if ([object isKindOfClass:[NSView class]]) {
+		subviews = [(NSView *)object subviews];
+		if ([subviews count] > 0) {
+			NSUInteger i;
+
+			[_out appendFormat:@"%@  subviews = (\n", inner];
+			for (i = 0; i < [subviews count]; i++) {
+				if (![self writeObject:[subviews objectAtIndex:i]
+						indent:[inner stringByAppendingString:@"  "]
+					    isTopLevel:NO]) {
+					return NO;
+				}
+				[_out appendFormat:@"\n"];
+			}
+			[_out appendFormat:@"%@  );\n", inner];
+		}
+		if ([[(NSView *)object constraints] count] > 0) {
+			NSArray *constraints = [(NSView *)object constraints];
+			NSUInteger i;
+
+			[_out appendFormat:@"%@  constraints = (\n", inner];
+			for (i = 0; i < [constraints count]; i++) {
+				NSLayoutConstraint *c = [constraints objectAtIndex:i];
+				id first = [c firstItem];
+				id second = [c secondItem];
+
+				[_out appendFormat:@"%@    { first = \"%@\";", inner,
+					[first isKindOfClass:[NSString class]] ? first : [self nameFor:first]];
+				[_out appendFormat:@" firstAttribute = %@;", ag_attribute_name([c firstAttribute])];
+				if (second != nil) {
+					[_out appendFormat:@" second = \"%@\"; secondAttribute = %@;",
+						[second isKindOfClass:[NSString class]] ? second : [self nameFor:second],
+						ag_attribute_name([c secondAttribute])];
+				}
+				[_out appendFormat:@" relation = %@; multiplier = %.17g; constant = %.17g;",
+					ag_relation_name([c relation]), (double)[c multiplier], (double)[c constant]];
+				if ([c priority] != NSLayoutPriorityRequired) {
+					[_out appendFormat:@" priority = %g;", (double)[c priority]];
+				}
+				if ([c identifier] != nil) {
+					[_out appendFormat:@" identifier = \"%@\";", [c identifier]];
+				}
+				[_out appendFormat:@" }\n"];
+			}
+			[_out appendFormat:@"%@  );\n", inner];
+		}
+	}
+	[_out appendFormat:@"%@}", indent];
+	return YES;
+}
+
+@end
+
+static NSString *ag_attribute_name(NSLayoutAttribute attribute)
+{
+	switch (attribute) {
+	case NSLayoutAttributeLeft: return @"left";
+	case NSLayoutAttributeRight: return @"right";
+	case NSLayoutAttributeTop: return @"top";
+	case NSLayoutAttributeBottom: return @"bottom";
+	case NSLayoutAttributeLeading: return @"leading";
+	case NSLayoutAttributeTrailing: return @"trailing";
+	case NSLayoutAttributeWidth: return @"width";
+	case NSLayoutAttributeHeight: return @"height";
+	case NSLayoutAttributeCenterX: return @"centerX";
+	case NSLayoutAttributeCenterY: return @"centerY";
+	case NSLayoutAttributeLastBaseline: return @"lastBaseline";
+	case NSLayoutAttributeFirstBaseline: return @"firstBaseline";
+	default: return @"none";
+	}
+}
+
+static NSString *ag_relation_name(NSLayoutRelation relation)
+{
+	switch (relation) {
+	case NSLayoutRelationLessThanOrEqual: return @"lessThanOrEqual";
+	case NSLayoutRelationGreaterThanOrEqual: return @"greaterThanOrEqual";
+	default: return @"equal";
+	}
 }
 
 @implementation NSNibSource
@@ -858,6 +1239,16 @@ static id ag_build_object(NSDictionary *record, NSDictionary *registry, NSString
 			destination = ag_resolve(registry, [record objectForKey:@"destination"]);
 			keyPath = [record objectForKey:@"keyPath"];
 			action = [record objectForKey:@"action"];
+			if (destination == nil && [record objectForKey:@"destination"] != nil) {
+				if (error != NULL) {
+					*error = [NSString stringWithFormat:@"connection %lu names a destination this file "
+						  "does not declare", (unsigned long)i];
+				}
+				[registry release];
+				[builtObjects release];
+				[builtConnections release];
+				return nil;
+			}
 			if (source == nil) {
 				if (error != NULL) {
 					*error = [NSString stringWithFormat:@"connection %lu names a source this file does "
@@ -915,6 +1306,106 @@ static id ag_build_object(NSDictionary *record, NSDictionary *registry, NSString
 		return nil;
 	}
 	return [self archiveFromSourceData:data error:error];
+}
+
+/* ============================================================================================
+ * THE DECOMPILER'S DOOR
+ * ============================================================================================ */
+
++ (NSData *)sourceFromArchiveData:(NSData *)archive error:(NSString **)error
+{
+	NSString *refusal;
+	id root;
+	NSArray *objects;
+	NSArray *connections;
+	NSMutableString *text;
+	AGNibWriter *writer;
+	NSUInteger i;
+
+	if (error != NULL) {
+		*error = nil;
+	}
+	refusal = [NSNib refusalReasonForArchiveData:archive];
+	if (refusal != nil) {
+		if (error != NULL) {
+			*error = refusal;
+		}
+		return nil;
+	}
+	root = [NSKeyedUnarchiver unarchivedObjectOfClasses:[NSNib supportedClasses]
+						     fromData:archive
+							error:NULL];
+	if (![root isKindOfClass:[NSDictionary class]]) {
+		if (error != NULL) {
+			*error = @"the archive did not decode";
+		}
+		return nil;
+	}
+	objects = [(NSDictionary *)root objectForKey:NSNibTopLevelObjectsKey];
+	connections = [(NSDictionary *)root objectForKey:NSNibConnectionsKey];
+
+	/* ONE WRITER FOR THE WHOLE FILE, so that an object's generated name is the same wherever it appears — a constraint
+	 * naming its parent and a connection naming the same view must agree, and they only agree if the name table is
+	 * shared. */
+	writer = [[AGNibWriter alloc] init];
+	text = [[NSMutableString alloc] init];
+	[text appendString:@"// written by ibtool decompile — edit it and compile it again\n{\n"];
+	[text appendFormat:@"  version = %ld;\n", (long)[NSNib formatVersion]];
+	[text appendString:@"  objects = (\n"];
+	for (i = 0; i < [objects count]; i++) {
+		if (![writer writeObject:[objects objectAtIndex:i] indent:@"    " isTopLevel:YES]) {
+			break;
+		}
+	}
+	if ([writer error] == nil) {
+		[text appendString:[writer takeOutput]];
+	}
+	[text appendString:@"  );\n"];
+	if ([writer error] == nil && [connections count] > 0) {
+		[text appendString:@"  connections = (\n"];
+		for (i = 0; i < [connections count]; i++) {
+			NSDictionary *record = [connections objectAtIndex:i];
+			id source = [record objectForKey:NSNibConnectionSourceKey];
+			id destination = [record objectForKey:NSNibConnectionDestinationKey];
+			NSString *keyPath = [record objectForKey:NSNibConnectionKeyPathKey];
+			NSString *action = [record objectForKey:NSNibConnectionActionKey];
+			/* **THE PLACEHOLDER HAS A SOURCE SPELLING AND AN ARCHIVE SPELLING.** The archive carries the string
+			 * `NSNibFileOwner`; the grammar says `owner`. Writing the archive's spelling would produce a file the
+			 * compiler cannot resolve, so the translation is here, where the two vocabularies meet. */
+			NSString *from = [source isKindOfClass:[NSString class]]
+				? ([source isEqualToString:NSNibFileOwner] ? @"owner" : source)
+				: [writer nameFor:source];
+			NSString *to = [destination isKindOfClass:[NSString class]]
+				? ([destination isEqualToString:NSNibFileOwner] ? @"owner" : destination)
+				: [writer nameFor:destination];
+
+			if (keyPath != nil) {
+				[text appendFormat:@"    { source = \"%@\"; keyPath = \"%@\"; destination = \"%@\"; }\n",
+					from, keyPath, to];
+			} else {
+				[text appendFormat:@"    { source = \"%@\"; action = \"%@\"; destination = \"%@\"; }\n",
+					from, action, to];
+			}
+		}
+		[text appendString:@"  );\n"];
+	}
+	[text appendString:@"}\n"];
+
+	if ([writer error] != nil) {
+		if (error != NULL) {
+			*error = [[[writer error] retain] autorelease];
+		}
+		[writer release];
+		[text release];
+		return nil;
+	}
+	[writer release];
+	{
+		NSData *data = [text dataUsingEncoding:NSUTF8StringEncoding];
+
+		[text release];
+		return data;
+	}
 }
 
 @end

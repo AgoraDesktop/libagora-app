@@ -19,6 +19,9 @@
 #import <AppKit/NSControl.h>
 #import <AppKit/NSButton.h>
 #import <AppKit/NSButtonCell.h>
+#import <AppKit/NSTextField.h>
+#import <AppKit/NSTextFieldCell.h>
+#import <AppKit/NSColor.h>
 
 #include <string.h>
 
@@ -191,6 +194,52 @@ int main(int argc, char **argv)
 			check(status == 1, "compile exits 1 for a source it refuses");
 			check([output rangeOfString:@"freckles"].location != NSNotFound,
 			      "and the refusal names the key");
+		}
+	}
+
+	/* ---- decompile -------------------------------------------------------------------------------- */
+	/* **THE OTHER DIRECTION, AND THE CLOSURE THAT MAKES IT MEANINGFUL.** A file that survives
+	 * nib → text → nib with the same DUMP has been described completely by the text: that is a much stronger claim
+	 * than "decompile exited 0", because the dump is what `ibtool` itself considers the file's content. */
+	{
+		NSString *textPath = @"/tmp/agora-ibtool-decompiled.nibsource";
+		NSString *againPath = @"/tmp/agora-ibtool-recompiled.nib";
+		NSString *before;
+		NSString *after;
+
+		output = run_ibtool(tool, [NSArray arrayWithObjects:@"decompile", goodPath, textPath, nil],
+				    &status);
+		check(status == 0, "decompile exits 0 for a file it can express");
+		check([output rangeOfString:@"decompiled"].location != NSNotFound, "decompile says what it did");
+
+		output = run_ibtool(tool, [NSArray arrayWithObjects:@"compile", textPath, againPath, nil],
+				    &status);
+		check(status == 0, "what it wrote compiles again");
+
+		before = run_ibtool(tool, [NSArray arrayWithObjects:@"dump", goodPath, nil], &status);
+		after = run_ibtool(tool, [NSArray arrayWithObjects:@"dump", againPath, nil], &status);
+		check(before != nil && [before isEqualToString:after],
+		      "nib -> text -> nib produces the SAME DUMP (the format is closed)");
+
+		/* AND A FILE IT CANNOT EXPRESS IS A REFUSAL THAT NAMES THE PROPERTY, not a silently thinner nib. */
+		{
+			NSString *coloredPath = @"/tmp/agora-ibtool-colored.nib";
+			NSTextField *field = [[NSTextField alloc] initWithFrame:NSMakeRect(0.0, 0.0, 80.0, 22.0)];
+
+			[[field cell] setTextColor:[NSColor redColor]];
+			check([[NSNib archivedDataWithTopLevelObjects:[NSArray arrayWithObject:field]
+							  connections:nil] writeToFile:coloredPath
+									     atomically:YES],
+			      "a nib with a colour-valued property was written");
+			[field release];
+
+			output = run_ibtool(tool, [NSArray arrayWithObjects:@"decompile", coloredPath, textPath, nil],
+					    &status);
+			check(status == 1, "decompile REFUSES a property the grammar cannot express");
+			check([output rangeOfString:@"textColor"].location != NSNotFound,
+			      "and the refusal names the key");
+			check([output rangeOfString:@"NSColor"].location != NSNotFound,
+			      "and the class of the value it could not write");
 		}
 	}
 
