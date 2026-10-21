@@ -63,7 +63,7 @@ static NSColor *fn_color(CGColorRef cg)
  * there is no second check to write. */
 static CGColorRef fn_named(NSString *name, CGFloat r, CGFloat g, CGFloat b, CGFloat a)
 {
-	CGColorSpaceRef space = CGColorSpaceCreateWithName(name);
+	CGColorSpaceRef space = CGColorSpaceCreateWithName((CFStringRef)name);
 	CGFloat comp[4];
 	CGColorRef cg;
 
@@ -327,7 +327,7 @@ static NSString * const AGCoderColorAlphaKey = @"alphaComponent";
 + (nullable NSColor *)colorWithSRGBRed:(CGFloat)red green:(CGFloat)green blue:(CGFloat)blue
 				 alpha:(CGFloat)alpha
 {
-	return fn_color(fn_named(kCGColorSpaceSRGB, red, green, blue, alpha));
+	return fn_color(fn_named((NSString *)kCGColorSpaceSRGB, red, green, blue, alpha));
 }
 
 /* !! `+colorWithDisplayP3Red:green:blue:alpha:` STOOD HERE AND NOW REFUSES (2026-10-05). It was
@@ -1145,7 +1145,7 @@ static void fn_hsv_to_rgb(CGFloat h, CGFloat s, CGFloat v, CGFloat *r, CGFloat *
 	CGFloat r, g, b;
 
 	fn_hsv_to_rgb(hue, saturation, brightness, &r, &g, &b);
-	return fn_color(fn_named(kCGColorSpaceGenericRGB, r, g, b, alpha));
+	return fn_color(fn_named((NSString *)kCGColorSpaceGenericRGB, r, g, b, alpha));
 }
 
 + (nullable NSColor *)colorWithDeviceHue:(CGFloat)hue saturation:(CGFloat)saturation

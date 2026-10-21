@@ -250,7 +250,7 @@ static NSDictionary *fn_core_text_attributes(NSDictionary *appkitAttributes)
 		return nil;
 	}
 	/* THE CALLER'S DICTIONARY IS TRANSLATED ON ITS WAY TO THE ENGINE: see `fn_core_text_attributes`. */
-	ct = CTFontDescriptorCreateWithAttributes(fn_core_text_attributes(attributes));
+	ct = CTFontDescriptorCreateWithAttributes((CFDictionaryRef)fn_core_text_attributes(attributes));
 	if (ct == NULL) {
 		[self release];
 		return nil;
@@ -293,7 +293,7 @@ static NSDictionary *fn_core_text_attributes(NSDictionary *appkitAttributes)
 	if (anAttribute == nil) {
 		return nil;
 	}
-	return [(id)CTFontDescriptorCopyAttribute(_descriptor, anAttribute) autorelease];
+	return [(id)CTFontDescriptorCopyAttribute(_descriptor, (CFStringRef)anAttribute) autorelease];
 }
 
 - (NSString *)postscriptName
@@ -367,7 +367,7 @@ static NSData *fn_matrix_data(NSAffineTransform *transform)
 		[merged addEntriesFromDictionary:attributes];
 	}
 	return [NSFontDescriptor apk_descriptorWithCTDescriptor:
-		CTFontDescriptorCreateCopyWithAttributes(_descriptor, fn_core_text_attributes(merged))];
+		CTFontDescriptorCreateCopyWithAttributes(_descriptor, (CFDictionaryRef)fn_core_text_attributes(merged))];
 }
 
 - (NSFontDescriptor *)fontDescriptorWithMatrix:(NSAffineTransform *)matrix
@@ -462,7 +462,7 @@ static NSData *fn_matrix_data(NSAffineTransform *transform)
 
 - (NSArray *)matchingFontDescriptorsWithMandatoryKeys:(NSSet *)mandatoryKeys
 {
-	NSArray *matches = CTFontDescriptorCreateMatchingFontDescriptors(_descriptor, mandatoryKeys);
+	NSArray *matches = (NSArray *)CTFontDescriptorCreateMatchingFontDescriptors(_descriptor, (CFSetRef)mandatoryKeys);
 	NSMutableArray *wrapped;
 	NSUInteger i;
 

@@ -226,7 +226,7 @@ static NSFont *apk_ui_font(CTFontUIFontType type, CGFloat size)
 	}
 	/* A NAME THE REGISTRY CANNOT RESOLVE ANSWERS nil, which is `CTFontCreateWithName`'s own NULL — Apple's
 	 * "or NULL if no font is found" reaching the AppKit spelling unchanged. */
-	return apk_font_take(CTFontCreateWithName(fontName, fontSize, NULL));
+	return apk_font_take(CTFontCreateWithName((CFStringRef)fontName, fontSize, NULL));
 }
 
 + (NSFont *)fontWithDescriptor:(NSFontDescriptor *)fontDescriptor size:(CGFloat)fontSize

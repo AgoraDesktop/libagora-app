@@ -140,7 +140,11 @@ static void apk_apply_colour(NSDictionary *attrs, CGContextRef ctx)
  * scoped by a save/restore, so **a drawing door does not leak its colour into the caller's graphics state**. */
 static void apk_draw_line(NSAttributedString *ctString, NSDictionary *effective, CGContextRef ctx, NSPoint point)
 {
-	CTLineRef line = CTLineCreateWithAttributedString(ctString);
+	/* **THE CASTS BELOW ARE THE BRIDGE, WRITTEN OUT.** Every argument here is an AppKit object handed to a Core
+	 * Text door that wants the Core Foundation spelling of the same pointer — one object, two types, and toll-free
+	 * at run time. The compiler treats the two pointer types as distinct, so the crossing is spelled rather than
+	 * implied; this is the same boundary the header comment above describes. */
+	CTLineRef line = CTLineCreateWithAttributedString((CFAttributedStringRef)ctString);
 
 	if (line == NULL) {
 		return;
@@ -155,7 +159,7 @@ static void apk_draw_line(NSAttributedString *ctString, NSDictionary *effective,
 
 static NSSize apk_size_of_line(NSAttributedString *ctString)
 {
-	CTLineRef line = CTLineCreateWithAttributedString(ctString);
+	CTLineRef line = CTLineCreateWithAttributedString((CFAttributedStringRef)ctString);
 	CGFloat ascent = 0.0, descent = 0.0, leading = 0.0;
 	double width;
 	NSSize size = { 0.0, 0.0 };
@@ -174,7 +178,7 @@ static NSSize apk_size_of_line(NSAttributedString *ctString)
 
 static void apk_draw_in_rect(NSAttributedString *ctString, NSDictionary *effective, CGContextRef ctx, NSRect rect)
 {
-	CTFramesetterRef framesetter = CTFramesetterCreateWithAttributedString(ctString);
+	CTFramesetterRef framesetter = CTFramesetterCreateWithAttributedString((CFAttributedStringRef)ctString);
 	CGPathRef path;
 	CTFrameRef frame;
 

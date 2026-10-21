@@ -53,6 +53,14 @@
  * registry category below, and the reason the application can wait on the connection it does not own. */
 @interface NSWindow (APPKITApplicationSeam)
 + (BOOL)cg_waitForEventInMilliseconds:(long)ms;
+/* ⚠⚠ AND THE CONNECTION ITSELF (2026-10-21), which `-cg_updateMenuBarWindow` below asks for. NSWindow.m declared
+ * this door on the class body IN ITS OWN TRANSLATION UNIT, so every caller in another file was answered `id` for
+ * it and `AGWindowServer *server = [NSWindow cg_sharedServer]` was diagnosed as initializing a pointer with `id`
+ * — an error that reads as a mistake in this file. It is not: it is the missing declaration. The door belongs
+ * HERE, beside the one above, for the same reason: this file is a caller, and this tree declares a private
+ * contract crossing a file boundary where it is CALLED. NSWindow keeps the ownership, and the note over its
+ * implementation is still the explanation of why the connection is its to hand out. */
++ (AGWindowServer *)cg_sharedServer;
 @end
 
 /* AND THE EVENT SEAM, WHICH IS THE SAME SHAPE FOR THE SAME REASON: NSEvent owns a monitor registry and a
