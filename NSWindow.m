@@ -199,6 +199,9 @@
 /* THE APPLICATION'S TWO ANSWERS, kept in step with this window's own `_key`/`_main` flags by the doors below. */
 - (void)cg_setKeyWindow:(NSWindow *)aWindow;
 - (void)cg_setMainWindow:(NSWindow *)aWindow;
+/* **AND THE ONE THAT IS NOT ABOUT THIS WINDOW AT ALL.** A shell's reopen ask arrives at a window because window ids
+ * are the only names the two sides share, but the answer belongs to the application. */
+- (BOOL)cg_handleReopen;
 @end
 
 /* THE TITLE BAR'S HEIGHT, AND IT IS OURS. A titled window's FRAME is its content plus its chrome, and this
@@ -3442,6 +3445,12 @@ static CGFloat fn_clamp_axis(CGFloat v, CGFloat lo, CGFloat hi)
 		break;
 	case AGEventClose:
 		_cg_closeRequested = YES;
+		break;
+	case AGEventReopen:
+		/* **A DOCK CLICK WITH NOTHING TO RAISE, ASKED OF THIS WINDOW BECAUSE A WINDOW IS THE ADDRESS.** The answer
+		 * is the application's — its delegate's, and ultimately its own — so the window hands it straight on and
+		 * does nothing else: this window may not even be the one that opens. */
+		[[NSApplication sharedApplication] cg_handleReopen];
 		break;
 	case AGEventKey:
 	case AGEventPointerButton:

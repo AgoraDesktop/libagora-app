@@ -27,6 +27,11 @@
 #import <Foundation/NSNotification.h>
 #import <Foundation/NSNumber.h>
 
+/* **AND `NSWindow.h` FOR THE TWO LEVELS THAT TELL AN APPLICATION'S FURNITURE FROM ITS WINDOWS.** A row in the
+ * snapshot carries a level, and the difference between Workspace's desktop and a Workspace file window is exactly
+ * that number — see `cg_applyWindowList:`'s note on the ordinary band. */
+#import <AppKit/NSWindow.h>
+
 #import <LaunchServices/LaunchServices.h>
 #import <IconServices/IconServices.h>
 
@@ -141,7 +146,14 @@ static void fn_window_list(void *context, const AGWindowInfo *rows, int count)
 {
 	NSMutableDictionary *byIdentifier = [NSMutableDictionary dictionary];
 	NSMutableDictionary *windowsByIdentifier = [NSMutableDictionary dictionary];
-	NSRunningApplication *active = nil;
+	/* **AND THE ONES A PERSON CAN WORK IN, WHICH IS NOT THE SAME SET.** An application's furniture — a desktop, a
+	 * menu bar — are its windows too, and the snapshot says which is which by LEVEL rather than by a flag. The
+	 * ordinary band is `NSNormalWindowLevel` up to (not including) `NSDockWindowLevel`: everything from a plain
+	 * window through panels and floating palettes, and nothing that is a backdrop below them or a bar above them.
+	 * That split is what lets a Dock click raise a file window instead of a desktop, and tells it when there is
+	 * nothing to raise at all. */
+	NSMutableDictionary *ordinaryByIdentifier = [NSMutableDictionary dictionary];
+	NSString *active = nil;	/* the IDENTIFIER of the frontmost row, not the object: it is matched as a name */
 	BOOL activeSeen = NO;
 	int i;
 	NSUInteger j;
@@ -149,6 +161,7 @@ static void fn_window_list(void *context, const AGWindowInfo *rows, int count)
 	for (i = 0; i < count; i++) {
 		NSString *identifier = [NSString stringWithUTF8String:rows[i].app_id];
 		NSMutableArray *windows;
+		BOOL ordinary = (rows[i].level >= NSNormalWindowLevel && rows[i].level < NSDockWindowLevel);
 
 		if ([identifier length] == 0) {
 			continue;	/* a window whose application declared no identifier: nothing to group it under */
@@ -160,6 +173,15 @@ static void fn_window_list(void *context, const AGWindowInfo *rows, int count)
 			[byIdentifier setObject:identifier forKey:identifier];
 		}
 		[windows addObject:[NSNumber numberWithUnsignedInt:rows[i].id]];
+		if (ordinary) {
+			NSMutableArray *raised = [ordinaryByIdentifier objectForKey:identifier];
+
+			if (raised == nil) {
+				raised = [NSMutableArray array];
+				[ordinaryByIdentifier setObject:raised forKey:identifier];
+			}
+			[raised addObject:[NSNumber numberWithUnsignedInt:rows[i].id]];
+		}
 		/* THE LIST RUNS BACK TO FRONT, so the LAST active row is the frontmost window. */
 		if (rows[i].active) {
 			activeSeen = YES;
@@ -222,6 +244,16 @@ static void fn_window_list(void *context, const AGWindowInfo *rows, int count)
 		windows = [windowsByIdentifier objectForKey:identifier];
 		if (![[application cg_windowIDs] isEqualToArray:windows]) {
 			[application cg_setWindowIDs:windows];
+		}
+		{
+			NSArray *ordinary = [ordinaryByIdentifier objectForKey:identifier];
+
+			if (ordinary == nil) {
+				ordinary = [NSArray array];
+			}
+			if (![[application cg_ordinaryWindowIDs] isEqualToArray:ordinary]) {
+				[application cg_setOrdinaryWindowIDs:ordinary];
+			}
 		}
 		isActive = (activeSeen && [active isEqualToString:identifier]);
 		[application cg_setActive:isActive];

@@ -191,6 +191,36 @@ int main(void)
 	check([[[workspace frontmostApplication] bundleIdentifier] isEqualToString:@"io.github.agoradesktop.two"],
 	      "and the survivor is frontmost");
 
+	/* **THE ORDINARY BAND, WHICH IS THE DIFFERENCE BETWEEN A WINDOW AND FURNITURE.** A row's LEVEL is what tells a
+	 * desktop from a file window, and it is the whole of what decides whether a Dock click raises something or asks
+	 * the application for a window. Workspace is the case that made this necessary: its desktop is a window, at a
+	 * level below every ordinary one, so a Workspace with no file window is "running with nothing to raise" — and
+	 * that click has to open a window rather than raise the desktop nobody can see. */
+	{
+		AGWindowInfo furniture[2];
+		NSRunningApplication *app;
+
+		memset(furniture, 0, sizeof furniture);
+		snprintf(furniture[0].app_id, sizeof furniture[0].app_id, "io.github.agoradesktop.three");
+		furniture[0].id = 41;
+		furniture[0].level = -2147483627;	/* a desktop: below every ordinary window */
+		furniture[0].visible = 1;
+		[workspace cg_applyWindowList:furniture count:1];
+		app = [[workspace runningApplications] lastObject];
+		check([[app bundleIdentifier] isEqualToString:@"io.github.agoradesktop.three"],
+		      "an application showing only furniture is still a running application");
+		check([[app cg_ordinaryWindowIDs] count] == 0, "and it has no window a click could raise");
+		check([app activateWithOptions:NSApplicationActivateAllWindows],
+		      "so a click asks it to reopen, and that is a click that did something");
+
+		furniture[1] = furniture[0];
+		furniture[1].id = 42;
+		furniture[1].level = 0;	/* a file window */
+		[workspace cg_applyWindowList:furniture count:2];
+		check([[app cg_ordinaryWindowIDs] count] == 1,
+		      "adding an ordinary window gives the click something to raise instead");
+	}
+
 	/* A ROW WITH NO APPLICATION IS NOT AN APPLICATION. */
 	memset(&rows[0], 0, sizeof rows[0]);
 	rows[0].id = 33;

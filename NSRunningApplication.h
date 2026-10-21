@@ -44,6 +44,7 @@ typedef NSUInteger NSApplicationActivationOptions;
 @private
 	NSString *_bundleIdentifier;
 	NSMutableArray *_windowIDs;	/* NSNumber(unsigned int), the windows this application owns */
+	NSMutableArray *_ordinaryWindowIDs;	/* the subset a person can work in — not the desktop, not a bar */
 	BOOL _active;
 	BOOL _terminated;
 	/* Resolved LAZILY and kept, because each of these is a Launch Services query or an icon raster. */
@@ -87,11 +88,14 @@ typedef NSUInteger NSApplicationActivationOptions;
 /* OWED, and nil rather than now: nothing records when a client connected. */
 @property (readonly, copy) NSDate *launchDate;
 
-/* **A CLICK ON A DOCK TILE.** The application's frontmost window is raised in its level AND takes the keyboard —
- * one click, both halves. YES when the application had a window to bring forward; NO when it did not (an
- * application whose windows have all closed, or one that has gone away). The options are accepted and not
- * interpreted: there is one desktop and one focus, so "activate all windows" and "ignore other applications" are
- * statements about a window manager this tree does not have. */
+/* **A CLICK ON A DOCK TILE, WHICH IS ONE OF TWO THINGS.** With windows a person can work in, every one of them is
+ * raised in its level — BACK TO FRONT, the order the window list already holds, so the click brings the application
+ * forward without shuffling its windows. The frontmost also takes the keyboard, which is what makes the application's
+ * menu bar follow. With nothing to raise — an application showing only its furniture, which is Workspace whenever its
+ * desktop is on the screen and no file window is — the application is ASKED to reopen and decides for itself what
+ * that means (`-applicationShouldHandleReopen:hasVisibleWindows:`); Workspace opens a file window. YES when the click
+ * did something, NO when the application has no window at all to address the ask to (it has gone away, or never had
+ * one). `NSApplicationActivateAllWindows` raises all of them; without it only the frontmost is raised. */
 - (BOOL)activateWithOptions:(NSApplicationActivationOptions)options;
 
 /* **NO HIDE/UNHIDE, AND THESE ANSWER NO RATHER THAN PRETENDING.** Hiding is `-[NSApplication hide:]` — local to
@@ -121,6 +125,11 @@ typedef NSUInteger NSApplicationActivationOptions;
 - (id)cg_initWithBundleIdentifier:(NSString *)identifier;
 - (void)cg_setActive:(BOOL)active;
 - (void)cg_setWindowIDs:(NSArray *)windowIDs;
+- (NSArray *)cg_windowIDs;
+/* **AND THE SUBSET A PERSON CAN WORK IN**, which is what a click raises and what "has no window" is measured
+ * against. `NSWorkspace` decides which rows are in it, by level; see `cg_applyWindowList:`. */
+- (void)cg_setOrdinaryWindowIDs:(NSArray *)windowIDs;
+- (NSArray *)cg_ordinaryWindowIDs;
 - (BOOL)cg_terminatedFlag;
 - (void)cg_setTerminated:(BOOL)terminated;
 @end

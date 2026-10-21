@@ -1378,11 +1378,27 @@ static void agora_window_pointer_global(void *data, struct agora_window *window,
 	w->has_global = 1;
 }
 
+/* **THE SHELL ASKING FOR A WINDOW, WHICH IS THE ANSWER A DOCK CLICK NEEDS WHEN THERE IS NOTHING TO RAISE.** It is
+ * delivered as an event rather than acted on here because what opens is the application's decision: the AppKit
+ * turns it into its delegate's `-applicationShouldHandleReopen:hasVisibleWindows:` and nothing in this seam knows
+ * what a window means to the program that owns it. */
+static void agora_window_reopen(void *data, struct agora_window *window)
+{
+	AGWindow *w = data;
+	AGEvent event;
+
+	(void)window;
+	memset(&event, 0, sizeof event);
+	event.type = AGEventReopen;
+	ag_window_deliver(w, &event);
+}
+
 static const struct agora_window_listener agora_window_listener = {
-	/* IN THE PROTOCOL'S OWN ORDER: `close`, `work_area_changed`, `pointer_global`. */
+	/* IN THE PROTOCOL'S OWN ORDER: `close`, `work_area_changed`, `pointer_global`, `reopen`. */
 	agora_window_close,
 	agora_window_work_area_changed,
 	agora_window_pointer_global,
+	agora_window_reopen,
 };
 
 /* ============================================================================================ *
@@ -1483,6 +1499,21 @@ void AGWindowRequestClose(AGWindowServer *server, unsigned int id)
 	wl_display_flush(server->display);
 }
 
+/* **THE REOPEN DOOR IS VERSION 5, AND A SHELL AT 4 SIMPLY NEVER HEARS IT.** `activate_window` and `close_window`
+ * moved a window that already existed; this one asks an application to make another, which is `reopen_window` and
+ * nothing older. */
+void AGWindowReopen(AGWindowServer *server, unsigned int id)
+{
+	if (server == NULL || server->shell == NULL) {
+		return;
+	}
+	if (wl_proxy_get_version((struct wl_proxy *)server->shell) < 5) {
+		return;
+	}
+	agora_shell_reopen_window(server->shell, id);
+	wl_display_flush(server->display);
+}
+
 static void registry_global(void *data, struct wl_registry *registry, uint32_t name, const char *interface,
 			    uint32_t version)
 {
@@ -1530,10 +1561,11 @@ static void registry_global(void *data, struct wl_registry *registry, uint32_t n
 		 * `AGWindowServerWorkArea` and through its frame being recorded rather than obeyed.
 		 *
 		 * **ASKED FOR AT THE HIGHEST VERSION THIS SEAM UNDERSTANDS, CAPPED BY THE COMPOSITOR'S.** The shell's own
-		 * requests matter now: `get_window_list`, `activate_window` and `close_window` arrived in 3, and a window
-		 * made from a shell bound at 2 is a version 2 window whose `set_reserved` is the last thing it has. */
+		 * requests matter now: `get_window_list`, `activate_window` and `close_window` arrived in 3, `set_activatable`
+		 * rides shell 4, and `reopen_window` arrived in 5 — and a window made from a shell bound at 2 is a version 2
+		 * window whose `set_reserved` is the last thing it has. */
 		server->shell = wl_registry_bind(registry, name, &agora_shell_interface,
-						version < 4 ? version : 4);
+						version < 5 ? version : 5);
 	}
 }
 

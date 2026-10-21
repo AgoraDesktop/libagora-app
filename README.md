@@ -1409,15 +1409,28 @@ snapshots into the three transitions and updates the objects. Two consequences w
 pid. And `-terminate` is a request: every window gets `agora_window.close`, the application decides, and
 `-forceTerminate` answers NO because a `SIGKILL` needs the session too. `-launchDate` is nil for the same reason.
 
+**AND A CLICK ON A DOCK TILE IS ONE OF TWO THINGS, SPLIT BY LEVEL.** A window-list row carries its level, and
+`-cg_applyWindowList:count:` keeps two sets per application: every window, and the **ordinary** ones — from
+`NSNormalWindowLevel` up to (not including) `NSDockWindowLevel`. The ordinary set is what a person can work in;
+the rest is furniture (a desktop, a menu bar, a status item), which is why a Workspace showing nothing but its
+desktop is running and still has nothing to raise. `-[NSRunningApplication activateWithOptions:]` therefore either
+raises the ordinary windows — **back to front, the order the list already holds, so a click brings the application
+forward without reversing its windows** — or, when there are none, sends `agora_shell.reopen_window` and lets the
+application answer what "reopen" means. The AppKit puts that answer to the delegate as
+`-applicationShouldHandleReopen:hasVisibleWindows:`, with "visible" measured against the same ordinary band; Work-
+space answers it by opening a file window, which is Finder's answer for the same click.
+
 **AND A BRIDGE BUG FOUND WHILE WIRING IT, NAMED RATHER THAN WORKED AROUND QUIETLY.** Passing an `NSURL` into a Core
 Foundation URL door ABORTS in this tree — `-[NSURL _cfurl]` is compiled with an opaque `struct __CFURL` while Core
 Foundation's call site encodes a complete one, so the runtime refuses the call with "incorrect signature".
 `NSWorkspace` crosses that line through the URL's absolute string (a real bridge the two runtimes agree on, the same
 one `WSItemKind` already relies on), and the fix belongs in `_cfurl`'s declaration.
 
-`tests/workspace_services.m` is the proof — **37 checks** — and it feeds the snapshots in directly, because the diff
+`tests/workspace_services.m` is the proof — **40 checks** — and it feeds the snapshots in directly, because the diff
 is the interesting half and the compositor half is the window-list probe's. A fixture bundle the test writes itself
-proves the identifier → bundle → `CFBundleName` → Icon Services chain, with no display and no application launched.
+proves the identifier → bundle → `CFBundleName` → Icon Services chain, with no display and no application launched;
+a snapshot whose only row is at a desktop level proves the furniture split, and that a click on it asks for a window
+rather than raising one.
 
 ### Still absent, and why
 

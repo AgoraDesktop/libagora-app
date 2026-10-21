@@ -233,23 +233,48 @@ static NSURL *URLForBundleIdentifier(NSString *identifier)
 	return _windowIDs;
 }
 
+- (void)cg_setOrdinaryWindowIDs:(NSArray *)windowIDs
+{
+	NSMutableArray *copy = [windowIDs mutableCopy];
+
+	[_ordinaryWindowIDs release];
+	_ordinaryWindowIDs = copy;
+}
+
+- (NSArray *)cg_ordinaryWindowIDs
+{
+	return _ordinaryWindowIDs;
+}
+
 - (BOOL)activateWithOptions:(NSApplicationActivationOptions)options
 {
-	NSNumber *frontmost;
-	unsigned int windowID;
+	AGWindowServer *server = AGWindowServerShared();
+	NSUInteger i;
 
-	(void)options;
 	if (_terminated || [_windowIDs count] == 0) {
 		return NO;
 	}
-	/* THE LAST WINDOW THE LIST NAMED IS THE FRONTMOST ONE the application owns: the list runs back to front, and
-	 * it is rebuilt on every change, so its order is the stacking order the click will act on. */
-	frontmost = [_windowIDs lastObject];
-	windowID = [frontmost unsignedIntValue];
-	if (windowID == 0) {
-		return NO;
+	if ([_ordinaryWindowIDs count] > 0) {
+		/* **BACK TO FRONT, WHICH IS THE ORDER THE LIST IS ALREADY IN.** Raising each window in turn puts it at the
+		 * front of its level, so raising the BACKMOST first and the frontmost last leaves the application's own
+		 * order exactly as it was and puts the whole of it above everybody else. Doing it the other way round is
+		 * the same set of windows in reverse — the classic reopened-window-stack bug — and the frontmost is the
+		 * one that keeps the keyboard, because it is the one activated last. */
+		NSUInteger first = 0;
+
+		if ((options & NSApplicationActivateAllWindows) == 0) {
+			first = [_ordinaryWindowIDs count] - 1;	/* just the frontmost, which is the last one the list named */
+		}
+		for (i = first; i < [_ordinaryWindowIDs count]; i++) {
+			AGWindowActivate(server, [[_ordinaryWindowIDs objectAtIndex:i] unsignedIntValue]);
+		}
+		return YES;
 	}
-	AGWindowActivate(AGWindowServerShared(), windowID);
+	/* **NOTHING A PERSON CAN WORK IN: ASK THE APPLICATION FOR ONE.** This is the state a Workspace is in whenever its
+	 * desktop is showing and no file window is — its windows are all furniture — and the click still means something
+	 * on the Mac. The address is the frontmost window the application has, because a window id is the only name the
+	 * two sides share; what comes of it is the application's answer, and it need not be that window. */
+	AGWindowReopen(server, [[_windowIDs lastObject] unsignedIntValue]);
 	return YES;
 }
 

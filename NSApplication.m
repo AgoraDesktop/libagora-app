@@ -192,6 +192,13 @@ static void fn_announce_window(NSWindow *w, NSString *name, SEL delegateSelector
 - (NSApplicationDelegateReply)cg_lastOpenOrPrintReply;
 @end
 
+/* **THE QUESTION A DOCK CLICK ASKS WHEN THERE IS NOTHING TO RAISE.** Declared here because the seam that receives
+ * it is a window's event and the answer is the application's: a window is where the ask ARRIVES, not what it is
+ * about. See the implementation's own note for what "visible" means in this tree. */
+@interface NSApplication (APPKITReopen)
+- (BOOL)cg_handleReopen;
+@end
+
 @implementation NSApplication
 
 + (NSApplication *)sharedApplication
@@ -1332,6 +1339,48 @@ static double s_last_report;
 		}
 	}
 	fn_announce(self, NSApplicationDidResignActiveNotification, @selector(applicationDidResignActive:));
+}
+
+/* ============================================================================================
+ * REOPEN: WHAT A DOCK CLICK MEANS WHEN THE APPLICATION HAS NOTHING TO RAISE.
+ *
+ * **THE MAC'S CONTRACT, AND THE ONE PIECE OF IT THAT IS A QUESTION RATHER THAN A VERB.** A click on a running
+ * application's tile activates it; if it has no window a person can work in, the application is ASKED what that
+ * click should do (`-applicationShouldHandleReopen:hasVisibleWindows:`) and decides for itself — Finder opens a
+ * Finder window, a document application opens an untitled document, a paletted utility does nothing. This tree has
+ * the same split: the window server forwards the ask to the window's client (see `agora_window.reopen`), the seam
+ * turns it into `AGEventReopen`, and this is where the delegate hears it.
+ *
+ * **"VISIBLE" IS "A WINDOW A PERSON WORKS IN", NOT "ANY WINDOW ON THE GLASS", AND THAT IS A DEVIATION WITH A
+ * CAUSE.** On the Mac the desktop is not a window, so a Finder showing nothing but its desktop honestly answers
+ * NO. Here the desktop IS an `NSWindow` — at a level below every ordinary one — and so is the menu bar, above
+ * them; counting either would answer YES for exactly the state this question exists to catch, and a Workspace with
+ * no file window would never open one. The band is therefore the ordinary levels: from `NSNormalWindowLevel` up to
+ * (not including) `NSDockWindowLevel`, which is where furniture starts.
+ * ============================================================================================ */
+- (BOOL)cg_handleReopen
+{
+	BOOL hasVisibleWindows = NO;
+	NSUInteger i;
+
+	for (i = 0; i < [_windows count]; i++) {
+		NSWindow *w = [_windows objectAtIndex:i];
+		NSInteger level = [w level];
+
+		if ([w isVisible] && level >= NSNormalWindowLevel && level < NSDockWindowLevel) {
+			hasVisibleWindows = YES;
+			break;
+		}
+	}
+	/* **AND A DELEGATE THAT DOES NOT ANSWER GETS THE MAC'S DEFAULT, WHICH IS NO: nothing opens.** The alternative —
+	 * opening something on the application's behalf — would make this class decide what a window is for an
+	 * application it knows nothing about. */
+	if (_delegate != nil &&
+	    [_delegate respondsToSelector:@selector(applicationShouldHandleReopen:hasVisibleWindows:)]) {
+		return [(id <NSApplicationDelegate>)_delegate applicationShouldHandleReopen:self
+								hasVisibleWindows:hasVisibleWindows];
+	}
+	return NO;
 }
 
 - (void)hide:(id)sender

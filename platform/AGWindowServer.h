@@ -62,6 +62,10 @@ typedef enum {
 	AGEventConfigure,
 	/* The compositor asked the window to close (the titlebar's X, or a session shutdown). */
 	AGEventClose,
+	/* **THE SHELL ASKED THIS APPLICATION TO SHOW A WINDOW.** A Dock tile was clicked and the application had no
+	 * window a person could work in, so the question "what does that click mean" is the application's. It arrives
+	 * at the window the ask named, and the answer need not be that window. */
+	AGEventReopen,
 	/* A key changed state. `keycode` is the evdev code, `text` the UTF-8 it produces (empty when none). */
 	AGEventKey,
 	/* The pointer moved inside the window. */
@@ -343,6 +347,11 @@ void AGWindowListSetHandler(AGWindowServer *server, AGWindowListFunction functio
  * refuses stays open, exactly as it does when its close button is pressed. An id nothing answers is ignored. */
 void AGWindowActivate(AGWindowServer *server, unsigned int id);
 void AGWindowRequestClose(AGWindowServer *server, unsigned int id);
+/* **AND THE ONE THAT ASKS AN APPLICATION TO SHOW SOMETHING.** `AGWindowActivate` moves a window; this asks the
+ * application behind one to reopen, which is what a tile click means when there is nothing to raise. The id is an
+ * ADDRESS rather than a subject — the application decides what opens — and a compositor that does not speak
+ * `agora_shell` version 5 never answers, which is the silence every older door has. */
+void AGWindowReopen(AGWindowServer *server, unsigned int id);
 
 /* WHETHER THIS APPLICATION HAS THE KEYBOARD, and a door to be told when that changes. Zero when the connection is
  * NULL, which is the honest answer for "no server, no focus". */
