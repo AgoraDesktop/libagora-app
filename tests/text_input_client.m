@@ -171,13 +171,21 @@ int main(void)
 	 * against is the CHARACTER's rect, and in a view with no window that rect is DEGENERATE — MEASURED at 1 point wide —
 	 * so an absolute fraction here would be measuring the degenerate geometry rather than the arithmetic. What is checked
 	 * is what the door promises whatever the box: a fraction in [0,1], the SAME answer for the same point twice, and a
-	 * NON-DECREASING one as the point moves right across the line. */
+	 * NON-DECREASING one as the point moves right **within one glyph**.
+	 *
+	 * **THE SWEEP IS ONE CHARACTER BECAUSE THE FRACTION IS PER GLYPH AND RESETS AT A BOUNDARY.** With four characters
+	 * the old sweep saw 0, 0, 1, 0, 1 — the reset from the end of `c` to the start of `d` — and called it a regression.
+	 * That reset is the door's contract, not a defect; a caller placing a candidate window asks within one glyph. The
+	 * Inter face used to make the test pass by accident because its boxes were degenerate enough to clamp at 1 for
+	 * every point after the first. A one-glyph document asks the question the door actually answers. */
 	{
 		CGFloat previous = -1.0;
 		BOOL inRange = YES;
 		BOOL monotone = YES;
 		int step;
 
+		[view setString:@"a"];
+		[[view layoutManager] ensureLayoutForTextContainer:[view textContainer]];
 		for (step = 0; step < 20; step++) {
 			NSPoint at = NSMakePoint((CGFloat)step * 10.0, 5.0);
 			CGFloat f = [client fractionOfDistanceThroughGlyphForPoint:at];
@@ -194,7 +202,7 @@ int main(void)
 			}
 			previous = f;
 		}
-		printf("  (the fraction stayed in [0,1] across the line and never went backwards)\n");
+		printf("  (the fraction stayed in [0,1] within one glyph and never went backwards)\n");
 		check(inRange, "every fraction the door answers is between 0 and 1");
 		check(monotone, "and it is deterministic and non-decreasing as the point moves right");
 	}

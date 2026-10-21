@@ -934,10 +934,15 @@ static NSSize fn_button_image_size(NSSize image, NSSize box, NSImageScaling scal
 	} else if (tsize.width > 0.0 && content.size.height > 0.0) {
 		CGFloat ascent = [font ascender];
 		CGFloat descent = (CGFloat)fabs((double)[font descender]);
-		CGFloat band = ascent + descent;
+		/* **THE BAND IS ROUNDED UP, BECAUSE A FRAME DRAWN INTO A RECT EXACTLY AS TALL AS THE BAND CLIPS ITS LAST
+		 * ROW.** `-sizeWithAttributes:` answers ascent + descent, and `-drawInRect:` builds a frame from that same
+		 * height; a fractional height puts the bottom row half outside the frame, so a face whose band lands on
+		 * 15.6 draws NO ink while one at 15.73 happens to round inside. MEASURED with the bundled Figtree: the button
+		 * title was invisible, and `ceil` — one point at most — draws it without moving the baseline enough to see. */
+		CGFloat band = ceil(ascent + descent);
 
 		baseline = content.origin.y + (content.size.height - band) / 2.0 + descent;
-		[title drawInRect:NSMakeRect(x, baseline - descent, tsize.width, band) withAttributes:attributes];
+		[title drawInRect:NSMakeRect(x, baseline - descent, ceil(tsize.width), band) withAttributes:attributes];
 	}
 }
 

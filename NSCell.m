@@ -1985,10 +1985,12 @@ static const NSSize FN_CELL_NO_OPINION = { 10000.0, 10000.0 };
 		{
 			CGFloat ascent = [font ascender];
 			CGFloat descent = (CGFloat)fabs((double)[font descender]);
-			CGFloat band = ascent + descent;
+			/* **ROUNDED UP FOR THE SAME REASON `NSButtonCell` ROUNDS ITS BAND**: a rect exactly as tall as a
+			 * fractional band clips the last row of the frame it is drawn into. See that file for the measurement. */
+			CGFloat band = ceil(ascent + descent);
 			CGFloat baseline = rect.origin.y + (rect.size.height - band) / 2.0 + descent;
 
-			[_title drawInRect:NSMakeRect(x, baseline - descent, text.width, band) withAttributes:attributes];
+			[_title drawInRect:NSMakeRect(x, baseline - descent, ceil(text.width), band) withAttributes:attributes];
 		}
 	}
 }

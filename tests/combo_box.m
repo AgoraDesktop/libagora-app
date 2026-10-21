@@ -311,20 +311,30 @@ int main(void)
 	{
 		NSRect probe = NSMakeRect(0.0, 0.0, 1000.0, (CGFloat)H);
 		NSComboBoxCell *late = [[NSComboBoxCell alloc] initTextCell:@""];
+		NSComboBoxCell *early = [[NSComboBoxCell alloc] initTextCell:@"NSComboBox"];
 		NSSize before;
 		NSSize after;
+		NSSize direct;
 
 		[late setBordered:YES];
 		[late setBezeled:YES];
+		[early setBordered:YES];
+		[early setBezeled:YES];
 		before = [late cellSizeForBounds:probe];
 		[late setStringValue:@"NSComboBox"];
 		after = [late cellSizeForBounds:probe];
-		printf("  (note: a cell made empty measures %.2f, and %.2f once the string arrives)\n",
-		       (double)before.width, (double)after.width);
+		direct = [early cellSizeForBounds:probe];
+		printf("  (note: a cell made empty measures %.2f, %.2f once the string arrives, and %.2f when made "
+		       "with it)\n", (double)before.width, (double)after.width, (double)direct.width);
 		check(after.width > before.width + 50.0,
 		      "a string that arrives AFTER the cell is made is measured too — the control-built path");
-		check(fabs(after.width - 117.78) < 1.0,
+		/* **THE COMPARISON IS AGAINST THE OTHER CELL, NOT A LITERAL.** The literal that used to be here (117.78)
+		 * was the width in ONE face; the claim is that the two construction paths agree, so the second cell IS
+		 * the expectation. MEASURED with Figtree: the late path answered 114.87 and the literal failed by three
+		 * points while the two paths agreed exactly. */
+		check(fabs(after.width - direct.width) < 0.01,
 		      "and it measures the same as a cell that was made with that string, so the two paths agree");
+		[early release];
 		[late release];
 	}
 

@@ -1733,9 +1733,15 @@ static BOOL fn_cell_owns_edge(CGFloat thisWidth, CGFloat otherWidth, BOOL tieGoe
 		for (ci = 0; ci < [cells count]; ci++) {
 			NSTextTableBlock *cell = [cells objectAtIndex:ci];
 			NSRange r = [[ranges objectAtIndex:ci] rangeValue];
-			CGFloat natural = [self cg_naturalWidthOfRange:r font:font]
+			/* **A COLUMN IS A WHOLE POINT WIDE, BECAUSE A LINE THAT EXACTLY FILLS ITS COLUMN IS THE LINE
+			 * THAT BREAKS.** MEASURED with Figtree: the natural width of `aa` is 13.26, the column was set to
+			 * 13.26, and `CTTypesetterSuggestLineBreak` — which asks whether the line fits, not whether it is
+			 * within a rounding error — broke after the first `a`, so every one-character cell became two
+			 * fragments and the second cell landed on the next row. `ceil` gives the line the fraction of a
+			 * point it needs; the table's own width scaling still runs afterwards if the columns overflow. */
+			CGFloat natural = ceil([self cg_naturalWidthOfRange:r font:font]
 					+ [self cg_tableCellInset:cell edge:NSTextBlockMinXEdge]
-					+ [self cg_tableCellInset:cell edge:NSTextBlockMaxXEdge];
+					+ [self cg_tableCellInset:cell edge:NSTextBlockMaxXEdge]);
 			NSInteger span = [cell columnSpan];
 			NSInteger c;
 

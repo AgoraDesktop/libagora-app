@@ -157,8 +157,10 @@ int main(void)
 		[para release];
 	}
 
-	/* 4. **AND THE TAIL INDENT NARROWS THE LINE, SO THE SAME PARAGRAPH WRAPS SOONER.** A right inset of 60 leaves 220
-	 * points instead of 280, so the paragraph takes more lines. */
+	/* 4. **AND THE TAIL INDENT NARROWS THE LINE, SO THE SAME PARAGRAPH WRAPS SOONER.** A right inset of 100 leaves
+	 * 180 points instead of 280. THE INSET IS 100 RATHER THAN 60 BECAUSE 60 LEFT 220, AND THE PARAGRAPH IS 214
+	 * POINTS WIDE IN THE BUNDLED FIGTREE: the old fixture fit by six points and the case became a fact about the
+	 * face rather than about the indent. 180 is below every bundled UI face's width for this string. */
 	{
 		NSMutableParagraphStyle *style = new_style();
 		NSTextContainer *wide = [[NSTextContainer alloc] initWithContainerSize:NSMakeSize(300.0, 400.0)];
@@ -169,10 +171,10 @@ int main(void)
 		[para addLayoutManager:m];
 		[m addTextContainer:wide];
 		plainCount = [m cg_lineFragmentCountForTextContainer:wide];
-		[style setTailIndent:60.0];
+		[style setTailIndent:100.0];
 		[para addAttribute:NSParagraphStyleAttributeName value:style range:NSMakeRange(0, [[para string] length])];
 		insetCount = [m cg_lineFragmentCountForTextContainer:wide];
-		printf("  (note: tail indent 60 — %lu lines, against %lu with none)\n",
+		printf("  (note: tail indent 100 — %lu lines, against %lu with none)\n",
 		       (unsigned long)insetCount, (unsigned long)plainCount);
 		check(insetCount > plainCount, "`-tailIndent:` takes width off the line, so the paragraph wraps into more lines");
 		[style release];

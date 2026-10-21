@@ -562,7 +562,11 @@ static NSColor *fn_item_ink(BOOL enabled, BOOL highlighted)
 		if ([self cg_viewIsHorizontal:controlView]) {
 			CGFloat slack = rect.size.width - text.width;
 
-			width = text.width;
+			/* **THE RECT IS ROUNDED UP, BECAUSE A LINE DRAWN INTO A RECT EXACTLY AS WIDE AS ITS OWN ADVANCE
+			 * CLIPS ITS LAST GLYPH.** MEASURED with Figtree: the menu bar drew `Vie`, `Wind` and `Hel`, each
+			 * losing the last letter, while the item's own padding sat unused on both sides. The same rounding
+			 * the band needed vertically applies here horizontally; the padding is wider than the point. */
+			width = ceil(text.width);
 			left = rect.origin.x + ((slack > 0.0) ? slack / 2.0 : 0.0);
 		} else {
 			/* **A DROPDOWN'S TITLE STARTS AT THE GUTTER, NOT AT THE CELL'S EDGE.** The checkmark's column is
@@ -601,7 +605,9 @@ static NSColor *fn_item_ink(BOOL enabled, BOOL highlighted)
 		 * frame from its rect's top downward, so the rect handed over is exactly that band. */
 		CGFloat ascent = [font ascender];
 		CGFloat descent = (CGFloat)fabs((double)[font descender]);
-		CGFloat band = ascent + descent;
+		/* **ROUNDED UP FOR THE SAME REASON THE CELLS ROUND THEIR BAND**: a rect exactly as tall as a
+		 * fractional band clips the last row of the frame it is drawn into. See `NSButtonCell.m`. */
+		CGFloat band = ceil(ascent + descent);
 		CGFloat baseline = rect.origin.y + (rect.size.height - band) / 2.0 + descent;
 
 		[title drawInRect:NSMakeRect(left, baseline - descent, width, band) withAttributes:attributes];
@@ -642,10 +648,12 @@ static NSColor *fn_item_ink(BOOL enabled, BOOL highlighted)
 	{
 		CGFloat ascent = [font ascender];
 		CGFloat descent = (CGFloat)fabs((double)[font descender]);
-		CGFloat band = ascent + descent;
+		/* **ROUNDED UP FOR THE SAME REASON THE CELLS ROUND THEIR BAND**: a rect exactly as tall as a
+		 * fractional band clips the last row of the frame it is drawn into. See `NSButtonCell.m`. */
+		CGFloat band = ceil(ascent + descent);
 		CGFloat baseline = cellFrame.origin.y + (cellFrame.size.height - band) / 2.0 + descent;
 
-		[key drawInRect:NSMakeRect(x, baseline - descent, text.width, band) withAttributes:attributes];
+		[key drawInRect:NSMakeRect(x, baseline - descent, ceil(text.width), band) withAttributes:attributes];
 	}
 }
 
