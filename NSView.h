@@ -623,7 +623,7 @@ extern const CGFloat NSViewNoInstrinsicMetric;
  * globally, and the check that demanded those rows be flipped said so in as many words. Apple's 10.6 NSView.h
  * declares all seven, so they were always owed HERE, on the class whose rows they are. The signatures are
  * Apple's, including the ones that differ from the window's (`at:(NSPoint)viewLocation`). */
-- (nullable NSData *)dataWithEPSInsideRect:(NSRect)rect;	/* needs a PDF/EPS producer: this tree's CG has none */
+- (nullable NSData *)dataWithEPSInsideRect:(NSRect)rect;	/* an EPS page from the view; see CGEPSContext.h for the subset */
 - (nullable NSData *)dataWithPDFInsideRect:(NSRect)rect;	/* a CGPDFContext page; see the .m for the frame */
 - (void)print:(nullable id)sender;			/* needs the printing system (NSPrintOperation) */
 

@@ -695,6 +695,13 @@ target_link_libraries(pdf_app PRIVATE App)
 
 add_test(NAME appkit-pdf COMMAND pdf_app)
 set_tests_properties(appkit-pdf PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
+# **EPS THROUGH APPKIT.** `-dataWithEPSInsideRect:` and `-writeEPSInsideRect:toPasteboard:` drive the EPS
+# writer; Ghostscript reads the result when the host has it. The structural checks do not need it.
+add_executable(eps_app eps_app.m)
+target_link_libraries(eps_app PRIVATE App)
+
+add_test(NAME appkit-eps COMMAND eps_app)
+set_tests_properties(appkit-eps PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
 
 # The package form of the RTF document: TXT.rtf plus one file per attachment, and the reference between them.
 add_executable(text_rtfd text_rtfd.m)

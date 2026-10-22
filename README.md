@@ -1442,6 +1442,14 @@ ordinary `-displayRectIgnoringOpacity:context:` walk, so a view's own `-drawRect
 reach the page without a second drawing path; `-writePDFInsideRect:toPasteboard:` puts those bytes on a pasteboard as
 `NSPDFPboardType`; and `NSPDFImageRep` parses them back with `CGPDFDocument`, counts the pages and draws one.
 
+**THE SAME WALK WRITES EPS.** `-dataWithEPSInsideRect:` opens `CGEPSContext` (the drawing library's EPS counterpart,
+over the same `CGContext` seam), sets the page up with the same translate-and-mirror transform the PDF door uses, and
+lets the ordinary `-displayRect:` walk draw. `-writeEPSInsideRect:toPasteboard:` puts the bytes on a pasteboard as
+`NSPostScriptPboardType`, and `NSWindow -dataWithEPSInsideRect:` delegates to the content view exactly as its PDF twin
+does. THE SUBSET IS THE DRAWING LIBRARY'S, stated there: paths, clips, dashes, flat colours, text outlines, opaque
+images and shadings; alpha, blend modes, groups, soft masks, blurred shadows and tiling patterns refuse by name.
+`NSEPSImageRep` and `CGPSConverter` remain absent: both need a PostScript interpreter, which this tree does not have.
+
 **THE REP DRAWS VECTOR, AND THAT IS THE POINT OF KEEPING A PDF.** `-drawInRect:` maps the current page's crop box with
 `CGPDFPageGetDrawingTransform` and calls `CGContextDrawPDFPage`, at whatever scale the destination asks for — the
 renderer that landed in `libagora-drawing`. `-CGImage` is the RENDERED FALLBACK the base class's single-image seam

@@ -839,7 +839,7 @@ typedef NSUInteger NSWindowSharingType;
  * default button cell and the toolbar's customization palette — and each door below names the one it needs. A toolbar
  * and a drag session are no longer on that list: `-setToolbar:` attaches one (`tests/toolbar.m`) and
  * `-dragImage:...` forwards to the content view's session (`tests/drag_session.m`, `tests/drag_seam.m`). */
-- (nullable NSData *)dataWithEPSInsideRect:(NSRect)rect;	/* needs a PDF/EPS producer: this tree's CG has none */
+- (nullable NSData *)dataWithEPSInsideRect:(NSRect)rect;	/* an EPS page from the view; see CGEPSContext.h for the subset */
 - (nullable NSData *)dataWithPDFInsideRect:(NSRect)rect;	/* the content view's PDF page */
 - (void)print:(nullable id)sender;			/* needs the printing system (NSPrintOperation) */
 - (void)dragImage:(nullable NSImage *)anImage		/* forwards to the content view's drag session */

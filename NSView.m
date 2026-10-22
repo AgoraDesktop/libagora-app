@@ -31,6 +31,7 @@
 #import <AppKit/NSLayoutAnchor_internal.h>
 #include <CoreGraphics/CGDataConsumer.h>
 #include <CoreGraphics/CGPDFContext.h>
+#include <CoreGraphics/CGEPSContext.h>
 #include <Foundation/NSData.h>
 #include <stdio.h>
 #include <string.h>
@@ -1118,8 +1119,18 @@ static NSString * const AGCoderConstraintsKey = @"constraints";
 
 - (void)writeEPSInsideRect:(NSRect)rect toPasteboard:(NSPasteboard *)pasteboard
 {
-	(void)rect; (void)pasteboard;
-	fn_refuse_window("-writeEPSInsideRect:toPasteboard:", "a PDF/EPS producer, which this tree's CoreGraphics has not got");
+	NSData *data;
+
+	if (pasteboard == nil) {
+		fn_refuse_window("-writeEPSInsideRect:toPasteboard:", "a pasteboard");
+		return;
+	}
+	data = [self dataWithEPSInsideRect:rect];
+	if (data == nil) {
+		return;
+	}
+	[pasteboard declareTypes:[NSArray arrayWithObject:NSPostScriptPboardType] owner:nil];
+	[pasteboard setData:data forType:NSPostScriptPboardType];
 }
 
 - (void)writePDFInsideRect:(NSRect)rect toPasteboard:(NSPasteboard *)pasteboard
@@ -1566,9 +1577,52 @@ NSString *NSDefinitionPresentationTypeOverlay = @"Overlay";
 
 - (nullable NSData *)dataWithEPSInsideRect:(NSRect)rect
 {
-	(void)rect;
-	fn_refuse_window("-dataWithEPSInsideRect:", "a PDF/EPS producer, which this tree's CoreGraphics has not got");
-	return nil;
+	CFMutableDataRef eps;
+	CGDataConsumerRef consumer;
+	CGContextRef cg;
+	NSGraphicsContext *context;
+	NSData *data;
+	CGRect page;
+
+	if (rect.size.width <= 0.0 || rect.size.height <= 0.0) {
+		fn_refuse_window("-dataWithEPSInsideRect:", "a rectangle with a positive width and height");
+		return nil;
+	}
+	eps = CFDataCreateMutable(kCFAllocatorDefault, 0);
+	if (eps == NULL) {
+		return nil;
+	}
+	consumer = CGDataConsumerCreateWithCFData(eps);
+	if (consumer == NULL) {
+		CFRelease(eps);
+		return nil;
+	}
+	page = CGRectMake(0.0, 0.0, rect.size.width, rect.size.height);
+	cg = CGEPSContextCreate(consumer, &page, NULL);
+	CGDataConsumerRelease(consumer);
+	if (cg == NULL) {
+		CFRelease(eps);
+		return nil;
+	}
+	context = [NSGraphicsContext graphicsContextWithCGContext:cg flipped:YES];
+	if (context == nil) {
+		CGContextRelease(cg);
+		CFRelease(eps);
+		return nil;
+	}
+	CGEPSContextBeginPage(cg, NULL);
+	/* THE SAME PAGE SET-UP AS THE PDF DOOR: the requested rectangle is translated to the EPS origin and then
+	 * mirrored, because a view draws y-down and PostScript's user space is y-up. */
+	CGContextTranslateCTM(cg, -rect.origin.x, -rect.origin.y);
+	CGContextTranslateCTM(cg, 0.0, rect.size.height);
+	CGContextScaleCTM(cg, 1.0, -1.0);
+	[self displayRectIgnoringOpacity:rect context:context];
+	CGEPSContextEndPage(cg);
+	CGEPSContextClose(cg);
+	data = [NSData dataWithBytes:CFDataGetBytePtr(eps) length:(NSUInteger)CFDataGetLength(eps)];
+	CGContextRelease(cg);
+	CFRelease(eps);
+	return data;
 }
 
 - (nullable NSData *)dataWithPDFInsideRect:(NSRect)rect

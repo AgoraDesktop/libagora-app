@@ -4769,9 +4769,13 @@ static NSUInteger fn_edge_index(NSRectEdge edge)
 
 - (nullable NSData *)dataWithEPSInsideRect:(NSRect)rect
 {
-	(void)rect;
-	fn_refuse_window("-dataWithEPSInsideRect:", "a PDF/EPS producer, which this tree's CoreGraphics has not got");
-	return nil;
+	NSView *content = [self contentView];
+
+	if (content == nil) {
+		fn_refuse_window("-dataWithEPSInsideRect:", "a content view to draw");
+		return nil;
+	}
+	return [content dataWithEPSInsideRect:[content convertRect:rect fromView:nil]];
 }
 
 - (nullable NSData *)dataWithPDFInsideRect:(NSRect)rect
