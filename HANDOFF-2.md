@@ -8,6 +8,9 @@ handoff is still worth reading; nothing in it was wrong, and §2's instrument ru
 *State at this handover: **18 commits**, tree clean, **132 tests passing**, `api-ledger: 355 metrics hold (111 classes,
 3096 selectors of 3835, 28 protocols, 86 functions)`. 101 files changed, +16,946/−140.*
 
+*State after the session that picked this file up (§8): **19 commits**, tree clean, **133 tests passing**, `api-ledger: 357
+metrics hold (113 classes, 3156 selectors of 3895, 29 protocols, 86 functions)`.*
+
 ---
 
 ## 1. What this session did
@@ -32,6 +35,7 @@ handoff is still worth reading; nothing in it was wrong, and §2's instrument ru
 | `cf133d3` | **`NSTabView`/`NSTabViewItem`** and `NSTabViewDelegate` — the first protocol in this run the tree actually SENDS. |
 | `87465bf` | **The animation family** — `NSAnimation`, `NSViewAnimation`, `NSAnimationContext`, `NSAnimationDelegate`. |
 | `a23a9b1` | **`NSLevelIndicator`/Cell** — the value that becomes a colour. |
+| `e2e3e52` | **`NSDatePicker`/Cell** and `NSDatePickerCellDelegate` — a formatted date, the subfield a step applies to, the veto; and the stepper's arrows, which pointed inward (§8). |
 
 Plus, in the workspace: the gitlink advanced after each of those.
 
@@ -58,21 +62,21 @@ The same discovery retired a misreading: "the largest remaining class is `NSFile
 ## 3. Current measured state
 
 ```
-classes   111 of 168   (66%)    57 missing      (one of them Foundation's — see §2)
-selectors 3096 of 3835 (81%)   739 missing     72 of 109 classes at COMPLETE coverage
-protocols  28 of  56   (50%)    28 missing
+classes   113 of 168   (67%)    55 missing      (one of them Foundation's — see §2)
+selectors 3156 of 3895 (81%)   739 missing     74 of 113 classes at COMPLETE coverage
+protocols  29 of  56   (52%)    27 missing
 functions  86 of  86  (100%)     0 missing      10 refuse by name
-methods  3523 declared, 4 with no body (0.1%)
+methods  3596 declared, 4 with no body (0.1%)
 
 text system:  NSLayoutManager 136/136 (COMPLETE) · NSText 39/39 (COMPLETE) · NSTextView 60/186 ·
               NSTextStorage 13/25 · NSTextContainer 17/17 · NSRulerView 32/32 · NSRulerMarker 19/19
 
-suites: 132 tests, ~60 s;  censuses: api-10.6 (355 metrics), refusal (140), owed (19)
+suites: 133 tests, ~60 s;  censuses: api-10.6 (357 metrics), refusal (140), owed (19)
 ```
 
-The honest reading: **the manager and the text system's geometry are finished; the remaining 57 classes are the peripheries**
+The honest reading: **the manager and the text system's geometry are finished; the remaining 55 classes are the peripheries**
 — the document and controller family, the panels (open/save, colour, font, print), the printing objects, the still-missing
-controls (`NSDatePicker`, `NSMatrix`, `NSCollectionView`, `NSImageView`), the speech/sound/movie machinery, OpenGL, QuickDraw,
+controls (`NSMatrix`, `NSCollectionView`, `NSImageView`), the speech/sound/movie machinery, OpenGL, QuickDraw,
 and the three typesetter classes (`NSTypesetter`, `NSATSTypesetter`, `NSSimpleHorizontalTypesetter`, `NSGlyphGenerator`), which
 Core Text replaces here.
 
@@ -126,6 +130,27 @@ Core Text replaces here.
 * **A screen exists headlessly with `-depth` 0** (no output), so `NSScreen -colorSpace` answers nil; the probe asserts the
   CONTRACT (nil when the depth names no space) rather than a constant.
 
+**A NON-ASCII LITERAL IN THIS TREE IS A SEQUENCE OF BYTES, NOT A CHARACTER.** `@"\u2013"` has `-length` 3, its
+`-characterAtIndex:` values are `0x00e2`, `0x0080`, `0x0093`, and `-rangeOfString:` cannot find it in a string built from the
+same literal. MEASURED while writing the date picker's range separator, which is ASCII now. Drawing a non-ASCII glyph works
+(the star in `NSLevelIndicator`), so the gap is in the string's character view rather than in its bytes; until it is fixed,
+compare ASCII.
+
+**A PATTERN'S FIELDS NEED NOT BE ADJACENT.** The day period is not beside the hour in "h:mm:ss a", so the date picker's
+first merge rule ("a repeated element extends the previous field") counted SEVEN subfields for a six-field date. The fix is
+to attach the day period to the hour by ELEMENT, wherever the locale put it. A probe that only printed the text would never
+have seen it; the instrument door that answered the count did.
+
+**A CHIP'S CENTRE IS THE GLYPH, NOT THE CHIP.** The month grid's selected day is a filled accent circle with a white number
+on it, so sampling the cell's centre read the number's antialiasing — the segmented control's plate, one slice later. The
+check counts the accent pixels in the CELL, which is a region assertion, and the neighbour's zero.
+
+**AND THE SLICE FOUND A SIBLING'S PICTURE BUG, WHICH IS THE POINT OF §4's OWN CLASS OF BUG.** `NSStepperCell` chose its
+arrow bands correctly and then drew each triangle's apex at `NSMaxY` regardless of the flip, so the TOP arrow pointed DOWN
+and the bottom one pointed UP — both inward — while every press assertion passed, because a press reads a band rather than a
+triangle. MEASURED by rendering 40 rows and counting ink: the top half's widest row was its top one. The fix takes the flip
+in both the band and the apex, and the stepper's probe now reads the rendered rows (apex 2, base 4).
+
 **And one environmental lesson worth its own line:** mid-slice, six unrelated tests failed — and they failed with the slice
 STASHED too, because a concurrent session was rebuilding `build-prefix` while the suite ran. **A red suite is evidence only
 once you know which libraries the binaries loaded.**
@@ -136,14 +161,14 @@ once you know which libraries the binaries loaded.**
 
 Ranked by reachable surface per unit of work.
 
-### 5.1 `NSDatePicker` + `NSDatePickerCell` — 60 selectors
+### 5.1 `NSDatePicker` + `NSDatePickerCell` — LANDED, see §8
 
-The biggest remaining control, and its substrate is all here — MEASURED: `libagora-base` has `NSCalendar`, `NSDateFormatter`,
-`NSISO8601DateFormatter` and `NSLocale`, so a date field is a text field whose text is a formatted date rather than a new
-subsystem. The slice is the formatting, the three styles (`NSTextFieldAndStepperDatePickerStyle`,
-`NSClockAndCalendarDatePickerStyle`, `NSTextFieldDatePickerStyle`), the calendar's element flags
-(`NSYearMonthDayDatePickerElementFlag` and its family) and the delegate's two questions — which is `NSDatePickerCellDelegate`,
-one of the 28 missing protocols, and a protocol this class would actually SEND.
+*Was: 60 selectors, the biggest remaining control, with `NSCalendar`/`NSDateFormatter`/`NSLocale` already here.*
+
+**Corrected while landing it:** `NSDatePickerCellDelegate` is not "the delegate's two questions" — 10.6 declares ONE optional
+message with TWO in/out parameters, `-datePickerCell:validateProposedDateValue:timeInterval:`, and the cell sends it. The rest
+of the prediction held, including the substrate: the whole class is a text field whose text is the formatter's answer, and the
+three styles are three frames around it.
 
 ### 5.2 `NSCollectionView` + its delegate — 28 selectors + 1 protocol
 
@@ -206,3 +231,51 @@ Unchanged from the first handoff's §6, with one addition and one emphasis:
 * **THE `cg_`-NAMED DOORS ARE THE INSTRUMENT'S, NOT APPLE'S.** `-cg_invalidatedRange`, `-cg_lineHeight`,
   `-cg_offsetForGlyphAtIndex:`, `-cg_levelCell` and the rest exist because a probe needed to read what a delegate was merely
   told. They are documented as such; do not mistake them for the era's API.
+
+---
+
+## 8. The date picker: a formatted date, the run a click selects, and the veto
+
+*Nineteenth commit of the pickup: `NSDatePicker` (30) + `NSDatePickerCell` (30, 2 inherited) + `NSDatePickerCellDelegate` —
+60 selectors, two classes, one protocol. **113 of 168 classes, 29 of 56 protocols.***
+
+**THE TEXT IS THE CELL'S OWN DOORS.** The element flags are a skeleton (`G y MMM d j mm ss z`), the locale turns it into a
+pattern, and one `NSDateFormatter` — given the cell's calendar, locale and time zone — renders it. The probe does not trust
+that sentence: it formats a fixed instant and requires the text to EQUAL a formatter built from the same facts in the test, then
+changes each door. de_DE: day first, "Juni", 24-hour. A +12 zone: 14:35 becomes 02:35 **the next day**, which is the assertion
+that catches a time zone stored and never read. An element flag removes a whole field; the era and zone flags add theirs.
+
+**THE SUBFIELD IS A MEASURED RUN, NOT A SECOND LAYOUT.** The pattern is walked in its own order (`fn_pattern_fields`), each
+field is formatted on its own with the same formatter configuration, and the piece is located in the finished string from the
+last match with a token boundary — so day "6" cannot be found inside year "2026". The rect is the difference of two PREFIX
+WIDTHS of the same attributed string, which is where the glyphs were drawn; the accent overdraw uses the same offset. The
+selected-subfield highlight is ink in `+cg_accentColor` rather than a filled chip, and the header says so (a chip that is only
+drawn when the control is first responder is a state this tier does not model in an offscreen probe).
+
+**STEPPING IS THE CALENDAR'S.** `-dateByAddingUnit:value:toDate:options:` with the selected element's unit; January 31 + one
+month is February 28 because `libagora-base`'s calendar normalizes it, and the probe reads that rather than trusting a formula.
+Typed digits replace the selected field: the buffer resets when the number cannot be a prefix any more (month "1" then "5" is
+May), the day is clamped to the shown month's length, and the year takes four digits. Up/down step, left/right move the
+selection, and the CONTROL compares the date before and after so a selection move redraws without sending the action.
+
+**THE DELEGATE IS SENT, THREE WAYS.** The 10.6 message is one optional method with two in/out parameters. The probe's watcher
+accepts, REPLACES the proposal with one shifted a day (and the cell stores the replacement: February 28 + the delegate's day is
+March 1), and REFUSES with a nil date (the step answers NO and the date does not move). `-setDateValue:` does not ask, which is
+Apple's split between a person's edit and an application's.
+
+**THE THREE STYLES ARE THREE PICTURES, AND THE THIRD IS STATED AS THIS TIER'S READING.** A time-only clock-and-calendar picker
+draws a clock face — ring, twelve ticks, hour/minute/second hands from the date's own components — and a picker with any date
+flag draws the month grid: the calendar's month name and year, the weekday row rotated by `-firstWeekday`, the month's days
+numbered, and the selected day a filled accent chip with the platform's selected-text ink. The probe checks the hour hand right
+at 03:00 and left at 09:00, and counts accent pixels inside June 16's cell and zero inside June 15's, then moves the date and
+requires the chip to move. `-cg_rectForDay:inFrame:` is the one geometry door the drawing calls per day.
+
+**AND THE RANGE MODE IS THE START PLUS A LENGTH.** `NSRangeDateMode` draws `dateValue` and `dateValue + timeInterval` as two
+formatted dates with an ASCII hyphen (see §4's note on non-ASCII literals); the pattern's fields still exist for the keyboard,
+but no run is separately hit-testable, and the header says why rather than answering a zero rect with no reason.
+
+### Where §5 goes next
+
+The ranking in §5 still holds: `NSCollectionView` + its delegate (5.2) is the next reachable slice, then `NSMatrix`/`NSForm`
+(5.3), then the two protocols whose senders exist (5.4). Three more classes left §5's "biggest remaining control" category, and
+the peripheries are what remain.
