@@ -1045,3 +1045,12 @@ target_link_libraries(spelling_underline PRIVATE App)
 
 add_test(NAME appkit-spelling-underline COMMAND spelling_underline)
 set_tests_properties(appkit-spelling-underline PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
+
+# **THE FIND ACTIONS THAT DO NOT NEED A PANEL.** Apple's API splits ten actions into three that want a panel and seven
+# that do not, so a Find menu works with no find UI at all; the test drives those and checks wrapping in both directions,
+# because a finder that stops at the end of the document is the bug users report as "find is broken".
+add_executable(find_actions find_actions.m)
+target_link_libraries(find_actions PRIVATE App)
+
+add_test(NAME appkit-find-actions COMMAND find_actions)
+set_tests_properties(appkit-find-actions PROPERTIES ENVIRONMENT "${_agora_app_test_env}")

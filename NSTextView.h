@@ -118,6 +118,14 @@ NS_ASSUME_NONNULL_BEGIN
 	NSMutableDictionary *_spellingState;
 
 
+	/* ============================================================================================
+	 * THE FIND STATE. The panel is absent, so what a view owns is the SEARCH STRING and the indicator —
+	 * the two things the era's `performFindPanelAction:` actually needed once the panel had handed it over.
+	 * ========================================================================================== */
+	BOOL _usesFindPanel;
+	NSString *_cg_findString;	/* RETAINED: the last string searched for, set by action 7 or by a caller */
+	NSRange _cg_findIndicatorRange;	/* where the find indicator was asked to show */
+	BOOL _cg_findIndicatorActive;	/* YES until the next draw, which is how long the era's flash lasts */
 }
 
 /* ==================================================================================================================
@@ -195,6 +203,43 @@ NS_ASSUME_NONNULL_BEGIN
  * request rather than an automatic one. */
 - (BOOL)isVerticallyResizable;
 - (void)setVerticallyResizable:(BOOL)flag;
+
+
+/* ==================================================================================================================
+ * FINDING — `NSFindPanelAction` and the four doors that reach it.
+ *
+ * **THE PANEL DOES NOT EXIST AND THE ACTIONS STILL DO, WHICH IS THE SPLIT APPLE'S OWN API MAKES.** `-performFindPanelAction:`
+ * takes a sender whose TAG is an `NSFindPanelAction`; a panel is only one of the ten things that tag can mean. The three
+ * that need a panel — show it, replace, replace-all — refuse by name here, and the rest are real: next, previous, select
+ * all, select-all-in-selection, and "set the find string from the selection", which is what a Find menu's first item
+ * does before any panel exists.
+ *
+ * THE VOCABULARY IS DECLARED IN THIS HEADER BECAUSE APPLE DECLARES IT HERE, in `NSTextView.h` — the artefact has no
+ * `NSFindPanel.h` at these pins, which is why a reader looking for one will not find it.
+ * ================================================================================================================ */
+
+enum {
+	NSFindPanelActionShowFindPanel = 1,
+	NSFindPanelActionNext = 2,
+	NSFindPanelActionPrevious = 3,
+	NSFindPanelActionReplaceAll = 4,
+	NSFindPanelActionReplace = 5,
+	NSFindPanelActionReplaceAndFind = 6,
+	NSFindPanelActionSetFindString = 7,
+	NSFindPanelActionReplaceAllInSelection = 8,
+	NSFindPanelActionSelectAll = 9,
+	NSFindPanelActionSelectAllInSelection = 10
+};
+
+- (void)performFindPanelAction:(nullable id)sender;
+
+/* Whether the view prefers a find bar to a find panel. Stored and answered; the BAR is the application's to build. */
+- (BOOL)usesFindPanel;
+- (void)setUsesFindPanel:(BOOL)flag;
+
+/* **THE FLASH IS STATIC HERE AND THAT IS STATED.** Apple's indicator is an animated capsule; this tier draws a yellow
+ * ring for one drawing pass and clears it, so a caller sees the feedback it asked for without an animation engine. */
+- (void)showFindIndicatorForRange:(NSRange)charRange;
 
 @end
 

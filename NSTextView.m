@@ -648,6 +648,7 @@ static void cg_announce(NSText *text, NSString *name, SEL delegateSelector)
 	 * a caller marked through `-setSpellingState:range:` is drawn as the era's red dotted rule, through the manager's
 	 * own underline door — so the geometry comes from the layout and only the DECISION is the view's. */
 	[self cg_drawSpellingUnderlines];
+	[self cg_drawFindIndicator];
 	/* **AND THE MARKED TEXT'S COMPOSITION MARK, WHICH IS THE VIEW'S BECAUSE THE STORE CANNOT CARRY IT.** A one-point rule
 	 * below the baseline of every visual line the marked range covers, clipped to the range the way the selection band is
 	 * — so a composition split across a wrap is underlined on both lines and a trailing space carries nothing. */
@@ -1409,9 +1410,42 @@ static void cg_announce(NSText *text, NSString *name, SEL delegateSelector)
  * it: the interface is here so the call in `-drawRect:` is declared, and the implementation follows immediately. */
 @interface NSTextView (AGSpellingDraw)
 - (void)cg_drawSpellingUnderlines;
+- (void)cg_drawFindIndicator;
 @end
 
+
 @implementation NSTextView (AGSpellingDraw)
+/* **THE FIND INDICATOR IS DRAWN WHERE THE SPELLING MARKS ARE**, because both are the view's marks over the manager's
+ * geometry: the rect comes from the layout manager, so a match split across a wrap is ringed on both lines. It is drawn
+ * for ONE pass — Apple's flash is animated and this tier's is static — and the flag is cleared afterwards so a later
+ * redraw does not leave a yellow ring behind. */
+- (void)cg_drawFindIndicator
+{
+	NSRect rect;
+
+	if (!_cg_findIndicatorActive || _cg_layoutManager == nil || _cg_textStorage == nil) {
+		return;
+	}
+	_cg_findIndicatorActive = NO;
+	{
+		NSRange glyphs = [_cg_layoutManager glyphRangeForCharacterRange:_cg_findIndicatorRange
+					     actualCharacterRange:NULL];
+		NSTextContainer *container = [[_cg_layoutManager textContainers] lastObject];
+
+		if (glyphs.length == 0 || container == nil) {
+			return;
+		}
+		rect = [_cg_layoutManager boundingRectForGlyphRange:glyphs inTextContainer:container];
+	}
+	rect.origin.x += NS_TEXT_INSET;
+	rect.origin.y += NS_TEXT_INSET;
+	rect = NSInsetRect(rect, -2.0, -1.0);
+	[[NSColor colorWithCalibratedRed:1.0 green:0.85 blue:0.15 alpha:0.28] setFill];
+	[[NSBezierPath bezierPathWithRect:rect] fill];
+	[[NSColor colorWithCalibratedRed:0.85 green:0.65 blue:0.05 alpha:1.0] setStroke];
+	[[NSBezierPath bezierPathWithRect:rect] stroke];
+}
+
 /* ==================================================================================================================
  * THE SPELLING UNDERLINES.
  *
@@ -1463,6 +1497,174 @@ static void cg_announce(NSText *text, NSString *name, SEL delegateSelector)
 			       lineFragmentGlyphRange:lineRange
 				       containerOrigin:NSMakePoint(0.0, NS_TEXT_INSET)];
 	}
+}
+
+@end
+
+
+/* ==================================================================================================================
+ * FINDING.
+ *
+ * **THE SEARCH IS A MANUAL SCAN, NOT `-rangeOfString:options:range:`.** This Foundation's `NSString` is a
+ * from-scratch reimplementation and the ranged search doors are exactly the kind of thing it may or may not carry;
+ * a case-insensitive single pass over the characters is a dozen lines, has no dependency on which doors exist, and
+ * makes the wrap-around behaviour explicit rather than inferred from an API's edge cases.
+ *
+ * **NEXT AND PREVIOUS WRAP**, which is what a Find menu does and what the era's panel did before it grew a "wrap"
+ * checkbox: the search starts at the end (or the start) of the current selection and comes back round once.
+ * ================================================================================================================ */
+@implementation NSTextView (AGFind)
+
+/* -1 when there is no match. `backwards` decides the direction; both directions wrap around the whole string once. */
+- (NSInteger)cg_findString:(NSString *)needle from:(NSUInteger)from backwards:(BOOL)backwards
+{
+	NSString *haystack = [self string];
+	NSUInteger n = [haystack length];
+	NSUInteger m = [needle length];
+	NSUInteger i;
+
+	if (m == 0 || n < m) {
+		return -1;
+	}
+	if (backwards) {
+		i = (from > n) ? n : from;
+		while (i > 0) {
+			NSUInteger start = i - 1;
+			NSUInteger k;
+
+			if (start + m > n) {
+				i--;
+				continue;
+			}
+			for (k = 0; k < m; k++) {
+				unichar a = [haystack characterAtIndex:start + k];
+				unichar b = [needle characterAtIndex:k];
+
+				if (a >= 'A' && a <= 'Z') {
+					a = (unichar)(a - 'A' + 'a');
+				}
+				if (b >= 'A' && b <= 'Z') {
+					b = (unichar)(b - 'A' + 'a');
+				}
+				if (a != b) {
+					break;
+				}
+			}
+			if (k == m) {
+				return (NSInteger)start;
+			}
+			i--;
+		}
+		return -1;
+	}
+	for (i = from; i + m <= n; i++) {
+		NSUInteger k;
+
+		for (k = 0; k < m; k++) {
+			unichar a = [haystack characterAtIndex:i + k];
+			unichar b = [needle characterAtIndex:k];
+
+			if (a >= 'A' && a <= 'Z') {
+				a = (unichar)(a - 'A' + 'a');
+			}
+			if (b >= 'A' && b <= 'Z') {
+				b = (unichar)(b - 'A' + 'a');
+			}
+			if (a != b) {
+				break;
+			}
+		}
+		if (k == m) {
+			return (NSInteger)i;
+		}
+	}
+	return -1;
+}
+
+- (BOOL)usesFindPanel
+{
+	return _usesFindPanel;
+}
+
+- (void)setUsesFindPanel:(BOOL)flag
+{
+	_usesFindPanel = flag ? YES : NO;
+}
+
+- (void)performFindPanelAction:(id)sender
+{
+	NSInteger action = 0;
+	NSRange selection = [self selectedRange];
+	NSString *string = [self string];
+
+	if (sender != nil) {
+		if ([sender respondsToSelector:@selector(tag)]) {
+			action = (NSInteger)[sender tag];
+		} else if ([sender respondsToSelector:@selector(integerValue)]) {
+			action = (NSInteger)[sender integerValue];
+		}
+	}
+	switch (action) {
+	case NSFindPanelActionSetFindString:
+		/* THE SELECTION BECOMES THE SEARCH STRING, which is what the menu item of that name does. */
+		if (selection.length > 0) {
+			NSString *found = [string substringWithRange:selection];
+
+			[found retain];
+			[_cg_findString release];
+			_cg_findString = found;
+		}
+		break;
+	case NSFindPanelActionNext:
+	case NSFindPanelActionPrevious:
+	{
+		NSUInteger from = (action == NSFindPanelActionNext)
+			? selection.location + selection.length : selection.location;
+		BOOL backwards = (action == NSFindPanelActionPrevious);
+		NSInteger found;
+
+		if (_cg_findString == nil || [_cg_findString length] == 0) {
+			return;		/* nothing to search for: silence is the era's answer too */
+		}
+		found = [self cg_findString:_cg_findString from:from backwards:backwards];
+		if (found < 0) {
+			/* WRAP: once round, from the other end. */
+			found = [self cg_findString:_cg_findString from:(backwards ? [string length] : 0)
+					  backwards:backwards];
+		}
+		if (found >= 0) {
+			NSRange match = NSMakeRange((NSUInteger)found, [_cg_findString length]);
+
+			[self setSelectedRange:match];
+			[self showFindIndicatorForRange:match];
+			[self scrollRangeToVisible:match];
+		}
+		break;
+	}
+	case NSFindPanelActionSelectAll:
+		[self setSelectedRange:NSMakeRange(0, [string length])];
+		break;
+	case NSFindPanelActionSelectAllInSelection:
+		/* The era's "select all in selection" means the selection itself, since there is no narrower scope here. */
+		break;
+	case NSFindPanelActionShowFindPanel:
+	case NSFindPanelActionReplaceAll:
+	case NSFindPanelActionReplace:
+	case NSFindPanelActionReplaceAndFind:
+	case NSFindPanelActionReplaceAllInSelection:
+		fn_refuse_window("-performFindPanelAction:",
+				 "a find panel (this tier has no find or replace user interface; the Actions that do not need "
+				 "one are real)");
+		break;
+	default:
+		break;
+	}
+}
+
+- (void)showFindIndicatorForRange:(NSRange)charRange
+{
+	_cg_findIndicatorRange = charRange;
+	_cg_findIndicatorActive = (charRange.length > 0) ? YES : NO;
 }
 
 @end
