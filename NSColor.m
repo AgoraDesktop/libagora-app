@@ -15,6 +15,7 @@
  * pipeline — the same reason CoreGraphics' `ContentHeadroom` rows are unimplemented.
  */
 #import <AppKit/NSColor.h>
+#import "AppKitRefusal.h"
 #import <CoreGraphics/CGColor.h>
 #import <CoreGraphics/CGColorSpace.h>
 #import <CoreGraphics/CGContext.h>
@@ -1565,11 +1566,9 @@ static void fn_refuse_catalog(const char *which)
 	return nil;
 }
 
-/* ---- AND THE THREE THAT TAKE A TYPE THIS TREE HAS NOT GOT -------------------------------------- *
- * Two take an `NSColorSpace` and one a `CIColor`, AND BOTH TYPES ARE SPELLED `id` FOR THE OVER-CREDITING
- * RULE this tree states wherever an unshipped class would otherwise be named: the ledger counts a forward
- * declaration as declaring the class, so `@class NSColorSpace;` would credit twenty-eight of that class's
- * rows to this one. Each answers nil with the subsystem it needs. */
+/* ---- THE COLOUR-SPACE DOORS, WHICH ARE REAL, AND THE ONE THAT TAKES CORE IMAGE ------------------- *
+ * `NSColorSpace` is a class in this tier now, so two of the three are conversions through the engine. The third
+ * (`+colorWithCIColor:`) still needs Core Image, which is where the refusal belongs. */
 + (nullable NSColor *)colorWithCIColor:(id)ciColor
 {
 	(void)ciColor;
@@ -1577,26 +1576,109 @@ static void fn_refuse_catalog(const char *which)
 	return nil;
 }
 
-+ (nullable NSColor *)colorWithColorSpace:(id)space
+/* **A COLOUR FROM COMPONENTS IN A NAMED SPACE**, which is the engine's own `CGColorCreate` — the count is the caller's
+ * and the engine validates it against the space's own component count (plus alpha), so a mismatch answers a colour the
+ * engine made or nil if it refused. An empty space or no components is nil rather than a crash. */
++ (nullable NSColor *)colorWithColorSpace:(NSColorSpace *)space
 			       components:(const CGFloat *)components
 				    count:(NSInteger)numberOfComponents
 {
-	(void)space;
-	(void)components;
-	(void)numberOfComponents;
-	fprintf(stderr, "APPKIT-REFUSE: +colorWithColorSpace:components:count: takes an NSColorSpace, a class "
-			"this tier does not ship; the spaces it DOES have are the rgb and gray models its own "
-			"constructors name\n");
-	return nil;
+	CGColorRef cg;
+	NSColor *color;
+
+	if (space == nil || components == NULL || numberOfComponents <= 0 || [space CGColorSpace] == NULL) {
+		return nil;
+	}
+	cg = CGColorCreate([space CGColorSpace], components);
+	if (cg == NULL) {
+		return nil;
+	}
+	color = [self colorWithCGColor:cg];
+	CGColorRelease(cg);
+	return color;
 }
 
-- (nullable NSColor *)colorUsingColorSpace:(id)space
+/* **THE CONVERSION THIS TIER CAN HONESTLY DO, AND NO MORE.** Apple's door hands the problem to ColorSync; this tier has no
+ * colour management, so what it does is per-model arithmetic and it says so: a colour whose model already MATCHES the
+ * target's is RELABELLED — the numbers are unchanged and the result is in the space asked for, which is what "no conversion
+ * needed" means for two spaces of one model — and gray↔RGB and RGB↔CMYK are converted with the standard formulas
+ * (`0.2126/0.7152/0.0722` for luminance, naive black generation for CMYK). A target model with no arithmetic here (Lab,
+ * indexed, pattern) answers nil with a reason. A caller that needs perceptual colour management does not get it, and the
+ * refusal says so rather than pretending the numbers are managed. */
+- (nullable NSColor *)colorUsingColorSpace:(NSColorSpace *)space
 {
-	(void)space;
-	fprintf(stderr, "APPKIT-REFUSE: -colorUsingColorSpace: takes an NSColorSpace, a class this tier does "
-			"not ship; a colour converts through the engine only into the spaces this class's own "
-			"getters ask for\n");
-	return nil;
+	CGColorSpaceRef source;
+	CGColorSpaceRef target;
+	const CGFloat *parts;
+	size_t count;
+	CGColorSpaceModel from;
+	NSColorSpaceModel to;
+	CGFloat in[4] = { 0.0, 0.0, 0.0, 1.0 };
+	CGFloat out[4] = { 0.0, 0.0, 0.0, 1.0 };
+	CGColorRef cg;
+	NSColor *color;
+
+	if (space == nil || _cgColor == NULL || [space CGColorSpace] == NULL) {
+		return nil;
+	}
+	source = CGColorGetColorSpace(_cgColor);
+	target = [space CGColorSpace];
+	parts = CGColorGetComponents(_cgColor);
+	count = CGColorGetNumberOfComponents(_cgColor);
+	if (source == NULL || parts == NULL || count < 2) {
+		return nil;
+	}
+	from = CGColorSpaceGetModel(source);
+	to = [space colorSpaceModel];
+	{
+		size_t k;
+
+		for (k = 0; k < count && k < 4; k++) {
+			in[k] = parts[k];
+		}
+	}
+	if (from == kCGColorSpaceModelMonochrome && to == NSGrayColorSpaceModel) {
+		out[0] = in[0];
+		out[3] = in[count - 1];
+	} else if (from == kCGColorSpaceModelMonochrome && to == NSRGBColorSpaceModel) {
+		out[0] = out[1] = out[2] = in[0];
+		out[3] = in[count - 1];
+	} else if (from == kCGColorSpaceModelRGB && to == NSRGBColorSpaceModel) {
+		out[0] = in[0];
+		out[1] = in[1];
+		out[2] = in[2];
+		out[3] = in[count - 1];
+	} else if (from == kCGColorSpaceModelRGB && to == NSGrayColorSpaceModel) {
+		out[0] = 0.2126 * in[0] + 0.7152 * in[1] + 0.0722 * in[2];
+		out[3] = in[count - 1];
+	} else if (from == kCGColorSpaceModelRGB && to == NSCMYKColorSpaceModel) {
+		CGFloat k = 1.0 - ((in[0] > in[1]) ? ((in[0] > in[2]) ? in[0] : in[2])
+						 : ((in[1] > in[2]) ? in[1] : in[2]));
+
+		if (k < 1.0) {
+			out[0] = (1.0 - in[0] - k) / (1.0 - k);
+			out[1] = (1.0 - in[1] - k) / (1.0 - k);
+			out[2] = (1.0 - in[2] - k) / (1.0 - k);
+		}
+		out[3] = k;
+	} else if (from == kCGColorSpaceModelCMYK && to == NSCMYKColorSpaceModel && count >= 5) {
+		out[0] = in[0];
+		out[1] = in[1];
+		out[2] = in[2];
+		out[3] = in[3];
+	} else {
+		fn_refuse_window("-colorUsingColorSpace:",
+				 "a conversion between these models; this tier converts gray<->RGB and RGB<->CMYK, and "
+				 "anything else would need the colour management it has not got");
+		return nil;
+	}
+	cg = CGColorCreate(target, out);
+	if (cg == NULL) {
+		return nil;
+	}
+	color = [[self class] colorWithCGColor:cg];
+	CGColorRelease(cg);
+	return color;
 }
 
 @end

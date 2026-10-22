@@ -8,8 +8,8 @@ spent.*
 *State at handover: **8 commits**, tree clean, **114 tests passing**, `api-ledger: 327 metrics
 hold (82 classes, 2652 selectors of 3517, 23 protocols, 86 functions)`.*
 
-*State after the session that picked it up (§9–§16): **17 commits**, tree clean, **123 tests passing**,
-`api-ledger: 329 metrics hold (84 classes, 2829 selectors of 3568, 23 protocols, 86 functions)`.*
+*State after the session that picked it up (§9–§17): **18 commits**, tree clean, **124 tests passing**,
+`api-ledger: 332 metrics hold (87 classes, 2870 selectors of 3609, 23 protocols, 86 functions)`.*
 
 ---
 
@@ -87,13 +87,13 @@ type's empty value and says on stderr what it wants — `AppKitRefusal.h`), or *
 ## 3. Current measured state
 
 ```
-classes    84 of 168   (50%)    84 missing
-selectors 2829 of 3568 (79%)   739 missing    46 of 83 classes at COMPLETE coverage
+classes    87 of 168   (52%)    81 missing
+selectors 2870 of 3609 (80%)   739 missing    49 of 86 classes at COMPLETE coverage
 protocols  23 of  56   (41%)    33 missing
 functions  86 of  86 (100%)     0 missing     10 refuse by name
-methods  3154 declared, 4 with no body (0.1%)
+methods  3289 declared, 4 with no body (0.1%)
 
-text system:  NSLayoutManager 130/136 · NSTextView 60/186 · NSTextStorage 13/25 · NSTextContainer 17/17
+text system:  NSLayoutManager 136/136 (COMPLETE) · NSTextView 60/186 · NSTextStorage 13/25 · NSTextContainer 17/17
               NSText 39/39 (COMPLETE) · NSRulerView 32/32 (COMPLETE) · NSRulerMarker 19/19 (COMPLETE)
 ```
 
@@ -268,7 +268,15 @@ predicted: the four ruler commands were the last four selectors it owed.
 
 **Where to go next, re-ranked by reachable surface:**
 
-1. **`NSLayoutManager` IS COMPLETE (§16) — all 136 selectors — and so are the twelve one-selector-short classes (§15).**
+1. **THE MISSING CLASSES HAVE STARTED LANDING (§17): `NSColorSpace`, `NSShadow`, `NSGradient`.** The next three by the
+   same argument (existing substrate, real behaviour, reachable) are the IMAGE REPS (`NSEPSImageRep`, `NSPICTImageRep`,
+   `NSCachedImageRep`, `NSCustomImageRep`, `NSCIImageRep` — 5 classes, 21 selectors, and `NSImageRep`'s registry already
+   dispatches to them), the STEPPER pair (`NSStepper`, `NSStepperCell` — 20 selectors, a real control on the existing cell
+   and tracking substrate) and `NSSecureTextField`/`NSSecureTextFieldCell` (2 selectors: bullet display on the field that
+   exists). After those the surface is the big subsystems the plan names — documents (104 + 51), printing (46 + 41 + 27 +
+   20), the panels, and the controller family — which want a design rather than a slice.
+
+2. **`NSLayoutManager` IS COMPLETE (§16) — all 136 selectors — and so are the twelve one-selector-short classes (§15).**
    The manager's last six were the typesetter trio, spelled `id` for the reason §16 records. What is left in the text
    system is the two classes those doors name, if anyone wants them: `NSTypesetter` (61 selectors — the era's own line
    breaker, which Core Text replaces here) and `NSGlyphGenerator` (2). Everything else in the manager is reachable, so the
@@ -481,3 +489,35 @@ first ask; this tier has none to make, so the answer is nil until a caller sets 
 **What the census says now:** `NSLayoutManager` 136/136; complete classes 46 of the 83 present; selectors 2829 of 3568
 (79%). The text system's remaining debt is the two classes those doors name, and neither is a slice anyone needs: Core Text
 does both jobs here.
+
+---
+
+## 17. The first of the missing classes: the colour-and-drawing values
+
+*Tenth commit of the pickup: `NSColorSpace` (19), `NSShadow` (8), `NSGradient` (14) — 41 selectors and three classes off the
+84 that had none. Complete coverage 46 → 49 of the 86 present classes; 87 of 168 classes present.*
+
+**THE CHOICE WAS MEASURED, NOT GUESSED.** The ledger lists 84 classes and 1640 selectors of debt; the plan's own priority is
+the 10.6 periphery (documents, panels, printing, controllers), and those are subsystems — a first slice that tried one would
+be a partial subsystem rather than a finished class. The three values were chosen because each has a SUBSTRATE THAT ALREADY
+EXISTS (`CGColorSpace`, `CGContextSetShadowWithColor`, `CGGradient`), each is COMPLETE at its manifest size, and two of them
+RETIRE REFUSALS the tree had recorded: `NSColor`'s colour-space pair and `NSScreen -colorSpace`.
+
+**Four decisions worth not rediscovering:**
+
+* **THE NINE NAMED SPACES ARE SINGLETONS.** A space is a value; two objects for one value is how a comparison comes to be
+  false, and `+availableColorSpacesWithModel:` would answer duplicates if each door made a new one.
+* **`-set` NEGATES THE SHADOW'S Y.** AppKit's offset is in the era's y-down drawing space and `CGContextSetShadow`'s
+  positive y is up, so (0, −3) — a shadow BELOW the ink — is `(0, +3)` to the engine. Everything else about the shadow is a
+  value, which is why the class has one state door.
+* **THE GRADIENT'S PLACEMENT ARITHMETIC IS OURS BECAUSE THE ENGINE HAS NO DOOR FOR IT.** An angle across a rect is the
+  ramp's line through the middle with length |w·cos| + |h·sin|; a relative centre is (−1..1) of half the rect with a radius
+  to the corners. Both are stated at the door.
+* **`-colorUsingColorSpace:` DOES ARITHMETIC AND SAYS SO.** Same model → RELABEL (the numbers are unchanged and the result is
+  in the space asked for); gray↔RGB and RGB↔CMYK → the standard formulas, named in the comment; Lab/indexed/pattern →
+  refuse, because this tier has no ColorSync and a managed conversion it cannot do is worse than a stated refusal. The
+  refusal census moved 142 → 140 as the two old literals went.
+
+**One test trap, again the same family:** a screen exists headlessly but its `-depth` is 0 (no output), so `-colorSpace`
+answers nil — and the probe now asserts the CONTRACT (nil when the depth names no space, the RGB space when it does) rather
+than a constant. The first version failed for the right reason and the wrong claim.

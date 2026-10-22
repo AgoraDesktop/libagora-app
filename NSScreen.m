@@ -8,6 +8,7 @@
  * unreachable.
  */
 #import <AppKit/NSScreen.h>
+#import <AppKit/NSColorSpace.h>
 #import <AppKit/AppKitRefusal.h>
 #import <Foundation/NSArray.h>
 #import <Foundation/NSDictionary.h>
@@ -179,12 +180,19 @@ static AGWindowServer *fn_screen_server(void)
 	return 1.0;
 }
 
-/* THE NAMED REFUSAL. See the header: the type is Apple's and the class is not in this tier. */
+/* **THE MAPPING FROM THE ERA'S SPACE NAMES TO THE OBJECTS.** The depth is the statement — this tier's surface is
+ * `XRGB8888`, so its depth names calibrated RGB — and the two families' names are what the door reads rather than
+ * re-deriving the model from the bits. A depth of 0 (no output) names nothing, and nil is the honest answer. */
 - (NSColorSpace *)colorSpace
 {
-	fn_refuse_window("-colorSpace",
-			 "an NSColorSpace, which is one of the classes this tier has not got; the screen's own colour "
-			 "model is CoreGraphics' and is reachable through the display's own doors");
+	NSString *name = NSColorSpaceFromDepth([self depth]);
+
+	if ([name isEqualToString:@"NSCalibratedRGBColorSpace"] || [name isEqualToString:@"NSDeviceRGBColorSpace"]) {
+		return [NSColorSpace genericRGBColorSpace];
+	}
+	if ([name isEqualToString:@"NSCalibratedWhiteColorSpace"] || [name isEqualToString:@"NSDeviceWhiteColorSpace"]) {
+		return [NSColorSpace genericGrayColorSpace];
+	}
 	return nil;
 }
 

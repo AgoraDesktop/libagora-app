@@ -20,8 +20,7 @@
  *
  * WHAT IS NOT HERE, IN FOUR GROUPS:
  *
- *   NOT IN THIS SLICE, AND EACH HAS A HOME: `-colorSpace` and `-colorUsingColorSpace:` need
- *   `NSColorSpace`; `-colorSpaceName` and `-colorUsingColorSpaceName:` need the
+ *   NOT IN THIS SLICE, AND EACH HAS A HOME: `-colorSpaceName` and `-colorUsingColorSpaceName:` need the
  *   `NSColorSpaceName` string constants; `-drawSwatchInRect:` needs `NSRectFill` and the AppKit
  *   rect helpers; `-colorWithSystemEffect:`, `-highlightWithLevel:`, `-blendedColorWithFraction:`
  *   and the `NSColor` SYSTEM colours (`labelColor`, `controlAccentColor`, the 20-odd semantic
@@ -70,6 +69,9 @@
 #import <AppKit/NSCell.h>
 #import <AppKit/NSGraphicsContext.h>
 #import <CoreGraphics/CGColor.h>
+/* FOR THE TWO DOORS BELOW THAT NAME IT: `NSColorSpace` is a real class in this tier now, so the parameters are its type
+ * rather than `id`, and the note that explained the `id` spelling is retired with the refusal it belonged to. */
+#import <AppKit/NSColorSpace.h>
 #import <Foundation/NSGeometry.h>
 #import <Foundation/NSObject.h>
 
@@ -361,10 +363,10 @@ extern NSString *NSSystemColorsDidChangeNotification;
 - (nullable NSString *)localizedColorNameComponent;
 - (nullable NSImage *)patternImage;
 + (nullable NSColor *)colorWithCIColor:(id)ciColor;
-+ (nullable NSColor *)colorWithColorSpace:(id)space
++ (nullable NSColor *)colorWithColorSpace:(NSColorSpace *)space
 			       components:(const CGFloat *)components
 				    count:(NSInteger)numberOfComponents;
-- (nullable NSColor *)colorUsingColorSpace:(id)space;
+- (nullable NSColor *)colorUsingColorSpace:(NSColorSpace *)space;
 
 /* ============================================================================================ *
  * AND THE LAST ROW OF THIS CLASS, WHOSE READER IS THE DRAWING DOOR. `+ignoresAlpha` is a global  *

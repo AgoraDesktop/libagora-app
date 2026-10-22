@@ -1146,3 +1146,14 @@ target_link_libraries(text_typesetter_doors PRIVATE App)
 
 add_test(NAME appkit-text-typesetter-doors COMMAND text_typesetter_doors)
 set_tests_properties(appkit-text-typesetter-doors PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
+
+
+# **THE COLOUR AND DRAWING VALUES: NSColorSpace, NSShadow, NSGradient** — plus the two refusals the first of them retires
+# (NSColor's colour-space pair and NSScreen's colour space). Round trips for the values, the interpolation's arithmetic, and
+# pixels for the ramp and the shadow, because a value that computes right and draws nothing is invisible to a value test.
+add_executable(color_and_shadow color_and_shadow.m)
+target_link_libraries(color_and_shadow PRIVATE App)
+
+add_test(NAME appkit-color-and-shadow COMMAND color_and_shadow)
+set_tests_properties(appkit-color-and-shadow PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
+

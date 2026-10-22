@@ -9,7 +9,7 @@
 # build, in BOTH directions — a file with a refusal it does not list fails, and a listed count that has moved fails.
 # Changing this file is therefore the deliberate act of adding or removing a refusal, and the diff says which.
 #
-# THE FORMAT IS `file count`, one per line, and the total is the sum: 142.
+# THE FORMAT IS `file count`, one per line, and the total is the sum: 140.
 
 NSApplication.m                      3
 NSAttributedStringRTF.m              4
@@ -18,7 +18,7 @@ NSBezierPath.m                       5
 NSBitmapImageRep.m                  15
 NSButtonCell.m                       1
 NSCell.m                             6
-NSColor.m                           17
+NSColor.m                           15
 NSComboBoxCell.m                     1
 NSDragging.m                         1
 NSGraphicsContext.m                 14
@@ -47,4 +47,4 @@ NSWindow.m                          13
 # literal are gone. THE OTHER FOUR CALL SITES NEVER CARRIED AN `APPKIT-REFUSE` LITERAL AT ALL, so the census could only
 # ever see the one — a limitation this change makes visible rather than hides.
 #
-# total: 142
+# total: 140

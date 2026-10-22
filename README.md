@@ -807,7 +807,23 @@ the compositor is really gone.
   is declared beside its only users because Apple declares it in `NSTypesetter.h`, a header this tier has not got — and the
   header says it must MOVE there on the day the class arrives.
 
-- **`ctest`: 123 of 123 passed** (the keyboard and the seam, the AppKit and its input path, the controls and their
+- **And the first of the missing CLASSES have arrived: `NSColorSpace`, `NSShadow` and `NSGradient`** (`ctest`, offscreen),
+  which is 41 selectors and three classes taken off the 84 that had none. `NSColorSpace` wraps a `CGColorSpace` and answers
+  the engine's own model and component count; the nine named spaces are CACHED SINGLETONS (a space is a value, and two
+  objects for one value is how a comparison comes to be false), `+availableColorSpacesWithModel:` filters them, and the two
+  PROFILE doors refuse by name because this tier has neither an ICC parser nor ColorSync. `NSShadow` is Apple's three facts
+  with Apple's defaults (offset (0, −3), blur 3) and one state door: `-set` hands them to `CGContextSetShadowWithColor`,
+  NEGATING the y because AppKit's offset is in a y-down drawing space. `NSGradient` holds its stops (so
+  `-getColor:location:atIndex:` and `-interpolatedColorAtLocation:` answer without the engine), builds the engine's ramp
+  once, and does the placement arithmetic the engine has no door for — an angle across a rect is the ramp's line through
+  the middle, a relative centre is a radius to the corners. **THE PAYOFF IS TWO DOORS THAT USED TO REFUSE:**
+  `NSScreen -colorSpace` now maps the depth's space name to a space, and `NSColor`'s colour-space pair are real —
+  `+colorWithColorSpace:components:count:` builds through `CGColorCreate`, and `-colorUsingColorSpace:` converts with
+  per-model arithmetic (gray↔RGB and RGB↔CMYK, with the formulas named) while REFUSING the models it cannot manage, because
+  this tier has no ColorSync and the door says so instead of pretending the numbers were managed. The refusal census moved
+  142 → 140 as those two literals went.
+
+- **`ctest`: 124 of 124 passed** (the keyboard and the seam, the AppKit and its input path, the controls and their
   metrics, the field control and its cell and its bezel and its placeholder and what it may hold, the text path and its
   word granularity and the multi-line view and its wrapping and its scrolling and its READING OF THE STORE, the STORE
   the rich-text slice is built on and the REGION it is laid out in and the WEB that ties the three together and the

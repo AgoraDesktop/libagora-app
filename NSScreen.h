@@ -65,13 +65,10 @@ NS_ASSUME_NONNULL_BEGIN
 @property (readonly, copy) NSString *localizedName;
 @property (readonly) CGFloat userSpaceScaleFactor;
 
-/* **THE SCREEN'S COLOUR SPACE IS NAMED AND REFUSED.** Apple answers an `NSColorSpace`, and `NSColorSpace` is one of the
- * classes this tier has not got — so the door takes its Apple type, answers nil (the empty value of a pointer) and says on
- * stderr what is missing. Declaring it keeps a caller's compile line intact and the refusal honest; inventing a colour
- * space object would be worse than saying no.
- *
- * `@class` IS ENOUGH HERE AND IS NOT AN OVER-CREDIT: the census counts a class present when the tree DEFINES it, and this
- * header only names the type a door's signature needs. */
+/* **THE SCREEN'S COLOUR SPACE, MAPPED FROM THE DEPTH'S OWN NAME.** A depth in this tier carries the era's space NAME
+ * (`NSColorSpaceFromDepth`), and this door answers the `NSColorSpace` that name denotes: calibrated or device RGB → the
+ * generic RGB space, calibrated or device white → the generic gray one. A screen with no output (depth 0) answers nil,
+ * because there is no space to name rather than an unknown one. */
 - (nullable NSColorSpace *)colorSpace;
 
 @end
