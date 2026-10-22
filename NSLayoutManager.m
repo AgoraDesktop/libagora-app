@@ -32,6 +32,7 @@
 
 #include <CoreGraphics/CGContext.h>
 #include <CoreFoundation/CFAttributedString.h>
+#include <CoreText/CTFont.h>
 #include <CoreText/CTLine.h>
 #include <CoreText/CTParagraphStyle.h>
 #include <CoreText/CTRun.h>
@@ -201,6 +202,13 @@
 @interface NSLayoutManager (AGTemporaryAttributes)
 - (NSDictionary *)cg_drawingAttributesAtIndex:(NSUInteger)index longestEffectiveRange:(NSRange *)range
 				      inRange:(NSRange)rangeLimit;
+@end
+
+/* THE CONTAINER A GLYPH RANGE WAS LAID OUT IN, when a subclass said so. Consulted first by both spellings of
+ * `-textContainerForGlyphAtIndex:…`; declared here because those doors come before the table's implementation. */
+@interface NSLayoutManager (AGGlyphBulk)
+- (BOOL)cg_containerOverride:(NSTextContainer **)containerPtr range:(NSRange *)rangePtr
+	       forGlyphIndex:(NSUInteger)glyphIndex;
 @end
 
 @implementation NSLayoutManager
@@ -3097,6 +3105,19 @@ static BOOL fn_cell_owns_edge(CGFloat thisWidth, CGFloat otherWidth, BOOL tieGoe
 	NSUInteger i, count;
 
 	[self cg_ensureLayout];
+	/* **A RANGE A SUBCLASS PLACED ANSWERS ITS CONTAINER FIRST**, before the fragments are consulted: the record exists
+	 * because the caller knows something the layout does not, and a scan that ignored it would make the door a no-op. */
+	{
+		NSTextContainer *overridden = nil;
+		NSRange overriddenRange = NSMakeRange(NSNotFound, 0);
+
+		if ([self cg_containerOverride:&overridden range:&overriddenRange forGlyphIndex:glyphIndex]) {
+			if (effectiveGlyphRange != NULL) {
+				*effectiveGlyphRange = overriddenRange;
+			}
+			return overridden;
+		}
+	}
 	containers = [self textContainers];
 	count = [containers count];
 	for (i = 0; i < count; i++) {
@@ -3623,7 +3644,11 @@ static CGFloat fn_fraction_between(FNFragment *fragment, CGFloat localX, NSUInte
 	NSUInteger character = [self characterIndexForGlyphAtIndex:glyphIndex];
 
 	if (character == NSNotFound) {
-		return fragment->used.origin.x;
+		/* **A GLYPH PAST THE FRAGMENT IS THE LINE'S END, NOT ITS START.** A rule for a range that runs to the end of the
+		 * line asks for the x AFTER its last glyph; answering the line's left edge made `x1 <= x0` true and the rule
+		 * vanish — MEASURED: a strike (or an underline) over a whole line drew nothing at all. */
+		return [self cg_xInFragment:fragment
+			      forCharacterIndex:fragment->range.location + fragment->range.length];
 	}
 	return [self cg_xInFragment:fragment forCharacterIndex:character];
 }
@@ -5032,6 +5057,377 @@ static NSImage *fn_tab_marker_image(NSTextTabType type)
 		return NO;
 	}
 	return ([(NSTextView *)responder layoutManager] == self);
+}
+
+@end
+
+/* ==================================================================================================================
+ * THE STORE'S BULK DOORS, THE STRIKE PAIR, THE BACKGROUND FILL, AND THE THREE SINGLES.
+ *
+ * The bulk readers fill parallel buffers from the shadow; the two writers write it. The strike pair is the underline
+ * pair at a different offset, through the same `-cg_drawRuleFromX:…` and the same trim. `-fillBackgroundRectArray:…` is
+ * a fill and nothing else. The nominally-spaced walk compares the shaper's advance with the font's own, which is the
+ * definition of "nominally spaced" rather than an approximation of it.
+ * ================================================================================================================ */
+
+@interface FNContainerOverride : NSObject
+{
+@public
+	NSRange range;
+	NSTextContainer *container;	/* BORROWED: the manager's own list or the caller's, and the caller owns either */
+}
+@end
+
+@implementation FNContainerOverride
+@end
+
+@implementation NSLayoutManager (AGGlyphBulk)
+
+- (void)getGlyphsInRange:(NSRange)glyphRange glyphs:(NSGlyph *)glyphBuffer
+	characterIndexes:(NSUInteger *)charIndexBuffer
+       glyphInscriptions:(NSGlyphInscription *)inscribeBuffer
+	     elasticBits:(BOOL *)elasticBuffer
+{
+	[self getGlyphsInRange:glyphRange glyphs:glyphBuffer characterIndexes:charIndexBuffer
+	      glyphInscriptions:inscribeBuffer elasticBits:elasticBuffer bidiLevels:NULL];
+}
+
+- (void)getGlyphsInRange:(NSRange)glyphRange glyphs:(NSGlyph *)glyphBuffer
+	characterIndexes:(NSUInteger *)charIndexBuffer
+       glyphInscriptions:(NSGlyphInscription *)inscribeBuffer
+	     elasticBits:(BOOL *)elasticBuffer
+	      bidiLevels:(unsigned char *)bidiLevelBuffer
+{
+	NSUInteger i;
+
+	[self cg_syncGlyphStore];
+	for (i = 0; i < glyphRange.length; i++) {
+		NSUInteger index = glyphRange.location + i;
+		FNGlyph *record = (index < [_glyphStore count]) ? [_glyphStore objectAtIndex:index] : nil;
+
+		/* **A RANGE THAT OVERLAPS THE EDGE OF THE TEXT STILL FILLS EVERY SLOT.** The caller asked for a count of
+		 * answers, and `NSNullGlyph`/the index itself is a better answer than leaving their buffer untouched. */
+		if (glyphBuffer != NULL) {
+			glyphBuffer[i] = (record != nil) ? record->glyph : (NSGlyph)0;	/* 0 is NSNullGlyph */
+		}
+		if (charIndexBuffer != NULL) {
+			charIndexBuffer[i] = (record != nil) ? record->characterIndex : index;
+		}
+		if (inscribeBuffer != NULL) {
+			/* ONE BASELINE IS THE WHOLE OF THIS TIER'S INSCRIPTION: nothing here is set below or over the line. */
+			inscribeBuffer[i] = NSGlyphInscribeBase;
+		}
+		if (elasticBuffer != NULL) {
+			/* AND NOTHING IS ELASTIC, because the breaker does not stretch a glyph to fill a line. */
+			elasticBuffer[i] = NO;
+		}
+		if (bidiLevelBuffer != NULL) {
+			bidiLevelBuffer[i] = 0;
+		}
+	}
+}
+
+/* **THE ARRAYS NAME THE START OF EACH STRETCH, WHICH IS WHY THE RANGE ARGUMENT IS THE LIMIT RATHER THAN THE SUBJECT.**
+ * Each `startingGlyphIndexes[j]` opens a stretch that runs to the next start (or the range's end), and `locations[j]` is
+ * the point that stretch's first glyph sits at — the same record `-setLocation:forStartOfGlyphRange:` writes, which is
+ * why this is a loop over that door rather than a second copy of the arithmetic. */
+- (void)setLocations:(NSPoint *)locations startingGlyphIndexes:(NSUInteger *)glyphIndexes count:(NSUInteger)count
+	forGlyphRange:(NSRange)glyphRange
+{
+	NSUInteger j;
+
+	if (locations == NULL || glyphIndexes == NULL) {
+		return;
+	}
+	[self cg_syncGlyphStore];
+	for (j = 0; j < count; j++) {
+		NSUInteger start = glyphIndexes[j];
+		NSUInteger end = (j + 1 < count) ? glyphIndexes[j + 1] : NSMaxRange(glyphRange);
+
+		if (start < glyphRange.location || start >= NSMaxRange(glyphRange)) {
+			continue;
+		}
+		if (end > NSMaxRange(glyphRange)) {
+			end = NSMaxRange(glyphRange);
+		}
+		[self setLocation:locations[j] forStartOfGlyphRange:NSMakeRange(start, end - start)];
+	}
+}
+
+/* **THE LINE'S TWO RECTS, WRITTEN INTO THE FRAGMENTS THE RANGE COVERS.** A subclass that placed its own lines says
+ * where; the line-fragment doors then read it back and the drawing uses it. A rect that changes is also a change of
+ * every glyph's plACEMENT, so the shadow's positions are rebuilt on the next read. */
+- (void)setLineFragmentRect:(NSRect)fragmentRect forGlyphRange:(NSRange)glyphRange usedRect:(NSRect)usedRect
+{
+	NSUInteger c, f;
+
+	[self cg_ensureLayout];
+	for (c = 0; c < [_fragments count]; c++) {
+		NSMutableArray *fragments = [_fragments objectAtIndex:c];
+
+		for (f = 0; f < [fragments count]; f++) {
+			FNFragment *fragment = [fragments objectAtIndex:f];
+
+			if (NSMaxRange(fragment->glyphs) <= glyphRange.location
+			    || fragment->glyphs.location >= NSMaxRange(glyphRange)) {
+				continue;
+			}
+			fragment->rect = fragmentRect;
+			fragment->used = usedRect;
+			_glyphStoreStale = YES;
+		}
+	}
+}
+
+/* **AND THE CONTAINER A RANGE WAS LAID OUT IN.** The record is consulted before the fragment scan in both spellings of
+ * `-textContainerForGlyphAtIndex:…`; a later call for an overlapping range replaces the part it names, which is the only
+ * behaviour that lets a subclass re-run its own layout without leaking the old answer. */
+- (void)setTextContainer:(NSTextContainer *)container forGlyphRange:(NSRange)glyphRange
+{
+	NSUInteger i;
+
+	if (container == nil || glyphRange.length == 0) {
+		return;
+	}
+	if (_glyphContainerOverrides == nil) {
+		_glyphContainerOverrides = [[NSMutableArray alloc] init];
+	}
+	/* TRIM WHAT THE NEW RECORD COVERS, keeping the parts outside it — the same split the temporary-attribute table uses. */
+	for (i = 0; i < [_glyphContainerOverrides count]; ) {
+		FNContainerOverride *entry = [_glyphContainerOverrides objectAtIndex:i];
+		NSRange run = entry->range;
+		NSUInteger end = NSMaxRange(glyphRange);
+
+		if (NSMaxRange(run) <= glyphRange.location || run.location >= end) {
+			i++;
+			continue;
+		}
+		[_glyphContainerOverrides removeObjectAtIndex:i];
+		if (run.location < glyphRange.location) {
+			FNContainerOverride *head = [[[FNContainerOverride alloc] init] autorelease];
+
+			head->range = NSMakeRange(run.location, glyphRange.location - run.location);
+			head->container = entry->container;
+			[_glyphContainerOverrides insertObject:head atIndex:i];
+			i++;
+		}
+		if (NSMaxRange(run) > end) {
+			FNContainerOverride *tail = [[[FNContainerOverride alloc] init] autorelease];
+
+			tail->range = NSMakeRange(end, NSMaxRange(run) - end);
+			tail->container = entry->container;
+			[_glyphContainerOverrides insertObject:tail atIndex:i];
+			i++;
+		}
+	}
+	{
+		FNContainerOverride *record = [[[FNContainerOverride alloc] init] autorelease];
+
+		record->range = glyphRange;
+		record->container = container;
+		[_glyphContainerOverrides addObject:record];
+	}
+}
+
+- (BOOL)cg_containerOverride:(NSTextContainer **)containerPtr range:(NSRange *)rangePtr
+	       forGlyphIndex:(NSUInteger)glyphIndex
+{
+	NSUInteger i;
+
+	for (i = 0; i < [_glyphContainerOverrides count]; i++) {
+		FNContainerOverride *entry = [_glyphContainerOverrides objectAtIndex:i];
+
+		if (glyphIndex >= entry->range.location && glyphIndex < NSMaxRange(entry->range)) {
+			if (containerPtr != NULL) {
+				*containerPtr = entry->container;
+			}
+			if (rangePtr != NULL) {
+				*rangePtr = entry->range;
+			}
+			return YES;
+		}
+	}
+	return NO;
+}
+
+/* ---- THE STRIKE PAIR AND THE BACKGROUND FILL ---------------------------------------------------------- */
+
+/* THE SAME TRIM THE UNDERLINE DOOR DOES, for the same reason: a rule under or through a trailing space looks like a
+ * bug. */
+- (void)strikethroughGlyphRange:(NSRange)glyphRange strikethroughType:(NSInteger)strikethroughVal
+		lineFragmentRect:(NSRect)lineRect lineFragmentGlyphRange:(NSRange)lineGlyphRange
+		 containerOrigin:(NSPoint)containerOrigin
+{
+	[self drawStrikethroughForGlyphRange:glyphRange strikethroughType:strikethroughVal baselineOffset:-1.0
+			     lineFragmentRect:lineRect lineFragmentGlyphRange:lineGlyphRange
+			     containerOrigin:containerOrigin];
+}
+
+- (void)drawStrikethroughForGlyphRange:(NSRange)glyphRange strikethroughType:(NSInteger)strikethroughVal
+			baselineOffset:(CGFloat)baselineOffset lineFragmentRect:(NSRect)lineRect
+	       lineFragmentGlyphRange:(NSRange)lineGlyphRange containerOrigin:(NSPoint)containerOrigin
+{
+	FNFragment *fragment;
+	NSGraphicsContext *context;
+	CGContextRef cg;
+	NSFont *font;
+	NSColor *colour = nil;
+	CGFloat x0, x1, y;
+
+	(void)lineRect;
+	(void)lineGlyphRange;
+	context = [NSGraphicsContext currentContext];
+	cg = (context != nil) ? (CGContextRef)[context graphicsPort] : NULL;
+	if (cg == NULL || glyphRange.length == 0) {
+		return;
+	}
+	fragment = [self cg_fragmentForGlyphAtIndex:glyphRange.location effectiveRange:NULL];
+	if (fragment == NULL) {
+		return;
+	}
+	x0 = [self ag_xForGlyph:glyphRange.location inFragment:fragment];
+	x1 = [self ag_xForGlyph:glyphRange.location + glyphRange.length inFragment:fragment];
+	if (x1 <= x0) {
+		return;
+	}
+	font = [self cg_font];
+	/* **THE RUN'S OWN COLOUR, THEN ITS FOREGROUND, THEN THE DEFAULT** — the order the manager's drawing pass uses. */
+	{
+		NSDictionary *attrs = [_textStorage attributesAtIndex:glyphRange.location effectiveRange:NULL];
+
+		colour = [attrs objectForKey:NSStrikethroughColorAttributeName];
+		if (colour == nil) {
+			colour = [attrs objectForKey:NSForegroundColorAttributeName];
+		}
+	}
+	if (colour == nil) {
+		colour = [NSColor controlTextColor];
+	}
+	y = containerOrigin.y + fragment->baseline - [font xHeight] / 2.0 + baselineOffset;
+	[self cg_drawRuleFromX:x0 + containerOrigin.x toX:x1 + containerOrigin.x y:y style:strikethroughVal
+		colour:colour context:cg];
+}
+
+- (void)fillBackgroundRectArray:(const NSRect *)rectArray count:(NSUInteger)rectCount
+	     forCharacterRange:(NSRange)charRange color:(NSColor *)color
+{
+	NSUInteger i;
+
+	(void)charRange;	/* the range names WHERE the rects came from; the fill is the rects' own */
+	if (rectArray == NULL || color == nil) {
+		return;
+	}
+	[color setFill];
+	for (i = 0; i < rectCount; i++) {
+		NSRectFill(rectArray[i]);
+	}
+}
+
+/* ---- THE THREE SINGLES ---------------------------------------------------------------------------------- */
+
+/* **A GLYPH IS NOMINALLY SPACED WHEN ITS ADVANCE IS THE FONT'S OWN FOR IT.** The walk starts at the query and extends in
+ * both directions while that holds, bounded by the line fragment; the first glyph whose advance differs — a kern pair, a
+ * ligature, a run with an explicit kern — ends the run on that side. This tier applies no kerning of its own, so the
+ * answer is normally the whole line, and the walk is here because the door's name promises a BOUNDARY. */
+- (NSRange)rangeOfNominallySpacedGlyphsContainingIndex:(NSUInteger)glyphIndex
+{
+	FNFragment *fragment = [self cg_fragmentForGlyphAtIndex:glyphIndex effectiveRange:NULL];
+	CTLineRef line;
+	CFArrayRef runs;
+	NSUInteger first, last;
+
+	[self cg_syncGlyphStore];
+	if (fragment == nil || fragment->line == NULL || glyphIndex >= [_glyphStore count]) {
+		return NSMakeRange(glyphIndex, 1);
+	}
+	line = fragment->line;
+	runs = CTLineGetGlyphRuns(line);
+	first = glyphIndex;
+	last = glyphIndex;
+	(void)runs;
+	/* The boundary test needs the glyph AFTER the one asked about and the one BEFORE it; both are compared against the
+	 * font's advance for the glyph itself. A missing glyph (the edge of the line) ends the walk, which is the honest
+	 * answer rather than extending past what the line contains. */
+	while (first > fragment->glyphs.location
+	       && [self cg_glyphIsNominallySpacedAt:(first - 1) inLine:line]) {
+		first--;
+	}
+	while (last + 1 < NSMaxRange(fragment->glyphs)
+	       && [self cg_glyphIsNominallySpacedAt:last inLine:line]) {
+		last++;
+	}
+	return NSMakeRange(first, last - first + 1);
+}
+
+/* THE TEST ITSELF: the shaper's advance for a glyph against the font's nominal advance for the same glyph. */
+- (BOOL)cg_glyphIsNominallySpacedAt:(NSUInteger)glyphIndex inLine:(CTLineRef)line
+{
+	CFArrayRef runs = CTLineGetGlyphRuns(line);
+	CFIndex r, runCount = (runs != NULL) ? CFArrayGetCount(runs) : 0;
+	CFIndex consumed = 0;
+
+	for (r = 0; r < runCount; r++) {
+		CTRunRef run = (CTRunRef)CFArrayGetValueAtIndex(runs, r);
+		CFIndex count = CTRunGetGlyphCount(run);
+
+		if (glyphIndex >= (NSUInteger)(consumed + count)) {
+			consumed += count;
+			continue;
+		}
+		{
+			CFIndex k = (CFIndex)glyphIndex - consumed;
+			CGSize advance;
+			CGRect rect;
+			CGGlyph shaped = 0;
+			CTFontRef ctFont;
+			CGSize nominal;
+
+			CTRunGetAdvances(run, CFRangeMake(k, 1), &advance);
+			CTRunGetGlyphs(run, CFRangeMake(k, 1), &shaped);
+			/* A rect is asked for only to reuse the run's own attribute; the font is the line's first run's. */
+			rect = CTRunGetImageBounds(run, NULL, CFRangeMake(0, 0));
+			(void)rect;
+			{
+				CFDictionaryRef attributes = CTRunGetAttributes(run);
+				CFTypeRef value = (attributes != NULL)
+					? CFDictionaryGetValue(attributes, kCTFontAttributeName) : NULL;
+
+				ctFont = (value != NULL) ? (CTFontRef)value : NULL;
+			}
+			if (ctFont == NULL) {
+				return YES;
+			}
+			/* **ORIENTATION 0 IS APPLE'S `kCTFontOrientationDefault`.** This tier's `CTFont.h` declares the typedef
+			 * and none of the three constants, so the value is spelled here with the name it has in Apple's header; the
+			 * advances are horizontal for every font this tree lays out. */
+			CTFontGetAdvancesForGlyphs(ctFont, (CTFontOrientation)0, &shaped, &nominal, 1);
+			/* A HALF-POINT OF SLACK: the shaper's advance is a float, the font's is another, and a pair that agrees to
+			 * within half a point is the same advance for this question. */
+			return (fabs((double)(advance.width - nominal.width)) < 0.5) ? YES : NO;
+		}
+	}
+	return YES;
+}
+
+/* THE PACKED-GLYPH ENCODING IS PRE-10.4 AND MEANS SOMETHING ELSE THAN A CGGlyph ARRAY. Refusing by name is the only
+ * honest answer; a caller that has the bytes and wants them drawn has `CGContextShowGlyphsAtPositions`. */
+- (void)showPackedGlyphs:(char *)glyphs length:(NSUInteger)glyphLen glyphRange:(NSRange)glyphRange
+		  atPoint:(NSPoint)point font:(NSFont *)font color:(NSColor *)color
+      printingAdjustment:(NSSize)printingAdjustment
+{
+	(void)glyphs; (void)glyphLen; (void)glyphRange; (void)point; (void)font; (void)color;
+	(void)printingAdjustment;
+	fn_refuse_window("-showPackedGlyphs:length:glyphRange:atPoint:font:color:printingAdjustment:",
+			 "the pre-10.4 NSPackedGlyphs encoding; this tier's CGContext takes a CGGlyph array, and "
+			 "CGContextShowGlyphsAtPositions draws one");
+}
+
+/* **NO SUBSTITUTION, AND THE FONT ITSELF IS THE ANSWER.** Apple's screen fonts were a 10.0-era hinting device; this tier
+ * lays text out in one font at one size, so the substitute IS the original and a caller comparing the two gets the truth
+ * rather than a nil it has to explain. */
+- (NSFont *)substituteFontForFont:(NSFont *)originalFont
+{
+	return originalFont;
 }
 
 @end

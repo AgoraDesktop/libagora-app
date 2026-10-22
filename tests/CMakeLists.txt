@@ -1117,3 +1117,12 @@ target_link_libraries(text_manager_knobs PRIVATE App)
 
 add_test(NAME appkit-text-manager-knobs COMMAND text_manager_knobs)
 set_tests_properties(appkit-text-manager-knobs PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
+
+# **THE GLYPH STORE'S RANGE DOORS AND THE STRIKE INK.** The bulk readers are compared against the one-at-a-time door on the
+# same record; the two writers are read back where a caller would read them (a written line rect and a recorded container);
+# and the strike pair is asserted as INK through the middle of the x-height, against the same draw without it.
+add_executable(text_glyph_bulk text_glyph_bulk.m)
+target_link_libraries(text_glyph_bulk PRIVATE App)
+
+add_test(NAME appkit-text-glyph-bulk COMMAND text_glyph_bulk)
+set_tests_properties(appkit-text-glyph-bulk PROPERTIES ENVIRONMENT "${_agora_app_test_env}")

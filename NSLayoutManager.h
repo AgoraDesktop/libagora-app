@@ -135,6 +135,10 @@ NS_ASSUME_NONNULL_BEGIN
 	BOOL _usesFontLeading;
 	BOOL _usesScreenFonts;
 	float _hyphenationFactor;
+	/* **AND THE CONTAINER A GLYPH RANGE WAS LAID OUT IN, WHEN A SUBCLASS SAYS SO.** `-setTextContainer:forGlyphRange:` is
+	 * the door a layout manager's subclass uses to tell the receiver where it put a range; this list is consulted before the
+	 * fragment scan, and a range with no entry is answered by the fragments as usual. */
+	NSMutableArray *_glyphContainerOverrides;	/* RETAINED; FNContainerOverride objects */
 	NSUInteger _layoutOptions;
 	NSRect _extraLineRect;
 	NSRect _extraLineUsedRect;
@@ -535,6 +539,116 @@ NS_ASSUME_NONNULL_BEGIN
 /* Rebuild the shadow from the fragments. Public as a `cg_` door because the store's correctness is what the test
  * asserts, and a caller that mutated the fragments by hand needs a way to say so. */
 - (void)cg_rebuildGlyphStore;
+
+/* ==================================================================================================================
+ * THE STORE'S BULK DOORS — the same record, read and written a range at a time.
+ *
+ * **`NSGlyphInscription` IS THE ERA'S VOCABULARY FOR WHERE A GLYPH SITS RELATIVE TO THE BASELINE**, and this tier lays
+ * every glyph on it: the four values are declared here because Apple declares them in this header, and every glyph
+ * answers `NSGlyphInscribeBase`. A caller that wants an overstrike composes it from two runs, which is what the era's
+ * own text system did too.
+ *
+ * **THE TWO `getGlyphsInRange:` DOORS FILL FOUR OR FIVE PARALLEL BUFFERS**, and every one of them is optional except
+ * the glyphs: the character each glyph stands for, its inscription, whether it is elastic (this tier's are not, because
+ * the breaker does not stretch), and — in the longer spelling — its bidi level, which is 0 in one direction. The count
+ * is the RANGE's, not the store's: a buffer is filled for every index the caller named, with `NSNullGlyph` past the end,
+ * which is how a caller asks for a run that overlaps the edge of the text.
+ *
+ * **AND THE TWO WRITERS ARE THE SUB-CLASS DOORS.** `-setLocations:startingGlyphIndexes:count:forGlyphRange:` is
+ * `-setLocation:forStartOfGlyphRange:` a range at a time (Apple's arrays name the START of each stretch and its point);
+ * `-setLineFragmentRect:forGlyphRange:usedRect:` moves the line fragments the range covers, which is what a manager
+ * that placed its own lines would do. Both write the SHADOW, so both survive until the next re-layout — the lifetime
+ * the section above explains.
+ * ================================================================================================================ */
+
+enum {
+	NSGlyphInscribeBase = 0,
+	NSGlyphInscribeBelow = 1,
+	NSGlyphInscribeAbove = 2,
+	NSGlyphInscribeOverstrike = 3,
+	NSGlyphInscribeOverBelow = 4
+};
+typedef NSUInteger NSGlyphInscription;
+
+- (void)getGlyphsInRange:(NSRange)glyphRange
+		  glyphs:(NSGlyph *)glyphBuffer
+	characterIndexes:(NSUInteger *)charIndexBuffer
+       glyphInscriptions:(NSGlyphInscription *)inscribeBuffer
+	     elasticBits:(nullable BOOL *)elasticBuffer;
+
+- (void)getGlyphsInRange:(NSRange)glyphRange
+		  glyphs:(NSGlyph *)glyphBuffer
+	characterIndexes:(NSUInteger *)charIndexBuffer
+       glyphInscriptions:(NSGlyphInscription *)inscribeBuffer
+	     elasticBits:(nullable BOOL *)elasticBuffer
+	      bidiLevels:(nullable unsigned char *)bidiLevelBuffer;
+
+- (void)setLocations:(NSPoint *)locations
+startingGlyphIndexes:(NSUInteger *)glyphIndexes
+	       count:(NSUInteger)count
+      forGlyphRange:(NSRange)glyphRange;
+
+- (void)setLineFragmentRect:(NSRect)fragmentRect
+	       forGlyphRange:(NSRange)glyphRange
+		    usedRect:(NSRect)usedRect;
+
+/* **WHICH CONTAINER A GLYPH RANGE IS IN, WHEN A CALLER KNOWS BETTER THAN THE FRAGMENTS DO.** A subclass that lays out
+ * by its own rules says so here; the read doors consult the record before their own scan, and a range with no entry is
+ * answered by the layout as usual. */
+- (void)setTextContainer:(NSTextContainer *)container forGlyphRange:(NSRange)glyphRange;
+
+/* ==================================================================================================================
+ * THE STRIKETHROUGH PAIR, AND THE BACKGROUND FILL — the ink doors that pair with the underline pair above.
+ *
+ * **THE SAME TWO HALVES AS THE UNDERLINE, FOR THE SAME REASON.** `-strikethroughGlyphRange:…` decides WHICH glyphs get
+ * the rule (it trims the leading and trailing whitespace, so a struck-through run does not begin with a ruled space) and
+ * `-drawStrikethroughForGlyphRange:…` puts it down, through the mid-x-height instead of under the baseline. The ink is
+ * the run's `NSStrikethroughColorAttributeName`, then its foreground, then the caller's default — which is the order the
+ * manager's own drawing pass uses, because it is the same run walk.
+ *
+ * **AND `-fillBackgroundRectArray:count:forCharacterRange:color:` IS THE FILL A VIEW DOES WITH THE RECTS IT WAS
+ * GIVEN.** It takes an array rather than computing one: the caller already knows which pieces of a selection or a
+ * background it wants painted, and asking the layout again would be a second answer to a question already answered.
+ * ================================================================================================================ */
+
+- (void)drawStrikethroughForGlyphRange:(NSRange)glyphRange
+		     strikethroughType:(NSInteger)strikethroughVal
+			baselineOffset:(CGFloat)baselineOffset
+		      lineFragmentRect:(NSRect)lineRect
+	       lineFragmentGlyphRange:(NSRange)lineGlyphRange
+		       containerOrigin:(NSPoint)containerOrigin;
+
+- (void)strikethroughGlyphRange:(NSRange)glyphRange
+	     strikethroughType:(NSInteger)strikethroughVal
+		lineFragmentRect:(NSRect)lineRect
+	 lineFragmentGlyphRange:(NSRange)lineGlyphRange
+		 containerOrigin:(NSPoint)containerOrigin;
+
+- (void)fillBackgroundRectArray:(const NSRect *)rectArray
+			  count:(NSUInteger)rectCount
+	     forCharacterRange:(NSRange)charRange
+			  color:(NSColor *)color;
+
+/* ==================================================================================================================
+ * TWO LAST SINGLES.
+ *
+ * **`-rangeOfNominallySpacedGlyphsContainingIndex:` IS A KERNING QUESTION.** A glyph is nominally spaced when its advance
+ * is the font's own for that glyph; a run of them is the range a caller can measure without consulting every kern pair,
+ * and it ENDS at the first glyph whose advance differs. This tier's layout applies no kerning of its own — the shaper's
+ * positions are the font's — so the answer is normally the line's glyphs; the walk is written anyway, because "normally"
+ * is not a contract and the door's name promises the boundary rather than the common case.
+ *
+ * **`-showPackedGlyphs:…` REFUSES BY NAME.** "Packed glyphs" are the pre-10.4 encoding (`NSPackedGlyphs`) that the
+ * Carbon text path consumed; this tier's `CGContext` takes a `CGGlyph` array, so the door answers nothing and says why
+ * rather than reinterpreting bytes that mean something else. `-substituteFontForFont:` is real, and quick, because this
+ * tier has no screen-font variants and the answer is the font itself.
+ * ================================================================================================================ */
+
+- (NSRange)rangeOfNominallySpacedGlyphsContainingIndex:(NSUInteger)glyphIndex;
+- (void)showPackedGlyphs:(char *)glyphs length:(NSUInteger)glyphLen glyphRange:(NSRange)glyphRange
+		  atPoint:(NSPoint)point font:(NSFont *)font color:(NSColor *)color
+      printingAdjustment:(NSSize)printingAdjustment;
+- (NSFont *)substituteFontForFont:(NSFont *)originalFont;
 
 
 /* ==================================================================================================================

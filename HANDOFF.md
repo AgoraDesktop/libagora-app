@@ -8,8 +8,8 @@ spent.*
 *State at handover: **8 commits**, tree clean, **114 tests passing**, `api-ledger: 327 metrics
 hold (82 classes, 2652 selectors of 3517, 23 protocols, 86 functions)`.*
 
-*State after the session that picked it up (§9–§13): **14 commits**, tree clean, **120 tests passing**,
-`api-ledger: 329 metrics hold (84 classes, 2795 selectors of 3568, 23 protocols, 86 functions)`.*
+*State after the session that picked it up (§9–§14): **15 commits**, tree clean, **121 tests passing**,
+`api-ledger: 329 metrics hold (84 classes, 2806 selectors of 3568, 23 protocols, 86 functions)`.*
 
 ---
 
@@ -88,12 +88,12 @@ type's empty value and says on stderr what it wants — `AppKitRefusal.h`), or *
 
 ```
 classes    84 of 168   (50%)    84 missing
-selectors 2795 of 3568 (78%)   773 missing    33 of 83 classes at COMPLETE coverage
+selectors 2806 of 3568 (79%)   762 missing    33 of 83 classes at COMPLETE coverage
 protocols  23 of  56   (41%)    33 missing
 functions  86 of  86 (100%)     0 missing     10 refuse by name
 methods  3154 declared, 4 with no body (0.1%)
 
-text system:  NSLayoutManager 119/136 · NSTextView 60/186 · NSTextStorage 13/25 · NSTextContainer 17/17
+text system:  NSLayoutManager 130/136 · NSTextView 60/186 · NSTextStorage 13/25 · NSTextContainer 17/17
               NSText 39/39 (COMPLETE) · NSRulerView 32/32 (COMPLETE) · NSRulerMarker 19/19 (COMPLETE)
 ```
 
@@ -268,15 +268,13 @@ predicted: the four ruler commands were the last four selectors it owed.
 
 **Where to go next, re-ranked by reachable surface:**
 
-1. **`NSLayoutManager` has 17 selectors left, and they are three coherent groups.** The GLYPH STORE's bulk/editing
-   doors (`getGlyphsInRange:…` both spellings, `setLocations:startingGlyphIndexes:count:forGlyphRange:`,
-   `setLineFragmentRect:forGlyphRange:usedRect:`, `setTextContainer:forGlyphRange:` — each has to decide what writing the
-   SHADOW means when the fragments are rebuilt from the store, which is the interesting question of the group); the STRIKE
-   AND BACKGROUND INK pair (`strikethroughGlyphRange:…`, `drawStrikethroughForGlyphRange:…`,
-   `fillBackgroundRectArray:count:forCharacterRange:color:`, `showPackedGlyphs:…`) which mirrors the underline pair already
-   shipped; and the TYPESETTER cluster (`typesetter`, `setTypesetter:`, `glyphGenerator`, `setGlyphGenerator:`,
-   `typesetterBehavior`, `setTypesetterBehavior:`), which blocks on `NSTypesetter`/`NSGlyphGenerator`/`NSTypesetterBehavior`
-   existing — three of the 84 missing classes.
+1. **`NSLayoutManager` has SIX selectors left, and they are one cluster: the typesetter trio.** `typesetter`,
+   `setTypesetter:`, `glyphGenerator`, `setGlyphGenerator:`, `typesetterBehavior`, `setTypesetterBehavior:`. They block on
+   three classes the tier has not got — `NSTypesetter`, `NSGlyphGenerator` and `NSTypesetterBehavior` — so the next move is
+   to import those types (declaration, an enum, and storage) or to declare the six doors and refuse them by name. Everything
+   else in the manager is now reachable, which is why the next hour belongs to a different class: the SEVEN classes with
+   one selector missing each, and the panels (open/save, colour, font, print) that the surface plan names as the 10.6
+   periphery.
 2. **The substitution machinery** (the old §5.2, ~12 doors): the five flags are stored; the tables
    (`userQuotesArrayForLanguage:`, `userReplacementsDictionary`) are what would make typing through them real.
 3. **`NSTextView`'s ruler accessory** — the one door this slice refused. A tab-type control cluster is an
@@ -389,3 +387,33 @@ leading measures zero on this machine and the claim would be untestable with it.
 with the receiver, so a hand-built manager attached to a view's container is a DIFFERENT manager and the positive case is
 false for the right reason. The probe now uses the view's own trio, and the negative case hands responder status to a
 field — a real handover rather than a `makeFirstResponder:` that quietly failed.
+
+---
+
+## 14. The shadow's bulk doors, and a rule that drew nothing
+
+*Seventh commit of the pickup: 11 doors — the glyph store's range readers and sub-class writers, the strike pair, the
+background fill, and three singles. `NSLayoutManager` is 130 of 136, with only the typesetter trio's six left.*
+
+**A PRE-EXISTING BUG FELL OUT OF THE STRIKE TEST.** `-ag_xForGlyph:inFragment:` answered the line's LEFT edge for a glyph
+past the fragment (`-characterIndexForGlyphAtIndex:` says `NSNotFound`, and the fallback was the used rect's origin). Both
+rule doors ask for `glyphRange.location + glyphRange.length`, so a strike — or an underline — over a range that ended at
+the line's end came out with `x1 <= x0` and RETURNED WITHOUT DRAWING. A whole line could not be underlined. The fix is
+one line, and the test that found it is the one that counts pixels: plain draw 0, struck draw 36.
+
+**The rest of the slice, and what each group decided:**
+
+* The two `getGlyphsInRange:` spellings fill their buffers from the SAME shadow `-glyphAtIndex:` reads, so the test can
+  compare them; past the end every slot still gets an answer (`NSNullGlyph`, the index asked for), because a caller named a
+  count.
+* `-setLineFragmentRect:forGlyphRange:usedRect:` writes the fragments' own rects and marks the glyph store stale; its
+  effect is checked through `-lineFragmentRectForGlyphAtIndex:` and `-lineFragmentUsedRectForGlyphAtIndex:` rather than by
+  reading the fragment.
+* `-setTextContainer:forGlyphRange:` is the one door that needed a new table: a record consulted BEFORE the fragment scan
+  in both `-textContainerForGlyphAtIndex:` spellings, trimming any earlier record it overlaps — the same split the
+  temporary-attribute table uses.
+* `-rangeOfNominallySpacedGlyphsContainingIndex:` really compares the shaper's advance against `CTFontGetAdvancesForGlyphs`
+  per glyph. This tier kerns nothing, so the answer is normally the line — and the walk is still written, because the
+  door's name promises a BOUNDARY rather than the common case.
+* `-showPackedGlyphs:…` refuses by name (the pre-10.4 `NSPackedGlyphs` encoding is not a `CGGlyph` array) and
+  `-substituteFontForFont:` answers the font itself (no screen-font variants).

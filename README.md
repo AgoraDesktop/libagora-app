@@ -767,7 +767,22 @@ the compositor is really gone.
   answer the first container's view, the same view for "the beginning of the selection" (the manager does not know one),
   and whether the window's first responder is a text view whose manager is this one — asked of a real window.
 
-- **`ctest`: 120 of 120 passed** (the keyboard and the seam, the AppKit and its input path, the controls and their
+- **And the glyph store reads and writes a RANGE at a time, and the strike has its ink doors** (`ctest`, offscreen):
+  `-getGlyphsInRange:glyphs:characterIndexes:glyphInscriptions:elasticBits:` (and the bidi-level spelling) fills four or
+  five parallel buffers from the same shadow `-glyphAtIndex:` reads — every glyph on the baseline, none elastic, level
+  zero — and a range that overlaps the edge fills every slot with `NSNullGlyph`. `-setLocations:startingGlyphIndexes:count:
+  forGlyphRange:` and `-setLineFragmentRect:forGlyphRange:usedRect:` are the SUB-CLASS writers: their effect is read back
+  where a caller would read it, and `-setTextContainer:forGlyphRange:` records a container the read door answers (with
+  `effectiveRange:` naming what the caller recorded) before it consults the fragments. The strike pair mirrors the
+  underline pair — the same trim, the same run walk, the ink through the middle of the x-height — and
+  `-fillBackgroundRectArray:count:forCharacterRange:color:` fills the rects it was handed. **The slice found a
+  pre-existing bug**: `-ag_xForGlyph:inFragment:` answered the line's LEFT edge for a glyph past the fragment, so a rule
+  over a WHOLE line came out with `x1 <= x0` and drew nothing — a strike over a whole line was invisible until this test
+  looked for its pixels. `-rangeOfNominallySpacedGlyphsContainingIndex:` compares the shaper's advance with the font's own
+  per glyph, `-substituteFontForFont:` answers the font itself, and `-showPackedGlyphs:…` refuses the pre-10.4
+  `NSPackedGlyphs` encoding by name.
+
+- **`ctest`: 121 of 121 passed** (the keyboard and the seam, the AppKit and its input path, the controls and their
   metrics, the field control and its cell and its bezel and its placeholder and what it may hold, the text path and its
   word granularity and the multi-line view and its wrapping and its scrolling and its READING OF THE STORE, the STORE
   the rich-text slice is built on and the REGION it is laid out in and the WEB that ties the three together and the
