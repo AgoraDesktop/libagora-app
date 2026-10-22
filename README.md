@@ -121,7 +121,9 @@ tests/
   window_chrome.m               the DRAWN chrome, offscreen: Greybird's bar and its four marks, the centred title
   menu_validation.m             validation and state, which the view tests do not reach
   appkit_activation.m           only the ACTIVE application's menu bar shows, and its sole window is key/main
-  appkit_controls_draw.m        a window full of controls, a SCROLL PANEL, a TEXT PLAYGROUND and a TABLE & OUTLINE window
+  appkit_controls_draw.m        a window full of controls (and the NEW-CONTROLS strip: stepper, level indicator,
+                                secure/search field, progress, date picker, box, tab view), a SCROLL PANEL, a TEXT
+                                PLAYGROUND and a TABLE & OUTLINE window
   chrome_theme.m                the THEME: an XFWM `.xpm` set becomes the chrome's buttons, 1:1
   chrome_buttons.m              and what a chrome button DOES: a click through the seam, and what happened
   toolbar.m                     the TOOLBAR: the delegate's items, the band, the ink and the click
@@ -881,7 +883,11 @@ the compositor is really gone.
   content frame in, the same frame back). **THE FIVE KINDS ARE FIVE PICTURES**: a separator is a line across the middle, a
   custom box fills its rectangle with its own colour (4256 pixels of red), and a primary box is 139 pixels of ink ALL AT THE
   EDGES with an empty middle, which is what "frame" means. The title is an `NSCell` (Apple's shape), so its face and
-  alignment are the cell's and `-titleFont` is a convenience over it.
+  alignment are the cell's and `-titleFont` is a convenience over it. **AND THE TITLE'S WORDS ARE DRAWN, WHICH TOOK THE
+  DEMONSTRATION TO SEE**: the box cleared a gap in its border and put nothing in it, because `-setTitle:` wrote the title
+  cell's VALUE while `-drawInteriorWithFrame:` reads its LABEL; and the band at `NSAtTop` was centred on the border, so
+  half its glyphs fell outside the view and were clipped. Both are fixed, and `tests/box.m` counts the glyph pixels and
+  the border pixels the clear cuts, plus the band being wholly inside the frame.
 
 - **And `NSTabView` with `NSTabViewItem`** (`ctest`, offscreen) — 51 selectors, two classes, and the `NSTabViewDelegate`
   protocol with the three questions a selection asks. **A TAB VIEW IS A SWAP OF PANES, NOT A PILE OF HIDDEN VIEWS**: exactly

@@ -25,6 +25,19 @@
  * command line. The left side is an `NSOutlineView` with disclosure triangles and nested levels; the right is an
  * `NSTableView` with three columns, a header and alternating rows. Both are the real classes from the last two
  * slices, not painted pictures of them.
+ *
+ * **AND THE NEW-CONTROLS STRIP, WHICH IS WHAT THIS REVISION ADDS.** The window's right column now carries every control
+ * class the later slices landed, in two columns where the scroll panel used to have the whole height: a
+ * continuous `NSLevelIndicator` above the warning threshold and a RATING one, an `NSStepper` with its value beside it,
+ * an `NSSecureTextField` and an `NSSearchField`, an `NSDatePicker` in the text-and-stepper style, an `NSProgressIndicator`
+ * as a bar with its SPINNER beside it, an `NSBox` with a button inside it, and an `NSTabView` whose two panes are the date
+ * picker's TEXT-FIELD and CLOCK-AND-CALENDAR styles. The third face, text-and-stepper, is the picker in the column to the
+ * left, so all three are in the window and two of them are one tab click apart. The scroll panel below them is shorter than
+ * it was; the values and pictures it makes visible are the point of the change.
+ *
+ * **AND `--no-playground` IS FOR LOOKING AT THIS WINDOW RATHER THAN THE TEXT.** The playground is mapped last so it is in
+ * front, which is right for the text and wrong for the controls it covers — `run-controls.sh --no-playground` leaves it
+ * unmapped.
  */
 #import <AppKit/NSApplication.h>
 #import <AppKit/NSWindow.h>
@@ -42,6 +55,14 @@
 #import <AppKit/NSScrollView.h>
 #import <AppKit/NSPopUpButton.h>
 #import <AppKit/NSComboBox.h>	/* the other field with a chip, and the one-triangle mark that tells them apart */
+#import <AppKit/NSLevelIndicator.h>	/* the value that becomes a bar, segments or stars, and a colour */
+#import <AppKit/NSStepper.h>	/* two arrows, one step, and the value pair a numeric cell owns */
+#import <AppKit/NSSecureTextField.h>	/* a field whose ink is bullets */
+#import <AppKit/NSSearchField.h>	/* a field with a search chip and a cancel chip */
+#import <AppKit/NSProgressIndicator.h>	/* a value as a bar, and a spinner that has no timer here */
+#import <AppKit/NSDatePicker.h>	/* a formatted date, and the three frames it can wear */
+#import <AppKit/NSBox.h>		/* the titled frame around other views */
+#import <AppKit/NSTabView.h>	/* the selection over views, used here to swap two date-picker styles */
 #import <AppKit/AGSwitch.h>	/* the tier's own control: a track and a knob, 32 x 20 */
 #import <AppKit/NSToolbar.h>	/* the band above the content, and the items in it */
 #import <AppKit/NSToolbarItem.h>
@@ -181,6 +202,10 @@
 	NSButton *readout;
 	NSSlider *slider;
 	NSSlider *plain;
+	/* **AND THE STEPPER'S READOUT, WHICH IS A LABEL RATHER THAN A BUTTON.** A stepper has no value of its own on screen,
+	 * so the number beside it is what makes a press readable; it is a non-editable `NSTextField`, the same shape the data
+	 * window's captions use, because this tier's label is a field with its doors turned off. */
+	NSTextField *stepperReadout;
 	/* **AND THE PLAYGROUND WINDOW, KEPT SO A SECOND CHOICE BRINGS IT FORWARD rather than making another.** */
 	NSWindow *_playground;
 	/* THE TOOLBAR'S THREE PICTURES, made once in `main` before the toolbar asks for its items. They are borrowed
@@ -199,6 +224,8 @@
 - (BOOL)validateMenuItem:(NSMenuItem *)item;
 - (void)toggleCheckbox:(id)sender;
 - (void)sliderMoved:(id)sender;
+- (void)stepperMoved:(id)sender;
+- (void)dateChanged:(id)sender;
 - (void)noop:(id)sender;
 - (void)choiceMade:(id)sender;
 - (void)showPlayground:(id)sender;
@@ -762,6 +789,30 @@ static void fn_playground_fill(NSTextView *view)
 	fprintf(stderr, "controls: slider -> %.1f\n", [moved doubleValue]);
 }
 
+/* **THE STEPPER'S ACTION UPDATES THE LABEL BESIDE IT.** A stepper is the one control here whose value is not drawn ON
+ * it, so the demonstration owes the number a surface — and printing it as well makes an arrow press readable in the
+ * terminal without looking at the window. The label is written the way a caller writes a caption: the cell's string
+ * value, because a label in this tier is a field with its editing doors off. */
+- (void)stepperMoved:(id)sender
+{
+	double value = [(NSStepper *)sender doubleValue];
+
+	[stepperReadout setStringValue:[NSString stringWithFormat:@"Value: %.0f", value]];
+	[stepperReadout setNeedsDisplay:YES];
+	fprintf(stderr, "controls: stepper -> %.0f\n", value);
+}
+
+/* **AND THE DATE PICKER'S ACTION, PRINTED RATHER THAN READ OUT.** A date field's value is its text, so there is nothing
+ * extra to draw; what a person cannot see from outside is WHICH instant the text stands for, and the formatter's
+ * answer is one line on stderr. The same door is on both pickers below, so a step, a typed digit or a calendar click
+ * says what it stored. */
+- (void)dateChanged:(id)sender
+{
+	NSDate *date = [(NSDatePicker *)sender dateValue];
+
+	fprintf(stderr, "controls: date -> %s\n", date != nil ? [[date description] UTF8String] : "(nil)");
+}
+
 /* AN ITEM WITH NO WORK TO DO BUT SOMETHING TO BE: a menu item whose action is NULL is DISABLED by the auto-enabling
  * walk (nothing answers it), so the items that are here to be LOOKED at carry this instead — enabled, and honestly
  * doing nothing but saying so. */
@@ -1180,6 +1231,7 @@ int main(int argc, char **argv)
 {
 	int seconds = 0;
 	int showData = 0;
+	int showPlaygroundWindow = 1;
 	int i;
 
 	/* **THE CHROME'S THEME IS THIS DEMONSTRATION'S DEFAULT, WHICH IS WHAT MAKES IT THE THING TO ITERATE ON.** The
@@ -1193,6 +1245,11 @@ int main(int argc, char **argv)
 			seconds = atoi(argv[++i]);
 		} else if (strcmp(argv[i], "--data") == 0) {
 			showData = 1;
+		} else if (strcmp(argv[i], "--no-playground") == 0) {
+			/* **THE PLAYGROUND IS MAPPED LAST SO IT IS IN FRONT, WHICH IS RIGHT FOR LOOKING AT THE TEXT AND WRONG FOR
+			 * LOOKING AT THE CONTROLS** — it covers the right column, which is where the newest controls are. This flag
+			 * leaves it unmapped, so `run-controls.sh --no-playground` opens on the controls window itself. */
+			showPlaygroundWindow = 0;
 		}
 	}
 #ifdef AGORA_CHROME_DEFAULT_THEME
@@ -1226,6 +1283,21 @@ int main(int argc, char **argv)
 		NSScrollView *scroll;
 		NSPopUpButton *popup;
 		NSComboBox *combo;
+		/* **AND THE NEW-CONTROLS STRIP'S OWN SET**: two level indicators (a capacity bar and a rating), a stepper with
+		 * its readout, the two fields that are about typing rather than about a value, a date picker, a progress bar and
+		 * a spinner, a box, and a tab view whose panes are two more date pickers. */
+		NSLevelIndicator *capacity;
+		NSLevelIndicator *rating;
+		NSStepper *stepper;
+		NSTextField *stepperValue;
+		NSSecureTextField *secure;
+		NSSearchField *search;
+		NSDatePicker *dateField;
+		NSProgressIndicator *progress;
+		NSProgressIndicator *spinner;
+		NSBox *box;
+		NSButton *boxButton;
+		NSTabView *tabs;
 		NSMenu *choices;
 		AGScrollDoc *doc;
 		NSToolbar *toolbar;
@@ -1278,8 +1350,10 @@ int main(int argc, char **argv)
 		sw = [[AGSwitch alloc] initWithFrame:NSMakeRect(330, 158, 0, 0)];
 		[sw setState:NSOnState];
 		/* THE SCROLL PANEL, TO THE RIGHT OF THE CONTROLS: a frame, and a document four times its height and twice and
-		 * a half its width, so both knobs have somewhere to go and both ends have a landmark. */
-		scroll = [[NSScrollView alloc] initWithFrame:NSMakeRect(400, 25, 340, 370)];
+		 * a half its width, so both knobs have somewhere to go and both ends have a landmark. **IT IS SHORTER THAN IT
+		 * WAS**: the new-controls strip above it needs the room, and 150 points of a 1200-point document is still enough
+		 * scrolling to show both bars doing their work. */
+		scroll = [[NSScrollView alloc] initWithFrame:NSMakeRect(400, 25, 340, 150)];
 		doc = [[AGScrollDoc alloc] initWithFrame:NSMakeRect(0, 0, AG_DOC_W, AG_DOC_H)];
 
 		[push setTitle:@"Toggle the Checkbox"];
@@ -1394,6 +1468,154 @@ int main(int argc, char **argv)
 		[combo selectItemAtIndex:0];
 		[combo sizeToFit];
 		[content addSubview:combo];
+
+		/* **THE NEW-CONTROLS STRIP: THE CLASSES THE LATER SLICES LANDED, IN THE ROOM THE SHORTER SCROLL PANEL GIVES
+		 * THEM.** Two columns of 162 points below the segmented/path/pop-up rows and above the scroll panel. The left
+		 * column is the value-shaped controls and the two fields; the right is the two CONTAINERS — a box around a
+		 * button and a tab view whose panes are the date picker's other two styles, so every face the date picker
+		 * draws is in one window.
+		 *
+		 * **EVERY CONTROL IS SET TO THE STATE THAT MAKES ITS PICTURE SAY SOMETHING**, which is what a gallery is for:
+		 * the capacity bar sits ABOVE its warning threshold so the fill is the platform's orange, the rating shows three
+		 * of five stars, the stepper starts at 5 with its value beside it, the secure field holds a value (so it draws
+		 * bullets rather than a placeholder), the search field holds a value (so its cancel chip is there to press), the
+		 * progress bar is at 62 with its spinner turning, and the date pickers are all "now". */
+		capacity = [[NSLevelIndicator alloc] initWithFrame:NSMakeRect(400, 372, 162, 18)];
+		rating = [[NSLevelIndicator alloc] initWithFrame:NSMakeRect(400, 348, 162, 18)];
+		stepper = [[NSStepper alloc] initWithFrame:NSMakeRect(400, 314, 19, 27)];
+		stepperValue = [[NSTextField alloc] initWithFrame:NSMakeRect(426, 318, 136, 20)];
+		secure = [[NSSecureTextField alloc] initWithFrame:NSMakeRect(400, 286, 162, 22)];
+		search = [[NSSearchField alloc] initWithFrame:NSMakeRect(400, 258, 162, 22)];
+		dateField = [[NSDatePicker alloc] initWithFrame:NSMakeRect(400, 230, 162, 22)];
+		progress = [[NSProgressIndicator alloc] initWithFrame:NSMakeRect(400, 204, 140, 12)];
+		spinner = [[NSProgressIndicator alloc] initWithFrame:NSMakeRect(546, 202, 16, 16)];
+		box = [[NSBox alloc] initWithFrame:NSMakeRect(574, 306, 162, 84)];
+		boxButton = [[NSButton alloc] initWithFrame:NSMakeRect(8, 8, 140, 23)];
+		tabs = [[NSTabView alloc] initWithFrame:NSMakeRect(574, 190, 162, 110)];
+
+		/* THE CAPACITY BAR'S TWO THRESHOLDS ARE THE REASON THE CLASS EXISTS: a progress bar says how far, a level
+		 * indicator says how far AND whether that is bad. At 62 with a warning at 50 the fill is the orange one, and
+		 * raising the value past 80 in a caller would turn it red. */
+		[capacity setMinValue:0.0];
+		[capacity setMaxValue:100.0];
+		[capacity setWarningValue:50.0];
+		[capacity setCriticalValue:80.0];
+		[capacity setDoubleValue:62.0];
+		/* THE RATING STYLE IS THE CELL'S DOOR: the control's initialiser makes a capacity cell, and `-cell` is how a
+		 * caller reaches the style — the same shape a button's type takes through its cell. */
+		[(NSLevelIndicatorCell *)[rating cell] setLevelIndicatorStyle:NSRatingLevelIndicatorStyle];
+		[rating setMaxValue:5.0];
+		[rating setDoubleValue:3.0];
+		[stepper setMinValue:0.0];
+		[stepper setMaxValue:10.0];
+		[stepper setIncrement:1.0];
+		[stepper setDoubleValue:5.0];
+		[stepper setTarget:controller];
+		[stepper setAction:@selector(stepperMoved:)];
+		/* **THE READOUT IS A LABEL, NOT A SECOND KIND OF CONTROL**: a field with its editing, border and background
+		 * doors off, which is what this tier (and the data window) uses a caption for. */
+		[stepperValue setStringValue:@"Value: 5"];
+		[stepperValue setEditable:NO];
+		[stepperValue setSelectable:NO];
+		[stepperValue setBordered:NO];
+		[stepperValue setBezeled:NO];
+		[stepperValue setDrawsBackground:NO];
+		[(NSTextFieldCell *)[secure cell] setPlaceholderString:@"A secure field"];
+		[secure setStringValue:@"hunter2"];	/* the bullets are the class's whole picture */
+		[(NSTextFieldCell *)[search cell] setPlaceholderString:@"A search field"];
+		[search setStringValue:@"Agora"];	/* a value is what puts the CANCEL chip on screen */
+		[progress setStyle:NSProgressIndicatorBarStyle];
+		[progress setIndeterminate:NO];
+		[progress setMinValue:0.0];
+		[progress setMaxValue:100.0];
+		[progress setDoubleValue:62.0];
+		[spinner setStyle:NSProgressIndicatorSpinningStyle];
+		[spinner setIndeterminate:YES];
+		[spinner setDisplayedWhenStopped:YES];
+		[spinner startAnimation:nil];	/* the state a caller reads; this tier has no animation timer */
+		[dateField setDatePickerElements:NSYearMonthDayDatePickerElementFlag];
+		[dateField setDateValue:[NSDate date]];
+		[dateField setTarget:controller];
+		[dateField setAction:@selector(dateChanged:)];
+		[box setTitle:@"NSBox"];
+		[boxButton setTitle:@"A box's button"];
+		[boxButton setTarget:controller];
+		[boxButton setAction:@selector(noop:)];
+		{
+			/* **THE CONTENT VIEW IS THE BOX'S, SO THE BOX RESIZES IT.** The frame here is a placeholder:
+			 * `-setContentView:` immediately sets the view to the box's own content rectangle, and the button inside it
+			 * keeps the frame a caller gave it. Passing the button itself as the content would stretch the button to fill
+			 * the box instead. */
+			NSView *boxContent = [[NSView alloc] initWithFrame:NSMakeRect(0.0, 0.0, 140.0, 50.0)];
+
+			[boxContent addSubview:boxButton];
+			[box setContentView:boxContent];
+			[boxContent release];
+		}
+		/* **THE TAB VIEW'S TWO PANES ARE THE DATE PICKER'S OTHER TWO FACES.** The clock style is a picture of the time
+		 * (a ring, ticks and three hands); the text-field style is the date and time as one formatted string. The strip's
+		 * left column already shows the third, text-and-stepper style, so the three frames are one tab click apart. */
+		{
+			NSTabViewItem *item = [[NSTabViewItem alloc] initWithIdentifier:@"clock"];
+			NSView *pane = [[NSView alloc] initWithFrame:NSMakeRect(0.0, 0.0, 158.0, 80.0)];
+			NSDatePicker *clockPicker = [[NSDatePicker alloc] initWithFrame:NSMakeRect(39.0, 0.0, 80.0, 80.0)];
+
+			[clockPicker setDatePickerStyle:NSClockAndCalendarDatePickerStyle];
+			[clockPicker setDatePickerElements:NSHourMinuteSecondDatePickerElementFlag];
+			[clockPicker setDateValue:[NSDate date]];
+			[clockPicker setTarget:controller];
+			[clockPicker setAction:@selector(dateChanged:)];
+			[pane addSubview:clockPicker];
+			[clockPicker release];
+			[item setLabel:@"Clock"];
+			[item setView:pane];
+			[pane release];
+			[tabs addTabViewItem:item];
+			[item release];
+		}
+		{
+			NSTabViewItem *item = [[NSTabViewItem alloc] initWithIdentifier:@"date"];
+			NSView *pane = [[NSView alloc] initWithFrame:NSMakeRect(0.0, 0.0, 158.0, 80.0)];
+			NSDatePicker *textPicker = [[NSDatePicker alloc] initWithFrame:NSMakeRect(6.0, 38.0, 146.0, 22.0)];
+			NSTextField *caption = [[NSTextField alloc] initWithFrame:NSMakeRect(6.0, 8.0, 146.0, 20.0)];
+
+			[textPicker setDatePickerStyle:NSTextFieldDatePickerStyle];
+			/* HOUR AND MINUTE RATHER THAN THE SECONDS TOO: the pane is 146 points wide and the full
+			 * "Oct 22, 2026, 1:28:53 PM" clips at its last word. A demonstration that shows a control's text cut
+			 * off would be teaching the wrong thing about the control. */
+			[textPicker setDatePickerElements:(NSYearMonthDayDatePickerElementFlag
+				| NSHourMinuteDatePickerElementFlag)];
+			[textPicker setDateValue:[NSDate date]];
+			[textPicker setTarget:controller];
+			[textPicker setAction:@selector(dateChanged:)];
+			[pane addSubview:textPicker];
+			[textPicker release];
+			[caption setStringValue:@"A text field style"];
+			[caption setEditable:NO];
+			[caption setSelectable:NO];
+			[caption setBordered:NO];
+			[caption setBezeled:NO];
+			[caption setDrawsBackground:NO];
+			[caption setFont:[NSFont systemFontOfSize:[NSFont smallSystemFontSize]]];
+			[pane addSubview:caption];
+			[caption release];
+			[item setLabel:@"Date"];
+			[item setView:pane];
+			[pane release];
+			[tabs addTabViewItem:item];
+			[item release];
+		}
+		[content addSubview:capacity];
+		[content addSubview:rating];
+		[content addSubview:stepper];
+		[content addSubview:stepperValue];
+		[content addSubview:secure];
+		[content addSubview:search];
+		[content addSubview:dateField];
+		[content addSubview:progress];
+		[content addSubview:spinner];
+		[content addSubview:box];
+		[content addSubview:tabs];
 		[content addSubview:push];
 		[content addSubview:alt];
 		[content addSubview:check];
@@ -1428,6 +1650,7 @@ int main(int argc, char **argv)
 		controller->checkbox = check;
 		controller->readout = readout;
 		controller->slider = slider;
+		controller->stepperReadout = stepperValue;
 		/* **AND EVERY ITEM WORTH TYPING CARRIES ITS SHORTCUT**, the Mac's own spellings: Cmd-N/O/W to make, open and
 		 * close, Cmd-Z and Shift-Cmd-Z to undo and redo, Cmd-G/R for the two View toggles. HELP HAS NONE — a Help
 		 * menu's own shortcut is a search field this tier has not got, and a made-up key would be one nobody typed. */
@@ -1460,7 +1683,9 @@ int main(int argc, char **argv)
 		/* **AND THE PLAYGROUND IS PUT ON SCREEN LAST, SO IT IS IN FRONT OF THE EYE.** The compositor stacks in map order,
 		 * so a window mapped after the controls window sits above it; it is ORDERED FRONT rather than made key, so the
 		 * CONTROLS keep the keyboard and their field keeps its editor while the playground is what a person sees. */
-		[controller showPlayground:nil];
+		if (showPlaygroundWindow) {
+			[controller showPlayground:nil];
+		}
 		if (showData) {
 			[controller showDataViews:nil];
 		}
@@ -1475,6 +1700,19 @@ int main(int argc, char **argv)
 			[content frame].size.width, [content frame].size.height,
 			[slider frame].origin.x, [slider frame].origin.y,
 			[field frame].origin.x, [field frame].origin.y, [field frame].size.width, [field frame].size.height);
+		/* **AND THE NEW-CONTROLS STRIP'S GEOMETRY**, so a screenshot can be read against the frames the application
+		 * believes rather than against a guess about where a control landed. The tab view's frame is printed too, because
+		 * its panes are sized by the tab strip rather than by the caller. */
+		fprintf(stderr, "controls: gallery = levels %.0fx%.0f, stepper %.0fx%.0f, secure %.0fx%.0f, search %.0fx%.0f, "
+			"date %.0fx%.0f, progress %.0fx%.0f, box %.0fx%.0f, tabs %.0fx%.0f\n",
+			[capacity frame].size.width, [capacity frame].size.height,
+			[stepper frame].size.width, [stepper frame].size.height,
+			[secure frame].size.width, [secure frame].size.height,
+			[search frame].size.width, [search frame].size.height,
+			[dateField frame].size.width, [dateField frame].size.height,
+			[progress frame].size.width, [progress frame].size.height,
+			[box frame].size.width, [box frame].size.height,
+			[tabs frame].size.width, [tabs frame].size.height);
 		/* **AND THE POP-UP BUTTON'S, WHICH IS THE ONE FRAME HERE THE CELL COMPUTED RATHER THAN THE CALLER.** It is
 		 * fitted to its title plus its arrow, so its width is `-cellSizeForBounds:`'s answer and printing it is how
 		 * a reader checks the measurement against the button they can see. */

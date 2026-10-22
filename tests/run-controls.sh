@@ -14,6 +14,7 @@
 #
 # Usage: run-controls.sh [WINDOW-SERVER] [WIDTHxHEIGHT] [DEMO-ARG...]
 #        run-controls.sh --data          # the Table & Outline window at startup
+#        run-controls.sh --no-playground # the Controls window itself, without the text window on top
 #        run-controls.sh "" 1200x820 --data
 #
 # **THE DEMO'S OWN ARGUMENTS ARE FORWARDED**, so the split view can be looked at without a second launcher:

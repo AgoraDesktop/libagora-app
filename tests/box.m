@@ -199,6 +199,75 @@ int main(void)
 				check(middleInk == 0, "and its middle is empty, which is why it is a FRAME");
 				[rep release];
 			}
+
+			/* **AND THE TITLE IS DRAWN, WHICH THE GEOMETRY CANNOT SEE.** A non-empty `-titleRect` is satisfied by the
+			 * CLEARING of the band alone — and the box that shipped did exactly that: `-setTitle:` wrote the title cell's
+			 * VALUE while `-drawInteriorWithFrame:` draws its LABEL, so the border had a gap with no words in it. The
+			 * demonstration is where it showed; this counts the band's ink, and the same box with `NSNoTitle` is the
+			 * negative assertion (an empty band cannot pass by accident). */
+			{
+				NSBox *titled = [[NSBox alloc] initWithFrame:NSMakeRect(0.0, 0.0, 160.0, 100.0)];
+				NSBitmapImageRep *withRep = [[NSBitmapImageRep alloc] initWithBitmapDataPlanes:NULL
+					pixelsWide:160 pixelsHigh:100 bitsPerSample:8 samplesPerPixel:4 hasAlpha:YES
+					isPlanar:NO colorSpaceName:NSCalibratedRGBColorSpace bytesPerRow:640 bitsPerPixel:32];
+				NSBitmapImageRep *withoutRep = [[NSBitmapImageRep alloc] initWithBitmapDataPlanes:NULL
+					pixelsWide:160 pixelsHigh:100 bitsPerSample:8 samplesPerPixel:4 hasAlpha:YES
+					isPlanar:NO colorSpaceName:NSCalibratedRGBColorSpace bytesPerRow:640 bitsPerPixel:32];
+				NSRect band;
+				int x, y, x0, x1, y0, y1;
+				int words = 0;
+				int gap = 0;
+
+				[titled setTitle:@"Group"];
+				[titled setTitlePosition:NSAtTop];
+				band = [titled titleRect];
+				[NSGraphicsContext setCurrentContext:[NSGraphicsContext graphicsContextWithBitmapImageRep:withRep]];
+				[titled drawRect:[titled bounds]];
+				[titled setTitlePosition:NSNoTitle];
+				[NSGraphicsContext setCurrentContext:[NSGraphicsContext graphicsContextWithBitmapImageRep:withoutRep]];
+				[titled drawRect:[titled bounds]];
+				/* **THE BAND'S INK AND THE BORDER'S GAP ARE TWO DIFFERENT PIXEL SETS.** The border line runs through
+				 * the middle of the band, so a plain count of dark pixels cannot tell a title from a frame; comparing
+				 * the two renders can. A pixel DARK with the title and not without it is a GLYPH (the border is not
+				 * there); one dark without the title and not with it is the GAP the clear cut for the words. */
+				/* **THE BAND STRADDLES THE BOX'S TOP EDGE**, so half of it is outside the bitmap: the rows are
+				 * clamped to the picture, which is what `-dark_in` does for the same reason. The bitmap's rows run the
+				 * opposite way to the drawing's. */
+				x0 = (int)NSMinX(band);
+				x1 = (int)NSMaxX(band);
+				y0 = 100 - (int)ceil(NSMaxY(band));
+				y1 = 100 - 1 - (int)floor(NSMinY(band));
+				if (y0 < 0) {
+					y0 = 0;
+				}
+				if (y1 > 99) {
+					y1 = 99;
+				}
+				for (y = y0; y <= y1; y++) {
+					for (x = x0; x < x1; x++) {
+						NSColor *a = [withRep colorAtX:x y:y];
+						NSColor *b = [withoutRep colorAtX:x y:y];
+						int aDark = (a != nil && [a alphaComponent] > 0.4 && [a redComponent] < 0.80);
+						int bDark = (b != nil && [b alphaComponent] > 0.4 && [b redComponent] < 0.80);
+
+						if (aDark && !bDark) {
+							words++;
+						}
+						if (bDark && !aDark) {
+							gap++;
+						}
+					}
+				}
+				printf("  (note: the title drew %d glyph pixels and cut %d border pixels out of its band)\n",
+				       words, gap);
+				check(words > 10, "a title's words are INK in its band, not only a gap in the border");
+				check(gap > 10, "and the words sit in a GAP the clear cut out of that border");
+				check(NSMaxY(band) <= NSMaxY([titled bounds]) + 0.01 && NSMinY(band) >= NSMinY([titled bounds]),
+				      "and the band is WHOLLY INSIDE the frame, so the clip cannot cut the letters in half");
+				[withRep release];
+				[withoutRep release];
+				[titled release];
+			}
 			[box release];
 			[host release];
 		}

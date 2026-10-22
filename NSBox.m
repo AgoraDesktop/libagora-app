@@ -91,10 +91,15 @@
 
 /* ---- THE TITLE ------------------------------------------------------------------------------------ */
 
-- (NSString *)title { return [_titleCell stringValue]; }
+/* **THE TITLE IS THE CELL'S LABEL, NOT ITS VALUE.** `NSCell` keeps two strings: `-_title` is what it DRAWS and
+ * `-objectValue` is what it holds, and the cell's `-cg_contentText` answers the label for every cell that does not
+ * override it. This door used to write `-setStringValue:`, which is the VALUE door — so `-title` read back, the title's
+ * band measured, and the drawing read an empty label: a box whose title cleared a gap in its border and put no words in
+ * it. MEASURED by the demonstration, which is what a demonstration is for; `tests/box.m` now counts the band's ink. */
+- (NSString *)title { return [_titleCell title]; }
 - (void)setTitle:(NSString *)title
 {
-	[_titleCell setStringValue:(title != nil) ? title : @""];
+	[_titleCell setTitle:(title != nil) ? title : @""];
 	[self cg_layOutContent];
 	[self setNeedsDisplay:YES];
 }
@@ -180,9 +185,11 @@
 	return [self bounds];
 }
 
-/* **THE TITLE'S BAND.** A title is drawn in a band the height of its font, at the position asked for: above the top edge
- * (outside), across the top edge (the classic form, in a gap in the border), below it, or at the bottom's three positions.
- * `NSNoTitle` answers an empty rect, which is what "there is no title" means. */
+/* **THE TITLE'S BAND.** A title is drawn in a band the height of its font, at the position asked for. The three TOP
+ * positions put the band in a gap along the top edge, wholly inside the frame (`NSAtTop`, the classic group-box title), or
+ * below it; the bottom's three are their mirror. `NSNoTitle` answers an empty rect, which is what "there is no title"
+ * means. **THE BAND STAYS INSIDE THE VIEW FOR `NSAtTop`** because the view clips to its bounds: a band centred on the
+ * border, Apple's shape, lost the top half of every letter here — MEASURED on the demonstration. */
 - (NSRect)titleRect
 {
 	NSRect bounds = [self bounds];
@@ -207,7 +214,12 @@
 		band.origin.y = NSMaxY(bounds);
 		break;
 	case NSAtTop:
-		band.origin.y = NSMaxY(bounds) - height / 2.0;
+		/* **INSIDE THE FRAME, NOT ASTRIDE IT.** Apple draws the title across the top edge, and this tier's `-borderRect`
+		 * IS the bounds — so a band centred on the edge has half its glyphs outside the view, where the view's own clip
+		 * cuts them. MEASURED on the demonstration: the title appeared with the top half of every letter missing. The
+		 * band now sits in a gap along the top edge, wholly inside the frame; the content's title band below is the whole
+		 * band, so nothing can be laid out underneath it. */
+		band.origin.y = NSMaxY(bounds) - height - 2.0;
 		break;
 	case NSBelowTop:
 		band.origin.y = NSMaxY(bounds) - height - 2.0;
@@ -238,7 +250,8 @@
 
 	switch (_titlePosition) {
 	case NSAtTop:
-		titleBand = ([_titleFont ascender] - [_titleFont descender]) / 2.0;
+		/* THE WHOLE BAND, because it is now wholly inside the frame (see `-titleRect`). */
+		titleBand = [_titleFont ascender] - [_titleFont descender] + 2.0;
 		break;
 	case NSBelowTop:
 		titleBand = [_titleFont ascender] - [_titleFont descender] + 2.0;
@@ -275,11 +288,7 @@
 
 	switch (_titlePosition) {
 	case NSAtTop:
-		titleBand = ([_titleFont ascender] - [_titleFont descender]) / 2.0;
-		break;
 	case NSBelowTop:
-		titleBand = [_titleFont ascender] - [_titleFont descender] + 2.0;
-		break;
 	case NSAboveTop:
 		titleBand = [_titleFont ascender] - [_titleFont descender] + 2.0;
 		break;
