@@ -10,6 +10,7 @@
  * glyph slice will hang everything on, and it is deliberately the part that does not need glyphs.
  */
 #import <AppKit/NSLayoutManager.h>
+#import <AppKit/AppKitRefusal.h>
 #import <AppKit/NSTextStorage.h>
 #import <AppKit/NSTextContainer.h>
 #import <AppKit/NSFont.h>
@@ -3049,6 +3050,34 @@ static BOOL fn_cell_owns_edge(CGFloat thisWidth, CGFloat otherWidth, BOOL tieGoe
  * answers 0 rather than dividing by zero.
  * ================================================================================================================ */
 
+/* ==================================================================================================================
+ * ONE GLYPH'S RECORD — the unit the store is an array of.
+ *
+ * **IT IS A CLASS RATHER THAN PARALLEL ARRAYS** because the doors address a glyph by index and read four different
+ * fields of it; four arrays would be four chances to fall out of step on an insert. The fields are Apple's: the glyph
+ * itself, the character it stands for, where it sits inside its line fragment, the two flags a typesetter sets, and a
+ * tag-keyed integer table.
+ * ================================================================================================================ */
+@interface FNGlyph : NSObject
+{
+@public
+	NSGlyph glyph;
+	NSUInteger characterIndex;
+	NSPoint location;
+	BOOL notShown;
+	BOOL drawsOutside;
+	NSMutableDictionary *attributes;
+}
+@end
+
+@implementation FNGlyph
+- (void)dealloc
+{
+	[attributes release];
+	[super dealloc];
+}
+@end
+
 @implementation NSLayoutManager (AGGlyphMapping)
 
 - (NSUInteger)characterIndexForGlyphAtIndex:(NSUInteger)glyphIndex
@@ -3062,6 +3091,12 @@ static BOOL fn_cell_owns_edge(CGFloat thisWidth, CGFloat otherWidth, BOOL tieGoe
 	 * promises. The guard is here rather than in the helper because the helper's other callers rely on that boundary. */
 	if (glyphIndex >= [self numberOfGlyphs]) {
 		return NSNotFound;
+	}
+	/* THE STORE ANSWERS FIRST, because a caller may have MOVED this glyph's character with `-setCharacterIndex:`. The
+	 * shaper is the fallback for a fragment with no line, where there are no glyphs to copy. */
+	[self cg_syncGlyphStore];
+	if (glyphIndex < [_glyphStore count]) {
+		return ((FNGlyph *)[_glyphStore objectAtIndex:glyphIndex])->characterIndex;
 	}
 	fragment = [self cg_fragmentForGlyphAtIndex:glyphIndex effectiveRange:NULL];
 	if (fragment == nil) {
@@ -3095,6 +3130,11 @@ static BOOL fn_cell_owns_edge(CGFloat thisWidth, CGFloat otherWidth, BOOL tieGoe
 
 	if (glyphIndex >= [self numberOfGlyphs]) {
 		return NSZeroPoint;
+	}
+	/* The store first, for the same reason: `-setLocation:forStartOfGlyphRange:` writes there. */
+	[self cg_syncGlyphStore];
+	if (glyphIndex < [_glyphStore count]) {
+		return ((FNGlyph *)[_glyphStore objectAtIndex:glyphIndex])->location;
 	}
 	fragment = [self cg_fragmentForGlyphAtIndex:glyphIndex effectiveRange:NULL];
 	if (fragment == nil) {
@@ -3199,6 +3239,259 @@ static CGFloat fn_fraction_between(FNFragment *fragment, CGFloat localX, NSUInte
 		nextCharacter = length;
 	}
 	return fn_fraction_between(fragment, point.x - fragment->used.origin.x, charIndex, nextCharacter);
+}
+
+@end
+
+
+/* ==================================================================================================================
+ * THE GLYPH STORE.
+ *
+ * See the header for why this is a SHADOW of the layout rather than its source, and why the three count-changing doors
+ * refuse: adding or removing a glyph makes the text and the store disagree about how many there are, and the next
+ * re-layout would silently undo the edit. Everything that changes a FIELD of a glyph is real here, because a field is
+ * something the fragments do not own.
+ *
+ * **THE REBUILD READS THE SHAPER DIRECTLY** — `CTRunGetGlyphs`, `CTRunGetStringIndices`, `CTRunGetPositions` — rather
+ * than going through this class's own query doors, which now read the store. That is what keeps the build and the
+ * queries from depending on each other, and it is why a fragment with no `CTLine` (an empty line, or a paragraph break)
+ * contributes records with a placeholder glyph rather than none: the glyph count has to stay the character count or
+ * every index after the break shifts.
+ * ================================================================================================================ */
+
+@implementation NSLayoutManager (AGGlyphStore)
+
+- (void)cg_syncGlyphStore
+{
+	if (_glyphStore == nil || _glyphStoreStale || _invalidatedRange.location != NSNotFound) {
+		[self cg_rebuildGlyphStore];
+	}
+}
+
+- (void)cg_rebuildGlyphStore
+{
+	NSUInteger c, f;
+
+	[self cg_ensureLayout];
+	if (_glyphStore == nil) {
+		_glyphStore = [[NSMutableArray alloc] init];
+	}
+	[_glyphStore removeAllObjects];
+	_glyphStoreStale = NO;
+	for (c = 0; c < [_fragments count]; c++) {
+		NSMutableArray *fragments = [_fragments objectAtIndex:c];
+
+		for (f = 0; f < [fragments count]; f++) {
+			FNFragment *fragment = [fragments objectAtIndex:f];
+			CFArrayRef runs;
+			CFIndex r, runCount;
+
+			if (fragment->line == NULL) {
+				NSUInteger k;
+
+				for (k = 0; k < fragment->range.length; k++) {
+					FNGlyph *record = [[[FNGlyph alloc] init] autorelease];
+
+					record->glyph = (NSGlyph)(fragment->range.location + k);
+					record->characterIndex = fragment->range.location + k;
+					record->location = NSMakePoint(fragment->used.origin.x - fragment->rect.origin.x,
+								       fragment->baseline - fragment->rect.origin.y);
+					[_glyphStore addObject:record];
+				}
+				continue;
+			}
+			runs = CTLineGetGlyphRuns(fragment->line);
+			runCount = (runs != NULL) ? CFArrayGetCount(runs) : 0;
+			for (r = 0; r < runCount; r++) {
+				CTRunRef run = (CTRunRef)CFArrayGetValueAtIndex(runs, r);
+				CFIndex glyphs = CTRunGetGlyphCount(run);
+				CFIndex k;
+
+				for (k = 0; k < glyphs; k++) {
+					CFRange one = CFRangeMake(k, 1);
+					CGGlyph shaped = 0;
+					CFIndex stringIndex = 0;
+					CGPoint position = CGPointZero;
+					FNGlyph *record = [[[FNGlyph alloc] init] autorelease];
+
+					CTRunGetGlyphs(run, one, &shaped);
+					CTRunGetStringIndices(run, one, &stringIndex);
+					CTRunGetPositions(run, one, &position);
+					record->glyph = (NSGlyph)shaped;
+					record->characterIndex = fragment->range.location + (NSUInteger)stringIndex;
+					record->location = NSMakePoint(fragment->used.origin.x + (CGFloat)position.x
+								       - fragment->rect.origin.x,
+								       fragment->baseline - fragment->rect.origin.y);
+					[_glyphStore addObject:record];
+				}
+			}
+			/* A line whose shaped glyphs are FEWER than its characters — a ligature — leaves the tail unrecorded by
+			 * the runs, so the shortfall is filled with one record per remaining character. Without this the store
+			 * would be shorter than `-numberOfGlyphs` and every index past a ligature would answer for the wrong glyph. */
+			{
+				NSUInteger recorded = fragment->glyphs.length;
+				NSUInteger k;
+
+				for (k = recorded; k < fragment->range.length; k++) {
+					FNGlyph *record = [[[FNGlyph alloc] init] autorelease];
+
+					record->glyph = (NSGlyph)(fragment->range.location + k);
+					record->characterIndex = fragment->range.location + k;
+					record->location = NSMakePoint(fragment->used.origin.x - fragment->rect.origin.x,
+								       fragment->baseline - fragment->rect.origin.y);
+					[_glyphStore addObject:record];
+				}
+			}
+		}
+	}
+}
+
+- (NSGlyph)glyphAtIndex:(NSUInteger)glyphIndex
+{
+	return [self glyphAtIndex:glyphIndex isValidIndex:NULL];
+}
+
+- (NSGlyph)glyphAtIndex:(NSUInteger)glyphIndex isValidIndex:(BOOL *)isValidIndex
+{
+	[self cg_syncGlyphStore];
+	if (glyphIndex >= [_glyphStore count]) {
+		if (isValidIndex != NULL) {
+			*isValidIndex = NO;
+		}
+		return 0;	/* NSNullGlyph */
+	}
+	if (isValidIndex != NULL) {
+		*isValidIndex = YES;
+	}
+	return ((FNGlyph *)[_glyphStore objectAtIndex:glyphIndex])->glyph;
+}
+
+- (void)getGlyphs:(NSGlyph *)glyphArray range:(NSRange)glyphRange
+{
+	NSUInteger i;
+
+	if (glyphArray == NULL) {
+		return;
+	}
+	[self cg_syncGlyphStore];
+	for (i = 0; i < glyphRange.length; i++) {
+		NSUInteger index = glyphRange.location + i;
+
+		glyphArray[i] = (index < [_glyphStore count])
+			? ((FNGlyph *)[_glyphStore objectAtIndex:index])->glyph : 0;
+	}
+}
+
+- (BOOL)notShownAttributeForGlyphAtIndex:(NSUInteger)glyphIndex
+{
+	[self cg_syncGlyphStore];
+	if (glyphIndex >= [_glyphStore count]) {
+		return NO;
+	}
+	return ((FNGlyph *)[_glyphStore objectAtIndex:glyphIndex])->notShown;
+}
+
+- (void)setNotShownAttribute:(BOOL)flag forGlyphAtIndex:(NSUInteger)glyphIndex
+{
+	[self cg_syncGlyphStore];
+	if (glyphIndex < [_glyphStore count]) {
+		((FNGlyph *)[_glyphStore objectAtIndex:glyphIndex])->notShown = flag ? YES : NO;
+	}
+}
+
+- (BOOL)drawsOutsideLineFragmentForGlyphAtIndex:(NSUInteger)glyphIndex
+{
+	[self cg_syncGlyphStore];
+	if (glyphIndex >= [_glyphStore count]) {
+		return NO;
+	}
+	return ((FNGlyph *)[_glyphStore objectAtIndex:glyphIndex])->drawsOutside;
+}
+
+- (void)setDrawsOutsideLineFragment:(BOOL)flag forGlyphAtIndex:(NSUInteger)glyphIndex
+{
+	[self cg_syncGlyphStore];
+	if (glyphIndex < [_glyphStore count]) {
+		((FNGlyph *)[_glyphStore objectAtIndex:glyphIndex])->drawsOutside = flag ? YES : NO;
+	}
+}
+
+- (NSInteger)intAttribute:(NSInteger)attributeTag forGlyphAtIndex:(NSUInteger)glyphIndex
+{
+	FNGlyph *record;
+	NSNumber *value;
+
+	[self cg_syncGlyphStore];
+	if (glyphIndex >= [_glyphStore count]) {
+		return 0;
+	}
+	record = [_glyphStore objectAtIndex:glyphIndex];
+	value = [record->attributes objectForKey:[NSString stringWithFormat:@"%ld", (long)attributeTag]];
+	return value != nil ? (NSInteger)[value longValue] : 0;
+}
+
+- (void)setIntAttribute:(NSInteger)attributeTag value:(NSInteger)val forGlyphAtIndex:(NSUInteger)glyphIndex
+{
+	FNGlyph *record;
+
+	[self cg_syncGlyphStore];
+	if (glyphIndex >= [_glyphStore count]) {
+		return;
+	}
+	record = [_glyphStore objectAtIndex:glyphIndex];
+	if (record->attributes == nil) {
+		record->attributes = [[NSMutableDictionary alloc] init];
+	}
+	[record->attributes setObject:[NSNumber numberWithLong:(long)val]
+			       forKey:[NSString stringWithFormat:@"%ld", (long)attributeTag]];
+}
+
+- (void)setLocation:(NSPoint)location forStartOfGlyphRange:(NSRange)glyphRange
+{
+	[self cg_syncGlyphStore];
+	if (glyphRange.location < [_glyphStore count]) {
+		((FNGlyph *)[_glyphStore objectAtIndex:glyphRange.location])->location = location;
+	}
+}
+
+- (void)setCharacterIndex:(NSUInteger)charIndex forGlyphAtIndex:(NSUInteger)glyphIndex
+{
+	[self cg_syncGlyphStore];
+	if (glyphIndex < [_glyphStore count]) {
+		((FNGlyph *)[_glyphStore objectAtIndex:glyphIndex])->characterIndex = charIndex;
+	}
+}
+
+- (void)replaceGlyphAtIndex:(NSUInteger)glyphIndex withGlyph:(NSGlyph)newGlyph
+{
+	[self cg_syncGlyphStore];
+	if (glyphIndex < [_glyphStore count]) {
+		((FNGlyph *)[_glyphStore objectAtIndex:glyphIndex])->glyph = newGlyph;
+	}
+}
+
+/* THE THREE THAT CHANGE HOW MANY GLYPHS THERE ARE. See the header: the store is a shadow, so an edit to its length
+ * would be undone by the next re-layout, and a door that lies about that is worse than one that says why. */
+- (void)insertGlyph:(NSGlyph)glyph atGlyphIndex:(NSUInteger)glyphIndex characterIndex:(NSUInteger)characterIndex
+{
+	(void)glyph; (void)glyphIndex; (void)characterIndex;
+	fn_refuse_window("-insertGlyph:atGlyphIndex:characterIndex:",
+			 "an authoritative glyph store (this tier's glyphs are shaped from the text, so a glyph the text has "
+			 "not got would be discarded by the next layout)");
+}
+
+- (void)insertGlyphs:(const NSGlyph *)glyphs length:(NSUInteger)length
+	forStartingGlyphAtIndex:(NSUInteger)glyphIndex characterIndex:(NSUInteger)characterIndex
+{
+	(void)glyphs; (void)length; (void)glyphIndex; (void)characterIndex;
+	fn_refuse_window("-insertGlyphs:length:forStartingGlyphAtIndex:characterIndex:",
+			 "an authoritative glyph store");
+}
+
+- (void)deleteGlyphsInRange:(NSRange)glyphRange
+{
+	(void)glyphRange;
+	fn_refuse_window("-deleteGlyphsInRange:", "an authoritative glyph store");
 }
 
 @end

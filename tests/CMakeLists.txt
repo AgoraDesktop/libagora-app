@@ -1019,3 +1019,12 @@ target_link_libraries(text_glyph_mapping PRIVATE App)
 
 add_test(NAME appkit-text-glyph-mapping COMMAND text_glyph_mapping)
 set_tests_properties(appkit-text-glyph-mapping PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
+
+# **THE GLYPH STORE.** The store is a SHADOW of the layout, so the test asserts both halves: it agrees with what it
+# shadows (glyph, character, location come from the shaper, not from zeros) and it REMEMBERS a caller's edits, with the
+# untouched neighbours checked too. The three count-changing doors are checked to refuse rather than to lie.
+add_executable(text_glyph_store text_glyph_store.m)
+target_link_libraries(text_glyph_store PRIVATE App)
+
+add_test(NAME appkit-text-glyph-store COMMAND text_glyph_store)
+set_tests_properties(appkit-text-glyph-store PROPERTIES ENVIRONMENT "${_agora_app_test_env}")

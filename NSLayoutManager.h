@@ -40,6 +40,9 @@
 #define APPKIT_NSLAYOUTMANAGER_H
 
 #import <Foundation/Foundation.h>
+/* `NSGlyph` is declared in `NSFont.h` and the glyph store's doors take it, so this header imports it for the same
+ * reason Apple's does: a type a signature names has to be visible where the signature is read. */
+#import <AppKit/NSFont.h>
 
 NS_ASSUME_NONNULL_BEGIN
 
@@ -79,6 +82,15 @@ NS_ASSUME_NONNULL_BEGIN
 	 * list changes, which is what keeps the two arrays in step BY CONSTRUCTION rather than by a rule somebody has to
 	 * remember. Nil until a layout is asked for. */
 	NSMutableArray *_fragments;	/* RETAINED; one array per container */
+	/* **AND THE GLYPH STORE — ONE RECORD PER GLYPH, REBUILT WITH THE FRAGMENTS.** Apple's layout manager is a glyph
+	 * store first and a line breaker second: its typesetter WRITES glyphs into the store, and the doors that read or
+	 * move one glyph (`-glyphAtIndex:`, `-setLocation:forStartOfGlyphRange:`, `-setNotShownAttribute:…`) are doors onto
+	 * that array. This tier's authority is the TEXT — the fragments' `CTLine`s are the shaped glyphs — so the store is a
+	 * SHADOW: it is built from the fragments whenever the layout is rebuilt, and it records what a caller changes so the
+	 * read doors can answer. A shadow is the honest shape here because the alternative, making the store authoritative,
+	 * would mean re-implementing line breaking so a glyph edit could survive one. */
+	NSMutableArray *_glyphStore;	/* RETAINED; FNGlyph records, in layout order, or nil before the first build */
+	BOOL _glyphStoreStale;		/* YES when the fragments have moved under it */
 }
 
 /* ---- THE STORE, WHICH THE STORAGE DRIVES ------------------------------------------------------------ */
@@ -295,6 +307,51 @@ NS_ASSUME_NONNULL_BEGIN
      fractionOfDistanceThroughGlyph:(nullable CGFloat *)partialFraction;
 - (CGFloat)fractionOfDistanceThroughGlyphForPoint:(NSPoint)point inTextContainer:(NSTextContainer *)container;
 
+
+
+/* ==================================================================================================================
+ * THE GLYPH STORE AND ITS DOORS.
+ *
+ * **THE STORE IS A SHADOW OF THE LAYOUT RATHER THAN ITS SOURCE.** Apple's typesetter writes glyphs into a store and the
+ * breaker reads them; this tier's breaker produces `CTLine`s and the glyphs are read back OUT of what it shaped. So the
+ * store is built from the fragments whenever the layout is rebuilt, and these doors read and write THAT record. A
+ * caller's edits — a moved location, a hidden glyph, an integer attribute — therefore survive until the text changes,
+ * which is exactly the lifetime Apple gives them before its own layout invalidates.
+ *
+ * **THE THREE COUNT-CHANGING DOORS REFUSE BY NAME** (`insertGlyph:`, `insertGlyphs:…`, `deleteGlyphsInRange:`), and
+ * the reason is the shadow rather than a missing subsystem: adding or removing a glyph means the text and the store
+ * disagree about how many glyphs there are, and the next re-layout would discard the edit anyway. A door that appears
+ * to succeed and is undone by the next keystroke is worse than one that says why.
+ * ================================================================================================================ */
+
+/* The glyph at an index, and the flag-carrying form Apple also declares. */
+- (NSGlyph)glyphAtIndex:(NSUInteger)glyphIndex;
+- (NSGlyph)glyphAtIndex:(NSUInteger)glyphIndex isValidIndex:(nullable BOOL *)isValidIndex;
+/* Fill a caller's buffer with a glyph range. */
+- (void)getGlyphs:(NSGlyph *)glyphArray range:(NSRange)glyphRange;
+
+/* THE PER-GLYPH FLAGS AND ATTRIBUTES: what a typesetter records about a glyph that is not its identity. */
+- (BOOL)notShownAttributeForGlyphAtIndex:(NSUInteger)glyphIndex;
+- (void)setNotShownAttribute:(BOOL)flag forGlyphAtIndex:(NSUInteger)glyphIndex;
+- (BOOL)drawsOutsideLineFragmentForGlyphAtIndex:(NSUInteger)glyphIndex;
+- (void)setDrawsOutsideLineFragment:(BOOL)flag forGlyphAtIndex:(NSUInteger)glyphIndex;
+- (NSInteger)intAttribute:(NSInteger)attributeTag forGlyphAtIndex:(NSUInteger)glyphIndex;
+- (void)setIntAttribute:(NSInteger)attributeTag value:(NSInteger)val forGlyphAtIndex:(NSUInteger)glyphIndex;
+
+/* THE RECORD'S OWN FIELDS, WRITABLE: where the glyph sits, which character it stands for, and which glyph it is. */
+- (void)setLocation:(NSPoint)location forStartOfGlyphRange:(NSRange)glyphRange;
+- (void)setCharacterIndex:(NSUInteger)charIndex forGlyphAtIndex:(NSUInteger)glyphIndex;
+- (void)replaceGlyphAtIndex:(NSUInteger)glyphIndex withGlyph:(NSGlyph)newGlyph;
+
+/* THE COUNT-CHANGING THREE, DECLARED AND REFUSED. */
+- (void)insertGlyph:(NSGlyph)glyph atGlyphIndex:(NSUInteger)glyphIndex characterIndex:(NSUInteger)characterIndex;
+- (void)insertGlyphs:(const NSGlyph *)glyphs length:(NSUInteger)length
+	forStartingGlyphAtIndex:(NSUInteger)glyphIndex characterIndex:(NSUInteger)characterIndex;
+- (void)deleteGlyphsInRange:(NSRange)glyphRange;
+
+/* Rebuild the shadow from the fragments. Public as a `cg_` door because the store's correctness is what the test
+ * asserts, and a caller that mutated the fragments by hand needs a way to say so. */
+- (void)cg_rebuildGlyphStore;
 
 @end
 
