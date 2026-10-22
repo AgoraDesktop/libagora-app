@@ -115,6 +115,12 @@ NS_ASSUME_NONNULL_BEGIN
 	NSMutableArray *_blockRectOverrides;	/* RETAINED; FNBlockRect objects, one per overridden block */
 	NSMutableDictionary *_attachmentSizes;	/* RETAINED; NSNumber(character index) -> NSValue(NSSize) */
 	NSImageScaling _defaultAttachmentScaling;
+	/* **AND THE TWO TABLES THE DRAWING PASS READS BESIDE THE STORE.** The marks are the temporary attributes, as a
+	 * sorted list of runs (an `FNTextMark`: a range and its dictionary); the rect array is the buffer the `rectArray…`
+	 * doors answer with, kept here because Apple's answer is a pointer valid until the next call. */
+	NSMutableArray *_temporaryMarks;	/* RETAINED; FNTextMark objects, sorted by range, non-overlapping */
+	NSRect *_rectArray;		/* OWNED; reallocated per call, freed with the manager */
+	NSUInteger _rectArrayCount;
 
 }
 
@@ -249,10 +255,71 @@ NS_ASSUME_NONNULL_BEGIN
  * one line two rectangles instead of a band. */
 - (void)drawBackgroundForGlyphRange:(NSRange)glyphsToShow atPoint:(NSPoint)origin;
 
-/* **AND WHAT IS STILL NOT HERE, NAMED AT THE DOOR THAT WOULD BE IT.** The MARKED RANGE and the temporary-attribute
- * question belong to the marked-text family and the drawing delegate, neither of which is here: the marked range is the
- * unconfirmed text an input method is composing, and a temporary attribute is a run the layout sees and the store does
- * not. Both are the input-method slice's, and both are NAMED rather than half-drawn. */
+/* ==================================================================================================================
+ * THE TEMPORARY ATTRIBUTES — runs the LAYOUT sees and the STORE does not.
+ *
+ * **A TEMPORARY ATTRIBUTE IS A HIGHLIGHT THAT IS NOT AN EDIT.** The classic user is a find: the results are painted while
+ * the search is showing and must vanish when it closes, and putting them in the store would make them undoable text. So
+ * Apple keeps a second table beside the store, read only by the DRAWING pass — which is why this tier's `-drawGlyphs…`
+ * and `-drawBackground…` now read their runs through one helper that merges the two tables, temporary winning, and why
+ * every door here is a table operation and nothing else.
+ *
+ * **AND THE DRAWING PASS ASKS THE DELEGATE FIRST.** `-layoutManager:shouldUseTemporaryAttributes:forDrawingToScreen:
+ * atCharacterIndex:effectiveRange:` is the era's way for a view to switch the whole table off for a pass (a print
+ * operation does, and so does a screen that would rather not show the flash); a delegate that answers NO gets the
+ * store's attributes and no temporary ink.
+ *
+ * **THE EFFECTIVE-RANGE DOORS REPORT THE RUN, NOT THE QUERY.** An attribute set over `{2, 6}` answers `{2, 6}` when
+ * asked about index 4, and the `longestEffectiveRange:inRange:` pair clips that to the caller's limit — the same
+ * longest-run contract the store's own doors keep, which is what lets a caller walk the table without seeing the same
+ * value twice.
+ * ================================================================================================================ */
+
+- (void)addTemporaryAttribute:(NSString *)attrName value:(id)value forCharacterRange:(NSRange)charRange;
+- (void)addTemporaryAttributes:(NSDictionary *)attrs forCharacterRange:(NSRange)charRange;
+- (void)removeTemporaryAttribute:(NSString *)attrName forCharacterRange:(NSRange)charRange;
+- (void)setTemporaryAttributes:(NSDictionary *)attrs forCharacterRange:(NSRange)charRange;
+
+- (nullable id)temporaryAttribute:(NSString *)attrName atCharacterIndex:(NSUInteger)location
+		    effectiveRange:(nullable NSRangePointer)range;
+- (nullable id)temporaryAttribute:(NSString *)attrName atCharacterIndex:(NSUInteger)location
+	     longestEffectiveRange:(nullable NSRangePointer)range inRange:(NSRange)rangeLimit;
+- (nullable NSDictionary *)temporaryAttributesAtCharacterIndex:(NSUInteger)location
+					       effectiveRange:(nullable NSRangePointer)range;
+- (nullable NSDictionary *)temporaryAttributesAtCharacterIndex:(NSUInteger)location
+					longestEffectiveRange:(nullable NSRangePointer)range
+						      inRange:(NSRange)rangeLimit;
+
+/* **AND WHAT IS STILL NOT HERE, NAMED AT THE DOOR THAT WOULD BE IT.** The MARKED RANGE belongs to the marked-text
+ * family: it is the unconfirmed text an input method is composing, and `NSTextView` already carries it (`_cg_markedRange`)
+ * — the manager's door for it arrives with the input-method slice, and is named rather than half-drawn. */
+
+/* ==================================================================================================================
+ * THE RECT ARRAYS — the boxes a range OCCUPIES, one per line, which is what a selection redraw is spelled in.
+ *
+ * **APPLE'S RETURN IS A POINTER, NOT AN ARRAY OBJECT**, and that is the door's whole shape: the manager fills its own
+ * buffer and answers a pointer valid until the next call, so a caller that walks a selection's rects does not allocate
+ * one array per line. This tier keeps that buffer for the same reason.
+ *
+ * **THE `withinSelected…` ARGUMENT IS TAKEN AND CONSULTED, AND THIS TIER'S BREAKER GIVES IT NOTHING TO DECIDE.** A
+ * line's rects are its glyphs' extent; the one place a selection changes the answer in Apple's text system is the EMPTY
+ * fragment at the end of a trailing newline, whose rect is included only when the selection reaches it. THIS TIER'S
+ * BREAKER DOES NOT PRODUCE THAT FRAGMENT — a trailing newline's glyph belongs to the line it ends, and the only
+ * zero-glyph fragment is an empty document's, which is the caret case — so both selections answer the same rects. The
+ * branch is kept because the rule is the DOOR's rather than the layout's: a breaker that produced the fragment would get
+ * the behaviour for free, and the test asserts the state that is true today rather than the one the parameter is named
+ * for.
+ * ================================================================================================================ */
+
+- (NSRect *)rectArrayForCharacterRange:(NSRange)charRange
+	   withinSelectedCharacterRange:(NSRange)selCharRange
+			inTextContainer:(NSTextContainer *)container
+			     rectCount:(NSUInteger *)rectCount;
+
+- (NSRect *)rectArrayForGlyphRange:(NSRange)glyphRange
+	withinSelectedGlyphRange:(NSRange)selGlyphRange
+		 inTextContainer:(NSTextContainer *)container
+		      rectCount:(NSUInteger *)rectCount;
 
 /* ==================================================================================================================
  * THE FRAGMENT QUERIES — what is laid out, and which container holds a given glyph.

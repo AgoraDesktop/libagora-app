@@ -1085,3 +1085,14 @@ target_link_libraries(text_block_rects PRIVATE App)
 
 add_test(NAME appkit-text-block-rects COMMAND text_block_rects)
 set_tests_properties(appkit-text-block-rects PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
+
+# **THE TABLE THE LAYOUT SEES AND THE STORE DOES NOT, AND THE RECTS A RANGE OCCUPIES.** A temporary attribute is a
+# find-highlight that is not an edit: the probe sets a red foreground, draws the line and counts red pixels, removes it and
+# requires them gone, then makes a delegate DECLINE the table and requires the ink to stay the store's. The rect arrays are
+# geometry: one rect per line at the line's height, a caret of no width, and the extra line drawn only when the selection
+# covers it.
+add_executable(text_temporary_attributes text_temporary_attributes.m)
+target_link_libraries(text_temporary_attributes PRIVATE App)
+
+add_test(NAME appkit-text-temporary-attributes COMMAND text_temporary_attributes)
+set_tests_properties(appkit-text-temporary-attributes PROPERTIES ENVIRONMENT "${_agora_app_test_env}")

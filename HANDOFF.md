@@ -8,8 +8,8 @@ spent.*
 *State at handover: **8 commits**, tree clean, **114 tests passing**, `api-ledger: 327 metrics
 hold (82 classes, 2652 selectors of 3517, 23 protocols, 86 functions)`.*
 
-*State after the session that picked it up (§9): **10 commits**, tree clean, **116 tests passing**,
-`api-ledger: 329 metrics hold (84 classes, 2735 selectors of 3568, 23 protocols, 86 functions)`.*
+*State after the session that picked it up (§9–§11): **12 commits**, tree clean, **118 tests passing**,
+`api-ledger: 329 metrics hold (84 classes, 2756 selectors of 3568, 23 protocols, 86 functions)`.*
 
 ---
 
@@ -88,12 +88,12 @@ type's empty value and says on stderr what it wants — `AppKitRefusal.h`), or *
 
 ```
 classes    84 of 168   (50%)    84 missing
-selectors 2735 of 3568 (77%)   833 missing    33 of 83 classes at COMPLETE coverage
+selectors 2756 of 3568 (77%)   812 missing    33 of 83 classes at COMPLETE coverage
 protocols  23 of  56   (41%)    33 missing
 functions  86 of  86 (100%)     0 missing     10 refuse by name
 methods  3154 declared, 4 with no body (0.1%)
 
-text system:  NSLayoutManager 70/136 · NSTextView 60/186 · NSTextStorage 13/25 · NSTextContainer 17/17
+text system:  NSLayoutManager 80/136 · NSTextView 60/186 · NSTextStorage 13/25 · NSTextContainer 17/17
               NSText 39/39 (COMPLETE) · NSRulerView 32/32 (COMPLETE) · NSRulerMarker 19/19 (COMPLETE)
 ```
 
@@ -268,11 +268,12 @@ predicted: the four ruler commands were the last four selectors it owed.
 
 **Where to go next, re-ranked by reachable surface:**
 
-1. **`NSLayoutManager` text-block and attachment rects — LANDED, see §10.** The next surface in this family is the
-   rest of the manager's 66 remaining selectors: temporary attributes (~8), the invalidation/ensure family (~8, of which
-   this slice uses four internally), `rectArrayForGlyphRange:…` and the insertion-point doors (~6), the typesetter and
-   glyph-generator setters (~10), and non-contiguous layout (~4). Pick by what a caller reaches: temporary attributes are
-   what a find-highlight needs, and the rect array is what an editor's redraw uses.
+1. **`NSLayoutManager`'s remaining 56 selectors — temporary attributes and the rect arrays are LANDED (§10, §11).**
+   What is left, by what a caller reaches: the INVALIDATION/ensure family (~8, of which the manager already implements
+   four privately — `invalidateLayoutForCharacterRange:` and friends are public doors over machinery that exists);
+   `getLineFragmentInsertionPointsForCharacterAtIndex:…` (the caret's positions on a line, one writing direction here);
+   the TYPESETTER and glyph-generator setters (~10, mostly declaration + storage); and non-contiguous layout (~4, which
+   this tier's full-layout model answers NO to).
 2. **The substitution machinery** (the old §5.2, ~12 doors): the five flags are stored; the tables
    (`userQuotesArrayForLanguage:`, `userReplacementsDictionary`) are what would make typing through them real.
 3. **`NSTextView`'s ruler accessory** — the one door this slice refused. A tab-type control cluster is an
@@ -303,3 +304,29 @@ ENGINE, not only the answer. `NSLayoutManager` is 70 of 136 now.
   overridden (40x30) rather than the cell's 12x12, and the failure looked like a scaling bug. The drawing checks now build
   their own manager, which is the cheap version of "a test that passes for the wrong reason is worse than one that
   fails".
+
+---
+
+## 11. The highlight that is not an edit, and the rects a selection redraws
+
+*Fourth commit of the pickup: 8 temporary-attribute doors and the 2 rect arrays. `NSLayoutManager` is 80 of 136.*
+
+**The temporary table is the find-highlight slice, and it cost one real bug.** The table is a sorted, non-overlapping run
+list beside the store; the drawing pass reads its ink through ONE helper that merges the two and asks the delegate's
+`shouldUseTemporaryAttributes:` question. THE FIRST VERSION STEPPED OVER THE ATTRIBUTE: a store run with a uniform colour
+returned its whole range as the "longest effective range", so the glyph walk drew the line in one colour and never reached
+the temporary run in the middle of it. A red character in a green line drew green — and the delegate test passed, because
+its temporary run started at index 0. The fix is that a store run's effective range stops at the NEXT TEMPORARY RUN even
+when the index is not inside one; that is the contract the walk depends on, and it is now stated at the helper.
+
+**Two smaller things worth keeping:**
+
+* The run table SPLITS on set, MERGES on add, deletes one key on remove, and merges equal neighbours after every change —
+  which is what makes `longestEffectiveRange:` answer the range over which a value does not change rather than the range
+  of one stored record.
+* `-rectArrayForGlyphRange:…` answers a POINTER into the manager's buffer, valid until the next call, which is Apple's
+  shape and the reason a selection redraw allocates nothing. Its caret case asks `-cg_fragmentForGlyphAtIndex:` rather
+  than scanning, because a boundary index belongs to the line it OPENS.
+* **`withinSelected…` has nothing to decide in this tier**, and the door says so: the breaker produces no extra-line
+  fragment for a trailing newline (the newline's glyph belongs to the line it ends), so both selections answer the same
+  rects. The branch is kept — the rule is the door's, not the layout's — and the test asserts today's state.

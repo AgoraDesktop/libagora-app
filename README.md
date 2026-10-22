@@ -729,7 +729,20 @@ the compositor is really gone.
   `-showAttachmentCell:inRect:characterIndex:` scales by `-defaultAttachmentScaling` (proportionally down by default)
   and clips to its rectangle in every mode, because a picture that overflows its line is a picture over its neighbours.
 
-- **`ctest`: 117 of 117 passed** (the keyboard and the seam, the AppKit and its input path, the controls and their
+- **And the layout can paint a HIGHLIGHT THAT IS NOT AN EDIT** (`ctest`, offscreen): the temporary-attribute table is
+  here — eight doors over a sorted, non-overlapping run list beside the store. `tests/text_temporary_attributes.m` sets a
+  red foreground over one character, draws the line and counts red pixels, removes it and requires them gone, and then
+  makes a delegate DECLINE `layoutManager:shouldUseTemporaryAttributes:forDrawingToScreen:atCharacterIndex:effectiveRange:`
+  and requires the ink to stay the store's — with a count proving the delegate was asked. The run table is checked as
+  arithmetic too: a set SPLITS the runs it crosses and keeps their tails, an add MERGES into what is there, two abutting
+  runs with one value are ONE range, and `longestEffectiveRange:` clips to the caller's limit. **The first version of the
+  drawing hook had a bug the pixel test caught**: a store run that claimed the whole line stepped OVER a temporary
+  attribute in the middle of it, so the run's effective range now stops at the next temporary run even when the index is
+  not inside one. `-rectArrayForGlyphRange:…` and its character spelling answer Apple's buffer-of-rects pointer (valid
+  until the next call): one rect per line at the line's height, a caret's zero-width rect, and this tier's layout, which
+  produces no extra line fragment for a trailing newline — stated at the door rather than pretended.
+
+- **`ctest`: 118 of 118 passed** (the keyboard and the seam, the AppKit and its input path, the controls and their
   metrics, the field control and its cell and its bezel and its placeholder and what it may hold, the text path and its
   word granularity and the multi-line view and its wrapping and its scrolling and its READING OF THE STORE, the STORE
   the rich-text slice is built on and the REGION it is laid out in and the WEB that ties the three together and the
@@ -740,7 +753,8 @@ the compositor is really gone.
   BASE DIRECTION that decides what natural alignment means,
   what a drag costs, the resize by edge, the tracking engine, the clip view and the scroller and the scroll view and the
   drawn offset and the ruler it can wear and the TEXT RULER whose markers are tab stops and the block rects and
-  attachment sizes the layout answers, the chrome and what its buttons do, the chrome theme, the menus and activation).
+  attachment sizes the layout answers and the temporary-attribute table and the rect arrays, the chrome and what its
+  buttons do, the chrome theme, the menus and activation).
 - **And the desktop's own text is SUB-PIXEL ANTIALIASED**, which is the AppKit's half of a renderer change in
   CoreGraphics: a window's surface is OPAQUE (`kCGImageAlphaNoneSkipFirst`), and the destination's opacity is
   exactly what decides whether a glyph is rasterised in colour. MEASURED on the live session: the window title's

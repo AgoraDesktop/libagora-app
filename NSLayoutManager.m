@@ -166,6 +166,43 @@
 @implementation FNBlockRect
 @end
 
+/* **AND A TEMPORARY ATTRIBUTE IS A RUN: A RANGE AND THE DICTIONARY THE DRAWING PASS SEES INSTEAD OF THE STORE'S.** The
+ * list of them is kept sorted and non-overlapping, and adjacent runs that carry the SAME dictionary are merged, which is
+ * what makes `longestEffectiveRange:` tell the truth: an attribute set over {2,4} and then over {4,6} with the same value
+ * is one run {2,8}, because that is the range over which the value does not change. */
+@interface FNTextMark : NSObject
+{
+@public
+	NSRange range;
+	NSMutableDictionary *attributes;	/* RETAINED */
+}
++ (id)markWithRange:(NSRange)aRange attributes:(NSDictionary *)someAttributes;
+@end
+
+@implementation FNTextMark
++ (id)markWithRange:(NSRange)aRange attributes:(NSDictionary *)someAttributes
+{
+	FNTextMark *mark = [[[FNTextMark alloc] init] autorelease];
+
+	mark->range = aRange;
+	mark->attributes = [someAttributes mutableCopy];
+	return mark;
+}
+- (void)dealloc
+{
+	[attributes release];
+	[super dealloc];
+}
+@end
+
+/* THE TEMPORARY-ATTRIBUTE TABLE AND THE MERGE THE DRAWING PASS READS. Declared before the implementation because the ink
+ * and background passes call the merge helper and are defined in the main body; implemented in a category at the foot of
+ * the file, where the run table lives beside its own prose. */
+@interface NSLayoutManager (AGTemporaryAttributes)
+- (NSDictionary *)cg_drawingAttributesAtIndex:(NSUInteger)index longestEffectiveRange:(NSRange *)range
+				      inRange:(NSRange)rangeLimit;
+@end
+
 @implementation NSLayoutManager
 
 /* ============================================================================================ *
@@ -217,6 +254,10 @@ static CGFloat fn_attachment_width(void *refCon)
 		 * line, drawn at its own size, would overlap the lines above and below it; shrinking it to fit is what keeps a
 		 * picture inside the text that asked for it. */
 		_defaultAttachmentScaling = NSImageScaleProportionallyDown;
+		/* AND THE TEMPORARY RUNS, EMPTY; the rect buffer starts NULL and is grown by the first rectArray call. */
+		_temporaryMarks = [[NSMutableArray alloc] init];
+		_rectArray = NULL;
+		_rectArrayCount = 0;
 		_invalidatedRange = NSMakeRange(NSNotFound, 0);
 	}
 	return self;
@@ -236,6 +277,10 @@ static CGFloat fn_attachment_width(void *refCon)
 	[_fragments release];
 	[_blockRectOverrides release];
 	[_attachmentSizes release];
+	[_temporaryMarks release];
+	if (_rectArray != NULL) {
+		free(_rectArray);
+	}
 	[_textStorage release];
 	[super dealloc];
 }
@@ -2683,7 +2728,8 @@ static BOOL fn_cell_owns_edge(CGFloat thisWidth, CGFloat otherWidth, BOOL tieGoe
 			pos = drawn.location;
 			while (pos < drawn.location + drawn.length) {
 				NSRange runRange;
-				NSDictionary *attrs = [_textStorage attributesAtIndex:pos longestEffectiveRange:&runRange inRange:drawn];
+				NSDictionary *attrs = [self cg_drawingAttributesAtIndex:pos longestEffectiveRange:&runRange
+										inRange:drawn];
 				NSColor *colour = [attrs objectForKey:NSForegroundColorAttributeName];
 				NSUInteger runEnd = runRange.location + runRange.length;
 				CFIndex a, b;
@@ -2752,8 +2798,12 @@ static BOOL fn_cell_owns_edge(CGFloat thisWidth, CGFloat otherWidth, BOOL tieGoe
 				if (runCount > 0) {
 					CTRunRef last = (CTRunRef)CFArrayGetValueAtIndex(hyphenRuns, runCount - 1);
 					CFIndex glyphCount = CTRunGetGlyphCount(last);
-					NSDictionary *endAttrs = [_textStorage attributesAtIndex:
-						(fragment->range.location + fragment->range.length - 1) effectiveRange:NULL];
+					/* **THE HYPHEN IS INK TOO, SO IT READS THE MERGED TABLE.** A temporary attribute over the
+					 * character the hyphen was built with would otherwise paint the word in red and its hyphen in the
+					 * store's colour — the one place the drawing pass would still be reading the store alone. */
+					NSDictionary *endAttrs = [self cg_drawingAttributesAtIndex:
+						(fragment->range.location + fragment->range.length - 1)
+						longestEffectiveRange:NULL inRange:fragment->range];
 					NSColor *endColour = [endAttrs objectForKey:NSForegroundColorAttributeName];
 					NSUInteger end = fragment->range.location + fragment->range.length;
 
@@ -2912,8 +2962,9 @@ static BOOL fn_cell_owns_edge(CGFloat thisWidth, CGFloat otherWidth, BOOL tieGoe
 			}
 			while (pos < end) {
 				NSRange runRange;
-				NSDictionary *attrs = [_textStorage attributesAtIndex:pos longestEffectiveRange:&runRange
-									  inRange:NSMakeRange(fragment->range.location, end - fragment->range.location)];
+				NSDictionary *attrs = [self cg_drawingAttributesAtIndex:pos longestEffectiveRange:&runRange
+						       inRange:NSMakeRange(fragment->range.location,
+									   end - fragment->range.location)];
 				NSColor *background = [attrs objectForKey:NSBackgroundColorAttributeName];
 				NSUInteger runEnd = runRange.location + runRange.length;
 
@@ -4137,6 +4188,447 @@ static NSImage *fn_tab_marker_image(NSTextTabType type)
 	} else {
 		[cell drawWithFrame:frame inView:view];
 	}
+}
+
+@end
+
+/* ==================================================================================================================
+ * THE TEMPORARY ATTRIBUTES AND THE RECT ARRAYS — the last two families declared in the header.
+ *
+ * The run table is four operations, and every public door is one of them or a lookup: SET replaces a range's attributes
+ * (splitting the runs it crosses and keeping their tails), ADD merges into whatever is there, REMOVE deletes a key, and
+ * LOOKUP answers a run. Adjacent runs with equal dictionaries are merged after every change, because
+ * `longestEffectiveRange:` promises the range over which a value does not change and two abutting runs with one value are
+ * one range.
+ *
+ * **AND THE DRAWING PASS IS WHAT MAKES THE TABLE MEAN ANYTHING.** `-cg_drawingAttributesAtIndex:…` merges the store's
+ * run with the temporary one, asks the delegate's `shouldUseTemporaryAttributes:` question when there IS one, and is the
+ * only path the glyph and background passes read their ink through — so a temporary foreground colour reaches the pixels
+ * and a delegate that declines reaches none of them.
+ * ================================================================================================================ */
+
+@implementation NSLayoutManager (AGTemporaryAttributes)
+
+/* THE BUFFER'S ENDS. The store is the limit: a temporary attribute past the text is an attribute on characters that do
+ * not exist, and a table that stored it would answer a run nobody can draw. */
+- (NSRange)cg_clipToStore:(NSRange)range
+{
+	NSUInteger length = [_textStorage length];
+
+	if (range.location >= length) {
+		return NSMakeRange(length, 0);
+	}
+	if (NSMaxRange(range) > length) {
+		range.length = length - range.location;
+	}
+	return range;
+}
+
+- (FNTextMark *)cg_markAtCharacterIndex:(NSUInteger)index
+{
+	NSUInteger i;
+
+	for (i = 0; i < [_temporaryMarks count]; i++) {
+		FNTextMark *mark = [_temporaryMarks objectAtIndex:i];
+
+		if (index >= mark->range.location && index < NSMaxRange(mark->range)) {
+			return mark;
+		}
+	}
+	return nil;
+}
+
+/* THE START OF THE NEXT RUN AFTER AN INDEX, or `limit` when there is none — which is how "split the add into the pieces
+ * the existing runs define" walks without an index-per-character table. */
+- (NSUInteger)cg_nextMarkStartAfter:(NSUInteger)index upTo:(NSUInteger)limit
+{
+	NSUInteger i;
+	NSUInteger best = limit;
+
+	for (i = 0; i < [_temporaryMarks count]; i++) {
+		NSUInteger start = ((FNTextMark *)[_temporaryMarks objectAtIndex:i])->range.location;
+
+		if (start > index && start < best) {
+			best = start;
+		}
+	}
+	return best;
+}
+
+/* MERGE THE NEIGHBOURS: equal dictionaries and abutting ranges are one run. It runs after every change, so the table
+ * never holds two runs that a lookup would have to walk past to answer a "longest" question. */
+- (void)cg_compactMarks
+{
+	NSMutableArray *sorted = [NSMutableArray arrayWithCapacity:[_temporaryMarks count]];
+	NSUInteger i;
+
+	/* INSERTION SORT: a table of marks is small, and a comparator built for it would be more code than the sort. */
+	for (i = 0; i < [_temporaryMarks count]; i++) {
+		FNTextMark *mark = [_temporaryMarks objectAtIndex:i];
+		NSUInteger at = 0;
+
+		while (at < [sorted count]
+		       && ((FNTextMark *)[sorted objectAtIndex:at])->range.location <= mark->range.location) {
+			at++;
+		}
+		[sorted insertObject:mark atIndex:at];
+	}
+	[_temporaryMarks setArray:sorted];
+	for (i = 1; i < [_temporaryMarks count]; ) {
+		FNTextMark *previous = [_temporaryMarks objectAtIndex:i - 1];
+		FNTextMark *mark = [_temporaryMarks objectAtIndex:i];
+
+		if (NSMaxRange(previous->range) == mark->range.location
+		    && [previous->attributes isEqualToDictionary:mark->attributes]) {
+			previous->range.length += mark->range.length;
+			[_temporaryMarks removeObjectAtIndex:i];
+			continue;
+		}
+		i++;
+	}
+}
+
+/* REPLACE, which is the primitive: every run the range touches is trimmed to the parts outside it (a left head and a
+ * right tail), and the new run goes in. A SET with an empty dictionary is a REMOVE, because a run with no attributes is
+ * a run that says nothing. */
+- (void)cg_setMarkAttributes:(NSDictionary *)attributes inRange:(NSRange)range
+{
+	NSMutableArray *kept = [NSMutableArray array];
+	NSUInteger i;
+
+	range = [self cg_clipToStore:range];
+	if (range.length == 0) {
+		return;
+	}
+	for (i = 0; i < [_temporaryMarks count]; i++) {
+		FNTextMark *mark = [_temporaryMarks objectAtIndex:i];
+		NSRange run = mark->range;
+
+		if (NSMaxRange(run) <= range.location || run.location >= NSMaxRange(range)) {
+			[kept addObject:mark];
+			continue;
+		}
+		if (run.location < range.location) {
+			mark->range.length = range.location - run.location;
+			[kept addObject:mark];
+		}
+		if (NSMaxRange(run) > NSMaxRange(range)) {
+			NSRange tail = NSMakeRange(NSMaxRange(range), NSMaxRange(run) - NSMaxRange(range));
+
+			[kept addObject:[FNTextMark markWithRange:tail attributes:mark->attributes]];
+		}
+	}
+	if ([attributes count] > 0) {
+		[kept addObject:[FNTextMark markWithRange:range attributes:attributes]];
+	}
+	[_temporaryMarks setArray:kept];
+	[self cg_compactMarks];
+}
+
+/* ADD, ONE PIECE AT A TIME: the range is walked in the pieces the existing runs define, and each piece's merged
+ * dictionary is SET. That is what makes an add to the middle of a run split it with the same value on both sides and the
+ * new one in between. */
+- (void)cg_addAttributes:(NSDictionary *)attributes inRange:(NSRange)range
+{
+	NSUInteger position;
+	NSUInteger end;
+
+	range = [self cg_clipToStore:range];
+	position = range.location;
+	end = NSMaxRange(range);
+	while (position < end) {
+		FNTextMark *mark = [self cg_markAtCharacterIndex:position];
+		NSUInteger stop = (mark != nil) ? MIN(end, NSMaxRange(mark->range))
+						: [self cg_nextMarkStartAfter:position upTo:end];
+		NSMutableDictionary *merged = [NSMutableDictionary dictionary];
+		NSRange piece;
+
+		if (mark != nil) {
+			[merged addEntriesFromDictionary:mark->attributes];
+		}
+		[merged addEntriesFromDictionary:attributes];
+		piece = NSMakeRange(position, stop - position);
+		[self cg_setMarkAttributes:merged inRange:piece];
+		position = stop;
+	}
+}
+
+- (void)cg_removeAttribute:(NSString *)name inRange:(NSRange)range
+{
+	NSUInteger position;
+	NSUInteger end;
+
+	range = [self cg_clipToStore:range];
+	position = range.location;
+	end = NSMaxRange(range);
+	while (position < end) {
+		FNTextMark *mark = [self cg_markAtCharacterIndex:position];
+		NSUInteger stop;
+		NSMutableDictionary *remaining;
+
+		if (mark == nil) {
+			position = [self cg_nextMarkStartAfter:position upTo:end];
+			continue;
+		}
+		stop = MIN(end, NSMaxRange(mark->range));
+		remaining = [[mark->attributes mutableCopy] autorelease];
+		[remaining removeObjectForKey:name];
+		[self cg_setMarkAttributes:remaining inRange:NSMakeRange(position, stop - position)];
+		position = stop;
+	}
+}
+
+- (void)setTemporaryAttributes:(NSDictionary *)attrs forCharacterRange:(NSRange)charRange
+{
+	[self cg_setMarkAttributes:attrs inRange:charRange];
+}
+
+- (void)addTemporaryAttributes:(NSDictionary *)attrs forCharacterRange:(NSRange)charRange
+{
+	[self cg_addAttributes:attrs inRange:charRange];
+}
+
+- (void)addTemporaryAttribute:(NSString *)attrName value:(id)value forCharacterRange:(NSRange)charRange
+{
+	if (value == nil) {
+		[self removeTemporaryAttribute:attrName forCharacterRange:charRange];
+		return;
+	}
+	[self cg_addAttributes:[NSDictionary dictionaryWithObject:value forKey:attrName] inRange:charRange];
+}
+
+- (void)removeTemporaryAttribute:(NSString *)attrName forCharacterRange:(NSRange)charRange
+{
+	[self cg_removeAttribute:attrName inRange:charRange];
+}
+
+- (NSDictionary *)temporaryAttributesAtCharacterIndex:(NSUInteger)location effectiveRange:(NSRange *)range
+{
+	FNTextMark *mark = [self cg_markAtCharacterIndex:location];
+
+	if (range != NULL) {
+		*range = (mark != nil) ? mark->range : NSMakeRange(location, 0);
+	}
+	return (mark != nil) ? mark->attributes : nil;
+}
+
+- (id)temporaryAttribute:(NSString *)attrName atCharacterIndex:(NSUInteger)location effectiveRange:(NSRange *)range
+{
+	NSDictionary *attributes = [self temporaryAttributesAtCharacterIndex:location effectiveRange:range];
+
+	return (attributes != nil) ? [attributes objectForKey:attrName] : nil;
+}
+
+- (NSDictionary *)temporaryAttributesAtCharacterIndex:(NSUInteger)location
+				longestEffectiveRange:(NSRange *)range inRange:(NSRange)rangeLimit
+{
+	FNTextMark *mark = [self cg_markAtCharacterIndex:location];
+	NSRange clipped;
+
+	if (mark == nil) {
+		if (range != NULL) {
+			*range = NSMakeRange(location, 0);
+		}
+		return nil;
+	}
+	clipped = NSIntersectionRange(mark->range, rangeLimit);
+	if (clipped.length == 0) {
+		clipped = NSMakeRange(location, 0);
+	}
+	if (range != NULL) {
+		*range = clipped;
+	}
+	return mark->attributes;
+}
+
+- (id)temporaryAttribute:(NSString *)attrName atCharacterIndex:(NSUInteger)location
+     longestEffectiveRange:(NSRange *)range inRange:(NSRange)rangeLimit
+{
+	NSDictionary *attributes = [self temporaryAttributesAtCharacterIndex:location
+					   longestEffectiveRange:range inRange:rangeLimit];
+
+	return (attributes != nil) ? [attributes objectForKey:attrName] : nil;
+}
+
+/* **THE ONE PLACE THE TWO TABLES MEET, AND THE DELEGATE'S VETO.** The store's run is read first (it is the one with a
+ * length); a temporary run that covers the index merges over it; and when the delegate implements the era's question it
+ * is asked with the temporary dictionary and may decline, in which case the store's answer stands alone. */
+- (NSDictionary *)cg_drawingAttributesAtIndex:(NSUInteger)index longestEffectiveRange:(NSRange *)range
+				      inRange:(NSRange)rangeLimit
+{
+	NSRange permanentRange = NSMakeRange(0, 0);
+	NSDictionary *permanent = [_textStorage attributesAtIndex:index longestEffectiveRange:&permanentRange
+							    inRange:rangeLimit];
+	FNTextMark *mark = [self cg_markAtCharacterIndex:index];
+	NSMutableDictionary *merged;
+	NSRange effective;
+
+	if (mark == nil) {
+		/* **AND A STORE RUN STOPS AT THE NEXT TEMPORARY RUN, EVEN THOUGH IT IS NOT INSIDE ONE.** The drawing walk
+		 * advances by the effective range it is handed, so a run that claimed the whole line would step OVER the
+		 * temporary attribute in the middle of it and the ink would never change. MEASURED: that is exactly what
+		 * happened — a red character in the middle of a green line drew green, and only a delegate test noticed,
+		 * because its temporary run started at index 0. */
+		NSRange effective = permanentRange;
+		NSUInteger next = [self cg_nextMarkStartAfter:index upTo:NSMaxRange(permanentRange)];
+
+		if (next < NSMaxRange(effective)) {
+			effective.length = next - effective.location;
+		}
+		if (range != NULL) {
+			*range = effective;
+		}
+		return permanent;
+	}
+	if (_delegate != nil && [_delegate respondsToSelector:
+			@selector(layoutManager:shouldUseTemporaryAttributes:forDrawingToScreen:atCharacterIndex:effectiveRange:)]) {
+		NSRange asked = NSIntersectionRange(permanentRange, mark->range);
+
+		if (![_delegate layoutManager:self shouldUseTemporaryAttributes:mark->attributes
+			     forDrawingToScreen:YES atCharacterIndex:index effectiveRange:&asked]) {
+			if (range != NULL) {
+				*range = permanentRange;
+			}
+			return permanent;
+		}
+	}
+	effective = NSIntersectionRange(permanentRange, mark->range);
+	if (effective.length == 0) {
+		effective = NSMakeRange(index, 1);
+	}
+	if (range != NULL) {
+		*range = effective;
+	}
+	merged = [NSMutableDictionary dictionaryWithDictionary:permanent];
+	[merged addEntriesFromDictionary:mark->attributes];
+	return merged;
+}
+
+/* ==================================================================================================================
+ * THE RECT ARRAYS.
+ * ================================================================================================================ */
+
+/* WHICH CONTAINER A FRAGMENT IS IN, by identity — the arrays are index-matched, so this is a scan of the outer list. */
+- (NSUInteger)cg_containerIndexForFragment:(FNFragment *)fragment
+{
+	NSUInteger i, j;
+
+	for (i = 0; i < [_fragments count]; i++) {
+		NSMutableArray *fragments = [_fragments objectAtIndex:i];
+
+		for (j = 0; j < [fragments count]; j++) {
+			if ([fragments objectAtIndex:j] == fragment) {
+				return i;
+			}
+		}
+	}
+	return NSNotFound;
+}
+
+- (NSRect *)cg_rectsForGlyphRange:(NSRange)glyphRange selected:(NSRange)selGlyphRange
+		   inTextContainer:(NSTextContainer *)container rectCount:(NSUInteger *)rectCount
+{
+	NSMutableArray *rects;
+	NSUInteger containerIndex;
+
+	[self cg_ensureLayout];
+	if (rectCount != NULL) {
+		*rectCount = 0;
+	}
+	if (container == nil) {
+		return NULL;
+	}
+	containerIndex = [_textContainers indexOfObjectIdenticalTo:container];
+	if (containerIndex == NSNotFound) {
+		return NULL;
+	}
+	rects = [NSMutableArray array];
+	/* **A CARET IS ONE RECT, ON THE LINE IT SITS IN.** The boundary between two lines belongs to the line it OPENS,
+	 * which is the rule `-cg_fragmentForGlyphAtIndex:` records — so the fragment is asked for rather than scanned for,
+	 * and the loop below then handles only a range with glyphs in it. */
+	if (glyphRange.length == 0) {
+		FNFragment *caret = [self cg_fragmentForGlyphAtIndex:glyphRange.location effectiveRange:NULL];
+		NSUInteger caretContainer = [self cg_containerIndexForFragment:caret];
+
+		if (caret != nil && caretContainer == containerIndex) {
+			CGFloat x = [self cg_offsetForGlyphAtIndex:glyphRange.location];
+
+			[rects addObject:[NSValue valueWithRect:NSMakeRect(x, NSMinY(caret->rect), 0.0,
+									   NSHeight(caret->rect))]];
+		}
+	} else {
+		NSMutableArray *fragments = [_fragments objectAtIndex:containerIndex];
+		NSUInteger j;
+
+		for (j = 0; j < [fragments count]; j++) {
+			FNFragment *fragment = [fragments objectAtIndex:j];
+			NSRange overlap;
+			CGFloat x0;
+			CGFloat x1;
+
+			overlap = NSIntersectionRange(glyphRange, fragment->glyphs);
+			if (overlap.length == 0) {
+				/* **AND AN EMPTY FRAGMENT — the extra line a trailing newline opens — ONLY WHEN THE RANGE REACHES THE
+				 * END AND THE SELECTION COVERS IT**, which is the one thing the `withinSelected…` argument decides: a
+				 * selection that ends before it leaves it undrawn, and one that includes it draws its line. */
+				if (fragment->glyphs.length == 0 && NSMaxRange(glyphRange) == fragment->glyphs.location
+				    && selGlyphRange.length > 0 && fragment->glyphs.location >= selGlyphRange.location
+				    && fragment->glyphs.location < NSMaxRange(selGlyphRange)) {
+					[rects addObject:[NSValue valueWithRect:NSMakeRect(
+						NSMinX(fragment->used), NSMinY(fragment->rect),
+						NSWidth(fragment->used), NSHeight(fragment->rect))]];
+				}
+				continue;
+			}
+			x0 = [self cg_offsetForGlyphAtIndex:overlap.location];
+			x1 = (NSMaxRange(overlap) < NSMaxRange(fragment->glyphs))
+				? [self cg_offsetForGlyphAtIndex:NSMaxRange(overlap)] : NSMaxX(fragment->used);
+			if (x1 < x0) {
+				x1 = x0;
+			}
+			[rects addObject:[NSValue valueWithRect:NSMakeRect(x0, NSMinY(fragment->rect), x1 - x0,
+									   NSHeight(fragment->rect))]];
+		}
+	}
+	if ([rects count] == 0) {
+		return NULL;
+	}
+	if (_rectArrayCount < [rects count]) {
+		_rectArray = realloc(_rectArray, sizeof(NSRect) * [rects count]);
+	}
+	_rectArrayCount = [rects count];
+	{
+		NSUInteger k;
+
+		for (k = 0; k < [rects count]; k++) {
+			_rectArray[k] = [[rects objectAtIndex:k] rectValue];
+		}
+	}
+	if (rectCount != NULL) {
+		*rectCount = _rectArrayCount;
+	}
+	return _rectArray;
+}
+
+- (NSRect *)rectArrayForGlyphRange:(NSRange)glyphRange
+	 withinSelectedGlyphRange:(NSRange)selGlyphRange
+		   inTextContainer:(NSTextContainer *)textContainer
+			 rectCount:(NSUInteger *)rectCount
+{
+	return [self cg_rectsForGlyphRange:glyphRange selected:selGlyphRange inTextContainer:textContainer
+		     rectCount:rectCount];
+}
+
+- (NSRect *)rectArrayForCharacterRange:(NSRange)charRange
+	 withinSelectedCharacterRange:(NSRange)selCharRange
+		      inTextContainer:(NSTextContainer *)textContainer
+			   rectCount:(NSUInteger *)rectCount
+{
+	NSRange glyphs = [self glyphRangeForCharacterRange:charRange actualCharacterRange:NULL];
+	NSRange selected = [self glyphRangeForCharacterRange:selCharRange actualCharacterRange:NULL];
+
+	return [self cg_rectsForGlyphRange:glyphs selected:selected inTextContainer:textContainer
+		     rectCount:rectCount];
 }
 
 @end
