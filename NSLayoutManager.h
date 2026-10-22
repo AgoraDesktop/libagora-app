@@ -223,9 +223,9 @@ NS_ASSUME_NONNULL_BEGIN
  * **THESE ARE THE DOORS THAT NEED NO CLUSTER MAPPING**, which is why they come first. A fragment here carries the
  * CHARACTER span the breaker decided, the GLYPH span the shaper produced, the line's two rects and its baseline — so
  * "which line is this glyph in", "where does that line start", "is this index real" and "which container is it in" are
- * arithmetic over that record. The glyph-to-character doors (`characterIndexForGlyphAtIndex:` and its inverse) need the
- * shaper's cluster table and are NOT here; a mapping invented without it would answer a plausible wrong index, which is
- * worse than answering nothing.
+ * arithmetic over that record. The glyph-to-character doors need the shaper's cluster table and were LEFT OUT of this
+ * slab on purpose — a mapping invented without it would answer a plausible wrong index, which is worse than answering
+ * nothing — and they arrive in the block AFTER this one, built on the table the manager already keeps.
  *
  * **`withoutAdditionalLayout:` IS TAKEN AND IGNORED**, and that is stated rather than implied: this tier lays a
  * container out in full when it is asked for anything, so there is no partially-laid state for the flag to protect.
@@ -256,6 +256,44 @@ NS_ASSUME_NONNULL_BEGIN
 - (NSRect)lineFragmentUsedRectForGlyphAtIndex:(NSUInteger)glyphIndex
 			       effectiveRange:(nullable NSRangePointer)effectiveGlyphRange
 			withoutAdditionalLayout:(BOOL)flag;
+
+
+/* ==================================================================================================================
+ * THE GLYPH-TO-CHARACTER MAPPING — the doors the slab above deliberately left out.
+ *
+ * **A CHARACTER SPAN AND A GLYPH SPAN ARE NOT THE SAME WIDTH**, which is why a fragment keeps both: an `fi` ligature is
+ * one glyph for two characters, and a combining mark is a glyph of its own with no character of its own. This tier
+ * already had the cluster table the mapping needs — `fn_characterForGlyphOffsetInLine` and
+ * `fn_glyphOffsetForCharacterInLine` walk `CTRunGetStringIndices`, and were written for
+ * `-glyphRangeForCharacterRange:` — so these are that machinery given Apple's names rather than a second mapping.
+ *
+ * **`-locationForGlyphAtIndex:` ANSWERS IN LINE-FRAGMENT COORDINATES**, which is Apple's contract for it and the reason
+ * its y is the baseline's offset WITHIN the fragment: a caller adding the fragment rect's origin gets the container
+ * point back, and a caller placing something inside a fragment does not have to subtract it.
+ *
+ * **AN OUT-OF-RANGE INDEX ANSWERS `NSNotFound` WHERE APPLE RAISES.** This tier's drawing doors answer their type's
+ * empty value instead of throwing (the rule `AppKitRefusal.h` states), and a hit test that throws takes the window down
+ * with it — so the guard is an answer, not an exception.
+ * ================================================================================================================ */
+
+/* The first character the given glyph stands for. */
+- (NSUInteger)characterIndexForGlyphAtIndex:(NSUInteger)glyphIndex;
+/* The first glyph the given character contributes to. */
+- (NSUInteger)glyphIndexForCharacterAtIndex:(NSUInteger)charIndex;
+
+/* The glyph's location RELATIVE TO ITS LINE FRAGMENT's origin, on its baseline. */
+- (NSPoint)locationForGlyphAtIndex:(NSUInteger)glyphIndex;
+
+/* THE POINT DOORS. `partialFraction` is how far INTO the character or glyph the point fell — the number a selection drag
+ * needs to decide whether the caret sits before or after a ligature. */
+- (NSUInteger)characterIndexForPoint:(NSPoint)point
+		     inTextContainer:(NSTextContainer *)container
+     fractionOfDistanceBetweenInsertionPoints:(nullable CGFloat *)partialFraction;
+- (NSUInteger)glyphIndexForPoint:(NSPoint)point inTextContainer:(NSTextContainer *)container;
+- (NSUInteger)glyphIndexForPoint:(NSPoint)point
+		 inTextContainer:(NSTextContainer *)container
+     fractionOfDistanceThroughGlyph:(nullable CGFloat *)partialFraction;
+- (CGFloat)fractionOfDistanceThroughGlyphForPoint:(NSPoint)point inTextContainer:(NSTextContainer *)container;
 
 
 @end

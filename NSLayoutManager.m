@@ -3032,3 +3032,173 @@ static BOOL fn_cell_owns_edge(CGFloat thisWidth, CGFloat otherWidth, BOOL tieGoe
 }
 
 @end
+
+
+/* ==================================================================================================================
+ * THE GLYPH-TO-CHARACTER MAPPING.
+ *
+ * **`-cg_glyphIndexForPoint:inTextContainer:` IS MISNAMED AND THIS FILE HAS TO SAY SO**: it answers a CHARACTER index —
+ * its last line adds `fragment->range.location` to what `CTLineGetStringIndexForPosition` returned, an index into the
+ * line's CHARACTERS. The glyph doors below therefore convert, and that conversion is why they are not one-line
+ * forwards. Renaming the helper was the alternative and was rejected: it is public in the header and its name is the
+ * one the view already calls.
+ *
+ * **THE FRACTION IS MEASURED BETWEEN INSERTION POINTS**, which is what makes a ligature decide correctly: the two
+ * points are the character's own boundaries, so a point inside `fi` answers before-or-after rather than a position
+ * inside a glyph that has two characters in it. A zero-width pair — a combining mark, or the last character of a line —
+ * answers 0 rather than dividing by zero.
+ * ================================================================================================================ */
+
+@implementation NSLayoutManager (AGGlyphMapping)
+
+- (NSUInteger)characterIndexForGlyphAtIndex:(NSUInteger)glyphIndex
+{
+	FNFragment *fragment;
+	NSUInteger local;
+
+	/* **THE RANGE IS CHECKED BEFORE THE FRAGMENT IS ASKED FOR.** `-cg_fragmentForGlyphAtIndex:` matches its fragment
+	 * INCLUSIVELY at the end, because a range boundary is a legitimate place for its own callers to ask about — so one
+	 * past the last glyph found the final fragment and came back with an index instead of the NSNotFound this door
+	 * promises. The guard is here rather than in the helper because the helper's other callers rely on that boundary. */
+	if (glyphIndex >= [self numberOfGlyphs]) {
+		return NSNotFound;
+	}
+	fragment = [self cg_fragmentForGlyphAtIndex:glyphIndex effectiveRange:NULL];
+	if (fragment == nil) {
+		return NSNotFound;
+	}
+	if (fragment->line == NULL || glyphIndex >= fragment->glyphs.location + fragment->glyphs.length) {
+		/* Past the shaper's last glyph: the tail of a line is one glyph per character, so the arithmetic answer is
+		 * the right one there and asking the shaper would read past its table. */
+		return fragment->range.location + (glyphIndex - fragment->glyphs.location);
+	}
+	local = fn_characterForGlyphOffsetInLine(fragment->line, glyphIndex - fragment->glyphs.location);
+	return fragment->range.location + local;
+}
+
+- (NSUInteger)glyphIndexForCharacterAtIndex:(NSUInteger)charIndex
+{
+	NSRange glyphs;
+
+	if (charIndex >= [[self textStorage] length]) {
+		return NSNotFound;
+	}
+	glyphs = [self glyphRangeForCharacterRange:NSMakeRange(charIndex, 1) actualCharacterRange:NULL];
+	return glyphs.location;
+}
+
+- (NSPoint)locationForGlyphAtIndex:(NSUInteger)glyphIndex
+{
+	FNFragment *fragment;
+	NSUInteger charIndex;
+	CGFloat x;
+
+	if (glyphIndex >= [self numberOfGlyphs]) {
+		return NSZeroPoint;
+	}
+	fragment = [self cg_fragmentForGlyphAtIndex:glyphIndex effectiveRange:NULL];
+	if (fragment == nil) {
+		return NSZeroPoint;
+	}
+	charIndex = [self characterIndexForGlyphAtIndex:glyphIndex];
+	if (charIndex == NSNotFound) {
+		return NSZeroPoint;
+	}
+	x = [self cg_xInFragment:fragment forCharacterIndex:charIndex] - fragment->rect.origin.x;
+	return NSMakePoint(x, fragment->baseline - fragment->rect.origin.y);
+}
+
+/* How far between two insertion points a point fell, clamped to [0,1], zero when the pair has no width. */
+static CGFloat fn_fraction_between(FNFragment *fragment, CGFloat localX, NSUInteger fromCharacter, NSUInteger toCharacter)
+{
+	CGFloat a, b, span, fraction;
+
+	if (fragment == NULL || fragment->line == NULL) {
+		return 0.0;
+	}
+	a = (CGFloat)CTLineGetOffsetForStringIndex(fragment->line,
+		(CFIndex)(fromCharacter - fragment->range.location), NULL);
+	b = (CGFloat)CTLineGetOffsetForStringIndex(fragment->line,
+		(CFIndex)(toCharacter - fragment->range.location), NULL);
+	span = b - a;
+	if (span <= 0.0) {
+		return 0.0;
+	}
+	fraction = (localX - a) / span;
+	if (fraction < 0.0) {
+		return 0.0;
+	}
+	return (fraction > 1.0) ? 1.0 : fraction;
+}
+
+- (NSUInteger)characterIndexForPoint:(NSPoint)point
+		     inTextContainer:(NSTextContainer *)container
+     fractionOfDistanceBetweenInsertionPoints:(CGFloat *)partialFraction
+{
+	NSUInteger charIndex = [self cg_glyphIndexForPoint:point inTextContainer:container];
+	NSUInteger glyphIndex;
+	FNFragment *fragment;
+	NSUInteger length;
+
+	if (partialFraction != NULL) {
+		*partialFraction = 0.0;
+	}
+	if (charIndex == NSNotFound || partialFraction == NULL) {
+		return charIndex;
+	}
+	glyphIndex = [self glyphIndexForCharacterAtIndex:charIndex];
+	fragment = [self cg_fragmentForGlyphAtIndex:glyphIndex effectiveRange:NULL];
+	length = [[self textStorage] length];
+	if (fragment != NULL && charIndex < length
+	    && charIndex + 1 <= fragment->range.location + fragment->range.length) {
+		*partialFraction = fn_fraction_between(fragment, point.x - fragment->used.origin.x,
+						       charIndex, charIndex + 1);
+	}
+	return charIndex;
+}
+
+- (NSUInteger)glyphIndexForPoint:(NSPoint)point inTextContainer:(NSTextContainer *)container
+{
+	NSUInteger charIndex = [self cg_glyphIndexForPoint:point inTextContainer:container];
+
+	if (charIndex == NSNotFound) {
+		return NSNotFound;
+	}
+	return [self glyphIndexForCharacterAtIndex:charIndex];
+}
+
+- (NSUInteger)glyphIndexForPoint:(NSPoint)point
+		 inTextContainer:(NSTextContainer *)container
+     fractionOfDistanceThroughGlyph:(CGFloat *)partialFraction
+{
+	NSUInteger glyphIndex = [self glyphIndexForPoint:point inTextContainer:container];
+
+	if (partialFraction != NULL) {
+		*partialFraction = [self fractionOfDistanceThroughGlyphForPoint:point inTextContainer:container];
+	}
+	return glyphIndex;
+}
+
+- (CGFloat)fractionOfDistanceThroughGlyphForPoint:(NSPoint)point inTextContainer:(NSTextContainer *)container
+{
+	NSUInteger charIndex = [self cg_glyphIndexForPoint:point inTextContainer:container];
+	NSUInteger glyphIndex, nextCharacter, length;
+	FNFragment *fragment;
+
+	if (charIndex == NSNotFound) {
+		return 0.0;
+	}
+	glyphIndex = [self glyphIndexForCharacterAtIndex:charIndex];
+	fragment = [self cg_fragmentForGlyphAtIndex:glyphIndex effectiveRange:NULL];
+	if (fragment == NULL || fragment->line == NULL) {
+		return 0.0;
+	}
+	length = [[self textStorage] length];
+	nextCharacter = charIndex + 1;
+	if (nextCharacter > length) {
+		nextCharacter = length;
+	}
+	return fn_fraction_between(fragment, point.x - fragment->used.origin.x, charIndex, nextCharacter);
+}
+
+@end

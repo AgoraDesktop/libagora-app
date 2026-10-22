@@ -1010,3 +1010,12 @@ target_link_libraries(text_fragment_queries PRIVATE App)
 
 add_test(NAME appkit-text-fragment-queries COMMAND text_fragment_queries)
 set_tests_properties(appkit-text-fragment-queries PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
+
+# **THE GLYPH-TO-CHARACTER SLAB.** The mapping is NOT the identity — a ligature is one glyph for two characters — so the
+# round trip is a real check rather than a tautology, and the point doors are checked against a point built from
+# `-locationForGlyphAtIndex:`, which forces the two halves to agree.
+add_executable(text_glyph_mapping text_glyph_mapping.m)
+target_link_libraries(text_glyph_mapping PRIVATE App)
+
+add_test(NAME appkit-text-glyph-mapping COMMAND text_glyph_mapping)
+set_tests_properties(appkit-text-glyph-mapping PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
