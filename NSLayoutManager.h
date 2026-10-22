@@ -123,6 +123,19 @@ NS_ASSUME_NONNULL_BEGIN
 	NSUInteger _rectArrayCount;
 	/* **AND THE EXTRA LINE FRAGMENT'S RECORD.** Nothing in this tier's layout writes it; the door that sets it does, and
 	 * the getters answer it, which is what a layout subclass needs to publish the line it made. */
+	/* ============================================================================================
+	 * AND THE MANAGER'S OWN KNOBS. Each is a number or a bit a caller sets and reads back; only two of them change what
+	 * the layout does (`_usesFontLeading` adds the font's leading to the line height), and each one that does not says so
+	 * at its door rather than implying an effect it has not got.
+	 * ========================================================================================== */
+	BOOL _allowsNonContiguousLayout;
+	BOOL _backgroundLayoutEnabled;
+	BOOL _showsInvisibleCharacters;
+	BOOL _showsControlCharacters;
+	BOOL _usesFontLeading;
+	BOOL _usesScreenFonts;
+	float _hyphenationFactor;
+	NSUInteger _layoutOptions;
 	NSRect _extraLineRect;
 	NSRect _extraLineUsedRect;
 	NSTextContainer *_extraLineContainer;	/* BORROWED: the container owns no record of it */
@@ -598,6 +611,88 @@ NS_ASSUME_NONNULL_BEGIN
 - (void)setDefaultAttachmentScaling:(NSImageScaling)newScaling;
 
 - (void)showAttachmentCell:(NSCell *)cell inRect:(NSRect)rect characterIndex:(NSUInteger)characterIndex;
+
+/* ==================================================================================================================
+ * THE MANAGER'S OWN KNOBS — and the one of them that changes the layout.
+ *
+ * **A KNOB THAT IS STORED AND NOT CONSULTED IS STILL A REAL DOOR, AND EACH ONE SAYS WHICH IT IS.** `-usesFontLeading`
+ * is the live one: the line height this manager hands the breaker is the font's ascender minus its (negative) descender,
+ * and leading on top of that when the flag is set — so a caller that turns it on gets taller lines. IT DEFAULTS TO NO,
+ * WHICH IS A STATED DEVIATION FROM APPLE'S YES: this tier's layout has never included leading, and flipping the default
+ * with the flag's arrival would move every document on screen by the font's leading — a change that belongs to a layout
+ * slice, not to a flag's first appearance.
+ *
+ * The rest are stored and answered, and what each would MEAN is named at its door: non-contiguous layout (this tier lays
+ * out in full, so it never has a hole), background layout (there is no background pass), screen fonts (this tier has no
+ * screen-font variants), invisible and control characters (the drawing pass does not substitute for them yet), the
+ * hyphenation factor (Apple deprecated it in 10.6 in favour of the paragraph style's, which is what this tier reads),
+ * and `-layoutOptions` (a bitfield with no bits defined here).
+ * ================================================================================================================ */
+
+- (BOOL)allowsNonContiguousLayout;
+- (void)setAllowsNonContiguousLayout:(BOOL)flag;
+- (BOOL)hasNonContiguousLayout;
+
+- (BOOL)backgroundLayoutEnabled;
+- (void)setBackgroundLayoutEnabled:(BOOL)flag;
+
+- (BOOL)showsInvisibleCharacters;
+- (void)setShowsInvisibleCharacters:(BOOL)flag;
+- (BOOL)showsControlCharacters;
+- (void)setShowsControlCharacters:(BOOL)flag;
+
+/* THE ONE LIVE KNOB: whether the line height carries the font's leading. See this section's note for the default. */
+- (BOOL)usesFontLeading;
+- (void)setUsesFontLeading:(BOOL)flag;
+
+- (BOOL)usesScreenFonts;
+- (void)setUsesScreenFonts:(BOOL)flag;
+
+/* **THE 10.6 DEPRECATION IS THE HONEST ANSWER HERE.** Apple's own header says to use `NSParagraphStyle`'s
+ * `-hyphenationFactor` instead, and that is exactly what this tier's breaker reads; this door stores the value so a
+ * caller can read it back, and does not fall back to it, because a second source for one number is how two paragraphs
+ * come to hyphenate differently from the same factor. */
+- (float)hyphenationFactor;
+- (void)setHyphenationFactor:(float)aFactor;
+
+- (NSUInteger)layoutOptions;
+
+/* ==================================================================================================================
+ * AND THE CARET'S PLACES ON A LINE.
+ *
+ * **A LINE HAS ONE INSERTION POINT PER CHARACTER PLUS ONE AT ITS END, AND THAT IS WHAT THIS DOOR FILLS.** Apple's arrays
+ * carry up to two positions per character for the bidirectional alternates — a position in the left-to-right run and one
+ * in the right-to-left — and this tier lays out ONE direction, so `alternatePositions:` is taken and every character
+ * answers once. The count is the number of points written, and `inDisplayOrder:` is ascending x, which is the order the
+ * layout produces by construction.
+ * ================================================================================================================ */
+
+- (NSUInteger)getLineFragmentInsertionPointsForCharacterAtIndex:(NSUInteger)charIndex
+					    alternatePositions:(BOOL)aFlag
+						inDisplayOrder:(BOOL)dFlag
+						     positions:(CGFloat *)positions
+					    characterIndexes:(NSUInteger *)charIndexes;
+
+/* **AND "MAKE SURE THIS RECTANGLE IS LAID OUT" is this tier's whole layout, because a container is laid out in full
+ * when anything is asked of it.** The rect is taken and not narrowed, for the same reason the `withoutAdditionalLayout:`
+ * flags are. */
+- (void)ensureLayoutForBoundingRect:(NSRect)bounds inTextContainer:(NSTextContainer *)container;
+
+/* ==================================================================================================================
+ * THE THREE QUESTIONS ABOUT THE VIEW A DOCUMENT IS SHOWN IN.
+ * ================================================================================================================ */
+
+/* The text view of the FIRST container — Apple's answer for a document laid out in one view, which is every document this
+ * tier lays out. */
+- (nullable NSTextView *)firstTextView;
+
+/* **THE MANAGER DOES NOT KNOW WHERE THE SELECTION IS**, so the beginning of it is answered as the first view: the
+ * selection is the VIEW's (this tier's `NSTextView` owns it) and a manager asked this without one has exactly that answer
+ * to give. */
+- (nullable NSTextView *)textViewForBeginningOfSelection;
+
+/* And whether this manager's first view is the window's first responder, which is a real question with a real answer. */
+- (BOOL)layoutManagerOwnsFirstResponderInWindow:(nullable NSWindow *)window;
 
 /* ==================================================================================================================
  * THE RULER'S TWO DOORS, WHICH ARE THE TEXT SYSTEM'S HALF OF IT.

@@ -8,8 +8,8 @@ spent.*
 *State at handover: **8 commits**, tree clean, **114 tests passing**, `api-ledger: 327 metrics
 hold (82 classes, 2652 selectors of 3517, 23 protocols, 86 functions)`.*
 
-*State after the session that picked it up (§9–§12): **13 commits**, tree clean, **119 tests passing**,
-`api-ledger: 329 metrics hold (84 classes, 2774 selectors of 3568, 23 protocols, 86 functions)`.*
+*State after the session that picked it up (§9–§13): **14 commits**, tree clean, **120 tests passing**,
+`api-ledger: 329 metrics hold (84 classes, 2795 selectors of 3568, 23 protocols, 86 functions)`.*
 
 ---
 
@@ -88,12 +88,12 @@ type's empty value and says on stderr what it wants — `AppKitRefusal.h`), or *
 
 ```
 classes    84 of 168   (50%)    84 missing
-selectors 2774 of 3568 (78%)   794 missing    33 of 83 classes at COMPLETE coverage
+selectors 2795 of 3568 (78%)   773 missing    33 of 83 classes at COMPLETE coverage
 protocols  23 of  56   (41%)    33 missing
 functions  86 of  86 (100%)     0 missing     10 refuse by name
 methods  3154 declared, 4 with no body (0.1%)
 
-text system:  NSLayoutManager 98/136 · NSTextView 60/186 · NSTextStorage 13/25 · NSTextContainer 17/17
+text system:  NSLayoutManager 119/136 · NSTextView 60/186 · NSTextStorage 13/25 · NSTextContainer 17/17
               NSText 39/39 (COMPLETE) · NSRulerView 32/32 (COMPLETE) · NSRulerMarker 19/19 (COMPLETE)
 ```
 
@@ -268,13 +268,15 @@ predicted: the four ruler commands were the last four selectors it owed.
 
 **Where to go next, re-ranked by reachable surface:**
 
-1. **`NSLayoutManager`'s remaining 38 selectors — temporary attributes, rect arrays and the invalidation family are
-   LANDED (§10–§12).** What is left: the GLYPH STORE's editing doors (`getGlyphsInRange:…`, `setGlyphs:…`,
-   `setLocations:…`, `setLineFragmentRect:…`, ~8 — these write the shadow the glyph store keeps, and each has to decide
-   what a mutation means when the fragments are rebuilt from the store); the TYPESETTER/glyph-generator cluster (~8, which
-   needs `NSTypesetter`/`NSGlyphGenerator`/`NSTypesetterBehavior` to exist first — three of the missing 84 classes); the
-   strike/underline ink pair (~4); `getLineFragmentInsertionPointsForCharacterAtIndex:…`; and the non-contiguous-layout
-   flags (~4, which this tier's full-layout model answers NO to).
+1. **`NSLayoutManager` has 17 selectors left, and they are three coherent groups.** The GLYPH STORE's bulk/editing
+   doors (`getGlyphsInRange:…` both spellings, `setLocations:startingGlyphIndexes:count:forGlyphRange:`,
+   `setLineFragmentRect:forGlyphRange:usedRect:`, `setTextContainer:forGlyphRange:` — each has to decide what writing the
+   SHADOW means when the fragments are rebuilt from the store, which is the interesting question of the group); the STRIKE
+   AND BACKGROUND INK pair (`strikethroughGlyphRange:…`, `drawStrikethroughForGlyphRange:…`,
+   `fillBackgroundRectArray:count:forCharacterRange:color:`, `showPackedGlyphs:…`) which mirrors the underline pair already
+   shipped; and the TYPESETTER cluster (`typesetter`, `setTypesetter:`, `glyphGenerator`, `setGlyphGenerator:`,
+   `typesetterBehavior`, `setTypesetterBehavior:`), which blocks on `NSTypesetter`/`NSGlyphGenerator`/`NSTypesetterBehavior`
+   existing — three of the 84 missing classes.
 2. **The substitution machinery** (the old §5.2, ~12 doors): the five flags are stored; the tables
    (`userQuotesArrayForLanguage:`, `userReplacementsDictionary`) are what would make typing through them real.
 3. **`NSTextView`'s ruler accessory** — the one door this slice refused. A tab-type control cluster is an
@@ -360,3 +362,30 @@ the flag it set.
 sets `-setNeedsDisplay:NO`. The first version of this test aborted on the missing door, which is the same class of
 surprise as `-NSTextBlock setWidth:…forEdge:` in §10: a declared door is not an implemented one, and only the probe finds
 out.
+
+---
+
+## 13. Knobs, and the door that had no callers
+
+*Sixth commit of the pickup: 21 doors — the flag family, the caret's insertion points, the three view questions.
+`NSLayoutManager` is 119 of 136.*
+
+**`-cg_lineHeight` HAD NO CALLERS.** It answered the line height, and the breaker computed `ascender - descender` again at
+its own site, so a knob that changed the door changed nothing on screen. The layout now stacks every fragment through
+that one door, which is what makes `-usesFontLeading` live: with the flag on, the line is the font's leading taller and the
+SECOND line's baseline moves by exactly that — the assertion the test makes, in Helvetica, because the default font's
+leading measures zero on this machine and the claim would be untestable with it.
+
+**Two other things worth keeping:**
+
+* **`-usesFontLeading` defaults to NO, a stated deviation from Apple's YES.** Leading has never been in this tier's
+  layout; flipping the default with the flag's arrival would move every document on screen by the font's leading, which is
+  a layout decision and not a flag's side effect.
+* **The stored knobs say what they would mean.** `-hasNonContiguousLayout` is `NO` by construction (a layout here is
+  complete), `-hyphenationFactor` does not fall back to the paragraph style's (a second source for one number is how two
+  paragraphs come to hyphenate differently from the same factor), and `-layoutOptions` has no bits defined.
+
+**And one trap in the test, not the code:** `-layoutManagerOwnsFirstResponderInWindow:` compares the responder's manager
+with the receiver, so a hand-built manager attached to a view's container is a DIFFERENT manager and the positive case is
+false for the right reason. The probe now uses the view's own trio, and the negative case hands responder status to a
+field — a real handover rather than a `makeFirstResponder:` that quietly failed.

@@ -753,7 +753,21 @@ the compositor is really gone.
   stored pair this tier's breaker never produces, and `-defaultLineHeightForFont:`/`-defaultBaselineOffsetForFont:` are
   the font's own ascender/descender/leading rather than a second line-height constant.
 
-- **`ctest`: 119 of 119 passed** (the keyboard and the seam, the AppKit and its input path, the controls and their
+- **And the manager has KNOBS, one of them live** (`ctest`, offscreen): the flag family plus the caret's places on a line.
+  Most are stored and answered — non-contiguous layout (always `NO` here, because a layout in this tier is complete),
+  background layout, screen fonts, the two character-visibility flags, the hyphenation factor (Apple deprecated it in
+  10.6 in favour of the paragraph style's, which is what this tier reads) and `-layoutOptions` (no bits defined) — and the
+  header names what each would mean rather than implying an effect. **`-usesFontLeading` is the live one, and it cost a
+  real fix**: `-cg_lineHeight` had NO callers — the breaker computed `ascender - descender` again at its own site — so the
+  door could not reach the layout. The layout now stacks through that door, and `tests/text_manager_knobs.m` asserts that
+  turning the flag on makes the SECOND line's baseline move by exactly the font's leading. It defaults to NO, a stated
+  deviation from Apple's YES: leading has never been in this tier's layout, and flipping the default with the flag's
+  arrival would move every document on screen. `-getLineFragmentInsertionPointsForCharacterAtIndex:…` fills one position
+  per character plus the line's end (one direction here, so the bidi alternates add nothing), and the three view doors
+  answer the first container's view, the same view for "the beginning of the selection" (the manager does not know one),
+  and whether the window's first responder is a text view whose manager is this one — asked of a real window.
+
+- **`ctest`: 120 of 120 passed** (the keyboard and the seam, the AppKit and its input path, the controls and their
   metrics, the field control and its cell and its bezel and its placeholder and what it may hold, the text path and its
   word granularity and the multi-line view and its wrapping and its scrolling and its READING OF THE STORE, the STORE
   the rich-text slice is built on and the REGION it is laid out in and the WEB that ties the three together and the

@@ -690,8 +690,15 @@ static NSUInteger fn_characterForGlyphOffsetInLine(CTLineRef line, NSUInteger gl
 - (CGFloat)cg_lineHeight
 {
 	NSFont *font = [self cg_font];
+	CGFloat height = [font ascender] - [font descender];
 
-	return [font ascender] - [font descender];
+	/* **AND THE LEADING, WHEN THE CALLER ASKED FOR IT.** `-usesFontLeading` defaults to NO here (Apple's is YES; see the
+	 * header's note): this tier's layout has never carried leading, and the flag's arrival must not move every document
+	 * on screen. Turned on, a line is the font's leading taller — which is what the door is FOR. */
+	if (_usesFontLeading) {
+		height += [font leading];
+	}
+	return height;
 }
 
 /* **THE PARAGRAPH STYLE THE TYPESETTER BREAKS BY, TAKEN FROM THE STORE'S FIRST RUN.** The typesetter obeys one thing
@@ -2033,7 +2040,10 @@ static BOOL fn_cell_owns_edge(CGFloat thisWidth, CGFloat otherWidth, BOOL tieGoe
 	n = [string length];
 	font = [self cg_font];
 	baseAscent = [font ascender];
-	baseLineHeight = [font ascender] - [font descender];
+	/* **THE LINE HEIGHT EVERY FRAGMENT IS STACKED BY, THROUGH THE ONE DOOR THAT KNOWS ABOUT LEADING.** With
+	 * `-usesFontLeading` off this is the font's ascender minus its descender, which is what the breaker has always used;
+	 * on, it is that plus the leading, and every line in the document and every table cell stacks on the taller one. */
+	baseLineHeight = [self cg_lineHeight];
 
 	if ([_textContainers count] == 0) {
 		_invalidatedRange = NSMakeRange(NSNotFound, 0);
@@ -4836,6 +4846,192 @@ static NSImage *fn_tab_marker_image(NSTextTabType type)
 - (CGFloat)defaultBaselineOffsetForFont:(NSFont *)aFont
 {
 	return (aFont != nil) ? [aFont ascender] : 0.0;
+}
+
+@end
+
+/* ==================================================================================================================
+ * THE MANAGER'S KNOBS, THE CARET'S PLACES AND THE THREE VIEW QUESTIONS.
+ *
+ * Every door here is a stored value or arithmetic over the layout the manager already has. The one with an effect is
+ * `-usesFontLeading` (read by `-cg_lineHeight`); `-hasNonContiguousLayout` answers NO by construction, because this tier
+ * has one layout and it is complete; and `-layoutManagerOwnsFirstResponderInWindow:` asks the window a real question
+ * rather than comparing pointers it guessed.
+ * ================================================================================================================ */
+
+@implementation NSLayoutManager (AGKnobs)
+
+- (BOOL)allowsNonContiguousLayout
+{
+	return _allowsNonContiguousLayout;
+}
+
+- (void)setAllowsNonContiguousLayout:(BOOL)flag
+{
+	_allowsNonContiguousLayout = flag ? YES : NO;
+}
+
+/* **NO, ALWAYS, AND THAT IS THE TRUTH RATHER THAN A STUB.** A hole in the layout is what non-contiguous layout means;
+ * this manager lays a container out in full when anything is asked of it, so there is never a glyph whose line is
+ * unlaid. The flag above is stored for a caller that audits its own setting. */
+- (BOOL)hasNonContiguousLayout
+{
+	return NO;
+}
+
+- (BOOL)backgroundLayoutEnabled
+{
+	return _backgroundLayoutEnabled;
+}
+
+- (void)setBackgroundLayoutEnabled:(BOOL)flag
+{
+	_backgroundLayoutEnabled = flag ? YES : NO;
+}
+
+- (BOOL)showsInvisibleCharacters
+{
+	return _showsInvisibleCharacters;
+}
+
+- (void)setShowsInvisibleCharacters:(BOOL)flag
+{
+	_showsInvisibleCharacters = flag ? YES : NO;
+}
+
+- (BOOL)showsControlCharacters
+{
+	return _showsControlCharacters;
+}
+
+- (void)setShowsControlCharacters:(BOOL)flag
+{
+	_showsControlCharacters = flag ? YES : NO;
+}
+
+- (BOOL)usesFontLeading
+{
+	return _usesFontLeading;
+}
+
+- (void)setUsesFontLeading:(BOOL)flag
+{
+	if ((flag ? YES : NO) == _usesFontLeading) {
+		return;
+	}
+	_usesFontLeading = flag ? YES : NO;
+	/* **A LINE-HEIGHT CHANGE IS A LAYOUT CHANGE**, so the document is marked stale: every baseline and every rect the
+	 * breaker computed was computed at the old height. */
+	[self invalidateLayoutForCharacterRange:NSMakeRange(0, [_textStorage length]) actualCharacterRange:NULL];
+}
+
+- (BOOL)usesScreenFonts
+{
+	return _usesScreenFonts;
+}
+
+- (void)setUsesScreenFonts:(BOOL)flag
+{
+	_usesScreenFonts = flag ? YES : NO;
+}
+
+- (float)hyphenationFactor
+{
+	return _hyphenationFactor;
+}
+
+- (void)setHyphenationFactor:(float)aFactor
+{
+	_hyphenationFactor = aFactor;
+}
+
+- (NSUInteger)layoutOptions
+{
+	return _layoutOptions;
+}
+
+/* **THE CARET'S PLACES ON THE LINE THE CHARACTER IS IN**: one per character of the fragment's range plus the line's end,
+ * each with the character it sits before. The fragment is found by CHARACTER range — this door's argument is a character
+ * index, unlike the line-fragment doors beside it, which take glyphs — and the positions come from the same
+ * `-cg_xInFragment:forCharacterIndex:` the caret itself is drawn from, so the two cannot disagree. */
+- (NSUInteger)getLineFragmentInsertionPointsForCharacterAtIndex:(NSUInteger)charIndex
+					    alternatePositions:(BOOL)aFlag
+						inDisplayOrder:(BOOL)dFlag
+						     positions:(CGFloat *)positions
+					    characterIndexes:(NSUInteger *)charIndexes
+{
+	FNFragment *fragment = nil;
+	NSUInteger i, j;
+	NSUInteger count = 0;
+
+	/* ONE DIRECTION IS THE WHOLE OF THIS TIER'S LAYOUT, so the two flags have nothing to change: the alternate positions
+	 * of a bidi run do not exist and the display order of one run is its logical order. */
+	(void)aFlag;
+	(void)dFlag;
+	[self cg_ensureLayout];
+	for (i = 0; i < [_fragments count] && fragment == nil; i++) {
+		NSMutableArray *fragments = [_fragments objectAtIndex:i];
+
+		for (j = 0; j < [fragments count]; j++) {
+			FNFragment *candidate = [fragments objectAtIndex:j];
+
+			if (charIndex >= candidate->range.location
+			    && charIndex < candidate->range.location + candidate->range.length) {
+				fragment = candidate;
+				break;
+			}
+			/* AN EMPTY FRAGMENT — an empty document — still has one place to put a caret. */
+			if (candidate->range.length == 0 && charIndex == candidate->range.location) {
+				fragment = candidate;
+				break;
+			}
+		}
+	}
+	if (fragment == nil) {
+		return 0;
+	}
+	{
+		NSUInteger start = fragment->range.location;
+		NSUInteger end = start + fragment->range.length;
+
+		for (i = start; i <= end; i++) {
+			if (positions != NULL) {
+				positions[count] = [self cg_xInFragment:fragment forCharacterIndex:i];
+			}
+			if (charIndexes != NULL) {
+				charIndexes[count] = i;
+			}
+			count++;
+		}
+	}
+	return count;
+}
+
+- (void)ensureLayoutForBoundingRect:(NSRect)bounds inTextContainer:(NSTextContainer *)container
+{
+	(void)bounds;
+	(void)container;
+	[self cg_ensureLayout];
+}
+
+- (NSTextView *)firstTextView
+{
+	return ([_textContainers count] > 0) ? (NSTextView *)[[_textContainers objectAtIndex:0] textView] : nil;
+}
+
+- (NSTextView *)textViewForBeginningOfSelection
+{
+	return [self firstTextView];
+}
+
+- (BOOL)layoutManagerOwnsFirstResponderInWindow:(NSWindow *)window
+{
+	id responder = [window firstResponder];
+
+	if (![responder isKindOfClass:[NSTextView class]]) {
+		return NO;
+	}
+	return ([(NSTextView *)responder layoutManager] == self);
 }
 
 @end

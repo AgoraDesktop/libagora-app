@@ -1106,3 +1106,14 @@ target_link_libraries(text_manager_state PRIVATE App)
 
 add_test(NAME appkit-text-manager-state COMMAND text_manager_state)
 set_tests_properties(appkit-text-manager-state PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
+
+
+# **THE MANAGER'S KNOBS AND THE CARET'S PLACES.** Most of these doors are stored, and the test says so by round-tripping
+# them; the exception is -usesFontLeading, asserted where it matters — the line height grows by the font's leading AND the
+# second line's BASELINE moves by exactly that, so the knob reaches the breaker rather than a field. The store is set in
+# Helvetica because the default font's leading measures zero on this machine, which would make the claim untestable.
+add_executable(text_manager_knobs text_manager_knobs.m)
+target_link_libraries(text_manager_knobs PRIVATE App)
+
+add_test(NAME appkit-text-manager-knobs COMMAND text_manager_knobs)
+set_tests_properties(appkit-text-manager-knobs PROPERTIES ENVIRONMENT "${_agora_app_test_env}")

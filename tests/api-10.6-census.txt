@@ -62,7 +62,7 @@
 # **AND THE MEASURED NUMBERS, RECOMPUTED RATHER THAN EDITED**, so a reader can see the shape without running anything:
 #
 #     classes    84 of 168   (50%)    84 missing
-#     selectors 2774 of 3568  (78%)  794 missing    33 of 83 classes at COMPLETE coverage
+#     selectors 2795 of 3568  (78%)  773 missing    33 of 83 classes at COMPLETE coverage
 #     protocols  23 of  56   (41%)    33 missing
 #     functions  86 of  86 (100%)     0 missing    10 of them REFUSE BY NAME, which this count does not distinguish
 #                86 declared, 0 declared-not-defined, 0 defined-not-declared
@@ -294,7 +294,7 @@ functions-defined-not-declared 0
 functions-missing 0
 functions-offered 86
 functions-present 86
-methods-declared 3193
+methods-declared 3214
 methods-declared-not-implemented 4
 proto:NSAlertDelegate 0
 proto:NSAnimatablePropertyContainer 0
@@ -377,7 +377,7 @@ sel:NSFontDescriptor 17
 sel:NSGraphicsContext 28
 sel:NSImage 68
 sel:NSImageRep 33
-sel:NSLayoutManager 98
+sel:NSLayoutManager 119
 sel:NSMenu 64
 sel:NSMenuItem 56
 sel:NSMenuItemCell 21
@@ -438,7 +438,7 @@ sel:NSViewController 13
 sel:NSWindow 243
 sel:NSWindowController 26
 sel:NSWorkspace 9
-selectors-missing 794
+selectors-missing 773
 selectors-offered 3568
-selectors-present 2774
+selectors-present 2795
 selphantom:NSObject 4
