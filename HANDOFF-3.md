@@ -13,6 +13,10 @@ tree clean, **137 tests passing in ~64 s**,
 4031 methods declared with 8 having no body**, **99 of the 115 classes with a surface at COMPLETE coverage**, refusal census
 **288**.*
 
+**A FOURTH HANDOFF, `HANDOFF-4.md`, NOW SUPERSEDES THE NUMBERS ABOVE AND THIS FILE'S §6 RANKING.** The six slices §§9–§14
+record have moved the surface to 131 classes and 4005 selectors; read this file for the running record and for the traps,
+and that one for the state.
+
 ---
 
 ## 1. What these sessions did
