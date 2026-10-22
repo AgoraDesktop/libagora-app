@@ -17,6 +17,7 @@
 #import <AppKit/NSBezierPath.h>
 #import <AppKit/NSGraphicsContext.h>
 #import <Foundation/NSGeometry.h>
+#import "AppKitRefusal.h"
 
 /* **THE BORDER'S WIDTH, WHICH IS ALSO HALF OF EVERY SIZE CONVERSION.** A line is a point, a groove and a bezel are
  * two, and none is nothing. It is a function rather than a table because the two class doors and `-tile` all need it
@@ -53,6 +54,14 @@ static NSString * const AGCoderScrollBorderKey = @"borderType";
 static NSString * const AGCoderScrollBackgroundKey = @"backgroundColor";
 static NSString * const AGCoderScrollDrawsBackgroundKey = @"drawsBackground";
 static NSString * const AGCoderScrollAutohideKey = @"autohidesScrollers";
+static NSString * const AGCoderScrollHLineKey = @"horizontalLineScroll";
+static NSString * const AGCoderScrollVLineKey = @"verticalLineScroll";
+static NSString * const AGCoderScrollHPageKey = @"horizontalPageScroll";
+static NSString * const AGCoderScrollVPageKey = @"verticalPageScroll";
+static NSString * const AGCoderScrollDynamicallyKey = @"scrollsDynamically";
+/* **AND THE TWO OLD KEYS ARE KEPT FOR READING, WHICH IS A COMPATIBILITY STATEMENT RATHER THAN LEFT-OVERS.** They were
+ * the 10.0 pair before the axes split; an archive written then carries one number for both, and `-initWithCoder:`
+ * still reads it as the vertical amount. Nothing writes them any more. */
 static NSString * const AGCoderScrollLineKey = @"lineScroll";
 static NSString * const AGCoderScrollPageKey = @"pageScroll";
 static NSString * const AGCoderScrollVRulerKey = @"verticalRuler";
@@ -77,8 +86,11 @@ static Class gRulerViewClass = Nil;
 	[aCoder encodeObject:_backgroundColor forKey:AGCoderScrollBackgroundKey];
 	[aCoder encodeBool:_drawsBackground forKey:AGCoderScrollDrawsBackgroundKey];
 	[aCoder encodeBool:_autohidesScrollers forKey:AGCoderScrollAutohideKey];
-	[aCoder encodeDouble:(double)_lineScroll forKey:AGCoderScrollLineKey];
-	[aCoder encodeDouble:(double)_pageScroll forKey:AGCoderScrollPageKey];
+	[aCoder encodeDouble:(double)_horizontalLineScroll forKey:AGCoderScrollHLineKey];
+	[aCoder encodeDouble:(double)_verticalLineScroll forKey:AGCoderScrollVLineKey];
+	[aCoder encodeDouble:(double)_horizontalPageScroll forKey:AGCoderScrollHPageKey];
+	[aCoder encodeDouble:(double)_verticalPageScroll forKey:AGCoderScrollVPageKey];
+	[aCoder encodeBool:_scrollsDynamically forKey:AGCoderScrollDynamicallyKey];
 	[aCoder encodeObject:_vRuler forKey:AGCoderScrollVRulerKey];
 	[aCoder encodeObject:_hRuler forKey:AGCoderScrollHRulerKey];
 	[aCoder encodeBool:_rulersVisible forKey:AGCoderScrollRulersVisibleKey];
@@ -114,10 +126,25 @@ static Class gRulerViewClass = Nil;
 		_autohidesScrollers = [aDecoder decodeBoolForKey:AGCoderScrollAutohideKey];
 	}
 	if ([aDecoder containsValueForKey:AGCoderScrollLineKey]) {
-		_lineScroll = [aDecoder decodeDoubleForKey:AGCoderScrollLineKey];
+		_verticalLineScroll = [aDecoder decodeDoubleForKey:AGCoderScrollLineKey];
 	}
 	if ([aDecoder containsValueForKey:AGCoderScrollPageKey]) {
-		_pageScroll = [aDecoder decodeDoubleForKey:AGCoderScrollPageKey];
+		_verticalPageScroll = [aDecoder decodeDoubleForKey:AGCoderScrollPageKey];
+	}
+	if ([aDecoder containsValueForKey:AGCoderScrollHLineKey]) {
+		_horizontalLineScroll = [aDecoder decodeDoubleForKey:AGCoderScrollHLineKey];
+	}
+	if ([aDecoder containsValueForKey:AGCoderScrollVLineKey]) {
+		_verticalLineScroll = [aDecoder decodeDoubleForKey:AGCoderScrollVLineKey];
+	}
+	if ([aDecoder containsValueForKey:AGCoderScrollHPageKey]) {
+		_horizontalPageScroll = [aDecoder decodeDoubleForKey:AGCoderScrollHPageKey];
+	}
+	if ([aDecoder containsValueForKey:AGCoderScrollVPageKey]) {
+		_verticalPageScroll = [aDecoder decodeDoubleForKey:AGCoderScrollVPageKey];
+	}
+	if ([aDecoder containsValueForKey:AGCoderScrollDynamicallyKey]) {
+		_scrollsDynamically = [aDecoder decodeBoolForKey:AGCoderScrollDynamicallyKey];
 	}
 	if ([aDecoder containsValueForKey:AGCoderScrollWantsVRulerKey]) {
 		_wantsVerticalRuler = [aDecoder decodeBoolForKey:AGCoderScrollWantsVRulerKey];
@@ -207,9 +234,15 @@ static Class gRulerViewClass = Nil;
 		/* APPLE'S DEFAULT IS NO, and this tree keeps it: a caller that wants bars to come and go opts in. */
 		_autohidesScrollers = NO;
 		/* THE LINE STEP IS TEN POINTS AND THE PAGE STEP IS ZERO, which is the era's pair: zero means "page by the
-		 * visible extent", so a page is a fraction of the window rather than a fixed number of points. */
-		_lineScroll = 10.0;
-		_pageScroll = 0.0;
+		 * visible extent", so a page is a fraction of the window rather than a fixed number of points. THE SAME PAIR
+		 * IS WRITTEN ON BOTH AXES, because a scroll view that said ten one way and zero the other would step
+		 * differently depending on which scroller the hand used. */
+		_horizontalLineScroll = 10.0;
+		_verticalLineScroll = 10.0;
+		_horizontalPageScroll = 0.0;
+		_verticalPageScroll = 0.0;
+		/* AND A SCROLL DRAWS AS IT GOES: the only mode this tier has (see `-setScrollsDynamically:`). */
+		_scrollsDynamically = YES;
 		/* **A SCROLL VIEW ALWAYS HAS A CONTENT VIEW, MADE HERE AND NOWHERE ELSE.** A caller who replaces it may,
 		 * but a scroll view whose content a caller forgot to set would have nowhere to put a document — and the
 		 * whole point of this class is that the document and the bars have a frame to sit in. */
@@ -806,24 +839,102 @@ static Class gRulerViewClass = Nil;
 	[self setNeedsDisplay:YES];
 }
 
+/* **THE 10.0 PAIR IS THE VERTICAL AXIS, SPELLED AS AN ALIAS RATHER THAN KEPT AS A SECOND NUMBER.** See the header:
+ * `-lineScroll` is the amount a line steps DOWN, and it is `_verticalLineScroll` under its older name. A separate field
+ * would let a caller set one and a scroller read the other, which is the same class of bug the axis-specific doors
+ * exist to prevent. */
 - (CGFloat)lineScroll
 {
-	return _lineScroll;
+	return _verticalLineScroll;
 }
 
 - (void)setLineScroll:(CGFloat)aFloat
 {
-	_lineScroll = aFloat;
+	_verticalLineScroll = aFloat;
 }
 
 - (CGFloat)pageScroll
 {
-	return _pageScroll;
+	return _verticalPageScroll;
 }
 
 - (void)setPageScroll:(CGFloat)aFloat
 {
-	_pageScroll = aFloat;
+	_verticalPageScroll = aFloat;
+}
+
+- (CGFloat)horizontalLineScroll
+{
+	return _horizontalLineScroll;
+}
+
+- (void)setHorizontalLineScroll:(CGFloat)aFloat
+{
+	_horizontalLineScroll = aFloat;
+}
+
+- (CGFloat)verticalLineScroll
+{
+	return _verticalLineScroll;
+}
+
+- (void)setVerticalLineScroll:(CGFloat)aFloat
+{
+	_verticalLineScroll = aFloat;
+}
+
+- (CGFloat)horizontalPageScroll
+{
+	return _horizontalPageScroll;
+}
+
+- (void)setHorizontalPageScroll:(CGFloat)aFloat
+{
+	_horizontalPageScroll = aFloat;
+}
+
+- (CGFloat)verticalPageScroll
+{
+	return _verticalPageScroll;
+}
+
+- (void)setVerticalPageScroll:(CGFloat)aFloat
+{
+	_verticalPageScroll = aFloat;
+}
+
+- (BOOL)scrollsDynamically
+{
+	return _scrollsDynamically;
+}
+
+- (void)setScrollsDynamically:(BOOL)flag
+{
+	/* **YES IS THE ONLY MODE THIS TIER HAS, SO NO IS REFUSED BY NAME RATHER THAN STORED.** A deferred scroll keeps the
+	 * clip view's BOUNDS where they were and draws the difference when the gesture ends; this tier's clip view draws
+	 * from `-bounds` at draw time, so a deferred scroll would move the DOCUMENT and leave the ink on screen where it
+	 * was — a scroll that visibly does nothing until something else forces a redraw. Storing NO and behaving as YES
+	 * would be the quiet version of the same lie; this says so and keeps the mode it can honour. */
+	if (!flag) {
+		fn_refuse_window("-[NSScrollView setScrollsDynamically:]",
+				 "a deferred-scroll mode (a scrolled clip view draws from its bounds at draw time here, so a "
+				 "deferred scroll would move the document and leave the ink where it was)");
+		_scrollsDynamically = YES;
+		return;
+	}
+	_scrollsDynamically = YES;
+}
+
+/* **AND THE DOCUMENT'S CURSOR, WHICH IS THE CLIP VIEW'S.** See the header: the pair is declared on both classes and
+ * this is the forward, so a caller holding the scroll view never has to find the clip view to say it. */
+- (NSCursor *)documentCursor
+{
+	return [_contentView documentCursor];
+}
+
+- (void)setDocumentCursor:(NSCursor *)anObj
+{
+	[_contentView setDocumentCursor:anObj];
 }
 
 - (void)drawRect:(NSRect)dirtyRect
@@ -997,7 +1108,9 @@ static Class gRulerViewClass = Nil;
 	case NSScrollerDecrementPage:
 	case NSScrollerIncrementPage:
 	{
-		CGFloat step = (_pageScroll > 0.0) ? _pageScroll : (visLen - _lineScroll);
+		CGFloat line = vertical ? _verticalLineScroll : _horizontalLineScroll;
+		CGFloat page = vertical ? _verticalPageScroll : _horizontalPageScroll;
+		CGFloat step = (page > 0.0) ? page : (visLen - line);
 		CGFloat sign = (part == NSScrollerDecrementPage) ? -1.0 : 1.0;
 
 		if (step <= 0.0) {
@@ -1014,11 +1127,12 @@ static Class gRulerViewClass = Nil;
 	case NSScrollerIncrementLine:
 	{
 		CGFloat sign = (part == NSScrollerDecrementLine) ? -1.0 : 1.0;
+		CGFloat step = vertical ? _verticalLineScroll : _horizontalLineScroll;
 
 		if (vertical) {
-			target.y += sign * _lineScroll;
+			target.y += sign * step;
 		} else {
-			target.x += sign * _lineScroll;
+			target.x += sign * step;
 		}
 		break;
 	}

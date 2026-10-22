@@ -75,6 +75,8 @@ tests/
   appkit_events.m               the INPUT PATH: the seam's event, to the view that should get it
   control_ink.m                 the CONTROL layer: a view that draws its cell, and a button's face
   control_metrics.m             and the METRICS: a button's height and a line of text's
+  button_sweep.m                and the BUTTON PAIR finished: the forwards, the alternate mnemonic, the bezel's
+                                SHADING in pixels, and the three ink doors counted and painted
   slider_ink.m                  a control whose VALUE is a POSITION: the knob and its inverse
   tracking_area.m               an AREA's region, owner and SCOPE — and a control's own hover area
   text_input.m                  the first slice of the text system, driven a keystroke at a time
@@ -115,8 +117,10 @@ tests/
   text_field_placeholder.m      and what an EMPTY field says it is for: a hint, drawn DIMMER than a value
   text_field_attributes.m       and what it MAY HOLD: the two attributed-editing flags, and the editor they reach
   clip_view.m                   the INSIDE of a scroll view: the arithmetic, and the wire that re-runs it
-  scroller.m                    and its BAR: a fraction into a knob, a point into a part, a drag back into a value
-  scroll_view.m                 and the FRAME that joins them: the tiling, the loop, and -enclosingScrollView
+  scroller.m                    and its BAR: a fraction into a knob, a point into a part, a drag back into a value,
+                                the parts that FIT the frame, and the two tracking entry points
+  scroll_view.m                 and the FRAME that joins them: the tiling, the loop, the two AXES and
+                                -enclosingScrollView
   view_offset.m                 and the ONE THING a scroll moves: a non-zero `bounds` origin, drawn and converted
   window_chrome.m               the DRAWN chrome, offscreen: Greybird's bar and its four marks, the centred title
   menu_validation.m             validation and state, which the view tests do not reach
@@ -139,7 +143,8 @@ tests/
   document.m                    the DOCUMENT family: a file, its change count, its undo and its windows, around a temp file
   save_panel.m                  the SAVE and OPEN PANELS: the listing, the filters, the accept, sheets and modeless runs
   popup_color_menu.m            the POP-UP's items, a COLOUR's space and -set, and the MENU's two flags
-  progress_indicator.m          the PROGRESS INDICATOR: range, clamp, spinner state and the bar's ink
+  progress_indicator.m          the PROGRESS INDICATOR: range, clamp, the spinner's FRAMES, its size, its tint
+                                and the recess `-isBezeled` decides
   panel_alert.m                 the PANEL and the ALERT: the click-to-key rule, the content and the two ways to run it
   search_field.m                the SEARCH FIELD: two ornaments, the sending rules, the timer and the recents menu
   image_draw.m                  an image rep draws UP in a y-up and a y-down context alike
@@ -1462,10 +1467,66 @@ orders it out.
 
 **`NSProgressIndicator` IS HERE IN ITS TWO STYLES.** The determinate bar draws a track, a hairline and an accent fill
 proportional to `(value - min) / (max - min)`; the value is clamped on the way in and the range setters keep
-`min <= max`. The spinning style draws a ring and a smaller ring while `-isAnimating`; this tier has no animation
-timer, so `-startAnimation:`/`-stopAnimation:` keep the state a caller reads and the ring is drawn for that state.
-`-isIndeterminate` records the mode and the bar's fill is omitted for it. `tests/progress_indicator.m` checks the
-default range, clamping, `-incrementBy:`, the spinner state and a bitmap's filled/empty halves.
+`min <= max`. `-isIndeterminate` records the mode and the bar's fill is omitted for it. `tests/progress_indicator.m`
+checks the default range, clamping, `-incrementBy:`, and a bitmap's filled/empty halves.
+
+**AND THE SPINNER IS DRIVEN BY A CALLER RATHER THAN BY A TIMER, WHICH IS WHAT MAKES `-animate:` REAL.** The spinning
+style draws a track ring and one arc, and the arc's start is `_animationPhase` in [0, 1) of a turn: `-animate:`
+advances it a twelfth and redraws, so a program that pumps frames sees the gap go round and one that does not sees the
+arc stay still. `-animationDelay` (a thirtieth of a second by default) is the interval a driver should leave between
+sends — the class has no clock to apply it itself, and says so instead of pretending. The two appearance doors are
+read by the drawing: `-controlSize` picks the spinner's inset and stroke width (a MINI ring is wider because it keeps
+less inset), `-controlTint` picks the fill's colour out of `+colorForControlTint:` with the default keeping the
+platform accent, and `-isBezeled:NO` drops the recess and leaves the coloured part alone on the caller's surface.
+`-usesThreadedAnimation` is the one NAMED REFUSAL: there is no animation thread, so the getter answers NO and the
+setter says on stderr what it would have needed.
+
+### The button pair and the scroll pair finished, and a face split three ways
+
+**FIFTY-ONE DOORS OVER SIX CLASSES, AND THEY TAKE `NSButton`, `NSButtonCell`, `NSScrollView`, `NSScroller` and
+`NSProgressIndicator` TO COMPLETE COVERAGE of the 10.6 surface.** The button's eight are forwards, and they are
+tested as forwards — against the CELL, which is the object that draws — so a button that stored its own copy of
+`-isTransparent` would pass a read-back and fail the test.
+
+**`NSButtonCell`'s ink is now THREE DOORS, WHICH IS APPLE'S SPLIT RATHER THAN A REFACTOR FOR ITS OWN SAKE.**
+`-drawWithFrame:inView:` is `-drawBezelWithFrame:inView:` (the bezel, or a switch's indicator) followed by
+`-drawInteriorWithFrame:inView:`, and the interior is `-drawImage:withFrame:inView:` and
+`-drawTitle:withFrame:inView:` with the finished rects its own layout measured — so a subclass with a different FACE
+inherits the contents and one with different WORDS inherits the layout. `tests/button_sweep.m` counts the calls with
+a subclass and paints from inside `-drawTitle:` with another, because a door that is called and ignored would pass the
+count.
+
+**THE BEZEL CAN BE SHADED, AND THE SHADING IS MEASURED RATHER THAN ASSERTED.** `-gradientType` is the era's five
+members: a CONVEX face is a light wash at the top and a dark one at the bottom (bulging toward the light above it), a
+CONCAVE face the reverse, and the STRONG pair is twice the WEAK pair's alpha. The probe draws all four and compares
+the mean of a row near each end — the flat face is one value, convex and concave swap the two, and strong differs
+from weak. The alternate title gained its own MNEMONIC pair (`&` marks, `&&` collapses, the index is into the
+alternate title and `NSNotFound` means none), and `-setKeyEquivalentFont:size:` resolves a family name to the same
+field the object door writes, with the system font as the documented answer for a name the host has no face for.
+
+**A SCROLL VIEW'S TWO STEPS ARE PER AXIS, AND THE 10.0 PAIR IS AN ALIAS RATHER THAN A FIFTH NUMBER.**
+`-horizontalLineScroll`/`-verticalLineScroll`/`-horizontalPageScroll`/`-verticalPageScroll` are what a scroller's
+action reads, and `-lineScroll`/`-pageScroll` are the VERTICAL pair under their older names — two fields a caller can
+set apart and that disagree are how a scroll comes to step sideways when it was told to step down. `-documentCursor`
+is the clip view's, forwarded. `-scrollsDynamically` keeps YES and REFUSES NO by name, because a deferred scroll needs
+a clip view that draws the difference at the end of the gesture rather than from its bounds.
+
+**A SCROLLER NOW KNOWS WHICH OF ITS PARTS FIT.** `-usableParts` answers the era's four-member enum from the live frame
+and `-arrowsPosition` — all parts, the buttons alone when there is no room for a track, the knob alone when the slot
+cannot hold a square knob, and the knob-and-slot when the arrows are off. **AND IT IS GEOMETRY, NOT ADVICE**: the
+cell's `-cg_usableParts` is what `-fn_arrowLengthInFrame:` consults, so a part the bar has no room for has NO
+RECTANGLE and can be neither drawn nor hit. `-checkSpaceForParts` recomputes and redraws (this tier's answer is
+computed, never cached), `-setKnobProportion:` writes the proportion and keeps the value, `-controlTint` is drawn on
+the knob, `-drawParts` is the whole bar in one call, and `-trackKnob:`/`-trackScrollButtons:` are gates in front of
+the one tracking loop — each refuses a press that did not land on the part it names.
+
+**AND THE SEQUENCE FOUND A CLIP VIEW BUG THAT NO SINGLE DOOR COULD.** A scroll view given its bars BEFORE its document
+was left with the origin the `-tile` pass had computed for no document at all — the centring rule read an empty
+extent as a zero-sized document and answered `-(clip - 0)/2`, i.e. (-92.5, -92.5) in a 185-point clip — and the first
+line scroll then clamped back to 0 instead of stepping. `-constrainScrollPoint:` now leaves a document-less origin
+alone, and a document that ARRIVES is measured against the origin the clip already has (CLAMPED, not centred: a clip
+view that recentred on every `-setDocumentView:` would move a caller's visible region whenever it swapped content).
+`tests/clip_view.m` holds both halves.
 
 ### The platform's named images, and what a template is for
 

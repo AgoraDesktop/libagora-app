@@ -34,6 +34,7 @@ NS_ASSUME_NONNULL_BEGIN
 @class NSClipView;
 @class NSScroller;
 @class NSEvent;
+@class NSCursor;
 @class NSRulerView;
 
 @interface NSScrollView : NSView <NSSecureCoding>
@@ -66,8 +67,16 @@ NS_ASSUME_NONNULL_BEGIN
 	BOOL _drawsBackground;
 	BOOL _autohidesScrollers;
 	BOOL _inTile;
-	CGFloat _lineScroll;
-	CGFloat _pageScroll;
+	/* **THE SCROLL AMOUNTS ARE PER AXIS, WHICH IS THE ERA'S OWN SPLIT.** `-lineScroll`/`-pageScroll` are the 10.0 doors
+	 * and they are the VERTICAL pair (see the header); the four axis-specific doors below are what a scroller's action
+	 * actually reads, so a scroll view can step by ten points sideways and by a page vertically without one of the two
+	 * numbers having to stand for both. `_scrollsDynamically` is whether a scroll redraws as it goes — YES here, and
+	 * the only value this tier has a mode for. */
+	CGFloat _horizontalLineScroll;
+	CGFloat _verticalLineScroll;
+	CGFloat _horizontalPageScroll;
+	CGFloat _verticalPageScroll;
+	BOOL _scrollsDynamically;
 }
 
 /* **THE TWO CLASS DOORS THAT CONVERT A CONTENT SIZE TO A FRAME AND BACK.** They are exact inverses and both must
@@ -132,12 +141,37 @@ NS_ASSUME_NONNULL_BEGIN
 - (BOOL)drawsBackground;
 - (void)setDrawsBackground:(BOOL)flag;
 
+/* **THE DOCUMENT'S CURSOR IS THE CLIP VIEW'S, AND THIS IS THE FORWARD** — Apple declares it on both classes, and a
+ * caller holding the scroll view must not have to reach through `-contentView` to say what the document's cursor is. */
+- (nullable NSCursor *)documentCursor;
+- (void)setDocumentCursor:(nullable NSCursor *)anObj;
+
 /* **THE TWO STEPS A PAGE OR A LINE MOVES BY.** `-pageScroll` of 0 means "page by the visible extent", which is the
- * era's default and the reason a page is not a fixed number of points. */
+ * era's default and the reason a page is not a fixed number of points.
+ *
+ * **AND THE SPLIT IS THE ERA'S**: `-lineScroll`/`-pageScroll` are the 10.0 doors and they name the VERTICAL amount,
+ * while `-horizontalLineScroll` and its three siblings are the axis-specific ones the action reads. The 10.0 pair is
+ * therefore an ALIAS rather than a fifth and sixth number — two fields that a caller can set apart and that disagree
+ * are exactly how a scroll comes to step sideways when it was told to step down. */
 - (CGFloat)lineScroll;
 - (void)setLineScroll:(CGFloat)aFloat;
 - (CGFloat)pageScroll;
 - (void)setPageScroll:(CGFloat)aFloat;
+- (CGFloat)horizontalLineScroll;
+- (void)setHorizontalLineScroll:(CGFloat)aFloat;
+- (CGFloat)verticalLineScroll;
+- (void)setVerticalLineScroll:(CGFloat)aFloat;
+- (CGFloat)horizontalPageScroll;
+- (void)setHorizontalPageScroll:(CGFloat)aFloat;
+- (CGFloat)verticalPageScroll;
+- (void)setVerticalPageScroll:(CGFloat)aFloat;
+
+/* **AND WHETHER A SCROLL DRAWS AS IT GOES.** The flag round-trips and YES is the default; NO is REFUSED BY NAME, because
+ * a deferred mode means scrolling the clip view's BOUNDS without moving its ink and drawing the difference when the
+ * gesture ends — and this tier's clip view draws from the current origin, so a deferred scroll would leave the content
+ * where it was and the knob saying it had moved. See `-setScrollsDynamically:`. */
+- (BOOL)scrollsDynamically;
+- (void)setScrollsDynamically:(BOOL)flag;
 
 /* **THE RULERS, WHICH ARE THE THIRD KIND OF STRIP A SCROLL VIEW CAN WEAR.** `-hasVerticalRuler` says whether one EXISTS,
  * `-setHasVerticalRuler:` creates or removes it, and `-rulersVisible` says whether the ones that exist are SHOWING —

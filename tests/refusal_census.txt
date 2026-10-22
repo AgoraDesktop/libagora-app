@@ -1,4 +1,4 @@
-# THE REFUSAL CENSUS — every `APPKIT-REFUSE` site in this library, by file.
+# THE REFUSAL CENSUS — every refusal site in this library, by file.
 #
 # Copyright © 2026 Kyle J. Cardoza. MIT licensed — see LICENSE.
 # SPDX-License-Identifier: MIT
@@ -9,45 +9,74 @@
 # build, in BOTH directions — a file with a refusal it does not list fails, and a listed count that has moved fails.
 # Changing this file is therefore the deliberate act of adding or removing a refusal, and the diff says which.
 #
-# THE FORMAT IS `file count`, one per line, and the total is the sum: 140.
-
-NSApplication.m                      3
-NSAttributedStringRTF.m              4
-NSAttributedStringRTFD.m             6
-NSBezierPath.m                       5
-NSBitmapImageRep.m                  15
-NSButtonCell.m                       1
-NSCell.m                             6
-NSColor.m                           15
-NSComboBoxCell.m                     1
-NSDragging.m                         1
-NSGraphicsContext.m                 14
-NSLayoutConstraint.m                 8
-NSLayoutSolver.m                     1
-NSImage.m                            5
-NSImageRep.m                         3
-NSPDFImageRep.m                      2
-NSTextList.m                         2
-NSMenu.m                            18
-NSMenuItem.m                         0
-NSMenuItemCell.m                     2
-NSNib.m                              0
-NSPasteboard.m                       5
-NSDocument.m                         1
-NSPopUpButtonCell.m                  1
-NSSliderCell.m                       1
-NSText.m                             3
-NSTrackingArea.m                     1
-NSView.m                             3
-NSViewController.m                   1
-NSWindow.m                          13
-
-# AND IT FELL BY TWO WHEN THE PANEL PAIR MADE THE DOCUMENT'S SAVE-AS, EXPORT AND OPEN DOORS REAL.
+# THE FORMAT IS `file count`, one per line, and the total is the sum: see the `total:` line at the foot, which is
+# the number the gate reads.
 #
-# AND IT FELL BY ONE WHEN THE FOUR FILE-TYPE PHRASES BECAME REAL. `NSPasteboard.m` held a single helper,
-# `fn_refuseFileType`, carrying the one APPKIT-REFUSE literal for all four doors; the four are now implemented as the
-# documented spelling convention and their round trip is checked in `tests/functions_target2.m`, so the helper and its
-# literal are gone. THE OTHER FOUR CALL SITES NEVER CARRIED AN `APPKIT-REFUSE` LITERAL AT ALL, so the census could only
-# ever see the one — a limitation this change makes visible rather than hides.
+# **AND THE NEEDLE IS WIDENED TO SEE BOTH WAYS A REFUSAL IS SPELLED, WHICH IS WHAT CLOSES A HOLE THIS FILE ALREADY
+# ADMITTED.** A refusal is either the `APPKIT-REFUSE` literal at the site or a call to `fn_refuse_window`, the shared
+# helper `AppKitRefusal.h` exists to keep the wording in one place. The census counted only the literal, so the
+# 126 sites written through the helper — half the refusals in the library, and every new one — moved no number at
+# all, which is the drift this instrument exists to prevent. It now counts `APPKIT-REFUSE|fn_refuse_window`, and the
+# count went 141 -> 267 for that reason ALONE: no refusal was added or removed by the widening.
 #
-# total: 141
+# THE COUNT IS A FILE'S MENTIONS RATHER THAN ITS EXECUTED STATEMENTS, and that was already true before the widening
+# (`NSCell.m`'s six are all prose). It is a per-file DRIFT detector: a file that gains or loses a refusal changes a
+# line, and a file whose comment names one has to keep naming it.
+
+NSAccessibility.m                1
+NSApplication.m                  11
+NSAttributedStringRTF.m          4
+NSAttributedStringRTFD.m         6
+NSBezierPath.m                   5
+NSBitmapImageRep.m               15
+NSButtonCell.m                   1
+NSCIImageRep.m                   2
+NSCachedImageRep.m               1
+NSCell.m                         6
+NSColor.m                        16
+NSColorSpace.m                   4
+NSComboBoxCell.m                 1
+NSCustomImageRep.m               2
+NSDocument.m                     1
+NSDragging.m                     4
+NSEPSImageRep.m                  2
+NSEvent.m                        11
+NSGlyphInfo.m                    2
+NSGlyphPacking.m                 1
+NSGradient.m                     5
+NSGraphics.m                     6
+NSGraphicsContext.m              14
+NSImage.m                        5
+NSImageRep.m                     3
+NSLayoutConstraint.m             8
+NSLayoutManager.m                5
+NSLayoutSolver.m                 1
+NSMenu.m                         18
+NSMenuItemCell.m                 2
+NSNibConnector.m                 2
+NSOpenGL.m                       3
+NSPDFImageRep.m                  2
+NSPICTImageRep.m                 2
+NSPasteboard.m                   5
+NSPopUpButtonCell.m              1
+NSProgressIndicator.m            1
+NSResponder.m                    3
+NSRulerView.m                    3
+NSScrollView.m                   1
+NSShadow.m                       1
+NSSliderCell.m                   1
+NSSpellChecker.m                 9
+NSText.m                         6
+NSTextList.m                     2
+NSTextView.m                     7
+NSToolbar.m                      1
+NSTrackingArea.m                 1
+NSView.m                         28
+NSViewController.m               1
+NSWindow.m                       24
+
+# AND IT ROSE BY 126 WHEN THE NEEDLE LEARNED THE SHARED HELPER'S NAME. Not one refusal was added by that change: the
+# `fn_refuse_window` spelling was simply invisible to a census that counted the `APPKIT-REFUSE` literal, so every
+# refusal written the house way — which is the way the header asks for — moved no number.
+#
+# total: 267

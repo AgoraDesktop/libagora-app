@@ -29,7 +29,7 @@
 #import <AppKit/NSScroller.h>
 #import <AppKit/NSScrollerCell.h>
 #import <AppKit/NSView.h>
-#import <AppKit/NSColor.h>
+#import <AppKit/NSCursor.h>
 #import <AppKit/NSBezierPath.h>
 #import <AppKit/NSBitmapImageRep.h>
 #import <AppKit/NSGraphicsContext.h>
@@ -331,6 +331,93 @@ int main(void)
 
 			[autoDoc release];
 			[autoView release];
+		}
+
+		/* 12. **THE TWO AXES, THE ALIASES BETWEEN THE 10.0 PAIR AND THEM, AND THE TWO DOORS THAT ARE NOT NUMBERS.** A
+		 * second scroll view with a document that overflows BOTH ways, because one that only overflows downward cannot tell
+		 * a vertical step from a horizontal one. */
+		{
+			NSScrollView *two = [[NSScrollView alloc] initWithFrame:NSMakeRect(0.0, 0.0, 200.0, 200.0)];
+			NSClipView *c2 = (NSClipView *)[two contentView];
+			NSView *d2 = [[NSView alloc] initWithFrame:NSMakeRect(0.0, 0.0, 500.0, 500.0)];
+			NSScroller *h;
+
+			[two setHasVerticalScroller:YES];
+			[two setHasHorizontalScroller:YES];
+			[two setDocumentView:d2];
+			h = [two horizontalScroller];
+
+			check(near([two horizontalLineScroll], 10.0) && near([two verticalLineScroll], 10.0),
+			      "both axes start at the era's ten-point line step");
+			check(near([two lineScroll], 10.0),
+			      "and `-lineScroll` is the VERTICAL amount — the 10.0 door is the vertical axis by name");
+			check(near([two horizontalPageScroll], 0.0) && near([two verticalPageScroll], 0.0),
+			      "with a page of 0 on both axes, which means \"page by the visible extent\"");
+
+			/* THE ALIAS IS ONE FIELD, NOT TWO ANSWERS THAT HAPPEN TO MATCH. */
+			[two setLineScroll:7.0];
+			check(near([two verticalLineScroll], 7.0) && near([two horizontalLineScroll], 10.0),
+			      "`-setLineScroll:` writes the VERTICAL amount and leaves the horizontal one alone");
+			[two setHorizontalLineScroll:30.0];
+			check(near([two verticalLineScroll], 7.0) && near([two lineScroll], 7.0),
+			      "and `-setHorizontalLineScroll:` cannot be read back through the vertical door");
+
+			/* A LINE ON EACH AXIS, AND EACH STEPS ITS OWN WAY. The horizontal scroller is 185 wide, so its decrement
+			 * line button is x 0..15; the vertical one's is y 0..15 in a flipped cell. */
+			[two setVerticalLineScroll:10.0];
+			aim_scroller(h, NSMakePoint(178.0, 7.0), 0.0);	/* the increment line button of a horizontal bar */
+			[two cg_scrollerAction:h];
+			printf("  (note: a horizontal line step left the clip origin at %.1f, %.1f)\n",
+			       (double)[c2 bounds].origin.x, (double)[c2 bounds].origin.y);
+			check(near([c2 bounds].origin.x, 30.0),
+			      "an increment LINE on the horizontal bar moves x by the HORIZONTAL step (30)");
+			check(near([c2 bounds].origin.y, 0.0), "and leaves y where it was");
+			{
+				NSScroller *v = [two verticalScroller];
+
+				aim_scroller(v, NSMakePoint(7.0, 178.0), 0.0);	/* the increment line at the bottom */
+				[two cg_scrollerAction:v];
+				check(near([c2 bounds].origin.y, 10.0),
+				      "and the vertical bar's line step is the VERTICAL amount (10)");
+				check(near([c2 bounds].origin.x, 30.0), "which leaves x alone");
+			}
+
+			/* A PAGE OF ITS OWN IS HONOURED WHEN IT IS SET, AND THE VISIBLE EXTENT IS THE FALLBACK. */
+			[two setHorizontalPageScroll:50.0];
+			aim_scroller(h, NSMakePoint(160.0, 7.0), 0.0);	/* an increment PAGE, clear of the knob */
+			[two cg_scrollerAction:h];
+			check(near([c2 bounds].origin.x, 80.0),
+			      "a horizontal page of 50 moves x by 50 rather than by the visible extent");
+			[two setHorizontalPageScroll:0.0];
+			[two setVerticalLineScroll:15.0];
+			[two setVerticalPageScroll:0.0];
+			/* BACK TO THE TOP FIRST, or the page would step from wherever the line step left the clip view — this is a
+			 * page's ARITHMETIC being checked, not its accumulation. */
+			[c2 scrollToPoint:NSMakePoint([c2 bounds].origin.x, 0.0)];
+			aim_scroller([two verticalScroller], NSMakePoint(7.0, 120.0), 0.0);
+			[two cg_scrollerAction:[two verticalScroller]];
+			printf("  (note: the vertical page of 0 left y at %.1f, and the knob sits at value %.3f)\n",
+			       (double)[c2 bounds].origin.y, (double)[[two verticalScroller] floatValue]);
+			check(near([c2 bounds].origin.y, 185.0 - 15.0),
+			      "and a page of 0 is the visible extent less the line step, on that axis's own numbers");
+
+			/* THE DOCUMENT'S CURSOR IS THE CLIP VIEW'S, AND THIS IS THE FORWARD. */
+			check([two documentCursor] == nil, "a scroll view has no document cursor by default");
+			[two setDocumentCursor:[NSCursor openHandCursor]];
+			check([two documentCursor] == [NSCursor openHandCursor],
+			      "`-setDocumentCursor:` round-trips through the scroll view");
+			check([c2 documentCursor] == [NSCursor openHandCursor],
+			      "because the state is the CLIP VIEW's, which is the object that draws the document");
+
+			/* AND THE ONE FLAG WITH ONE MODE. NO is refused by name and the bar keeps the mode it can honour — the
+			 * claim is read back rather than assumed. */
+			check([two scrollsDynamically], "a scroll view draws as it goes by default");
+			[two setScrollsDynamically:NO];
+			check([two scrollsDynamically],
+			      "`-setScrollsDynamically:NO` is REFUSED and the flag stays YES, because there is no deferred mode here");
+
+			[d2 release];
+			[two release];
 		}
 
 		[sv release];

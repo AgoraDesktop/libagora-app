@@ -25,6 +25,8 @@
 
 #import <AppKit/NSActionCell.h>
 
+@class NSEvent;
+
 NS_ASSUME_NONNULL_BEGIN
 
 /* **THE TWO ENUMS A BUTTON'S FACE IS DRAWN FROM — APPLE'S OWN, WITH THE ERA'S NUMBERS.** They are declared HERE
@@ -45,6 +47,19 @@ typedef enum {
 	NSAcceleratorButton = 9,
 	NSMultiLevelAcceleratorButton = 10
 } NSButtonType;
+
+/* **AND HOW THAT BEZEL IS SHADED, WHICH IS THE ONE GRADIENT THIS TIER HAS.** The era's five members: no shading at
+ * all, and four named by the shape the shading suggests — CONCAVE is a face pressed IN (dark at the top, light at the
+ * bottom) and CONVEX a face bulging OUT toward the light above it (light at the top, dark at the bottom), each in a
+ * WEAK and a STRONG depth. It is declared here for the same reason the two enums above are: a cell that is not a
+ * button has no bezel to shade. */
+typedef enum {
+	NSGradientNone = 0,
+	NSGradientConcaveWeak = 1,
+	NSGradientConcaveStrong = 2,
+	NSGradientConvexWeak = 3,
+	NSGradientConvexStrong = 4
+} NSGradientType;
 
 typedef enum {
 	NSRoundedBezelStyle = 1,
@@ -98,6 +113,12 @@ typedef enum {
 	float _periodicDelay;
 	float _periodicInterval;
 	NSInteger _maxAcceleratorLevel;
+	/* **AND THE TWO PIECES THE SWEEP ADDS, both of which are the SECOND of a pair the class already had**: the index
+	 * into `_alternateTitle` of the character its mnemonic marks (`NSNotFound` when there is none — the same spelling
+	 * and the same reason `NSCell`'s own `_mnemonicLocation` gives), and the bezel's shading. The mnemonic index is an
+	 * INDEX INTO ITS TITLE, so `-setAlternateTitle:` has to clear it for exactly the reason the title's is cleared. */
+	NSUInteger _alternateMnemonicLocation;
+	NSGradientType _gradientType;
 }
 
 /* THE FLAGS. Each getter is spelled where Apple spells one — `-isTransparent` — and each setter is declared as well
@@ -166,6 +187,29 @@ typedef enum {
 @property (nullable, retain) id keyEquivalentFont;
 - (void)setKeyEquivalentFont:(nullable id)font;
 
+/* **AND THE ERA'S TWO-ARGUMENT FORM OF THE SAME DOOR, WHICH NAMES THE FONT INSTEAD OF HANDING ONE OVER.** It is
+ * spelled `-setKeyEquivalentFont:size:` and the first argument is a FAMILY NAME (`nil` means the system font), which
+ * is what makes it the 10.2 door rather than a second setter for the object above: it is for a caller that has a
+ * name and a size from a plist and no `NSFont` in hand. */
+- (void)setKeyEquivalentFont:(nullable NSString *)fontName size:(CGFloat)fontSize;
+
+/* **THE ALTERNATE TITLE'S OWN MNEMONIC, WHICH IS THE PAIR `NSCell` ALREADY HAS ONE TITLE OVER.** `&` marks the
+ * character that follows, the mark is stripped out of the alternate title, and `-alternateMnemonic` answers that
+ * character — an EMPTY STRING when there is none, which is the same answer `-mnemonic` gives and the same reading of
+ * "a string or nil" as the primary pair. The location is an index into the ALTERNATE title and `NSNotFound` means
+ * none, so a caller can set it directly the way `-setMnemonicLocation:` allows on the primary. */
+- (nullable NSString *)alternateMnemonic;
+- (NSUInteger)alternateMnemonicLocation;
+- (void)setAlternateMnemonicLocation:(NSUInteger)location;
+- (void)setAlternateTitleWithMnemonic:(nullable NSString *)stringWithAmpersand;
+
+/* **AND THE BEZEL'S SHADING, WHICH THE FACE BELOW READS.** The flag round-trips and -drawBezelWithFrame:inView:
+ * paints it: a convex face is light at the top and dark at the bottom, a concave one the other way round, and the
+ * STRONG pair is twice the WEAK pair's alpha. `NSGradientNone` is the default and paints the flat face this cell has
+ * always drawn, so a button nobody configures is unchanged. */
+- (NSGradientType)gradientType;
+- (void)setGradientType:(NSGradientType)gradientType;
+
 /* **AND THE PERIODIC PAIR A REPEATING BUTTON USES, AND ONE VALUE NOTHING HERE READS.** The delay and the interval
  * are the two the CELL's own `-getPeriodicDelay:interval:` answers by name (0.2/0.025); a BUTTON's are 0.4/0.075, and
  * this pair is the button's. `-maxAcceleratorLevel` is the depth a multi-level accelerator button answers — stored so
@@ -175,13 +219,32 @@ typedef enum {
 @property NSInteger maxAcceleratorLevel;
 - (void)setMaxAcceleratorLevel:(NSInteger)level;
 
-/* **AND THE INK — THE TWO DOORS `NSCell` SPLITS SO THAT THIS CLASS CAN OVERRIDE ONE AND INHERIT THE OTHER.**
- * `-drawWithFrame:inView:` paints the button's FACE; `-drawInteriorWithFrame:inView:` paints what is ON it, and is
- * overridden here only because a button lays an image and a title out against each other by `-imagePosition` rather
- * than centring each one, which is what the cell below does. The two rect doors are overridden for the same reason:
- * a switch's title begins to the RIGHT of its indicator rather than in the middle of the cell. */
+/* **AND THE INK — THE DOORS `NSCell` SPLITS SO THAT THIS CLASS CAN OVERRIDE THEM.** `-drawWithFrame:inView:` is
+ * the whole face; `-drawInteriorWithFrame:inView:` paints what is ON it, and is overridden here only because a button
+ * lays an image and a title out against each other by `-imagePosition` rather than centring each one, which is what
+ * the cell below does. The two rect doors are overridden for the same reason: a switch's title begins to the RIGHT of
+ * its indicator rather than in the middle of the cell.
+ *
+ * **AND THE THREE PIECES APPLE LETS A SUBCLASS REPLACE ONE AT A TIME.** `-drawWithFrame:inView:` is the two calls
+ * below it: the FACE (`-drawBezelWithFrame:inView:` — the bezel, or a switch's or radio's indicator) and then the
+ * CONTENTS (`-drawInteriorWithFrame:inView:`, which is `-drawImage:withFrame:inView:` and `-drawTitle:withFrame:inView:`
+ * with the rects its own layout computed). The split is not decoration: it is the seam a subclass with its own face
+ * overrides, and it is why the two content doors are given FINISHED rects — the layout is the interior's, so a
+ * subclass that replaces only the words does not have to re-derive where the picture goes. And because each content
+ * door is HANDED the picture or the title it draws rather than reading the cell's state, the alternate-title decision
+ * is made once, in the interior, and handed down — a subclass overriding one door cannot disagree with the layout
+ * about which of the two it was given. */
 - (void)drawWithFrame:(NSRect)cellFrame inView:(nullable id)controlView;
 - (void)drawInteriorWithFrame:(NSRect)cellFrame inView:(nullable id)controlView;
+- (void)drawBezelWithFrame:(NSRect)cellFrame inView:(nullable id)controlView;
+- (void)drawImage:(nullable NSImage *)image withFrame:(NSRect)frame inView:(nullable id)controlView;
+- (void)drawTitle:(nullable NSAttributedString *)title withFrame:(NSRect)frame inView:(nullable id)controlView;
+
+/* **AND THE POINTER'S TWO DOORS, WHICH THIS CELL ANSWERS RATHER THAN THE VIEW.** A control's tracking area already
+ * tells the CELL where the pointer is through `NSCell -cg_setMouseInside:`; these are the era's names for the same
+ * fact, and they are what `-showsBorderOnlyWhileMouseInside` above is a statement about. */
+- (void)mouseEntered:(nullable NSEvent *)event;
+- (void)mouseExited:(nullable NSEvent *)event;
 /* **THE INK A BUTTON'S CONTENTS ARE DRAWN IN, WHICH IS ONE QUESTION WITH TWO READERS.** The interior asks it for the
  * title and the image; a SUBCLASS whose face takes the same states asks it too rather than keeping a second copy of
  * the rule — `NSPopUpButtonCell` draws its own title, and a title that inverted while its face did not is exactly what

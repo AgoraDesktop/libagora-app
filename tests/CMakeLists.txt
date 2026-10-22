@@ -470,6 +470,16 @@ target_link_libraries(scroll_view PRIVATE App m)
 add_test(NAME appkit-scroll-view COMMAND scroll_view)
 set_tests_properties(appkit-scroll-view PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
 
+# **AND THE BUTTON PAIR FINISHED.** Twenty doors over two classes: the button's eight forwards (checked against the CELL,
+# which is the object that draws), the cell's alternate mnemonic (a parse, so tested as one), its two font doors (one
+# field, so the pair is checked against itself), the bezel's shading (pixels, since a gradient is a picture), and the
+# three ink doors the face is now split into — counted by a subclass AND painted by one, so a door that is called and
+# ignored cannot pass. Offscreen: a bitmap rep and the cells' own geometry.
+add_executable(button_sweep button_sweep.m)
+target_link_libraries(button_sweep PRIVATE App m)
+add_test(NAME appkit-button-sweep COMMAND button_sweep)
+set_tests_properties(appkit-button-sweep PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
+
 # **AND THE PLATFORM'S OWN PICTURES, WHICH USED TO BE NAMES WITH NOTHING BEHIND THEM.** Every `NSImageName…` this
 # tier draws answers an image; every one is a template; and a template drawn through the tint door really does take
 # the ink it was given. Offscreen, into a bitmap rep.
@@ -713,12 +723,15 @@ set_tests_properties(appkit-text-rtfd PROPERTIES ENVIRONMENT "${_agora_app_test_
 # The refusal census: every `APPKIT-REFUSE` site in this library, counted against the committed table in BOTH
 # directions. `nm` cannot answer here — every door in this layer is an Objective-C method, which is dispatched
 # dynamically and appears in no symbol table — so the census counts the sites the prose itself makes.
+# **THE NEEDLE TAKES BOTH SPELLINGS OF A REFUSAL**, which `tests/refusal_census.txt` explains: the marker literal and
+# the shared `fn_refuse_window` helper. Counting only the literal made half the refusals in the library invisible,
+# including every one added since the helper landed.
 add_test(NAME appkit-refusal-census
     COMMAND "${CMAKE_COMMAND}"
             "-DSOURCE_DIR=${CMAKE_CURRENT_SOURCE_DIR}/.."
             "-DCENSUS=${CMAKE_CURRENT_SOURCE_DIR}/refusal_census.txt"
             "-DEXTENSION=.m"
-            "-DNEEDLE=APPKIT-REFUSE"
+            "-DNEEDLE=(APPKIT-REFUSE|fn_refuse_window)"
             -P "${CMAKE_CURRENT_SOURCE_DIR}/claims_census.cmake")
 
 # And the same instrument over the HEADERS, counting the OWED claims — as a WORD, so `ALLOWED` does not count.

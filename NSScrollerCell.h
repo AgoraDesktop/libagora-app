@@ -61,6 +61,13 @@ NS_ASSUME_NONNULL_BEGIN
 - (NSScrollerPart)testPart:(NSPoint)point;
 - (NSRect)rectForPart:(NSScrollerPart)part;
 
+/* **WHICH PARTS FIT THE FRAME, WHICH IS THE GEOMETRY'S OWN FIRST QUESTION.** It is the private seam the view's
+ * `-usableParts` forwards to, and the reason it lives on the cell is that the cell is what knows the frame and the
+ * arrow position: `-rectForPart:` and `-testPart:` both read it through `-fn_arrowLengthInFrame:`, so a part the bar
+ * has no room for has NO RECTANGLE and can be neither drawn nor hit. That is what makes the answer behaviour rather
+ * than a number a caller has to remember to consult. */
+- (NSScrollerUsableParts)cg_usableParts;
+
 - (NSScrollArrowPosition)arrowsPosition;
 - (void)setArrowsPosition:(NSScrollArrowPosition)where;
 

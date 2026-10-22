@@ -68,6 +68,44 @@
 		[[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(viewBoundsChanged:)
 			name:NSViewBoundsDidChangeNotification object:aView];
 	}
+	/* **AND THE NEW DOCUMENT IS MEASURED AGAINST THE ORIGIN THE CLIP ALREADY HAS — CLAMPED, NOT CENTRED.** A document that
+	 * ARRIVES may be larger than the one before, and the origin then lies past its end; that origin is pulled back into
+	 * range. It is deliberately NOT centred when the document is short, because centring is the answer to a SCROLL, not
+	 * to a document arriving — a clip view that recentred on every `-setDocumentView:` would move a caller's visible
+	 * region every time it swapped its content. MEASURED as a bug one class up before this existed: a scroll view given
+	 * its bars before its document kept the origin a `-tile` pass had computed with no document at all (-92.5, -92.5 in
+	 * a 185-point clip), and the first line scroll then clamped to 0 instead of stepping. */
+	if (aView != nil) {
+		NSRect doc = [self documentRect];
+		NSRect visible = [self bounds];
+		NSPoint origin = visible.origin;
+		BOOL moved = NO;
+
+		if (NSWidth(doc) >= NSWidth(visible)) {
+			if (origin.x < NSMinX(doc)) {
+				origin.x = NSMinX(doc);
+				moved = YES;
+			} else if (origin.x > NSMaxX(doc) - NSWidth(visible)) {
+				origin.x = NSMaxX(doc) - NSWidth(visible);
+				moved = YES;
+			}
+		}
+		if (NSHeight(doc) >= NSHeight(visible)) {
+			if (origin.y < NSMinY(doc)) {
+				origin.y = NSMinY(doc);
+				moved = YES;
+			} else if (origin.y > NSMaxY(doc) - NSHeight(visible)) {
+				origin.y = NSMaxY(doc) - NSHeight(visible);
+				moved = YES;
+			}
+		}
+		if (moved) {
+			[self setBoundsOrigin:origin];
+			if ([[self superview] respondsToSelector:@selector(reflectScrolledClipView:)]) {
+				[[self superview] reflectScrolledClipView:self];
+			}
+		}
+	}
 }
 
 - (NSView *)documentView
@@ -118,10 +156,19 @@
 
 - (NSPoint)constrainScrollPoint:(NSPoint)newOrigin
 {
-	NSRect doc = [self documentRect];
+	NSRect doc;
 	NSSize clip = [self bounds].size;
 	NSPoint p = newOrigin;
 
+	/* **NO DOCUMENT IS NOT "A DOCUMENT THAT FITS".** With nothing to scroll, the extent is empty, and the centring
+	 * branch below would read that emptiness as a zero-sized document and place the origin at `-(clip - 0)/2` — which
+	 * is a real number and a wrong one. It left a clip view at (-92.5, -92.5) before any document existed, so the
+	 * origin a caller read was negative and the first scroll had to travel back to zero before it could step. A clip
+	 * view with no document has nothing to constrain against, so the origin is left where the caller put it. */
+	if (_docView == nil) {
+		return newOrigin;
+	}
+	doc = [self documentRect];
 	/* **A DOCUMENT SHORTER THAN THE CLIP VIEW IS CENTRED, NOT PINNED** — Apple's rule, and the reason a small
 	 * document sits in the middle of a window rather than at one corner of it. */
 	if (doc.size.width <= clip.width) {

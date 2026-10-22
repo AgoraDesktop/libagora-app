@@ -190,6 +190,40 @@ static NSString * const AGCoderScrollerArrowsKey = @"arrowsPosition";
 	return NSWidth(frame) > NSHeight(frame);
 }
 
+/* **WHICH PARTS FIT, IN THE ERA'S FOUR ANSWERS.** The bar's thickness is one arrow button's length and also the floor
+ * under the knob's length, so the arithmetic is: two buttons plus a slot have to fit along the long side, and the slot
+ * has to hold at least the knob's floor. Everything shorter than that drops a piece rather than drawing it squeezed:
+ *
+ *   - no arrows by position      → the knob and its slot, which is the whole frame;
+ *   - no room for two buttons    → the buttons only (a bar shorter than 2 × 15 points);
+ *   - a slot under a knob's floor → the knob only, filling the frame;
+ *   - otherwise                  → all three, which is the ordinary bar.
+ *
+ * THE ORDER OF THE LAST TWO IS THE MEANINGFUL DECISION: a slot that cannot hold a square knob is a better fit for a
+ * knob that fills it than for two buttons around a track nothing can sit in. */
+- (NSScrollerUsableParts)cg_usableParts
+{
+	NSRect frame = [self cg_frame];
+	CGFloat thickness = [self fn_thicknessInFrame:frame];
+	CGFloat longSide = (NSWidth(frame) > NSHeight(frame)) ? NSWidth(frame) : NSHeight(frame);
+	CGFloat slotLength;
+
+	if (_arrowsPosition == NSScrollerArrowsNone) {
+		return NSScrollerKnobSlotOnly;
+	}
+	if (thickness <= 0.0) {
+		return NSScrollerAllParts;	/* a degenerate frame fits nothing, and the default is the honest answer */
+	}
+	slotLength = longSide - 2.0 * thickness;
+	if (slotLength <= 0.0) {
+		return NSScrollerArrowsOnly;
+	}
+	if (slotLength < thickness) {
+		return NSScrollerKnobOnly;
+	}
+	return NSScrollerAllParts;
+}
+
 /* THE THICKNESS: the short side, which is also the size of an arrow button and the floor under the knob's length. */
 - (CGFloat)fn_thicknessInFrame:(NSRect)frame
 {
@@ -201,7 +235,15 @@ static NSString * const AGCoderScrollerArrowsKey = @"arrowsPosition";
 
 - (CGFloat)fn_arrowLengthInFrame:(NSRect)frame
 {
+	NSScrollerUsableParts usable;
+
 	if (_arrowsPosition == NSScrollerArrowsNone) {
+		return 0.0;
+	}
+	/* **A BAR THAT HAS NO ROOM FOR ITS BUTTONS HAS NONE TO DRAW EITHER**, which is the one place the usable-parts answer
+	 * reaches into the ink: the buttons are dropped and the whole frame is the slot. See `-cg_usableParts`. */
+	usable = [self cg_usableParts];
+	if (usable == NSScrollerKnobOnly || usable == NSScrollerKnobSlotOnly) {
 		return 0.0;
 	}
 	return [self fn_thicknessInFrame:frame];
@@ -613,7 +655,12 @@ static void fn_draw_grip(NSRect knob, BOOL horizontal)
 	 * takes the white and the groove takes the grey. A DISABLED SCROLLER STILL DRAWS ITS KNOB — the position is still
 	 * worth showing, it simply stops claiming to be grabbable. **AND A DRAGGED KNOB KEEPS ITS FILL.** The handle is
 	 * already the thing the hand is holding and the pointer is the feedback; recolouring it as well says the knob has
-	 * become a different object rather than that it is being moved. */
+	 * become a different object rather than that it is being moved.
+	 *
+	 * **AND THE TINT IS THE KNOB'S, BECAUSE THE KNOB IS THE ONE PIECE WITH A SURFACE OF ITS OWN.** `-setControlTint:` is
+	 * the era's door for an appearance's accent, and a bar with no accent in it would store the answer and change
+	 * nothing; asking for blue or graphite asks the knob to wear that colour. THE DEFAULT IS NOT A TINT: it leaves the
+	 * sample's white knob exactly as it is, which is what keeps every picture this file already drew. */
 	if (![self isEnabled]) {
 		[[NSColor controlBackgroundColor] setFill];
 		/* **AND A DISABLED KNOB'S OUTLINE IS NOW A STEP THIS FILE HAS TO ASK FOR BY NAME.** It was
@@ -624,7 +671,13 @@ static void fn_draw_grip(NSRect knob, BOOL horizontal)
 		 * that has stopped claiming to be grabbable says so with a heavier edge. */
 		[[NSColor controlShadowColor] setStroke];
 	} else {
-		[[NSColor controlBackgroundColor] setFill];
+		NSControlTint tint = [self controlTint];
+
+		if (tint == NSBlueControlTint || tint == NSGraphiteControlTint || tint == NSClearControlTint) {
+			[[NSColor colorForControlTint:tint] setFill];
+		} else {
+			[[NSColor controlBackgroundColor] setFill];
+		}
 		[[NSColor controlDarkShadowColor] setStroke];
 	}
 	[p fill];
@@ -635,16 +688,20 @@ static void fn_draw_grip(NSRect knob, BOOL horizontal)
 - (void)drawKnobSlotInRect:(NSRect)slotRect highlight:(BOOL)flag
 {
 	(void)flag;
-	if (slotRect.size.width <= 0.0 || slotRect.size.height <= 0.0) {
-		return;
-	}
 	/* **THE SLOT IS THE RECESS, SO IT IS DRAWN FIRST AND UNDER EVERYTHING.** The arrows are then drawn on top of it,
 	 * and the knob last of all — which is the order a raised knob over a hollow groove reads as. **AND IT IS A SQUARE
 	 * RECTANGLE**, the one piece of this bar that is: the knob and the two buttons are rounded because they are things
-	 * the pointer can take hold of, and the groove is the hole they sit in. */
-	[[NSColor cg_scrollerTrackColor] setFill];
-	[[NSBezierPath bezierPathWithRect:slotRect] fill];
-	if (_arrowsPosition != NSScrollerArrowsNone) {
+	 * the pointer can take hold of, and the groove is the hole they sit in.
+	 *
+	 * **A BAR WITH ONLY ITS BUTTONS STILL DRAWS THE BUTTONS.** `-cg_usableParts` can answer `NSScrollerArrowsOnly`, and
+	 * then the slot has no length at all — so the groove is skipped and the two arrows are drawn anyway. That is the
+	 * one case where the slot and the arrows are not drawn together, and it is why this method does not return early
+	 * on an empty slot any more. */
+	if (slotRect.size.width > 0.0 && slotRect.size.height > 0.0) {
+		[[NSColor cg_scrollerTrackColor] setFill];
+		[[NSBezierPath bezierPathWithRect:slotRect] fill];
+	}
+	if (_arrowsPosition != NSScrollerArrowsNone && [self cg_usableParts] != NSScrollerKnobOnly) {
 		[self drawArrow:NSScrollerDecrementArrow highlight:NO];
 		[self drawArrow:NSScrollerIncrementArrow highlight:NO];
 	}

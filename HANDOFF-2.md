@@ -11,6 +11,10 @@ handoff is still worth reading; nothing in it was wrong, and §2's instrument ru
 *State after the session that picked this file up (§8–§12): **23 commits**, tree clean, **136 tests passing**, `api-ledger: 361
 metrics hold (117 classes, 3362 selectors of 4112, 30 protocols, 86 functions)`.*
 
+*State after the session that picked THAT up (§13, the completion sweep's part 2): **24 commits**, tree clean, **137 tests
+passing**, `api-ledger: 361 metrics hold (117 classes, 3413 selectors of 4112, 30 protocols, 86 functions)`, 84 classes COMPLETE.
+The refusal census is 267 — it was 141, and the difference is the needle learning the shared helper's name, not a refusal.*
+
 ---
 
 ## 1. What this session did
@@ -505,3 +509,90 @@ The remaining 181 selectors, by group, with the ones that are NOT simple forward
 4. **`NSCell`'s field-editor family** (9) is the deepest: `-editWithFrame:…`, `-selectWithFrame:…`, `-endEditing:`,
    `-fieldEditorForView:` and `-trackMouse:…` are the cell-level doors the control's session machinery already implements
    internally; exposing them without a second session is the design work.
+
+---
+
+## 13. The completion sweep, part 2: the button pair, the scroll pair, and a bug the sequence found
+
+*Twenty-fourth commit of the pickup: `NSButton` 39/39, `NSButtonCell` 55/55, `NSScrollView` 55/55, `NSScroller` 23/23 and
+`NSProgressIndicator` 27/27 — 51 selectors, five classes to COMPLETE, plus one private door on `NSScrollerCell`. **3413 of
+4112 selectors (83%), 84 of 117 classes complete, 699 missing.** 137 tests.*
+
+**THE BUTTON'S EIGHT ARE FORWARDS AND THEY ARE TESTED AS FORWARDS.** Each is checked by asking the CELL what it now
+answers, because a button that kept its own `_transparent` would pass "does the button read back" and fail "does the
+object that draws know". `-showsBorderOnlyWhileMouseInside` is then tested as the behaviour it is: the same cell drawn
+with the pointer outside has NO border ink at all, and drawn after `-mouseEntered:` it has one.
+
+**THE FACE IS NOW THREE DOORS, WHICH IS APPLE'S SPLIT AND NOT A REFACTOR FOR ITS OWN SAKE.** `-drawWithFrame:inView:`
+is `-drawBezelWithFrame:inView:` plus `-drawInteriorWithFrame:inView:`, and the interior is `-drawImage:withFrame:inView:`
+plus `-drawTitle:withFrame:inView:` — each handed the FINISHED rect its own layout measured, so a subclass with a
+different face inherits the contents and one with different words inherits the layout. The probe proves it twice: one
+subclass COUNTS the three calls, another PAINTS from inside `-drawTitle:`, because a door that is called and ignored
+would pass the count. The plain title is now built as an attributed string and sent through the same door, which is
+what makes the door have one kind of subject — and `-drawInRect:withAttributes:` is `-initWithString:attributes:` plus
+`-drawInRect:`, so the pixels are the ones the old direct call produced.
+
+**A BEZEL CAN BE SHADED, AND THE SHADING IS A MEASUREMENT.** `-gradientType` is the era's five members. Convex is a light
+wash at the top and a dark one at the foot, concave the reverse, strong twice weak's alpha. MEASURED on a 120x24 bezel:
+flat 0.902/0.902, convex 0.890/0.773, concave 0.773/0.890, strong 0.875/0.639 — so direction and depth are two
+independent things a caller can predict, and the assertion is the ORDER rather than a colour nobody published.
+
+**A SCROLL VIEW'S STEPS ARE PER AXIS AND THE 10.0 PAIR IS AN ALIAS.** The four axis doors are what the action reads;
+`-lineScroll`/`-pageScroll` write the VERTICAL pair and report it back. A second field would have let a caller set one
+and the action read the other. `-documentCursor` forwards to the clip view. `-scrollsDynamically:NO` refuses by name.
+
+**A SCROLLER KNOWS WHICH PARTS FIT, AND THAT IS GEOMETRY RATHER THAN ADVICE.** `-usableParts` reduces the bar to all
+parts, the buttons alone (15x20: two 15-point buttons fill it), the knob alone (15x40: a slot too short for a square
+knob) or knob-and-slot (arrows off). The cell's `-cg_usableParts` is what `-fn_arrowLengthInFrame:` consults, so a part
+the bar has no room for has NO RECTANGLE and can be neither drawn nor hit — the probe checks both ends of that. The two
+tracking doors are gates in front of the ONE loop, each refusing a press that did not land where its name says; the
+probe reads `-hitPart` to see the refusal as well as the acceptance.
+
+**THE SPINNER IS CALLER-DRIVEN, WHICH IS WHAT MAKES `-animate:` REAL** — the arc's start is a phase, one send advances
+it a twelfth of a turn, and the probe compares the rendered spinner before and after three sends (38 of 400 points
+moved). `-animationDelay` is the interval a driver should use and says so, since nothing here has a clock.
+`-controlSize` reaches the ink (a mini ring is wider), `-controlTint` reaches the fill (graphite is grey where the
+default is the accent), `-isBezeled:NO` leaves the empty half UNPAINTED — read as an alpha of zero, because the bitmap
+starts transparent. `-usesThreadedAnimation` is the slice's one refusal.
+
+### THE BUG THE SEQUENCE FOUND, WHICH NO SINGLE DOOR COULD
+
+`NSScrollView` sets its clip view's frame in `-tile`, and `-tile` ends by re-constraining the visible origin. With NO
+document yet, the clip view answered an EMPTY extent, the centring rule read that as a zero-sized document, and the
+origin became `-(185 - 0)/2 = -92.5` on both axes. Later a 500x500 document arrived — and `-setDocumentView:` did not
+re-constrain, so the clip view sat at (-92.5, -92.5) with a document that would never allow such an origin. THE
+SYMPTOM WAS ONE LINE: the first horizontal line step computed `-92.5 + 30` and `scrollToPoint:` clamped it to 0, so the
+bar moved nothing and the test read a zero. MEASURED by printing the action's own target; the two doors involved were
+each correct on their own.
+
+Two fixes, both in `NSClipView`: a document-less clip view leaves the origin it was given (`-constrainScrollPoint:`
+returns early), and a document that ARRIVES is measured against the origin the clip already has — CLAMPED into range,
+deliberately NOT centred, because centring is the answer to a SCROLL and a clip view that recentred on every
+`-setDocumentView:` would move a caller's visible region whenever it swapped its content. `tests/clip_view.m` holds the
+pair; the first attempt at the second fix DID centre and broke the non-flipped `documentRect` case, which is why the
+test was there.
+
+### AND THE REFUSAL CENSUS WAS COUNTING HALF THE LIBRARY
+
+The slice adds two refusals — both written as `fn_refuse_window`, the shared helper `AppKitRefusal.h` exists for — and
+neither moved a number. The census counted the `APPKIT-REFUSE` literal only, and 126 of the library's 267 refusal sites
+are written through the helper, which its own prose had already half-admitted. The needle is now
+`(APPKIT-REFUSE|fn_refuse_window)` and the census is re-pinned 141 → 267 with NO refusal added or removed by the
+widening. This matters for the next slice: a new refusal written the house way is now visible.
+
+### Where the next hour goes, after part 2
+
+The completion sweep's parts 1 and 2 are done. What remains of §12's table, by reachable surface:
+
+1. **The combo pair's data source** — `NSComboBox` 15 + `NSComboBoxCell` 16 = 31, once
+   `NSComboBoxDataSource`/`NSComboBoxCellDataSource`/`NSComboBoxDelegate` are declared and sent. The cell's list
+   geometry is already there.
+2. **The image family** — `NSImage` 9 + `NSImageRep` 7 + `NSBitmapImageRep` 5 = 21: `-drawInRect:fromRect:operation:fraction:`
+   is real over the context; TIFF encoding stays the one refusal.
+3. **`NSAlert` 7 + `NSStatusItem` 5 + `NSRunningApplication` 4 + `NSBrowserCell` 6 = 22**, with the same warning §12 gave:
+   `NSStatusItem`'s enabled/mask/toolTip doors still have no click path to reach them.
+4. **`NSTextStorage` 12 + `NSTextBlock` 10 + `NSSpellChecker` 10 + `NSTextInputContext` 8 = 40**, the storage's
+   deprecated attribute runs being the real part of it.
+5. **`NSCell` 9 + `NSApplication` 7 = 16**, the field-editor family being the design work.
+6. And outside the sweep, unchanged: `NSBrowser`'s 64 for the Workspace's Column view, `NSWorkspace`'s 49 for the
+   shell's verbs, `NSDocument`'s 30 and `NSDocumentController`'s 8 for print/autosave/error presentation.

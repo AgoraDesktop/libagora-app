@@ -21,6 +21,9 @@
 #import <AppKit/NSBezierPath.h>
 #import <AppKit/NSStringDrawing.h>
 #import <AppKit/NSImage.h>
+/* **AND THE ONE GRADIENT A BEZEL CAN WEAR.** `-gradientType` names a shape; this is the class that paints it, and it is
+ * imported here rather than in the header because a caller setting the FLAG needs no gradient in hand. */
+#import <AppKit/NSGradient.h>
 /* **AND THE CONTEXT, FOR ONE CALL: `CGContextSetAlpha`, which is how a disabled button's picture dims when it asked
  * to — `-drawInRect:` carries no fraction and the compositing doors do not scale. */
 #import <AppKit/NSGraphicsContext.h>
@@ -57,6 +60,8 @@ static NSString * const AGCoderButtonImageScalingKey = @"imageScaling";
 static NSString * const AGCoderButtonPeriodicDelayKey = @"periodicDelay";
 static NSString * const AGCoderButtonPeriodicIntervalKey = @"periodicInterval";
 static NSString * const AGCoderButtonMaxAcceleratorKey = @"maxAcceleratorLevel";
+static NSString * const AGCoderButtonAlternateMnemonicKey = @"alternateMnemonicLocation";
+static NSString * const AGCoderButtonGradientKey = @"gradientType";
 
 - (void)encodeWithCoder:(NSCoder *)aCoder
 {
@@ -80,6 +85,8 @@ static NSString * const AGCoderButtonMaxAcceleratorKey = @"maxAcceleratorLevel";
 	[aCoder encodeDouble:(double)_periodicDelay forKey:AGCoderButtonPeriodicDelayKey];
 	[aCoder encodeDouble:(double)_periodicInterval forKey:AGCoderButtonPeriodicIntervalKey];
 	[aCoder encodeInteger:_maxAcceleratorLevel forKey:AGCoderButtonMaxAcceleratorKey];
+	[aCoder encodeInteger:(NSInteger)_alternateMnemonicLocation forKey:AGCoderButtonAlternateMnemonicKey];
+	[aCoder encodeInteger:(NSInteger)_gradientType forKey:AGCoderButtonGradientKey];
 }
 
 - (instancetype)initWithCoder:(NSCoder *)aDecoder
@@ -146,6 +153,12 @@ static NSString * const AGCoderButtonMaxAcceleratorKey = @"maxAcceleratorLevel";
 	if ([aDecoder containsValueForKey:AGCoderButtonMaxAcceleratorKey]) {
 		_maxAcceleratorLevel = [aDecoder decodeIntegerForKey:AGCoderButtonMaxAcceleratorKey];
 	}
+	if ([aDecoder containsValueForKey:AGCoderButtonAlternateMnemonicKey]) {
+		_alternateMnemonicLocation = (NSUInteger)[aDecoder decodeIntegerForKey:AGCoderButtonAlternateMnemonicKey];
+	}
+	if ([aDecoder containsValueForKey:AGCoderButtonGradientKey]) {
+		_gradientType = (NSGradientType)[aDecoder decodeIntegerForKey:AGCoderButtonGradientKey];
+	}
 	return self;
 }
 
@@ -174,6 +187,11 @@ static NSString * const AGCoderButtonMaxAcceleratorKey = @"maxAcceleratorLevel";
 		_periodicDelay = 0.4f;
 		_periodicInterval = 0.075f;
 		_maxAcceleratorLevel = 0;
+		/* **AND THE ONE DEFAULT THAT IS NOT ZERO IS THE MNEMONIC'S**, for the reason `NSCell`'s initialiser gives:
+		 * zero is a VALID mnemonic index (the first character), so "no alternate mnemonic" has to be `NSNotFound`. The
+		 * gradient's zero IS `NSGradientNone`, which is the flat face, so that one is right by construction. */
+		_alternateMnemonicLocation = NSNotFound;
+		_gradientType = NSGradientNone;
 		[self setButtonType:NSMomentaryLightButton];
 	}
 	return self;
@@ -239,6 +257,12 @@ static NSString * const AGCoderButtonMaxAcceleratorKey = @"maxAcceleratorLevel";
 		[_alternateTitle release];
 		_alternateTitle = copy;
 	}
+	/* **AND A NEW ALTERNATE TITLE CLEARS ITS MNEMONIC**, which is `NSCell -setTitle:`'s rule one title over: the
+	 * location is an INDEX INTO THIS STRING, so leaving it standing would point at a character nobody marked. It is
+	 * cleared even when the string handed in is the same object, because asking again is a statement about what the
+	 * title is NOW — and it is what lets `-setAlternateTitleWithMnemonic:` below return early at any point and still
+	 * be honest. */
+	_alternateMnemonicLocation = NSNotFound;
 }
 
 - (id)backgroundColor
@@ -440,6 +464,121 @@ static NSString * const AGCoderButtonMaxAcceleratorKey = @"maxAcceleratorLevel";
 		_keyEquivalentFont = held;
 	}
 }
+
+- (void)setAlternateTitleWithMnemonic:(NSString *)stringWithAmpersand
+{
+	NSRange amp;
+
+	/* **THE ALTERNATE TWIN OF `NSCell -setTitleWithMnemonic:`, AND DELIBERATELY THE SAME ONE PASS.** `NSMenuItem`'s parse is
+	 * the rule this tree already ships, `NSCell` spells it for a title, and this is the second title a button has — so the
+	 * convention is restated by DOING the same thing rather than by a second convention: `&` marks the NEXT character,
+	 * `&&` is one literal ampersand and names nothing, and a trailing `&` names nothing. The difference from the primary
+	 * pair is only WHICH title is stored and which index field remembers it. */
+	if (stringWithAmpersand == nil) {
+		[self setAlternateTitle:@""];	/* which clears the location, so every return below is honest */
+		return;
+	}
+	[self setAlternateTitle:stringWithAmpersand];
+	if (_alternateTitle == nil) {
+		return;
+	}
+	amp = [_alternateTitle rangeOfString:@"&"];
+	if (amp.location == NSNotFound) {
+		return;			/* no `&`, so no mnemonic — the common case */
+	}
+	if (amp.location + 1 < [_alternateTitle length] && [_alternateTitle characterAtIndex:amp.location + 1] == '&') {
+		NSString *collapsed = [[_alternateTitle stringByReplacingCharactersInRange:NSMakeRange(amp.location, 2)
+									   withString:@"&"] copy];
+
+		[_alternateTitle release];
+		_alternateTitle = collapsed;
+		return;			/* `&&` is a literal ampersand and names no mnemonic */
+	}
+	if (amp.location + 1 >= [_alternateTitle length]) {
+		return;			/* a trailing `&` names nothing */
+	}
+	_alternateMnemonicLocation = amp.location;
+	{
+		NSString *marked = [[_alternateTitle stringByReplacingCharactersInRange:NSMakeRange(amp.location, 1)
+								  withString:@""] copy];
+
+		[_alternateTitle release];
+		_alternateTitle = marked;
+	}
+}
+
+- (NSString *)alternateMnemonic
+{
+	/* AN EMPTY STRING RATHER THAN NIL, which is `-mnemonic`'s documented answer and the reason a caller can ask this
+	 * of a button nobody marked and get a string it can compare to `@""`. An index past the end is the same answer:
+	 * a location that names nothing names nothing, and it is not a refusal because nothing went wrong. */
+	if (_alternateMnemonicLocation == NSNotFound || _alternateMnemonicLocation >= [_alternateTitle length]) {
+		return @"";
+	}
+	return [_alternateTitle substringWithRange:NSMakeRange(_alternateMnemonicLocation, 1)];
+}
+
+- (NSUInteger)alternateMnemonicLocation
+{
+	return _alternateMnemonicLocation;
+}
+
+- (void)setAlternateMnemonicLocation:(NSUInteger)location
+{
+	/* A SETTER AND NOTHING MORE, exactly as `NSCell -setMnemonicLocation:` is: the index may be out of range and
+	 * `-alternateMnemonic` answers the empty string for it, which is a quiet answer rather than a refusal nobody
+	 * asked for. `NSNotFound` is the spelling for "no mnemonic", and it is what `-setAlternateTitle:` writes. */
+	_alternateMnemonicLocation = location;
+}
+
+- (NSGradientType)gradientType
+{
+	return _gradientType;
+}
+
+- (void)setGradientType:(NSGradientType)gradientType
+{
+	_gradientType = gradientType;
+	/* THE FACE IS THE GRADIENT, so changing it is a repaint of the whole cell rather than of a band. */
+	if (_controlView != nil && [_controlView respondsToSelector:@selector(setNeedsDisplay:)]) {
+		[_controlView setNeedsDisplay:YES];
+	}
+}
+
+- (void)setKeyEquivalentFont:(NSString *)fontName size:(CGFloat)fontSize
+{
+	NSFont *font = nil;
+
+	/* **A NAME AND A SIZE, RESOLVED HERE RATHER THAN STORED AS TWO FIELDS.** The object door above is the cell's
+	 * state, so the two-argument form has to land in the same field or the two would disagree about what font the key
+	 * equivalent wears. *nil* NAME IS THE SYSTEM FONT at the given size (`-fontWithName:size:` answers nil for a name
+	 * the host has no face for, and a key equivalent drawn in nil is invisible — so the fallback is stated rather than
+	 * left to whatever the drawing does with a nil font). */
+	if (fontName != nil) {
+		font = [NSFont fontWithName:fontName size:fontSize];
+	}
+	if (font == nil) {
+		font = [NSFont systemFontOfSize:fontSize];
+	}
+	[self setKeyEquivalentFont:font];
+}
+
+- (void)mouseEntered:(NSEvent *)event
+{
+	(void)event;
+	/* **THE POINTER'S ARRIVAL IS THE CELL'S STATE, AND THE CONTROL'S TRACKING AREA IS WHAT ALREADY DELIVERS IT.**
+	 * `NSControl -mouseEntered:` calls `-cg_setMouseInside:`, which is the tier's spelling of this fact and the one
+	 * that redraws; this door is the era's name for the same answer, so a caller that sends it directly — a manual
+	 * probe, or a subclass with its own tracking — reaches the same state rather than a second copy of it. */
+	[self cg_setMouseInside:YES];
+}
+
+- (void)mouseExited:(NSEvent *)event
+{
+	(void)event;
+	[self cg_setMouseInside:NO];
+}
+
 
 - (void)setPeriodicDelay:(float)delay interval:(float)interval
 {
@@ -668,16 +807,53 @@ static NSString * const AGCoderButtonMaxAcceleratorKey = @"maxAcceleratorLevel";
 	return [self fn_faceIsPushed];
 }
 
+/* **THE WHOLE FACE IS TWO DOORS, AND THE SPLIT IS APPLE'S RATHER THAN A REFACTOR FOR ITS OWN SAKE.** A subclass that
+ * wants a different FACE overrides `-drawBezelWithFrame:inView:` and inherits the contents; one that wants different
+ * WORDS overrides `-drawTitle:withFrame:inView:`. Before the split there was one method, so either change meant
+ * copying the other half — which is the shape that makes a control's face drift from its behaviour. */
+/* **THE ONE GRADIENT THIS TIER PAINTS, AND THE TWO FACES IT CAN SUGGEST.** A CONVEX bezel is a face bulging toward
+ * the light above it — lighter at the top, darker at the bottom — and a CONCAVE one is the same shading reversed, a
+ * face pressed IN (darker at the top). The STRONG pair is twice the WEAK pair's alpha rather than a second colour, so
+ * the four members differ in two independent ways a caller can predict: DIRECTION and DEPTH.
+ *
+ * THE SHADE IS A LIGHT AND A DARK WASH RATHER THAN A SECOND FILL: it is composited over whatever the face is wearing,
+ * which is what makes it work on the accent, on a disabled grey and on a caller's own `-backgroundColor:` without the
+ * gradient having to know any of the three. It is drawn INSIDE the bezel path and BEFORE the border, so the border is
+ * still the one colour `-drawBezelWithFrame:inView:` names. */
+- (void)fn_drawBezelGradientInPath:(NSBezierPath *)face
+{
+	BOOL concave = (_gradientType == NSGradientConcaveWeak || _gradientType == NSGradientConcaveStrong);
+	BOOL strong = (_gradientType == NSGradientConcaveStrong || _gradientType == NSGradientConvexStrong);
+	CGFloat alpha = strong ? 0.36 : 0.18;
+	NSColor *light = [NSColor colorWithCalibratedWhite:1.0 alpha:alpha];
+	NSColor *dark = [NSColor colorWithCalibratedWhite:0.0 alpha:alpha];
+	NSGradient *shade;
+
+	/* THE ANGLE IS 90 DEGREES, WHICH IS BOTTOM TO TOP, so the STARTING colour is the one at the FOOT of the bezel:
+	 * convex wants the dark there, concave wants the light. */
+	shade = [[NSGradient alloc] initWithStartingColor:(concave ? light : dark)
+						 endingColor:(concave ? dark : light)];
+	[shade drawInBezierPath:face angle:90.0];
+	[shade release];
+}
+
 - (void)drawWithFrame:(NSRect)cellFrame inView:(id)controlView
 {
+	[self drawBezelWithFrame:cellFrame inView:controlView];
+	[self drawInteriorWithFrame:cellFrame inView:controlView];
+}
+
+/* **THE FACE, WHICH IS THE INDICATOR FOR A SWITCH OR A RADIO AND THE BEZEL FOR EVERYTHING ELSE.** A push button's
+ * face is a ROUNDED BEZEL, FILLED AND THEN DARKENED WHILE THE BUTTON IS DOWN; the radius is zero for the square bezel
+ * styles and four for the rounded ones, and a transparent button paints no face at all — which is what `-isTransparent`
+ * MEANS rather than a colour that happens to blend. */
+- (void)drawBezelWithFrame:(NSRect)cellFrame inView:(id)controlView
+{
+	(void)controlView;
 	if ([self fn_isIndicatorButton]) {
 		[self fn_drawIndicatorWithFrame:cellFrame];
-		[self drawInteriorWithFrame:cellFrame inView:controlView];
 		return;
 	}
-	/* **A PUSH BUTTON'S FACE: A ROUNDED BEZEL, FILLED AND THEN DARKENED WHILE THE BUTTON IS DOWN.** The radius is
-	 * zero for the square bezel styles and four for the rounded ones, and a transparent button paints no face at all
-	 * — which is what `-isTransparent` MEANS rather than a colour that happens to blend. */
 	/* **`-showsBorderOnlyWhileMouseInside` IS THE ERA DOOR WHOSE WHOLE MEANING IS THE POINTER'S POSITION**, so it is
 	 * honoured here rather than only stored: with the flag set, the face is drawn ONLY while the pointer is on the
 	 * button, which is what makes a "borderless until you point at it" button borderless. It is false by default, so
@@ -720,11 +896,15 @@ static NSString * const AGCoderButtonMaxAcceleratorKey = @"maxAcceleratorLevel";
 		}
 		[fill setFill];
 		[face fill];
+		/* **AND THE SHADING, WHICH IS THE BEZEL'S ONLY GRADIENT.** See `-fn_drawBezelGradientInPath:`: it is drawn
+		 * INSIDE the face and UNDER its border, so the stroke stays the one colour it names. */
+		if (_gradientType != NSGradientNone) {
+			[self fn_drawBezelGradientInPath:face];
+		}
 		[[NSColor controlDarkShadowColor] setStroke];
 		[face setLineWidth:NS_CELL_BEZEL_WIDTH];
 		[face stroke];
 	}
-	[self drawInteriorWithFrame:cellFrame inView:controlView];
 }
 
 /* **THE RECTS A BUTTON'S CONTENTS LIVE IN, WHICH IS THE ONE PLACE ITS LAYOUT DIFFERS FROM THE CELL'S.** A switch's
@@ -852,7 +1032,7 @@ static NSSize fn_button_image_size(NSSize image, NSSize box, NSImageScaling scal
 	NSDictionary *attributes;
 	NSSize tsize = NSZeroSize;
 	NSSize draw = NSZeroSize;
-	CGFloat gap, total, x, baseline;
+	CGFloat gap, total, x;
 
 	(void)controlView;
 	/* **THE ALTERNATE TITLE AND IMAGE ARE WHAT A BUTTON SHOWS INSTEAD OF ITSELF, AND WHEN DEPENDS ON THE TYPE** — a
@@ -905,33 +1085,18 @@ static NSSize fn_button_image_size(NSSize image, NSSize box, NSImageScaling scal
 	if (image != nil && draw.width > 0.0) {
 		NSRect where = NSMakeRect(x, content.origin.y + (content.size.height - draw.height) / 2.0,
 					  draw.width, draw.height);
-		CGContextRef cg = [[NSGraphicsContext currentContext] CGContext];
-		/* **A DISABLED PICTURE DIMS IF THE BUTTON ASKED IT TO** — an alpha on the current context, which is the one
-		 * door this tier's image drawing offers for it (`-drawInRect:` carries no fraction, and the compositing
-		 * doors do not scale). */
-		BOOL dim = (!_enabled && _imageDimsWhenDisabled);
 
-		if (dim && cg != NULL) {
-			CGContextSetAlpha(cg, 0.5);
-		}
-		/* **A TEMPLATE IS DRAWN IN THE BUTTON'S INK, WHICH IS THE TITLE'S OWN.** A template image is ONE INK and
-		 * the control is what chooses it: `-cg_inkColor` already answers the three cases this cell has — the
-		 * era's grey when disabled, white on the accent while pressed, `controlTextColor` otherwise — so a
-		 * platform image and the words beside it are the same colour in every state, which is the whole reason
-		 * `NSImageNameGoLeftTemplate` is a template rather than a picture of a grey arrow. A picture that is NOT a
-		 * template, or a template with no stencil behind it, takes the ordinary door and draws its own pixels. */
-		if (!([image isTemplate] && [image cg_drawInRect:where ink:ink])) {
-			[image drawInRect:where];
-		}
-		if (dim && cg != NULL) {
-			CGContextSetAlpha(cg, 1.0);
-		}
+		/* **THE PICTURE IS THE DOOR'S, AND THE RECT IS THIS METHOD'S** — which is the split that lets a subclass draw
+		 * a different picture without re-deriving where it goes. */
+		[self drawImage:image withFrame:where inView:controlView];
 		x += draw.width + gap;
 	}
 	if (attributed != nil) {
-		[attributed drawInRect:NSMakeRect(x, content.origin.y + (content.size.height - tsize.height) / 2.0,
-						  tsize.width, tsize.height)];
-	} else if (tsize.width > 0.0 && content.size.height > 0.0) {
+		[self drawTitle:attributed
+		      withFrame:NSMakeRect(x, content.origin.y + (content.size.height - tsize.height) / 2.0,
+				   tsize.width, tsize.height)
+			 inView:controlView];
+	} else if (title != nil && tsize.width > 0.0 && content.size.height > 0.0) {
 		CGFloat ascent = [font ascender];
 		CGFloat descent = (CGFloat)fabs((double)[font descender]);
 		/* **THE BAND IS ROUNDED UP, BECAUSE A FRAME DRAWN INTO A RECT EXACTLY AS TALL AS THE BAND CLIPS ITS LAST
@@ -940,10 +1105,56 @@ static NSSize fn_button_image_size(NSSize image, NSSize box, NSImageScaling scal
 		 * 15.6 draws NO ink while one at 15.73 happens to round inside. MEASURED with the bundled Figtree: the button
 		 * title was invisible, and `ceil` — one point at most — draws it without moving the baseline enough to see. */
 		CGFloat band = ceil(ascent + descent);
+		CGFloat baseline = content.origin.y + (content.size.height - band) / 2.0 + descent;
+		/* **A PLAIN TITLE IS DRAWN THROUGH THE SAME DOOR AS AN ATTRIBUTED ONE**, with the cell's font and ink laid
+		 * over it: `-drawInRect:withAttributes:` is `-initWithString:attributes:` plus `-drawInRect:`, so building the
+		 * string here produces the same ink the old direct call did — and it leaves the door with ONE kind of subject. */
+		NSAttributedString *drawn = [[NSAttributedString alloc] initWithString:title attributes:attributes];
 
-		baseline = content.origin.y + (content.size.height - band) / 2.0 + descent;
-		[title drawInRect:NSMakeRect(x, baseline - descent, ceil(tsize.width), band) withAttributes:attributes];
+		[self drawTitle:drawn withFrame:NSMakeRect(x, baseline - descent, ceil(tsize.width), band)
+			 inView:controlView];
+		[drawn release];
 	}
+}
+
+/* **THE PICTURE, AND THE ONE STATE THAT CHANGES HOW IT IS PUT DOWN.** A disabled picture dims IF THE BUTTON ASKED IT
+ * TO, which is an alpha on the current context — the one door this tier's image drawing offers for it
+ * (`-drawInRect:` carries no fraction, and the compositing doors do not scale). And A TEMPLATE IS DRAWN IN THE
+ * BUTTON'S INK, WHICH IS THE TITLE'S OWN: `-cg_inkColor` already answers the three cases this cell has — the era's
+ * grey when disabled, white on the accent while pressed, `controlTextColor` otherwise — so a platform image and the
+ * words beside it are the same colour in every state, which is the whole reason `NSImageNameGoLeftTemplate` is a
+ * template rather than a picture of a grey arrow. A picture that is NOT a template, or a template with no stencil
+ * behind it, takes the ordinary door and draws its own pixels. */
+- (void)drawImage:(NSImage *)image withFrame:(NSRect)frame inView:(id)controlView
+{
+	CGContextRef cg = [[NSGraphicsContext currentContext] CGContext];
+	BOOL dim = (!_enabled && _imageDimsWhenDisabled);
+
+	(void)controlView;
+	if (image == nil) {
+		return;
+	}
+	if (dim && cg != NULL) {
+		CGContextSetAlpha(cg, 0.5);
+	}
+	if (!([image isTemplate] && [image cg_drawInRect:frame ink:[self cg_inkColor]])) {
+		[image drawInRect:frame];
+	}
+	if (dim && cg != NULL) {
+		CGContextSetAlpha(cg, 1.0);
+	}
+}
+
+/* **AND THE WORDS: THE ATTRIBUTED STRING THE INTERIOR BUILT, DRAWN IN THE RECT IT MEASURED.** The door draws what it
+ * is handed rather than asking the cell for "the title", which is why the ALTERNATE-title decision lives in one place
+ * (the interior) and a subclass cannot disagree with the layout about which of the two it was given. */
+- (void)drawTitle:(NSAttributedString *)title withFrame:(NSRect)frame inView:(id)controlView
+{
+	(void)controlView;
+	if (title == nil || [title length] == 0) {
+		return;
+	}
+	[title drawInRect:frame];
 }
 
 @end

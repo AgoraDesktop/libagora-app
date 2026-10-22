@@ -55,8 +55,7 @@ NS_ASSUME_NONNULL_BEGIN
 - (NSBezelStyle)bezelStyle;
 - (void)setBezelStyle:(NSBezelStyle)style;
 
-/* THE KEY EQUIVALENT, which is a cell's, and the image, which is too. */
-- (nullable NSString *)keyEquivalent;
+/* THE KEY EQUIVALENT, which is a cell's, and the image, which is too. */- (nullable NSString *)keyEquivalent;
 - (void)setKeyEquivalent:(nullable NSString *)aKeyEquivalent;
 - (nullable id)image;
 - (void)setImage:(nullable id)anImage;
@@ -75,6 +74,20 @@ NS_ASSUME_NONNULL_BEGIN
 - (NSImageScaling)imageScaling;
 - (void)setImageScaling:(NSImageScaling)scaling;
 
+/* **THE FOUR FLAGS AND THE SOUND, WHICH ARE THE CELL'S AND ARE FORWARDED FOR THE ONE REASON A BUTTON IS A VIEW.**
+ * `-isBordered` is whether the cell draws its border; `-isTransparent` is whether it draws a FACE at all;
+ * `-showsBorderOnlyWhileMouseInside` is the era's "borderless until you point at it"; and `-sound` is the thing a
+ * button plays when it is pressed. Apple declares all five on the CELL and on the BUTTON, and a caller holding a
+ * button must not have to reach through `-cell` to say one of them — so each door below is a forward, and the two
+ * that change the face redraw. */
+- (BOOL)isBordered;
+- (void)setBordered:(BOOL)flag;
+- (BOOL)isTransparent;
+- (void)setTransparent:(BOOL)flag;
+- (BOOL)showsBorderOnlyWhileMouseInside;
+- (void)setShowsBorderOnlyWhileMouseInside:(BOOL)flag;
+- (nullable id)sound;
+- (void)setSound:(nullable id)aSound;
 /* THE KEY EQUIVALENT'S MASK, AND THE PERIODIC PAIR A REPEATING BUTTON USES. */
 - (NSUInteger)keyEquivalentModifierMask;
 - (void)setKeyEquivalentModifierMask:(NSUInteger)mask;

@@ -89,6 +89,14 @@
 	return [(NSScrollerCell *)[self cell] knobProportion];
 }
 
+- (void)setKnobProportion:(CGFloat)proportion
+{
+	/* THE VALUE THE BAR IS AT IS KEPT, because the proportion is the OTHER half of the pair: this door writes how much
+	 * of the document is visible and leaves where the reader is. */
+	[(NSScrollerCell *)[self cell] setFloatValue:[self floatValue] knobProportion:proportion];
+	[self setNeedsDisplay:YES];
+}
+
 /* ---- THE PARTS, FORWARDED -------------------------------------------------------------------------------- */
 
 - (NSScrollerPart)hitPart
@@ -130,6 +138,32 @@
 	[self setNeedsDisplay:YES];
 }
 
+- (NSControlTint)controlTint
+{
+	return [(NSScrollerCell *)[self cell] controlTint];
+}
+
+- (void)setControlTint:(NSControlTint)tint
+{
+	[(NSScrollerCell *)[self cell] setControlTint:tint];
+	[self setNeedsDisplay:YES];
+}
+
+/* ---- WHICH PARTS FIT, AND ALL OF THE INK AT ONCE -------------------------------------------------------- */
+
+- (NSScrollerUsableParts)usableParts
+{
+	return [(NSScrollerCell *)[self cell] cg_usableParts];
+}
+
+- (void)checkSpaceForParts
+{
+	/* **THE ANSWER IS COMPUTED, SO THIS DOOR'S JOB IS THE REDISPLAY APPLE'S CACHED VERSION NEEDS AFTER IT CHANGES.**
+	 * A caller that resized the bar asks this and the bar is drawn again from the frame it now has; see the header on
+	 * why nothing here is remembered. */
+	[self setNeedsDisplay:YES];
+}
+
 - (void)drawArrow:(NSScrollerArrow)whichArrow highlight:(BOOL)flag
 {
 	[(NSScrollerCell *)[self cell] drawArrow:whichArrow highlight:flag];
@@ -149,6 +183,44 @@
 {
 	[(NSScrollerCell *)[self cell] setHighlighted:flag];
 	[self setNeedsDisplay:YES];
+}
+
+- (void)drawParts
+{
+	/* THE SLOT, ITS ARROWS AND THE KNOB, IN THAT ORDER — which is `NSScrollerCell -drawWithFrame:inView:`'s order, so
+	 * this is the forward rather than a second painting. */
+	[(NSScrollerCell *)[self cell] drawWithFrame:[self bounds] inView:self];
+}
+
+/* ---- AND THE TWO TRACKING ENTRY POINTS --------------------------------------------------------------- */
+
+/* **EACH IS A GATE IN FRONT OF THE ONE LOOP, NOT A LOOP OF ITS OWN.** Apple's scroller has its own tracking because its
+ * cell does; this tier's `NSControl -mouseDown:` already runs the loop with the cell's three hooks, so the honest version
+ * of these doors is "check the part this door is named for, then enter it" — which is also what makes them testable
+ * and what keeps a press on the knob from being handled twice by two different loops.
+ *
+ * A PRESS THAT LANDED SOMEWHERE ELSE IS REFUSED SILENTLY: `-trackKnob:` with the pointer on a page is not a knob drag,
+ * and acting on it would scroll a document the caller did not mean to touch. There is nothing to report, so nothing is
+ * reported. */
+- (void)trackKnob:(NSEvent *)theEvent
+{
+	NSPoint where = [self convertPoint:[theEvent locationInWindow] fromView:nil];
+
+	if ([(NSScrollerCell *)[self cell] testPart:where] != NSScrollerKnob) {
+		return;
+	}
+	[self mouseDown:theEvent];
+}
+
+- (void)trackScrollButtons:(NSEvent *)theEvent
+{
+	NSPoint where = [self convertPoint:[theEvent locationInWindow] fromView:nil];
+	NSScrollerPart part = [(NSScrollerCell *)[self cell] testPart:where];
+
+	if (part != NSScrollerDecrementLine && part != NSScrollerIncrementLine) {
+		return;
+	}
+	[self mouseDown:theEvent];
 }
 
 @end

@@ -222,6 +222,55 @@ static NSString * const AGCoderButtonSpringLoadedKey = @"springLoaded";
 	[self setNeedsDisplay:YES];
 }
 
+/* ---- THE FOUR FLAGS AND THE SOUND, ALL THE CELL'S ---------------------------------------------- */
+
+/* **FOUR FLAGS AND A SOUND, FORWARDED WITHOUT A SECOND COPY OF ANY OF THEM.** The face is the cell's, so the flags that
+ * change it are the cell's too; a button keeping its own `_bordered` would be a second answer to one question, and
+ * the cell that draws is the one that must be right. The two that change the INK ask for a redisplay; the other two
+ * are read the next time the cell draws for any other reason. */
+- (BOOL)isBordered
+{
+	return [[self cell] isBordered];
+}
+
+- (void)setBordered:(BOOL)flag
+{
+	[[self cell] setBordered:flag];
+	[self setNeedsDisplay:YES];
+}
+
+- (BOOL)isTransparent
+{
+	return [(NSButtonCell *)[self cell] isTransparent];
+}
+
+- (void)setTransparent:(BOOL)flag
+{
+	[(NSButtonCell *)[self cell] setTransparent:flag];
+	[self setNeedsDisplay:YES];
+}
+
+- (BOOL)showsBorderOnlyWhileMouseInside
+{
+	return [(NSButtonCell *)[self cell] showsBorderOnlyWhileMouseInside];
+}
+
+- (void)setShowsBorderOnlyWhileMouseInside:(BOOL)flag
+{
+	[(NSButtonCell *)[self cell] setShowsBorderOnlyWhileMouseInside:flag];
+	[self setNeedsDisplay:YES];
+}
+
+- (id)sound
+{
+	return [(NSButtonCell *)[self cell] sound];
+}
+
+- (void)setSound:(id)aSound
+{
+	[(NSButtonCell *)[self cell] setSound:aSound];
+}
+
 /* ---- THE KEY EQUIVALENT'S MASK, THE PERIODIC PAIR, AND THE STATE WALK --------------------------------- */
 
 - (NSUInteger)keyEquivalentModifierMask

@@ -304,6 +304,31 @@ int main(void)
 		[second release];
 	}
 
+	/* 10. **A CLIP VIEW WITH NO DOCUMENT IS NOT "A DOCUMENT THAT FITS".** The centring rule is about a document
+	 * SMALLER than the clip view, and with no document at all there is no such comparison to make: the extent is
+	 * empty, and `-(100 - 0)/2` is a real number that means nothing. MEASURED as a bug one class up: a scroll view
+	 * given its bars before its document was left with an origin of (-30, -30) in a 100-point clip, so the first line
+	 * scroll clamped to 0 instead of stepping — a scroll that visibly did nothing. The two claims below are the pair
+	 * that closes it: the constraint leaves a document-less origin ALONE, and a document arriving is measured against
+	 * the origin the clip already has rather than adopting a number computed for nothing. */
+	{
+		NSClipView *c = clip100();
+
+		check(eqp([c constrainScrollPoint:NSMakePoint(0.0, 0.0)], NSMakePoint(0.0, 0.0)),
+		      "a clip view with NO document leaves (0, 0) at (0, 0) rather than centring an empty extent");
+		check(eqp([c constrainScrollPoint:NSMakePoint(20.0, 20.0)], NSMakePoint(20.0, 20.0)),
+		      "and leaves any other asked-for origin alone too — there is nothing to constrain against");
+		{
+			NSView *doc = [[NSView alloc] initWithFrame:NSMakeRect(0.0, 0.0, 300.0, 200.0)];
+
+			[c setDocumentView:doc];
+			check(eqp([c bounds].origin, NSMakePoint(0.0, 0.0)),
+			      "and a long document arriving leaves the origin at the start, where the scroll belongs");
+			[doc release];
+		}
+		[c release];
+	}
+
 		printf("clip_view: %d case(s) failed\n", s_failed);
 	}
 	return s_failed == 0 ? 0 : 1;

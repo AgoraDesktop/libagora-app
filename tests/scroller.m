@@ -357,6 +357,174 @@ int main(void)
 			check(![cell cg_trackingShouldRepeatAtTime:soon], "and the release stops a page that was repeating");
 		}
 
+		/* 13. **WHICH PARTS FIT, AND THE GEOMETRY FOLLOWING THE ANSWER.** The era's four members are a reduction: a bar too
+		 * short for two buttons is buttons only, one whose slot cannot hold a square knob is a knob only, and the ordinary
+		 * 15x100 bar has all three. THE PART THAT MATTERS IS THAT THE ANSWER IS NOT ADVICE — `-rectForPart:` reads it, so a
+		 * part the bar has no room for has NO RECTANGLE and can be neither drawn nor hit. */
+		{
+			NSScroller *ordinary = [[NSScroller alloc] initWithFrame:NSMakeRect(0.0, 0.0, 15.0, 100.0)];
+			NSScroller *snug = [[NSScroller alloc] initWithFrame:NSMakeRect(0.0, 0.0, 15.0, 40.0)];
+			NSScroller *tiny = [[NSScroller alloc] initWithFrame:NSMakeRect(0.0, 0.0, 15.0, 20.0)];
+			NSScroller *bare = [[NSScroller alloc] initWithFrame:NSMakeRect(0.0, 0.0, 15.0, 100.0)];
+
+			check([ordinary usableParts] == NSScrollerAllParts,
+			      "a 15x100 bar has room for both buttons and the track, which is the ordinary answer");
+			check([snug usableParts] == NSScrollerKnobOnly,
+			      "a 15x40 bar's slot cannot hold a square knob, so it keeps the KNOB and drops the buttons");
+			check([tiny usableParts] == NSScrollerArrowsOnly,
+			      "and a 15x20 bar has no slot at all — two 15-point buttons fill it, so only they are left");
+			[bare setArrowsPosition:NSScrollerArrowsNone];
+			check([bare usableParts] == NSScrollerKnobSlotOnly,
+			      "with the arrows off by position, the knob and its slot are the whole bar");
+
+			/* THE GEOMETRY, READ BACK: a dropped part is a part with no rectangle. */
+			check(eqr([snug rectForPart:NSScrollerDecrementLine], NSZeroRect),
+			      "in the knob-only bar neither line button HAS a rectangle");
+			check(eqr([snug rectForPart:NSScrollerKnobSlot], NSMakeRect(0.0, 0.0, 15.0, 40.0)),
+			      "and the slot is the whole frame, so the knob fills it");
+			check(eqr([tiny rectForPart:NSScrollerKnobSlot], NSMakeRect(0.0, 15.0, 15.0, 0.0)),
+			      "in the buttons-only bar the slot is EMPTY, and the two buttons meet in the middle");
+			check(eqr([tiny rectForPart:NSScrollerDecrementLine], NSMakeRect(0.0, 0.0, 15.0, 15.0)) &&
+			      eqr([tiny rectForPart:NSScrollerIncrementLine], NSMakeRect(0.0, 5.0, 15.0, 15.0)),
+			      "and each button has its own end");
+			check([tiny testPart:NSMakePoint(7.0, 2.0)] == NSScrollerDecrementLine,
+			      "so a press at the top is the decrement button there");
+			check([tiny testPart:NSMakePoint(7.0, 17.0)] == NSScrollerIncrementLine,
+			      "and a press at the bottom is the increment button");
+
+			/* AND THE DOOR THAT RE-ASKS: `-checkSpaceForParts` is a redisplay here (the answer is computed), so the
+			 * claim is that the answer survives it and that a RESIZED bar re-answers from the new frame. */
+			[ordinary setFrameSize:NSMakeSize(15.0, 40.0)];
+			[ordinary checkSpaceForParts];
+			check([ordinary usableParts] == NSScrollerKnobOnly,
+			      "`-checkSpaceForParts` after a resize answers from the frame the bar NOW has");
+			[ordinary setFrameSize:NSMakeSize(15.0, 100.0)];
+			check([ordinary usableParts] == NSScrollerAllParts, "and back again when it is tall enough");
+			[ordinary release];
+			[snug release];
+			[tiny release];
+			[bare release];
+		}
+
+		/* 14. **THE PROPORTION WITHOUT THE VALUE.** The pair door is one fact and the single door is the other half of
+		 * it: a caller that has measured a new visible fraction writes it and leaves the reader where it was. */
+		[s setFloatValue:0.4 knobProportion:0.5];
+		[s setKnobProportion:0.25];
+		check(near([s knobProportion], 0.25) && near([s floatValue], 0.4),
+		      "`-setKnobProportion:` writes the proportion and KEEPS the value");
+		[s setKnobProportion:9.0];
+		check(near([s knobProportion], 1.0), "and it clamps like the pair door does");
+
+		/* 15. **THE TINT IS THE KNOB'S, WHICH IS THE ONE PIECE OF THE BAR WITH A SURFACE OF ITS OWN.** The default leaves
+		 * the sample's white knob; asking for graphite asks the knob to wear the platform's graphite, which is a grey
+		 * MEASURED on the knob's own pixels rather than read back from the flag. */
+		{
+			NSBitmapImageRep *rep = [[NSBitmapImageRep alloc] initWithBitmapDataPlanes:NULL pixelsWide:15
+				pixelsHigh:100 bitsPerSample:8 samplesPerPixel:4 hasAlpha:YES isPlanar:NO
+				colorSpaceName:NSCalibratedRGBColorSpace bytesPerRow:15 * 4 bitsPerPixel:32];
+			NSRect k;
+			double white_knob;
+			double grey_knob;
+
+			[s setArrowsPosition:NSScrollerArrowsDefaultSetting];
+			[s setFloatValue:0.5 knobProportion:0.5];
+			k = [s rectForPart:NSScrollerKnob];
+			[s setControlTint:NSDefaultControlTint];
+			[NSGraphicsContext setCurrentContext:[NSGraphicsContext graphicsContextWithBitmapImageRep:rep]];
+			[[NSColor whiteColor] setFill];
+			[[NSBezierPath bezierPathWithRect:vframe] fill];
+			[s drawRect:vframe];
+			white_knob = [[rep colorAtX:11 y:(int)(100 - 1 - NSMidY(k))] redComponent];
+			[s setControlTint:NSGraphiteControlTint];
+			check([s controlTint] == NSGraphiteControlTint, "`-setControlTint:` round-trips through the control");
+			[[NSColor whiteColor] setFill];
+			[[NSBezierPath bezierPathWithRect:vframe] fill];
+			[s drawRect:vframe];
+			grey_knob = [[rep colorAtX:11 y:(int)(100 - 1 - NSMidY(k))] redComponent];
+			printf("  (note: the knob's red is %.3f at the default tint and %.3f at graphite)\n",
+			       white_knob, grey_knob);
+			check(white_knob > 0.9, "the default tint leaves the knob WHITE, which is the sample's picture");
+			check(grey_knob < white_knob - 0.2, "and graphite paints it a grey, which is what the door asks for");
+			[s setControlTint:NSDefaultControlTint];
+			[rep release];
+		}
+
+		/* 16. **THE TWO TRACKING ENTRY POINTS ARE GATES ON THE ONE LOOP.** Each refuses a press that did not land on the
+		 * part it names — `-hitPart` is the witness — and each runs the loop for one that did. There is no run loop here,
+		 * so the loop's own early return leaves exactly the state a press writes, which is what is being read. */
+		{
+			NSEvent *on_knob = [NSEvent mouseEventWithType:NSLeftMouseDown
+							      location:NSMakePoint(7.0, 40.0)
+							 modifierFlags:0
+							     timestamp:0.0
+							  windowNumber:0
+							       context:nil
+							   eventNumber:1
+							    clickCount:1
+							      pressure:1.0];
+			NSEvent *on_line = [NSEvent mouseEventWithType:NSLeftMouseDown
+							      location:NSMakePoint(7.0, 92.0)
+							 modifierFlags:0
+							     timestamp:0.0
+							  windowNumber:0
+							       context:nil
+							   eventNumber:2
+							    clickCount:1
+							      pressure:1.0];
+
+			[s setArrowsPosition:NSScrollerArrowsDefaultSetting];
+			[s setFloatValue:0.5 knobProportion:0.5];
+			check(on_knob != nil && on_line != nil, "the probe can build mouse-down events");
+
+			/* A PRESS OFF THE BAR ENTIRELY CLEARS THE PART, which is how "nothing happened" is measured. */
+			[cell startTrackingAt:NSMakePoint(200.0, 200.0) inView:s];
+			check([s hitPart] == NSScrollerNoPart, "a press outside the bar reports no part");
+
+			[s trackKnob:on_line];
+			check([s hitPart] == NSScrollerNoPart,
+			      "`-trackKnob:` REFUSES a press on a line button — it is not a knob drag");
+			[s trackKnob:on_knob];
+			check([s hitPart] == NSScrollerKnob, "and runs the loop for a press on the knob");
+
+			[cell startTrackingAt:NSMakePoint(200.0, 200.0) inView:s];
+			[s trackScrollButtons:on_knob];
+			check([s hitPart] == NSScrollerNoPart,
+			      "`-trackScrollButtons:` refuses a press on the knob for the same reason");
+			[s trackScrollButtons:on_line];
+			check([s hitPart] == NSScrollerIncrementLine, "and runs it for a press on a line button");
+		}
+
+		/* 17. **AND ALL OF THE INK AT ONCE.** `-drawParts` is the whole bar in one call, which is checked by comparing
+		 * the ink it lays down with the ink `-drawWithFrame:` lays down for the same frame. */
+		{
+			NSBitmapImageRep *by_parts = [[NSBitmapImageRep alloc] initWithBitmapDataPlanes:NULL pixelsWide:15
+				pixelsHigh:100 bitsPerSample:8 samplesPerPixel:4 hasAlpha:YES isPlanar:NO
+				colorSpaceName:NSCalibratedRGBColorSpace bytesPerRow:15 * 4 bitsPerPixel:32];
+			NSBitmapImageRep *by_frame = [[NSBitmapImageRep alloc] initWithBitmapDataPlanes:NULL pixelsWide:15
+				pixelsHigh:100 bitsPerSample:8 samplesPerPixel:4 hasAlpha:YES isPlanar:NO
+				colorSpaceName:NSCalibratedRGBColorSpace bytesPerRow:15 * 4 bitsPerPixel:32];
+			int parts_ink;
+			int frame_ink;
+
+			[s setArrowsPosition:NSScrollerArrowsDefaultSetting];
+			[s setFloatValue:0.5 knobProportion:0.5];
+			[NSGraphicsContext setCurrentContext:[NSGraphicsContext graphicsContextWithBitmapImageRep:by_parts]];
+			[[NSColor whiteColor] setFill];
+			[[NSBezierPath bezierPathWithRect:vframe] fill];
+			[s drawParts];
+			[NSGraphicsContext setCurrentContext:[NSGraphicsContext graphicsContextWithBitmapImageRep:by_frame]];
+			[[NSColor whiteColor] setFill];
+			[[NSBezierPath bezierPathWithRect:vframe] fill];
+			[s drawRect:vframe];
+			parts_ink = ink_in(by_parts, 100, 0, 0, 15, 100, 0.97);
+			frame_ink = ink_in(by_frame, 100, 0, 0, 15, 100, 0.97);
+			printf("  (note: -drawParts lays %d inked points; -drawRect: lays %d)\n", parts_ink, frame_ink);
+			check(parts_ink > 0 && parts_ink == frame_ink,
+			      "`-drawParts` IS the frame's own painting — the same ink, point for point");
+			[by_parts release];
+			[by_frame release];
+		}
+
 		[s release];
 		printf("scroller: %d case(s) failed\n", s_failed);
 	}
