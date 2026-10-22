@@ -19,6 +19,10 @@
 # all, which is the drift this instrument exists to prevent. It now counts `APPKIT-REFUSE|fn_refuse_window`, and the
 # count went 141 -> 267 for that reason ALONE: no refusal was added or removed by the widening.
 #
+# AND IT ROSE BY THREE IN THE TEXT-LAYER SLICE, ALL IN `NSSpellChecker`: the asynchronous check (its results would be
+# `NSTextCheckingResult`s, which Foundation here has not got, so it refuses as `-checkString:` already does), the
+# substitutions panel's accessory controller (no panel), and the grammar string (no engine).
+#
 # AND IT ROSE BY ONE IN THE ALERT SLICE: the help button's action, whose delegate may decline to handle the request and
 # whose anchor then has no Help Viewer to open in.
 #
@@ -76,7 +80,7 @@ NSRulerView.m                    3
 NSScrollView.m                   1
 NSShadow.m                       1
 NSSliderCell.m                   1
-NSSpellChecker.m                 9
+NSSpellChecker.m                 12
 NSText.m                         6
 NSTextList.m                     2
 NSTextView.m                     7
@@ -90,4 +94,4 @@ NSWindow.m                       24
 # `fn_refuse_window` spelling was simply invisible to a census that counted the `APPKIT-REFUSE` literal, so every
 # refusal written the house way — which is the way the header asks for — moved no number.
 #
-# total: 283
+# total: 286

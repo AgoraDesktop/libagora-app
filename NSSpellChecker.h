@@ -41,6 +41,12 @@ NS_ASSUME_NONNULL_BEGIN
 @class NSViewController;
 @class NSTextCheckingResult;
 
+/* **THE FOUR TYPES THE CHECKING REQUEST TAKES, AND THE ONE OPTION WORD.** `NSTextCheckingType` is Foundation's (the
+ * results this checker produces are `NSTextCheckingResult`s), the types array holds `NSNumber`s of it, and the options
+ * dictionary is Apple's `NSSpellChecking…` bag of which this tier honours none — a request's options are advice about a
+ * checker with modes, and this one has a dictionary and a language. */
+@class NSTextCheckingResult;
+
 @interface NSSpellChecker : NSObject
 {
 	/* TAG -> SET OF WORDS, so it is a DICTIONARY. The first draft made this an `NSSet` and looked tags up with
@@ -57,6 +63,15 @@ NS_ASSUME_NONNULL_BEGIN
 	NSString *_language;
 	BOOL _loaded;
 	BOOL _dictionaryFound;
+	/* **AND THE THREE THE SWEEP ADDS.** `_identifiesLanguages` is Apple's flag (YES by default): when it is on, a check
+	 * may re-identify the language, and with ONE dictionary here the identification can only ever answer "en" or leave
+	 * the language alone — which the door's own note states rather than implying a detector. `_replacements` is the
+	 * user's substitution table, which is the table the text view's automatic-substitution flags have been waiting for;
+	 * it starts EMPTY, because a replacement nobody made is not a default. `_substitutionsAccessory` is a view
+	 * CONTROLLER for a substitutions panel this tier has not got, which is why the pair refuses by name. */
+	BOOL _identifiesLanguages;
+	NSMutableDictionary *_replacements;
+	id _substitutionsAccessory;	/* NOT RETAINED, and never set: the panel below refuses */
 }
 
 /* THE SINGLETON, and the era's two other class doors. `sharedSpellCheckerExists` is YES because the checker always
@@ -88,6 +103,30 @@ NS_ASSUME_NONNULL_BEGIN
 - (void)unlearnWord:(NSString *)word;
 - (BOOL)hasLearnedWord:(NSString *)word;
 - (void)closeSpellDocumentWithTag:(NSInteger)tag;
+
+/* **AND THE TEN DOORS THE SWEEP ADDS, IN FOUR KINDS.** A FLAG (`-automaticallyIdentifiesLanguages`, whose reader is the
+ * language a check may re-identify), TWO TABLES (`-userReplacementsDictionary` and `-userQuotesArrayForLanguage:`, which
+ * are the substitution machinery's missing halves — the text view's automatic-substitution flags have been stored values
+ * until now), a WORD the user forgets (`-forgetWord:`, whose reader is `-hasLearnedWord:`), a GUESSER
+ * (`-guessesForWord:`, the single-word form of the range door that already exists), and the ASYNCHRONOUS CHECK
+ * (`-requestCheckingOfString:…completionHandler:`; this tier has no background queue, so the handler runs BEFORE the
+ * door returns — the same results, in the caller's stack, which the note there states). The three that need a PANEL or an
+ * ENGINE — the substitutions accessory and the grammar string — refuse by name, because their subject does not exist. */
+- (BOOL)automaticallyIdentifiesLanguages;
+- (void)setAutomaticallyIdentifiesLanguages:(BOOL)flag;
+- (NSDictionary *)userReplacementsDictionary;
+- (nullable NSArray *)userQuotesArrayForLanguage:(nullable NSString *)language;
+- (void)forgetWord:(NSString *)word;
+- (NSArray *)guessesForWord:(nullable NSString *)word;
+- (NSInteger)requestCheckingOfString:(NSString *)stringToCheck
+			       range:(NSRange)range
+			       types:(NSUInteger)checkingTypes
+			     options:(nullable NSDictionary *)options
+	      inSpellDocumentWithTag:(NSInteger)tag
+		   completionHandler:(nullable void (^)(NSInteger sequenceNumber, NSArray *results))completionHandler;
+- (nullable id)substitutionsPanelAccessoryViewController;
+- (void)setSubstitutionsPanelAccessoryViewController:(nullable id)controller;
+- (void)updateSpellingPanelWithGrammarString:(NSString *)string detail:(nullable NSDictionary *)detail;
 
 /* THE LANGUAGES THIS MACHINE CAN CHECK, discovered from the dictionaries present rather than declared. An empty answer
  * is the honest one on a machine with no word list. */

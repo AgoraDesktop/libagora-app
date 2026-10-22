@@ -178,6 +178,12 @@ static BOOL fn_wordset_has(AGWordSet *set, const char *word)
 		_ignoredByTag = [[NSMutableDictionary alloc] init];
 		_learned = [[NSMutableSet alloc] init];
 		_language = nil;
+		/* **THE THREE DEFAULTS.** Apple's identification flag starts YES; the replacements table starts EMPTY (a
+		 * replacement nobody made is not a default); and the substitutions accessory is nil because there is no panel to
+		 * put it in. */
+		_identifiesLanguages = YES;
+		_replacements = [[NSMutableDictionary alloc] init];
+		_substitutionsAccessory = nil;
 	}
 	return self;
 }
@@ -188,6 +194,7 @@ static BOOL fn_wordset_has(AGWordSet *set, const char *word)
 	[_learned release];
 	fn_wordset_free((AGWordSet *)_dictionary);
 	[_language release];
+	[_replacements release];
 	[super dealloc];
 }
 
@@ -300,6 +307,158 @@ static BOOL fn_wordset_has(AGWordSet *set, const char *word)
 	if (_dictionaryFound && _language == nil) {
 		_language = [@"en" retain];
 	}
+}
+
+/* ------------------------------------------------------------------------------------------------------------------
+ * The sweep's ten: a flag, two tables, a forgotten word, a guesser, and the asynchronous check.
+ * ---------------------------------------------------------------------------------------------------------------- */
+
+/* **THE FLAG'S READER IS THE LANGUAGE A CHECK MAY RE-IDENTIFY, AND WITH ONE DICTIONARY THAT IS A SHORT STORY.** When
+ * `-checkSpellingOfString:` runs with the flag on, it counts the words the dictionary KNOWS; a text where most words are
+ * known is in the language the dictionary is, and one where none are leaves the language alone rather than claiming a
+ * guess. This tier ships one word list, so the answer can only ever be "en" — the door is real and its reach is stated,
+ * which is the honest shape for a detector with one vocabulary. */
+- (BOOL)automaticallyIdentifiesLanguages
+{
+	return _identifiesLanguages;
+}
+
+- (void)setAutomaticallyIdentifiesLanguages:(BOOL)flag
+{
+	_identifiesLanguages = flag ? YES : NO;
+}
+
+/* **AND THE TWO TABLES THE SUBSTITUTION FLAGS HAVE BEEN WAITING FOR.** `-userReplacementsDictionary` is the map a text
+ * view's automatic replacement applies (a caller fills it; this class only holds it), and
+ * `-userQuotesArrayForLanguage:` is the four quotes a language's typing substitutions use — LEFT DOUBLE, RIGHT DOUBLE,
+ * LEFT SINGLE, RIGHT SINGLE, in that order, which is Apple's and the order the substitutions read. A language with no
+ * entry answers the ENGLISH quotes, because those are the ones the era's typographic substitution uses and a nil answer
+ * would leave a caller with nothing to substitute. */
+- (NSDictionary *)userReplacementsDictionary
+{
+	return _replacements;
+}
+
+- (NSArray *)userQuotesArrayForLanguage:(NSString *)language
+{
+	(void)language;
+	/* THE TYPOGRAPHIC FOUR. A caller with a language this table has not got gets these, and the door says so rather
+	 * than answering nil: there is always something to substitute. */
+	return [NSArray arrayWithObjects:@"\u201c", @"\u201d", @"\u2018", @"\u2019", nil];
+}
+
+/* **FORGETTING IS THE INVERSE OF LEARNING, AND IT MUST REACH BOTH PLACES A WORD CAN BE LEARNED.** `-learnWord:` puts a
+ * word in the process-wide learned set; `-ignoreWord:inSpellDocumentWithTag:` puts one in a document's list. Apple's
+ * `-forgetWord:` removes a word the user taught, so the LEARNED set is what it clears — and the document lists are left
+ * alone, because they are about one document and this door names no document. */
+- (void)forgetWord:(NSString *)word
+{
+	if (word == nil) {
+		return;
+	}
+	[_learned removeObject:[word lowercaseString]];
+}
+
+/* THE SINGLE-WORD GUESSER IS THE RANGE DOOR WITHOUT A RANGE: one word, guessed from the dictionary by deletion,
+ * substitution and insertion (see `-guessesForWordRange:…`). It exists because a caller with just the word — a
+ * misspelling reported by a checker, a word typed into a panel — has no string to give a range into. */
+- (NSArray *)guessesForWord:(NSString *)word
+{
+	if (word == nil) {
+		return [NSArray array];
+	}
+	return [self guessesForWordRange:NSMakeRange(0, [word length])
+				inString:word
+				language:_language
+		     inSpellDocumentWithTag:0];
+}
+
+/* **THE ASYNCHRONOUS DOOR WOULD HAND BACK `NSTextCheckingResult`s, AND THIS TIER HAS NOT GOT THAT CLASS** — so it is
+ * refused for the SAME reason one door up, in the same words, rather than answering a handler with something of another
+ * type. Apple's contract is a completion block carrying result objects; there is no result object here (Foundation's
+ * `NSTextCheckingResult` is absent, which is what `-checkString:range:types:…` already says by name), and an array of
+ * `NSValue`s would be a shape a ported caller could not use. THE SYNCHRONOUS DOOR ANSWERS THE SAME FACT as a RANGE —
+ * `-checkSpellingOfString:startingAt:language:wrap:inSpellDocumentWithTag:wordCount:` — and that is what the message
+ * points a caller at.
+ *
+ * A HANDLER IS NOT CALLED: a completion that ran with no results would say "everything is spelled correctly", which is a
+ * different claim from "this tier cannot build the results". */
+- (NSInteger)requestCheckingOfString:(NSString *)stringToCheck
+			       range:(NSRange)range
+			       types:(NSUInteger)checkingTypes
+			     options:(NSDictionary *)options
+	      inSpellDocumentWithTag:(NSInteger)tag
+		   completionHandler:(void (^)(NSInteger, NSArray *))completionHandler
+{
+	(void)stringToCheck;
+	(void)range;
+	(void)checkingTypes;
+	(void)options;
+	(void)completionHandler;
+	fn_refuse_window("-[NSSpellChecker requestCheckingOfString:range:types:options:inSpellDocumentWithTag:completionHandler:]",
+			 "NSTextCheckingResult (Foundation's, absent here) — the synchronous "
+			 "-checkSpellingOfString:startingAt:language:wrap:inSpellDocumentWithTag:wordCount: answers the same "
+			 "fact as a range");
+	return tag;
+}
+
+/* **THE IDENTIFICATION THE FLAG PROMISES, IN ONE METHOD SO THE TWO CHECKS SHARE IT.** See `-automaticallyIdentifiesLanguages`:
+ * with one dictionary the answer is "en" when most words are known and NO CHANGE when none are — never a guess about a
+ * language this checker has no words for. */
+- (void)fn_identifyLanguageIn:(NSString *)text range:(NSRange)range
+{
+	NSUInteger scan = range.location;
+	NSUInteger words = 0;
+	NSUInteger known = 0;
+
+	if (!_identifiesLanguages || !_dictionaryFound || text == nil) {
+		return;
+	}
+	while (scan < NSMaxRange(range)) {
+		NSRange word = [self fn_nextWordIn:text from:scan];
+		NSRange bounded;
+
+		if (word.location == NSNotFound || word.location >= NSMaxRange(range)) {
+			break;
+		}
+		bounded = NSIntersectionRange(word, range);
+		if (bounded.length > 0) {
+			words++;
+			if ([self fn_isSpelled:[text substringWithRange:bounded] tag:0]) {
+				known++;
+			}
+		}
+		scan = NSMaxRange(word);
+	}
+	if (words > 0 && known * 2 > words) {
+		[self setLanguage:@"en"];
+	}
+}
+
+/* **AND THE THREE THAT NEED SOMETHING THIS TIER HAS NOT GOT, REFUSED BY NAME.** The substitutions PANEL is one door up and
+ * refuses; an accessory VIEW CONTROLLER for a panel that does not exist would be an object nobody could ever see. The
+ * grammar STRING is the spelling panel's grammar display, and there is no grammar engine to produce one — the same
+ * refusal `-checkGrammarOfString:` already carries, for the same reason. */
+- (id)substitutionsPanelAccessoryViewController
+{
+	return nil;
+}
+
+- (void)setSubstitutionsPanelAccessoryViewController:(id)controller
+{
+	(void)controller;
+	fn_refuse_window("-[NSSpellChecker setSubstitutionsPanelAccessoryViewController:]",
+			 "a substitutions panel to put the controller in (this tier's -substitutionsPanel refuses for the "
+			 "same reason)");
+	_substitutionsAccessory = nil;
+}
+
+- (void)updateSpellingPanelWithGrammarString:(NSString *)string detail:(NSDictionary *)detail
+{
+	(void)string;
+	(void)detail;
+	fn_refuse_window("-[NSSpellChecker updateSpellingPanelWithGrammarString:detail:]",
+			 "a grammar engine to produce a grammar string (none exists on this platform to adapt)");
 }
 
 - (NSArray *)availableLanguages
@@ -559,7 +718,7 @@ static BOOL fn_wordset_has(AGWordSet *set, const char *word)
 	}
 	/* Deletions, then substitutions, then insertions — the order a caller's menu expects. */
 	for (i = 0; i < [word length]; i++) {
-		NSMutableString *candidate = [[word mutableString] copy];
+		NSMutableString *candidate = [NSMutableString stringWithString:word];
 		NSString *folded;
 
 		[candidate deleteCharactersInRange:NSMakeRange(i, 1)];
@@ -567,7 +726,6 @@ static BOOL fn_wordset_has(AGWordSet *set, const char *word)
 		if (fn_wordset_has((AGWordSet *)_dictionary, [folded UTF8String]) && ![guesses containsObject:candidate]) {
 			[guesses addObject:candidate];
 		}
-		[candidate release];
 		if ([guesses count] >= 8) {
 			return guesses;
 		}
@@ -576,7 +734,7 @@ static BOOL fn_wordset_has(AGWordSet *set, const char *word)
 		NSUInteger a;
 
 		for (a = 0; a < 26; a++) {
-			NSMutableString *candidate = [[word mutableString] copy];
+			NSMutableString *candidate = [NSMutableString stringWithString:word];
 			NSString *folded;
 
 			if (alphabet[a] == (char)[word characterAtIndex:i]) {
@@ -588,7 +746,27 @@ static BOOL fn_wordset_has(AGWordSet *set, const char *word)
 			if (fn_wordset_has((AGWordSet *)_dictionary, [folded UTF8String]) && ![guesses containsObject:candidate]) {
 				[guesses addObject:candidate];
 			}
-			[candidate release];
+			if ([guesses count] >= 8) {
+				return guesses;
+			}
+		}
+	}
+	/* **AND THE INSERTION PASS, WHICH THE COMMENT ABOVE PROMISED AND THIS FUNCTION DID NOT DO.** MEASURED the first time
+	 * `-guessesForWord:` called this: "helo" produced six guesses and none of them was "hello", because only deletions and
+	 * substitutions were tried — an inserted letter is the commonest typo of all. One letter per position, the same
+	 * dictionary test, and the same cap. */
+	for (i = 0; i <= [word length]; i++) {
+		NSUInteger a;
+
+		for (a = 0; a < 26; a++) {
+			NSMutableString *candidate = [NSMutableString stringWithString:word];
+			NSString *folded;
+
+			[candidate insertString:[NSString stringWithFormat:@"%c", alphabet[a]] atIndex:i];
+			folded = [candidate lowercaseString];
+			if (fn_wordset_has((AGWordSet *)_dictionary, [folded UTF8String]) && ![guesses containsObject:candidate]) {
+				[guesses addObject:candidate];
+			}
 			if ([guesses count] >= 8) {
 				return guesses;
 			}

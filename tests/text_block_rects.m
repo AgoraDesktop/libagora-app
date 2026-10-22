@@ -375,6 +375,95 @@ int main(void)
 			[image release];
 		}
 
+		/* ============================================================================================
+		 * AND THE SWEEP'S TEN: THE GENERIC VALUE DOOR, THE CONTENT WIDTH, AND THE TWO NAMES.
+		 * ========================================================================================== */
+		{
+			NSTextBlock *block = [[NSTextBlock alloc] init];
+			NSTextContainer *container = [[NSTextContainer alloc] initWithContainerSize:NSMakeSize(200.0, 200.0)];
+			NSRect containing = NSMakeRect(0.0, 0.0, 200.0, 200.0);
+			NSRect grown;
+
+			(void)container;
+
+			/* 1. THE LAYER DIMENSIONS ARE THE SAME STORAGE AS THE PAIRS, which is the whole argument for one word. */
+			[block setValue:10.0 type:NSTextBlockAbsoluteValueType
+			   forDimension:(NSTextBlockBorderDimension | NSTextBlockMinXEdge)];
+			check(close_enough([block widthForLayer:NSTextBlockBorder edge:NSTextBlockMinXEdge], 10.0),
+			      "a BORDER dimension lands in the border/edge slot the pair door reads");
+			check(close_enough([block valueForDimension:(NSTextBlockBorderDimension | NSTextBlockMinXEdge)], 10.0),
+			      "and the generic door reads it back");
+			check([block valueTypeForDimension:(NSTextBlockBorderDimension | NSTextBlockMinXEdge)]
+				      == NSTextBlockAbsoluteValueType,
+			      "with its value type");
+			[block setValue:50.0 type:NSTextBlockPercentageValueType
+			   forDimension:(NSTextBlockPaddingDimension | NSTextBlockMaxYEdge)];
+			check(close_enough([block widthForLayer:NSTextBlockPadding edge:NSTextBlockMaxYEdge], 50.0) &&
+			      [block valueTypeForDimension:(NSTextBlockPaddingDimension | NSTextBlockMaxYEdge)]
+				      == NSTextBlockPercentageValueType,
+			      "and a PERCENTAGE dimension keeps its type as well as its number");
+
+			/* 2. THE CONTENT WIDTH IS THE WIDTH DIMENSION, UNDER TWO NAMES. */
+			[block setValue:120.0 type:NSTextBlockAbsoluteValueType forDimension:NSTextBlockWidth];
+			check(close_enough([block contentWidth], 120.0) &&
+			      [block contentWidthValueType] == NSTextBlockAbsoluteValueType,
+			      "the WIDTH dimension is the content width, and its type with it");
+			[block setContentWidth:60.0 type:NSTextBlockPercentageValueType];
+			check(close_enough([block valueForDimension:NSTextBlockWidth], 60.0),
+			      "and the named setter is the same field the generic door reads");
+
+			/* 3. AND THE CONTENT WIDTH IS READ BY THE GEOMETRY: a box grows around the width that was SET, not around
+			 * whatever rect the caller happened to pass. */
+			[block setContentWidth:100.0 type:NSTextBlockAbsoluteValueType];
+			grown = [block boundsRectForContentRect:NSMakeRect(0.0, 0.0, 40.0, 20.0) inRect:containing
+						  textContainer:container characterRange:NSMakeRange(0, 1)];
+			printf("  (note: a 40-point content rect through a 100-point block came out %.1f wide)\n",
+			       (double)NSWidth(grown));
+			check(close_enough(NSWidth(grown), 100.0 + 10.0),
+			      "a 100-point content width plus the left border is what the box measures");
+			[block setContentWidth:50.0 type:NSTextBlockPercentageValueType];
+			grown = [block boundsRectForContentRect:NSMakeRect(0.0, 0.0, 40.0, 20.0) inRect:containing
+						  textContainer:container characterRange:NSMakeRange(0, 1)];
+			check(close_enough(NSWidth(grown), 100.0 + 10.0),
+			      "and a 50-percent width resolves against the CONTAINING rect — 100 of 200, plus the border");
+			[block setContentWidth:0.0 type:NSTextBlockAbsoluteValueType];
+			grown = [block boundsRectForContentRect:NSMakeRect(0.0, 0.0, 40.0, 20.0) inRect:containing
+						  textContainer:container characterRange:NSMakeRange(0, 1)];
+			check(close_enough(NSWidth(grown), 40.0 + 10.0),
+			      "and a block with NO content width grows around the rect it was given, as before");
+
+			/* 4. A HEIGHT IS NOT A THING A BLOCK CAN SIZE, and the door answers zero rather than storing one. */
+			[block setValue:99.0 type:NSTextBlockAbsoluteValueType forDimension:NSTextBlockHeight];
+			check(close_enough([block valueForDimension:NSTextBlockHeight], 0.0),
+			      "a HEIGHT dimension is answered 0: a block's height is its content's");
+
+			/* 5. ONE COLOUR, FOUR EDGES — and the older name for the value type is the same answer. */
+			[block setBorderColor:[NSColor redColor]];
+			check([[block borderColorForEdge:NSTextBlockMinXEdge] isEqual:[NSColor redColor]] &&
+			      [[block borderColorForEdge:NSTextBlockMaxYEdge] isEqual:[NSColor redColor]],
+			      "`-setBorderColor:` colours all four edges at once");
+			check([block widthValueTypeForLayer:NSTextBlockBorder edge:NSTextBlockMinXEdge] ==
+			      [block valueTypeForLayer:NSTextBlockBorder edge:NSTextBlockMinXEdge],
+			      "and `-widthValueTypeForLayer:edge:` is the value type under its older name");
+
+			/* 6. THE ALIGNMENT ROUND-TRIPS, and a COPY carries the three new fields. */
+			check([block verticalAlignment] == NSTextBlockTopAlignment,
+			      "a fresh block aligns its content at the top");
+			[block setVerticalAlignment:NSTextBlockMiddleAlignment];
+			check([block verticalAlignment] == NSTextBlockMiddleAlignment,
+			      "`-setVerticalAlignment:` round-trips");
+			{
+				NSTextBlock *copied = [block copy];
+
+				check(close_enough([copied contentWidth], [block contentWidth]) &&
+				      [copied verticalAlignment] == NSTextBlockMiddleAlignment,
+				      "and a copy keeps the content width and the alignment — a copy that lost them would be a cell "
+				      "with a different shape");
+				[copied release];
+			}
+			[block release];
+		}
+
 		if (failures == 0) {
 			printf("text_block_rects: all checks passed\n");
 			return 0;

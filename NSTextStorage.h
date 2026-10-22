@@ -120,6 +120,38 @@ extern NSString *NSTextStorageDidProcessEditingNotification;
 - (void)removeLayoutManager:(NSLayoutManager *)obj;
 - (nullable NSArray *)layoutManagers;
 
+/* ============================================================================================ *
+ * AND THE 10.0 DOORS, WHICH THIS TIER HAD NO ANSWER FOR UNTIL THE SWEEP.                          *
+ * ============================================================================================ */
+/* **THESE ARE THE PRE-ATTRIBUTE-STRING API, AND THEY ARE REAL RATHER THAN DEPRECATED STUBS.** Before an attributed
+ * string had runs, a text storage was a sequence of CHARACTERS, WORDS, PARAGRAPHS or ATTRIBUTE RUNS that a caller read
+ * as arrays and wrote back wholesale — and Apple kept every one of those doors when the storage became an
+ * `NSMutableAttributedString`. They are implemented here over the modern primitives, which is why each is a few lines
+ * and why each ANNOUNCES its edit through `-edited:range:changeInLength:` like every other mutator: a caller who uses
+ * the old API gets the same notifications as one who uses the new.
+ *
+ * THE DECOMPOSITIONS ARE STATED RATHER THAN GUESSED, because "words" and "paragraphs" are the era's rules and not a
+ * modern word breaker: WORDS are the runs between whitespace (a run of spaces, tabs and newlines separates them, and
+ * nothing else does); PARAGRAPHS are the runs between newlines; CHARACTERS are one string per UTF-16 unit, which is what
+ * this layer's strings ARE (see the non-ASCII note in `HANDOFF-2.md` — a literal's `-length` is its bytes here, so a
+ * "character" is one unit and the door is honest about it); and ATTRIBUTE RUNS are the maximal ranges of uniform
+ * attributes, read by walking `-attributesAtIndex:effectiveRange:`.
+ *
+ * THE SETTERS REPLACE THE WHOLE CONTENTS and the FONT and COLOUR pairs are one attribute over the whole range — Apple's
+ * documented reading of `-setFont:` and `-setForegroundColor:`. */
+- (nullable NSArray *)characters;
+- (void)setCharacters:(nullable NSArray *)aStringArray;
+- (nullable NSArray *)words;
+- (void)setWords:(nullable NSArray *)aStringArray;
+- (nullable NSArray *)paragraphs;
+- (void)setParagraphs:(nullable NSArray *)aStringArray;
+- (nullable NSArray *)attributeRuns;
+- (void)setAttributeRuns:(nullable NSArray *)attributedStringArray;
+- (nullable id)font;
+- (void)setFont:(nullable id)aFont;
+- (nullable id)foregroundColor;
+- (void)setForegroundColor:(nullable id)aColor;
+
 @end
 
 NS_ASSUME_NONNULL_END

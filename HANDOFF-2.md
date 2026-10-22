@@ -27,6 +27,10 @@ census 282.*
 `api-ledger: 361 metrics hold (117 classes, 3487 selectors of 4112, 34 protocols, 86 functions)`, 93 classes COMPLETE, refusal
 census 283.*
 
+*State after the session that picked THAT up (§17, the text layer's whole surface): **28 commits**, tree clean, **137 tests
+passing**, `api-ledger: 361 metrics hold (117 classes, 3519 selectors of 4112, 34 protocols, 86 functions)`, 96 classes COMPLETE,
+refusal census 286.*
+
 ---
 
 ## 1. What this session did
@@ -800,3 +804,59 @@ era's shorthand for selected. MEASURED: 14 dark points in the trailing twelve fo
    largest single remaining view) and `NSCollectionView` was ruled out by the 10.11 plan's §9.3.
 4. **A LIVE PATH WORTH A SMALL SLICE**: `-comboBoxSelectionIsChanging:` and `-menu:willHighlightItem:` share one missing
    seam — a menu view's highlight walk telling its owner. One door in `NSMenuView`, one delegate send, two controls served.
+
+---
+
+## 17. The text layer's whole surface: the old storage API, a guesser with two bugs, and a block's width
+
+*Twenty-eighth commit of the pickup: `NSTextStorage` 25/25, `NSTextBlock` 21/21 and `NSSpellChecker` 39/39 — 32 selectors,
+three classes COMPLETE. **3519 of 4112 selectors (85%), 96 of 117 classes complete, 593 missing.** 137 tests.*
+
+**`NSTextStorage`'s twelve are the PRE-ATTRIBUTED-STRING API, and they are real.** Characters, words, paragraphs, attribute
+runs, and the two whole-range attributes — every one implemented over the modern primitives, so each SETTER announces its
+edit through the primitive like any other mutator rather than doing its own bookkeeping. The decompositions are the ERA'S
+rules (words are the runs between whitespace, paragraphs between newlines, characters one per unit, runs read by walking
+`-attributesAtIndex:effectiveRange:`), and the runs are READ rather than cached, so they cannot disagree with what a caller
+set. `-setForegroundColor:nil` REMOVES the attribute; a store with no characters answers nil rather than an empty attribute.
+
+**THE SPELL CHECKER'S TEN FOUND TWO REAL BUGS IN THE CODE THEY CALLED.** `-guessesForWord:` is the single-word form of
+`-guessesForWordRange:…`, and the first call this component makes of that door:
+
+1. **CRASHED** in `[[word mutableString] copy]` — this layer's `NSString` has no `-mutableString`. A public door that had
+   never been called from a test was broken from the day it was written.
+2. **AND THEN ANSWERED WRONG**: six guesses for "helo" and none of them "hello", because the function's own comment
+   promised "deletions, then substitutions, then insertions" and the code had only the first two. An inserted letter is
+   the commonest typo of all. Both are fixed; the pass is three lines.
+
+The rest of the ten are real tables and flags with readers: the identification flag's reader is the language a check may
+re-identify (with ONE dictionary the answer is "en" or no change, which the door states rather than implying a detector),
+`-forgetWord:` clears the learned set, and `-userReplacementsDictionary` / `-userQuotesArrayForLanguage:` are the
+SUBSTITUTION TABLES the text view's automatic-substitution flags have been stored bits without — the row the first handoff
+ranked as §5.2 and never landed. The asynchronous check is a NAMED REFUSAL in `-checkString:`'s own words: its handler
+would carry `NSTextCheckingResult`s and Foundation here has not got that class, so a handler called with an empty array
+would claim everything was spelled correctly.
+
+**AND A TEXT BLOCK'S CONTENT WIDTH IS READ BY THE GEOMETRY.** `-setValue:type:forDimension:` is the generic form of the
+twelve layer/edge widths — a layer bit OR-ed with an edge lands in the same storage, so the two spellings cannot disagree,
+and a HEIGHT dimension answers 0 because a block's height is its content's. `-setContentWidth:type:` is the one width a
+block owns, and `-boundsRectForContentRect:…` clamps the box to it before growing it by the layers: MEASURED, a 40-point
+content rect through a 100-point block comes out 110 wide, and a 50-percent block in a 200-point container the same. The
+three new fields travel through `-copy` and both coder methods, which is the kind of thing a copy that "just works" hides
+until a cell has a different shape from the one it was copied from.
+
+**AND ONE HEADER HAD TO SAY WHAT APPLE'S HEADER CANNOT.** `NSTextBlockDimension`'s layer bits and `NSTextBlockLayer`'s
+three values are two spellings of one thing, and C puts enumerators in one namespace — so Apple's two enums cannot both
+use `NSTextBlockBorder`, and this header names the dimension bits `…Dimension` (0x1000/0x2000/0x4000) while keeping the
+layer enum as Apple's (-1/0/1). The door maps one to the other in one place.
+
+### Where the next hour goes, after the text layer
+
+1. **`NSTextInputContext`'s eight**, the ONE class of the four the handoff ranked that is left: the input-SOURCE registry
+   (`+keyboardInputSources`, `+selectedKeyboardInputSource`, `+localizedNameForInputSource:`) is the real work, and
+   xkbcommon — already linked for the keymap test — is where the layouts would come from. The three flags
+   (`acceptsGlyphInfo`, `allowedInputSourceLocales`) are storage with readers in that registry.
+2. **`NSCell` 9 + `NSApplication` 7 = 16**, the field-editor family being the design work.
+3. **The shared menu-highlight seam** (§16's note): one door in `NSMenuView` and one delegate send would give both
+   `-comboBoxSelectionIsChanging:` and `-menu:willHighlightItem:` their sender.
+4. And then the surface is the peripheries the plan named: `NSMatrix`/`NSForm` (a new class, 134 selectors), the
+   controller family, printing, colour/font panels.

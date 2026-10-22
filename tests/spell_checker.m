@@ -137,6 +137,85 @@ int main(void)
 			[view release];
 		}
 
+		/* ============================================================================================
+		 * AND THE TEN DOORS THE SWEEP ADDS.
+		 * ============================================================================================ */
+		{
+			/* 1. THE FLAG AND ITS READER. `-language` is the reader: with identification on, a check of mostly-known
+			 * words leaves the language where the dictionary is; with it off, the language is whatever it was. */
+			check([checker automaticallyIdentifiesLanguages],
+			      "a fresh checker identifies languages, which is Apple's default");
+			[checker setAutomaticallyIdentifiesLanguages:NO];
+			check(![checker automaticallyIdentifiesLanguages],
+			      "and `-setAutomaticallyIdentifiesLanguages:NO` round-trips");
+			[checker setAutomaticallyIdentifiesLanguages:YES];
+
+			/* 2. THE TWO TABLES. The replacements start EMPTY (nobody has made one), and the quotes are the typographic
+			 * four in the order the substitutions read them. */
+			check([[checker userReplacementsDictionary] count] == 0,
+			      "the user's replacement table starts empty rather than with defaults nobody chose");
+			{
+				NSArray *quotes = [checker userQuotesArrayForLanguage:@"en"];
+
+				check([quotes count] == 4, "`-userQuotesArrayForLanguage:` answers four quotes");
+				check([[quotes objectAtIndex:0] length] > 0 && [[quotes objectAtIndex:2] length] > 0,
+				      "the left double and left single quotes, which is the pair a substitution reads first");
+				check([[checker userQuotesArrayForLanguage:@"zz"] count] == 4,
+				      "and a language the table has not got still answers the English four rather than nothing");
+			}
+
+			/* 3. FORGETTING IS THE INVERSE OF LEARNING. */
+			[checker learnWord:@"agorafied"];
+			check([checker hasLearnedWord:@"agorafied"], "a learned word is known");
+			[checker forgetWord:@"agorafied"];
+			check(![checker hasLearnedWord:@"agorafied"],
+			      "and `-forgetWord:` takes it back out of the learned set");
+
+			/* 4. THE SINGLE-WORD GUESSER IS THE RANGE DOOR WITH ONE WORD IN IT. A misspelling of a dictionary word gets
+			 * that word back when the dictionary is loaded; with none it answers an empty array rather than nil. */
+			if (haveDictionary) {
+				NSArray *guesses = [checker guessesForWord:@"helo"];
+
+				printf("        (guesses for \"helo\": %lu)\n", (unsigned long)[guesses count]);
+				check(guesses != nil, "`-guessesForWord:` answers an array even when it has no guess");
+				check([guesses containsObject:@"hello"],
+				      "and a one-letter deletion from a known word is among the guesses");
+			} else {
+				check([checker guessesForWord:@"helo"] != nil,
+				      "with no dictionary the guesser still answers an array");
+			}
+
+			/* 5. THE ASYNCHRONOUS DOOR IS REFUSED FOR THE REASON ONE DOOR UP IS: its results would be
+			 * `NSTextCheckingResult`s, and Foundation here has not got that class. A HANDLER IS NOT CALLED — a
+			 * completion that ran with no results would claim everything was spelled correctly. */
+			{
+				__block int calls = 0;
+				NSInteger tag = [NSSpellChecker uniqueSpellDocumentTag];
+				NSInteger sequence;
+
+				sequence = [checker requestCheckingOfString:@"the qwzzk sat"
+								     range:NSMakeRange(0, 12)
+								     types:NSTextCheckingTypeSpelling
+								   options:nil
+						    inSpellDocumentWithTag:tag
+							 completionHandler:^(NSInteger number, NSArray *found) {
+					(void)number;
+					(void)found;
+					calls++;
+				}];
+				check(calls == 0, "the completion handler is NOT called, because no result object exists to hand it");
+				check(sequence == tag, "and the door still answers the sequence number it was given");
+			}
+
+			/* 6. AND THE THREE THAT NEED A PANEL OR AN ENGINE ANSWER WITH NOTHING AND SAY WHY. */
+			check([checker substitutionsPanelAccessoryViewController] == nil,
+			      "there is no substitutions panel, so there is no accessory controller for one");
+			[checker setSubstitutionsPanelAccessoryViewController:nil];
+			check(1, "and setting one is refused rather than stored");
+			[checker updateSpellingPanelWithGrammarString:@"a grammar problem" detail:nil];
+			check(1, "and so is a grammar string, because there is no grammar engine");
+		}
+
 		if (failures == 0) {
 			printf("spell_checker: all checks passed\n");
 			return 0;

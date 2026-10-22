@@ -16,6 +16,9 @@
  * is the one a copy of the header cannot prove.
  */
 #import <AppKit/NSTextStorage.h>
+#import <AppKit/NSFont.h>
+#import <AppKit/NSColor.h>
+#import <AppKit/NSAttributedString.h>
 #import <Foundation/Foundation.h>
 #include <stdio.h>
 
@@ -176,6 +179,71 @@ int main(void)
 		[store replaceCharactersInRange:NSMakeRange(0, 0) withString:@"?"];
 		check(posts == 1, "a listener registered for the DID notification is told without conforming to anything");
 		[center removeObserver:token];
+	}
+
+	/* ============================================================================================
+	 * AND THE 10.0 DOORS: CHARACTERS, WORDS, PARAGRAPHS, RUNS AND THE TWO WHOLE-RANGE ATTRIBUTES.
+	 * ============================================================================================ */
+	{
+		NSTextStorage *old = [[NSTextStorage alloc] initWithString:@"one two\nthree"];
+
+		/* 1. THE TWO DECOMPOSITIONS THAT ARE THE ERA'S RULES RATHER THAN A MODERN BREAKER. */
+		check([[old words] count] == 3, "`-words` splits the runs between whitespace, and a newline is whitespace");
+		check([[[old words] objectAtIndex:2] isEqual:@"three"], "in order, with the words themselves");
+		check([[old paragraphs] count] == 2, "`-paragraphs` splits at the newlines");
+		check([[[old paragraphs] objectAtIndex:1] isEqual:@"three"], "and answers the second line's text");
+		check([[old characters] count] == [old length], "`-characters` answers one string per unit of the string");
+		check([[[old characters] objectAtIndex:3] isEqual:@" "], "which is the character itself, spaces included");
+
+		/* 2. THE SETTERS REPLACE THE WHOLE CONTENTS — AND ANNOUNCE IT LIKE ANY OTHER EDIT. */
+		[old setWords:[NSArray arrayWithObjects:@"alpha", @"beta", nil]];
+		check([[old string] isEqual:@"alpha beta"], "`-setWords:` joins with single spaces");
+		[old setParagraphs:[NSArray arrayWithObjects:@"first", @"second", @"third", nil]];
+		check([[old string] isEqual:@"first\nsecond\nthird"], "`-setParagraphs:` joins with newlines");
+		[old setCharacters:[NSArray arrayWithObjects:@"a", @"b", @"c", nil]];
+		check([[old string] isEqual:@"abc"], "`-setCharacters:` concatenates the array");
+
+		/* 3. THE FONT AND THE COLOUR ARE ONE ATTRIBUTE OVER THE WHOLE RANGE, and a store with no characters answers
+		 * nil rather than an attribute nobody set. */
+		check([old font] == nil && [old foregroundColor] == nil,
+		      "a store with no font or colour set answers nil for both");
+		[old setFont:[NSFont systemFontOfSize:13.0]];
+		[old setForegroundColor:[NSColor redColor]];
+		check([old font] != nil && [[old font] pointSize] == 13.0,
+		      "`-setFont:` applies the font to the whole text, and `-font` reads it back");
+		check([[old foregroundColor] isEqual:[NSColor redColor]],
+		      "and the same for the foreground colour");
+		check([old attributeRuns] != nil && [[old attributeRuns] count] == 1,
+		      "with one uniform run over the whole text");
+		[old setForegroundColor:nil];
+		check([old foregroundColor] == nil, "and a nil colour REMOVES the attribute rather than storing a nil");
+
+		/* 4. THE RUNS ARE READ FROM THE ATTRIBUTES, so two runs are two objects with the ranges they came from. */
+		{
+			NSTextStorage *runs = [[NSTextStorage alloc] initWithString:@"abcdef"];
+			NSArray *read;
+
+			[runs addAttribute:@"Colour" value:@"red" range:NSMakeRange(0, 3)];
+			[runs addAttribute:@"Colour" value:@"blue" range:NSMakeRange(3, 3)];
+			read = [runs attributeRuns];
+			check([read count] == 2, "two attribute ranges are two runs");
+			check([read count] == 2 && [[(NSAttributedString *)[read objectAtIndex:0] string] isEqual:@"abc"],
+			      "the first is the characters the first range covers");
+			/* **THE ATTRIBUTES ARE READ AT AN INDEX, NOT IN BULK**: this layer's `NSAttributedString` has no
+			 * `-attributes` (one run's worth of attributes is what an attributed string has), so a probe asks at 0. */
+			check([read count] == 2 &&
+			      [[[(NSAttributedString *)[read objectAtIndex:1] attributesAtIndex:0 effectiveRange:NULL]
+				  objectForKey:@"Colour"] isEqual:@"blue"],
+			      "and its attributes are the ones that were set");
+
+			/* AND WRITING THEM BACK REPLACES THE CONTENTS, ATTRIBUTES AND ALL. */
+			[runs setAttributeRuns:read];
+			check([[runs string] isEqual:@"abcdef"], "`-setAttributeRuns:` puts back the same characters");
+			check([[[runs attributesAtIndex:4 effectiveRange:NULL] objectForKey:@"Colour"] isEqual:@"blue"],
+			      "and the same attributes, run for run");
+			[runs release];
+		}
+		[old release];
 	}
 
 	[watcher release];

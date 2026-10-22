@@ -99,6 +99,10 @@ static NSColor *fn_colour_from_components(id stored)
 			copy->_valueTypes[i][j] = _valueTypes[i][j];
 		}
 	}
+	/* AND THE SWEEP'S THREE TRAVEL WITH THE TWELVE — a copy that lost them would be a cell with a different shape. */
+	copy->_contentWidth = _contentWidth;
+	copy->_contentWidthType = _contentWidthType;
+	copy->_verticalAlignment = _verticalAlignment;
 	return copy;
 }
 
@@ -194,6 +198,12 @@ static NSColor *fn_colour_from_components(id stored)
 	}
 	[coder encodeObject:widths forKey:@"NSWidths"];
 	[coder encodeObject:types forKey:@"NSValueTypes"];
+	/* **AND THE SWEEP'S THREE, UNDER THEIR OWN KEYS.** They are the block's own dimensions rather than one of the twelve
+	 * layer slots, so they travel beside them: a content width with its type, and the vertical alignment. An archive from
+	 * before this slice simply has no keys, and the defaults (no width, Top alignment) are what a fresh block answers. */
+	[coder encodeDouble:(double)_contentWidth forKey:@"NSContentWidth"];
+	[coder encodeInteger:(NSInteger)_contentWidthType forKey:@"NSContentWidthType"];
+	[coder encodeInteger:_verticalAlignment forKey:@"NSVerticalAlignment"];
 }
 
 - (instancetype)initWithCoder:(NSCoder *)coder
@@ -203,6 +213,15 @@ static NSColor *fn_colour_from_components(id stored)
 		return nil;
 	}
 	_backgroundColor = [fn_colour_from_components([coder decodeObjectForKey:@"NSBackgroundColor"]) retain];
+	if ([coder containsValueForKey:@"NSContentWidth"]) {
+		_contentWidth = (CGFloat)[coder decodeDoubleForKey:@"NSContentWidth"];
+	}
+	if ([coder containsValueForKey:@"NSContentWidthType"]) {
+		_contentWidthType = (NSTextBlockValueType)[coder decodeIntegerForKey:@"NSContentWidthType"];
+	}
+	if ([coder containsValueForKey:@"NSVerticalAlignment"]) {
+		_verticalAlignment = (NSTextBlockVerticalAlignment)[coder decodeIntegerForKey:@"NSVerticalAlignment"];
+	}
 	_borderColors = [[NSMutableDictionary alloc] init];
 	{
 		NSArray *edges = [coder decodeObjectForKey:@"NSBorderColors"];
@@ -284,8 +303,135 @@ static NSColor *fn_colour_from_components(id stored)
 - (NSRect)boundsRectForContentRect:(NSRect)contentRect inRect:(NSRect)rect
 		    textContainer:(NSTextContainer *)textContainer characterRange:(NSRange)charRange
 {
-	return [self _boundsRectForContentRect:contentRect inRect:rect textContainer:textContainer
+	NSRect inner = contentRect;
+
+	/* **AND A CONTENT WIDTH, WHEN ONE WAS SET, IS WHAT THE BOX GROWS AROUND.** The door's job is the rectangle a caller
+	 * draws, so a block told it is 100 points wide must produce a box 100 points plus its three layers — not the width the
+	 * caller happened to pass. A PERCENTAGE resolves against the containing rect, which is the same rule the layer widths
+	 * use, so the two cannot disagree about what "50%" is measured from. */
+	if (_contentWidth > 0.0) {
+		inner.size.width = (_contentWidthType == NSTextBlockPercentageValueType)
+			? NSWidth(rect) * _contentWidth / 100.0
+			: _contentWidth;
+	}
+	return [self _boundsRectForContentRect:inner inRect:rect textContainer:textContainer
 		       characterRange:charRange];
+}
+
+/* ---- THE TEN THE SWEEP ADDS, AND THE ONE ARITHMETIC THEY SHARE --------------------------------- */
+
+/* **THE DIMENSION WORD CARRIES THREE KINDS OF THING, AND EACH IS ANSWERED FROM THE STORAGE IT BELONGS TO.** A CONTENT
+ * dimension is one of the six small numbers: a WIDTH is `_contentWidth` (with its type), and a HEIGHT is 0 because a
+ * block cannot size its own height — its height is its content's, and a table's row is what gives it one. A LAYER
+ * dimension is a layer bit OR-ed with an edge, and it lands in the same twelve-slot table the `…forLayer:edge:` doors
+ * write. **THE HEIGHT ANSWER IS A ZERO AND NOT A REFUSAL MESSAGE** (the header says so): zero is a legitimate width, and
+ * a print per call would be noise on a door a layout asks in a loop.
+ *
+ * THE LAYER BIT IS MAPPED TO THE `NSTextBlockLayer` VALUE HERE, because the two spellings of a layer are a number and a
+ * bit and only one of them indexes the table. */
+static NSInteger fn_layer_from_dimension(NSTextBlockDimension dimension)
+{
+	if ((dimension & NSTextBlockPaddingDimension) != 0) {
+		return NSTextBlockPadding;
+	}
+	if ((dimension & NSTextBlockBorderDimension) != 0) {
+		return NSTextBlockBorder;
+	}
+	if ((dimension & NSTextBlockMarginDimension) != 0) {
+		return NSTextBlockMargin;
+	}
+	return NSNotFound;
+}
+
+static NSTextBlockEdge fn_edge_from_dimension(NSTextBlockDimension dimension)
+{
+	return (NSTextBlockEdge)(dimension & (NSTextBlockMinXEdge | NSTextBlockMaxXEdge |
+					      NSTextBlockMinYEdge | NSTextBlockMaxYEdge));
+}
+
+- (void)setValue:(CGFloat)value type:(NSTextBlockValueType)type forDimension:(NSTextBlockDimension)dimension
+{
+	NSInteger layer = fn_layer_from_dimension(dimension);
+	NSTextBlockEdge edge = fn_edge_from_dimension(dimension);
+
+	if (layer != NSNotFound && edge != 0) {
+		[self setWidth:value type:type forLayer:(NSTextBlockLayer)layer edge:edge];
+		return;
+	}
+	if (dimension == NSTextBlockWidth) {
+		[self setContentWidth:value type:type];
+	}
+	/* A HEIGHT (or its minimum or maximum) is RECORDED NOWHERE: see the method's own note. */
+}
+
+- (CGFloat)valueForDimension:(NSTextBlockDimension)dimension
+{
+	NSInteger layer = fn_layer_from_dimension(dimension);
+	NSTextBlockEdge edge = fn_edge_from_dimension(dimension);
+
+	if (layer != NSNotFound && edge != 0) {
+		return [self widthForLayer:(NSTextBlockLayer)layer edge:edge];
+	}
+	if (dimension == NSTextBlockWidth) {
+		return _contentWidth;
+	}
+	return 0.0;
+}
+
+- (NSTextBlockValueType)valueTypeForDimension:(NSTextBlockDimension)dimension
+{
+	NSInteger layer = fn_layer_from_dimension(dimension);
+	NSTextBlockEdge edge = fn_edge_from_dimension(dimension);
+
+	if (layer != NSNotFound && edge != 0) {
+		return [self valueTypeForLayer:(NSTextBlockLayer)layer edge:edge];
+	}
+	if (dimension == NSTextBlockWidth) {
+		return _contentWidthType;
+	}
+	return NSTextBlockAbsoluteValueType;
+}
+
+/* **AND THE CONTENT WIDTH UNDER ITS OWN NAME, WHICH IS THE SAME TWO FIELDS.** Apple declares both spellings; this tier
+ * keeps one storage and lets the generic door find it, so the pair cannot disagree. */
+- (CGFloat)contentWidth
+{
+	return _contentWidth;
+}
+
+- (NSTextBlockValueType)contentWidthValueType
+{
+	return _contentWidthType;
+}
+
+- (void)setContentWidth:(CGFloat)width type:(NSTextBlockValueType)type
+{
+	_contentWidth = (width > 0.0) ? width : 0.0;
+	_contentWidthType = type;
+}
+
+/* ONE COLOUR, FOUR EDGES — the shorthand a caller with a single border colour writes, and the same storage the per-edge
+ * door uses. */
+- (void)setBorderColor:(NSColor *)color
+{
+	[self setBorderColor:color forEdge:(NSTextBlockMinXEdge | NSTextBlockMaxXEdge |
+					  NSTextBlockMinYEdge | NSTextBlockMaxYEdge)];
+}
+
+- (NSTextBlockVerticalAlignment)verticalAlignment
+{
+	return _verticalAlignment;
+}
+
+- (void)setVerticalAlignment:(NSTextBlockVerticalAlignment)alignment
+{
+	_verticalAlignment = alignment;
+}
+
+/* AND THE OLDER NAME FOR THE VALUE TYPE — see the header: one answer, under the two spellings Apple has used. */
+- (NSTextBlockValueType)widthValueTypeForLayer:(NSTextBlockLayer)layer edge:(NSTextBlockEdge)edge
+{
+	return [self valueTypeForLayer:layer edge:edge];
 }
 
 - (NSRect)_boundsRectForContentRect:(NSRect)contentRect inRect:(NSRect)rect

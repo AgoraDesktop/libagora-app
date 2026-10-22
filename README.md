@@ -81,7 +81,8 @@ tests/
   slider_ink.m                  a control whose VALUE is a POSITION: the knob and its inverse
   tracking_area.m               an AREA's region, owner and SCOPE — and a control's own hover area
   text_input.m                  the first slice of the text system, driven a keystroke at a time
-  text_storage.m                and the STORE the rich-text slice is built on: an attributed string that announces edits
+  text_storage.m                and the STORE the rich-text slice is built on: an attributed string that announces edits,
+                                plus its 10.0 character/word/paragraph/run doors
   text_container.m              and the REGION that store is laid out in: a size, a padding, and the fragments that fit
   text_container_region.m       and a SHAPED region: the container's subrect places and narrows the line, holes split it
   text_layout_web.m             and the WEB that ties the trio together: the store, its managers, and what goes stale
@@ -1575,6 +1576,39 @@ line scroll then clamped back to 0 instead of stepping. `-constrainScrollPoint:`
 alone, and a document that ARRIVES is measured against the origin the clip already has (CLAMPED, not centred: a clip
 view that recentred on every `-setDocumentView:` would move a caller's visible region whenever it swapped content).
 `tests/clip_view.m` holds both halves.
+
+### The text layer's remaining doors: the old storage API, a guesser, and a block's own width
+
+**`NSTextStorage` ANSWERS ITS WHOLE 10.6 SURFACE NOW, INCLUDING THE PRE-ATTRIBUTED-STRING API.** Before a string had
+runs, a storage was a sequence of CHARACTERS, WORDS, PARAGRAPHS or ATTRIBUTE RUNS that a caller read as arrays and wrote
+back wholesale, and Apple kept every one of those doors. They are implemented over the modern primitives, so each
+SETTER replaces the contents through `-replaceCharactersInRange:withString:` and therefore ANNOUNCES its edit like any
+other mutator — a caller on the old API gets the same notifications as one on the new. The decompositions are the ERA'S
+rules rather than a modern word breaker: WORDS are the runs between whitespace, PARAGRAPHS the runs between newlines,
+CHARACTERS one string per unit (which is what this layer's strings are), and RUNS the maximal uniform ranges read by
+walking `-attributesAtIndex:effectiveRange:` — READ, not remembered, so they cannot disagree with the attributes a caller
+set. `-font`/`-setFont:` and `-foregroundColor`/`-setForegroundColor:` are one attribute over the whole range, and a nil
+colour REMOVES it rather than storing a nil.
+
+**AND THE SPELL CHECKER'S TEN DOORS FOUND TWO REAL BUGS IN THE EXISTING GUESSER.** `-guessesForWord:` is the single-word
+form of the range door, `-forgetWord:` is the inverse of learning, and `-userReplacementsDictionary` /
+`-userQuotesArrayForLanguage:` are the SUBSTITUTION TABLES the text view's automatic-substitution flags had been waiting
+for (empty and the typographic four, respectively). MEASURED the first time the guesser was called from a door a test
+reaches: it crashed inside `[[word mutableString] copy]` — this layer's `NSString` has no `-mutableString` — and once that
+was fixed it produced six guesses for "helo" and none of them was "hello", because its own comment promised an INSERTION
+pass that the code did not have. Both are fixed; the insertion pass is the commonest typo of all. The asynchronous
+`-requestCheckingOfString:…` is a NAMED REFUSAL in the same words `-checkString:` already uses: its completion handler
+would carry `NSTextCheckingResult`s, and Foundation here has not got that class, so a handler that ran with an empty array
+would claim everything was spelled correctly — a different statement from "this tier cannot build the results".
+
+**AND A TEXT BLOCK HAS ITS OWN WIDTH, WHICH THE GEOMETRY READS.** `-setValue:type:forDimension:` is the generic form of
+the twelve `-setWidth:type:forLayer:edge:` calls — the layer dimensions are a layer bit OR-ed with an edge, and they land
+in the same storage, so the two spellings cannot disagree; a HEIGHT dimension is answered 0 because a block's height is
+its content's. `-setContentWidth:type:` is the one width the block owns, and `-boundsRectForContentRect:…` now CLAMPS the
+box to it (absolute points, or a percentage of the containing rect) before growing it by the three layers — MEASURED: a
+40-point content rect through a 100-point block comes out 110 wide, and a 50-percent block in a 200-point container comes
+out the same. `-setBorderColor:` colours all four edges at once, `-widthValueTypeForLayer:edge:` is the older name for the
+value type, and `-setVerticalAlignment:` is storage whose READER is a table cell's layout one class over.
 
 ### The status item, the running application, and the browser's row
 

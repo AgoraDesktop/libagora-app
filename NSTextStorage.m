@@ -15,6 +15,7 @@
 #import <Foundation/NSNotification.h>
 #import <Foundation/NSNotificationCenter.h>
 #import <Foundation/NSDictionary.h>
+#import <AppKit/NSAttributedString.h>	/* NSFontAttributeName and its foreground sibling */
 
 NSString *NSTextStorageWillProcessEditingNotification = @"NSTextStorageWillProcessEditingNotification";
 NSString *NSTextStorageDidProcessEditingNotification = @"NSTextStorageDidProcessEditingNotification";
@@ -176,6 +177,180 @@ NSString *NSTextStorageDidProcessEditingNotification = @"NSTextStorageDidProcess
 {
 	[super removeAttribute:name range:range];
 	[self edited:NSTextStorageEditedAttributes range:range changeInLength:0];
+}
+
+/* ============================================================================================ *
+ * THE 10.0 DOORS: CHARACTERS, WORDS, PARAGRAPHS, RUNS, AND THE TWO WHOLE-RANGE ATTRIBUTES.        *
+ * ============================================================================================ */
+
+/* **ONE PRIVATE DOOR FOR "REPLACE EVERYTHING", BECAUSE FOUR SETTERS DO EXACTLY THAT.** Apple's old setters all replace
+ * the receiver's contents wholesale, so the only difference between them is how the array becomes a string — and routing
+ * all four through one `-replaceCharactersInRange:withString:` is what makes them announce like any other edit rather
+ * than each doing its own bookkeeping. */
+- (void)fn_replaceContentsWithString:(NSString *)replacement
+{
+	NSString *text = (replacement != nil) ? replacement : @"";
+
+	[self replaceCharactersInRange:NSMakeRange(0, [self length]) withString:text];
+	/* AND THE ATTRIBUTES GO WITH THE CHARACTERS, because a wholesale replacement is a new document: an old font left
+	 * over the new string's first character would be a run nobody asked for. The setter's caller applies its own. */
+	[self setAttributes:[NSDictionary dictionary] range:NSMakeRange(0, [self length])];
+}
+
+- (NSArray *)characters
+{
+	NSUInteger length = [self length];
+	NSMutableArray *out = [NSMutableArray arrayWithCapacity:length];
+	NSUInteger i;
+
+	for (i = 0; i < length; i++) {
+		[out addObject:[[self string] substringWithRange:NSMakeRange(i, 1)]];
+	}
+	return out;
+}
+
+- (void)setCharacters:(NSArray *)aStringArray
+{
+	NSMutableString *joined = [NSMutableString string];
+	NSUInteger i;
+
+	for (i = 0; i < [aStringArray count]; i++) {
+		id piece = [aStringArray objectAtIndex:i];
+
+		[joined appendString:([piece isKindOfClass:[NSString class]] ? (NSString *)piece : [piece description])];
+	}
+	[self fn_replaceContentsWithString:joined];
+}
+
+/* THE ERA'S WORD RULE, IN ONE PASS: a word ends at whitespace, and a RUN of whitespace is one separator rather than
+ * several empty words. That is what a caller of `-words` expects — an empty string between two spaces is not a word. */
+- (NSArray *)words
+{
+	NSString *text = [self string];
+	NSMutableArray *out = [NSMutableArray array];
+	NSUInteger length = [text length];
+	NSUInteger start = 0;
+	BOOL inWord = NO;
+	NSUInteger i;
+
+	for (i = 0; i <= length; i++) {
+		BOOL space = (i == length);
+		unichar c = 0;
+
+		if (!space) {
+			c = [text characterAtIndex:i];
+			space = (c == ' ' || c == '\t' || c == '\n' || c == '\r');
+		}
+		if (!space && !inWord) {
+			start = i;
+			inWord = YES;
+		} else if (space && inWord) {
+			[out addObject:[text substringWithRange:NSMakeRange(start, i - start)]];
+			inWord = NO;
+		}
+	}
+	return out;
+}
+
+- (void)setWords:(NSArray *)aStringArray
+{
+	[self fn_replaceContentsWithString:[aStringArray componentsJoinedByString:@" "]];
+}
+
+- (NSArray *)paragraphs
+{
+	return [[self string] componentsSeparatedByString:@"\n"];
+}
+
+- (void)setParagraphs:(NSArray *)aStringArray
+{
+	[self fn_replaceContentsWithString:[aStringArray componentsJoinedByString:@"\n"]];
+}
+
+/* **AND THE RUNS ARE READ, NOT REMEMBERED.** A run is the maximal range whose attributes are uniform, which is exactly
+ * what `-attributesAtIndex:effectiveRange:` answers — so this door is a walk over the store and cannot disagree with the
+ * attributes a caller set, which a cached array would. */
+- (NSArray *)attributeRuns
+{
+	NSMutableArray *out = [NSMutableArray array];
+	NSUInteger length = [self length];
+	NSUInteger location = 0;
+
+	while (location < length) {
+		NSRange run = NSMakeRange(0, 0);
+		NSDictionary *attributes = [self attributesAtIndex:location effectiveRange:&run];
+
+		if (run.length == 0) {
+			break;	/* a store that answers no run would loop forever; one step and out */
+		}
+		[out addObject:[[[NSAttributedString alloc] initWithString:
+				[[self string] substringWithRange:run] attributes:attributes] autorelease]];
+		location = NSMaxRange(run);
+	}
+	return out;
+}
+
+- (void)setAttributeRuns:(NSArray *)attributedStringArray
+{
+	NSMutableAttributedString *assembled = [[NSMutableAttributedString alloc] init];
+	NSUInteger i;
+
+	for (i = 0; i < [attributedStringArray count]; i++) {
+		id piece = [attributedStringArray objectAtIndex:i];
+
+		if (![piece isKindOfClass:[NSAttributedString class]]) {
+			continue;
+		}
+		[assembled appendAttributedString:piece];
+	}
+	[self setAttributedString:assembled];
+	[assembled release];
+}
+
+/* THE TWO WHOLE-RANGE ATTRIBUTES. Apple's `-font` answers the font at the START of the text; a store with no characters
+ * has none. The setter applies to every character, which is the era's reading of a storage-wide font. */
+- (id)font
+{
+	if ([self length] == 0) {
+		return nil;
+	}
+	return [[self attributesAtIndex:0 effectiveRange:NULL] objectForKey:NSFontAttributeName];
+}
+
+- (void)setFont:(id)aFont
+{
+	NSRange all = NSMakeRange(0, [self length]);
+
+	if (all.length == 0) {
+		return;
+	}
+	if (aFont == nil) {
+		[self removeAttribute:NSFontAttributeName range:all];
+	} else {
+		[self addAttribute:NSFontAttributeName value:aFont range:all];
+	}
+}
+
+- (id)foregroundColor
+{
+	if ([self length] == 0) {
+		return nil;
+	}
+	return [[self attributesAtIndex:0 effectiveRange:NULL] objectForKey:NSForegroundColorAttributeName];
+}
+
+- (void)setForegroundColor:(id)aColor
+{
+	NSRange all = NSMakeRange(0, [self length]);
+
+	if (all.length == 0) {
+		return;
+	}
+	if (aColor == nil) {
+		[self removeAttribute:NSForegroundColorAttributeName range:all];
+	} else {
+		[self addAttribute:NSForegroundColorAttributeName value:aColor range:all];
+	}
 }
 
 /* ============================================================================================ *

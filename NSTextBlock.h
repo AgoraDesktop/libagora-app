@@ -58,6 +58,41 @@ enum {
 };
 typedef NSUInteger NSTextBlockEdge;
 
+/* **AND THE DIMENSION WORD, WHICH NAMES WHAT A GENERIC VALUE IS ABOUT.** Apple packs two things into one integer: the
+ * four CONTENT dimensions (a width, or a height, or the minimum or maximum of either) are small numbers, and the three
+ * LAYER dimensions are a bit that is OR-ed WITH AN EDGE — so `NSTextBlockBorder | NSTextBlockMinXEdge` names the left
+ * border's width. The layer bits are the era's own values (0x1000, 0x2000, 0x4000), which is what makes the OR safe:
+ * they are far above the four edges' low bits and the four content dimensions' small numbers.
+ *
+ * **THE LAYER CONSTANTS SHARE THEIR NAMES WITH `NSTextBlockLayer` AND THAT IS APPLE'S HEADER, NOT A TYPO** — a layer and
+ * its dimension bit are two spellings of one thing, and C puts them in one namespace, so this header declares the
+ * DIMENSION ones here and the LAYER ones (as -1, 0 and 1, for the `…forLayer:` doors) above. The two casts in
+ * `-setValue:type:forDimension:` are how the object tells them apart: a negative value is a layer, a value with a layer
+ * bit is a layer dimension, and anything else is a content dimension. */
+enum {
+	NSTextBlockWidth = 0,
+	NSTextBlockMinimumWidth = 1,
+	NSTextBlockMaximumWidth = 2,
+	NSTextBlockHeight = 4,
+	NSTextBlockMinimumHeight = 5,
+	NSTextBlockMaximumHeight = 6,
+	NSTextBlockPaddingDimension = 0x1000,
+	NSTextBlockBorderDimension = 0x2000,
+	NSTextBlockMarginDimension = 0x4000
+};
+typedef NSInteger NSTextBlockDimension;
+
+/* **HOW A BLOCK'S CONTENT SITS IN ITS ROW**, which is a table's question asked of a block: the vertical alignment of the
+ * content inside the cell. Apple's four members, in its order; `Middle` is the default its documentation names for a
+ * table cell. */
+typedef NSInteger NSTextBlockVerticalAlignment;
+enum {
+	NSTextBlockTopAlignment = 0,
+	NSTextBlockMiddleAlignment = 1,
+	NSTextBlockBottomAlignment = 2,
+	NSTextBlockBaselineAlignment = 3
+};
+
 @interface NSTextBlock : NSObject <NSCoding, NSCopying>
 {
 	NSColor *_backgroundColor;			/* RETAINED */
@@ -66,6 +101,14 @@ typedef NSUInteger NSTextBlockEdge;
 	 * because an absolute 20 and a 20-percent are different widths. */
 	CGFloat _widths[3][4];
 	NSTextBlockValueType _valueTypes[3][4];
+	/* **AND THE SWEEP'S THREE.** `_contentWidth` is the block's own width — the CONTENT dimension Apple keeps beside the
+	 * twelve layer widths — with its value type; `_verticalAlignment` is where the content sits in its row. Both are
+	 * READ: the content width clamps the rectangle `-boundsRectForContentRect:…` grows, and the alignment is what a
+	 * table's cell asks when its content is shorter than the row (see `-valueForDimension:`, which answers it for the
+	 * height dimensions it cannot size). */
+	CGFloat _contentWidth;
+	NSTextBlockValueType _contentWidthType;
+	NSTextBlockVerticalAlignment _verticalAlignment;
 }
 
 /* THE GROUND THE BLOCK SITS ON, and the colour of each edge. A nil colour means the edge is not drawn. */
@@ -92,6 +135,38 @@ typedef NSUInteger NSTextBlockEdge;
 - (NSTextBlockValueType)valueTypeForLayer:(NSTextBlockLayer)layer edge:(NSTextBlockEdge)edge;
 - (void)setWidth:(CGFloat)width type:(NSTextBlockValueType)type forLayer:(NSTextBlockLayer)layer;
 - (CGFloat)widthForLayer:(NSTextBlockLayer)layer;
+
+/* ---- AND THE TEN THE SWEEP ADDS: ONE VALUE DOOR, AND NAMES FOR THE PIECES ------------------------- */
+
+/* **ONE DOOR FOR EVERY DIMENSION, WHICH IS APPLE'S ARGUMENT FOR THE DIMENSION WORD.** `-setValue:type:forDimension:` is
+ * the generic form of the twelve `-setWidth:type:forLayer:edge:` calls, and `-valueForDimension:` /
+ * `-valueTypeForDimension:` read it back; the content dimensions are `-contentWidth:`/`-contentWidthValueType:` under
+ * their own names. A dimension this class has no storage for (a HEIGHT, which a block cannot size: its height is its
+ * content's) is RECORDED NOWHERE and answered with 0 — see the implementation, where the refusal is stated rather than
+ * printed, because zero is a legitimate width and a message per call would be noise. */
+- (void)setValue:(CGFloat)value type:(NSTextBlockValueType)type forDimension:(NSTextBlockDimension)dimension;
+- (CGFloat)valueForDimension:(NSTextBlockDimension)dimension;
+- (NSTextBlockValueType)valueTypeForDimension:(NSTextBlockDimension)dimension;
+
+/* **AND THE CONTENT WIDTH IS READ BY THE GEOMETRY.** `-boundsRectForContentRect:…` clamps the content to this width when
+ * one is set — absolute points, or a percentage of the containing rectangle — and grows it by the three layers as
+ * before. */
+- (CGFloat)contentWidth;
+- (NSTextBlockValueType)contentWidthValueType;
+- (void)setContentWidth:(CGFloat)width type:(NSTextBlockValueType)type;
+
+/* THE FOUR EDGES AT ONCE, which is the shorthand a caller who wants one border colour writes. */
+- (void)setBorderColor:(nullable NSColor *)color;
+
+/* **AND WHERE THE CONTENT SITS IN ITS ROW.** Read by a table cell's layout when its content is shorter than the row; the
+ * block itself has no row to align in, which is why this is storage with a READER one class over rather than a stored
+ * value nothing reads. */
+- (NSTextBlockVerticalAlignment)verticalAlignment;
+- (void)setVerticalAlignment:(NSTextBlockVerticalAlignment)alignment;
+
+/* AND THE OLDER SPELLING OF THE VALUE TYPE, which is the same information under Apple's 10.3 name. It answers what
+ * `-valueTypeForLayer:edge:` answers, and this header says so rather than keeping a second table. */
+- (NSTextBlockValueType)widthValueTypeForLayer:(NSTextBlockLayer)layer edge:(NSTextBlockEdge)edge;
 
 /* **AND THE TWO GEOMETRY DOORS THE LAYOUT ASKS.** `-boundsRectForContentRect:` grows a content rectangle by the three
  * layers on every edge — the box a caller draws; `-rectForLayoutAtPoint:` is the inverse, the content rectangle a
