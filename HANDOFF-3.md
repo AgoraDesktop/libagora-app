@@ -363,3 +363,43 @@ has been carrying longest: `NSPrintInfo` + `NSPrintOperation` alone would retire
 `NSApplication -application:printFiles:`, the alert's print paths and `-print:`. After that, §6's item 5 — the 569
 selectors in classes this tree HAS, largest first: `NSTextView` 126, `NSBrowser` 64, `NSResponder` 57, `NSWorkspace`
 49, `NSMenuView` 37, `NSFont` 35, `NSText` 31.
+
+---
+
+## 11. The fourth pick-up: printing, and the transport decision
+
+*One session, one commit: `NSPrintInfo`, `NSPrintOperation`, `NSPrintPanel`, `NSPageLayout`, `NSPrinter` (146 selectors),
+`NSPrintPanelAccessorizing`, the twelve `NSView` printing doors, `-print:` on `NSView`/`NSWindow`, eleven `NSDocument`
+doors that had been ABSENT rather than refused, and the two `NSApplication` doors — plus `platform/AGPrintService.h`, the
+seam the job leaves through.*
+
+**THE DECISION THE USER MADE, RECORDED BECAUSE IT AMENDED THE PLAN.** The plan's §4.4/§4.5 said "physical printers
+refused"; both now say implemented, with the transport as a seam: libcups when `pkg-config` finds it (Apache-2.0,
+dynamic, no systemd, optional like `gbm`) and a null service when it does not. A job is always a PDF — which is not a
+downgrade, since driverless printers take PDF natively and CUPS filters it for everything older.
+
+**WHAT LANDED.** The renderer (page rectangles from `-knowsPageRange:`/`-rectForPage:` or from the imageable height with
+`-adjustPageHeightNew:…`, drawn into `CGPDFContext`), the three dispositions, the PDF/EPS copying operations, the
+ticket's dictionary and arithmetic, the paper table (IPP keyword and friendly name to points), both panels with real
+controls and the no-run-loop answer, and the queue list through the seam. A spool with no queue REFUSES BY NAME; a save
+with no path does too; a preview keeps the bytes for `cg_resultData`.
+
+**THE NUMBERS.** classes 126 → 131 of 168, selectors 3790 → 3947 of 4359 → 4505, protocols 38 → 39, methods 4301 → 4468.
+**AND THE MISSING COUNT MOVED DOWN FOR THE FIRST TIME — 569 → 558** — because eleven `NSDocument` print doors were
+declared rather than refused. 113 of the 129 classes with a surface are at COMPLETE coverage. Refusal census
+**294 → 292**: twelve `NSView` doors, two `NSApplication` doors and `NSWindow -print:` became real, while six in
+`NSPrintInfo` (the Carbon handles) and six in `NSPrintOperation` (the seam's named failures) and one in `NSDocument`
+(the script command) were added. The suite is **141 tests**, with `appkit-printing` (72 checks) as the new one.
+
+**TWO TRAPS THE PROBE FOUND, BOTH WORTH THE NEXT SESSION'S TIME:**
+* **A WINDOW MADE BY `-initWithContentRect:…` HAS NO CONTENT VIEW.** `_contentView` is nil until someone sets one, so
+  every control added to it was a no-op, the factory's `-release` freed it, and the NEXT allocation reused the memory —
+  which surfaced as an `NSTextField` receiving `-removeAllItems:`. Both panels now make and set a content view.
+* **THE EPS CONTEXT HAS ONE PAGE, AND THE COPYING RENDERER DREW THREE.** `+EPSOperationWithView:insideRect:toData:` was
+  asking the view's own pagination (the probe's three-page view) instead of drawing its one rectangle; a copying
+  operation now renders exactly `_copyRect`, and the EPS writer's own second-page refusal stopped firing.
+
+**WHERE THE NEXT HOUR IS.** §6's item 3 is retired. The ranking now starts at §6's item 5 — the 558 selectors outstanding
+in classes this tree HAS: `NSTextView` 126, `NSBrowser` 64, `NSResponder` 57, `NSWorkspace` 49, `NSMenuView` 37,
+`NSFont` 35, `NSText` 31 — and the absent classes are down to 37, of which the largest groups are the editors
+(`NSMatrix` is done; `NSForm` too) and the controllers/bindings, which are a design question before they are a slice.

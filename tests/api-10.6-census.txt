@@ -57,16 +57,16 @@
 # **THE PER-CLASS LINES ARE WHAT MAKE MEMBERSHIP PINNED RATHER THAN JUST THE TOTALS.** A census of aggregates alone
 # could keep `classes-present 81` while swapping `NSBox` for `NSMatrix`; with a line per shared class, any change to
 # which classes are present moves a line name. The missing set is then fully determined — 10.6's offering from the
-# manifest, minus the present set the `sel:` lines name — so the 42 absent classes need no lines of their own.
+# manifest, minus the present set the `sel:` lines name — so the 37 absent classes need no lines of their own.
 #
 # **AND THE MEASURED NUMBERS, RECOMPUTED RATHER THAN EDITED**, so a reader can see the shape without running anything:
 #
-#     classes   126 of 168   (75%)    42 missing
-#     selectors 3790 of 4359  (87%)  569 missing   108 of 124 classes at COMPLETE coverage
-#     protocols  38 of  56   (68%)    18 missing
+#     classes   131 of 168   (78%)    37 missing
+#     selectors 3947 of 4505  (88%)  558 missing   113 of 129 classes at COMPLETE coverage
+#     protocols  39 of  56   (70%)    17 missing
 #     functions  86 of  86 (100%)     0 missing    10 of them REFUSE BY NAME, which this count does not distinguish
 #                86 declared, 0 declared-not-defined, 0 defined-not-declared
-#     methods   4301 declared on this tree's own classes, 8 with NO body on the chain (0.2%)
+#     methods   4468 declared on this tree's own classes, 8 with NO body on the chain (0.2%)
 #
 # Three things those five lines say together. The 87% on selectors is still the strongest part of the tree and the reason a
 # hand count that looked only at filenames undersold it by a factor of two. THE FUNCTIONS ARE FINISHED — 86 of 86, and
@@ -75,11 +75,14 @@
 # reading "the tree does not yet fill a rectangle" three slices after it did. And the 71% on classes is the honest
 # version of the headline — the desktop CORE is deep, the periphery is thinner every slice. THE LAST TWO SLICES MOVED
 # BOTH THE NUMBERS AND THEIR SHAPE: `NSMatrix` + `NSForm` + `NSFormCell` added 134 selectors, 3 classes and 1 protocol,
-# and the COLOUR PANELS added 52 selectors, 4 classes and 2 protocols, and the FONT PAIR added 61 selectors and 2
-# classes. The selectors' OFFERED count rises with them — `selectors-offered` is the manifest's surface over the classes
-# this tree HAS, so a class appearing adds its rows to both sides of the fraction (4112 -> 4246 -> 4298 -> 4359
-# offered, 3543 -> 3677 -> 3729 -> 3790 answered, the 569 missing unmoved the whole way). And `classes-present` rose by
-# 9 while `classes-missing` fell by 9; `NSFileWrapper` stays in the gap for the reason the note below records.
+# the COLOUR PANELS added 52 selectors, 4 classes and 2 protocols, the FONT PAIR 61 selectors and 2 classes, and the
+# PRINT SYSTEM 146 selectors over 5 classes, 1 protocol and 11 `NSDocument` doors that were not declared before. The
+# selectors' OFFERED count rises with them — `selectors-offered` is the manifest's surface over the classes this tree
+# HAS, so a class appearing adds its rows to both sides of the fraction (4112 -> 4246 -> 4298 -> 4359 -> 4505 offered,
+# 3543 -> 3677 -> 3729 -> 3790 -> 3947 answered). The printing slice is also the first that MOVED THE MISSING COUNT
+# DOWN — 569 -> 558 — because it declared eleven selectors in `NSDocument` that had been absent rather than refused.
+# `classes-present` has risen by 14 across the last four slices; `NSFileWrapper` stays in the gap for the reason the
+# note below records.
 
 # **ONE OF THE MISSING CLASSES IS NOT THIS COMPONENT'S TO IMPLEMENT, AND THAT IS A FACT ABOUT THE INSTRUMENT.**
 # `NSFileWrapper` is a FOUNDATION class in this stack (`libagora-base/NSFileWrapper.h`, 47 methods), which is also Apple's own
@@ -129,9 +132,9 @@
 # NOTE THE ONE DELIBERATE EXCLUSION. `NSFileWrapper` is declared by 10.6's AppKit (`AppKit/NSFileWrapper.h`) but is
 # Foundation's in this tree, so it is attributed to Foundation to avoid charging one class to two ledgers. The
 # manifest applies that rule at generation time via its second framework argument; the census never sees it.
-classes-missing 42
+classes-missing 37
 classes-offered 168
-classes-present 126
+classes-present 131
 fn:NSAccessibilityActionDescription 1
 fn:NSAccessibilityPostNotification 1
 fn:NSAccessibilityRaiseBadArgumentException 1
@@ -310,7 +313,7 @@ functions-defined-not-declared 0
 functions-missing 0
 functions-offered 86
 functions-present 86
-methods-declared 4301
+methods-declared 4468
 methods-declared-not-implemented 8
 proto:NSAlertDelegate 1
 proto:NSAnimatablePropertyContainer 0
@@ -345,7 +348,7 @@ proto:NSPasteboardReading 1
 proto:NSPasteboardWriting 1
 proto:NSPathCellDelegate 1
 proto:NSPathControlDelegate 1
-proto:NSPrintPanelAccessorizing 0
+proto:NSPrintPanelAccessorizing 1
 proto:NSRuleEditorDelegate 0
 proto:NSSoundDelegate 0
 proto:NSSpeechRecognizerDelegate 0
@@ -368,9 +371,9 @@ proto:NSUserInterfaceItemSearching 0
 proto:NSUserInterfaceValidations 1
 proto:NSValidatedUserInterfaceItem 1
 proto:NSWindowDelegate 1
-protocols-missing 18
+protocols-missing 17
 protocols-offered 56
-protocols-present 38
+protocols-present 39
 sel:NSActionCell 6
 sel:NSAlert 27
 sel:NSAnimation 26
@@ -401,7 +404,7 @@ sel:NSCursor 35
 sel:NSCustomImageRep 3
 sel:NSDatePicker 32
 sel:NSDatePickerCell 28
-sel:NSDocument 74
+sel:NSDocument 85
 sel:NSDocumentController 43
 sel:NSEPSImageRep 5
 sel:NSEvent 65
@@ -434,6 +437,7 @@ sel:NSOpenPanel 15
 sel:NSOutlineView 30
 sel:NSPDFImageRep 7
 sel:NSPICTImageRep 4
+sel:NSPageLayout 12
 sel:NSPanel 6
 sel:NSParagraphStyle 21
 sel:NSPasteboard 31
@@ -443,6 +447,10 @@ sel:NSPathComponentCell 4
 sel:NSPathControl 16
 sel:NSPopUpButton 36
 sel:NSPopUpButtonCell 47
+sel:NSPrintInfo 46
+sel:NSPrintOperation 41
+sel:NSPrintPanel 20
+sel:NSPrinter 27
 sel:NSProgressIndicator 27
 sel:NSResponder 88
 sel:NSRulerMarker 19
@@ -495,7 +503,7 @@ sel:NSViewController 13
 sel:NSWindow 243
 sel:NSWindowController 26
 sel:NSWorkspace 9
-selectors-missing 569
-selectors-offered 4359
-selectors-present 3790
+selectors-missing 558
+selectors-offered 4505
+selectors-present 3947
 selphantom:NSObject 8

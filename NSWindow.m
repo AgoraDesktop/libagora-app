@@ -53,6 +53,7 @@
 #import <CoreGraphics/CGBitmapContext.h>
 
 #import <AppKit/NSWindow.h>
+#import <AppKit/NSPrintOperation.h>
 #import <AppKit/NSTrackingArea.h>
 #import <AppKit/NSColor.h>
 #import <AppKit/NSCursor.h>
@@ -4833,8 +4834,10 @@ static NSUInteger fn_edge_index(NSRectEdge edge)
 
 - (void)print:(id)sender
 {
+	/* **A WINDOW PRINTS ITS CONTENT VIEW**, which is where its document's drawing lives; `NSDocument` builds its own
+	 * operation over the same view, so the two paths cannot disagree about what a page is. */
 	(void)sender;
-	fn_refuse_window("-print:", "the printing system (NSPrintOperation)");
+	[[NSPrintOperation printOperationWithView:[self contentView]] runOperation];
 }
 
 - (void)dragImage:(NSImage *)anImage at:(NSPoint)baseLocation offset:(NSSize)initialOffset event:(NSEvent *)event

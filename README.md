@@ -1646,8 +1646,8 @@ wins when it can take the action, and a RESPONDER SENDER starts the walk from IT
 action finds the view the click came from. `-searchString:inUserInterfaceItemString:searchRange:foundRange:` is the Help
 menu's filter: case-insensitive, with the item's `&` mnemonic mark SKIPPED so it cannot shift the match, answering the
 matched substring and its range. `-isHidden` is the flag `-hide:` keeps; `-context` answers nil, which is Apple's own
-documented answer and not a gap; and `-application:printFiles:` is a NAMED REFUSAL, because printing needs the print system
-this tier has not got. The two RELATIVES — `-beginModalSessionForWindow:relativeToWindow:` and its run form — attach the
+documented answer and not a gap; and `-application:printFiles:` PRINTS NOW — it asks the delegate's six-part door and,
+failing that, opens each file as a document and prints it, replying with the launch's code. The two RELATIVES — `-beginModalSessionForWindow:relativeToWindow:` and its run form — attach the
 window to its parent through the sheet door the class already has and then begin the SAME session, with the parent
 remembered so `-endModalSession:` takes the attachment back down.
 
@@ -2065,9 +2065,10 @@ up. A PDF page's device y runs UP, so the same sign means the opposite thing; th
 `tests/pdf_app.m` in both the bitmap case and the PDF-export case, plus a flipped view's three rectangles, the
 pasteboard type, a two-page document and the current-page clamp — 24 checks, no window and no compositor.
 
-What is still absent on this subject: `-dataWithEPSInsideRect:` and PostScript output, PRINTING (`NSPrintOperation`
-still refuses), and `+graphicsContextWithAttributes:` still does not turn a data destination into a PDF page — the
-attributes carry no page size, so the sized routes above are the ones to use.
+What is still absent on this subject: `-dataWithEPSInsideRect:` and PostScript output, and
+`+graphicsContextWithAttributes:` still does not turn a data destination into a PDF page — the attributes carry no page
+size, so the sized routes above are the ones to use. PRINTING has its own section below: a job is a PDF rendered through
+this same export path.
 
 ### The grid, the form, and a cell that copies itself
 
@@ -2184,6 +2185,40 @@ lost, the `NSUnboldFontMask` spelling, face, the mask projection, the attributes
 sent and the target's call back producing the panel's font, a disabled manager staying silent, the collection store, the
 font menu and its one delegate door, and the panel's two clicks — a family row and a size chip — each changing the font,
 moving the selection and firing the target.
+
+### Printing: a ticket, a PDF, and the queue it goes to
+
+**A PRINT JOB IS A PDF, AND THE TREE ALREADY KNEW HOW TO MAKE ONE.** `NSPrintOperation` paginates a view, draws each
+page into a `CGPDFContext` with the same transform `-dataWithPDFInsideRect:` uses, and hands the result to a
+disposition: `NSPrintSpoolJob` sends it to a queue, `NSPrintSaveJob` writes `NSPrintSavePath`, `NSPrintPreviewJob`
+keeps the bytes. All 146 selectors of `NSPrintInfo` (46), `NSPrintOperation` (41), `NSPrintPanel` (20), `NSPageLayout`
+(12) and `NSPrinter` (27) are answered, plus `NSPrintPanelAccessorizing` — and with them the twelve `NSView` printing
+doors, `-print:` on `NSView`/`NSWindow`, and `NSDocument`'s eleven print doors, which had been absent rather than
+refused.
+
+**THE TRANSPORT IS A SEAM WITH TWO IMPLEMENTATIONS.** `platform/AGPrintService.h` is the narrow C interface — the queue
+list, each queue's facts and media keywords, and a submission of a complete PDF — and `platform/AGPrintService.c` is
+libcups when `pkg-config` finds it (`cupsCreateJob` → `cupsStartDocument` with `application/pdf` →
+`cupsWriteRequestData`) and a null service when it does not. CUPS is a system library (Apache-2.0, dynamically linked, no
+systemd), optionally configured, exactly the shape `gbm` already had. A build without it still answers every door: the
+queue list is empty and a spool REFUSES BY NAME rather than silently saving somewhere.
+
+**THE TICKET IS A DICTIONARY WITH DOORS, AND ITS ARITHMETIC IS THE PAGES.** `-paperSize` is the sheet, the four margins
+are the edges, and `-imageablePageBounds` is the sheet minus them with the axes swapped for landscape — that rectangle is
+what pagination measures, so a tall view becomes `ceil(height ÷ imageableHeight)` pages. A view that knows its own range
+overrides `-knowsPageRange:` and `-rectForPage:` instead and gets exactly its pages; `-adjustPageHeightNew:top:bottom:limit:`
+is the chance to round each automatic break.
+
+**AND THE PANELS ARE REAL WINDOWS WITH REAL CONTROL.** `NSPrintPanel` owns a panel with the queue popup, copies, the
+page range, the disposition ("Print" / "Save as PDF" / "Preview") and the accessory band; `NSPageLayout` owns paper,
+orientation and the four margins, reading and writing the ticket through `-readPrintInfo`/`-writePrintInfo`. Both answer
+`NSOKButton` without a run loop — the guard the menu, field and alert sessions carry — which is what makes them
+testable headlessly.
+
+`tests/printing.m` asserts it in 72 checks: the ticket's defaults and arithmetic both orientations, the paper table's
+keywords and names, a three-page view and a tall one cut into three, a page range, save/preview/spool-with-no-queue, the
+PDF and EPS copying operations, both panels' sessions and the page layout's round trip, and a document's own ticket being
+a copy of the shared one.
 
 ### Still absent, and why
 

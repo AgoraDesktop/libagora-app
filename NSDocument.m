@@ -20,6 +20,11 @@
 #import "NSWindowController.h"
 #import "NSWindow.h"
 #import "AppKitRefusal.h"
+#import "NSApplication.h"
+#import "NSPrintInfo.h"
+#import "NSPrintOperation.h"
+#import "NSPageLayout.h"
+#import "NSView.h"
 
 #import <Foundation/NSData.h>
 #import <Foundation/NSDate.h>
@@ -33,6 +38,7 @@
 #import <Foundation/NSURL.h>
 
 #include <stdio.h>
+#include <objc/message.h>
 
 /* THE ONE ERROR DOMAIN, with a code per kind of failure; the text is what `-localizedDescription` answers. */
 static NSString *const AGDocumentErrorDomain = @"com.agora.appkit.document";
@@ -971,6 +977,152 @@ originalContentsURL:(NSURL *)absoluteOriginalContentsURL
 - (void)cg_setDocumentController:(id)controller
 {
 	_cg_documentController = controller;
+}
+
+/* ============================================================================================ *
+ * THE PRINT DOORS.                                                                              *
+ * ============================================================================================ */
+
+/* **THE TICKET IS A COPY OF THE SHARED ONE ON FIRST ASK**, so a document's paper size is its own; the copy is made
+ * through `-initWithDictionary:`, which is the same door a caller building a ticket by hand uses. */
+- (NSPrintInfo *)printInfo
+{
+	if (_printInfo == nil) {
+		_printInfo = [[NSPrintInfo alloc] initWithDictionary:[[NSPrintInfo sharedPrintInfo] dictionary]];
+	}
+	return _printInfo;
+}
+
+- (void)setPrintInfo:(NSPrintInfo *)printInfo
+{
+	NSPrintInfo *old = _printInfo;
+
+	_printInfo = [printInfo retain];
+	[old release];
+}
+
+- (BOOL)shouldChangePrintInfo:(NSPrintInfo *)newPrintInfo
+{
+	(void)newPrintInfo;
+	return YES;
+}
+
+/* **THE OPERATION PRINTS THE DOCUMENT'S WINDOW CONTENT, WHICH IS THE ONE ANSWER THIS CLASS CAN GIVE.** A document with a
+ * paginated view of its own overrides this door and returns an operation over that view; every other door below then
+ * works unchanged, which is why the seam is here rather than in `-printDocument:`. */
+- (NSPrintOperation *)printOperationWithSettings:(NSDictionary *)printSettings error:(NSError **)outError
+{
+	NSWindow *window = (_window != nil) ? _window : [self windowForSheet];
+	NSView *view = ([window contentView] != nil) ? [window contentView] : nil;
+	NSPrintOperation *operation;
+
+	if (view == nil) {
+		if (outError != NULL) {
+			*outError = [NSError errorWithDomain:@"NSDocumentPrintErrorDomain" code:1
+						    userInfo:[NSDictionary dictionaryWithObject:
+							      @"the document has no window to print"
+											    forKey:NSLocalizedDescriptionKey]];
+		}
+		return nil;
+	}
+	operation = [NSPrintOperation printOperationWithView:view printInfo:[self printInfo]];
+	if (printSettings != nil) {
+		[[[self printInfo] dictionary] addEntriesFromDictionary:printSettings];
+	}
+	[operation setJobTitle:[self displayName]];
+	return operation;
+}
+
+- (void)printDocument:(id)sender
+{
+	(void)sender;
+	[self printShowingPrintPanel:YES];
+}
+
+- (void)printShowingPrintPanel:(BOOL)showPanels
+{
+	NSPrintOperation *operation = [self printOperationWithSettings:nil error:NULL];
+
+	if (operation == nil) {
+		return;
+	}
+	[operation setShowsPrintPanel:showPanels];
+	[operation runOperation];
+}
+
+- (void)printDocumentWithSettings:(NSDictionary *)printSettings showPrintPanel:(BOOL)showPrintPanel
+			 delegate:(id)delegate didPrintSelector:(SEL)didPrintSelector
+		      contextInfo:(void *)contextInfo
+{
+	NSPrintOperation *operation = [self printOperationWithSettings:printSettings error:NULL];
+
+	if (operation == nil) {
+		if (delegate != nil && didPrintSelector != NULL) {
+			typedef void (*AGDocumentDidPrint)(id, SEL, id, BOOL, void *);
+
+			((AGDocumentDidPrint)objc_msgSend)(delegate, didPrintSelector, self, NO, contextInfo);
+		}
+		return;
+	}
+	[operation setShowsPrintPanel:showPrintPanel];
+	[self runModalPrintOperation:operation delegate:delegate didRunSelector:didPrintSelector
+			 contextInfo:contextInfo];
+}
+
+- (void)runModalPrintOperation:(NSPrintOperation *)printOperation delegate:(id)delegate
+		didRunSelector:(SEL)didRunSelector contextInfo:(void *)contextInfo
+{
+	NSWindow *sheetWindow = [self windowForSheet];
+
+	if (sheetWindow != nil && [[NSApplication sharedApplication] isRunning]) {
+		[printOperation runOperationModalForWindow:sheetWindow delegate:delegate
+					    didRunSelector:didRunSelector contextInfo:contextInfo];
+		return;
+	}
+	{
+		BOOL ok = [printOperation runOperation];
+
+		if (delegate != nil && didRunSelector != NULL) {
+			typedef void (*AGDocumentDidPrint)(id, SEL, id, BOOL, void *);
+
+			((AGDocumentDidPrint)objc_msgSend)(delegate, didRunSelector, self, ok, contextInfo);
+		}
+	}
+}
+
+- (void)runModalPageLayoutWithPrintInfo:(NSPrintInfo *)printInfo
+{
+	[[NSPageLayout pageLayout] runModalWithPrintInfo:printInfo];
+}
+
+- (void)runModalPageLayoutWithPrintInfo:(NSPrintInfo *)printInfo delegate:(id)delegate
+			 didRunSelector:(SEL)didRunSelector contextInfo:(void *)contextInfo
+{
+	NSWindow *sheetWindow = [self windowForSheet];
+	NSPageLayout *layout = [NSPageLayout pageLayout];
+
+	if (sheetWindow != nil && [[NSApplication sharedApplication] isRunning]) {
+		[layout beginSheetWithPrintInfo:printInfo modalForWindow:sheetWindow delegate:delegate
+				  didEndSelector:didRunSelector contextInfo:contextInfo];
+		return;
+	}
+	{
+		NSInteger code = [layout runModalWithPrintInfo:printInfo];
+
+		if (delegate != nil && didRunSelector != NULL) {
+			typedef void (*AGDocumentDidLayout)(id, SEL, id, NSInteger, void *);
+
+			((AGDocumentDidLayout)objc_msgSend)(delegate, didRunSelector, self, code, contextInfo);
+		}
+	}
+}
+
+/* THE SCRIPTING DOOR IS A NAMED REFUSAL, because this tree has no `NSScriptCommand` to be given. */
+- (id)handlePrintScriptCommand:(id)command
+{
+	(void)command;
+	fn_refuse_window("-handlePrintScriptCommand:", "the scripting suite: this tree has no NSScriptCommand");
+	return nil;
 }
 
 @end

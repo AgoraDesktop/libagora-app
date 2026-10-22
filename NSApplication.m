@@ -30,6 +30,10 @@
 #import "NSMenuItem.h"
 #import "NSDockMenu.h"	/* the ids a tile's menu crosses by, and the tree they name */
 #import "NSColor.h"
+#import "NSPrintInfo.h"
+#import "NSPageLayout.h"
+#import "NSDocumentController.h"
+#import "NSPrintOperation.h"
 
 #import <Foundation/NSThread.h>
 #import <AppKit/NSApplication.h>
@@ -1165,8 +1169,11 @@ static double s_last_report;
 
 - (void)runPageLayout:(id)sender
 {
+	/* **PAGE SETUP IS THE SHARED TICKET'S PAGE, EDITED IN PLACE.** The panel writes paper, orientation and margins back
+	 * through `-writePrintInfo`, so the next print job of any document inherits the change — which is what a page-setup
+	 * command is for. */
 	(void)sender;
-	fn_refuse_window("-runPageLayout:", "the page layout panel (NSPageLayout)");
+	[[NSPageLayout pageLayout] runModalWithPrintInfo:[NSPrintInfo sharedPrintInfo]];
 }
 
 /* AND THE ONE THAT IS REAL: Foundation has threads, and this is the pre-10.0 spelling of a door that still works. */
@@ -1975,12 +1982,45 @@ struct AGModalSession {
 	return nil;
 }
 
+/* **A PRINT REQUEST IS THE DELEGATE'S FIRST, AND THE DOCUMENT CONTROLLER'S SECOND.** Apple's delegate door
+ * (`-application:printFiles:withSettings:showPrintPanels:`) is asked when a delegate implements it; otherwise each file is
+ * opened as a document and printed through the document, which is the path a file manager's "Print" takes. The reply is
+ * the launch's: success when at least one document printed, failure when none did, and cancel when there was nothing to
+ * print at all. */
 - (void)application:(id)sender printFiles:(NSArray *)filenames
 {
+	id delegate = [self delegate];
+
 	(void)sender;
-	(void)filenames;
-	fn_refuse_window("-[NSApplication application:printFiles:]", "the printing system (NSPrintOperation, NSPrintInfo and "
-			 "the panel), and the Apple Event that would deliver a print request");
+	if (filenames == nil || [filenames count] == 0) {
+		[self replyToOpenOrPrint:NSApplicationDelegateReplyCancel];
+		return;
+	}
+	if ([delegate respondsToSelector:@selector(application:printFiles:withSettings:showPrintPanels:)]) {
+		NSApplicationPrintReply reply = (NSApplicationPrintReply)[delegate application:self printFiles:filenames
+									      withSettings:nil showPrintPanels:YES];
+
+		[self replyToOpenOrPrint:(reply == NSPrintingSuccess) ? NSApplicationDelegateReplySuccess
+								     : NSApplicationDelegateReplyFailure];
+		return;
+	}
+	{
+		NSDocumentController *controller = [NSDocumentController sharedDocumentController];
+		BOOL printed = NO;
+		NSUInteger i;
+
+		for (i = 0; i < [filenames count]; i++) {
+			NSURL *url = [NSURL fileURLWithPath:[filenames objectAtIndex:i]];
+			NSError *error = nil;
+			id document = [controller openDocumentWithContentsOfURL:url display:NO error:&error];
+
+			if (document != nil) {
+				[document printDocument:self];
+				printed = YES;
+			}
+		}
+		[self replyToOpenOrPrint:printed ? NSApplicationDelegateReplySuccess : NSApplicationDelegateReplyFailure];
+	}
 }
 
 - (void)stopModal

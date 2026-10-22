@@ -161,6 +161,21 @@ else()
 endif()
 
 # ---------------------------------------------------------------------------
+# PRINTING (optional): libcups
+#
+# **THE PRINT SYSTEM IS A SYSTEM LIBRARY, ON THE SAME TERMS AS WAYLAND AND XKBCOMMON.** CUPS is Apache-2.0 since 2.3,
+# it is linked dynamically, and it does not bring systemd with it — it is its own daemon and socket. The dependency is
+# OPTIONAL in the same shape this project already uses for gbm: a build without it has no queues, and every print door
+# still answers (a job saves to a file or previews). See `platform/AGPrintService.h`.
+# ---------------------------------------------------------------------------
+pkg_check_modules(CUPS IMPORTED_TARGET cups)
+if(CUPS_FOUND)
+  message(STATUS "libagora-app: print service: libcups ${CUPS_VERSION}")
+else()
+  message(STATUS "libagora-app: print service: none — print jobs can be saved or previewed")
+endif()
+
+# ---------------------------------------------------------------------------
 # The library
 # ---------------------------------------------------------------------------
 file(GLOB APP_SOURCES CONFIGURE_DEPENDS
@@ -184,6 +199,10 @@ if(GBM_FOUND)
   add_dependencies(App linux-dmabuf-bindings)
   target_compile_definitions(App PRIVATE AG_HAVE_DMABUF)
   target_link_libraries(App PRIVATE PkgConfig::GBM)
+endif()
+if(CUPS_FOUND)
+  target_compile_definitions(App PRIVATE AG_HAVE_CUPS)
+  target_link_libraries(App PRIVATE PkgConfig::CUPS)
 endif()
 
 set_target_properties(App PROPERTIES OUTPUT_NAME agora-app)

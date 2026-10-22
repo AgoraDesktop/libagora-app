@@ -22,10 +22,15 @@
  * work at all. A subclass that overrides only a deprecated URL door is NOT consulted by the modern one; the header says so
  * at the pair rather than leaving it to be discovered.
  *
- * **THE PRINT, AUTOSAVE, SCRIPTING AND PANEL DOORS ARE NOT DECLARED YET.** There is no print subsystem, no autosave
- * timer, and no save panel in this tier; declaring those methods and refusing them would put forty rows in the census that
- * answer nothing. `-saveDocument:` REFUSES BY NAME when the document has no URL (that is the save-panel path) and
- * `-saveDocumentAs:`/`-saveDocumentTo:` always refuse; a direct `-saveToURL:…` is real. The next slice is the panel pair.
+ * **THE PRINT DOORS LANDED WITH THE PRINT SYSTEM, AND THEY ARE REAL.** A document's ticket is its own (`-printInfo`,
+ * made from the shared one on first ask), `-printOperationWithSettings:error:` builds an operation over the document's
+ * window content, `-printDocument:` shows the panel, `-printShowingPrintPanel:` does not have to, and the two
+ * `runModal…` doors are the page-layout and operation sheets. A subclass that draws its own pages overrides
+ * `-printOperationWithSettings:error:` and keeps everything else.
+ *
+ * **AUTOSAVE, SCRIPTING AND THE SAVE PANEL ARE STILL NOT DECLARED.** No autosave timer and no save panel live here;
+ * `-saveDocument:` REFUSES BY NAME when the document has no URL (that is the save-panel path) and
+ * `-saveDocumentAs:`/`-saveDocumentTo:` always refuse; a direct `-saveToURL:…` is real.
  *
  * **THE CHANGE COUNT IS THE DOCUMENT'S, NOT THE UNDO MANAGER'S.** `-updateChangeCount:` is the one writer; the document
  * registers for the undo manager's did-undo/did-redo notifications so the count follows an undo the application never
@@ -41,7 +46,7 @@
 
 NS_ASSUME_NONNULL_BEGIN
 
-@class NSData, NSDate, NSDictionary, NSError, NSFileWrapper, NSString, NSUndoManager, NSURL, NSWindow, NSWindowController;
+@class NSData, NSDate, NSDictionary, NSError, NSFileWrapper, NSPrintInfo, NSPrintOperation, NSString, NSUndoManager, NSURL, NSWindow, NSWindowController;
 
 /* WHAT A CHANGE DID, in Apple's order and with Apple's numbers. `NSChangeRedone` is the 10.5 addition and sits at 5 because
  * 4 was already `NSChangeAutosaved`. */
@@ -76,6 +81,7 @@ enum {
 	NSInteger _changeCount;			/* signed: undone changes below zero are still "not equal to zero" */
 	BOOL _hasUndoManager;
 	id _cg_documentController;		/* NOT RETAINED: the controller that added this document */
+	NSPrintInfo *_printInfo;		/* RETAINED: made from the shared ticket on first ask */
 }
 
 /* ---- INITIALIZATION ------------------------------------------------------------------------------- */
@@ -257,6 +263,34 @@ originalContentsURL:(nullable NSURL *)absoluteOriginalContentsURL
  * records itself here and `-close` removes from the owner it actually has. A `cg_` door because Apple has no such pair. */
 - (nullable id)cg_documentController;
 - (void)cg_setDocumentController:(nullable id)controller;
+
+/* ============================================================================================ *
+ * THE PRINT DOORS.                                                                              *
+ * ============================================================================================ */
+
+/* **A DOCUMENT'S TICKET IS ITS OWN AND BEGINS AS A COPY OF THE SHARED ONE.** That is Apple's rule and it matters:
+ * setting one document's paper size must not change every other document's. */
+- (NSPrintInfo *)printInfo;
+- (void)setPrintInfo:(NSPrintInfo *)printInfo;
+- (BOOL)shouldChangePrintInfo:(NSPrintInfo *)newPrintInfo;
+
+/* **THE OPERATION IS THE SEAM A SUBCLASS OVERRIDES.** The default prints the document's window content; a subclass
+ * with a paginated view returns an operation over that view instead, and every door below keeps working. */
+- (nullable NSPrintOperation *)printOperationWithSettings:(nullable NSDictionary *)printSettings
+						    error:(NSError **)outError;
+- (void)printDocument:(nullable id)sender;
+- (void)printShowingPrintPanel:(BOOL)showPanels;
+- (void)printDocumentWithSettings:(nullable NSDictionary *)printSettings showPrintPanel:(BOOL)showPrintPanel
+			 delegate:(nullable id)delegate didPrintSelector:(nullable SEL)didPrintSelector
+		      contextInfo:(nullable void *)contextInfo;
+- (void)runModalPrintOperation:(NSPrintOperation *)printOperation delegate:(nullable id)delegate
+		didRunSelector:(nullable SEL)didRunSelector contextInfo:(nullable void *)contextInfo;
+- (void)runModalPageLayoutWithPrintInfo:(NSPrintInfo *)printInfo;
+- (void)runModalPageLayoutWithPrintInfo:(NSPrintInfo *)printInfo delegate:(nullable id)delegate
+			 didRunSelector:(nullable SEL)didRunSelector contextInfo:(nullable void *)contextInfo;
+
+/* THE SCRIPTING DOOR STAYS WHAT IT WAS: this tree has no NSScriptCommand, so the print script command answers nil. */
+- (nullable id)handlePrintScriptCommand:(nullable id)command;
 
 @end
 

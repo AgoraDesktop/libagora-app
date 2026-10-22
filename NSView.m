@@ -21,6 +21,7 @@
 #import <AppKit/NSCursor.h>
 #import <AppKit/NSGraphicsContext.h>
 #import <AppKit/NSWindow.h>
+#import <AppKit/NSPrintOperation.h>
 #import <AppKit/NSGraphicsContext.h>
 #import <AppKit/NSPasteboard.h>
 #import <AppKit/NSImage.h>
@@ -1041,70 +1042,77 @@ static NSString * const AGCoderConstraintsKey = @"constraints";
 
 /* ---- AND THE PRINTING, DRAG AND FULL-SCREEN FAMILIES, REFUSED BY NAME -------------------------------- */
 
+/* **THE VIEW'S HALF OF A PRINT JOB, AND THE DEFAULTS ARE APPLE'S.** `NSPrintOperation` asks `-knowsPageRange:` first;
+ * a view that answers YES supplies `-rectForPage:` per page and the operation draws exactly those rectangles. One that
+ * answers NO is cut up vertically by the ticket's imageable height, with the two `-adjustPage…` doors given each proposed
+ * break to round — a table view that wants a break between rows is the reason those doors exist.
+ *
+ * THE DOCUMENT AND PAGE DOORS ARE NOTIFICATIONS. A view that wants a border drawn over its page overrides
+ * `-drawPageBorderWithSize:`; the default does nothing, which is what a view with no opinion should do. */
 - (void)beginDocument
 {
-	fn_refuse_window("-beginDocument", "the printing system (NSPrintOperation)");
 }
 
 - (void)endDocument
 {
-	fn_refuse_window("-endDocument", "the printing system (NSPrintOperation)");
 }
 
 - (void)beginPageInRect:(NSRect)aRect atPlacement:(NSPoint)location
 {
-	(void)aRect; (void)location;
-	fn_refuse_window("-beginPageInRect:atPlacement:", "the printing system (NSPrintOperation)");
+	(void)aRect;
+	(void)location;
 }
 
 - (void)endPage
 {
-	fn_refuse_window("-endPage", "the printing system (NSPrintOperation)");
 }
 
 - (void)drawPageBorderWithSize:(NSSize)borderSize
 {
 	(void)borderSize;
-	fn_refuse_window("-drawPageBorderWithSize:", "the printing system (NSPrintOperation)");
 }
 
 - (void)drawSheetBorderWithSize:(NSSize)borderSize
 {
 	(void)borderSize;
-	fn_refuse_window("-drawSheetBorderWithSize:", "the printing system (NSPrintOperation)");
 }
 
 - (BOOL)knowsPageRange:(NSRangePointer)range
 {
+	/* **NO IS THE DEFAULT, AND IT MEANS "LET THE OPERATION PAGINATE ME"**, not "I cannot print": the operation then
+	 * asks `-rectForPage:` never and the page-adjustment doors instead. */
 	(void)range;
-	fn_refuse_window("-knowsPageRange:", "the printing system (NSPrintOperation)");
 	return NO;
 }
 
 - (void)adjustPageWidthNew:(CGFloat *)newRight left:(CGFloat)oldLeft right:(CGFloat)oldRight limit:(CGFloat)rightLimit
 {
-	(void)newRight; (void)oldLeft; (void)oldRight; (void)rightLimit;
-	fn_refuse_window("-adjustPageWidthNew:left:right:limit:", "the printing system (NSPrintOperation)");
+	(void)oldLeft;
+	(void)oldRight;
+	if (newRight != NULL && *newRight > rightLimit) {
+		*newRight = rightLimit;
+	}
 }
 
 - (void)adjustPageHeightNew:(CGFloat *)newBottom top:(CGFloat)oldTop bottom:(CGFloat)oldBottom limit:(CGFloat)bottomLimit
 {
-	(void)newBottom; (void)oldTop; (void)oldBottom; (void)bottomLimit;
-	fn_refuse_window("-adjustPageHeightNew:top:bottom:limit:", "the printing system (NSPrintOperation)");
+	(void)oldTop;
+	(void)oldBottom;
+	if (newBottom != NULL && *newBottom > bottomLimit) {
+		*newBottom = bottomLimit;
+	}
 }
 
 - (NSRect)rectForPage:(NSInteger)page
 {
-	(void)page;
-	fn_refuse_window("-rectForPage:", "the printing system (NSPrintOperation)");
-	return NSZeroRect;
+	/* PAGE ONE IS THE WHOLE VIEW; any other page is empty, and the operation skips an empty rectangle rather than
+	 * drawing it. A view that knows its range overrides this and `-knowsPageRange:` together. */
+	return (page == 1) ? [self bounds] : NSZeroRect;
 }
 
 - (NSPoint)locationOfPrintRect:(NSRect)aRect
 {
-	(void)aRect;
-	fn_refuse_window("-locationOfPrintRect:", "the printing system (NSPrintOperation)");
-	return NSZeroPoint;
+	return NSMakePoint(NSMinX(aRect), NSMinY(aRect));
 }
 
 - (nullable id)rulerView
@@ -1524,8 +1532,11 @@ FN_VIEW_PAIR(setPostsBoundsChangedNotifications, postsBoundsChangedNotifications
 
 - (nullable NSString *)printJobTitle
 {
-	/* NIL RATHER THAN A MADE-UP TITLE: a print job title belongs to a print job, and `-print:` refuses to make one. */
-	return nil;
+	/* THE WINDOW'S TITLE WHEN THERE IS ONE, and the empty string otherwise — a printed page with no name is better
+	 * than one named after a class. */
+	NSString *title = ([self window] != nil) ? [[self window] title] : nil;
+
+	return (title != nil) ? title : @"";
 }
 
 - (NSFocusRingType)focusRingType
@@ -1681,7 +1692,7 @@ NSString *NSDefinitionPresentationTypeOverlay = @"Overlay";
 - (void)print:(id)sender
 {
 	(void)sender;
-	fn_refuse_window("-print:", "the printing system (NSPrintOperation)");
+	[[NSPrintOperation printOperationWithView:self] runOperation];
 }
 
 /* AND THE THREE THAT ANSWER RATHER THAN REFUSE. */

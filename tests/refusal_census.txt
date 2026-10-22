@@ -46,13 +46,21 @@
 # AND IT ROSE BY ONE IN THE FONT-MANAGER SLICE: `-orderFrontStylesPanel:` names the era's separate styles panel, which
 # this tier has not built — the font panel's family and size lists are the choice that exists.
 #
+# AND IT FELL BY TWO IN THE PRINTING SLICE, WHICH IS THE POINT OF A CENSUS THAT CAN GO BOTH WAYS: twelve of `NSView`'s
+# printing doors became real (`-print:`, the two page-adjustment questions, the page rectangle, the location, the two
+# border drawers and the document/page notifications), `NSApplication`'s `-application:printFiles:` and
+# `-runPageLayout:` did too, and `NSWindow -print:` with them. What was added is six in `NSPrintInfo` (the three Carbon
+# handles, their two update doors and `-printSettings`) and six in `NSPrintOperation` (a job needs a view, a rendered
+# document, a save path and a queue, and two of the six name the seam's own failures), plus one in `NSDocument` for the
+# script command, which this tree still cannot answer.
+#
 # THE COUNT IS A FILE'S MENTIONS RATHER THAN ITS EXECUTED STATEMENTS, and that was already true before the widening
 # (`NSCell.m`'s six are all prose). It is a per-file DRIFT detector: a file that gains or loses a refusal changes a
 # line, and a file whose comment names one has to keep naming it.
 
 NSAccessibility.m                1
-NSAlert.m                         1
-NSApplication.m                  12
+NSAlert.m                        1
+NSApplication.m                  10
 NSAttributedStringRTF.m          4
 NSAttributedStringRTFD.m         6
 NSBezierPath.m                   5
@@ -66,7 +74,7 @@ NSColorList.m                    4
 NSColorSpace.m                   4
 NSComboBoxCell.m                 9
 NSCustomImageRep.m               2
-NSDocument.m                     1
+NSDocument.m                     2
 NSDragging.m                     4
 NSEPSImageRep.m                  2
 NSEvent.m                        11
@@ -89,6 +97,8 @@ NSPDFImageRep.m                  2
 NSPICTImageRep.m                 2
 NSPasteboard.m                   5
 NSPopUpButtonCell.m              1
+NSPrintInfo.m                    6
+NSPrintOperation.m               6
 NSProgressIndicator.m            1
 NSResponder.m                    3
 NSRulerView.m                    3
@@ -102,12 +112,12 @@ NSTextList.m                     2
 NSTextView.m                     7
 NSToolbar.m                      1
 NSTrackingArea.m                 1
-NSView.m                         28
+NSView.m                         16
 NSViewController.m               1
-NSWindow.m                       24
+NSWindow.m                       23
 
 # AND IT ROSE BY 126 WHEN THE NEEDLE LEARNED THE SHARED HELPER'S NAME. Not one refusal was added by that change: the
 # `fn_refuse_window` spelling was simply invisible to a census that counted the `APPKIT-REFUSE` literal, so every
 # refusal written the house way — which is the way the header asks for — moved no number.
 #
-# total: 294
+# total: 292

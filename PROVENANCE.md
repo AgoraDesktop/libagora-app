@@ -801,6 +801,38 @@ compressed and narrow trait masks are never reported because this Core Text has 
 the action/target round trip, the collections, the font menu's delegate door, and the panel's family and size clicks —
 **77 checks**.
 
+## 33. Printing: a PDF, a seam, and the queue behind it
+
+**`NSPrintInfo`, `NSPrintOperation`, `NSPrintPanel`, `NSPageLayout`, `NSPrinter` AND THEIR PLANE OF SUPPORT
+(`platform/AGPrintService.h`) ARE THIS REPOSITORY'S OWN CODE**, written against the 10.6 declarations. Five decisions
+are the ones to know:
+
+- **THE JOB IS A PDF.** Every page is drawn into a `CGPDFContext` with the transform `-dataWithPDFInsideRect:` already
+  uses, so a view that prints and a view that exports go through one drawing path. The PDF/EPS "copying operations" are
+  the same renderer with one rectangle, one page and a data or file destination.
+- **THE TRANSPORT IS A SEAM.** `AGPrintService` is a narrow C interface — queues, their facts and media keywords, one
+  submission of a complete PDF, cancel — implemented over libcups when `pkg-config` finds it and as a null service
+  otherwise. CUPS is Apache-2.0, linked dynamically, independent of systemd, and OPTIONAL at configure time: a build
+  without it answers every door and refuses a spool by name instead of saving somewhere unasked.
+- **THE TICKET IS A DICTIONARY AND THE PAGINATION IS ITS ARITHMETIC.** Margins and the sheet give
+  `-imageablePageBounds` (axes swapped for landscape), and that rectangle is what turns a tall view into
+  `ceil(height ÷ imageableHeight)` pages. A view may instead answer `-knowsPageRange:` and supply `-rectForPage:` per
+  page.
+- **THE PANELS OWN WINDOWS AND WRITE THE TICKET BACK.** `-updateFromPrintInfo`/`-finalWritePrintInfo` and
+  `-readPrintInfo`/`-writePrintInfo` are the two directions, and both panels answer `NSOKButton` without a run loop.
+  The page range is the one value the ticket cannot hold, so the panel keeps it and `NSPrintOperation` reads it through
+  a `cg_` door after the session.
+- **THE PAPER TABLE LIVES IN `NSPrinter` ONCE**, because a queue reports IPP keywords and a caller writes words: both
+  spellings resolve to the same points, and `NSPrintInfo -sizeForPaperName:` asks the same table.
+
+Two facts the probe paid for: an `NSWindow` made by `-initWithContentRect:…` has NO content view until one is set (every
+control added to the nil view was freed and its memory reused — which surfaced as an `NSTextField` receiving
+`-removeAllItems:`), and `NSDocument` has no `-window` accessor here, so its print operation reads the ivar.
+
+`tests/printing.m` measures the ticket and its arithmetic in both orientations, the paper table, three-page and
+tall-view pagination, the page range, the three dispositions (including the two refusals), both copying operations, both
+panels, and the document/application doors — **72 checks**.
+
 ## Keeping in sync
 
 The Fiwix AppKit is the origin and this repository has now diverged from it in the seam. A fix made there

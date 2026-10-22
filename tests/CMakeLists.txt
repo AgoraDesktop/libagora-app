@@ -1221,6 +1221,17 @@ target_link_libraries(font_manager PRIVATE App)
 add_test(NAME appkit-font-manager COMMAND font_manager)
 set_tests_properties(appkit-font-manager PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
 
+# **THE PRINT SYSTEM: A TICKET, A PDF, AND THE PANELS.** One file of checks that a print job comes out as a PDF with the
+# right pages, with no printer anywhere in sight: the ticket's arithmetic, the paper table, a view that knows its range
+# (three pages) and one that does not (cut by the imageable height), the page range, save/preview/spool dispositions, the
+# PDF and EPS copying operations, both panels' sessions without a run loop, and the document/application doors. A spool
+# WITH a queue is not asserted here — a test that needs a printer is a test that fails everywhere.
+add_executable(printing printing.m)
+target_link_libraries(printing PRIVATE App)
+
+add_test(NAME appkit-printing COMMAND printing)
+set_tests_properties(appkit-printing PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
+
 # **THE STEPPER PAIR AND THE SECURE FIELD PAIR.** The stepper's press IS the step: the probe drives the cell's own tracking
 # hooks in each half of the control, in BOTH flips (a direction that a flip reverses), checks the clamp, the wrap, the action
 # a target receives and that a drag does not step again — then renders the cell and counts ink. The secure field's claim is
