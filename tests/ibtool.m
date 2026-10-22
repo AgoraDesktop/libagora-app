@@ -186,7 +186,11 @@ static NSData *reencode(NSData *archive)
 {
 	id root;
 	NSArray *objects;
-	NSDictionary *connections = nil;
+	/* **AND THE CONNECTIONS ARE AN ARRAY TOO, WHICH IS THE TYPE `-archivedDataWithTopLevelObjects:connections:` TAKES.**
+	 * Both collections the nib archive carries are arrays indexed in the same order — `dump_bytes` above already reads
+	 * connections with `-objectAtIndex:` — so declaring this one `NSDictionary` described neither the archive nor the
+	 * writer's parameter, and the writer's call was rejected for it. */
+	NSArray *connections = nil;
 	NSError *error = nil;
 
 	root = [NSKeyedUnarchiver unarchivedObjectOfClasses:[NSNib supportedClasses]

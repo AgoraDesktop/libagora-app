@@ -1207,7 +1207,7 @@ static NSString * const AGCoderConstraintsKey = @"constraints";
 	return nil;
 }
 
-- (nullable NSView *)enclosingScrollView
+- (nullable NSScrollView *)enclosingScrollView
 {
 	/* **THE WALK THAT COULD NOT BE WRITTEN UNTIL THE CLASS EXISTED.** This door used to answer nil BECAUSE THERE WAS
 	 * NO `NSScrollView` — a scroll view is the frame, the scrollers and the ruler, and only the clip view was here —
@@ -1218,7 +1218,7 @@ static NSString * const AGCoderConstraintsKey = @"constraints";
 
 	while (v != nil) {
 		if ([v isKindOfClass:[NSScrollView class]]) {
-			return v;
+			return (NSScrollView *)v;
 		}
 		v = [v superview];
 	}

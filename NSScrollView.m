@@ -189,21 +189,21 @@ static NSString * const AGCoderScrollPageKey = @"pageScroll";
 
 /* ---- THE CONTENT VIEW AND THE DOCUMENT ------------------------------------------------------------------ */
 
-- (NSView *)contentView
+- (NSClipView *)contentView
 {
 	return _contentView;
 }
 
-- (void)setContentView:(NSView *)aView
+- (void)setContentView:(NSClipView *)aView
 {
-	if (aView == (NSView *)_contentView) {
+	if (aView == _contentView) {
 		return;
 	}
 	if (_contentView != nil) {
 		[_contentView removeFromSuperview];
 	}
 	/* BORROWED: `-addSubview:` below is what owns it, which is the rule `NSClipView` follows for its own document. */
-	_contentView = (NSClipView *)aView;
+	_contentView = aView;
 	if (aView != nil) {
 		[self addSubview:aView];
 	}

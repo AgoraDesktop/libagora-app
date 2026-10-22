@@ -85,6 +85,11 @@ NS_ASSUME_NONNULL_BEGIN
 /* AND `NSScreen`, FOR THE SAME REASON AND WITH THE SAME SAFETY: its class row is shipped, so a forward
  * declaration cannot move it. */
 @class NSScreen;
+/* **AND `NSScrollView`, BECAUSE `-enclosingScrollView` ANSWERS ONE.** The walk below already asks for that class by
+ * name; declaring the ANSWER as the class it looks for is what makes a caller's binding (`NSScrollView *content = [[self
+ * cg_iconView] enclosingScrollView]`) legal instead of a "crossing" the compiler has to reject. Its class row is
+ * shipped — `NSScrollView.m` is in this tree — so the forward declaration cannot move a row. */
+@class NSScrollView;
 
 /* NAMED BECAUSE APPLE'S SIGNATURES FOR THE DOORS BELOW NAME THEM. A forward declaration only FLIPS a `class` row
  * the ledger still holds OPEN — the trap recorded for this sweep — and these four (NSEvent, NSImage, NSImageRep,
@@ -534,11 +539,14 @@ extern const CGFloat NSViewNoInstrinsicMetric;
  * `-opaqueAncestor` walk the SUPERVIEW chain, the second stopping at the first view whose `-isOpaque` says YES;
  * `-rectPreservedDuringLiveResize` asks the door the promise is declared on; `-registeredDraggedTypes` reports the
  * set the drag pair keeps. `-enclosingScrollView` WALKS the superview chain for the nearest `NSScrollView`, which
- * it could not do while there was no such class here; the absent half was the class and not the walk. And the same
- * search still costs `-enclosingMenuItem` its answer: this tier has no menu ITEM for a view to be inside. */
+ * it could not do while there was no such class here; the absent half was the class and not the walk. **AND THE DOOR
+ * ANSWERS THAT CLASS, NOT `NSView`:** the walk can only ever return a scroll view, so a caller that wants one had to
+ * write a cast at every site — or, binding the result straight to an `NSScrollView *`, was told the types were
+ * incompatible. The looseness bought nothing and cost the crossing; Apple's 10.6 signature names `NSScrollView` too.
+ * And the same search still costs `-enclosingMenuItem` its answer: this tier has no menu ITEM for a view to be inside. */
 - (BOOL)hiddenOrHasHiddenAncestor;
 - (nullable NSView *)opaqueAncestor;
-- (nullable NSView *)enclosingScrollView;
+- (nullable NSScrollView *)enclosingScrollView;
 - (nullable NSView *)enclosingMenuItem;
 - (BOOL)rectPreservedDuringLiveResize;
 - (nullable NSArray *)registeredDraggedTypes;

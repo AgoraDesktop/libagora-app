@@ -71,9 +71,15 @@ NS_ASSUME_NONNULL_BEGIN
 
 - (instancetype)initWithFrame:(NSRect)frameRect;
 
-/* THE CONTENT VIEW, WHICH IS AN `NSClipView` AND THE PARENT OF THE DOCUMENT. */
-- (nullable NSView *)contentView;
-- (void)setContentView:(nullable NSView *)aView;
+/* THE CONTENT VIEW, WHICH IS AN `NSClipView` AND THE PARENT OF THE DOCUMENT — AND IS DECLARED AS THE CLASS IT IS.
+ * **A LOOSE `NSView *` HERE IS NOT A CONVENIENCE, IT IS A CROSSING.** Everything a caller does with the answer is
+ * clip-view work: `-scrollToPoint:`, `-bounds`, handing it back to `-reflectScrolledClipView:`, which takes an
+ * `NSClipView` and cannot take a plain view. Declared loosely, each of those sites becomes an implicit narrowing the
+ * compiler must reject ("incompatible pointer types sending 'NSView *' to parameter of type 'NSClipView *'") — the
+ * error lands on the CALLER for a fact the class has always known, and every caller pays a cast to say it. The ivar
+ * is an `NSClipView *`, `-contentView` returns it, and Apple's 10.6 signature names `NSClipView`; so does this one. */
+- (nullable NSClipView *)contentView;
+- (void)setContentView:(nullable NSClipView *)aView;
 
 /* **AND THE DOCUMENT ITSELF, WHICH IS THE CLIP VIEW'S AND FORWARDED FROM HERE.** A caller talks to the scroll view
  * and never has to find the clip view to put a document in it. */
