@@ -6,6 +6,10 @@
 Agora is an installable desktop environment for Linux and BSD; see the project README in the parent
 directory (`../README.md`). `libagora-app` is the top of its stack: above it there are only applications.
 
+**IF YOU ARE PICKING THIS TREE UP RATHER THAN READING ITS API, START WITH `HANDOFF-3.md`** — the standing handoff: the
+measured surface, the traps the last eight sessions paid for, and where the next hour is best spent. `HANDOFF.md` and
+`HANDOFF-2.md` are the earlier ones, and their instrument notes are still the ones in force.
+
 ## Status
 
 **The AppKit is imported and its windows run on Agora's window server. The X11 seam is gone.** Above the

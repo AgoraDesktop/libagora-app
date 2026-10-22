@@ -1,5 +1,8 @@
 # libagora-app — a second handoff
 
+**THIS FILE IS CONTINUED BY `HANDOFF-3.md`**, which is the standing handoff as of §20: a reader new to the tree should
+start there and come back here for §2 (the instrument), §4 (the traps) and the earlier running record (§8–§20).
+
 *Written at the end of a session that picked the first handoff up (§9–§25 of `HANDOFF.md` are its running record) and spent
 its time where that document said to: the text system's last doors, then the classes the 10.6 surface was missing. This file is
 written for whoever picks the tree up next — what exists now, what it cost, and where the next hour is best spent. The first
