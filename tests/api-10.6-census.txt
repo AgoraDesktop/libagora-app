@@ -61,9 +61,9 @@
 #
 # **AND THE MEASURED NUMBERS, RECOMPUTED RATHER THAN EDITED**, so a reader can see the shape without running anything:
 #
-#     classes   104 of 168   (61%)    64 missing
-#     selectors 2975 of 3714  (80%)  739 missing    65 of 102 classes at COMPLETE coverage
-#     protocols  26 of  56   (46%)    30 missing
+#     classes   106 of 168   (63%)    62 missing
+#     selectors 3026 of 3765  (80%)  739 missing    67 of 104 classes at COMPLETE coverage
+#     protocols  27 of  56   (48%)    29 missing
 #     functions  86 of  86 (100%)     0 missing    10 of them REFUSE BY NAME, which this count does not distinguish
 #                86 declared, 0 declared-not-defined, 0 defined-not-declared
 #     methods   3134 declared on this tree's own classes, 4 with NO body on the chain (0.1%)
@@ -120,9 +120,9 @@
 # Foundation's in this tree, so it is attributed to Foundation to avoid charging one class to two ledgers. The
 # manifest applies that rule at generation time via its second framework argument; the census never sees it.
 
-classes-missing 64
+classes-missing 62
 classes-offered 168
-classes-present 104
+classes-present 106
 fn:NSAccessibilityActionDescription 1
 fn:NSAccessibilityPostNotification 1
 fn:NSAccessibilityRaiseBadArgumentException 1
@@ -301,7 +301,7 @@ functions-defined-not-declared 0
 functions-missing 0
 functions-offered 86
 functions-present 86
-methods-declared 3399
+methods-declared 3450
 methods-declared-not-implemented 4
 proto:NSAlertDelegate 0
 proto:NSAnimatablePropertyContainer 0
@@ -342,7 +342,7 @@ proto:NSSoundDelegate 0
 proto:NSSpeechRecognizerDelegate 0
 proto:NSSpeechSynthesizerDelegate 0
 proto:NSSplitViewDelegate 1
-proto:NSTabViewDelegate 0
+proto:NSTabViewDelegate 1
 proto:NSTableViewDataSource 1
 proto:NSTableViewDelegate 1
 proto:NSTextAttachmentCell 1
@@ -359,9 +359,9 @@ proto:NSUserInterfaceItemSearching 0
 proto:NSUserInterfaceValidations 1
 proto:NSValidatedUserInterfaceItem 1
 proto:NSWindowDelegate 1
-protocols-missing 30
+protocols-missing 29
 protocols-offered 56
-protocols-present 26
+protocols-present 27
 sel:NSActionCell 6
 sel:NSAlert 20
 sel:NSApplication 88
@@ -438,6 +438,8 @@ sel:NSStatusBar 5
 sel:NSStatusItem 25
 sel:NSStepper 10
 sel:NSStepperCell 10
+sel:NSTabView 34
+sel:NSTabViewItem 17
 sel:NSTableColumn 29
 sel:NSTableHeaderCell 2
 sel:NSTableHeaderView 7
@@ -465,6 +467,6 @@ sel:NSWindow 243
 sel:NSWindowController 26
 sel:NSWorkspace 9
 selectors-missing 739
-selectors-offered 3714
-selectors-present 2975
+selectors-offered 3765
+selectors-present 3026
 selphantom:NSObject 4

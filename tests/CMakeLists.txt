@@ -1211,3 +1211,13 @@ target_link_libraries(box PRIVATE App)
 
 add_test(NAME appkit-box COMMAND box)
 set_tests_properties(appkit-box PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
+
+# **NSTabView AND NSTabViewItem.** The claim is that selection is a SWAP OF PANES and not a pile of hidden views: exactly one
+# pane is in the hierarchy at a time and it is the selected item's, checked before and after a selection. The delegate is
+# asked before the change and may REFUSE — the probe counts the three messages and then refuses, requiring the panes not to
+# move. Then the strip's geometry (a hit test per tab, the content shrinking on the edge the type names) and the ink.
+add_executable(tab_view tab_view.m)
+target_link_libraries(tab_view PRIVATE App)
+
+add_test(NAME appkit-tab-view COMMAND tab_view)
+set_tests_properties(appkit-tab-view PROPERTIES ENVIRONMENT "${_agora_app_test_env}")

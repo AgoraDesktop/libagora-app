@@ -883,7 +883,17 @@ the compositor is really gone.
   EDGES with an empty middle, which is what "frame" means. The title is an `NSCell` (Apple's shape), so its face and
   alignment are the cell's and `-titleFont` is a convenience over it.
 
-- **`ctest`: 129 of 129 passed** (the keyboard and the seam, the AppKit and its input path, the controls and their
+- **And `NSTabView` with `NSTabViewItem`** (`ctest`, offscreen) — 51 selectors, two classes, and the `NSTabViewDelegate`
+  protocol with the three questions a selection asks. **A TAB VIEW IS A SWAP OF PANES, NOT A PILE OF HIDDEN VIEWS**: exactly
+  one item's view is in the tab view's hierarchy at a time, and the test asserts it before and after a selection (the old pane
+  leaves, the new one arrives and fills `-contentRect`). The delegate is asked BEFORE the change and may refuse —
+  `tabView:shouldSelectTabViewItem:` answering NO stops the selection, and the probe checks the panes did not move, which is
+  what a refusal has to mean. The strip is geometry: `-tabViewItemAtPoint:` answers the tab under a point and no tab for a
+  point in the pane, `-contentRect` shrinks by the strip on the edge the type names (top and bottom checked), the two stepping
+  doors wrap, a removal re-selects rather than showing nothing, and `-sizeOfLabel:` is the label's own measure with a least
+  tab width. The ink is 1265 dark pixels: the bezel, the tabs and their labels.
+
+- **`ctest`: 130 of 130 passed** (the keyboard and the seam, the AppKit and its input path, the controls and their
   metrics, the field control and its cell and its bezel and its placeholder and what it may hold, the text path and its
   word granularity and the multi-line view and its wrapping and its scrolling and its READING OF THE STORE, the STORE
   the rich-text slice is built on and the REGION it is laid out in and the WEB that ties the three together and the

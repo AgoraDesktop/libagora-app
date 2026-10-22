@@ -8,8 +8,8 @@ spent.*
 *State at handover: **8 commits**, tree clean, **114 tests passing**, `api-ledger: 327 metrics
 hold (82 classes, 2652 selectors of 3517, 23 protocols, 86 functions)`.*
 
-*State after the session that picked it up (§9–§22): **23 commits**, tree clean, **129 tests passing**,
-`api-ledger: 351 metrics hold (104 classes, 2975 selectors of 3714, 26 protocols, 86 functions)`.*
+*State after the session that picked it up (§9–§23): **24 commits**, tree clean, **130 tests passing**,
+`api-ledger: 354 metrics hold (106 classes, 3026 selectors of 3765, 27 protocols, 86 functions)`.*
 
 ---
 
@@ -87,9 +87,9 @@ type's empty value and says on stderr what it wants — `AppKitRefusal.h`), or *
 ## 3. Current measured state
 
 ```
-classes   104 of 168   (61%)    64 missing
-selectors 2975 of 3714 (80%)   739 missing    65 of 102 classes at COMPLETE coverage
-protocols  26 of  56   (46%)    30 missing
+classes   106 of 168   (63%)    62 missing
+selectors 3026 of 3765 (80%)   739 missing    67 of 104 classes at COMPLETE coverage
+protocols  27 of  56   (48%)    29 missing
 functions  86 of  86 (100%)     0 missing     10 refuse by name
 methods  3289 declared, 4 with no body (0.1%)
 
@@ -663,3 +663,32 @@ loop — a content frame in, the same frame back — which is the only assertion
 **And the box's five kinds are checked as five pictures**, because a box that stored its kind and painted one face would pass
 every value check: a separator is a line across the middle, a custom box fills its rectangle, and a primary box is ink at the
 edges with an empty middle.
+
+---
+
+## 23. Tabs: a selection over views, and a protocol that is actually sent
+
+*Sixteenth commit of the pickup: `NSTabView` (34) + `NSTabViewItem` (17) and the `NSTabViewDelegate` protocol — 51 selectors,
+two classes, one protocol. **106 of 168 classes, 27 of 56 protocols.***
+
+**THIS IS THE FIRST PROTOCOL IN THE RECENT RUN THAT THE TREE ACTUALLY SENDS.** The pasteboard protocols were contracts
+implemented by `-respondsToSelector:`; `NSTabViewDelegate` is asked three questions on every selection, and the test counts
+them. The one that makes it more than a notification is `-tabView:shouldSelectTabViewItem:`: a delegate that answers NO stops
+the change, and the probe requires the panes NOT to have moved.
+
+**A TAB VIEW IS A SELECTION OVER VIEWS, NOT A PILE OF HIDDEN VIEWS.** The selected item's view is a subview; the others are
+not in the hierarchy at all. That is the difference the test is built on: three items with three panes, and after each
+selection exactly one is a subview, and it is the selected one's.
+
+**Two things the probe had to learn (both about the test, not the code):**
+
+* **THE ITEM ORDER IS THE INSERT ORDER, NOT THE ADD ORDER.** The probe adds `one`, adds `two`, then INSERTS `three` at index 1,
+  so the strip is `one, three, two` — and the first version of the stepping assertions read as if it were `one, two, three`.
+  The test now states the order explicitly before stepping through it, which makes those assertions arithmetic rather than an
+  assumption.
+* **`-sizeOfLabel:` IS THE ONE MEASURE THE STRIP IS BUILT FROM.** A tab's width and the strip's thickness both come from it, so
+  a view with a bigger font has a bigger strip and the least width is a floor rather than a second formula.
+
+**And one structural note:** `NSTabViewItem`'s ivars are `@public`, which is the rule `NSFont`'s substrate ivar already
+states — the tab view is the only thing that sets an item's state and adopts its pane, and a private setter triplet would be
+three doors to keep in step with three fields.
