@@ -8,7 +8,7 @@ handoff is still worth reading; nothing in it was wrong, and §2's instrument ru
 *State at this handover: **18 commits**, tree clean, **132 tests passing**, `api-ledger: 355 metrics hold (111 classes,
 3096 selectors of 3835, 28 protocols, 86 functions)`. 101 files changed, +16,946/−140.*
 
-*State after the session that picked this file up (§8): **19 commits**, tree clean, **133 tests passing**, `api-ledger: 357
+*State after the session that picked this file up (§8–§9): **20 commits**, tree clean, **133 tests passing**, `api-ledger: 357
 metrics hold (113 classes, 3156 selectors of 3895, 29 protocols, 86 functions)`.*
 
 ---
@@ -36,6 +36,7 @@ metrics hold (113 classes, 3156 selectors of 3895, 29 protocols, 86 functions)`.
 | `87465bf` | **The animation family** — `NSAnimation`, `NSViewAnimation`, `NSAnimationContext`, `NSAnimationDelegate`. |
 | `a23a9b1` | **`NSLevelIndicator`/Cell** — the value that becomes a colour. |
 | `e2e3e52` | **`NSDatePicker`/Cell** and `NSDatePickerCellDelegate` — a formatted date, the subfield a step applies to, the veto; and the stepper's arrows, which pointed inward (§8). |
+| `e7ba264` | **The demonstration's new-controls strip**, and the two `NSBox` title bugs it found (§9). |
 
 Plus, in the workspace: the gitlink advanced after each of those.
 
@@ -279,3 +280,45 @@ but no run is separately hit-testable, and the header says why rather than answe
 The ranking in §5 still holds: `NSCollectionView` + its delegate (5.2) is the next reachable slice, then `NSMatrix`/`NSForm`
 (5.3), then the two protocols whose senders exist (5.4). Three more classes left §5's "biggest remaining control" category, and
 the peripheries are what remain.
+
+---
+
+## 9. The demonstration, and the title it found missing
+
+*Twentieth commit of the pickup: `tests/appkit_controls_draw.m` now shows every control class the later slices landed, and
+the update found two `NSBox` bugs that no value check could see.*
+
+**THE WINDOW IS STILL 760x420, AND THAT IS A CONSTRAINT RATHER THAN A PREFERENCE.** `run-controls.sh` opens a 900x600 nested
+compositor by default and the controls window already fills it; widening or growing the window would push its chrome off the
+screen. So the new strip is the RIGHT COLUMN's top 215 points in two 162-wide columns, and the scroll panel below it gave up
+220 points of height (370 -> 150). The left column carries the value-shaped controls: `NSLevelIndicator` twice (a capacity
+bar at 62 with warning 50 and critical 80, so the fill is the platform's orange, and a rating of three of five stars), an
+`NSStepper` with a read-only label beside it, `NSSecureTextField` (holding a value, so it draws bullets), `NSSearchField`
+(holding a value, so its cancel chip is there), `NSDatePicker` in the text-and-stepper style, and `NSProgressIndicator` as a
+bar with a spinner beside it. The right column carries the two containers: an `NSBox` around a button, and an `NSTabView`
+whose Clock pane is the date picker's clock-and-calendar style and whose Date pane is the text-field style (hour and minute,
+because the full string clipped at 146 points). The third date-picker face is the one in the left column, so all three are in
+the window, two of them a tab click apart.
+
+**AND `--no-playground` EXISTS BECAUSE THE THING BEING LOOKED AT WAS BEHIND ANOTHER WINDOW.** The playground is mapped last so
+it is in front, which is right for the text and wrong for the controls: it covers the right column. The flag leaves it
+unmapped, and `run-controls.sh --no-playground` is how the screenshot in this session was taken.
+
+**THE FIRST BUG: A BOX THAT CLEARED A GAP AND WROTE NOTHING IN IT.** `NSBox -setTitle:` wrote the title cell's VALUE
+(`-setStringValue:`), while `-drawInteriorWithFrame:` draws its LABEL (`-_title`). So `-title` read back, `-titleRect`
+measured a band, the clear cut the border open — and the words were never drawn. The title cell's label is now the title, and
+the demonstration's screenshot is where that showed (the first render had a gap in the border and no "NSBox" in it).
+
+**THE SECOND, WHICH ONLY APPEARED ONCE THE WORDS WERE DRAWN: THE BAND WAS ASTRIDE THE CLIP.** At `NSAtTop` the band was
+centred on the top edge (`maxY - height / 2`), which is Apple's shape — and this tier's `-borderRect` IS the bounds, so half of
+every letter fell outside the view and was cut off. The band is now wholly inside the frame (`maxY - height - 2`), and the
+content's title band is the WHOLE band rather than its lower half, so nothing can be laid out underneath the words.
+
+**AND `tests/box.m` NOW TESTS THE PICTURE, NOT THE GEOMETRY.** It counts the glyph pixels (a pixel dark with the title and not
+without it), the border pixels the clear removes (dark without the title and not with it — which is the gap), and asserts the
+band is inside the bounds. The old checks read the title's STRING and its BAND and passed through both bugs; the demonstration
+is what saw them, which is what a demonstration is for.
+
+**WHAT IS NOT THERE, AND WHY.** `NSImageView`, `NSMatrix`, `NSColorWell`, `NSTokenField`, `NSCollectionView` and `NSDrawer`
+have no class in this tier, so the gallery cannot show them. `NSBrowser` exists but is a columned data view and belongs beside the table
+and outline. Apart from it, the window now shows every control class the 10.6 surface here implements.
