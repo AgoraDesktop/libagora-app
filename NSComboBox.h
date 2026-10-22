@@ -147,6 +147,12 @@ NS_ASSUME_NONNULL_BEGIN
  * `cg_` because Apple has no such door. */
 - (void)cg_didSelectItemAtIndex:(NSInteger)index;
 
+/* **AND THE SEAM FOR THE ROW UNDER THE POINTER.** The cell is the list's menu delegate, so when the session moves the
+ * highlight the cell calls this with the row's tag (or -1 for "no row") and the view sends
+ * `-comboBoxSelectionIsChanging:` to its delegate. IT IS THE MESSAGE THE HEADER USED TO LIST AS DECLARED AND NOT SENT —
+ * the seam it was waiting for is the menu's, which now exists. */
+- (void)cg_willHighlightItemAtIndex:(NSInteger)index;
+
 @end
 
 NS_ASSUME_NONNULL_END

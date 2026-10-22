@@ -903,8 +903,24 @@ int main(void)
 		printf("  (note: a pick sent %d selection-changed message(s))\n", watcher->didChanges);
 		check(watcher->didChanges == 1,
 		      "a picked row tells the delegate the selection changed — the CELL asks the CONTROL to send it");
-		check(watcher->isChangings == 0,
-		      "and `-comboBoxSelectionIsChanging:` is NOT sent: this tier has no seam from the highlight walk");
+		/* **AND THE FOURTH MESSAGE IS SENT NOW, THROUGH THE SEAM THAT WAS MISSING.** The list is a menu, the CELL is its
+		 * delegate, and the menu's session reports every highlight change — so `-menu:willHighlightItem:` on the cell
+		 * becomes `-comboBoxSelectionIsChanging:` on the control's delegate. The probe sends what the session sends. */
+		{
+			NSMenu *list = [(NSComboBoxCell *)[box cell] cg_buildListMenu];
+			NSMenuItem *second = (NSMenuItem *)[list itemAtIndex:1];
+
+			check([list delegate] == (id)[box cell],
+			      "the list's menu DELEGATE is the cell, which is what carries the highlight back");
+			[(NSComboBoxCell *)[box cell] menu:list willHighlightItem:second];
+			printf("  (note: moving the highlight over row 1 sent %d selection-is-changing message(s))\n",
+			       watcher->isChangings);
+			check(watcher->isChangings == 1,
+			      "and a highlight change on a row reaches the delegate as `-comboBoxSelectionIsChanging:`");
+			[(NSComboBoxCell *)[box cell] menu:list willHighlightItem:nil];
+			check(watcher->isChangings == 2,
+			      "including the move OFF the menu, which the cell reports as no row");
+		}
 
 		/* AND THE TWO LIST TIDINGS COME FROM THE CHIP'S PRESS, WHICH IS THE ONLY THING THAT OPENS A LIST. The session
 		 * needs a display to be seen but not to be ENTERED: it is begun and dismissed around the press, so a probe with

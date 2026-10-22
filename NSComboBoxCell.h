@@ -35,6 +35,7 @@
 #import <AppKit/NSTextFieldCell.h>
 
 @class NSMenu;
+@class NSMenuItem;
 @class NSComboBoxCell;
 
 NS_ASSUME_NONNULL_BEGIN
@@ -248,6 +249,12 @@ NS_ASSUME_NONNULL_BEGIN
  * at this message with its index as the receiver's tag. Public because the probe that proves the wiring has to be able
  * to send what the list sends. */
 - (void)itemSelected:(nullable id)sender;
+
+/* **AND THE ROW THE POINTER IS OVER, WHICH IS THE OTHER THING A LIST IS ASKED.** The list this cell builds is a menu, and
+ * the cell is that menu's DELEGATE: `-menu:willHighlightItem:` turns a highlight change into the tag on the row, which is
+ * the same index the pick carries — so the control hears "the pointer moved to row 3" and "row 3 was chosen" through one
+ * vocabulary. Public because the menu sends it and a probe may too. */
+- (void)menu:(nullable NSMenu *)menu willHighlightItem:(nullable NSMenuItem *)item;
 
 @end
 

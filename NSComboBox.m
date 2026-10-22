@@ -342,6 +342,14 @@
 	[self fn_notifyDelegate:@selector(comboBoxSelectionDidChange:)];
 }
 
+/* AND THE ROW THE POINTER MOVED TO, which is the fourth of the delegate's messages — see the header: this is the seam
+ * `-comboBoxSelectionIsChanging:` was declared for. */
+- (void)cg_willHighlightItemAtIndex:(NSInteger)index
+{
+	(void)index;
+	[self fn_notifyDelegate:@selector(comboBoxSelectionIsChanging:)];
+}
+
 /* ---- THE LIST'S SHAPE, ALL OF IT THE CELL'S ------------------------------------------------------ */
 
 - (CGFloat)itemHeight

@@ -74,6 +74,41 @@ extern NSString *NSMenuDidEndTrackingNotification;
 - (BOOL)validateMenuItem:(NSMenuItem *)menuItem;
 @end
 
+/* ============================================================================================ *
+ * AND THE MENU'S DELEGATE, WHICH IS A PROTOCOL THIS TIER NOW SENDS TO.                          *
+ * ============================================================================================ */
+/* **`NSMenuDelegate` WAS DECLARED ABSENT FOR AS LONG AS THE SESSION COULD NOT TELL ANYONE ANYTHING.** The header used to
+ * say "that protocol is not in this tree, and a forward declaration of it would be a row claimed for a protocol nobody
+ * wrote" — true while a menu's session had no moments to report. It has three: the menu OPENS, the pointer MOVES over a
+ * row, and the menu CLOSES, and all three are now sent.
+ *
+ * THE THREE SENT MESSAGES ARE THE THREE MOMENTS THE SESSION HAS. `-menuWillOpen:` is sent when the tracking session
+ * begins (after the window is up and the menu has updated itself), `-menu:willHighlightItem:` on every change of the row
+ * under the pointer — including to nil, which is the pointer leaving the menu — and `-menuDidClose:` when the session ends,
+ * before the window goes away so a delegate can still read the menu. THE OTHER FIVE MEMBERS ARE DECLARED AND NOT SENT,
+ * and each says what it would need: `-menuNeedsUpdate:` and `-menuHasKeyEquivalent:…` belong to the update walk and the
+ * key-equivalent pass, neither of which has a caller here; the two item-list messages are for a DYNAMIC menu (one built
+ * from a delegate rather than from items), and this tier's menus are built by their callers; and
+ * `-menu:willSendEventToItem:…` is 10.7's. */
+@class NSMenu;
+@class NSMenuItem;
+@class NSEvent;
+
+@protocol NSMenuDelegate <NSObject>
+@optional
+- (void)menuWillOpen:(NSMenu *)menu;
+- (void)menuDidClose:(NSMenu *)menu;
+- (void)menu:(NSMenu *)menu willHighlightItem:(nullable NSMenuItem *)item;
+/* DECLARED AND NOT SENT — see the note above. */
+- (void)menuNeedsUpdate:(NSMenu *)menu;
+- (NSInteger)numberOfItemsInMenu:(NSMenu *)menu;
+- (BOOL)menu:(NSMenu *)menu updateItem:(NSMenuItem *)item atIndex:(NSInteger)index shouldCancel:(BOOL)shouldCancel;
+- (BOOL)menuHasKeyEquivalent:(NSMenu *)menu forEvent:(nullable NSEvent *)event
+			 target:(id _Nullable * _Nullable)target action:(SEL _Nullable * _Nullable)action;
+- (BOOL)menu:(NSMenu *)menu shouldSendEventToItem:(nullable NSMenuItem *)item;
+@end
+
+
 @interface NSMenu : NSObject <NSSecureCoding>
 {
 	NSString *_title;			/* RETAINED (a copy of what was set) */
@@ -282,9 +317,9 @@ extern NSString *NSMenuDidEndTrackingNotification;
 
 /* AND THE TWO THE UPDATE WALK READS, plus the delegate it asks: `-update` is what gives `-autoenablesItems` its
  * reader (an item that names a target is enabled exactly when the target answers its action) and what makes
- * `-propertiesToUpdate` a door with a writer rather than a mask nobody sets. THE DELEGATE IS `id`, NOT
- * `NSMenuDelegate`: that protocol is not in this tree, and a forward declaration of it would be a row claimed for
- * a protocol nobody wrote. */
+ * `-propertiesToUpdate` a door with a writer rather than a mask nobody sets. THE DELEGATE IS TYPED `id` HERE because the
+ * property predates the protocol in this file; the protocol above is what a caller should conform to, and the header of
+ * each sending method says which messages this tier actually sends. */
 @property (nullable, assign) id delegate;
 @property BOOL autoenablesItems;
 @property (readonly) NSMenuProperties propertiesToUpdate;
@@ -377,6 +412,12 @@ extern NSString *NSMenuDidEndTrackingNotification;
  * menu genuinely disagree about. The class must be `NSMenuView` or a subclass of it; `Nil` restores the default. */
 - (void)cg_setMenuViewClass:(nullable Class)aClass;
 - (nullable Class)cg_menuViewClass;
+
+/* **AND THE ONE SEND A VIEW CAN MAKE ON A MENU'S BEHALF.** The menu's own tracking step funnels its highlight changes
+ * through `-setHighlightedItem:`, which notifies the delegate; the BAR's view has a tracking loop of its own (a title press
+ * that opens a submenu), and its changes must reach the same delegate — so it calls this, which ONLY notifies. That is the
+ * whole door: one message, one delegate, two paths that raise a highlight. */
+- (void)cg_willHighlightItem:(nullable NSMenuItem *)item;
 
 /* ============================================================================================ *
  * AND THE SHAPE OF A ROW, WHICH A LIST ASKS FOR AND A MENU NEVER DOES.                        *

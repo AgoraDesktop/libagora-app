@@ -861,6 +861,10 @@ static const CGFloat NSMenuStateColumnWidth = 20.0;
 {
 	if (item != _highlightedItem) {
 		_highlightedItem = item;
+		/* **AND THE DELEGATE HEARS EVERY CHANGE, INCLUDING THE ONE TO NIL.** A highlight moving off a row and onto
+		 * nothing is the pointer leaving the menu, which a delegate watching for "which row am I on" must be told; that
+		 * is why the message is sent from HERE rather than from the step that found a row. */
+		[self cg_willHighlightItem:item];
 		if (getenv("APPKIT_MENU_DIAG") != NULL) {
 			fprintf(stderr, "  DIAG highlight: \"%s\" (%s)\n",
 				item != nil ? [[item title] UTF8String] : "(none)",
@@ -869,6 +873,17 @@ static const CGFloat NSMenuStateColumnWidth = 20.0;
 		if (_tracking) {
 			[self cg_repaintSession];
 		}
+	}
+}
+
+/* **THE ONE SEND, IN ONE PLACE, BECAUSE TWO PATHS RAISE A HIGHLIGHT.** The session's own step calls
+ * `-setHighlightedItem:`, and the BAR's view has a tracking loop of its own (a title press that opens a submenu); both
+ * end up here, so a delegate sees one message per change however the change was made. `-menu:willHighlightItem:` is
+ * `@optional`, so the delegate is asked whether it answers before it is sent. */
+- (void)cg_willHighlightItem:(NSMenuItem *)item
+{
+	if (_delegate != nil && [_delegate respondsToSelector:@selector(menu:willHighlightItem:)]) {
+		[(id <NSMenuDelegate>)_delegate menu:self willHighlightItem:item];
 	}
 }
 
@@ -1176,6 +1191,11 @@ static const CGFloat NSMenuStateColumnWidth = 20.0;
 	 * first release was eaten as if it were the press that opened the menu. A menu that drives ITSELF still needs
 	 * the flag, because the opening release does reach it and must not pick the item under the pointer. */
 	_openedByPress = _callerDrives ? NO : YES;
+	/* **AND THE DELEGATE IS TOLD THE MENU IS OPENING, AFTER THE UPDATE** — so a delegate that reads the menu in
+	 * `-menuWillOpen:` finds the enabled states the session will actually honour. */
+	if (_delegate != nil && [_delegate respondsToSelector:@selector(menuWillOpen:)]) {
+		[(id <NSMenuDelegate>)_delegate menuWillOpen:self];
+	}
 	/* AND THE MENU UPDATES ITSELF FIRST, so that what it shows is what its targets can actually answer — this is
 	 * `-update` getting its caller, one unit after it was given its reader. */
 	[self update];
@@ -1210,6 +1230,16 @@ static const CGFloat NSMenuStateColumnWidth = 20.0;
 	if (_callerDrives) {
 		_callerDrives = NO;
 		return;
+	}
+	/* **AND A SESSION WITH NO LOOP TO RUN IS CLOSED RATHER THAN LEFT STANDING.** MEASURED while adding the delegate's
+	 * tidings: a menu opened by a program with no run loop (a probe, a script) never reached the loop below, so
+	 * `-cancelTracking` never ran — `_tracking` stayed YES, the tracking window stayed up and the pointer grab stayed
+	 * taken. `-menuDidClose:` is what made it observable (it never arrived), and the fix is to close the session in the
+	 * branch that cannot track it. A SUBMENU WHOSE PARENT IS TRACKING IS NOT THAT CASE: its session belongs to the
+	 * parent's loop, which is the same test that decides whether this menu may loop at all. */
+	if ((_supermenu == nil || !((NSMenu *)_supermenu)->_tracking) &&
+	    ![[NSApplication sharedApplication] isRunning] && _tracking) {
+		[self cancelTracking];
 	}
 	if ((_supermenu == nil || !((NSMenu *)_supermenu)->_tracking) &&
 	    [[NSApplication sharedApplication] isRunning]) {
@@ -1304,6 +1334,11 @@ static const CGFloat NSMenuStateColumnWidth = 20.0;
 	 * ends everything it opened. */
 	[self cg_closeSubmenu];
 	DIAG("  DIAG close: the session ended\n");
+	/* **AND THE DELEGATE IS TOLD BEFORE THE WINDOW GOES**, so a delegate reading the menu in `-menuDidClose:` still has a
+	 * menu to read — its items, its highlight, its last state. */
+	if (_delegate != nil && [_delegate respondsToSelector:@selector(menuDidClose:)]) {
+		[(id <NSMenuDelegate>)_delegate menuDidClose:self];
+	}
 	_tracking = NO;
 	/* GIVE THE POINTER'S FALLBACK BACK BEFORE THE WINDOW GOES, so nothing is left believing it takes desktop
 	 * clicks. The teardown below destroys the surface anyway, and `aws_seat_surface_gone` clears it on the way

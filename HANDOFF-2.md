@@ -39,6 +39,10 @@ census 287.*
 tree clean, **137 tests passing**, `api-ledger: 361 metrics hold (117 classes, 3543 selectors of 4112, 34 protocols, 86
 functions)`, 99 classes COMPLETE, refusal census 288.*
 
+*State after the session that picked THAT up (§20, the menu's delegate): **31 commits**, tree clean, **137 tests passing**,
+`api-ledger: 361 metrics hold (117 classes, 3543 selectors of 4112, 35 protocols, 86 functions)`, 99 classes COMPLETE, refusal
+census 288.*
+
 ---
 
 ## 1. What this session did
@@ -962,3 +966,53 @@ end to end: attach, one pass, the stop's code, and the sheet gone.
 3. **And the honest state of the surface**: 86% of selectors, 99 of 117 classes complete, and every remaining selector in
    a class this tree HAS is either a periphery above, a door needing a subsystem (print, speech, Help), or the planning
    that `-comboBoxSelectionIsChanging:`'s one send would close.
+
+---
+
+## 20. The menu's delegate: three moments, two raisers, one message, and a session that was never closed
+
+*Thirty-first commit of the pickup: `NSMenuDelegate` declared and SENT. **3543 selectors of 4112 (86%), 35 of 56 protocols,
+99 of 117 classes complete.** 137 tests.*
+
+**THE PROTOCOL WAS AN ABSENCE WITH A REASON, AND THE REASON EXPIRED.** `NSMenu.h` said `NSMenuDelegate` was not in this tree
+because "a forward declaration of it would be a row claimed for a protocol nobody wrote" — true while a menu's session had
+nothing to report. It has three moments and all three are sent now: `-menuWillOpen:` when the session begins (AFTER
+`-update`, so a delegate reading the menu finds the enabled states the session will honour), `-menu:willHighlightItem:` on
+every change of the row under the pointer including the change to nil, and `-menuDidClose:` when the session ends BEFORE
+the tracking window goes, so the menu is still readable. The other five members are declared and NOT sent, each with the
+thing it would need named in the header.
+
+**THE HIGHLIGHT HAS TWO RAISERS AND ONE SEND.** The session's step funnels through `NSMenu -setHighlightedItem:`, and the
+menu BAR's view has its own tracking loop (a title press that opens a submenu). Both now reach `-cg_willHighlightItem:`, so
+a delegate cannot tell which path raised the change — which is what makes the delegation worth having.
+
+**AND THE MESSAGE THAT HAD BEEN WAITING TWO SLICES FOR A SENDER NOW HAS ONE.** `-comboBoxSelectionIsChanging:` was declared,
+documented as NOT sent, and listed in §16's "where the next hour goes" as the thing one seam would close. The list a combo
+box opens IS a menu, so the seam was the menu's: the cell is now the list's menu delegate (`-cg_buildListMenu` sets it, so a
+list built without being shown has it too), and the row's tag becomes the index the control reports. Moving over row 3 is
+`-comboBoxSelectionIsChanging:`; moving OFF the list is the same message with no row. ALL FOUR of `NSComboBoxDelegate`'s
+messages are sent, and the probe asserts each.
+
+**AND THE DELEGATE FOUND A SESSION THAT WAS NEVER CLOSED.** `-menuDidClose:` never arrived for a menu opened by a program
+with NO run loop: `-popUpMenuPositioningItem:` SKIPS the tracking loop when `-isRunning` is NO — and that loop's end is
+what calls `-cancelTracking` — so `_tracking` stayed YES, the tracking window stayed up and the pointer grab stayed taken,
+for the life of the process. Nobody could see it because no code read the consequence. A session with no loop to run it is
+now closed in the branch that cannot track it; a SUBMENU whose parent is tracking is deliberately not that case, because
+its session belongs to the parent's loop.
+
+**THIS CLOSES THE LAST PIECE OF THE SURFACE THIS TREE HAS ALREADY IMPLEMENTED.** Every remaining selector in a class that
+exists here is now either a periphery above (the 51 whole classes: `NSMatrix`/`NSForm`, controllers, printing, the panels),
+a door needing a subsystem this platform has not got, or a deliberate refusal. §21 should be a WHOLE CLASS, and the plan's
+own ranking says `NSMatrix`/`NSForm` (134 selectors) is the largest one left.
+
+### Where the next hour goes
+
+1. **`NSMatrix` + `NSForm` + `NSFormCell`** — 134 selectors, a real new VIEW (a grid of cells with tracking, selection and
+   tab order), and the arithmetic it needs is all in classes that exist (the table's selection, the cell's tracking hooks,
+   the segmented control's hit test). It is the last big view.
+2. **The controller family** (`NSController`, `NSObjectController`, `NSArrayController`, `NSDictionaryController`,
+   `NSUserDefaultsController`, 5 classes): bindings, which this tier has no KVO/KVC substrate for beyond the two doors in
+   `NSKeyValueBinding.h` — a design question before it is a slice.
+3. **Printing** (`NSPrintInfo`, `NSPrintOperation`, `NSPrintPanel`, `NSPageLayout`, `NSPrinter`): five classes that would
+   turn the `printFiles:`, `-print:` and `NSAlert`-family refusals into doors, and the one subsystem whose absence is
+   recorded in more places than any other.

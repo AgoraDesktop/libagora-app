@@ -774,6 +774,12 @@ static NSString * const AGCoderComboButtonBorderedKey = @"buttonBordered";
 			[item setState:NSOnState];
 		}
 	}
+	/* **AND THE CELL IS THE LIST'S DELEGATE, WHICH IS WHAT MAKES THE HIGHLIGHT REACH ANYBODY.** The menu's session sends
+	 * `-menu:willHighlightItem:` to its delegate; a list whose delegate was nil would leave the seam unused, so every list
+	 * this door builds names the cell — the object that already owns the rows, their tags and the pick. IT IS SET HERE
+	 * RATHER THAN WHERE THE LIST IS POPPED UP because a caller may BUILD a list without showing it (a probe does, and so
+	 * does a caller measuring one), and the delegate is a property of the list rather than of the session. */
+	[list setDelegate:(id <NSMenuDelegate>)self];
 	return list;
 }
 
@@ -808,6 +814,17 @@ static NSString * const AGCoderComboButtonBorderedKey = @"buttonBordered";
 /* **AND THE PICK IS THE SAME TWO THINGS THE POP-UP'S IS.** The row's index becomes the selection — which writes the
  * box's string, so the field shows what was chosen — and then the CELL's own action goes to the CELL's own target, with
  * the control as the sender, because that is what a caller who set a target is waiting for. */
+- (void)menu:(NSMenu *)menu willHighlightItem:(NSMenuItem *)item
+{
+	/* THE SAME ROUTE THE PICK TAKES: the row's TAG is the index, and the CONTROL is what tells its delegate. A nil item
+	 * — the pointer leaving the menu — is a move to no row, which the control reports as -1 so a delegate clearing its
+	 * state can hear it. */
+	(void)menu;
+	if ([[self controlView] respondsToSelector:@selector(cg_willHighlightItemAtIndex:)]) {
+		[(id)[self controlView] cg_willHighlightItemAtIndex:(item != nil) ? [item tag] : -1];
+	}
+}
+
 - (void)itemSelected:(id)sender
 {
 	[self selectItemAtIndex:[sender tag]];

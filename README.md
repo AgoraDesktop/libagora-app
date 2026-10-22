@@ -573,9 +573,9 @@ the compositor is really gone.
   `-setButtonBordered:NO` drops the chip's accent plate and draws the triangle in the field's ink. THREE LIST DOORS ARE
   NAMED REFUSALS — `-setHasVerticalScroller:`, `-scrollItemAtIndexToTop:`, `-scrollItemAtIndexToVisible:` — because the
   session this tier reuses clamps itself to the screen and has no scroll offset, while `-deselectItemAtIndex:` is real
-  without one. And `NSComboBoxDelegate` sends THREE of its four messages: the two around the list's session and the
-  selection-changed one through the cell; `-comboBoxSelectionIsChanging:` is declared and NOT sent, and the header says
-  where the seam it would need is.
+  without one. And `NSComboBoxDelegate` sends ALL FOUR of its messages: the two around the list's
+  session, the selection-changed one when a row is picked, and — since the menu session grew a delegate — the
+  selection-is-CHANGING one when the pointer moves over a row.
 - **And the field's delegate family** (`ctest`, offscreen): a control that edits text owes the THREE things Apple
   declares in `NSControl.h` — the `NSControlTextEditingDelegate` protocol (seven optional methods), the
   `NSControlSubclassNotifications` category that an object preferring to LISTEN is declared on, and three published
@@ -1578,6 +1578,34 @@ line scroll then clamped back to 0 instead of stepping. `-constrainScrollPoint:`
 alone, and a document that ARRIVES is measured against the origin the clip already has (CLAMPED, not centred: a clip
 view that recentred on every `-setDocumentView:` would move a caller's visible region whenever it swapped content).
 `tests/clip_view.m` holds both halves.
+
+### The menu's delegate, and the two controls that wanted its one message
+
+**`NSMenuDelegate` EXISTED AS AN ABSENCE FOR AS LONG AS THE SESSION HAD NOTHING TO REPORT.** The header said so in as many
+words — "that protocol is not in this tree, and a forward declaration of it would be a row claimed for a protocol nobody
+wrote" — and that was true while a menu's session could not tell anyone anything. It has three moments, and all three are
+now sent: `-menuWillOpen:` when the tracking session begins (AFTER the update, so a delegate reading the menu finds the
+enabled states the session will honour), `-menu:willHighlightItem:` on every change of the row under the pointer INCLUDING
+the change to nil (which is how a delegate hears the pointer leave), and `-menuDidClose:` when the session ends, before the
+window goes so the menu is still readable. The other five members are declared and NOT sent, and each says what it would
+need (an update walk with a caller, a key-equivalent pass, a dynamic menu).
+
+**THE HIGHLIGHT HAS TWO RAISERS AND ONE SEND.** The session's step funnels through `-setHighlightedItem:`; the menu BAR's
+view has a tracking loop of its own for a title press that opens a submenu. Both now reach the same notify door
+(`-cg_willHighlightItem:`), so a delegate cannot tell which path raised the change.
+
+**AND THE MESSAGE THAT WAS WAITING FOR IT NOW HAS ITS SENDER.** `-comboBoxSelectionIsChanging:` was declared, documented as
+unsent, and listed as the seam it needed — and the list a combo box opens is a MENU, so the seam was the menu's. The cell
+is now the list's delegate (`-cg_buildListMenu` sets it, so a list built without being shown has it too), and the row's tag
+becomes the index the control reports: the pointer moving over row 3 is `-comboBoxSelectionIsChanging:`, moving off the
+list is the same message with no row. All four of `NSComboBoxDelegate`'s messages are therefore sent, and the probe asserts
+each one.
+
+**AND THE DELEGATE FOUND A SESSION THAT WAS NEVER CLOSED.** `-menuDidClose:` never arrived for a menu opened by a program
+with NO run loop: `-popUpMenuPositioningItem:` skipped the tracking loop (which is what ends the session) and nothing else
+cancelled it, so `_tracking` stayed YES with its window up and the pointer grab still taken — invisible until a delegate
+was watching. A session with no loop to run it is now closed in the branch that cannot track it, and a SUBMENU whose
+parent is tracking is deliberately not that case: its session belongs to the parent's loop.
 
 ### The cell's own edit session, and the application's last seven doors
 

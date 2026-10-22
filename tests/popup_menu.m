@@ -44,6 +44,28 @@ static int is_accent(NSColor *c)
 	return c != nil && [c blueComponent] > 0.90 && [c redComponent] < 0.90;
 }
 
+/* A DELEGATE THAT COUNTS THE THREE SENT MESSAGES AND KEEPS THE LAST HIGHLIGHT. */
+@interface AGMenuWatcher : NSObject <NSMenuDelegate>
+{
+@public
+	int opens;
+	int closes;
+	int highlights;
+	NSMenuItem *lastHighlighted;
+}
+@end
+
+@implementation AGMenuWatcher
+- (void)menuWillOpen:(NSMenu *)menu { (void)menu; opens++; }
+- (void)menuDidClose:(NSMenu *)menu { (void)menu; closes++; }
+- (void)menu:(NSMenu *)menu willHighlightItem:(NSMenuItem *)item
+{
+	(void)menu;
+	highlights++;
+	lastHighlighted = item;	/* NOT RETAINED: the menu owns it, and the probe reads it immediately */
+}
+@end
+
 static void check(int ok, const char *name)
 {
 	printf("  %s   %s\n", ok ? "ok  " : "FAIL", name);
@@ -491,6 +513,43 @@ int main(void)
 		 * the notification: MEASURED, a SIGSEGV inside `-[NSNotification dealloc]` whose receiver's `isa` was already
 		 * heap garbage. `NSMenu -dealloc` detaches quietly now, and this probe is the case that found it. THE FAILURE
 		 * SIGNAL IS THIS PROCESS DYING, so there is nothing to assert down here — a crash fails the test on its own. */
+		/* ============================================================================================
+		 * AND THE MENU'S DELEGATE, WHICH THE SESSION NOW TELLS ITS THREE MOMENTS.
+		 * ========================================================================================== */
+		{
+			NSMenu *menu = [[NSMenu alloc] initWithTitle:@"Delegated"];
+			AGMenuWatcher *watcher = [[AGMenuWatcher alloc] init];
+
+			[menu addItemWithTitle:@"One" action:NULL keyEquivalent:@""];
+			[menu addItemWithTitle:@"Two" action:NULL keyEquivalent:@""];
+			[menu setDelegate:watcher];
+			check([menu delegate] == watcher, "the menu answers the delegate it was given");
+
+			/* THE HIGHLIGHT SEND IS THE ONE A VIEW REACHES WITHOUT A SESSION. */
+			[menu setHighlightedItem:[menu itemAtIndex:1]];
+			printf("  (note: two highlight changes sent %d will-highlight message(s))\n", watcher->highlights);
+			check(watcher->highlights == 1, "a change of the highlighted row reaches the delegate");
+			[menu setHighlightedItem:[menu itemAtIndex:1]];
+			check(watcher->highlights == 1, "and the SAME row again is not a change, so nothing is sent");
+			[menu setHighlightedItem:nil];
+			check(watcher->highlights == 2 &&
+			      [[watcher->lastHighlighted description] isEqual:[NSNull null]] == NO,
+			      "while a move to NO row is a change, which is how a delegate hears the pointer leave");
+
+			/* AND THE TWO SESSION MOMENTS COME FROM THE SESSION ITSELF — which needs no compositor to be ENTERED and
+			 * dismissed, the same path the combo box's chip press takes. */
+			[menu popUpMenuPositioningItem:nil atLocation:NSMakePoint(10.0, 10.0) inView:nil];
+			printf("  (note: opening and closing the menu sent %d will-open and %d did-close message(s))\n",
+			       watcher->opens, watcher->closes);
+			check(watcher->opens == 1, "`-menuWillOpen:` is sent when the session begins");
+			check(watcher->closes == 1, "and `-menuDidClose:` when it ends");
+			[menu setDelegate:nil];
+			[menu setHighlightedItem:[menu itemAtIndex:0]];
+			check(watcher->highlights == 2, "and with no delegate nothing else is sent");
+			[watcher release];
+			[menu release];
+		}
+
 		[NSApplication sharedApplication];
 		printf("popup_menu: %d case(s) failed\n", s_failed);
 	}

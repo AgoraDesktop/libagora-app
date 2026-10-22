@@ -339,6 +339,10 @@ static void apk_fill_vertical_gradient(NSRect rect, CGFloat radius,
 						NSRect frame = [[self window] frame];
 
 						[self setHighlightedItem:[_shownMenu itemAtIndex:current]];
+						/* AND THE MENU'S DELEGATE HEARS IT, through the menu's own notify door — the bar's loop
+						 * raises a highlight the same way the session's step does, and a delegate must not be able to
+						 * tell which path it came from. */
+						[_shownMenu cg_willHighlightItem:[_shownMenu itemAtIndex:current]];
 						[[self window] setNeedsDisplay:YES];
 						[[self window] displayIfNeeded];
 						[open cg_beginSessionAt:NSMakePoint(frame.origin.x + box.origin.x,
@@ -445,6 +449,7 @@ static void apk_fill_vertical_gradient(NSRect rect, CGFloat radius,
 					}
 				}
 				[self setHighlightedItem:nil];
+				[_shownMenu cg_willHighlightItem:nil];
 				[[self window] setNeedsDisplay:YES];
 				[[self window] displayIfNeeded];
 			}
