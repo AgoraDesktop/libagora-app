@@ -215,7 +215,16 @@ static void apk_fill_vertical_gradient(NSRect rect, CGFloat radius,
 		/* **THE FIRST ITEM IS THE TOP ROW, WHICH IS THE CONVERSION WORTH WRITING DOWN.** A menu's item 0 is the
 		 * row the reader sees first, at the TOP; a view's coordinates are Cocoa's and run UP from the bottom. So
 		 * the row index counts down while the y counts up — and the panel's own padding is taken off BOTH ends, so
-		 * the rows sit inside the panel rather than against it. */
+		 * the rows sit inside the panel rather than against it.
+		 *
+		 * **AND THE ARITHMETIC IS THE MENU'S NOW, BECAUSE A LIST'S ROWS ARE NOT THE MENU'S HEIGHT.** A combo box can say
+		 * how tall its rows are and how much air it wants between them, and BOTH the paint and the hit test have to agree
+		 * about that or a click would land on a row the menu did not draw. So the rect comes from
+		 * `-cg_rowRectAtIndex:inFrame:` — one door, three callers — and the fallback below is the constant for a view that
+		 * was handed no menu at all. */
+		if (_shownMenu != nil) {
+			return [_shownMenu cg_rowRectAtIndex:index inFrame:bounds];
+		}
 		return NSMakeRect(NSMenuPanelPadding,
 				  bounds.size.height - NSMenuPanelPadding - (CGFloat)(index + 1) * NSMenuRowHeight,
 				  bounds.size.width - 2.0 * NSMenuPanelPadding,
@@ -487,14 +496,20 @@ static void apk_fill_vertical_gradient(NSRect rect, CGFloat radius,
 - (CGFloat)requiredHeight
 {
 	NSInteger count = (_shownMenu != nil) ? [_shownMenu numberOfItems] : 0;
-	CGFloat height = (CGFloat)count * NSMenuRowHeight;
+	CGFloat pitch = (_shownMenu != nil) ? [_shownMenu cg_rowPitch] : NSMenuRowHeight;
+	CGFloat gap = (_shownMenu != nil) ? (pitch - [_shownMenu cg_rowHeight]) : 0.0;
+	CGFloat height = (CGFloat)count * pitch - gap;
+	CGFloat rowHeight = (_shownMenu != nil) ? [_shownMenu cg_rowHeight] : NSMenuRowHeight;
 
 	/* **THE DROPDOWN KEEPS AIR ABOVE AND BELOW ITS ROWS; THE BAR DOES NOT.** A bar's height IS the strip the server
-	 * draws, so padding it would lift its titles off the surface they are part of. */
+	 * draws, so padding it would lift its titles off the surface they are part of.
+	 *
+	 * **AND THE LAST ROW KEEPS ITS HEIGHT RATHER THAN A GAP:** a list's rows are pitched by the height PLUS the air
+	 * between them, so a panel sized `count * pitch` would end with one gap's worth of nothing under the last row. */
 	if (!_horizontal) {
 		height += 2.0 * NSMenuPanelPadding;
 	}
-	return (height < NSMenuRowHeight) ? NSMenuRowHeight : height;
+	return (height < rowHeight) ? rowHeight : height;
 }
 
 - (CGFloat)requiredWidth

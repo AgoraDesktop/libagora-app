@@ -17,6 +17,7 @@
 #import "AGComboListView.h"
 #import <AppKit/NSWindow.h>
 #import <Foundation/NSGeometry.h>
+#import "AppKitRefusal.h"
 
 /* **A COMBO BOX IS A FIELD WITH A CHIP IN IT, AND THE CHIP IS THE POP-UP'S CHIP.** The five measures — the chip's
  * side and its inset, the mark's width and height, and the gap a doubled pair leaves — are `NSCell.h`'s, because the
@@ -34,6 +35,13 @@ static NSString * const AGCoderComboSelectedKey = @"selectedIndex";
 static NSString * const AGCoderComboVisibleItemsKey = @"numberOfVisibleItems";
 static NSString * const AGCoderComboCompletesKey = @"completes";
 static NSString * const AGCoderComboDataSourceKey = @"usesDataSource";
+static NSString * const AGCoderComboItemHeightKey = @"itemHeight";
+static NSString * const AGCoderComboIntercellKey = @"intercellSpacing";
+static NSString * const AGCoderComboButtonBorderedKey = @"buttonBordered";
+/* **AND THE DATA SOURCE IS NOT ARCHIVED, WHICH IS A DECISION RATHER THAN AN OMISSION.** A source is an OBJECT the
+ * caller owns and feeds — it is not a design property of the box, it has no coding protocol in this tier, and a nib
+ * that carried one would be carrying a live graph. Apple's own answer is the same: what archives is the box's own
+ * rows, and a box whose `-usesDataSource` is YES archives the flag but not the object it points at. */
 
 - (void)encodeWithCoder:(NSCoder *)aCoder
 {
@@ -43,6 +51,9 @@ static NSString * const AGCoderComboDataSourceKey = @"usesDataSource";
 	[aCoder encodeInteger:_numberOfVisibleItems forKey:AGCoderComboVisibleItemsKey];
 	[aCoder encodeBool:_completes forKey:AGCoderComboCompletesKey];
 	[aCoder encodeBool:_usesDataSource forKey:AGCoderComboDataSourceKey];
+	[aCoder encodeDouble:(double)_itemHeight forKey:AGCoderComboItemHeightKey];
+	[aCoder encodeSize:_intercellSpacing forKey:AGCoderComboIntercellKey];
+	[aCoder encodeBool:_buttonBordered forKey:AGCoderComboButtonBorderedKey];
 }
 
 - (instancetype)initWithCoder:(NSCoder *)aDecoder
@@ -65,6 +76,15 @@ static NSString * const AGCoderComboDataSourceKey = @"usesDataSource";
 	}
 	if ([aDecoder containsValueForKey:AGCoderComboDataSourceKey]) {
 		_usesDataSource = [aDecoder decodeBoolForKey:AGCoderComboDataSourceKey];
+	}
+	if ([aDecoder containsValueForKey:AGCoderComboItemHeightKey]) {
+		_itemHeight = (CGFloat)[aDecoder decodeDoubleForKey:AGCoderComboItemHeightKey];
+	}
+	if ([aDecoder containsValueForKey:AGCoderComboIntercellKey]) {
+		_intercellSpacing = [aDecoder decodeSizeForKey:AGCoderComboIntercellKey];
+	}
+	if ([aDecoder containsValueForKey:AGCoderComboButtonBorderedKey]) {
+		_buttonBordered = [aDecoder decodeBoolForKey:AGCoderComboButtonBorderedKey];
 	}
 	return self;
 }
@@ -94,6 +114,12 @@ static NSString * const AGCoderComboDataSourceKey = @"usesDataSource";
 		 * The control's base is `NSTextField` now, whose press is gated on exactly this flag, so setting it here is what
 		 * makes the two agree: a combo box IS a field, and a field IS editable. */
 		[self setEditable:YES];
+		/* **AND THE LIST'S SHAPE STARTS AT "THE SESSION'S OWN" AND THE CHIP BORDERED.** A height of 0 and a spacing
+		 * of (0, 0) are what leave every menu's existing row arithmetic alone (see `-setItemHeight:`), and a bordered
+		 * chip is the picture this class has always drawn. */
+		_itemHeight = 0.0;
+		_intercellSpacing = NSMakeSize(0.0, 0.0);
+		_buttonBordered = YES;
 	}
 	return self;
 }
@@ -106,13 +132,55 @@ static NSString * const AGCoderComboDataSourceKey = @"usesDataSource";
 
 /* ---- THE LIST ------------------------------------------------------------------------------------- */
 
+/* **THE TWO DOORS EVERY OTHER ROW DOOR READS THROUGH, WHICH IS WHAT MAKES THE DATA SOURCE ONE DECISION.** A box with a
+ * source takes its rows from the source; a box without one takes them from its own array. Everything that counts or
+ * fetches a row asks these two — so there is exactly one place that knows the difference, and a door cannot honour the
+ * source while its neighbour forgets it. The source answers the CELL protocol (see the header on why the noun differs
+ * from the view's), and a source that does not implement a REQUIRED member is treated as absent rather than sent a
+ * message it would not understand. */
+- (BOOL)fn_usesDataSource
+{
+	return _usesDataSource && _dataSource != nil;
+}
+
+- (NSInteger)fn_itemCount
+{
+	if ([self fn_usesDataSource]) {
+		if ([(id)_dataSource respondsToSelector:@selector(numberOfItemsInComboBoxCell:)]) {
+			return (NSInteger)[(id)_dataSource numberOfItemsInComboBoxCell:self];
+		}
+		return 0;
+	}
+	return (NSInteger)[_objectValues count];
+}
+
+- (id)fn_itemObjectAtIndex:(NSInteger)index
+{
+	if (index < 0 || index >= [self fn_itemCount]) {
+		return nil;
+	}
+	if ([self fn_usesDataSource]) {
+		if ([(id)_dataSource respondsToSelector:@selector(comboBoxCell:objectValueForItemAtIndex:)]) {
+			return [(id)_dataSource comboBoxCell:self objectValueForItemAtIndex:index];
+		}
+		return nil;
+	}
+	return [_objectValues objectAtIndex:(NSUInteger)index];
+}
+
 - (NSInteger)numberOfItems
 {
-	return (NSInteger)[_objectValues count];
+	return [self fn_itemCount];
 }
 
 - (void)addItemWithObjectValue:(id)object
 {
+	if ([self fn_usesDataSource]) {
+		fn_refuse_window("-[NSComboBoxCell addItemWithObjectValue:]",
+				 "an own row list (this box has a data source, and a row written into the box would be a row "
+				 "nothing reads — change the source instead)");
+		return;
+	}
 	if (object != nil) {
 		[_objectValues addObject:object];
 	}
@@ -122,6 +190,12 @@ static NSString * const AGCoderComboDataSourceKey = @"usesDataSource";
 {
 	NSEnumerator *e = [objects objectEnumerator];
 	id object;
+
+	if ([self fn_usesDataSource]) {
+		fn_refuse_window("-[NSComboBoxCell addItemsWithObjectValues:]",
+				 "an own row list (this box has a data source — see `-addItemWithObjectValue:`)");
+		return;
+	}
 
 	while ((object = [e nextObject]) != nil) {
 		[self addItemWithObjectValue:object];
@@ -134,6 +208,11 @@ static NSString * const AGCoderComboDataSourceKey = @"usesDataSource";
  * lines rather than a rule anybody has to remember. */
 - (void)insertItemWithObjectValue:(id)object atIndex:(NSInteger)index
 {
+	if ([self fn_usesDataSource]) {
+		fn_refuse_window("-[NSComboBoxCell insertItemWithObjectValue:atIndex:]",
+				 "an own row list (this box has a data source — see `-addItemWithObjectValue:`)");
+		return;
+	}
 	if (object == nil) {
 		return;
 	}
@@ -148,6 +227,11 @@ static NSString * const AGCoderComboDataSourceKey = @"usesDataSource";
 
 - (void)removeAllItems
 {
+	if ([self fn_usesDataSource]) {
+		fn_refuse_window("-[NSComboBoxCell removeAllItems]",
+				 "an own row list (this box has a data source — see `-addItemWithObjectValue:`)");
+		return;
+	}
 	[_objectValues removeAllObjects];
 	/* NOTHING IS CHOSEN AND THE BOX HAS NOTHING TO SAY: the title goes with the list, because a box that kept the
 	 * words of a row that no longer exists would be showing a value it no longer holds. */
@@ -157,6 +241,11 @@ static NSString * const AGCoderComboDataSourceKey = @"usesDataSource";
 
 - (void)removeItemAtIndex:(NSInteger)index
 {
+	if ([self fn_usesDataSource]) {
+		fn_refuse_window("-[NSComboBoxCell removeItemAtIndex:]",
+				 "an own row list (this box has a data source — see `-addItemWithObjectValue:`)");
+		return;
+	}
 	if (index < 0 || index >= (NSInteger)[_objectValues count]) {
 		return;
 	}
@@ -180,20 +269,57 @@ static NSString * const AGCoderComboDataSourceKey = @"usesDataSource";
 
 - (id)itemObjectValueAtIndex:(NSInteger)index
 {
-	if (index < 0 || index >= (NSInteger)[_objectValues count]) {
-		return nil;
-	}
-	return [_objectValues objectAtIndex:(NSUInteger)index];
+	return [self fn_itemObjectAtIndex:index];
 }
 
 - (NSArray *)objectValues
 {
+	/* **AND WITH A SOURCE THE ANSWER IS STILL AN ARRAY, BECAUSE A CALLER ASKED FOR ONE.** Apple's array is the box's
+	 * own list; with a source the rows are the source's, so they are gathered — the useful reading, and the one that
+	 * keeps this door from answering an empty array for a box that visibly has rows. */
+	if ([self fn_usesDataSource]) {
+		NSInteger count = [self fn_itemCount];
+		NSMutableArray *gathered = [NSMutableArray arrayWithCapacity:(NSUInteger)(count > 0 ? count : 0)];
+		NSInteger i;
+
+		for (i = 0; i < count; i++) {
+			id row = [self fn_itemObjectAtIndex:i];
+
+			if (row != nil) {
+				[gathered addObject:row];
+			}
+		}
+		return gathered;
+	}
 	return _objectValues;
 }
 
 - (NSInteger)indexOfItemWithObjectValue:(id)object
 {
 	if (object == nil) {
+		return -1;
+	}
+	if ([self fn_usesDataSource]) {
+		/* THE SOURCE'S OWN INDEX WHEN IT HAS ONE, for a STRING value: Apple's optional door is about a typed string,
+		 * which is the only thing a source can index without comparing objects it never held. Anything else is a
+		 * linear scan over the rows — a combo box's list is a handful of words, and a cache of identities would be a
+		 * second thing to keep in step with a source that may change under it. */
+		if ([object isKindOfClass:[NSString class]] &&
+		    [(id)_dataSource respondsToSelector:@selector(comboBoxCell:indexOfItemWithStringValue:)]) {
+			NSUInteger found = [(id)_dataSource comboBoxCell:self indexOfItemWithStringValue:object];
+
+			return (found == NSNotFound) ? -1 : (NSInteger)found;
+		}
+		{
+			NSInteger count = [self fn_itemCount];
+			NSInteger i;
+
+			for (i = 0; i < count; i++) {
+				if ([[self fn_itemObjectAtIndex:i] isEqual:object]) {
+					return i;
+				}
+			}
+		}
 		return -1;
 	}
 	return (NSInteger)[_objectValues indexOfObject:object];
@@ -263,6 +389,211 @@ static NSString * const AGCoderComboDataSourceKey = @"usesDataSource";
 - (void)setUsesDataSource:(BOOL)flag
 {
 	_usesDataSource = flag;
+}
+
+/* ---- THE DATA SOURCE, AND THE TWO WAYS ITS OWNER SAYS THE ROWS MOVED ------------------------------ */
+
+- (void)setDataSource:(id <NSComboBoxCellDataSource>)aSource
+{
+	/* **NOT RETAINED, AND THAT IS THE CONNECTION'S RULE RATHER THAN AN OVERSIGHT** — see the ivar. A source that
+	 * ARRIVES is measured against the selection the box already has, because the rows it is replacing may be fewer: the
+	 * selection is clamped into the new count and the shown value re-read, which is the same act the two doors below
+	 * perform for a source that CHANGED. A source this box cannot read is still stored: `-fn_usesDataSource` asks the
+	 * required members when a row is wanted, so a source that answers neither behaves as an empty list rather than as a
+	 * crash at the first question. */
+	_dataSource = aSource;
+	[self fn_reclampSelection];
+}
+
+- (id <NSComboBoxCellDataSource>)dataSource
+{
+	return _dataSource;
+}
+
+/* **THE ONE ACT BOTH ``RELOAD'' DOORS PERFORM, AND THE REASON THEY ARE TWO DOORS WITH ONE BODY.** The rows are read
+ * from the source on demand, so nothing is cached to throw away; what can be STALE is the SELECTION — an index into a
+ * list that may have grown, shrunk, or changed its contents under it — and the value the box is SHOWING, which is the
+ * selected row's words. So both doors clamp the index into the count and re-read the string, and the difference between
+ * them is what the CALLER knows: `-noteNumberOfItemsChanged` says the count moved, `-reloadData` says the contents did
+ * (which for this class is the same repair, and the header says so rather than inventing a second behaviour). */
+- (void)fn_reclampSelection
+{
+	NSInteger count = [self fn_itemCount];
+
+	if (_selectedIndex >= count) {
+		_selectedIndex = count - 1;
+	}
+	if (_selectedIndex < -1) {
+		_selectedIndex = -1;
+	}
+	if (_selectedIndex >= 0) {
+		id object = [self fn_itemObjectAtIndex:_selectedIndex];
+
+		[self setStringValue:(object != nil) ? [object description] : @""];
+	} else {
+		[self setStringValue:@""];
+	}
+	if ([self controlView] != nil && [[self controlView] respondsToSelector:@selector(setNeedsDisplay:)]) {
+		[[self controlView] setNeedsDisplay:YES];
+	}
+}
+
+- (void)reloadData
+{
+	[self fn_reclampSelection];
+}
+
+- (void)noteNumberOfItemsChanged
+{
+	[self fn_reclampSelection];
+}
+
+/* ---- AND THE COMPLETION OF A TYPED PREFIX ---------------------------------------------------------- */
+
+/* **WHAT `-completes` IS THE SWITCH FOR, AND WHY THE COMPARISON IS CASE-INSENSITIVE.** The answer is the first row
+ * whose words BEGIN with what has been typed; a source that implements `-comboBoxCell:completedString:` speaks for its
+ * own rows (it knows which one a person would mean), and otherwise the rows are scanned in order. A completion that is
+ * not LONGER than the prefix is not a completion — it is the same words back — so it answers nil, which is what lets
+ * the typing path leave the editor alone. An EMPTY prefix completes nothing: a box that offered its first row the
+ * moment it was clicked into would be choosing for the person who wanted to type. */
+- (NSString *)completedString:(NSString *)uncompletedString
+{
+	NSString *prefix = (uncompletedString != nil) ? uncompletedString : @"";
+	NSInteger count;
+	NSInteger i;
+
+	if ([prefix length] == 0) {
+		return nil;
+	}
+	if ([self fn_usesDataSource] &&
+	    [(id)_dataSource respondsToSelector:@selector(comboBoxCell:completedString:)]) {
+		NSString *fromSource = [(id)_dataSource comboBoxCell:self completedString:prefix];
+
+		return ([fromSource length] > [prefix length]) ? fromSource : nil;
+	}
+	count = [self fn_itemCount];
+	for (i = 0; i < count; i++) {
+		NSString *words = [[self fn_itemObjectAtIndex:i] description];
+
+		if ([words length] > [prefix length] &&
+		    [words compare:prefix options:NSCaseInsensitiveSearch
+			     range:NSMakeRange(0, [prefix length])] == NSOrderedSame) {
+			return words;
+		}
+	}
+	return nil;
+}
+
+/* **AND THE TYPING PATH, WHICH IS WHERE THE FLAG BECOMES BEHAVIOUR.** The editor's own change notification reaches the
+ * cell because the cell is the editor's delegate (see `NSTextFieldCell`), so this is the one place a keystroke can be
+ * answered. When `-completes` is on, the prefix is completed and THE APPENDED PART IS SELECTED — so the next character
+ * typed replaces the offer, which is the behaviour a person expects rather than a suggestion they must delete. The
+ * guard is not an optimisation: setting the editor's string announces another change, and one completion is enough. */
+- (void)textDidChange:(NSNotification *)notification
+{
+	NSText *editor = [notification object];
+	static BOOL sCompleting;	/* one completion in flight; see above */
+
+	if (_completes && !sCompleting && [editor isKindOfClass:[NSText class]]) {
+		/* **THE LENGTH IS TAKEN BEFORE THE EDIT, BECAUSE `-string` ANSWERS THE LIVE MUTABLE STRING.** MEASURED: the
+		 * first version read `[editor string]` into a variable, completed it, called `-setString:` — which mutates the
+		 * very object the variable points at — and then computed the suffix's length from two lengths that were now the
+		 * same. The selection came out as `(6, 0)`: a caret at the end of the completed word instead of the offer
+		 * selected, so the next key typed appended to it rather than replacing it. A NUMBER TAKEN BEFORE THE EDIT IS
+		 * NOT AN ALIAS OF ANYTHING. */
+		NSUInteger typedLength = [[editor string] length];
+		NSString *completed = [self completedString:[editor string]];
+
+		if (completed != nil) {
+			sCompleting = YES;
+			[editor setString:completed];
+			[editor setSelectedRange:NSMakeRange(typedLength, [completed length] - typedLength)];
+			sCompleting = NO;
+		}
+	}
+	[super textDidChange:notification];
+}
+
+/* ---- THE LIST'S SHAPE ------------------------------------------------------------------------------ */
+
+- (CGFloat)itemHeight
+{
+	return _itemHeight;
+}
+
+- (void)setItemHeight:(CGFloat)itemHeight
+{
+	_itemHeight = (itemHeight > 0.0) ? itemHeight : 0.0;
+}
+
+- (NSSize)intercellSpacing
+{
+	return _intercellSpacing;
+}
+
+- (void)setIntercellSpacing:(NSSize)aSize
+{
+	_intercellSpacing = NSMakeSize((aSize.width > 0.0) ? aSize.width : 0.0,
+				      (aSize.height > 0.0) ? aSize.height : 0.0);
+}
+
+- (BOOL)isButtonBordered
+{
+	return _buttonBordered;
+}
+
+- (void)setButtonBordered:(BOOL)flag
+{
+	_buttonBordered = flag;
+	if ([self controlView] != nil && [[self controlView] respondsToSelector:@selector(setNeedsDisplay:)]) {
+		[[self controlView] setNeedsDisplay:YES];
+	}
+}
+
+/* **THE THREE LIST DOORS THIS SESSION HAS NO MECHANISM FOR, REFUSED BY NAME.** A list taller than its space needs a
+ * scroll offset and a bar, and the session this tier reuses is `NSMenu`'s: it clamps itself to the screen and draws no
+ * bar. Storing the flag and drawing nothing would be a caller believing their list scrolls; a scroll door that answered
+ * silence would be worse, because the row would not move and nothing would say why. */
+- (BOOL)hasVerticalScroller
+{
+	return NO;
+}
+
+- (void)setHasVerticalScroller:(BOOL)flag
+{
+	if (flag) {
+		fn_refuse_window("-[NSComboBoxCell setHasVerticalScroller:]",
+				 "a scroller in a list window (this tier's list is the menu session, which clamps to the "
+				 "screen and draws no bar)");
+	}
+}
+
+- (void)scrollItemAtIndexToTop:(NSInteger)index
+{
+	(void)index;
+	fn_refuse_window("-[NSComboBoxCell scrollItemAtIndexToTop:]",
+			 "a scrollable list (this tier's list has no scroll offset — see `-setHasVerticalScroller:`)");
+}
+
+- (void)scrollItemAtIndexToVisible:(NSInteger)index
+{
+	(void)index;
+	fn_refuse_window("-[NSComboBoxCell scrollItemAtIndexToVisible:]",
+			 "a scrollable list (this tier's list has no scroll offset — see `-setHasVerticalScroller:`)");
+}
+
+/* **AND THE ONE LIST DOOR THAT IS REAL WITHOUT A SCROLLER.** See the header: it un-chooses, and only when the index
+ * given is the one held — which is Apple's reading and the only one under which the door is not a synonym. */
+- (void)deselectItemAtIndex:(NSInteger)index
+{
+	if (index != _selectedIndex || index < 0) {
+		return;
+	}
+	_selectedIndex = -1;
+	[self setStringValue:@""];
+	if ([self controlView] != nil && [[self controlView] respondsToSelector:@selector(setNeedsDisplay:)]) {
+		[[self controlView] setNeedsDisplay:YES];
+	}
 }
 
 /* ---- THE INK -------------------------------------------------------------------------------------- */
@@ -363,14 +694,24 @@ static NSString * const AGCoderComboDataSourceKey = @"usesDataSource";
 	CGContextRef c = [[NSGraphicsContext currentContext] CGContext];
 	NSBezierPath *mark;
 
-	[[NSColor cg_accentColor] setFill];
-	[face fill];
+	/* **AND `-isButtonBordered:` IS THE PLATE, WHICH IS THE ONE THING THIS DRAWING HAS A FLAG FOR.** A bordered chip is
+	 * the accent square with the mark knocked OUT of it — so the mark is the FIELD's white, because it is a hole rather
+	 * than ink. An UNBORDERED one has no square to be a hole in, so the mark is drawn in the field's INK instead; a
+	 * white triangle on a white field would be the "borderless button" that is merely invisible. */
+	if (_buttonBordered) {
+		[[NSColor cg_accentColor] setFill];
+		[face fill];
+	}
 	if (c == NULL) {
 		return;
 	}
 	CGContextSaveGState(c);
 	CGContextSetShouldAntialias(c, false);
-	[[NSColor controlBackgroundColor] setFill];
+	if (_buttonBordered) {
+		[[NSColor controlBackgroundColor] setFill];
+	} else {
+		[[self cg_inkColor] setFill];
+	}
 	/* ONE TRIANGLE, AND IT IS CENTRED ON THE CHIP rather than placed off the centre line the way a doubled pair has
 	 * to be: with one mark there is no pair to centre, so the mark and the chip share a centre and the drawing says so
 	 * rather than carrying a half-gap that would only be right for two. */
@@ -408,12 +749,17 @@ static NSString * const AGCoderComboDataSourceKey = @"usesDataSource";
 	NSMenu *list = [[[NSMenu alloc] initWithTitle:@"List"] autorelease];
 	NSUInteger i;
 
-	for (i = 0; i < [_objectValues count]; i++) {
+	/* **AND THE LIST'S SHAPE IS SAID HERE, BECAUSE THIS IS WHERE THE LIST IS BUILT.** A menu's rows are its own height
+	 * with no air between them; a combo box may say otherwise through `-setItemHeight:`/`-setIntercellSpacing:`, and the
+	 * session's paint, its hit test and the panel's height all read the two numbers back from the menu. */
+	[list cg_setRowHeight:_itemHeight intercellSpacing:_intercellSpacing];
+
+	for (i = 0; i < (NSUInteger)[self fn_itemCount]; i++) {
 		/* **THE TAG IS THE INDEX, WHICH IS HOW THE PICK FINDS ITS WAY BACK.** A menu item's tag is a number a caller
 		 * may use for anything, and what this control has to remember about a row is WHERE IT IS — the same fact
 		 * `-indexOfItem:` recovers for the pop-up, kept directly because a combo box's rows are plain objects and there
 		 * is no menu to ask. */
-		NSMenuItem *item = [list addItemWithTitle:[[_objectValues objectAtIndex:i] description]
+		NSMenuItem *item = [list addItemWithTitle:[[self fn_itemObjectAtIndex:(NSInteger)i] description]
 						   action:NULL keyEquivalent:@""];
 
 		[item setTarget:self];
@@ -448,7 +794,7 @@ static NSString * const AGCoderComboDataSourceKey = @"usesDataSource";
 	NSMenu *list;
 	NSPoint where;
 
-	if ([_objectValues count] == 0) {
+	if ([self fn_itemCount] == 0) {
 		fprintf(stderr, "APPKIT-REFUSE: -cg_attachListWithFrame:inView: needs a list with rows — a combo box with "
 				"nothing to choose from is not a combo box\n");
 		return;
@@ -465,6 +811,13 @@ static NSString * const AGCoderComboDataSourceKey = @"usesDataSource";
 - (void)itemSelected:(id)sender
 {
 	[self selectItemAtIndex:[sender tag]];
+	/* **AND THE CONTROL IS TOLD, BECAUSE THE DELEGATE MESSAGE IS THE VIEW'S.** A pick lands here (the list is a menu and
+	 * the row's action points at this door), but `-comboBoxSelectionDidChange:` is a delegate's question and the delegate
+	 * belongs to the control. Asking the control whether it wants to hear it is the same seam `-cg_inkColor` uses one
+	 * class over, and it keeps the notification's construction where the delegate is. */
+	if ([[self controlView] respondsToSelector:@selector(cg_didSelectItemAtIndex:)]) {
+		[(id)[self controlView] cg_didSelectItemAtIndex:[sender tag]];
+	}
 	[[NSApplication sharedApplication] sendAction:[self action] to:[self target] from:[self controlView]];
 	if ([self controlView] != nil) {
 		[[self controlView] setNeedsDisplay:YES];

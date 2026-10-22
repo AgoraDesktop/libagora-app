@@ -143,6 +143,8 @@ tests/
   document.m                    the DOCUMENT family: a file, its change count, its undo and its windows, around a temp file
   save_panel.m                  the SAVE and OPEN PANELS: the listing, the filters, the accept, sheets and modeless runs
   popup_color_menu.m            the POP-UP's items, a COLOUR's space and -set, and the MENU's two flags
+  combo_box.m                   the COMBO BOX: one triangle rather than two, the chip's geometry, a picked row, and
+                                now the DATA SOURCE, the completion of a prefix, and a list with its own row shape
   progress_indicator.m          the PROGRESS INDICATOR: range, clamp, the spinner's FRAMES, its size, its tint
                                 and the recess `-isBezeled` decides
   panel_alert.m                 the PANEL and the ALERT: the click-to-key rule, the content and the two ways to run it
@@ -546,6 +548,27 @@ the compositor is really gone.
   opens its session, leaving the EDITOR as the responder. `NSComboBox` now derives from `NSTextField` — Apple's own
   hierarchy, which its header had named as the row this control would close — so its press is the base's press and the
   chip is the only thing it adds.
+- **And the combo box's rows, which can come from a source** (`ctest`, offscreen): the two data-source protocols are
+  declared and SENT — the view's pair and the cell's pair are different protocols with different nouns, and the view is
+  the cell's source by ADAPTING the three calls, so a source written for a view is never asked a cell's question and
+  neither header pretends to be the other. One pair of private doors answers every row question (`-numberOfItems`,
+  `-itemObjectValueAtIndex:`, `-objectValues`, `-indexOfItemWithObjectValue:`, the list it builds and the completion it
+  offers), so a source cannot be honoured in three places and forgotten in a fourth; the ARRAY doors refuse by name
+  while a source is in use, because they would write storage nothing reads. `-reloadData` and
+  `-noteNumberOfItemsChanged` are real: a source that changed its count under the box gets the selection CLAMPED into
+  the new count and the shown value re-read. **`-completes` STOPPED BEING A STORED BIT**: the cell is the editor's
+  delegate, so its `-textDidChange:` completes the prefix and SELECTS the appended suffix, and MEASURED that path found
+  a real trap — `NSText -string` hands back the LIVE mutable string, so a length read before the edit and used after it
+  was the length AFTER the edit, and the selection came out as a caret at the end instead of the offer selected.
+  `-itemHeight` and `-intercellSpacing` are handed to the list when it is built, and `NSMenu` grew ONE row arithmetic
+  (`-cg_rowRectAtIndex:inFrame:`) that its paint, its hit test and the submenu's placement all now share — so a list's
+  rows really are 30 points tall with air between them, and a menu that nobody shaped is byte-for-byte the menu it was.
+  `-setButtonBordered:NO` drops the chip's accent plate and draws the triangle in the field's ink. THREE LIST DOORS ARE
+  NAMED REFUSALS — `-setHasVerticalScroller:`, `-scrollItemAtIndexToTop:`, `-scrollItemAtIndexToVisible:` — because the
+  session this tier reuses clamps itself to the screen and has no scroll offset, while `-deselectItemAtIndex:` is real
+  without one. And `NSComboBoxDelegate` sends THREE of its four messages: the two around the list's session and the
+  selection-changed one through the cell; `-comboBoxSelectionIsChanging:` is declared and NOT sent, and the header says
+  where the seam it would need is.
 - **And the field's delegate family** (`ctest`, offscreen): a control that edits text owes the THREE things Apple
   declares in `NSControl.h` — the `NSControlTextEditingDelegate` protocol (seven optional methods), the
   `NSControlSubclassNotifications` category that an object preferring to LISTEN is declared on, and three published

@@ -819,9 +819,20 @@ static const CGFloat NSMenuStateColumnWidth = 20.0;
 	if (y < 0.0) {
 		return nil;
 	}
-	row = count - 1 - (NSInteger)(y / NSMenuRowHeight);
+	/* **AND A POINT IN THE AIR BETWEEN TWO ROWS IS OVER NO ROW.** With the spacing at zero the pitch IS the height and
+	 * this check can never fail; with a list's spacing set it can, and a gap that named a row would make a click in
+	 * the air choose something. The row is found by pitch and then verified against the row's own rectangle, which is
+	 * the one arithmetic the paint uses. */
+	row = count - 1 - (NSInteger)(y / [self cg_rowPitch]);
 	if (row < 0 || row >= count) {
 		return nil;
+	}
+	{
+		NSRect rowRect = [self cg_rowRectAtIndex:row inFrame:_trackingFrame];
+
+		if (screen.y < NSMinY(rowRect) || screen.y > NSMaxY(rowRect)) {
+			return nil;
+		}
 	}
 	return [_items objectAtIndex:(NSUInteger)row];
 }
@@ -1055,9 +1066,10 @@ static const CGFloat NSMenuStateColumnWidth = 20.0;
 	/* **AND THE PANEL'S OWN PADDING IS PART OF THE WINDOW'S HEIGHT, not something the view adds inside it.** The view
 	 * is sized to the frame and the frame is sized here, so a padding known only to the view would be drawn with its
 	 * rows hanging off the bottom of the panel. */
-	size.height = (CGFloat)[_items count] * NSMenuRowHeight + 2.0 * NSMenuPanelPadding;
-	if (size.height < NSMenuRowHeight) {
-		size.height = NSMenuRowHeight;
+	size.height = (CGFloat)[_items count] * [self cg_rowPitch] - _cgIntercellSpacing.height
+		      + 2.0 * NSMenuPanelPadding;
+	if (size.height < [self cg_rowHeight]) {
+		size.height = [self cg_rowHeight];
 	}
 	/* **THE WIDTH IS THE WIDER OF THE CALLER'S FLOOR AND THE CONTENT, WHICH THIS TIER CAN NOW MEASURE.** `-size`
 	 * is the floor; the VIEW is what holds the cells that measured each row's title and shortcut, and a menu is
@@ -1371,6 +1383,43 @@ static const CGFloat NSMenuStateColumnWidth = 20.0;
 	return (_cg_menuViewClass != Nil) ? _cg_menuViewClass : [NSMenuView class];
 }
 
+/* ---- AND A LIST'S ROW SHAPE ------------------------------------------------------------------------ */
+
+- (void)cg_setRowHeight:(CGFloat)height intercellSpacing:(NSSize)spacing
+{
+	_cgRowHeight = (height > 0.0) ? height : 0.0;
+	_cgIntercellSpacing = NSMakeSize((spacing.width > 0.0) ? spacing.width : 0.0,
+					 (spacing.height > 0.0) ? spacing.height : 0.0);
+}
+
+- (CGFloat)cg_rowHeight
+{
+	/* ZERO IS "THE MENU'S OWN", which is why this answers the shared constant rather than the stored field. */
+	return (_cgRowHeight > 0.0) ? _cgRowHeight : NSMenuRowHeight;
+}
+
+- (CGFloat)cg_rowPitch
+{
+	return [self cg_rowHeight] + _cgIntercellSpacing.height;
+}
+
+/* **THE ONE PLACE A ROW'S RECTANGLE IS COMPUTED.** The dropdown's rows count DOWN from the top — item 0 is the row the
+ * reader sees first — and each takes the pitch, with the row itself the height and the air the gap. The horizontal
+ * extent is the frame less the panel's padding and then less the caller's spacing, which is the one thing a list's
+ * rows do that a menu's do not. THE BAR IS NOT THIS: a bar's items are columns and `NSMenuView -rectForItemAtIndex:`
+ * keeps its own arithmetic for them. */
+- (NSRect)cg_rowRectAtIndex:(NSInteger)index inFrame:(NSRect)frame
+{
+	CGFloat pitch = [self cg_rowPitch];
+	CGFloat height = [self cg_rowHeight];
+	CGFloat inset = _cgIntercellSpacing.width;
+
+	return NSMakeRect(NSMinX(frame) + NSMenuPanelPadding + inset,
+			  NSMaxY(frame) - NSMenuPanelPadding - height - (CGFloat)index * pitch,
+			  NSWidth(frame) - 2.0 * NSMenuPanelPadding - 2.0 * inset,
+			  height);
+}
+
 - (BOOL)isAttached
 {
 	/* NO, AND IT IS THE TRUE ANSWER rather than a refusal dance: a menu can be POPPED UP here now, but nothing
@@ -1407,10 +1456,7 @@ static const CGFloat NSMenuStateColumnWidth = 20.0;
 		 * answer: it is where a menu with no such row would put one. */
 		return NSMakePoint(NSMaxX(_trackingFrame), NSMaxY(_trackingFrame));
 	}
-	row = NSMakeRect(_trackingFrame.origin.x + NSMenuPanelPadding,
-			 _trackingFrame.origin.y + NSMenuPanelPadding
-			   + (CGFloat)([_items count] - 1 - index) * NSMenuRowHeight,
-			 _trackingFrame.size.width - 2.0 * NSMenuPanelPadding, NSMenuRowHeight);
+	row = [self cg_rowRectAtIndex:index inFrame:_trackingFrame];
 	return NSMakePoint(NSMaxX(row), NSMaxY(row));
 }
 

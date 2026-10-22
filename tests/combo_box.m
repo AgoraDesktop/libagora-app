@@ -107,6 +107,130 @@ static NSBitmapImageRep *draw_cell(NSObject *cell, int W, int H, NSView *view)
 }
 @end
 
+/* **A SOURCE FOR THE VIEW'S PROTOCOL, WITH A LIST THE PROBE CAN CHANGE UNDER THE BOX.** All four members are
+ * implemented, because the two optional ones are the ones the routing has to ask for by name — an index for a typed
+ * string and a completion for a prefix — and a stub that answered neither would leave those two paths untested. */
+@interface AGViewSource : NSObject <NSComboBoxDataSource>
+{
+@public
+	NSMutableArray *rows;
+}
+@end
+
+@implementation AGViewSource
+- (id)init
+{
+	if ((self = [super init]) != nil) {
+		rows = [[NSMutableArray alloc] init];
+	}
+	return self;
+}
+- (void)dealloc
+{
+	[rows release];
+	[super dealloc];
+}
+- (NSInteger)numberOfItemsInComboBox:(NSComboBox *)aComboBox
+{
+	(void)aComboBox;
+	return (NSInteger)[rows count];
+}
+- (id)comboBox:(NSComboBox *)aComboBox objectValueForItemAtIndex:(NSInteger)index
+{
+	(void)aComboBox;
+	return (index >= 0 && index < (NSInteger)[rows count]) ? [rows objectAtIndex:(NSUInteger)index] : nil;
+}
+- (NSUInteger)comboBox:(NSComboBox *)aComboBox indexOfItemWithStringValue:(NSString *)string
+{
+	NSUInteger i;
+
+	(void)aComboBox;
+	for (i = 0; i < [rows count]; i++) {
+		if ([[[rows objectAtIndex:i] description] isEqual:string]) {
+			return i;
+		}
+	}
+	return NSNotFound;
+}
+- (NSString *)comboBox:(NSComboBox *)aComboBox completedString:(NSString *)string
+{
+	(void)aComboBox;
+	if ([rows count] > 0) {
+		NSString *first = [[rows objectAtIndex:0] description];
+
+		if ([first length] > [string length] &&
+		    [first compare:string options:NSCaseInsensitiveSearch
+			     range:NSMakeRange(0, [string length])] == NSOrderedSame) {
+			return first;
+		}
+	}
+	return nil;
+}
+@end
+
+/* AND THE CELL'S PROTOCOL, WHICH IS A DIFFERENT SET OF NAMES — the point the two headers make. */
+@interface AGCellSource : NSObject <NSComboBoxCellDataSource>
+{
+@public
+	NSMutableArray *rows;
+}
+@end
+
+@implementation AGCellSource
+- (id)init
+{
+	if ((self = [super init]) != nil) {
+		rows = [[NSMutableArray alloc] init];
+	}
+	return self;
+}
+- (void)dealloc
+{
+	[rows release];
+	[super dealloc];
+}
+- (NSInteger)numberOfItemsInComboBoxCell:(NSComboBoxCell *)cell
+{
+	(void)cell;
+	return (NSInteger)[rows count];
+}
+- (id)comboBoxCell:(NSComboBoxCell *)cell objectValueForItemAtIndex:(NSInteger)index
+{
+	(void)cell;
+	return (index >= 0 && index < (NSInteger)[rows count]) ? [rows objectAtIndex:(NSUInteger)index] : nil;
+}
+- (NSUInteger)comboBoxCell:(NSComboBoxCell *)cell indexOfItemWithStringValue:(NSString *)string
+{
+	NSUInteger i;
+
+	(void)cell;
+	for (i = 0; i < [rows count]; i++) {
+		if ([[[rows objectAtIndex:i] description] isEqual:string]) {
+			return i;
+		}
+	}
+	return NSNotFound;
+}
+@end
+
+/* AND A DELEGATE THAT COUNTS THE FOUR TIDINGS. */
+@interface ComboWatcher : NSObject <NSComboBoxDelegate>
+{
+@public
+	int popUps;
+	int dismisses;
+	int didChanges;
+	int isChangings;
+}
+@end
+
+@implementation ComboWatcher
+- (void)comboBoxWillPopUp:(NSNotification *)note { (void)note; popUps++; }
+- (void)comboBoxWillDismiss:(NSNotification *)note { (void)note; dismisses++; }
+- (void)comboBoxSelectionDidChange:(NSNotification *)note { (void)note; didChanges++; }
+- (void)comboBoxSelectionIsChanging:(NSNotification *)note { (void)note; isChangings++; }
+@end
+
 int main(void)
 {
 	NSAutoreleasePool *pool = [[NSAutoreleasePool alloc] init];
@@ -545,6 +669,271 @@ int main(void)
 		 * which is the door that owns the cell. */
 		[listView release];
 		[plainView release];
+	}
+
+	/* 10. **THE DATA SOURCE: THE ROWS ARE THE SOURCE'S, AND EVERY ROW DOOR KNOWS IT.** The view's protocol names the
+	 * VIEW and the cell's names the CELL, so this section sets the VIEW's source and the box adapts — which is the
+	 * claim: one source, every door. */
+	{
+		NSComboBox *box = [[NSComboBox alloc] initWithFrame:NSMakeRect(0.0, 0.0, (CGFloat)W, (CGFloat)H)];
+		AGViewSource *source = [[AGViewSource alloc] init];
+
+		[source->rows addObject:@"one"];
+		[source->rows addObject:@"two"];
+		[source->rows addObject:@"three"];
+		[box setDataSource:source];
+		[box setUsesDataSource:YES];
+		check([box dataSource] == source, "the data source round-trips through the control");
+		check([box numberOfItems] == 3, "and the box counts the SOURCE's rows, not its own empty array");
+		check([[box itemObjectValueAtIndex:1] isEqual:@"two"], "a row comes from the source, at the index asked");
+		check([[box objectValues] count] == 3,
+		      "`-objectValues` GATHERS them, so a caller is not handed an empty array for a box with rows");
+		check([box indexOfItemWithObjectValue:@"three"] == 2,
+		      "and a typed string's index is the source's own door rather than a scan");
+		[box selectItemAtIndex:2];
+		check([[box stringValue] isEqual:@"three"], "a selection writes the source's row into the field");
+
+		/* THE SOURCE CHANGES UNDER THE BOX, WHICH IS WHAT THE TWO ``RELOAD'' DOORS ARE FOR. */
+		[source->rows removeAllObjects];
+		[source->rows addObject:@"alpha"];
+		[box reloadData];
+		check([box numberOfItems] == 1, "`-reloadData` re-reads a source that changed its count");
+		check([box indexOfSelectedItem] == 0, "and the selection is CLAMPED into the new count");
+		check([[box stringValue] isEqual:@"alpha"], "with the shown value re-read from it");
+
+		[source->rows addObject:@"beta"];
+		[box noteNumberOfItemsChanged];
+		check([box numberOfItems] == 2, "`-noteNumberOfItemsChanged` re-reads it too");
+
+		/* AND THE ARRAY DOORS REFUSE, BECAUSE THEY WOULD WRITE STORAGE NOTHING READS. */
+		[box addItemWithObjectValue:@"ignored"];
+		check([box numberOfItems] == 2, "`-addItemWithObjectValue:` is refused while the source is in use");
+		[box setUsesDataSource:NO];
+		check([box numberOfItems] == 0,
+		      "and with the flag off the box shows its OWN rows, which are still empty — the flag is the switch");
+		[box release];
+		[source release];
+	}
+
+	/* 11. **THE CELL'S OWN PROTOCOL, WHICH IS THE ONE WITH A COMPLETION.** */
+	{
+		NSComboBoxCell *cell = [[NSComboBoxCell alloc] initTextCell:@""];
+		AGCellSource *source = [[AGCellSource alloc] init];
+
+		[source->rows addObject:@"apples"];
+		[source->rows addObject:@"bananas"];
+		[cell setDataSource:source];
+		[cell setUsesDataSource:YES];
+		check([cell dataSource] == source, "the CELL protocol's source round-trips through the cell");
+		check([cell numberOfItems] == 2, "and the cell counts its rows");
+		check([[cell completedString:@"ap"] isEqual:@"apples"],
+		      "`-completedString:` finds the row that begins with the prefix");
+		check([[cell completedString:@"BAN"] isEqual:@"bananas"],
+		      "the comparison is CASE-INSENSITIVE, so a person typing lowercase is completed too");
+		check([cell completedString:@"x"] == nil, "a prefix no row begins with answers nil");
+		check([cell completedString:@""] == nil, "and so does an empty prefix — completion is not a default choice");
+		check([cell completedString:@"apples"] == nil,
+		      "a prefix that IS a whole row completes nothing: the answer has to be LONGER to be a completion");
+		check([cell indexOfItemWithObjectValue:@"bananas"] == 1, "the index door scans the source's rows by equality");
+		[cell release];
+		[source release];
+	}
+
+	/* 12. **AND THE TYPING PATH, WHICH IS WHERE `-completes` STOPS BEING A STORED BIT.** The editor's change
+	 * notification reaches the cell because the cell is the editor's delegate, so sending that notification by hand is
+	 * the same path a keystroke takes. The completed suffix must be SELECTED, so the next character replaces the offer. */
+	{
+		NSComboBoxCell *cell = [[NSComboBoxCell alloc] initTextCell:@""];
+		NSText *editor = [[NSText alloc] initWithFrame:NSMakeRect(0.0, 0.0, 100.0, 20.0)];
+		NSNotification *note;
+
+		[cell addItemWithObjectValue:@"Apples"];
+		[cell addItemWithObjectValue:@"Apricots"];
+		[cell addItemWithObjectValue:@"Bananas"];
+		check([cell completes], "a combo cell completes by default");
+		[editor setString:@"Ap"];
+		note = [NSNotification notificationWithName:NSTextDidChangeNotification object:editor];
+		[cell textDidChange:note];
+		printf("  (note: typing \"Ap\" left the editor at \"%s\", selection %lu..%lu)\n",
+		       [[editor string] UTF8String], (unsigned long)[editor selectedRange].location,
+		       (unsigned long)([editor selectedRange].location + [editor selectedRange].length));
+		check([[editor string] isEqual:@"Apples"], "typing a prefix COMPLETES it from the rows");
+		check([editor selectedRange].location == 2 && [editor selectedRange].length == 4,
+		      "and the completed suffix is SELECTED, so the next key replaces it");
+
+		[cell setCompletes:NO];
+		[editor setString:@"Ba"];
+		[cell textDidChange:[NSNotification notificationWithName:NSTextDidChangeNotification object:editor]];
+		check([[editor string] isEqual:@"Ba"], "with `-completes` off the editor is left exactly as typed");
+		[editor release];
+		[cell release];
+	}
+
+	/* 13. **THE LIST'S SHAPE, WHICH THE SESSION NOW OBEYS.** The rows of this tier's list are a menu's, so the cell
+	 * hands its two numbers to the menu it builds and the menu's own arithmetic is what answers — which is the claim:
+	 * not that the cell stores a height, but that the rows ARE that tall. */
+	{
+		NSComboBoxCell *cell = [[NSComboBoxCell alloc] initTextCell:@""];
+		NSMenu *list;
+		NSMenu *plain = [[NSMenu alloc] initWithTitle:@"plain"];
+		NSRect frame = NSMakeRect(0.0, 0.0, 100.0, 200.0);
+		NSRect row0, row1;
+
+		[cell addItemWithObjectValue:@"a"];
+		[cell addItemWithObjectValue:@"b"];
+		[cell addItemWithObjectValue:@"c"];
+		check([cell itemHeight] == 0.0 && [cell intercellSpacing].height == 0.0,
+		      "an unshaped box asks for the session's OWN row shape, which is zero on both axes");
+		[cell setItemHeight:30.0];
+		[cell setIntercellSpacing:NSMakeSize(4.0, 6.0)];
+		check([cell itemHeight] == 30.0 && [cell intercellSpacing].width == 4.0 &&
+		      [cell intercellSpacing].height == 6.0, "the two shape doors round-trip through the cell");
+
+		list = [cell cg_buildListMenu];
+		check([list cg_rowHeight] == 30.0, "the list the cell builds is 30 points a row");
+		check([list cg_rowPitch] == 36.0, "and its rows are PITCHED by the height plus the air between them");
+		row0 = [list cg_rowRectAtIndex:0 inFrame:frame];
+		row1 = [list cg_rowRectAtIndex:1 inFrame:frame];
+		printf("  (note: row 0 is (%.1f, %.1f) %.0fx%.0f and row 1 is (%.1f, %.1f))\n",
+		       (double)row0.origin.x, (double)row0.origin.y, (double)row0.size.width, (double)row0.size.height,
+		       (double)row1.origin.x, (double)row1.origin.y);
+		check(row0.size.height == 30.0 && row1.size.height == 30.0, "each row IS the height asked for");
+		check(fabs((row0.origin.y - row1.origin.y) - 36.0) < 0.01, "and the gap between two rows is the pitch");
+		check(row0.origin.x == NSMenuPanelPadding + 4.0,
+		      "the spacing's WIDTH insets the rows from the panel, which is what a list's rows do");
+
+		/* AND A MENU THAT NOBODY SHAPED IS UNCHANGED — the defaults are the session's own, not zero-sized rows. */
+		check([plain cg_rowHeight] == NSMenuRowHeight && [plain cg_rowPitch] == NSMenuRowHeight,
+		      "a menu nobody shaped keeps the shared row height and no gap");
+		[plain release];
+		[cell release];
+	}
+
+	/* 14. **`-setButtonBordered:NO` IS THE TRIANGLE WITHOUT ITS PLATE.** Measured in the chip's own rect: the bordered
+	 * chip is accent there, and the unbordered one has no accent at all but still carries a mark — in the field's ink,
+	 * because a white triangle on a white field would be the borderless button that is merely invisible. */
+	{
+		NSComboBoxCell *bordered = [[NSComboBoxCell alloc] initTextCell:@""];
+		NSComboBoxCell *bare = [[NSComboBoxCell alloc] initTextCell:@""];
+		NSBitmapImageRep *a;
+		NSBitmapImageRep *b;
+		NSRect chip;
+		int accentA = 0, accentB = 0, inkB = 0;
+		int x, y, i;
+
+		check([bordered isButtonBordered], "a chip is bordered by default");
+		[bare setButtonBordered:NO];
+		check(![bare isButtonBordered], "and `-setButtonBordered:NO` round-trips");
+		chip = [bordered cg_chipRectInFrame:NSMakeRect(0.0, 0.0, (CGFloat)W, (CGFloat)H)];
+		a = draw_cell(bordered, W, H, nil);
+		b = draw_cell(bare, W, H, nil);
+		for (y = 0; y < H; y++) {
+			int drawing_y = H - 1 - y;
+
+			if (drawing_y < (int)NSMinY(chip) || drawing_y >= (int)NSMaxY(chip)) {
+				continue;
+			}
+			for (x = (int)NSMinX(chip); x < (int)NSMaxX(chip); x++) {
+				NSColor *ca = [a colorAtX:x y:y];
+				NSColor *cb = [b colorAtX:x y:y];
+
+				accentA += is_accent(ca) ? 1 : 0;
+				accentB += is_accent(cb) ? 1 : 0;
+				inkB += (cb != nil && [cb redComponent] < 0.6) ? 1 : 0;
+			}
+		}
+		printf("  (note: accent in the chip — %d bordered, %d unbordered; and %d dark points where the mark is)\n",
+		       accentA, accentB, inkB);
+		check(accentA > 50, "a bordered chip is the accent plate it always was");
+		check(accentB == 0, "and an unbordered one has NO plate at all");
+		check(inkB > 5, "while its triangle is still drawn, in the field's ink");
+		[a release];
+		[b release];
+		[bordered release];
+		[bare release];
+	}
+
+	/* 15. **`-deselectItemAtIndex:` UN-CHOOSES, AND ONLY THE ROW IT NAMES.** */
+	{
+		NSComboBox *box = [[NSComboBox alloc] initWithFrame:NSMakeRect(0.0, 0.0, (CGFloat)W, (CGFloat)H)];
+
+		[box addItemWithObjectValue:@"zero"];
+		[box addItemWithObjectValue:@"one"];
+		[box selectItemAtIndex:1];
+		[box deselectItemAtIndex:0];
+		check([box indexOfSelectedItem] == 1, "deselecting a row that is NOT the held one changes nothing");
+		[box deselectItemAtIndex:1];
+		check([box indexOfSelectedItem] == -1 && [[box stringValue] isEqual:@""],
+		      "and deselecting the HELD row clears the selection and the field with it");
+		[box release];
+	}
+
+	/* 16. **AND THE THREE LIST DOORS THIS SESSION HAS NO MECHANISM FOR REFUSE BY NAME.** A scroller in a list window
+	 * would need a scroll offset the menu session has not got, so the flag answers NO however it is set and the two
+	 * scroll doors say what they would need. */
+	{
+		NSComboBox *box = [[NSComboBox alloc] initWithFrame:NSMakeRect(0.0, 0.0, (CGFloat)W, (CGFloat)H)];
+
+		check(![box hasVerticalScroller], "a box has no vertical scroller");
+		[box setHasVerticalScroller:YES];
+		check(![box hasVerticalScroller], "and setting the flag does not invent one");
+		[box scrollItemAtIndexToTop:0];
+		[box scrollItemAtIndexToVisible:0];
+		check(1, "the two scroll doors are refusals rather than crashes");
+		[box release];
+	}
+
+	/* 17. **THE DELEGATE'S THREE TIDINGS, TWO OF THEM THROUGH THE PATH A PERSON TAKES.** `-cg_didSelectItemAtIndex:`
+	 * is what the CELL sends when a row is picked; the two list messages are sent around the session a press on the
+	 * chip begins. */
+	{
+		NSComboBox *box = [[NSComboBox alloc] initWithFrame:NSMakeRect(0.0, 0.0, (CGFloat)W, (CGFloat)H)];
+		ComboWatcher *watcher = [[ComboWatcher alloc] init];
+		NSMenuItem *row = [[NSMenuItem alloc] initWithTitle:@"one" action:NULL keyEquivalent:@""];
+
+		[box addItemWithObjectValue:@"zero"];
+		[box addItemWithObjectValue:@"one"];
+		[box setDelegate:(id <NSComboBoxDelegate>)watcher];
+		check([box delegate] == (id)watcher, "the combo box answers its delegate through its own typed door");
+
+		[row setTarget:box];
+		[row setAction:@selector(itemSelected:)];
+		[row setTag:1];
+		[(NSComboBoxCell *)[box cell] itemSelected:row];
+		printf("  (note: a pick sent %d selection-changed message(s))\n", watcher->didChanges);
+		check(watcher->didChanges == 1,
+		      "a picked row tells the delegate the selection changed — the CELL asks the CONTROL to send it");
+		check(watcher->isChangings == 0,
+		      "and `-comboBoxSelectionIsChanging:` is NOT sent: this tier has no seam from the highlight walk");
+
+		/* AND THE TWO LIST TIDINGS COME FROM THE CHIP'S PRESS, WHICH IS THE ONLY THING THAT OPENS A LIST. The session
+		 * needs a display to be seen but not to be ENTERED: it is begun and dismissed around the press, so a probe with
+		 * no compositor still hears the two messages — which is the claim, and the reason they are sent by the VIEW
+		 * rather than built inside the session. */
+		{
+			/* THE CHIP'S RECT COMES FROM THE CELL: it is a cell-only door, and a view has none — the control's own
+			 * press asks its cell the same question. */
+			NSRect chip = [(NSComboBoxCell *)[box cell] cg_chipRectInFrame:[box bounds]];
+			NSEvent *press = [NSEvent mouseEventWithType:NSLeftMouseDown
+							    location:NSMakePoint(NSMidX(chip), NSMidY(chip))
+						       modifierFlags:0
+							   timestamp:0.0
+							windowNumber:0
+							     context:nil
+							 eventNumber:1
+							  clickCount:1
+							    pressure:1.0];
+
+			check(press != nil, "the probe can build a press on the chip");
+			[box mouseDown:press];
+			printf("  (note: a chip press sent %d pop-up and %d dismiss message(s))\n",
+			       watcher->popUps, watcher->dismisses);
+			check(watcher->popUps == 1 && watcher->dismisses == 1,
+			      "and a press on the CHIP tells the delegate the list is opening, then that it is gone");
+		}
+		[box release];
+		[watcher release];
+		[row release];
 	}
 
 	[combo release];

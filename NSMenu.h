@@ -139,6 +139,16 @@ extern NSString *NSMenuDidEndTrackingNotification;
 	 * COMBO BOX'S LIST, whose rows are a list's and whose held row is marked — had no way to say so. `Nil` means the
 	 * default, so a menu that nobody has told behaves exactly as before. */
 	Class _cg_menuViewClass;
+	/* **AND A LIST'S OWN ROW METRICS, WHICH A MENU DOES NOT NEED AND A LIST DOES.** Every menu in this tier is rows of
+	 * `NSMenuRowHeight` with no air between them, and that is right for a menu. A COMBO BOX'S LIST has two doors for
+	 * the shape of its rows — `-itemHeight` and `-intercellSpacing` — and before these fields they were values nothing
+	 * read, because the rows were the menu's and nobody could say otherwise. ZERO IS THE DEFAULT AND MEANS "THE MENU'S
+	 * OWN": a height of 0 keeps `NSMenuRowHeight`, and an intercell spacing of (0, 0) keeps the rows abutting and
+	 * flush, so every menu that nobody has shaped is laid out exactly as before. See `-cg_setRowHeight:intercellSpacing:`
+	 * and `-cg_rowRectAtIndex:inFrame:`, which is the ONE arithmetic the paint, the hit test and the submenu's placement
+	 * now share. */
+	CGFloat _cgRowHeight;
+	NSSize _cgIntercellSpacing;
 	/* **AND WHETHER THE CALLER IS DRIVING THIS SESSION RATHER THAN THE MENU.** One flag, because
 	 * `-popUpMenuPositioningItem:` already does everything a session's beginning needs: the window, the view, the
 	 * first repaint, the notification. With this set it RETURNS at the point the loop would start, which is exactly
@@ -367,6 +377,23 @@ extern NSString *NSMenuDidEndTrackingNotification;
  * menu genuinely disagree about. The class must be `NSMenuView` or a subclass of it; `Nil` restores the default. */
 - (void)cg_setMenuViewClass:(nullable Class)aClass;
 - (nullable Class)cg_menuViewClass;
+
+/* ============================================================================================ *
+ * AND THE SHAPE OF A ROW, WHICH A LIST ASKS FOR AND A MENU NEVER DOES.                        *
+ * ============================================================================================ */
+/* **THREE DOORS AND ONE RECT, BECAUSE FOUR COPIES OF THIS ARITHMETIC IS HOW A MENU'S PANEL AND A MENU'S ROWS COME TO
+ * DISAGREE.** `-cg_rowHeight` and `-cg_rowPitch` are what the panel's HEIGHT is computed from; `-cg_rowRectAtIndex:`
+ * is where a row IS, and the paint, the hit test and the submenu's placement all ask it rather than re-deriving it.
+ *
+ * `-cg_setRowHeight:` takes a height of 0 to mean "the menu's own" (`NSMenuRowHeight`), and the spacing's height is the
+ * AIR BETWEEN two rows — so a pitch is the two added together. The spacing's width insets each row from the panel's
+ * sides, which is the one thing a list's rows do that a menu's do not: a menu's highlight fills the panel's width
+ * less its padding, and a list's is inset by the caller's spacing. A spacing of (0, 0) therefore reproduces every
+ * menu this tier has ever drawn, exactly. */
+- (void)cg_setRowHeight:(CGFloat)height intercellSpacing:(NSSize)spacing;
+- (CGFloat)cg_rowHeight;
+- (CGFloat)cg_rowPitch;
+- (NSRect)cg_rowRectAtIndex:(NSInteger)index inFrame:(NSRect)frame;
 
 - (BOOL)isAttached;
 - (nullable id)attachedMenu;

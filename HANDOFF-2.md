@@ -15,6 +15,10 @@ metrics hold (117 classes, 3362 selectors of 4112, 30 protocols, 86 functions)`.
 passing**, `api-ledger: 361 metrics hold (117 classes, 3413 selectors of 4112, 30 protocols, 86 functions)`, 84 classes COMPLETE.
 The refusal census is 267 — it was 141, and the difference is the needle learning the shared helper's name, not a refusal.*
 
+*State after the session that picked THAT up (§14, the combo box's rows): **25 commits**, tree clean, **137 tests passing**,
+`api-ledger: 361 metrics hold (117 classes, 3444 selectors of 4112, 33 protocols, 86 functions)`, 86 classes COMPLETE, refusal
+census 275.*
+
 ---
 
 ## 1. What this session did
@@ -596,3 +600,78 @@ The completion sweep's parts 1 and 2 are done. What remains of §12's table, by 
 5. **`NSCell` 9 + `NSApplication` 7 = 16**, the field-editor family being the design work.
 6. And outside the sweep, unchanged: `NSBrowser`'s 64 for the Workspace's Column view, `NSWorkspace`'s 49 for the
    shell's verbs, `NSDocument`'s 30 and `NSDocumentController`'s 8 for print/autosave/error presentation.
+
+---
+
+## 14. The combo box's rows: a data source, a completion, and a list that can be shaped
+
+*Twenty-fifth commit of the pickup: `NSComboBox` 37/37 and `NSComboBoxCell` 36/36 — 31 selectors, two classes COMPLETE — plus
+`NSComboBoxDataSource`, `NSComboBoxCellDataSource` and `NSComboBoxDelegate`. **3444 of 4112 selectors (84%), 33 of 56
+protocols, 86 of 117 classes complete, 668 missing.** 137 tests.*
+
+**TWO PROTOCOLS WITH DIFFERENT NOUNS, AND THE VIEW IS THE CELL'S SOURCE.** Apple declares the view's pair
+(`-numberOfItemsInComboBox:`, `-comboBox:objectValueForItemAtIndex:`) and the cell's pair
+(`-numberOfItemsInComboBoxCell:`, `-comboBoxCell:objectValueForItemAtIndex:`), and this tree declares both rather than
+collapsing them: a caller hands over a source written for a VIEW, the view conforms to the CELL's protocol in a class
+extension, and the three calls are translated in one place. The alternative — one protocol and a comment asking a source
+to implement both spellings — is how a header comes to lie about what it needs.
+
+**ONE PAIR OF PRIVATE DOORS ANSWERS EVERY ROW QUESTION.** `-fn_itemCount` and `-fn_itemObjectAtIndex:` are what
+`-numberOfItems`, `-itemObjectValueAtIndex:`, `-objectValues`, `-indexOfItemWithObjectValue:`, `-selectItemAtIndex:` and
+`-cg_buildListMenu` all read, so the source cannot be honoured in three places and forgotten in the fourth. The ARRAY
+doors (`-addItemWithObjectValue:` and its four siblings) REFUSE BY NAME while a source is in use: they would write
+storage nothing reads, which is worse than a refusal because it looks like it worked. `-reloadData` and
+`-noteNumberOfItemsChanged` are one act with two names — the rows are read on demand, so what goes stale is the SELECTION
+and the shown value, and both doors clamp the index into the new count and re-read the string.
+
+**`-completes` STOPPED BEING A STORED BIT, AND PAYING FOR THAT FOUND A REAL TRAP.** The cell is the field editor's
+delegate, so its `-textDidChange:` is one keystroke's worth of hook: it completes the prefix and SELECTS the appended
+suffix. THE TRAP: **`NSText -string` ANSWERS THE LIVE MUTABLE STRING.** The first version did
+
+    NSString *typed = [editor string];
+    NSString *completed = [self completedString:typed];
+    [editor setString:completed];                       /* mutates the very object typed points at */
+    [editor setSelectedRange:NSMakeRange([typed length], ...)];   /* now 6, not 2 */
+
+and the probe measured a caret at the end of the completed word (selection 6,0) instead of the offer selected (2,4), so
+the next key appended instead of replacing. A LENGTH TAKEN BEFORE THE EDIT IS NOT AN ALIAS OF ANYTHING. This is the same
+family as the handoff's other "saved a fact that then changed" traps, and the test that holds it is one assertion about
+the selection.
+
+**THE LIST'S SHAPE IS NOW THREE DOORS AND ONE ARITHMETIC.** `NSMenu` grew `-cg_setRowHeight:intercellSpacing:`,
+`-cg_rowHeight`, `-cg_rowPitch` and `-cg_rowRectAtIndex:inFrame:` — and the last one is now what the paint
+(`NSMenuView -rectForItemAtIndex:`), the hit test (`-cg_itemAtPoint:`), the panel's height and the submenu's placement all
+ask, instead of four copies of `index * NSMenuRowHeight`. Zero means "the menu's own": a height of 0 keeps
+`NSMenuRowHeight` and a spacing of (0, 0) leaves the rows abutting and flush, so EVERY MENU THAT NOBODY SHAPED IS
+UNCHANGED — the whole existing menu suite passed without a re-pin. The combo cell hands its `-itemHeight` and
+`-intercellSpacing` to the menu it builds, so a list's rows really are that tall and that far apart; MEASURED, a 30-point
+row with a 6-point gap puts row 1 exactly 36 below row 0 and insets it 4 points from the panel.
+
+**THREE NAMED REFUSALS, AND WHY THEY ARE NOT STUBS.** `-setHasVerticalScroller:`, `-scrollItemAtIndexToTop:` and
+`-scrollItemAtIndexToVisible:` all need a list WINDOW with a scroll offset; this tier's list is the menu session, which
+clamps itself to the screen and draws no bar. The flag answers NO however it is set and the two scroll doors say what
+they would need. `-deselectItemAtIndex:` IS real: it un-chooses, and only when the index given is the one held — the one
+reading under which it is not `-selectItemAtIndex:` under a second name.
+
+**`-setButtonBordered:NO` IS THE TRIANGLE WITHOUT ITS PLATE**, and it is measured: the bordered chip has 250 accent points
+in its own rect, the unbordered one has NONE, and the mark is still there in the field's ink (25 dark points) — a white
+triangle on a white field would be the borderless button that is merely invisible.
+
+**AND THE DELEGATE'S FOUR MESSAGES ARE THREE SENDS, STATED IN THE HEADER.** `-comboBoxWillPopUp:` and
+`-comboBoxWillDismiss:` are sent around the session a chip press begins, and `-comboBoxSelectionDidChange:` is sent when
+a row is PICKED — through `-cg_didSelectItemAtIndex:`, which the cell asks its control for, because the delegate belongs
+to the view. `-comboBoxSelectionIsChanging:` is declared and NOT sent: it belongs to the moment the pointer moves over a
+row, and the highlight walk lives in `NSMenuView`, which has no seam to the menu's owner yet. The header says exactly
+that, and the probe asserts the absence as well as the presence.
+
+### Where the next hour goes, after the combo box
+
+1. **The image family** — `NSImage` 9 + `NSImageRep` 7 + `NSBitmapImageRep` 5 = 21: drawing with an operation and a
+   fraction is real; TIFF encoding stays the one refusal.
+2. **`NSAlert` 7 + `NSStatusItem` 5 + `NSRunningApplication` 4 + `NSBrowserCell` 6 = 22**, with the standing warning that
+   `NSStatusItem`'s enabled/mask/toolTip doors have no click path to reach them.
+3. **`NSTextStorage` 12 + `NSTextBlock` 10 + `NSSpellChecker` 10 + `NSTextInputContext` 8 = 40**.
+4. **`NSCell` 9 + `NSApplication` 7 = 16**, the field-editor family being the design work.
+5. **AND ONE SEAM WORTH MAKING, SMALL AND REAL**: a menu delegate's `-menu:willHighlightItem:` would give
+   `-comboBoxSelectionIsChanging:` its source, and `NSMenu` already has a delegate property and an update walk to hang it
+   on. Until then that one message is the tier's only declared-and-unsent delegate door for this control.

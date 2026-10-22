@@ -17,15 +17,43 @@
 #import <AppKit/NSComboBoxCell.h>
 #import <AppKit/NSView.h>
 #import <AppKit/NSEvent.h>
+#import <Foundation/NSNotification.h>
+
+/* **THE VIEW IS THE CELL'S DATA SOURCE, WHICH IS THE ADAPTATION THAT KEEPS APPLE'S TWO PROTOCOLS APART.** A caller hands
+ * over an `NSComboBoxDataSource` — the protocol whose methods name the VIEW — and the cell asks its own protocol, whose
+ * methods name the CELL. This class conforms to the cell's protocol and translates the three calls, so neither header
+ * has to pretend to be the other and a source written for a view is never asked a cell's question. The conformance is
+ * declared here rather than in the header because it is an implementation detail of the hand-off. */
+@interface NSComboBox () <NSComboBoxCellDataSource>
+@end
 
 @implementation NSComboBox
 
 /* ============================================================================================
- * ARCHIVING: NOTHING OF ITS OWN: ITS ITEMS, SELECTION AND BEHAVIOUR ARE ITS CELL'S.
+ * ARCHIVING: ITS ROWS ARE ITS CELL'S, AND ITS ONE IVAR IS NOT A DESIGN PROPERTY.
  * ============================================================================================ */
-/* Its items, selection and behaviour are its CELL's. A class with no instance storage can inherit both coding methods — `class_getInstanceSize` is what
- * says so, and `NSNib`'s census accepts exactly that case. The conformance is declared so the allow-list's
- * `-conformsToProtocol:` question answers YES. */
+/* **THIS CLASS NOW HAS STORAGE, SO IT MUST DO ITS OWN CODING** — `NSNib`'s census accepts an inherited method only when
+ * `class_getInstanceSize` says there is nothing to lose, and `_dataSource` is something to lose. What it holds is an
+ * OBJECT the caller owns and feeds, not a design property: a data source has no coding protocol in this tier and a nib
+ * carrying one would carry a live graph, so the pair below encodes and decodes NOTHING and says so. The CELL's coding
+ * carries everything that is part of the design — its own rows, the selection, the list's shape. */
+- (void)encodeWithCoder:(NSCoder *)aCoder
+{
+	[super encodeWithCoder:aCoder];
+	/* NOTHING OF THIS CLASS'S IS WRITTEN: the one ivar is a source, and a source is not a design property. */
+}
+
+- (instancetype)initWithCoder:(NSCoder *)aDecoder
+{
+	self = [super initWithCoder:aDecoder];
+	if (self == nil) {
+		return nil;
+	}
+	/* THE SOURCE IS NOT ARCHIVED, so a decoded box shows its own rows until a caller sets one. */
+	_dataSource = nil;
+	return self;
+}
+
 + (BOOL)supportsSecureCoding
 {
 	return YES;
@@ -71,7 +99,14 @@
 	NSPoint where = [self convertPoint:[event locationInWindow] fromView:nil];
 
 	if (NSPointInRect(where, [cell cg_chipRectInFrame:bounds])) {
+		/* **AND THE DELEGATE HEARS THE LIST OPEN AND CLOSE, WHICH IS WHAT THOSE TWO MESSAGES ARE FOR.** They are sent
+		 * around the session — the cell's attach door RUNS it, so "after it returns" is "the list is gone" — and each
+		 * carries a notification naming this control, which is the object Apple's messages carry. THE NOTIFICATION IS
+		 * BUILT AND NOT POSTED: a delegate that also registered for the name would otherwise hear the same news twice,
+		 * and this tier has one delegate to tell. */
+		[self fn_notifyDelegate:@selector(comboBoxWillPopUp:)];
 		[cell cg_attachListWithFrame:bounds inView:self];
+		[self fn_notifyDelegate:@selector(comboBoxWillDismiss:)];
 		return;
 	}
 	/* **THE CONTROL IS THE CALLER, WHICH IS HOW A COMMITTED EDIT REACHES A CALLER'S ACTION** — and that is still true
@@ -216,6 +251,153 @@
 - (void)setEditable:(BOOL)flag
 {
 	[(NSComboBoxCell *)[self cell] setEditable:flag];
+}
+
+
+/* ---- THE DATA SOURCE ----------------------------------------------------------------------------- */
+
+- (void)setDataSource:(id <NSComboBoxDataSource>)aSource
+{
+	/* **THE VIEW KEEPS THE SOURCE AND THE CELL IS TOLD THIS OBJECT IS ITS OWN.** A nil source clears both, which is how
+	 * a caller falls back to the box's own rows; the box keeps `-usesDataSource` as its own switch, so a caller may hold
+	 * a source while asking the box to show what it holds (Apple's split, and the cell's header says so). */
+	_dataSource = aSource;
+	[(NSComboBoxCell *)[self cell] setDataSource:((aSource != nil) ? (id <NSComboBoxCellDataSource>)self : nil)];
+	[self setNeedsDisplay:YES];
+}
+
+- (id <NSComboBoxDataSource>)dataSource
+{
+	return (id <NSComboBoxDataSource>)_dataSource;
+}
+
+/* THE THREE ADAPTED CALLS. Each asks the view's protocol of the source the CALLER handed over; a required member the
+ * source does not implement is treated as an empty list rather than sent a message it cannot answer. */
+- (NSInteger)numberOfItemsInComboBoxCell:(NSComboBoxCell *)comboBoxCell
+{
+	(void)comboBoxCell;
+	if (_dataSource == nil || ![(id)_dataSource respondsToSelector:@selector(numberOfItemsInComboBox:)]) {
+		return 0;
+	}
+	return [(id)_dataSource numberOfItemsInComboBox:self];
+}
+
+- (id)comboBoxCell:(NSComboBoxCell *)comboBoxCell objectValueForItemAtIndex:(NSInteger)index
+{
+	(void)comboBoxCell;
+	if (_dataSource == nil || ![(id)_dataSource respondsToSelector:@selector(comboBox:objectValueForItemAtIndex:)]) {
+		return nil;
+	}
+	return [(id)_dataSource comboBox:self objectValueForItemAtIndex:index];
+}
+
+- (NSUInteger)comboBoxCell:(NSComboBoxCell *)comboBoxCell indexOfItemWithStringValue:(NSString *)string
+{
+	(void)comboBoxCell;
+	if (_dataSource != nil && [(id)_dataSource respondsToSelector:@selector(comboBox:indexOfItemWithStringValue:)]) {
+		return [(id)_dataSource comboBox:self indexOfItemWithStringValue:string];
+	}
+	return NSNotFound;
+}
+
+- (NSString *)comboBoxCell:(NSComboBoxCell *)comboBoxCell completedString:(NSString *)uncompletedString
+{
+	(void)comboBoxCell;
+	if (_dataSource != nil && [(id)_dataSource respondsToSelector:@selector(comboBox:completedString:)]) {
+		return [(id)_dataSource comboBox:self completedString:uncompletedString];
+	}
+	return nil;
+}
+
+- (void)reloadData
+{
+	[(NSComboBoxCell *)[self cell] reloadData];
+}
+
+- (void)noteNumberOfItemsChanged
+{
+	[(NSComboBoxCell *)[self cell] noteNumberOfItemsChanged];
+}
+
+/* ---- THE DELEGATE'S THREE TIDINGS ---------------------------------------------------------------- */
+
+/* **ONE HELPER, THREE CALLERS, AND THE SAME SHAPE FOR EACH.** The delegate is asked whether it implements the message
+ * before it is sent — a delegate is `id` and the four are `@optional` — and the notification names THIS control, because
+ * that is the object a caller's handler will look at. */
+- (void)fn_notifyDelegate:(SEL)message
+{
+	id delegate = [self delegate];
+	NSNotification *note;
+
+	if (delegate == nil || ![delegate respondsToSelector:message]) {
+		return;
+	}
+	note = [NSNotification notificationWithName:NSStringFromSelector(message) object:self];
+	(void)[(id)delegate performSelector:message withObject:note];
+}
+
+- (void)cg_didSelectItemAtIndex:(NSInteger)index
+{
+	(void)index;
+	[self fn_notifyDelegate:@selector(comboBoxSelectionDidChange:)];
+}
+
+/* ---- THE LIST'S SHAPE, ALL OF IT THE CELL'S ------------------------------------------------------ */
+
+- (CGFloat)itemHeight
+{
+	return [(NSComboBoxCell *)[self cell] itemHeight];
+}
+
+- (void)setItemHeight:(CGFloat)itemHeight
+{
+	[(NSComboBoxCell *)[self cell] setItemHeight:itemHeight];
+}
+
+- (NSSize)intercellSpacing
+{
+	return [(NSComboBoxCell *)[self cell] intercellSpacing];
+}
+
+- (void)setIntercellSpacing:(NSSize)aSize
+{
+	[(NSComboBoxCell *)[self cell] setIntercellSpacing:aSize];
+}
+
+- (BOOL)isButtonBordered
+{
+	return [(NSComboBoxCell *)[self cell] isButtonBordered];
+}
+
+- (void)setButtonBordered:(BOOL)flag
+{
+	[(NSComboBoxCell *)[self cell] setButtonBordered:flag];
+}
+
+- (BOOL)hasVerticalScroller
+{
+	return [(NSComboBoxCell *)[self cell] hasVerticalScroller];
+}
+
+- (void)setHasVerticalScroller:(BOOL)flag
+{
+	[(NSComboBoxCell *)[self cell] setHasVerticalScroller:flag];
+}
+
+- (void)scrollItemAtIndexToTop:(NSInteger)index
+{
+	[(NSComboBoxCell *)[self cell] scrollItemAtIndexToTop:index];
+}
+
+- (void)scrollItemAtIndexToVisible:(NSInteger)index
+{
+	[(NSComboBoxCell *)[self cell] scrollItemAtIndexToVisible:index];
+}
+
+- (void)deselectItemAtIndex:(NSInteger)index
+{
+	[(NSComboBoxCell *)[self cell] deselectItemAtIndex:index];
+	[self setNeedsDisplay:YES];
 }
 
 @end

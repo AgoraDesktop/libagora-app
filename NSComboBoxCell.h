@@ -35,8 +35,27 @@
 #import <AppKit/NSTextFieldCell.h>
 
 @class NSMenu;
+@class NSComboBoxCell;
 
 NS_ASSUME_NONNULL_BEGIN
+
+/* **THE CELL'S OWN DATA SOURCE, WHICH IS A DIFFERENT PROTOCOL FROM THE VIEW'S BECAUSE THE TWO ASK ABOUT DIFFERENT
+ * OBJECTS.** Apple spells the cell's pair `-numberOfItemsInComboBoxCell:` and `-comboBoxCell:objectValueForItemAtIndex:`
+ * — the noun is the CELL — and the view's pair names the view. That is not duplication for its own sake: a data source
+ * written for a cell can be handed to a view only if the view adapts the call, and this tier's view does exactly
+ * that (see `NSComboBox`'s own protocol), so each class asks the question its own name is in.
+ *
+ * THE TWO OPTIONAL MEMBERS ARE THE ONES THAT MAKE THE LIST USEFUL RATHER THAN MERELY FILLED: an index for a typed
+ * string, and the completion of a prefix. `-indexOfItemWithStringValue:` answers `NSNotFound` when nothing matches,
+ * which is why its type is `NSUInteger` rather than `NSInteger` — Apple's own spelling, and the one this header keeps. */
+@protocol NSComboBoxCellDataSource <NSObject>
+@required
+- (NSInteger)numberOfItemsInComboBoxCell:(NSComboBoxCell *)comboBoxCell;
+- (nullable id)comboBoxCell:(NSComboBoxCell *)comboBoxCell objectValueForItemAtIndex:(NSInteger)index;
+@optional
+- (NSUInteger)comboBoxCell:(NSComboBoxCell *)comboBoxCell indexOfItemWithStringValue:(nullable NSString *)string;
+- (nullable NSString *)comboBoxCell:(NSComboBoxCell *)comboBoxCell completedString:(nullable NSString *)uncompletedString;
+@end
 
 @interface NSComboBoxCell : NSTextFieldCell <NSSecureCoding>
 {
@@ -58,6 +77,21 @@ NS_ASSUME_NONNULL_BEGIN
 	NSInteger _numberOfVisibleItems;
 	BOOL _completes;
 	BOOL _usesDataSource;
+	/* **AND THE SLICE THAT MAKES THE DATA SOURCE REAL.** `_dataSource` is NOT RETAINED — Apple's rule for a data
+	 * source, and this tree's rule for every delegate-shaped connection: a source that was owned by the box it feeds
+	 * could never be freed while the box lives. It is consulted only when `_usesDataSource` is on, which is Apple's
+	 * own split and the reason the flag exists rather than a nil check: a caller may keep a source around while asking
+	 * the box to show its own items.
+	 *
+	 * `_itemHeight` AND `_intercellSpacing` ARE THE LIST'S SHAPE, and they are read where the list is BUILT: the rows
+	 * are a menu session's in this tier, so the cell hands these two numbers to the menu (`-cg_setRowHeight:intercellSpacing:`)
+	 * and the session's own paint and hit test then agree about them. ZERO IS "THE SESSION'S OWN", so a box that nobody
+	 * shaped produces the list this control has always produced. `_buttonBordered` is whether the CHIP wears its plate —
+	 * YES by default, which is Apple's default and the picture this class draws. */
+	id _dataSource;			/* NOT RETAINED */
+	CGFloat _itemHeight;
+	NSSize _intercellSpacing;
+	BOOL _buttonBordered;
 	/* **AND `-_editable` IS NOT HERE BECAUSE `NSCell` ALREADY HAS IT**, along with the `-isEditable` and
 	 * `-setEditable:` pair that answers it. This class therefore inherits both rather than shadowing them with a
 	 * second copy that would have to be kept in step — the same reason the two doors are not redeclared below. WHAT
@@ -104,6 +138,61 @@ NS_ASSUME_NONNULL_BEGIN
 - (void)setCompletes:(BOOL)flag;
 - (BOOL)usesDataSource;
 - (void)setUsesDataSource:(BOOL)flag;
+
+/* ---- THE DATA SOURCE, AND WHAT IT REPLACES ------------------------------------------------------- */
+
+/* **A BOX WITH A SOURCE TAKES ITS ROWS FROM THE SOURCE RATHER THAN FROM ITS OWN ARRAY, AND EVERY ROW DOOR ASKS WHICH.**
+ * `-numberOfItems`, `-itemObjectValueAtIndex:`, `-objectValues`, `-indexOfItemWithObjectValue:`, `-selectItemAtIndex:`,
+ * the list it builds and the completion it offers all read through ONE pair of private doors, so a data source cannot
+ * be honoured in three places and forgotten in a fourth. The array doors (`-addItemWithObjectValue:` and its siblings)
+ * REFUSE BY NAME while the source is in use: they would write storage nothing reads, which is worse than a refusal
+ * because it looks like it worked. */
+- (void)setDataSource:(nullable id <NSComboBoxCellDataSource>)aSource;
+- (nullable id <NSComboBoxCellDataSource>)dataSource;
+
+/* **AND THE TWO WAYS THE OWNER OF A SOURCE SAYS "THE ROWS MOVED".** `-noteNumberOfItemsChanged` is the lighter one —
+ * the count may have changed, so the selection is clamped into it and the shown value re-read; `-reloadData` is the
+ * same thing said about the CONTENTS, and for this class it is the same act because nothing is cached: the rows are
+ * read from the source on demand. Both are real doors rather than stored bits, and the difference between them is
+ * stated where they are implemented. */
+- (void)reloadData;
+- (void)noteNumberOfItemsChanged;
+
+/* **AND THE COMPLETION OF A TYPED PREFIX, WHICH IS WHAT `-completes` IS THE SWITCH FOR.** The argument is what has been
+ * typed; the answer is the first row whose words begin with it, or nil when none does. With a data source that
+ * answers `-comboBoxCell:completedString:` the source speaks; otherwise the rows are scanned. */
+- (nullable NSString *)completedString:(nullable NSString *)uncompletedString;
+
+/* ---- THE LIST'S SHAPE, WHICH THE SESSION NOW OBEYS ----------------------------------------------- */
+
+/* **`-itemHeight` AND `-intercellSpacing` ARE HANDED TO THE LIST WHEN IT IS BUILT.** A combo box's list in this tier is
+ * a menu session (see `-cg_attachListWithFrame:inView:`), and a menu's rows are its own height with no air between
+ * them; these two numbers are how the box says otherwise. ZERO IS "THE SESSION'S OWN" on both axes — a height of 0
+ * keeps `NSMenuRowHeight` and a spacing of (0, 0) leaves the rows abutting and flush — because Apple's published
+ * defaults for a list window this tier does not have are not a thing to transcribe into one it does. */
+- (CGFloat)itemHeight;
+- (void)setItemHeight:(CGFloat)itemHeight;
+- (NSSize)intercellSpacing;
+- (void)setIntercellSpacing:(NSSize)aSize;
+
+/* **AND WHETHER THE CHIP WEARS ITS PLATE.** YES by default: the accent square with the hole knocked out of it. NO
+ * draws the TRIANGLE ALONE, in the field's ink, which is the era's borderless-button look and is measurable in pixels. */
+- (BOOL)isButtonBordered;
+- (void)setButtonBordered:(BOOL)flag;
+
+/* **AND THE ONE SHAPE DOOR THE SESSION HAS NOT GOT: A SCROLLER.** A list taller than its space needs a bar and a
+ * scroll offset, and this tier's session has neither — `NSMenu` clamps a menu to the screen and draws no bar. So the
+ * flag is REFUSED BY NAME when set, and the two scroll doors below are refusals too: a list with no offset has nothing
+ * to scroll, and a "scroll to this row" door that silently did nothing would be the worst of both. */
+- (BOOL)hasVerticalScroller;
+- (void)setHasVerticalScroller:(BOOL)flag;
+- (void)scrollItemAtIndexToTop:(NSInteger)index;
+- (void)scrollItemAtIndexToVisible:(NSInteger)index;
+
+/* **AND ONE LIST DOOR THAT IS REAL WITHOUT A SCROLLER.** `-deselectItemAtIndex:` clears the selection when the index
+ * given is the one held, which is the only reading under which it is not `-selectItemAtIndex:` under a second name:
+ * it un-chooses, and the box goes back to holding nothing. */
+- (void)deselectItemAtIndex:(NSInteger)index;
 /* AND `-isEditable` / `-setEditable:` ARE INHERITED FROM `NSCell` rather than redeclared: this class does not change
  * what they do, so a caller reads the base's answer and there is one implementation of it. */
 

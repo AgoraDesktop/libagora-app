@@ -62,11 +62,11 @@
 # **AND THE MEASURED NUMBERS, RECOMPUTED RATHER THAN EDITED**, so a reader can see the shape without running anything:
 #
 #     classes   117 of 168   (70%)    51 missing
-#     selectors 3413 of 4112  (83%)  699 missing    84 of 117 classes at COMPLETE coverage
-#     protocols  30 of  56   (54%)    26 missing
+#     selectors 3444 of 4112  (84%)  668 missing    86 of 117 classes at COMPLETE coverage
+#     protocols  33 of  56   (59%)    23 missing
 #     functions  86 of  86 (100%)     0 missing    10 of them REFUSE BY NAME, which this count does not distinguish
 #                86 declared, 0 declared-not-defined, 0 defined-not-declared
-#     methods   3884 declared on this tree's own classes, 8 with NO body on the chain (0.2%)
+#     methods   3922 declared on this tree's own classes, 8 with NO body on the chain (0.2%)
 #
 # Three things those five lines say together. The 80% on selectors is the strongest part of the tree and the reason a
 # hand count that looked only at filenames undersold it by a factor of two. THE FUNCTIONS ARE FINISHED — 86 of 86, and
@@ -304,7 +304,7 @@ functions-defined-not-declared 0
 functions-missing 0
 functions-offered 86
 functions-present 86
-methods-declared 3884
+methods-declared 3922
 methods-declared-not-implemented 8
 proto:NSAlertDelegate 0
 proto:NSAnimatablePropertyContainer 0
@@ -315,9 +315,9 @@ proto:NSChangeSpelling 0
 proto:NSCollectionViewDelegate 0
 proto:NSColorPickingCustom 0
 proto:NSColorPickingDefault 0
-proto:NSComboBoxCellDataSource 0
-proto:NSComboBoxDataSource 0
-proto:NSComboBoxDelegate 0
+proto:NSComboBoxCellDataSource 1
+proto:NSComboBoxDataSource 1
+proto:NSComboBoxDelegate 1
 proto:NSControlTextEditingDelegate 1
 proto:NSDatePickerCellDelegate 1
 proto:NSDockTilePlugIn 0
@@ -362,9 +362,9 @@ proto:NSUserInterfaceItemSearching 0
 proto:NSUserInterfaceValidations 1
 proto:NSValidatedUserInterfaceItem 1
 proto:NSWindowDelegate 1
-protocols-missing 26
+protocols-missing 23
 protocols-offered 56
-protocols-present 30
+protocols-present 33
 sel:NSActionCell 6
 sel:NSAlert 20
 sel:NSAnimation 26
@@ -384,8 +384,8 @@ sel:NSClipView 17
 sel:NSCollectionViewItem 3
 sel:NSColor 100
 sel:NSColorSpace 19
-sel:NSComboBox 22
-sel:NSComboBoxCell 20
+sel:NSComboBox 37
+sel:NSComboBoxCell 36
 sel:NSControl 37
 sel:NSCursor 35
 sel:NSCustomImageRep 3
@@ -480,7 +480,7 @@ sel:NSViewController 13
 sel:NSWindow 243
 sel:NSWindowController 26
 sel:NSWorkspace 9
-selectors-missing 699
+selectors-missing 668
 selectors-offered 4112
-selectors-present 3413
+selectors-present 3444
 selphantom:NSObject 8
