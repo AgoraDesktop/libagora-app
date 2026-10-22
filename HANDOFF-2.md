@@ -8,8 +8,8 @@ handoff is still worth reading; nothing in it was wrong, and §2's instrument ru
 *State at this handover: **18 commits**, tree clean, **132 tests passing**, `api-ledger: 355 metrics hold (111 classes,
 3096 selectors of 3835, 28 protocols, 86 functions)`. 101 files changed, +16,946/−140.*
 
-*State after the session that picked this file up (§8–§11): **22 commits**, tree clean, **135 tests passing**, `api-ledger: 361
-metrics hold (117 classes, 3332 selectors of 4112, 30 protocols, 86 functions)`.*
+*State after the session that picked this file up (§8–§12): **23 commits**, tree clean, **136 tests passing**, `api-ledger: 361
+metrics hold (117 classes, 3362 selectors of 4112, 30 protocols, 86 functions)`.*
 
 ---
 
@@ -39,6 +39,7 @@ metrics hold (117 classes, 3332 selectors of 4112, 30 protocols, 86 functions)`.
 | `e7ba264` | **The demonstration's new-controls strip**, and the two `NSBox` title bugs it found (§9). |
 | `0420c08` | **`NSDocument` + `NSDocumentController`** — the file, the change count, the undo wiring, the window controllers and the type table (§10). |
 | `13b4928` | **`NSSavePanel` + `NSOpenPanel`** and the delegate — the browser, the filters, the accept, and the document doors they retire (§11). |
+| `698b992` | **The pop-up pair, `NSColor`'s space and `NSMenu`'s flags** — the first part of the completion sweep (§12). |
 
 Plus, in the workspace: the gitlink advanced after each of those.
 
@@ -66,15 +67,15 @@ The same discovery retired a misreading: "the largest remaining class is `NSFile
 
 ```
 classes   117 of 168   (70%)    51 missing      (one of them Foundation's — see §2)
-selectors 3332 of 4112 (81%)   780 missing     75 of 117 classes at COMPLETE coverage
+selectors 3362 of 4112 (82%)   750 missing     79 of 117 classes at COMPLETE coverage
 protocols  30 of  56   (54%)    26 missing
 functions  86 of  86  (100%)     0 missing      10 refuse by name
-methods  3802 declared, 8 with no body (0.2%)
+methods  3832 declared, 8 with no body (0.2%)
 
 text system:  NSLayoutManager 136/136 (COMPLETE) · NSText 39/39 (COMPLETE) · NSTextView 60/186 ·
               NSTextStorage 13/25 · NSTextContainer 17/17 · NSRulerView 32/32 · NSRulerMarker 19/19
 
-suites: 135 tests, ~60 s;  censuses: api-10.6 (361 metrics), refusal (141), owed (19)
+suites: 136 tests, ~60 s;  censuses: api-10.6 (361 metrics), refusal (141), owed (19)
 ```
 
 The honest reading: **the manager and the text system's geometry are finished, and the application model now exists; the
@@ -433,13 +434,74 @@ also no replacement confirmation: an existing file's URL is accepted and the cal
 
 ### Where the next hour goes, after the panels
 
-1. **The completion sweep** (211 selectors over 23 classes, each ≤15 short) is now the cheapest large win: 75 → ~98 complete
-   classes and 81% → ~86%, almost all forwards. `NSProgressIndicator` 11, `NSButton` 8, `NSPopUpButton(+Cell)` 23,
-   `NSComboBox(+Cell)` 31, `NSScrollView` 12, `NSImage`+`NSImageRep` 16, `NSBrowserCell` 6, `NSStatusItem` 5, `NSMenu` 4,
-   `NSAlert` 7, `NSScroller` 8, `NSCell` 9.
+1. **The completion sweep** — PART 1 LANDED (the pop-up pair, the colour's space and the menu's flags), see §12. The
+   remaining 181 selectors over 19 classes are listed in §12; the button pair, the scroll pair and the progress indicator
+   are the next 51, and all are real doors.
 2. **`NSBrowser`'s 64** for the Workspace's Column view (index paths, type-select, titles, autosave, drag), or **`NSWorkspace`'s
    49** for the shell's launch/file verbs.
 3. **The text editing commands** (`NSResponder` 57 + `NSTextView` 126) for the deepest subsystem.
 4. **The document/panel leftovers**: `NSDocument` 30 (print, autosave, error presentation, the deprecated file forms) and
    `NSDocumentController` 8 (`-reviewUnsavedDocuments…`, `-presentError…`, `-autosavingDelay`), and the three panel selectors
    above. Print and autosave are their own subsystems and are honestly absent rather than half-built.
+
+---
+
+## 12. The completion sweep, part 1: the pop-up's items, a colour's space, and the menu's flags
+
+*Twenty-third commit of the pickup: `NSPopUpButton` 36/36, `NSPopUpButtonCell` 47/47, `NSColor` 100/100 and `NSMenu`
+68/68 — 30 selectors, four classes COMPLETE. **3362 of 4112 selectors (82%), 79 of 117 classes complete.***
+
+**THE POP-UP'S ITEM ARITHMETIC IS THE MENU'S, SPELLED WHERE A CALLER REACHES IT.** `-addItemsWithTitles:`,
+`-insertItemWithTitle:atIndex:` (clamped, and the selection index moves with a row inserted above it),
+`-removeItemWithTitle:`, `-itemTitles`, the represented-object and target/action lookups, and `-selectItem:` go through
+the cell into its menu. Two cell flags are BEHAVIOUR rather than storage: `-usesItemFromMenu` (YES by default) is whether
+a pick copies the row's title onto the button — with it NO the cell keeps its own title through a synchronise — and
+`-altersStateOfSelectedItem` makes a pick TOGGLE the chosen row's state instead of clearing the others, which is a popup of
+independent checkmarks rather than a radio group. `-performClickWithFrame:inView:` is the existing real pop-up path.
+
+**AND A FRESH POP-UP HAS AN EMPTY MENU, WHICH IS APPLE'S SHAPE AND WAS NOT THIS TREE'S.** The cell started with a nil
+menu, so `-addItemWithTitle:` and its eight siblings returned early; the probe failed nine checks in a row before any of
+them could pass. The cell now makes an empty menu in its initialiser, which is also what makes `-menu` answer an object the
+moment a button exists.
+
+**A COLOUR KNOWS ITS SPACE.** `-colorSpace` wraps `CGColorGetColorSpace` in an `NSColorSpace`; `-colorSpaceName` maps a
+NAMED engine space to `NSCalibratedRGBColorSpace`/`NSCalibratedWhiteColorSpace` and an UNNAMED (device) one to
+`NSDeviceRGBColorSpace`/`NSDeviceGrayColorSpace` — CoreGraphics' name-or-no-name is exactly the distinction the era's names
+draw — and `-set` makes the colour the current context's fill AND stroke. The probe checks `-set` as a pixel: a bitmap fill
+comes back `1.00/0.00/0.00`. **The tree's constructors build device spaces**, so `+redColor` answers the device name where
+Apple's calibrated red answers the calibrated one; that divergence is in the test's note rather than hidden.
+
+**THE MENU'S TWO FLAGS ROUND-TRIP.** `-isTornOff` is the 10.6 spelling of state the class already kept, and
+`-allowsContextMenuPlugIns` governs a mechanism Apple removed: the flag stores the answer and loads no plug-in, which is
+the whole of what it can mean now. `+popUpContextMenu:withEvent:forView:withFont:` sets the font and calls the old pop-up
+door rather than copying its positioning.
+
+**AND THE REPRESENTED OBJECT IS FOUND BY IDENTITY.** `NSMenu -indexOfItemWithRepresentedObject:` compares the POINTERS,
+which the class documents; the probe uses the same `NSNumber` object for the set and the lookup. A test that passes an equal
+but different object is testing `-isEqual:`, which is not what the door asks.
+
+### The rest of the sweep, and the doors that need a design rather than a stub
+
+The remaining 181 selectors, by group, with the ones that are NOT simple forwards called out:
+
+| Group | Selectors | Note |
+|---|---|---|
+| `NSButton` 8 + `NSButtonCell` 12 | 20 | transparency, border, sound and the drawing hooks; the cell's `drawBezelWithFrame:` family is a refactor of its existing `drawWithFrame:`, not new arithmetic |
+| `NSScrollView` 12 + `NSScroller` 8 | 20 | line/page increments are real; `-setScrollsDynamically:NO` has no deferred-scroll mode here (a named refusal), and the scroller's two tracking doors are the control's loop under their era names |
+| `NSProgressIndicator` 11 | 11 | `controlSize`/`controlTint`/`bezeled` need the drawing to read them; `usesThreadedAnimation` has no thread (a named refusal) |
+| `NSImage` 9 + `NSImageRep` 7 + `NSBitmapImageRep` 5 | 21 | `drawInRect:fromRect:operation:fraction:` is real over the context; the TIFF representation needs an encoder the tree has not got (refuse by name) |
+| `NSComboBox` 15 + `NSComboBoxCell` 16 | 31 | the data-source half needs the three combo protocols declared and sent; the list geometry is real |
+| `NSAlert` 7 + `NSStatusItem` 5 + `NSRunningApplication` 4 + `NSBrowserCell` 6 | 22 | the alert's suppression button and `+alertWithError:` are real; **`NSStatusItem`'s click/action path is not in that class** (no view sends `_fAction`), so its enabled/mask/toolTip doors would be state with no reader — leave them until the status bar has a click path |
+| `NSTextStorage` 12 + `NSTextBlock` 10 + `NSSpellChecker` 10 + `NSTextInputContext` 8 | 40 | the storage's deprecated attribute runs are real; the input-source doors need a source manager; the spell checker's request-checking is asynchronous |
+| `NSCell` 9 + `NSApplication` 7 | 16 | the field-editor/tracking family and the modal-session relatives; the app's `targetForAction:to:from:` is real, `searchString:` is a UI-string search |
+
+### Where the next hour goes
+
+1. **The button pair + the scroll pair + the progress indicator** — 51 selectors, six classes, and all of the doors are
+   real except the two named refusals. That is the natural second part of the sweep.
+2. **The combo pair's data source** (31) once its three protocols are declared: `NSComboBoxDataSource`,
+   `NSComboBoxCellDataSource`, `NSComboBoxDelegate`. The cell's list geometry is already there.
+3. **The image family** (21): drawing with an operation and a fraction is real; TIFF encoding is the one refusal.
+4. **`NSCell`'s field-editor family** (9) is the deepest: `-editWithFrame:…`, `-selectWithFrame:…`, `-endEditing:`,
+   `-fieldEditorForView:` and `-trackMouse:…` are the cell-level doors the control's session machinery already implements
+   internally; exposing them without a second session is the design work.
