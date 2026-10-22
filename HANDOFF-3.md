@@ -403,3 +403,37 @@ declared rather than refused. 113 of the 129 classes with a surface are at COMPL
 in classes this tree HAS: `NSTextView` 126, `NSBrowser` 64, `NSResponder` 57, `NSWorkspace` 49, `NSMenuView` 37,
 `NSFont` 35, `NSText` 31 — and the absent classes are down to 37, of which the largest groups are the editors
 (`NSMatrix` is done; `NSForm` too) and the controllers/bindings, which are a design question before they are a slice.
+
+---
+
+## 12. The fifth pick-up: Workspace's print verb, which is the launch door's first caller
+
+*One session, one commit, in the `workspace` repository — the user's third answer from the transport decision: yes, the
+file manager gets print verbs.*
+
+**WHAT LANDED.** `File > Print…` (⌘P) in the file window, with `-printSelection:` on `WSFileWindowController`: the
+selection when there is one, the whole folder otherwise. It hands those paths to
+`-[NSApplication application:printFiles:]` — the launch's own door — so the menu and an outside print request run the
+same code. `WSApplication -application:printFiles:withSettings:showPrintPanels:` is the delegate body, and it forwards to
+`WSPrintService`, which prints one LISTING per file (a title and one row per item: name, kind through `WSItemKind`, size,
+date) with a per-file copy of the shared ticket and the settings dictionary merged over it.
+
+**A FILE MANAGER PRINTS A LISTING AND SAYS SO.** Printing a document's contents needs the application that owns the
+document, and this tree has no Apple Event transport to hand a file to one; what Workspace can print is what it shows.
+`WSPrintView` is a tall flipped view that does not answer `-knowsPageRange:` — the AppKit's paginator cuts it by the
+ticket's imageable height, so two hundred items need no arithmetic here, only an 18-point row. The deliberate absences
+are named in the component's PROVENANCE: no file CONTENTS, and no running header per page.
+
+**AND NOTHING A PROBE DOES TOUCHES A PRINTER.** The print request carries settings, so the probe asks for a preview or a
+save and asserts the pages; the menu verb is measured through NSApplication with a recording delegate. `tests/printing.m`
+is **24 checks**: the rows and their height, a three-row page, a hundred-row three-page listing, the ink on page one, the
+service's preview/save/cancel replies, the delegate door, and the verb's paths arriving at the launch door. The
+workspace suite is **14 tests**, all green.
+
+**A CONVENTION NOTE FOR THE NEXT SESSION:** the plan's stage numbers are taken (W7 is the system-wide drag session), so
+the component's README and PROVENANCE record this as an unnumbered "Printing" section rather than inventing a stage.
+
+**WHERE THE NEXT HOUR IS, UNCHANGED FROM §11:** the 558 selectors outstanding in classes `libagora-app` already has —
+`NSTextView` 126 first — and then the absent groups in §2's table, of which the controllers/bindings are a design
+question before they are a slice. Workspace's own plan still owes W7 (cross-process drag), W8 (Get Info) and W9 (Quick
+Look); the print verb is the first thing in this component that the AppKit slice could not have provided alone.
