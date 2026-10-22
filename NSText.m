@@ -32,6 +32,9 @@
 #import <AppKit/NSGraphicsContext.h>
 #import <AppKit/NSWindow.h>
 #import <AppKit/NSApplication.h>
+#import <AppKit/NSScrollView.h>
+#import <AppKit/NSRulerView.h>
+#import <AppKit/AppKitRefusal.h>
 #import <Foundation/NSNotification.h>
 #import <Foundation/NSNotificationCenter.h>
 #import <Foundation/NSArray.h>
@@ -69,6 +72,13 @@ static void fn_announce(NSText *text, NSString *name, SEL delegateSelector)
 		[delegate performSelector:delegateSelector withObject:note];
 	}
 }
+
+/* THE SETTER LIVES ON `NSTextView` (it is a 10.6 `NSTextView` selector, not an `NSText` one) and this class only forwards
+ * the command to it. Declared before the implementation because `-toggleRuler:` sends it; NOT in the header, because a
+ * plain `NSText` has no ruler to set and a caller should not read a door that answers a refusal on that side. */
+@interface NSText (AGRulerToggle)
+- (void)setRulerVisible:(BOOL)flag;
+@end
 
 @implementation NSText
 
@@ -1197,6 +1207,51 @@ static void fn_announce(NSText *text, NSString *name, SEL delegateSelector)
 	 * supposed to undo an edit performed it. */
 	_movement = NSTextMovementCancel;
 	[[self window] makeFirstResponder:nil];
+}
+
+
+/* ==================================================================================================================
+ * THE RULER'S FOUR COMMANDS.
+ *
+ * The show/hide pair is real here because the ruler lives in the SCROLL VIEW, which both classes can be inside; the
+ * copy/paste pair is the answered refusal described in the header, and `NSTextView` overrides it with the store-based
+ * version. `-toggleRuler:` asks the subclass's setter rather than writing the scroll view itself, so a text view gets
+ * its chance to rebuild the markers — the toggle is the command and the setter is the behaviour.
+ * ================================================================================================================ */
+
+
+- (BOOL)isRulerVisible
+{
+	NSScrollView *scroll = [self enclosingScrollView];
+
+	return (scroll != nil) ? [scroll rulersVisible] : NO;
+}
+
+- (void)toggleRuler:(id)sender
+{
+	(void)sender;
+	if (![self respondsToSelector:@selector(setRulerVisible:)]) {
+		fn_refuse_window("NSText -toggleRuler:", "a ruler to toggle; this object is not in a scroll view that can "
+				 "wear one");
+		return;
+	}
+	[self setRulerVisible:![self isRulerVisible]];
+}
+
+- (void)copyRuler:(id)sender
+{
+	(void)sender;
+	fn_refuse_window("NSText -copyRuler:",
+			 "an attributed storage to take a ruler from; a plain NSText holds one run with no tab stops, so the "
+			 "door is NSTextView's");
+}
+
+- (void)pasteRuler:(id)sender
+{
+	(void)sender;
+	fn_refuse_window("NSText -pasteRuler:",
+			 "an attributed storage to put a ruler into; a plain NSText holds one run with no tab stops, so the door "
+			 "is NSTextView's");
 }
 
 @end

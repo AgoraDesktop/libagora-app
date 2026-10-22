@@ -49,6 +49,10 @@ NS_ASSUME_NONNULL_BEGIN
 @class NSTextStorage;
 @class NSTextContainer;
 @class NSLayoutManager;
+@class NSTextView;
+@class NSParagraphStyle;
+@class NSRulerView;
+@class NSView;
 
 /* **THE TWO THINGS A MANAGER TELLS ITS DELEGATE, OF THE ERA'S THREE.** `-layoutManagerDidInvalidateLayout:` is the one
  * this slice can send — the layout IS invalidated, because the store said so — and the other two
@@ -384,6 +388,36 @@ NS_ASSUME_NONNULL_BEGIN
 	   lineFragmentRect:(NSRect)lineRect
     lineFragmentGlyphRange:(NSRange)lineGlyphRange
 	    containerOrigin:(NSPoint)containerOrigin;
+
+/* ==================================================================================================================
+ * THE RULER'S TWO DOORS, WHICH ARE THE TEXT SYSTEM'S HALF OF IT.
+ *
+ * **A TAB STOP IS A MARKER ON A RULER, AND THAT IDENTITY IS THE WHOLE OF THESE TWO METHODS.** `NSTextTab` is a location
+ * and a kind; `NSRulerMarker` is a location and an image; so the manager builds one marker per tab stop, hands the tab
+ * over as the marker's `representedObject`, and the ruler draws and drags it — after which the client view reads the
+ * marker list back and writes the paragraph's tab stops from it. The kind is carried by the IMAGE (left, centre, right,
+ * decimal), which is why four small bitmaps are the manager's rather than the ruler's: they are what a `NSTextTabType`
+ * looks like.
+ *
+ * **THE LOCATION IS IN THE RULER'S OWN COORDINATES, WHICH MEANS IT INCLUDES THE ORIGIN OFFSET.** The offset is what
+ * puts the ruler's zero at the text's left inset — the same number a tab stop is measured from — so a one-inch tab and
+ * the one-inch hash mark land in the same place. A manager that returned the bare tab location would put every marker
+ * four points to the left of the mark it names.
+ *
+ * **THE ACCESSORY STRIP IS DECLARED AND REFUSED**, which is this tier's vocabulary rather than an omission: Apple's is
+ * the little control cluster that changes a tab's type, and it is a CONTROL this tier has not built, so the door
+ * answers nil — the empty value of its type — and says so on stderr. A ruler that reserved room for nothing would be
+ * worse than one that reserves none.
+ * ================================================================================================================ */
+
+- (NSArray *)rulerMarkersForTextView:(nullable NSTextView *)aTextView
+		      paragraphStyle:(NSParagraphStyle *)style
+			       ruler:(NSRulerView *)aRulerView;
+
+- (nullable NSView *)rulerAccessoryViewForTextView:(nullable NSTextView *)aTextView
+				    paragraphStyle:(NSParagraphStyle *)style
+					      ruler:(NSRulerView *)aRulerView
+					    enabled:(BOOL)isEnabled;
 
 @end
 

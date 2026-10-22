@@ -69,6 +69,9 @@
 @class NSTextStorage;
 @class NSLayoutManager;
 @class NSTextContainer;
+@class NSRulerView;
+@class NSRulerMarker;
+@class NSEvent;
 
 NS_ASSUME_NONNULL_BEGIN
 
@@ -116,7 +119,10 @@ NS_ASSUME_NONNULL_BEGIN
 	 * drawing is the layout manager's next slice — stated here rather than implied, because a setter that silently
 	 * drops its argument is the shape a stub takes. */
 	NSMutableDictionary *_spellingState;
-
+	/* **AND WHETHER THIS VIEW WANTS A RULER AT ALL.** Apple's default is YES for a text view — the line is there for
+	 * the asking — and NO here would mean the view has none to show, which is a different fact from `-isRulerVisible`
+	 * (whether the scroll view is showing the one it has). */
+	BOOL _usesRuler;
 
 	/* ============================================================================================
 	 * THE FIND STATE. The panel is absent, so what a view owns is the SEARCH STRING and the indicator —
@@ -204,6 +210,46 @@ NS_ASSUME_NONNULL_BEGIN
 - (BOOL)isVerticallyResizable;
 - (void)setVerticallyResizable:(BOOL)flag;
 
+
+/* ==================================================================================================================
+ * THE RULER — the view's half of it, and the nine questions the ruler asks it back.
+ *
+ * **`-usesRuler` IS A LINE THE VIEW DRAWS AND `-isRulerVisible` IS WHERE IT IS.** Apple separates the two: a view that
+ * uses a ruler wants one it can SHOW, and showing it is the scroll view's visibility flag. So `-setUsesRuler:NO` means
+ * "this view has no ruler at all" — `-setRulerVisible:YES` then creates nothing — while hiding one leaves it built and
+ * its markers intact.
+ *
+ * `-updateRuler` IS THE ONE PLACE THE RULER AND THE PARAGRAPH ARE RECONCILED, and it is public because Apple's is: it
+ * reads the paragraph style at the insertion point, asks the layout manager for a marker per tab stop, installs them, and
+ * reserves the ruler's marker band from the tallest one. The view calls it when the ruler is shown and when the
+ * selection moves.
+ *
+ * **AND THE NINE DELEGATE-LOOKING DOORS ARE THE CLIENT VIEW'S SIDE OF THE INFORMAL PROTOCOL.** They are not a
+ * `NSRulerViewDelegate` (10.6 has no such protocol) — they are the messages a ruler sends its CLIENT VIEW, and this is
+ * the client. The three `should` questions answer YES; the two `will` questions answer the location they were given, and
+ * are where a view would clamp one; and the three `did` questions are the real behaviour: THE PARAGRAPH'S TAB STOPS ARE
+ * REBUILT FROM THE MARKERS, so dragging a marker in the ruler moves the tab stop in the document, and adding or
+ * removing one adds or removes a tab. That is the whole reason a `representedObject` carries the `NSTextTab`.
+ *
+ * `-rulerView:handleMouseDown:` moves the insertion point to the place on the current line that the click names — the
+ * other half of the gesture, so a click that misses a marker is not swallowed.
+ * ================================================================================================================ */
+
+- (BOOL)isRulerVisible;
+- (void)setRulerVisible:(BOOL)flag;
+- (BOOL)usesRuler;
+- (void)setUsesRuler:(BOOL)flag;
+- (void)updateRuler;
+
+- (BOOL)rulerView:(NSRulerView *)aRulerView shouldAddMarker:(NSRulerMarker *)marker;
+- (CGFloat)rulerView:(NSRulerView *)aRulerView willAddMarker:(NSRulerMarker *)marker atLocation:(CGFloat)location;
+- (void)rulerView:(NSRulerView *)aRulerView didAddMarker:(NSRulerMarker *)marker;
+- (BOOL)rulerView:(NSRulerView *)aRulerView shouldMoveMarker:(NSRulerMarker *)marker;
+- (CGFloat)rulerView:(NSRulerView *)aRulerView willMoveMarker:(NSRulerMarker *)marker toLocation:(CGFloat)location;
+- (void)rulerView:(NSRulerView *)aRulerView didMoveMarker:(NSRulerMarker *)marker;
+- (BOOL)rulerView:(NSRulerView *)aRulerView shouldRemoveMarker:(NSRulerMarker *)marker;
+- (void)rulerView:(NSRulerView *)aRulerView didRemoveMarker:(NSRulerMarker *)marker;
+- (void)rulerView:(NSRulerView *)aRulerView handleMouseDown:(NSEvent *)event;
 
 /* ==================================================================================================================
  * FINDING — `NSFindPanelAction` and the four doors that reach it.

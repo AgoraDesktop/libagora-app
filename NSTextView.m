@@ -31,6 +31,12 @@
 #import <AppKit/NSEvent.h>
 #import <AppKit/NSAttributedString.h>
 #import <AppKit/NSParagraphStyle.h>
+#import <AppKit/NSTextTab.h>
+#import <AppKit/NSScrollView.h>
+#import <AppKit/NSRulerView.h>
+#import <AppKit/NSPasteboard.h>
+#import <Foundation/NSPropertyListSerialization.h>
+#import <Foundation/NSData.h>
 #import <Foundation/NSNotification.h>
 #import <Foundation/NSNotificationCenter.h>
 
@@ -55,6 +61,9 @@ static void cg_announce(NSText *text, NSString *name, SEL delegateSelector)
 	if (self != nil) {
 		/* APPLE'S DEFAULT FOR A TEXT VIEW, and the one a scroll view needs: the view is as tall as its text. */
 		_cg_verticallyResizable = YES;
+		/* **AND A TEXT VIEW USES A RULER UNLESS IT IS TOLD NOT TO**, which is Apple's default: the line a ruler
+		 * draws is there for the asking, and merely asking does not build one. */
+		_usesRuler = YES;
 		_cg_markedRange = NSMakeRange(NSNotFound, 0);
 		/* **AND THE TRIO IS BUILT HERE, IN THE ONE DIRECTION THAT CANNOT CYCLE.** The view retains the STORE, the
 		 * store retains the MANAGER, the manager retains the CONTAINER, and the container holds a BORROWED pointer
@@ -1275,6 +1284,462 @@ static void cg_announce(NSText *text, NSString *name, SEL delegateSelector)
 {
 	(void)sender;
 	[self setSelectedRange:NSMakeRange(_selectedRange.location, [[self string] length] - _selectedRange.location)];
+}
+
+/* ==================================================================================================================
+ * THE RULER.
+ *
+ * The view's side of it, in three layers: the show/hide state (`-usesRuler`, `-setRulerVisible:`), the reconciliation
+ * (`-updateRuler` reads the paragraph at the insertion point and asks the manager for one marker per tab stop), and the
+ * nine question the ruler asks its client back — of which the three `did` ones are the behaviour, because they rebuild
+ * the paragraph's tab stops from the marker list.
+ *
+ * **THE PARAGRAPH IS THE INSERTION POINT'S, NOT THE SELECTION'S SPAN.** A ruler describes the paragraph the caret is in,
+ * which is what Apple's text system does and what makes the markers change when the caret crosses a paragraph boundary.
+ * A caller wanting a ruler for several paragraphs has a selection whose START is the paragraph in question.
+ * ================================================================================================================ */
+
+/* THE PAYLOAD'S KEYS, WHICH ARE THIS TIER'S RATHER THAN APPLE'S. `NSRulerPboardType` carries an opaque blob in Apple's
+ * implementation; here it is a property list of the ruler's FACTS, because a `NSParagraphStyle` is not a property-list
+ * type and a pasteboard that needed a keyed archive would be a heavier dependency than a ruler deserves. The names are
+ * spelled once and read back by the same constants, so a paste can never disagree with a copy about a key. */
+static NSString * const AGRulerAlignmentKey = @"Alignment";
+static NSString * const AGRulerFontNameKey = @"FontName";
+static NSString * const AGRulerFontSizeKey = @"FontSize";
+static NSString * const AGRulerTabStopsKey = @"TabStops";
+static NSString * const AGRulerTabLocationKey = @"Location";
+static NSString * const AGRulerTabTypeKey = @"Type";
+static NSString * const AGRulerHeadIndentKey = @"HeadIndent";
+static NSString * const AGRulerFirstLineHeadIndentKey = @"FirstLineHeadIndent";
+static NSString * const AGRulerTailIndentKey = @"TailIndent";
+static NSString * const AGRulerLineSpacingKey = @"LineSpacing";
+static NSString * const AGRulerParagraphSpacingKey = @"ParagraphSpacing";
+static NSString * const AGRulerParagraphSpacingBeforeKey = @"ParagraphSpacingBefore";
+static NSString * const AGRulerLineHeightMultipleKey = @"LineHeightMultiple";
+
+/* **AND THE RULER FOLLOWS THE CARET'S PARAGRAPH.** Every movement and every edit ends in a selection change — `NSText`
+ * makes that true — so hanging the ruler's update here is what makes it track the caret without a notification of its
+ * own. It is guarded by the two flags, so a view with no ruler pays one comparison. */
+- (void)setSelectedRange:(NSRange)range
+{
+	[super setSelectedRange:range];
+	if (_usesRuler && [self isRulerVisible]) {
+		[self updateRuler];
+	}
+}
+
+- (BOOL)usesRuler
+{
+	return _usesRuler;
+}
+
+- (void)setUsesRuler:(BOOL)flag
+{
+	BOOL value = flag ? YES : NO;
+
+	if (value == _usesRuler) {
+		return;
+	}
+	_usesRuler = value;
+	/* **A VIEW THAT STOPS USING A RULER PUTS IT AWAY.** Leaving a visible ruler measuring a view that no longer wants one
+	 * is the state Apple's split exists to avoid. */
+	if (!value) {
+		[self setRulerVisible:NO];
+	}
+}
+
+- (BOOL)isRulerVisible
+{
+	NSScrollView *scroll = [self enclosingScrollView];
+
+	if (_usesRuler && scroll != nil) {
+		return [scroll rulersVisible];
+	}
+	return NO;
+}
+
+/* **SHOWING IT IS THREE FACTS, IN THIS ORDER.** The scroll view must HAVE a horizontal ruler, it must be VISIBLE, and
+ * then the markers are rebuilt from the paragraph — because a ruler that appeared with the previous paragraph's tabs
+ * would be showing a document that is not there. Hiding it is one fact, and it keeps the markers, which is the
+ * scroll view's own split between "has" and "shows". */
+- (void)setRulerVisible:(BOOL)flag
+{
+	NSScrollView *scroll = [self enclosingScrollView];
+
+	if (!flag) {
+		[scroll setRulersVisible:NO];
+		return;
+	}
+	if (!_usesRuler) {
+		return;
+	}
+	if (scroll == nil) {
+		fn_refuse_window("NSTextView -setRulerVisible:",
+				 "an enclosing scroll view to wear the ruler; a text view laid out by hand has no strip to put it in");
+		return;
+	}
+	[scroll setHasHorizontalRuler:YES];
+	[scroll setRulersVisible:YES];
+	{
+		NSRulerView *ruler = [scroll horizontalRulerView];
+
+		/* **THE RULE STRIP IS SIZED FOR MARKS AND NUMBERS, NOT FOR APPLE'S FIFTEEN.** A text ruler is a tab-stop strip:
+		 * eight points of tick, a nine-point label above it, and the markers in the band the scroll view reserves for
+		 * them — so fifteen is one point too many and fourteen is what the drawing actually spends. */
+		[ruler setRuleThickness:14.0];
+		[ruler setOriginOffset:NS_TEXT_INSET];
+		[ruler setClientView:self];
+	}
+	[self updateRuler];
+}
+
+/* **THE RECONCILIATION.** One paragraph style in, one marker per tab stop out, and the reserve that keeps them inside
+ * the strip. A view whose store is empty still gets a ruler — with no markers — because the STRIP is a fact about the
+ * view and not about its text. */
+- (void)updateRuler
+{
+	NSScrollView *scroll = [self enclosingScrollView];
+	NSRulerView *ruler;
+	NSParagraphStyle *style = nil;
+	NSArray *markers;
+	NSView *accessory;
+	NSUInteger index = _selectedRange.location;
+	CGFloat tallest = 0.0;
+	NSUInteger i;
+
+	if (!_usesRuler || scroll == nil || ![scroll rulersVisible]) {
+		return;
+	}
+	ruler = [scroll horizontalRulerView];
+	if (ruler == nil) {
+		return;
+	}
+	[ruler setClientView:self];
+	if ([_cg_textStorage length] > 0) {
+		NSRange effective = NSMakeRange(0, 0);
+
+		if (index >= [_cg_textStorage length]) {
+			index = [_cg_textStorage length] - 1;
+		}
+		style = [[_cg_textStorage attributesAtIndex:index effectiveRange:&effective]
+			    objectForKey:NSParagraphStyleAttributeName];
+	}
+	if (style == nil) {
+		style = [NSParagraphStyle defaultParagraphStyle];
+	}
+	markers = [_cg_layoutManager rulerMarkersForTextView:self paragraphStyle:style ruler:ruler];
+	[ruler setMarkers:markers];
+	for (i = 0; i < [markers count]; i++) {
+		CGFloat needed = [[markers objectAtIndex:i] thicknessRequiredInRuler];
+
+		if (needed > tallest) {
+			tallest = needed;
+		}
+	}
+	[ruler setReservedThicknessForMarkers:tallest];
+	/* **AND THE ACCESSORY, WHICH IS THE MANAGER'S ANSWER AND MAY BE NIL.** The reserve is set from what came back rather
+	 * than assumed, so the refusal costs no thickness and a future accessory costs exactly its own. */
+	accessory = [_cg_layoutManager rulerAccessoryViewForTextView:self paragraphStyle:style ruler:ruler enabled:YES];
+	[ruler setAccessoryView:accessory];
+	[ruler setReservedThicknessForAccessoryView:accessory != nil
+		? (([ruler orientation] == NSVerticalRuler) ? NSWidth([accessory frame]) : NSHeight([accessory frame]))
+		: 0.0];
+	[ruler invalidateHashMarks];
+}
+
+/* ==================================================================================================================
+ * THE MARKERS BECOME THE PARAGRAPH.
+ *
+ * **ONE PATH FOR ADD, MOVE AND REMOVE, BECAUSE THEY ARE THE SAME FACT.** The ruler's marker list is the truth after any
+ * of the three, so the paragraph's tab stops are rebuilt from the WHOLE list — sorted by location, each one's kind read
+ * back out of its `representedObject` — and written to the insertion point's paragraph. A per-gesture edit would be
+ * three chances to disagree about ordering; this is one.
+ * ================================================================================================================ */
+
+- (void)cg_applyRulerMarkers:(NSRulerView *)ruler
+{
+	NSArray *markers;
+	NSMutableArray *tabs;
+	NSMutableParagraphStyle *style;
+	NSRange paragraph;
+	NSUInteger index;
+	NSUInteger i;
+
+	if (ruler == nil || [_cg_textStorage length] == 0) {
+		return;
+	}
+	index = (_selectedRange.location < [_cg_textStorage length]) ? _selectedRange.location
+								    : [_cg_textStorage length] - 1;
+	style = [[[_cg_textStorage attributesAtIndex:index effectiveRange:NULL]
+		     objectForKey:NSParagraphStyleAttributeName] mutableCopy];
+	if (style == nil) {
+		style = [[NSMutableParagraphStyle alloc] init];
+	}
+	markers = [ruler markers];
+	tabs = [NSMutableArray arrayWithCapacity:[markers count]];
+	for (i = 0; i < [markers count]; i++) {
+		NSRulerMarker *marker = [markers objectAtIndex:i];
+		id represented = [marker representedObject];
+		NSTextTabType type = [represented isKindOfClass:[NSTextTab class]]
+					 ? [(NSTextTab *)represented tabStopType] : NSLeftTabStopType;
+		CGFloat location = [marker markerLocation] - [ruler originOffset];
+		NSTextTab *tab;
+		NSUInteger insertAt = 0;
+
+		if (location < 0.0) {
+			location = 0.0;
+		}
+		tab = [[NSTextTab alloc] initWithType:type location:location];
+		/* **THE LIST IS KEPT SORTED AS IT IS BUILT**, because `-tabStops` is documented in ascending order and the
+		 * layout walks it in order; a marker list mutated by three gestures would otherwise reach the engine unsorted. */
+		while (insertAt < [tabs count] && [(NSTextTab *)[tabs objectAtIndex:insertAt] location] <= location) {
+			insertAt++;
+		}
+		[tabs insertObject:tab atIndex:insertAt];
+		[tab release];
+	}
+	[style setTabStops:tabs];
+	paragraph = [[self string] paragraphRangeForRange:_selectedRange];
+	if (paragraph.length == 0) {
+		paragraph = NSMakeRange(index, 0);
+	}
+	[_cg_textStorage addAttribute:NSParagraphStyleAttributeName value:style range:paragraph];
+	[style release];
+	[self setNeedsDisplay:YES];
+}
+
+- (BOOL)rulerView:(NSRulerView *)aRulerView shouldAddMarker:(NSRulerMarker *)marker
+{
+	(void)aRulerView;
+	(void)marker;
+	return YES;
+}
+
+- (CGFloat)rulerView:(NSRulerView *)aRulerView willAddMarker:(NSRulerMarker *)marker atLocation:(CGFloat)location
+{
+	(void)aRulerView;
+	(void)marker;
+	return location;
+}
+
+- (void)rulerView:(NSRulerView *)aRulerView didAddMarker:(NSRulerMarker *)marker
+{
+	(void)marker;
+	[self cg_applyRulerMarkers:aRulerView];
+}
+
+- (BOOL)rulerView:(NSRulerView *)aRulerView shouldMoveMarker:(NSRulerMarker *)marker
+{
+	(void)aRulerView;
+	(void)marker;
+	return YES;
+}
+
+- (CGFloat)rulerView:(NSRulerView *)aRulerView willMoveMarker:(NSRulerMarker *)marker toLocation:(CGFloat)location
+{
+	(void)aRulerView;
+	(void)marker;
+	return location;
+}
+
+- (void)rulerView:(NSRulerView *)aRulerView didMoveMarker:(NSRulerMarker *)marker
+{
+	(void)marker;
+	[self cg_applyRulerMarkers:aRulerView];
+}
+
+- (BOOL)rulerView:(NSRulerView *)aRulerView shouldRemoveMarker:(NSRulerMarker *)marker
+{
+	(void)aRulerView;
+	(void)marker;
+	return YES;
+}
+
+- (void)rulerView:(NSRulerView *)aRulerView didRemoveMarker:(NSRulerMarker *)marker
+{
+	(void)marker;
+	[self cg_applyRulerMarkers:aRulerView];
+}
+
+/* **A CLICK ON THE RULER THAT MISSES A MARKER MOVES THE INSERTION POINT**, which is the other half of the gesture: the
+ * ruler's x names a place on the caret's own line, and the manager answers which character that place is. Without this a
+ * click on the strip would be swallowed, which is exactly what a marker hit test alone would do. */
+- (void)rulerView:(NSRulerView *)aRulerView handleMouseDown:(NSEvent *)event
+{
+	NSPoint point;
+	CGFloat baseline;
+	NSUInteger line;
+	NSUInteger glyph;
+	NSUInteger character;
+
+	(void)aRulerView;
+	if ([_cg_textStorage length] == 0) {
+		return;
+	}
+	point = [self convertPoint:[event locationInWindow] fromView:nil];
+	line = [self cg_visualLineIndexForCharacterIndex:_selectedRange.location];
+	baseline = [self cg_baselineForLine:line];
+	if (point.x < 0.0) {
+		point.x = 0.0;
+	}
+	glyph = [_cg_layoutManager cg_glyphIndexForPoint:NSMakePoint(point.x, baseline)
+					  inTextContainer:_cg_textContainer];
+	character = [_cg_layoutManager characterIndexForGlyphAtIndex:glyph];
+	[self setSelectedRange:NSMakeRange(character, 0)];
+}
+
+/* ==================================================================================================================
+ * THE TWO RULER COMMANDS THE BASE CLASS REFUSES.
+ *
+ * **WHAT A RULER COPIES IS THE PARAGRAPH'S FORMAT PLUS THE RUN'S FONT.** Tab stops, the three indents, the paragraph and
+ * line spacing and the alignment are the `NSParagraphStyle`; the font is the run's. Both travel as a property list under
+ * `NSRulerPboardType`, and `-pasteRuler:` writes them onto every paragraph the selection touches — which is what "paste
+ * the ruler" means: a paragraph is the unit, so a selection inside one paragraph affects that paragraph, and a selection
+ * across three affects all three.
+ * ================================================================================================================ */
+
+- (void)copyRuler:(id)sender
+{
+	NSPasteboard *pasteboard = [NSPasteboard generalPasteboard];
+	NSDictionary *attributes;
+	NSMutableDictionary *facts;
+	NSParagraphStyle *style;
+	NSFont *font;
+	NSArray *stops;
+	NSMutableArray *tabs;
+	NSData *data;
+	NSUInteger index;
+
+	(void)sender;
+	if ([_cg_textStorage length] == 0) {
+		fn_refuse_window("NSTextView -copyRuler:", "a paragraph to take a ruler from; this view's store is empty");
+		return;
+	}
+	index = (_selectedRange.location < [_cg_textStorage length]) ? _selectedRange.location
+								    : [_cg_textStorage length] - 1;
+	attributes = [_cg_textStorage attributesAtIndex:index effectiveRange:NULL];
+	style = [attributes objectForKey:NSParagraphStyleAttributeName];
+	font = [attributes objectForKey:NSFontAttributeName];
+	if (style == nil) {
+		style = [NSParagraphStyle defaultParagraphStyle];
+	}
+	facts = [NSMutableDictionary dictionary];
+	[facts setObject:[NSNumber numberWithInteger:(NSInteger)[style alignment]] forKey:AGRulerAlignmentKey];
+	[facts setObject:[NSNumber numberWithDouble:(double)[style headIndent]] forKey:AGRulerHeadIndentKey];
+	[facts setObject:[NSNumber numberWithDouble:(double)[style firstLineHeadIndent]]
+		  forKey:AGRulerFirstLineHeadIndentKey];
+	[facts setObject:[NSNumber numberWithDouble:(double)[style tailIndent]] forKey:AGRulerTailIndentKey];
+	[facts setObject:[NSNumber numberWithDouble:(double)[style lineSpacing]] forKey:AGRulerLineSpacingKey];
+	[facts setObject:[NSNumber numberWithDouble:(double)[style paragraphSpacing]] forKey:AGRulerParagraphSpacingKey];
+	[facts setObject:[NSNumber numberWithDouble:(double)[style paragraphSpacingBefore]]
+		  forKey:AGRulerParagraphSpacingBeforeKey];
+	[facts setObject:[NSNumber numberWithDouble:(double)[style lineHeightMultiple]]
+		  forKey:AGRulerLineHeightMultipleKey];
+	if (font != nil) {
+		if ([font fontName] != nil) {
+			[facts setObject:[font fontName] forKey:AGRulerFontNameKey];
+		}
+		[facts setObject:[NSNumber numberWithDouble:(double)[font pointSize]] forKey:AGRulerFontSizeKey];
+	}
+	stops = [style tabStops];
+	tabs = [NSMutableArray arrayWithCapacity:[stops count]];
+	for (index = 0; index < [stops count]; index++) {
+		NSTextTab *tab = [stops objectAtIndex:index];
+
+		[tabs addObject:[NSDictionary dictionaryWithObjectsAndKeys:
+			[NSNumber numberWithDouble:(double)[tab location]], AGRulerTabLocationKey,
+			[NSNumber numberWithInteger:(NSInteger)[tab tabStopType]], AGRulerTabTypeKey, nil]];
+	}
+	[facts setObject:tabs forKey:AGRulerTabStopsKey];
+	data = [NSPropertyListSerialization dataWithPropertyList:facts format:NSPropertyListXMLFormat_v1_0
+							  options:0 error:NULL];
+	if (data == nil) {
+		fn_refuse_window("NSTextView -copyRuler:", "a serialisable ruler; the facts did not encode");
+		return;
+	}
+	[pasteboard declareTypes:[NSArray arrayWithObject:NSRulerPboardType] owner:nil];
+	[pasteboard setData:data forType:NSRulerPboardType];
+}
+
+- (void)pasteRuler:(id)sender
+{
+	NSPasteboard *pasteboard = [NSPasteboard generalPasteboard];
+	NSData *data = [pasteboard dataForType:NSRulerPboardType];
+	id plist;
+	NSDictionary *facts;
+	NSMutableParagraphStyle *style;
+	NSMutableArray *tabs;
+	NSArray *encodedTabs;
+	NSFont *font;
+	NSRange paragraph;
+	NSUInteger i;
+
+	(void)sender;
+	if (data == nil) {
+		fn_refuse_window("NSTextView -pasteRuler:", "a ruler on the pasteboard; there is no NSRulerPboardType data");
+		return;
+	}
+	plist = [NSPropertyListSerialization propertyListWithData:data options:0 format:NULL error:NULL];
+	if (![plist isKindOfClass:[NSDictionary class]]) {
+		fn_refuse_window("NSTextView -pasteRuler:", "a ruler this tier can read; the payload is not its property list");
+		return;
+	}
+	facts = plist;
+	style = [[NSMutableParagraphStyle alloc] init];
+	if ([facts objectForKey:AGRulerAlignmentKey] != nil) {
+		[style setAlignment:(NSTextAlignment)[[facts objectForKey:AGRulerAlignmentKey] integerValue]];
+	}
+	if ([facts objectForKey:AGRulerHeadIndentKey] != nil) {
+		[style setHeadIndent:(CGFloat)[[facts objectForKey:AGRulerHeadIndentKey] doubleValue]];
+	}
+	if ([facts objectForKey:AGRulerFirstLineHeadIndentKey] != nil) {
+		[style setFirstLineHeadIndent:(CGFloat)[[facts objectForKey:AGRulerFirstLineHeadIndentKey] doubleValue]];
+	}
+	if ([facts objectForKey:AGRulerTailIndentKey] != nil) {
+		[style setTailIndent:(CGFloat)[[facts objectForKey:AGRulerTailIndentKey] doubleValue]];
+	}
+	if ([facts objectForKey:AGRulerLineSpacingKey] != nil) {
+		[style setLineSpacing:(CGFloat)[[facts objectForKey:AGRulerLineSpacingKey] doubleValue]];
+	}
+	if ([facts objectForKey:AGRulerParagraphSpacingKey] != nil) {
+		[style setParagraphSpacing:(CGFloat)[[facts objectForKey:AGRulerParagraphSpacingKey] doubleValue]];
+	}
+	if ([facts objectForKey:AGRulerParagraphSpacingBeforeKey] != nil) {
+		[style setParagraphSpacingBefore:(CGFloat)[[facts objectForKey:AGRulerParagraphSpacingBeforeKey] doubleValue]];
+	}
+	if ([facts objectForKey:AGRulerLineHeightMultipleKey] != nil) {
+		[style setLineHeightMultiple:(CGFloat)[[facts objectForKey:AGRulerLineHeightMultipleKey] doubleValue]];
+	}
+	encodedTabs = [facts objectForKey:AGRulerTabStopsKey];
+	tabs = [NSMutableArray arrayWithCapacity:[encodedTabs count]];
+	for (i = 0; i < [encodedTabs count]; i++) {
+		NSDictionary *entry = [encodedTabs objectAtIndex:i];
+		NSTextTab *tab = [[NSTextTab alloc] initWithType:(NSTextTabType)
+					      [[entry objectForKey:AGRulerTabTypeKey] integerValue]
+							location:(CGFloat)[[entry objectForKey:AGRulerTabLocationKey] doubleValue]];
+
+		[tabs addObject:tab];
+		[tab release];
+	}
+	[style setTabStops:tabs];
+	paragraph = [[self string] paragraphRangeForRange:_selectedRange];
+	if (paragraph.length == 0 && [_cg_textStorage length] > 0) {
+		paragraph = NSMakeRange((_selectedRange.location < [_cg_textStorage length]) ? _selectedRange.location
+											  : [_cg_textStorage length] - 1, 0);
+	}
+	[_cg_textStorage addAttribute:NSParagraphStyleAttributeName value:style range:paragraph];
+	font = nil;
+	if ([facts objectForKey:AGRulerFontNameKey] != nil) {
+		font = [NSFont fontWithName:[facts objectForKey:AGRulerFontNameKey]
+				       size:(CGFloat)[[facts objectForKey:AGRulerFontSizeKey] doubleValue]];
+	} else if ([facts objectForKey:AGRulerFontSizeKey] != nil) {
+		font = [NSFont systemFontOfSize:(CGFloat)[[facts objectForKey:AGRulerFontSizeKey] doubleValue]];
+	}
+	if (font != nil) {
+		[_cg_textStorage addAttribute:NSFontAttributeName value:font range:paragraph];
+	}
+	[style release];
+	[self updateRuler];
 }
 
 @end

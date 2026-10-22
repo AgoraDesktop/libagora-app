@@ -703,7 +703,20 @@ the compositor is really gone.
   than about the sampler's row order. `NSRulerMarker -trackMouse:adding:` is the one refusal: the modal loop `NSCell`
   already declines to build.
 
-- **`ctest`: 115 of 115 passed** (the keyboard and the seam, the AppKit and its input path, the controls and their
+- **And the text system wears it** (`ctest`, offscreen): `NSTextView -setRulerVisible:YES` installs a horizontal ruler,
+  and `-updateRuler` asks `NSLayoutManager -rulerMarkersForTextView:paragraphStyle:ruler:` for one marker per
+  `NSTextTab` — at the tab's location PLUS the ruler's origin offset, so a one-inch tab and the one-inch hash mark land
+  in the same place. Each marker carries its tab as `representedObject`, which is what makes the drag a document edit:
+  the ruler sends `rulerView:didMoveMarker:`, the view rebuilds the insertion point's paragraph tab stops from the whole
+  marker list (sorted, kinds preserved) and writes them to the store. `tests/text_ruler.m` asserts that the LAYOUT
+  moved — the x of the character after a tab is measured before and after a fifty-point drag — rather than only that a
+  list changed. `-copyRuler:`/`-pasteRuler:` round-trip the paragraph format plus the run's font as a property list
+  under `NSRulerPboardType` (a `NSParagraphStyle` is not a property-list type, and the payload's keys are this tier's,
+  stated at the door). The manager's accessory-strip door is a REFUSAL: nil and a reason, because the tab-type control
+  cluster is a control this tier has not built, and the ruler reserves nothing for it. `-usesRuler` (default YES) is
+  whether the view has a ruler at all; `-isRulerVisible` is whether the scroll view shows it.
+
+- **`ctest`: 116 of 116 passed** (the keyboard and the seam, the AppKit and its input path, the controls and their
   metrics, the field control and its cell and its bezel and its placeholder and what it may hold, the text path and its
   word granularity and the multi-line view and its wrapping and its scrolling and its READING OF THE STORE, the STORE
   the rich-text slice is built on and the REGION it is laid out in and the WEB that ties the three together and the
@@ -713,7 +726,7 @@ the compositor is really gone.
   whose dead key composes with the next keystroke and the CANDIDATE LIST a variants method shows under the caret and the
   BASE DIRECTION that decides what natural alignment means,
   what a drag costs, the resize by edge, the tracking engine, the clip view and the scroller and the scroll view and the
-  drawn offset and the ruler it can wear, the chrome and what its buttons do, the chrome theme, the menus and activation).
+  drawn offset and the ruler it can wear and the TEXT RULER whose markers are tab stops, the chrome and what its buttons do, the chrome theme, the menus and activation).
 - **And the desktop's own text is SUB-PIXEL ANTIALIASED**, which is the AppKit's half of a renderer change in
   CoreGraphics: a window's surface is OPAQUE (`kCGImageAlphaNoneSkipFirst`), and the destination's opacity is
   exactly what decides whether a glyph is rasterised in colour. MEASURED on the live session: the window title's

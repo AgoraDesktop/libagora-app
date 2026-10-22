@@ -230,6 +230,26 @@ typedef NSInteger NSTextMovement;
 - (void)setDelegate:(nullable id)delegate;
 - (void)sizeToFit;
 
+/* ==================================================================================================================
+ * THE RULER'S FOUR COMMANDS, WHICH APPLE PUTS ON THIS CLASS RATHER THAN ON THE VIEW.
+ *
+ * **A FIELD CAN WEAR A RULER AND THE PLAIN TEXT CLASS IS WHERE THE COPY/PASTE COMMANDS LIVE.** `-copyRuler:` copies the
+ * selection's ruler — the paragraph's tab stops and indents plus the run's font — to the pasteboard under
+ * `NSRulerPboardType`, and `-pasteRuler:` applies that ruler to every paragraph the selection touches. `-toggleRuler:`
+ * shows or hides the ruler in the enclosing scroll view, and `-isRulerVisible` answers whether it is showing.
+ *
+ * **THE TWO RULER COMMANDS ARE THE VIEW'S BECAUSE THE ATTRIBUTES ARE.** A plain `NSText` holds ONE run of one line and
+ * has no attributed storage to copy a ruler out of; so these two doors REFUSE BY NAME here and `NSTextView` overrides
+ * them with the real thing. The SHOW/HIDE pair works on both, because both can sit in a scroll view and the question is
+ * the scroll view's. Stating the split is what keeps this from being a stub: a caller on a text view gets the behaviour,
+ * and a caller on a field gets a reason.
+ * ================================================================================================================ */
+
+- (void)copyRuler:(nullable id)sender;
+- (void)pasteRuler:(nullable id)sender;
+- (void)toggleRuler:(nullable id)sender;
+- (BOOL)isRulerVisible;
+
 @end
 
 /* **AND THE THREE NOTIFICATIONS A DELEGATE CAN WATCH INSTEAD.** They are the OTHER half of the delegate protocol — a

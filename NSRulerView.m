@@ -757,12 +757,13 @@ NSString *const NSRulerViewUnitPicas = @"Picas";
 	if (!_dragging || _draggedMarker == nil) {
 		return;
 	}
+	/* **THE MARKER IS PINNED FOR THE DURATION OF THE NOTIFICATION.** A client's `didMove` may rebuild the marker list
+	 * (`NSTextView`'s does), and the array is the only owner — so the callback could release the marker it is being
+	 * told about halfway through the sentence. */
+	[[_draggedMarker retain] autorelease];
 	[_draggedMarker cg_setDragging:NO];
 	if ([client respondsToSelector:@selector(rulerView:didMoveMarker:)]) {
-		CGFloat location = [_draggedMarker markerLocation];
-
 		[client rulerView:self didMoveMarker:_draggedMarker];
-		(void)location;
 	}
 	[self moveRulerlineFromLocation:_rulerLineLocation toLocation:_rulerLineLocation];
 	_draggedMarker = nil;

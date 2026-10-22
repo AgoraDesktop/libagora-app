@@ -8,6 +8,9 @@ spent.*
 *State at handover: **8 commits**, tree clean, **114 tests passing**, `api-ledger: 327 metrics
 hold (82 classes, 2652 selectors of 3517, 23 protocols, 86 functions)`.*
 
+*State after the session that picked it up (§9): **10 commits**, tree clean, **116 tests passing**,
+`api-ledger: 329 metrics hold (84 classes, 2735 selectors of 3568, 23 protocols, 86 functions)`.*
+
 ---
 
 ## 1. What this session did
@@ -84,13 +87,14 @@ type's empty value and says on stderr what it wants — `AppKitRefusal.h`), or *
 ## 3. Current measured state
 
 ```
-classes    82 of 168   (49%)    86 missing
-selectors 2652 of 3517 (75%)   865 missing    31 of 81 classes at COMPLETE coverage
+classes    84 of 168   (50%)    84 missing
+selectors 2735 of 3568 (77%)   833 missing    33 of 83 classes at COMPLETE coverage
 protocols  23 of  56   (41%)    33 missing
 functions  86 of  86 (100%)     0 missing     10 refuse by name
-methods  2989 declared, 4 with no body (0.1%)
+methods  3154 declared, 4 with no body (0.1%)
 
-text system:  NSLayoutManager 57/136 · NSTextView 46/186 · NSTextStorage 13/25 · NSTextContainer 17/17
+text system:  NSLayoutManager 59/136 · NSTextView 60/186 · NSTextStorage 13/25 · NSTextContainer 17/17
+              NSText 39/39 (COMPLETE) · NSRulerView 32/32 (COMPLETE) · NSRulerMarker 19/19 (COMPLETE)
 ```
 
 The honest reading: **the desktop core is deep, the periphery is empty, and the functions are
@@ -146,7 +150,9 @@ changes** (that mistake wiped 36 declarations once and had to be rebuilt by hand
 
 Ranked by reachable surface per unit of work, with entry points.
 
-### 5.1 `NSRulerView` — 15 `NSTextView` doors + 2 `NSLayoutManager` ones
+### 5.1 `NSRulerView` — LANDED, see §9
+
+*Was: 15 `NSTextView` doors + 2 `NSLayoutManager` ones.*
 
 The last piece of the text system that is **geometry** (which this tree now does well) rather than
 a new subsystem. One class, plus `NSRulerMarker`.
@@ -213,3 +219,59 @@ will report drift in every affected line. That is correct: re-pin deliberately.
   `fn_refuse_window` helper — which is most of the new ones — are invisible to it. Ten function
   refusals and a handful of method refusals therefore do not appear in the 141. If that matters,
   the fix is a second needle for `fn_refuse_window(` call sites, not a bigger comment.
+
+---
+
+## 9. The session that picked this up
+
+*What landed, in two commits, and what it cost.*
+
+**`NSRulerView` and `NSRulerMarker`, plus the strip `NSScrollView` tiles.** 32 and 19 selectors, both COMPLETE —
+which is what the ledger shows and the first time since `NSText` that a whole pair has come over at once. The view owns
+the thickness arithmetic (`ruleThickness` + two reserves, the sum `-tile` takes off the content's edge), the unit table
+with four built-in units and `+registerUnitWithName:…`, the hash marks, the marker list and the drag session. The
+marker owns an image at a location plus an origin across the ruler.
+
+**The text system's half.** `NSText -copyRuler:`/`-pasteRuler:`/`-toggleRuler:`/`-isRulerVisible`, `NSTextView`'s five
+ruler doors and the nine client messages, and `NSLayoutManager`'s two: a marker per `NSTextTab` at the tab's location
+plus the ruler's origin offset, with the tab as `representedObject`. `NSText` is COMPLETE now (39/39), which nobody
+predicted: the four ruler commands were the last four selectors it owed.
+
+**Four decisions worth not rediscovering:**
+
+* **The ruler does not scroll — it moves its BOUNDS ORIGIN**, which the scroll view keeps equal to the clip view's on the
+  ruler's own axis. That is the whole of "a mark at document 300 is under the character at 300", and it is one line in
+  `-reflectScrolledClipView:` per orientation.
+* **BOTH ORIENTATIONS ARE FLIPPED, against Apple**, whose vertical ruler is not. A vertical marker location then grows
+  downward with the text it measures, and no conversion is needed anywhere the manager and the ruler meet. Documented at
+  `-isFlipped`.
+* **A DRAG IS A STREAM, NOT A MODAL LOOP.** `-trackMouse:adding:` refuses by name (the same refusal `NSCell` makes); the
+  ruler's `-mouseDown:`/`-mouseDragged:`/`-mouseUp:` run the drag from the event stream the application already pumps,
+  absolutely from the grab point, with ONE `didMove` on the release. A `didMove` per dragged event would rewrite the
+  paragraph's tab stops a hundred times for one gesture.
+* **THE UNIT TABLE'S CYCLE RUNS FINE TO COARSE**, so the subdivisions are the reciprocal of its FIRST entry. Reading the
+  last entry made points and inches subdivide once, and the ruler drew only its labelled ticks — a wrong answer that
+  looked like a style choice until a pixel count said 6 marks instead of 60.
+
+**Traps this session paid for:**
+
+* A header with `NS_ASSUME_NONNULL_BEGIN` and a **forward declaration missing for the class's own forward use**
+  (`NSRulerMarker` naming `NSRulerView` before `@class NSRulerView;`) fails as "unknown type name" on a line that looks
+  unrelated. And `NSLayoutManager.h` needed `@class NSView;` before the new door — an appkit header that imports only
+  `NSFont.h` has never needed `NSView` before.
+* **A category interface placed inside an `@implementation` is not a category.** Two `@end`s and one implementation, and
+  the compiler's message ("missing '@end'") names the wrong line. Declare the private category BEFORE the class's
+  `@implementation`, or the methods land outside it.
+* **The census prose went stale exactly as §7 warned**: the summary block still called the C functions the weakest part
+  and said the tree "does not yet fill a rectangle" — nine slices after `NSRectFill` landed. It is recomputed now, and
+  the sentence says so.
+
+**Where to go next, re-ranked by reachable surface:**
+
+1. **`NSLayoutManager` text-block and attachment rects** (11 doors, the old §5.3): `boundsRectForTextBlock:atIndex:…`,
+   `layoutRectForTextBlock:glyphRange:`, `attachmentSizeForGlyphAtIndex:`, `showAttachmentCell:inRect:characterIndex:`.
+   The boxes exist (`FNBox`, `cg_drawBlocksForGlyphRange:`); these doors expose what is already computed.
+2. **The substitution machinery** (the old §5.2, ~12 doors): the five flags are stored; the tables
+   (`userQuotesArrayForLanguage:`, `userReplacementsDictionary`) are what would make typing through them real.
+3. **`NSTextView`'s ruler accessory** — the one door this slice refused. A tab-type control cluster is an
+   `NSPopUpButton` and an action; the reserve arithmetic already accounts for whatever is installed.

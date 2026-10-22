@@ -1064,3 +1064,13 @@ target_link_libraries(ruler_view PRIVATE App)
 
 add_test(NAME appkit-ruler-view COMMAND ruler_view)
 set_tests_properties(appkit-ruler-view PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
+
+# **THE TEXT SYSTEM'S RULER, WHICH IS A ROUND TRIP RATHER THAN A COUNT.** Showing the ruler asks the manager for a marker
+# per tab stop; dragging one rebuilds the paragraph's tab stops; and the assertion is that the LAYOUT moved — the x of the
+# character after a tab is measured before and after a fifty-point drag. Copy/paste of the ruler is the second round trip,
+# read back out of the store.
+add_executable(text_ruler text_ruler.m)
+target_link_libraries(text_ruler PRIVATE App)
+
+add_test(NAME appkit-text-ruler COMMAND text_ruler)
+set_tests_properties(appkit-text-ruler PROPERTIES ENVIRONMENT "${_agora_app_test_env}")

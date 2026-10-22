@@ -21,6 +21,9 @@
 #import <AppKit/NSTextTable.h>
 #import "NSTextTable_internal.h"
 #import <AppKit/NSTextView.h>
+#import <AppKit/NSRulerView.h>
+#import <AppKit/NSImage.h>
+#import <AppKit/NSBezierPath.h>
 #import <AppKit/NSGraphicsContext.h>
 #import <AppKit/NSAttributedString.h>
 #import <Foundation/NSArray.h>
@@ -3623,6 +3626,114 @@ static CGFloat fn_fraction_between(FNFragment *fragment, CGFloat localX, NSUInte
 	[self drawUnderlineForGlyphRange:trimmed underlineType:underlineVal baselineOffset:-1.0
 		   lineFragmentRect:lineRect lineFragmentGlyphRange:lineGlyphRange
 		   containerOrigin:containerOrigin];
+}
+
+@end
+
+/* ==================================================================================================================
+ * THE RULER'S TWO DOORS.
+ *
+ * The four tab images are made once, on first use, by drawing into a 9x8 image: a stem and a foot, with the foot on the
+ * side the alignment points and, for a decimal tab, a dot where the point lands. They are hand-drawn rather than loaded
+ * because this tier has no artwork for them and a missing image would make a marker zero-thickness and invisible —
+ * which is exactly the failure a tab-stop ruler must not have. The images are y-down (the ruler is flipped), so a foot
+ * at the bottom of the image is the end nearest the text.
+ * ================================================================================================================ */
+
+@interface NSLayoutManager (AGRuler)
+@end
+
+static NSImage *sTabMarkerImages[4];
+
+static void fn_fill_image_rect(CGFloat x, CGFloat y, CGFloat w, CGFloat h)
+{
+	[[NSBezierPath bezierPathWithRect:NSMakeRect(x, y, w, h)] fill];
+}
+
+static NSImage *fn_tab_marker_image(NSTextTabType type)
+{
+	NSUInteger slot = ((NSUInteger)type < 4) ? (NSUInteger)type : (NSUInteger)NSLeftTabStopType;
+	NSImage *image = sTabMarkerImages[slot];
+
+	if (image != nil) {
+		return image;
+	}
+	image = [[NSImage alloc] initWithSize:NSMakeSize(9.0, 8.0)];
+	[image lockFocusFlipped:YES];
+	[[NSColor blackColor] setFill];
+	/* THE STEM, WHICH EVERY KIND HAS: the two middle columns, top to bottom. */
+	fn_fill_image_rect(4.0, 0.0, 1.0, 8.0);
+	switch (slot) {
+	case NSRightTabStopType:
+		fn_fill_image_rect(0.0, 6.0, 5.0, 1.0);
+		break;
+	case NSCenterTabStopType:
+		fn_fill_image_rect(1.0, 6.0, 7.0, 1.0);
+		break;
+	case NSDecimalTabStopType:
+		fn_fill_image_rect(4.0, 5.0, 2.0, 2.0);
+		break;
+	case NSLeftTabStopType:
+	default:
+		fn_fill_image_rect(4.0, 6.0, 5.0, 1.0);
+		break;
+	}
+	[image unlockFocus];
+	sTabMarkerImages[slot] = image;
+	return image;
+}
+
+@implementation NSLayoutManager (AGRuler)
+
+- (NSArray *)rulerMarkersForTextView:(NSTextView *)aTextView
+		      paragraphStyle:(NSParagraphStyle *)style
+			       ruler:(NSRulerView *)aRulerView
+{
+	NSMutableArray *markers = [NSMutableArray array];
+	NSArray *stops = (style != nil) ? [style tabStops] : nil;
+	CGFloat offset = (aRulerView != nil) ? [aRulerView originOffset] : 0.0;
+	NSUInteger i;
+
+	(void)aTextView;
+	for (i = 0; i < [stops count]; i++) {
+		NSTextTab *tab = [stops objectAtIndex:i];
+		NSRulerMarker *marker = [[NSRulerMarker alloc] initWithRulerView:aRulerView
+									 markerLocation:offset + [tab location]
+										  image:fn_tab_marker_image([tab tabStopType])
+								    imageOrigin:NSZeroPoint];
+
+		/* **THE TAB TRAVELS WITH THE MARKER**, which is what lets a drag end as a changed paragraph: the client view
+		 * rebuilds the paragraph's tab list from the markers and reads each one's kind back out of this. */
+		[marker setRepresentedObject:tab];
+		[markers addObject:marker];
+		[marker release];
+	}
+	return markers;
+}
+
+/* THE DOCUMENTED REFUSAL. See this header's comment: nil is the empty value of `NSView *`, and the accessory strip is a
+ * control cluster this tier has not built. Saying so on stderr is the difference between a gap and a stub. */
+- (NSView *)rulerAccessoryViewForTextView:(NSTextView *)aTextView
+			    paragraphStyle:(NSParagraphStyle *)style
+				      ruler:(NSRulerView *)aRulerView
+				    enabled:(BOOL)isEnabled
+{
+	/* **SAID ONCE PER PROCESS, BECAUSE THIS DOOR IS ASKED ON EVERY RULER UPDATE.** A refusal that printed on every caret
+	 * move would be noise rather than information, and the fact does not change between them; the other refusals in this
+	 * tree are per-call because they are per-call DOORS. */
+	static BOOL said = NO;
+
+	(void)aTextView;
+	(void)style;
+	(void)aRulerView;
+	(void)isEnabled;
+	if (!said) {
+		said = YES;
+		fn_refuse_window("NSLayoutManager -rulerAccessoryViewForTextView:paragraphStyle:ruler:enabled:",
+				 "the tab-type control cluster Apple's text system puts in the ruler's accessory band; the ruler "
+				 "reserves nothing for it and the markers are still draggable");
+	}
+	return nil;
 }
 
 @end
