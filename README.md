@@ -837,7 +837,19 @@ the compositor is really gone.
   refuse at their constructors (no QuickDraw player, no Core Image) and their sniffs answer NO rather than promising a
   decode they cannot do.
 
-- **`ctest`: 125 of 125 passed** (the keyboard and the seam, the AppKit and its input path, the controls and their
+- **And the STEPPER PAIR and the SECURE FIELD PAIR** (`ctest`, offscreen): `NSStepper`/`NSStepperCell` (20 selectors) and
+  `NSSecureTextField`/`NSSecureTextFieldCell` (2). **The stepper's press IS the step**: the cell's
+  `-startTrackingAt:inView:` decides the direction from the half the pointer landed in — read through the view's FLIP, which
+  is the trap the slider's ticks record — clamps or wraps at the ends, and sends the control's action only when the value
+  actually moved, so a press at a non-wrapping end sends nothing. Its defaults are Apple's (0…59, step 1, wrap and
+  autorepeat on), a zero step is refused, and `-autorepeat` is stored with the reason it is not yet looped stated at the
+  door. **The value pair had to be overridden**: `NSCell -setDoubleValue:` REFUSES unless the cell is an `NSTextCellType`, so
+  a stepper inheriting it had arrows that changed nothing — MEASURED, and the reason the value lives in the cell's own
+  field. The secure field is one override in `-cg_contentText` (the door the base both DRAWS and MEASURES through), so
+  bullets are the width of the password and the caret sits on them; `-echosBullets` defaults YES, and the probe renders the
+  field with the flag on and off and compares the ink.
+
+- **`ctest`: 126 of 126 passed** (the keyboard and the seam, the AppKit and its input path, the controls and their
   metrics, the field control and its cell and its bezel and its placeholder and what it may hold, the text path and its
   word granularity and the multi-line view and its wrapping and its scrolling and its READING OF THE STORE, the STORE
   the rich-text slice is built on and the REGION it is laid out in and the WEB that ties the three together and the

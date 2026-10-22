@@ -8,8 +8,8 @@ spent.*
 *State at handover: **8 commits**, tree clean, **114 tests passing**, `api-ledger: 327 metrics
 hold (82 classes, 2652 selectors of 3517, 23 protocols, 86 functions)`.*
 
-*State after the session that picked it up (§9–§18): **19 commits**, tree clean, **125 tests passing**,
-`api-ledger: 337 metrics hold (92 classes, 2889 selectors of 3628, 23 protocols, 86 functions)`.*
+*State after the session that picked it up (§9–§19): **20 commits**, tree clean, **126 tests passing**,
+`api-ledger: 341 metrics hold (96 classes, 2911 selectors of 3650, 23 protocols, 86 functions)`.*
 
 ---
 
@@ -87,8 +87,8 @@ type's empty value and says on stderr what it wants — `AppKitRefusal.h`), or *
 ## 3. Current measured state
 
 ```
-classes    92 of 168   (55%)    76 missing
-selectors 2889 of 3628 (80%)   739 missing    54 of 91 classes at COMPLETE coverage
+classes    96 of 168   (57%)    72 missing
+selectors 2911 of 3650 (80%)   739 missing    57 of 94 classes at COMPLETE coverage
 protocols  23 of  56   (41%)    33 missing
 functions  86 of  86 (100%)     0 missing     10 refuse by name
 methods  3289 declared, 4 with no body (0.1%)
@@ -268,14 +268,13 @@ predicted: the four ruler commands were the last four selectors it owed.
 
 **Where to go next, re-ranked by reachable surface:**
 
-1. **THE MISSING CLASSES CONTINUE (§17, §18): the colour values and all five image reps are DONE.** Next by the same
-   argument (existing substrate, real behaviour, reachable): the STEPPER PAIR (`NSStepper`, `NSStepperCell` — 20
-   selectors, a real control on the existing cell and tracking substrate), `NSSecureTextField`/`NSSecureTextFieldCell` (2
-   selectors: bullet display on the field that exists), the NIB CONNECTORS (`NSNibConnector`, `NSNibOutletConnector`,
-   `NSNibControlConnector` — 10 selectors, and `NSNib` already encodes the connections), and `NSPasteboardItem` (9, the
-   item-based pasteboard API beside `NSPasteboard`). After those the surface is the big subsystems the plan names —
-   documents (104 + 51), printing (46 + 41 + 27 + 20), the panels, and the controller family — which want a design rather
-   than a slice.
+1. **THE MISSING CLASSES CONTINUE (§17–§19): the colour values, the image reps and the stepper/secure pairs are DONE.**
+   Next by the same argument: the NIB CONNECTORS (`NSNibConnector`, `NSNibOutletConnector`, `NSNibControlConnector` — 10
+   selectors, and `NSNib` already encodes the connections), `NSPasteboardItem` (9, the item-based pasteboard API beside
+   `NSPasteboard`), `NSViewController`'s `NSCollectionViewItem` (3), the three tiny reps left (`NSCIImageRep` is done;
+   `NSImageCell` 6, `NSGlyphInfo` 6, `NSTouch` 6), and `NSFileWrapper` (35 — the RTFD and attachment substrate).
+   After those the surface is the big subsystems the plan names — documents (104 + 51), printing (46 + 41 + 27 + 20), the
+   panels, and the controller family — which want a design rather than a slice.
 
 2. **`NSLayoutManager` IS COMPLETE (§16) — all 136 selectors — and so are the twelve one-selector-short classes (§15).**
    The manager's last six were the typesetter trio, spelled `id` for the reason §16 records. What is left in the text
@@ -557,3 +556,27 @@ own: a suite that reports from stdout cannot see a failure that happens after th
 too — the concurrent Swift session was rebuilding `build-prefix` (libobjc, libagora-base, libagora-drawing) while the suite
 ran. After it settled, 124 of 125 passed again with the slice in place. A failing suite is evidence only once you know
 which libraries the binaries actually loaded.
+
+---
+
+## 19. The stepper and the secure field: a control that steps, and a cell that hides
+
+*Twelfth commit of the pickup: `NSStepper`/`NSStepperCell` (20 selectors) and `NSSecureTextField`/`NSSecureTextFieldCell`
+(2). Complete coverage 54 → 57 of the 94 present classes; 96 of 168 classes present.*
+
+**`NSCell -setDoubleValue:` ANSWERS ONLY FOR A TEXT CELL.** `if (_type != NSTextCellType) return;` — so the first stepper,
+which inherited the value pair, had arrows that moved nothing. The probe caught it as four failures that all read "the value
+did not change", and the fix is the cell's own field with both doors overridden. This is the third door in this session
+whose *declared* behaviour differed from what a subclass needed (`-cg_lineHeight` had no callers; `NSInvocation` refuses a
+32-byte argument); a tier this thin keeps its surprises in the seams between a base class's contract and a subclass's use.
+
+**Two more things worth keeping:**
+
+* **THE FLIP DECIDES WHICH ARROW IS "UP".** The cell reads the direction through `-isFlipped`, so the same press point steps
+  up in an unflipped view and down in a flipped one — the probe drives both and requires opposite answers, which is the
+  slider's tick-direction trap in another control.
+* **A CELL'S ACTION GOES THROUGH ITS CONTROL.** `-sendAction:to:` is `NSControl`'s, so a cell whose "control view" is a bare
+  `NSView` steps silently and sends nothing — MEASURED, and the probe now hands the cell the stepper itself.
+* **THE SECURE FIELD IS ONE OVERRIDE, IN THE DOOR THAT IS BOTH DRAWN AND MEASURED.** `-cg_contentText` is what the base
+  draws AND what it measures, so bullets are the width of the password and the caret sits on them by construction. The
+  probe renders the field twice (flag on and off) and compares the dark ink: 40 pixels of bullets against 146 of letters.

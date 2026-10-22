@@ -1168,3 +1168,14 @@ target_link_libraries(image_rep_family PRIVATE App)
 
 add_test(NAME appkit-image-rep-family COMMAND image_rep_family)
 set_tests_properties(appkit-image-rep-family PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
+
+# **THE STEPPER PAIR AND THE SECURE FIELD PAIR.** The stepper's press IS the step: the probe drives the cell's own tracking
+# hooks in each half of the control, in BOTH flips (a direction that a flip reverses), checks the clamp, the wrap, the action
+# a target receives and that a drag does not step again — then renders the cell and counts ink. The secure field's claim is
+# the ink: `-cg_contentText` answers bullets, and the field is rendered with the flag on and off so the two renderings'
+# dark pixels can be compared — a substitution that is not drawn is not a password field.
+add_executable(stepper_and_secure stepper_and_secure.m)
+target_link_libraries(stepper_and_secure PRIVATE App)
+
+add_test(NAME appkit-stepper-and-secure COMMAND stepper_and_secure)
+set_tests_properties(appkit-stepper-and-secure PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
