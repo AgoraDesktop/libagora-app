@@ -1074,3 +1074,14 @@ target_link_libraries(text_ruler PRIVATE App)
 
 add_test(NAME appkit-text-ruler COMMAND text_ruler)
 set_tests_properties(appkit-text-ruler PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
+
+# **THE BLOCK'S TWO RECTANGLES AND AN ATTACHMENT'S SIZE.** The claims are checkable without knowing the layout's
+# arithmetic: the bounds rect differs from the layout rect by exactly the block's own padding+border, a caller's stored
+# rect is answered while the other stays computed, and an attachment size override MOVES the text after it — measured as a
+# reflow rather than as a changed answer. The drawing doors then paint into a rectangle and are checked for ink inside it
+# and none outside.
+add_executable(text_block_rects text_block_rects.m)
+target_link_libraries(text_block_rects PRIVATE App)
+
+add_test(NAME appkit-text-block-rects COMMAND text_block_rects)
+set_tests_properties(appkit-text-block-rects PROPERTIES ENVIRONMENT "${_agora_app_test_env}")

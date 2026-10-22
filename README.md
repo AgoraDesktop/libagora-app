@@ -716,7 +716,20 @@ the compositor is really gone.
   cluster is a control this tier has not built, and the ruler reserves nothing for it. `-usesRuler` (default YES) is
   whether the view has a ruler at all; `-isRulerVisible` is whether the scroll view shows it.
 
-- **`ctest`: 116 of 116 passed** (the keyboard and the seam, the AppKit and its input path, the controls and their
+- **And the layout answers a caller's MEASUREMENTS** (`ctest`, offscreen): `NSLayoutManager` now has its text-block and
+  attachment doors. A block's LAYOUT rect is where its glyphs are (the union of the used rects of the fragments that
+  share the block, in the container's coordinates) and its BOUNDS rect is that content grown by the block's OWN layers
+  through `-boundsRectForContentRect:inRect:textContainer:characterRange:` — so a block with six points of padding and two
+  of border answers a bounds rect exactly sixteen points wider and taller, which is what `tests/text_block_rects.m`
+  measures. A table cell's bounds are measured from its column band, because that is the box the drawing pass paints.
+  The four accessors come in Apple's two spellings (by glyph range, and by one glyph whose `effectiveRange:` is a GLYPH
+  range), and the two setters are a subclass's OVERRIDE table that the getters consult first. `-setAttachmentSize:` is
+  the other kind of door: it stores a size the LAYOUT reserves when it builds the run delegate, so overriding an
+  attachment from 12 to 40 points MOVES the text after it by 28 — asserted as a reflow, not as a changed answer.
+  `-showAttachmentCell:inRect:characterIndex:` scales by `-defaultAttachmentScaling` (proportionally down by default)
+  and clips to its rectangle in every mode, because a picture that overflows its line is a picture over its neighbours.
+
+- **`ctest`: 117 of 117 passed** (the keyboard and the seam, the AppKit and its input path, the controls and their
   metrics, the field control and its cell and its bezel and its placeholder and what it may hold, the text path and its
   word granularity and the multi-line view and its wrapping and its scrolling and its READING OF THE STORE, the STORE
   the rich-text slice is built on and the REGION it is laid out in and the WEB that ties the three together and the
@@ -726,7 +739,8 @@ the compositor is really gone.
   whose dead key composes with the next keystroke and the CANDIDATE LIST a variants method shows under the caret and the
   BASE DIRECTION that decides what natural alignment means,
   what a drag costs, the resize by edge, the tracking engine, the clip view and the scroller and the scroll view and the
-  drawn offset and the ruler it can wear and the TEXT RULER whose markers are tab stops, the chrome and what its buttons do, the chrome theme, the menus and activation).
+  drawn offset and the ruler it can wear and the TEXT RULER whose markers are tab stops and the block rects and
+  attachment sizes the layout answers, the chrome and what its buttons do, the chrome theme, the menus and activation).
 - **And the desktop's own text is SUB-PIXEL ANTIALIASED**, which is the AppKit's half of a renderer change in
   CoreGraphics: a window's surface is OPAQUE (`kCGImageAlphaNoneSkipFirst`), and the destination's opacity is
   exactly what decides whether a glyph is rasterised in colour. MEASURED on the live session: the window title's

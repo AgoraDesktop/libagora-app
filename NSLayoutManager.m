@@ -149,6 +149,23 @@
 @implementation FNCellBox
 @end
 
+/* **AND ONE BLOCK'S TWO RECTANGLES, WHEN A CALLER DICTATED THEM.** The setters store one of these; the getters search the
+ * list before they compute. The block pointer is BORROWED for the same reason `FNCellBox`'s is: the paragraph style in
+ * the store is what owns the block, and a manager that retained it would outlive the document that named it. */
+@interface FNBlockRect : NSObject
+{
+@public
+	NSTextBlock *block;	/* BORROWED; the block this rect was set for */
+	NSRect bounds;		/* the value the caller gave */
+	NSRect layout;
+	BOOL hasBounds;
+	BOOL hasLayout;
+}
+@end
+
+@implementation FNBlockRect
+@end
+
 @implementation NSLayoutManager
 
 /* ============================================================================================ *
@@ -193,6 +210,13 @@ static CGFloat fn_attachment_width(void *refCon)
 		_textContainers = [[NSMutableArray alloc] init];
 		/* ONE FRAGMENT LIST PER CONTAINER, index-matched for as long as the two arrays are only ever changed together. */
 		_fragments = [[NSMutableArray alloc] init];
+		/* AND THE THREE OVERRIDE TABLES, EMPTY: a manager that computes its own layout has nothing to consult them for. */
+		_blockRectOverrides = [[NSMutableArray alloc] init];
+		_attachmentSizes = [[NSMutableDictionary alloc] init];
+		/* **PROPORTIONALLY DOWN IS APPLE'S DEFAULT AND THE ONE A LINE OF TEXT NEEDS.** An attachment taller than its
+		 * line, drawn at its own size, would overlap the lines above and below it; shrinking it to fit is what keeps a
+		 * picture inside the text that asked for it. */
+		_defaultAttachmentScaling = NSImageScaleProportionallyDown;
 		_invalidatedRange = NSMakeRange(NSNotFound, 0);
 	}
 	return self;
@@ -210,6 +234,8 @@ static CGFloat fn_attachment_width(void *refCon)
 	}
 	[_textContainers release];
 	[_fragments release];
+	[_blockRectOverrides release];
+	[_attachmentSizes release];
 	[_textStorage release];
 	[super dealloc];
 }
@@ -1400,6 +1426,16 @@ static BOOL fn_cell_owns_edge(CGFloat thisWidth, CGFloat otherWidth, BOOL tieGoe
 	return width;
 }
 
+/* **THE SIZE AN ATTACHMENT CHARACTER OCCUPIES: THE CALLER'S IF THERE IS ONE, ELSE THE CELL'S.** It is a door of its own
+ * because the layout, the draw and the public accessor all have to agree about the number, and three copies of "ask the
+ * override, then the cell" is three chances to disagree. */
+- (NSSize)cg_attachmentSizeForCharacterIndex:(NSUInteger)index fallback:(NSSize)fallback
+{
+	NSValue *value = [_attachmentSizes objectForKey:[NSNumber numberWithUnsignedInteger:index]];
+
+	return (value != nil) ? [value sizeValue] : fallback;
+}
+
 /* **THE BOXES A RANGE CARRIES: ONE PER ATTACHMENT CHARACTER, WITH THE WIDTH IT OCCUPIES.** The engine measured a
  * placeholder glyph for the character, so both numbers are recorded — the box's width and the advance the glyph had —
  * and the difference is what shifts everything after it. A range with no attachment answers nil, which is the common
@@ -1424,22 +1460,28 @@ static BOOL fn_cell_owns_edge(CGFloat thisWidth, CGFloat otherWidth, BOOL tieGoe
 		}
 		if (attachment != nil && line != NULL) {
 			NSCell<NSTextAttachmentCell> *cell = [attachment attachmentCell];
-			NSSize size = (cell != nil) ? [cell cellSize] : NSZeroSize;
+			NSSize cellSize = (cell != nil) ? [cell cellSize] : NSZeroSize;
+			NSUInteger k;
 
-			if (size.width > 0.0) {
-				NSUInteger k;
+			/* **THE SIZE IS ASKED PER CHARACTER, BECAUSE A CALLER MAY HAVE OVERRIDDEN ONE OF THEM.** The cell's own
+			 * size is the fallback; `-setAttachmentSize:forGlyphRange:` is what makes the layout reserve something
+			 * else, and this is the one place the override has to reach for the layout to move. */
+			for (k = pos; k < runEnd; k++) {
+				NSSize size = [self cg_attachmentSizeForCharacterIndex:k fallback:cellSize];
+				CFIndex rel;
+				CGFloat advance;
 
-				for (k = pos; k < runEnd; k++) {
-					CFIndex rel = (CFIndex)(k - range.location);
-					CGFloat advance = (CGFloat)(CTLineGetOffsetForStringIndex(line, rel + 1, NULL)
-								   - CTLineGetOffsetForStringIndex(line, rel, NULL));
-
-					if (boxes == nil) {
-						boxes = [NSMutableArray array];
-					}
-					[boxes addObject:[FNBox boxWithIndex:k width:size.width engineAdvance:advance
-						ascent:size.height descent:0.0 content:attachment]];
+				if (size.width <= 0.0) {
+					continue;
 				}
+				rel = (CFIndex)(k - range.location);
+				advance = (CGFloat)(CTLineGetOffsetForStringIndex(line, rel + 1, NULL)
+						    - CTLineGetOffsetForStringIndex(line, rel, NULL));
+				if (boxes == nil) {
+					boxes = [NSMutableArray array];
+				}
+				[boxes addObject:[FNBox boxWithIndex:k width:size.width engineAdvance:advance
+					ascent:size.height descent:0.0 content:attachment]];
 			}
 		}
 		pos = runEnd;
@@ -2663,7 +2705,10 @@ static BOOL fn_cell_owns_edge(CGFloat thisWidth, CGFloat otherWidth, BOOL tieGoe
 				if ([attrs objectForKey:NSAttachmentAttributeName] != nil) {
 					NSTextAttachment *attachment = [attrs objectForKey:NSAttachmentAttributeName];
 					NSCell<NSTextAttachmentCell> *cell = [attachment attachmentCell];
-					NSSize size = (cell != nil) ? [cell cellSize] : NSZeroSize;
+					/* **THE SAME SIZE THE BOX RESERVED, NOT THE CELL'S AGAIN.** An overridden attachment would
+					 * otherwise reserve one width and paint at another, which is a picture over its neighbours. */
+					NSSize size = [self cg_attachmentSizeForCharacterIndex:pos
+							 fallback:((cell != nil) ? [cell cellSize] : NSZeroSize)];
 
 					if (cell != nil && size.width > 0.0 && size.height > 0.0) {
 						CGFloat x = origin.x + [self cg_xInFragment:fragment forCharacterIndex:pos];
@@ -3734,6 +3779,364 @@ static NSImage *fn_tab_marker_image(NSTextTabType type)
 				 "reserves nothing for it and the markers are still draggable");
 	}
 	return nil;
+}
+
+@end
+
+/* ==================================================================================================================
+ * THE BLOCK RECTANGLES AND THE ATTACHMENT'S SIZE — the doors declared in the header's last section.
+ *
+ * Three helpers do all the work: the OVERRIDE LOOKUP (a caller's rect wins), the GROUP (the union of the fragments that
+ * share a block, which container they are in, and the range they span), and the two frames the group produces — the
+ * block's own drawn frame from `-cg_frameForBlock:`, and the text band the glyphs occupy. The public doors are two
+ * spellings of each, by range and by one glyph, and Apple's `atIndex:` pair is glyph-indexed, so its effective range
+ * comes back in GLYPHS.
+ *
+ * **A TABLE CELL'S BOUNDS ARE MEASURED FROM ITS FLOW BAND, NOT ITS TEXT**, because that is what the drawing pass does
+ * (`-cg_addCell:` unions `fragment->rect`) and a bounds rect that disagreed with the drawn border would be a door that
+ * answers a rectangle nobody painted. The LAYOUT rect is the text band for every kind of block: it is where the glyphs
+ * are, which is the whole of what its name promises.
+ * ================================================================================================================ */
+
+@interface NSLayoutManager (AGBlockRects)
+@end
+
+@implementation NSLayoutManager (AGBlockRects)
+
+/* THE OVERRIDE, OR NIL. Linear for the same reason the cell grid's search is: a document has few blocks, and a dictionary
+ * keyed by a borrowed pointer buys nothing but a lifetime argument. */
+- (FNBlockRect *)cg_overrideEntryForBlock:(NSTextBlock *)block create:(BOOL)create
+{
+	NSUInteger i;
+
+	for (i = 0; i < [_blockRectOverrides count]; i++) {
+		FNBlockRect *entry = [_blockRectOverrides objectAtIndex:i];
+
+		if (entry->block == block) {
+			return entry;
+		}
+	}
+	if (!create || block == nil) {
+		return nil;
+	}
+	{
+		FNBlockRect *entry = [[[FNBlockRect alloc] init] autorelease];
+
+		entry->block = block;
+		entry->bounds = NSZeroRect;
+		entry->layout = NSZeroRect;
+		entry->hasBounds = NO;
+		entry->hasLayout = NO;
+		[_blockRectOverrides addObject:entry];
+		return entry;
+	}
+}
+
+/* THE BLOCK'S GROUP: the union of its fragments' bands, the glyph range they span, and the container the FIRST of them
+ * is in. `flow` chooses the band: YES is the fragment's whole flow rect (a table cell's own box) and NO its used rect
+ * (where the glyphs are). A block with no fragments answers NO — it is not in the layout. */
+- (BOOL)cg_blockGroup:(NSTextBlock *)block content:(NSRect *)contentPtr range:(NSRange *)rangePtr
+	 container:(NSUInteger *)containerPtr flow:(BOOL)flow
+{
+	BOOL found = NO;
+	NSUInteger i, j;
+
+	if (block == nil) {
+		return NO;
+	}
+	[self cg_ensureLayout];
+	for (i = 0; i < [_fragments count]; i++) {
+		NSMutableArray *fragments = [_fragments objectAtIndex:i];
+
+		for (j = 0; j < [fragments count]; j++) {
+			FNFragment *fragment = [fragments objectAtIndex:j];
+
+			if ([self cg_blockForFragment:fragment] != block) {
+				continue;
+			}
+			if (!found) {
+				*contentPtr = flow ? fragment->rect : fragment->used;
+				*rangePtr = fragment->glyphs;
+				if (containerPtr != NULL) {
+					*containerPtr = i;
+				}
+				found = YES;
+			} else {
+				NSRect band = flow ? fragment->rect : fragment->used;
+				NSUInteger end = fragment->glyphs.location + fragment->glyphs.length;
+				NSUInteger start = rangePtr->location;
+
+				*contentPtr = NSUnionRect(*contentPtr, band);
+				rangePtr->length = end - start;
+			}
+		}
+	}
+	return found;
+}
+
+- (NSRect)cg_boundsForBlock:(NSTextBlock *)block range:(NSRange *)rangePtr
+{
+	FNBlockRect *override = [self cg_overrideEntryForBlock:block create:NO];
+	NSRect content = NSZeroRect;
+	NSRange range = NSMakeRange(0, 0);
+	NSUInteger container = 0;
+	BOOL flow = [block isKindOfClass:[NSTextTableBlock class]];
+
+	if (override != nil && override->hasBounds) {
+		if (rangePtr != NULL) {
+			/* **AN OVERRIDE STILL REPORTS THE BLOCK'S RANGE**, because the caller asked where the block IS as well as
+			 * where it was put; the rect is what changed, not the glyphs. */
+			NSRect ignored = NSZeroRect;
+
+			(void)[self cg_blockGroup:block content:&ignored range:&range container:&container flow:flow];
+			*rangePtr = range;
+		}
+		return override->bounds;
+	}
+	if (![self cg_blockGroup:block content:&content range:&range container:&container flow:flow]) {
+		if (rangePtr != NULL) {
+			*rangePtr = NSMakeRange(NSNotFound, 0);
+		}
+		return NSZeroRect;
+	}
+	if (rangePtr != NULL) {
+		*rangePtr = range;
+	}
+	return [self cg_frameForBlock:block union:content containerIndex:container origin:NSZeroPoint
+			characterRange:range];
+}
+
+- (NSRect)cg_layoutForBlock:(NSTextBlock *)block range:(NSRange *)rangePtr
+{
+	FNBlockRect *override = [self cg_overrideEntryForBlock:block create:NO];
+	NSRect content = NSZeroRect;
+	NSRange range = NSMakeRange(0, 0);
+	NSUInteger container = 0;
+
+	if (override != nil && override->hasLayout) {
+		if (rangePtr != NULL) {
+			NSRect ignored = NSZeroRect;
+
+			(void)[self cg_blockGroup:block content:&ignored range:&range container:&container flow:NO];
+			*rangePtr = range;
+		}
+		return override->layout;
+	}
+	if (![self cg_blockGroup:block content:&content range:&range container:&container flow:NO]) {
+		if (rangePtr != NULL) {
+			*rangePtr = NSMakeRange(NSNotFound, 0);
+		}
+		return NSZeroRect;
+	}
+	if (rangePtr != NULL) {
+		*rangePtr = range;
+	}
+	(void)container;
+	return content;
+}
+
+- (NSRect)boundsRectForTextBlock:(NSTextBlock *)block glyphRange:(NSRange)glyphRange
+{
+	(void)glyphRange;	/* the block's own range is what the frame is made from; the argument names WHICH block */
+	return [self cg_boundsForBlock:block range:NULL];
+}
+
+- (NSRect)layoutRectForTextBlock:(NSTextBlock *)block glyphRange:(NSRange)glyphRange
+{
+	(void)glyphRange;
+	return [self cg_layoutForBlock:block range:NULL];
+}
+
+- (void)setBoundsRect:(NSRect)rect forTextBlock:(NSTextBlock *)block glyphRange:(NSRange)glyphRange
+{
+	FNBlockRect *entry = [self cg_overrideEntryForBlock:block create:(block != nil)];
+
+	(void)glyphRange;
+	if (entry == nil) {
+		return;
+	}
+	entry->bounds = rect;
+	entry->hasBounds = YES;
+}
+
+- (void)setLayoutRect:(NSRect)rect forTextBlock:(NSTextBlock *)block glyphRange:(NSRange)glyphRange
+{
+	FNBlockRect *entry = [self cg_overrideEntryForBlock:block create:(block != nil)];
+
+	(void)glyphRange;
+	if (entry == nil) {
+		return;
+	}
+	entry->layout = rect;
+	entry->hasLayout = YES;
+}
+
+/* **THE `atIndex:` PAIR, AND ITS INDEX IS A GLYPH'S.** Apple's own parameter names in this pair are `glyphIndex` and
+ * `glyphRange`, so a caller that passes a character index here is already wrong in Apple's terms; the door finds the
+ * glyph's fragment, checks that the block it belongs to is the one asked for, and answers the GROUP's range. */
+- (NSRect)boundsRectForTextBlock:(NSTextBlock *)block atIndex:(NSUInteger)glyphIndex
+		  effectiveRange:(NSRange *)glyphRange
+{
+	FNFragment *fragment = [self cg_fragmentForGlyphAtIndex:glyphIndex effectiveRange:NULL];
+	NSRect rect;
+
+	if (fragment == nil || [self cg_blockForFragment:fragment] != block) {
+		if (glyphRange != NULL) {
+			*glyphRange = NSMakeRange(NSNotFound, 0);
+		}
+		return NSZeroRect;
+	}
+	rect = [self cg_boundsForBlock:block range:glyphRange];
+	return rect;
+}
+
+- (NSRect)layoutRectForTextBlock:(NSTextBlock *)block atIndex:(NSUInteger)glyphIndex
+		  effectiveRange:(NSRange *)glyphRange
+{
+	FNFragment *fragment = [self cg_fragmentForGlyphAtIndex:glyphIndex effectiveRange:NULL];
+	NSRect rect;
+
+	if (fragment == nil || [self cg_blockForFragment:fragment] != block) {
+		if (glyphRange != NULL) {
+			*glyphRange = NSMakeRange(NSNotFound, 0);
+		}
+		return NSZeroRect;
+	}
+	rect = [self cg_layoutForBlock:block range:glyphRange];
+	return rect;
+}
+
+/* ---- THE ATTACHMENT'S SIZE ------------------------------------------------------------------------------ */
+
+- (void)setAttachmentSize:(NSSize)attachmentSize forGlyphRange:(NSRange)glyphRange
+{
+	NSRange chars;
+	NSUInteger i;
+
+	[self cg_ensureLayout];
+	chars = [self characterRangeForGlyphRange:glyphRange actualGlyphRange:NULL];
+	if (chars.location == NSNotFound || chars.length == 0) {
+		return;
+	}
+	for (i = chars.location; i < chars.location + chars.length; i++) {
+		[_attachmentSizes setObject:[NSValue valueWithSize:attachmentSize]
+				     forKey:[NSNumber numberWithUnsignedInteger:i]];
+	}
+	/* **AND THE LAYOUT IS TOLD, BECAUSE THE SIZE IS A LAYOUT FACT.** Without this the override would reach the answer
+	 * and not the engine, which is the failure mode this door exists to avoid: a caller measuring a box the layout
+	 * never made. */
+	[self invalidateLayoutForCharacterRange:chars actualCharacterRange:NULL];
+}
+
+- (NSSize)attachmentSizeForGlyphAtIndex:(NSUInteger)glyphIndex
+{
+	NSValue *overrideValue;
+	NSUInteger charIndex;
+	NSUInteger i, j;
+
+	[self cg_ensureLayout];
+	charIndex = [self characterIndexForGlyphAtIndex:glyphIndex];
+	/* THE BOX THE LAYOUT MADE WINS, because that is the size the text actually flowed around. */
+	for (i = 0; i < [_fragments count]; i++) {
+		NSMutableArray *fragments = [_fragments objectAtIndex:i];
+
+		for (j = 0; j < [fragments count]; j++) {
+			FNFragment *fragment = [fragments objectAtIndex:j];
+			NSUInteger b;
+
+			if (fragment->boxes == nil
+			    || charIndex < fragment->range.location
+			    || charIndex >= fragment->range.location + fragment->range.length) {
+				continue;
+			}
+			for (b = 0; b < [fragment->boxes count]; b++) {
+				FNBox *box = [fragment->boxes objectAtIndex:b];
+
+				if (box->index == charIndex) {
+					return NSMakeSize(box->width, box->ascent + box->descent);
+				}
+			}
+		}
+	}
+	overrideValue = [_attachmentSizes objectForKey:[NSNumber numberWithUnsignedInteger:charIndex]];
+	if (overrideValue != nil) {
+		return [overrideValue sizeValue];
+	}
+	/* AND A GLYPH WITH NO BOX ANSWERS THE CELL'S SIZE WHEN THE STORE STILL CARRIES AN ATTACHMENT THERE, which is the
+	 * case before a layout has run. */
+	if (charIndex < [_textStorage length]) {
+		NSDictionary *attrs = [_textStorage attributesAtIndex:charIndex effectiveRange:NULL];
+		NSTextAttachment *attachment = [attrs objectForKey:NSAttachmentAttributeName];
+
+		if (attachment != nil && [attachment attachmentCell] != nil) {
+			return [[attachment attachmentCell] cellSize];
+		}
+	}
+	return NSZeroSize;
+}
+
+- (NSImageScaling)defaultAttachmentScaling
+{
+	return _defaultAttachmentScaling;
+}
+
+- (void)setDefaultAttachmentScaling:(NSImageScaling)newScaling
+{
+	_defaultAttachmentScaling = newScaling;
+}
+
+/* **THE CELL DRAWN INTO A RECTANGLE, SCALED BY THE MODE THE MANAGER CARRIES.** The cell draws itself into whatever frame
+ * it is handed, so scaling is the frame's business: proportionally-down shrinks an oversized picture to fit, up-or-down
+ * fits either way, axes-independently fills, and none keeps the cell's own size. THE DRAW IS CLIPPED TO THE RECTANGLE in
+ * every mode, because a picture that overflows its line is a picture over its neighbours. */
+- (void)showAttachmentCell:(NSCell *)cell inRect:(NSRect)rect characterIndex:(NSUInteger)characterIndex
+{
+	NSTextContainer *container = [self textContainerForGlyphAtIndex:
+		[self glyphIndexForCharacterAtIndex:characterIndex] effectiveRange:NULL];
+	NSView *view = (container != nil) ? (NSView *)[container textView] : nil;
+	NSSize natural = (cell != nil) ? [cell cellSize] : NSZeroSize;
+	NSValue *overrideValue = [_attachmentSizes objectForKey:
+		[NSNumber numberWithUnsignedInteger:characterIndex]];
+	NSRect frame = rect;
+
+	if (cell == nil) {
+		return;
+	}
+	if (overrideValue != nil) {
+		natural = [overrideValue sizeValue];
+	}
+	if (natural.width > 0.0 && natural.height > 0.0 && !NSIsEmptyRect(rect)) {
+		switch (_defaultAttachmentScaling) {
+		case NSImageScaleProportionallyDown:
+		case NSImageScaleProportionallyUpOrDown: {
+			CGFloat sx = NSWidth(rect) / natural.width;
+			CGFloat sy = NSHeight(rect) / natural.height;
+			CGFloat scale = (sx < sy) ? sx : sy;
+
+			if (_defaultAttachmentScaling == NSImageScaleProportionallyDown && scale > 1.0) {
+				scale = 1.0;
+			}
+			frame = NSMakeRect(NSMidX(rect) - natural.width * scale * 0.5,
+					   NSMidY(rect) - natural.height * scale * 0.5,
+					   natural.width * scale, natural.height * scale);
+			break;
+		}
+		case NSImageScaleAxesIndependently:
+			frame = rect;
+			break;
+		case NSImageScaleNone:
+		default:
+			frame = NSMakeRect(NSMidX(rect) - natural.width * 0.5, NSMidY(rect) - natural.height * 0.5,
+					   natural.width, natural.height);
+			break;
+		}
+	}
+	NSRectClip(rect);
+	if ([cell respondsToSelector:@selector(drawWithFrame:inView:characterIndex:)]) {
+		[(id<NSTextAttachmentCell>)cell drawWithFrame:frame inView:view characterIndex:characterIndex];
+	} else {
+		[cell drawWithFrame:frame inView:view];
+	}
 }
 
 @end

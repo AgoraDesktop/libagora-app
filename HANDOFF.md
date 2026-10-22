@@ -93,7 +93,7 @@ protocols  23 of  56   (41%)    33 missing
 functions  86 of  86 (100%)     0 missing     10 refuse by name
 methods  3154 declared, 4 with no body (0.1%)
 
-text system:  NSLayoutManager 59/136 · NSTextView 60/186 · NSTextStorage 13/25 · NSTextContainer 17/17
+text system:  NSLayoutManager 70/136 · NSTextView 60/186 · NSTextStorage 13/25 · NSTextContainer 17/17
               NSText 39/39 (COMPLETE) · NSRulerView 32/32 (COMPLETE) · NSRulerMarker 19/19 (COMPLETE)
 ```
 
@@ -268,10 +268,38 @@ predicted: the four ruler commands were the last four selectors it owed.
 
 **Where to go next, re-ranked by reachable surface:**
 
-1. **`NSLayoutManager` text-block and attachment rects** (11 doors, the old §5.3): `boundsRectForTextBlock:atIndex:…`,
-   `layoutRectForTextBlock:glyphRange:`, `attachmentSizeForGlyphAtIndex:`, `showAttachmentCell:inRect:characterIndex:`.
-   The boxes exist (`FNBox`, `cg_drawBlocksForGlyphRange:`); these doors expose what is already computed.
+1. **`NSLayoutManager` text-block and attachment rects — LANDED, see §10.** The next surface in this family is the
+   rest of the manager's 66 remaining selectors: temporary attributes (~8), the invalidation/ensure family (~8, of which
+   this slice uses four internally), `rectArrayForGlyphRange:…` and the insertion-point doors (~6), the typesetter and
+   glyph-generator setters (~10), and non-contiguous layout (~4). Pick by what a caller reaches: temporary attributes are
+   what a find-highlight needs, and the rect array is what an editor's redraw uses.
 2. **The substitution machinery** (the old §5.2, ~12 doors): the five flags are stored; the tables
    (`userQuotesArrayForLanguage:`, `userReplacementsDictionary`) are what would make typing through them real.
 3. **`NSTextView`'s ruler accessory** — the one door this slice refused. A tab-type control cluster is an
    `NSPopUpButton` and an action; the reserve arithmetic already accounts for whatever is installed.
+
+---
+
+## 10. And then the layout's measurements
+
+*Third commit of the pickup: the eleven text-block and attachment doors.*
+
+`boundsRectForTextBlock:…`, `layoutRectForTextBlock:…` (both spellings each), the two setters, `setAttachmentSize:`,
+`attachmentSizeForGlyphAtIndex:`, `defaultAttachmentScaling` and `showAttachmentCell:inRect:characterIndex:`. The manager
+keeps an OVERRIDE TABLE for the two rects (a caller's value wins; the getter computes otherwise) and a per-character size
+table for attachments that `-cg_boxesForRange:` consults when it builds the run delegate — so the override reaches the
+ENGINE, not only the answer. `NSLayoutManager` is 70 of 136 now.
+
+**Three things this slice learned, all recorded at the code:**
+
+* **A table cell's bounds are measured from its column band, not its text.** `-cg_addCell:` unions `fragment->rect` for a
+  cell and `fragment->used` for a plain block, so a door that used the text band would answer a rectangle the drawing
+  pass never painted. The MEASURED shape: a custom block grows its layout rect by exactly padding+border (sixteen points
+  for six and two), while a cell's bounds exceed its text by MORE than its layers because the band is the cell's width.
+* **`-colorAtX:y:` indexes from the opposite end to the drawing coordinates**, which the §4 trap list already said and
+  this slice paid for again: a 40x40 picture filled its rect exactly and the naive band called 80 of its pixels
+  "outside". The probe now converts the rect to a row band once (`row = H - 1 - y`) and says why.
+* **A test that reuses a manager inherits its overrides.** The drawing checks drew at the size a previous section had
+  overridden (40x30) rather than the cell's 12x12, and the failure looked like a scaling bug. The drawing checks now build
+  their own manager, which is the cheap version of "a test that passes for the wrong reason is worse than one that
+  fails".

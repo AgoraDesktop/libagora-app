@@ -43,6 +43,9 @@
 /* `NSGlyph` is declared in `NSFont.h` and the glyph store's doors take it, so this header imports it for the same
  * reason Apple's does: a type a signature names has to be visible where the signature is read. */
 #import <AppKit/NSFont.h>
+/* FOR `NSImageScaling` AND `NSCell`: two of the doors below name them, and a forward declaration cannot stand in for a
+ * typedef. `NSCell.h` imports this tier's view/text headers, never this one, so the dependency runs one way. */
+#import <AppKit/NSCell.h>
 
 NS_ASSUME_NONNULL_BEGIN
 
@@ -53,6 +56,7 @@ NS_ASSUME_NONNULL_BEGIN
 @class NSParagraphStyle;
 @class NSRulerView;
 @class NSView;
+@class NSTextBlock;
 
 /* **THE TWO THINGS A MANAGER TELLS ITS DELEGATE, OF THE ERA'S THREE.** `-layoutManagerDidInvalidateLayout:` is the one
  * this slice can send — the layout IS invalidated, because the store said so — and the other two
@@ -95,6 +99,23 @@ NS_ASSUME_NONNULL_BEGIN
 	 * would mean re-implementing line breaking so a glyph edit could survive one. */
 	NSMutableArray *_glyphStore;	/* RETAINED; FNGlyph records, in layout order, or nil before the first build */
 	BOOL _glyphStoreStale;		/* YES when the fragments have moved under it */
+	/* ============================================================================================
+	 * AND THE THREE THINGS A CALLER CAN DICTATE RATHER THAN MEASURE.
+	 *
+	 * **A TEXT BLOCK'S TWO RECTANGLES ARE COMPUTED FROM THE FRAGMENTS — AND A SUBCLASS MAY OVERRIDE THEM.** Apple's
+	 * `-setBoundsRect:forTextBlock:glyphRange:` exists for a layout manager's SUBCLASS to say where it put a block,
+	 * so this tier keeps the overrides in one list (a borrowed block object and two rects) and consults it before it
+	 * computes. The list is searched linearly: a table has few blocks, and a dictionary keyed by a borrowed pointer
+	 * needs the same lifetime argument anyway.
+	 *
+	 * **AN ATTACHMENT'S SIZE IS THE ONE NUMBER THE ENGINE TOOK FROM THE CELL**, so a caller that disagrees stores its
+	 * own here, keyed by character index, and `-cg_boxesForRange:` reads it when it builds the run delegate — which is
+	 * how the override reaches the LAYOUT rather than only the answer. Setting one invalidates that range.
+	 * ========================================================================================== */
+	NSMutableArray *_blockRectOverrides;	/* RETAINED; FNBlockRect objects, one per overridden block */
+	NSMutableDictionary *_attachmentSizes;	/* RETAINED; NSNumber(character index) -> NSValue(NSSize) */
+	NSImageScaling _defaultAttachmentScaling;
+
 }
 
 /* ---- THE STORE, WHICH THE STORAGE DRIVES ------------------------------------------------------------ */
@@ -388,6 +409,50 @@ NS_ASSUME_NONNULL_BEGIN
 	   lineFragmentRect:(NSRect)lineRect
     lineFragmentGlyphRange:(NSRange)lineGlyphRange
 	    containerOrigin:(NSPoint)containerOrigin;
+
+/* ==================================================================================================================
+ * THE BLOCK'S TWO RECTANGLES, AND THE ATTACHMENT'S SIZE.
+ *
+ * **A TEXT BLOCK OCCUPIES TWO RECTANGLES AND THE DIFFERENCE IS ITS OWN LAYERS.** The LAYOUT rect is where the block's
+ * content is laid out — this tier's answer is the union of the used rects of the fragments that share the block, in the
+ * text container's coordinates, which is where the glyphs actually are. The BOUNDS rect is what the block's padding,
+ * border and margin make of that content, and it is computed by the block itself
+ * (`-boundsRectForContentRect:inRect:textContainer:characterRange:`), so the frame a caller reads back is the frame
+ * `-drawGlyphRange:…` draws. A block that is not in the layout answers `NSZeroRect`, which is Apple's answer and the
+ * only honest one: there is no rectangle for something that was never laid out.
+ *
+ * **THE FOUR ACCESSORS COME IN TWO PAIRS: BY GLYPH RANGE AND BY ONE GLYPH.** Apple's `atIndex:` doors take a GLYPH
+ * index and report a GLYPH range through `effectiveRange:` — the names in Apple's own header are `glyphIndex` and
+ * `glyphRange` — which is why the effective range here is the block's glyphs and not its characters.
+ *
+ * **AND THE TWO SETTERS ARE A SUBCLASS'S, NOT A CALLER'S.** They store an override the getters consult first, which is
+ * what a layout manager that places blocks by its own rules needs; nothing in this tier calls them.
+ *
+ * **AN ATTACHMENT'S SIZE IS WHAT THE LAYOUT RESERVED, AND IT CAN BE OVERRIDDEN.** `-attachmentSizeForGlyphAtIndex:`
+ * answers the size the glyph's box occupies (which is the attachment cell's size unless a caller said otherwise), and
+ * `-setAttachmentSize:forGlyphRange:` stores a size for a range and invalidates it, so the next layout reserves THAT
+ * width. `-defaultAttachmentScaling` is the mode `-showAttachmentCell:inRect:characterIndex:` uses when a cell's own
+ * size does not fit the rectangle it was given; its default is proportionally-down, which is what keeps an oversized
+ * picture inside its line.
+ * ================================================================================================================ */
+
+- (NSRect)boundsRectForTextBlock:(NSTextBlock *)block glyphRange:(NSRange)glyphRange;
+- (NSRect)layoutRectForTextBlock:(NSTextBlock *)block glyphRange:(NSRange)glyphRange;
+- (void)setBoundsRect:(NSRect)rect forTextBlock:(NSTextBlock *)block glyphRange:(NSRange)glyphRange;
+- (void)setLayoutRect:(NSRect)rect forTextBlock:(NSTextBlock *)block glyphRange:(NSRange)glyphRange;
+
+- (NSRect)boundsRectForTextBlock:(NSTextBlock *)block atIndex:(NSUInteger)glyphIndex
+		  effectiveRange:(nullable NSRangePointer)glyphRange;
+- (NSRect)layoutRectForTextBlock:(NSTextBlock *)block atIndex:(NSUInteger)glyphIndex
+		  effectiveRange:(nullable NSRangePointer)glyphRange;
+
+- (void)setAttachmentSize:(NSSize)attachmentSize forGlyphRange:(NSRange)glyphRange;
+- (NSSize)attachmentSizeForGlyphAtIndex:(NSUInteger)glyphIndex;
+
+- (NSImageScaling)defaultAttachmentScaling;
+- (void)setDefaultAttachmentScaling:(NSImageScaling)newScaling;
+
+- (void)showAttachmentCell:(NSCell *)cell inRect:(NSRect)rect characterIndex:(NSUInteger)characterIndex;
 
 /* ==================================================================================================================
  * THE RULER'S TWO DOORS, WHICH ARE THE TEXT SYSTEM'S HALF OF IT.
