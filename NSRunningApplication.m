@@ -20,10 +20,12 @@
 
 #import <Foundation/NSBundle.h>
 #import <Foundation/NSNumber.h>
+#import <Foundation/NSProcessInfo.h>
 
 #import <LaunchServices/LSInfo.h>
 
 #include <stdio.h>
+#include <unistd.h>	/* getpid: the one process fact this tier publishes */
 
 /* One URL out of a Launch Services array, or nil. The array is +1 from the Copy door and released here.
  *
@@ -50,6 +52,41 @@ static NSURL *URLForBundleIdentifier(NSString *identifier)
 		CFRelease(urls);
 	}
 	return [url autorelease];
+}
+
+/* **THE ELF HEADER'S ONE FACT, FOR A PROCESS WITH NO BUNDLE.** See `-executableArchitecture` for why this exists beside
+ * `NSBundle -executableArchitectures` rather than instead of it: the codes are FOUNDATION's (this library's 1..5), the
+ * machine word is `e_machine` at offset 18, and `e_ident[EI_DATA]` decides the byte order. A file that cannot be read, is
+ * not an ELF, or names a machine this layer has no code for answers 0. */
+static NSInteger fn_architecture_of_elf(const char *path)
+{
+	FILE *file;
+	unsigned char header[20];
+	size_t got;
+	unsigned int machine;
+
+	file = fopen(path, "rb");
+	if (file == NULL) {
+		return 0;
+	}
+	got = fread(header, 1, sizeof(header), file);
+	fclose(file);
+	if (got < sizeof(header) || header[0] != 0x7f || header[1] != 'E' || header[2] != 'L' || header[3] != 'F') {
+		return 0;
+	}
+	if (header[5] == 2) {
+		machine = ((unsigned int)header[18] << 8) | header[19];
+	} else {
+		machine = (unsigned int)header[18] | ((unsigned int)header[19] << 8);
+	}
+	switch (machine) {
+	case 3:		return NSBundleExecutableArchitectureI386;	/* EM_386 */
+	case 20:	return NSBundleExecutableArchitecturePPC;	/* EM_PPC */
+	case 21:	return NSBundleExecutableArchitecturePPC64;	/* EM_PPC64 */
+	case 62:	return NSBundleExecutableArchitectureX86_64;	/* EM_X86_64 */
+	case 183:	return NSBundleExecutableArchitectureARM64;	/* EM_AARCH64, Foundation's fifth code */
+	default:	return 0;
+	}
 }
 
 @implementation NSRunningApplication
@@ -167,7 +204,130 @@ static NSURL *URLForBundleIdentifier(NSString *identifier)
 
 - (pid_t)processIdentifier
 {
-	return 0;	/* not published: see the header */
+	/* SEE THE IVAR: the window server publishes an application's IDENTIFIER and not its process, so an application
+	 * discovered that way has no pid. The current application's object has one, because a process always knows its own. */
+	return _pid;
+}
+
+- (void)cg_setProcessIdentifier:(pid_t)pid
+{
+	_pid = pid;
+}
+
+/* ---- THE CLASS DOORS, AND THE ONE LOOKUP WITH A REAL ANSWER ------------------------------------ */
+
+/* **`+currentApplication` IS THE PROCESS'S OWN APPLICATION, AND IT IS THE SAME OBJECT EVERY TIME.** A caller compares
+ * two of these with `==` (Apple's own answer is a singleton), so it is cached. When the workspace's list already holds
+ * an entry for this bundle — the ordinary case for an application the compositor has seen — THAT object is answered,
+ * so the current application and its Dock tile are one object rather than two that are `-isEqual:`.
+ *
+ * THE PID IS THE ONE FACT THIS CLASS ADDS OVER A DISCOVERED APPLICATION: `getpid()` is available in any process, so the
+ * application that is asking always knows its own. */
++ (NSRunningApplication *)currentApplication
+{
+	static NSRunningApplication *sCurrent = nil;
+	NSString *identifier;
+
+	if (sCurrent != nil) {
+		return sCurrent;
+	}
+	identifier = [[NSBundle mainBundle] bundleIdentifier];
+	if (identifier == nil) {
+		/* **A PROCESS WITH NO BUNDLE STILL HAS AN APPLICATION.** Apple's `+currentApplication` never answers nil; here a
+		 * bare executable (a test, a tool) has no Info.plist to name it, so its PROCESS NAME is the identifier — which is
+		 * what the window server would see on a window it declared, and the only name such a process has. */
+		identifier = [[NSProcessInfo processInfo] processName];
+	}
+	if (identifier == nil) {
+		return nil;
+	}
+	{
+		NSArray *known = [[NSWorkspace sharedWorkspace] runningApplications];
+		NSUInteger i;
+
+		for (i = 0; i < [known count]; i++) {
+			NSRunningApplication *candidate = [known objectAtIndex:i];
+
+			if ([[candidate bundleIdentifier] isEqualToString:identifier]) {
+				sCurrent = [candidate retain];
+				[candidate cg_setProcessIdentifier:getpid()];
+				return sCurrent;
+			}
+		}
+	}
+	sCurrent = [[NSRunningApplication alloc] cg_initWithBundleIdentifier:identifier];
+	[sCurrent cg_setProcessIdentifier:getpid()];
+	return sCurrent;
+}
+
+/* **AND THE LOOKUP BY PID ANSWERS FOR EVERY PID THIS TIER CAN SEE, WHICH IS ONE.** See the header: the window server
+ * publishes identifiers, not processes, so only the current application carries a pid. A query for a pid nobody
+ * published answers nil, which is the true answer to "which application has this pid" from a component that was never
+ * told. NO REFUSAL IS PRINTED: a pid that matches nothing is an ordinary nil, not a missing mechanism. */
++ (NSRunningApplication *)runningApplicationWithProcessIdentifier:(pid_t)pid
+{
+	NSRunningApplication *current = [self currentApplication];
+
+	if (current != nil && pid != 0 && [current processIdentifier] == pid) {
+		return current;
+	}
+	return nil;
+}
+
+/* AND THE FILTER IS A FILTER: the workspace's own list, by identifier, in the order the workspace holds it. */
++ (NSArray *)runningApplicationsWithBundleIdentifier:(NSString *)bundleIdentifier
+{
+	NSMutableArray *matching = [NSMutableArray array];
+	NSArray *known;
+	NSUInteger i;
+
+	if (bundleIdentifier == nil) {
+		return matching;
+	}
+	known = [[NSWorkspace sharedWorkspace] runningApplications];
+	for (i = 0; i < [known count]; i++) {
+		NSRunningApplication *candidate = [known objectAtIndex:i];
+
+		if ([[candidate bundleIdentifier] isEqualToString:bundleIdentifier]) {
+			[matching addObject:candidate];
+		}
+	}
+	return matching;
+}
+
+/* **THE ARCHITECTURE IS THE BUNDLE'S OWN ANSWER, WHICH IS ALREADY THE HEADER READ.** `NSBundle -executableArchitectures`
+ * opens the executable and maps the ELF's `e_machine` onto the library's five codes — written in `libagora-base`, where the
+ * bundle's executable is. So this door is a translation of the APPLICATION into a BUNDLE and of the array's first code into
+ * an `NSInteger`; a second ELF parser here would be the same reading twice, and the first version of this method was
+ * exactly that (and would have answered Mach-O's numbers rather than this library's). */
+- (NSInteger)executableArchitecture
+{
+	NSURL *url = [self executableURL];
+	NSBundle *bundle;
+	NSArray *codes;
+	NSInteger code = 0;
+
+	/* **AND A PROCESS WITH NO BUNDLE READS ITS OWN EXECUTABLE.** See `+currentApplication`: a bare tool has no bundle
+	 * URL to resolve, and the only application this tier can identify that way is the running one, so `/proc/self/exe`
+	 * is the file that answers. Any OTHER application without a resolvable bundle answers 0, because there is no path to
+	 * read. */
+	if (url != nil) {
+		bundle = [NSBundle bundleWithPath:[url path]];
+		codes = [bundle executableArchitectures];
+		if ([codes count] > 0) {
+			code = (NSInteger)[[codes objectAtIndex:0] integerValue];
+		}
+		return code;
+	}
+	if (self == [[self class] currentApplication]) {
+		/* **A BARE PROCESS HAS NO BUNDLE OBJECT TO ASK, SO ITS OWN EXECUTABLE IS READ HERE.** `/proc/self/exe` is the
+		 * one path a process always has, and the mapping from `e_machine` to the codes is the SAME mapping
+		 * `NSBundle -executableArchitectures` performs — which is a second copy of ten lines, named rather than hidden,
+		 * because that door is BUNDLE-shaped and a process without a bundle has no bundle to hand it. The day a
+		 * path-based door exists in Foundation, this block is what it replaces. */
+		return fn_architecture_of_elf("/proc/self/exe");
+	}
+	return 0;
 }
 
 - (BOOL)isActive

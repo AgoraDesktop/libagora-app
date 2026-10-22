@@ -405,6 +405,66 @@ int main(void)
 		}
 	}
 
+	/* 15. **AND THE BROWSER CELL'S OWN SIX DOORS: TWO PICTURES, TWO BRANCH MARKS, A HIGHLIGHT COLOUR AND `-set`.**
+	 * The mark is checked in PIXELS at the cell's trailing edge, because "a branch wears a chevron and a leaf does not"
+	 * is a claim about ink and not about a flag. */
+	{
+		NSBrowserCell *branch = [[NSBrowserCell alloc] initTextCell:@"Row"];
+		NSBrowserCell *leaf = [[NSBrowserCell alloc] initTextCell:@"Row"];
+		NSImage *alt = [[NSImage alloc] initWithSize:NSMakeSize(8.0, 8.0)];
+		NSBitmapImageRep *branchRep;
+		NSBitmapImageRep *leafRep;
+		int branchInk = 0;
+		int leafInk = 0;
+		int x, y;
+
+		[branch setLeaf:NO];
+		[leaf setLeaf:YES];
+		check([NSBrowserCell branchImage] != nil && [NSBrowserCell highlightedBranchImage] != nil,
+		      "the two branch marks are images rather than nil");
+		check([NSBrowserCell branchImage] != [NSBrowserCell highlightedBranchImage],
+		      "and they are DIFFERENT images — one for a plain row and one for a selected one");
+		check([branch alternateImage] == nil, "a fresh browser cell has no alternate picture");
+		[branch setAlternateImage:alt];
+		check([branch alternateImage] == alt, "`-setAlternateImage:` round-trips");
+		check([[branch highlightColorInView:nil] isEqual:[NSColor selectedControlColor]],
+		      "`-highlightColorInView:` answers the selection colour a highlighted row is drawn with");
+		[branch set];
+		check([branch state] == NSOnState && [branch isHighlighted],
+		      "`-set` is the era's shorthand for selected: the state goes ON and the cell is highlighted");
+		[branch setHighlighted:NO];
+
+		branchRep = [[NSBitmapImageRep alloc] initWithBitmapDataPlanes:NULL pixelsWide:100 pixelsHigh:20
+			bitsPerSample:8 samplesPerPixel:4 hasAlpha:YES isPlanar:NO
+			colorSpaceName:NSCalibratedRGBColorSpace bytesPerRow:400 bitsPerPixel:32];
+		leafRep = [[NSBitmapImageRep alloc] initWithBitmapDataPlanes:NULL pixelsWide:100 pixelsHigh:20
+			bitsPerSample:8 samplesPerPixel:4 hasAlpha:YES isPlanar:NO
+			colorSpaceName:NSCalibratedRGBColorSpace bytesPerRow:400 bitsPerPixel:32];
+		[NSGraphicsContext setCurrentContext:[NSGraphicsContext graphicsContextWithBitmapImageRep:branchRep]];
+		[[NSColor whiteColor] setFill];
+		[[NSBezierPath bezierPathWithRect:NSMakeRect(0.0, 0.0, 100.0, 20.0)] fill];
+		[branch drawWithFrame:NSMakeRect(0.0, 0.0, 100.0, 20.0) inView:nil];
+		[NSGraphicsContext setCurrentContext:[NSGraphicsContext graphicsContextWithBitmapImageRep:leafRep]];
+		[[NSColor whiteColor] setFill];
+		[[NSBezierPath bezierPathWithRect:NSMakeRect(0.0, 0.0, 100.0, 20.0)] fill];
+		[leaf drawWithFrame:NSMakeRect(0.0, 0.0, 100.0, 20.0) inView:nil];
+		for (y = 0; y < 20; y++) {
+			for (x = 88; x < 100; x++) {
+				if ([[branchRep colorAtX:x y:y] redComponent] < 0.6) branchInk++;
+				if ([[leafRep colorAtX:x y:y] redComponent] < 0.6) leafInk++;
+			}
+		}
+		printf("  (note: the trailing 12 points hold %d dark points for a branch and %d for a leaf)\n",
+		       branchInk, leafInk);
+		check(branchInk > 0, "a BRANCH draws its chevron at the trailing edge");
+		check(leafInk == 0, "and a LEAF draws nothing there — that is what being a leaf means");
+		[branchRep release];
+		[leafRep release];
+		[alt release];
+		[branch release];
+		[leaf release];
+	}
+
 	[window release];
 	[browser release];
 	[probe release];

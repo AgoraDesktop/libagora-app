@@ -343,6 +343,103 @@ static void test_alert_sheet(void)
 	[parent release];
 }
 
+/* **AND THE ALERT'S FOUR NEW DOORS: TWO CONSTRUCTORS, THE SUPPRESSION BOX, AND THE DELEGATE'S ONE QUESTION.** The box and
+ * the constructor are checked for what they BUILD, and the delegate for what it is TOLD — the help button's action is the
+ * sender, so the probe sends what a press would. */
+@interface AGAlertWatcher : NSObject <NSAlertDelegate>
+{
+@public
+	int asked;
+	BOOL answers;
+}
+@end
+
+@implementation AGAlertWatcher
+- (BOOL)alertShowHelp:(NSAlert *)alert
+{
+	(void)alert;
+	asked++;
+	return answers;
+}
+@end
+
+static void test_alert_sweep(void)
+{
+	NSAlert *alert;
+	NSAlert *fromFormat;
+	NSAlert *fromError;
+	NSButton *box;
+	NSError *error;
+	AGAlertWatcher *watcher;
+
+	/* 1. THE FORMAT CONSTRUCTOR. */
+	fromFormat = [NSAlert alertWithMessageText:@"Delete 3 items?"
+				     defaultButton:@"Delete"
+				   alternateButton:@"Cancel"
+				       otherButton:nil
+		     informativeTextWithFormat:@"%@ cannot be undone.", @"This"];
+	check(fromFormat != nil, "+alertWithMessageText:...informativeTextWithFormat: builds an alert");
+	check([[fromFormat messageText] isEqual:@"Delete 3 items?"], "with the message it was given");
+	check([[fromFormat informativeText] isEqual:@"This cannot be undone."],
+	      "and the informative run BUILT FROM THE FORMAT — the argument reached it");
+	check([[fromFormat buttons] count] == 2, "with one button per non-nil title, and none for the nil one");
+
+	/* 2. THE ERROR CONSTRUCTOR: the message, the reason and the recovery options. */
+	error = [NSError errorWithDomain:@"io.github.agoradesktop.test" code:7
+			       userInfo:[NSDictionary dictionaryWithObjectsAndKeys:
+					 @"The file could not be saved.", NSLocalizedDescriptionKey,
+					 @"The volume is read-only.", NSLocalizedFailureReasonKey,
+					 [NSArray arrayWithObjects:@"Save As…", @"Cancel", nil],
+					 NSLocalizedRecoveryOptionsErrorKey,
+					 nil]];
+	fromError = [NSAlert alertWithError:error];
+	check(fromError != nil, "+alertWithError: builds an alert from an error");
+	check([[fromError messageText] isEqual:@"The file could not be saved."],
+	      "whose message is the error's localized description");
+	check([[fromError informativeText] isEqual:@"The volume is read-only."],
+	      "and whose explanatory line is its localized failure reason");
+	check([[fromError buttons] count] == 2 &&
+	      [[(NSButton *)[[fromError buttons] objectAtIndex:0] title] isEqual:@"Save As…"],
+	      "with a button per recovery option, in the error's own order");
+	check([NSAlert alertWithError:nil] == nil, "and a nil error is nil rather than an empty alert");
+
+	/* 3. THE SUPPRESSION BOX IS MADE ON DEMAND, WHICH IS APPLE'S CONTRACT. */
+	alert = [[NSAlert alloc] init];
+	check(![alert showsSuppressionButton] && [alert suppressionButton] == nil,
+	      "a fresh alert has NO suppression box, and asking for one answers nil");
+	[alert setShowsSuppressionButton:YES];
+	box = [alert suppressionButton];
+	check(box != nil && [alert showsSuppressionButton], "`-setShowsSuppressionButton:YES` makes one");
+	check([box buttonType] == NSSwitchButton, "and it is a CHECKBOX, which is what a suppression box is");
+	[box setTitle:@"Do not ask again"];
+	[box setState:NSOnState];
+	check([[alert suppressionButton] state] == NSOnState &&
+	      [[[alert suppressionButton] title] isEqual:@"Do not ask again"],
+	      "and the caller's title and the person's answer live on the BUTTON, which is the object the door hands back");
+	[alert setShowsSuppressionButton:NO];
+	check([alert suppressionButton] != nil && ![alert showsSuppressionButton],
+	      "turning the flag off HIDES the box without destroying the answer it holds");
+	[alert release];
+
+	/* 4. THE DELEGATE'S ONE QUESTION, SENT BY THE HELP BUTTON'S ACTION. */
+	watcher = [[AGAlertWatcher alloc] init];
+	alert = [[NSAlert alloc] init];
+	[alert setDelegate:watcher];
+	check([alert delegate] == watcher, "the alert answers its delegate through its own typed door");
+	watcher->answers = YES;
+	[alert cg_helpButtonClicked:nil];
+	check(watcher->asked == 1, "the help action ASKS the delegate, once");
+	watcher->answers = NO;
+	[alert cg_helpButtonClicked:nil];
+	check(watcher->asked == 2,
+	      "and a NO answer is a second ask: the delegate said it had not handled the request");
+	[alert setDelegate:nil];
+	[alert cg_helpButtonClicked:nil];
+	check(watcher->asked == 2, "with no delegate nothing is asked and the refusal is printed instead");
+	[alert release];
+	[watcher release];
+}
+
 int main(void)
 {
 	NSApplication *application = [NSApplication sharedApplication];
@@ -354,6 +451,7 @@ int main(void)
 	test_alert_content();
 	test_alert_answers();
 	test_alert_sheet();
+	test_alert_sweep();
 
 	printf("panel_alert: %s\n", s_failed == 0 ? "all checks passed" : "FAILURES");
 	return s_failed == 0 ? 0 : 1;

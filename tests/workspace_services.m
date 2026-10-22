@@ -283,6 +283,64 @@ int main(void)
 		      "opening a path that does not exist, or that nothing claims, answers NO");
 	}
 
+	/* **AND THE FOUR APPLICATION DOORS THE SWEEP ADDS.** The current application is the one process this tier publishes
+	 * a pid for; the lookup by pid therefore answers for it and for nothing else — which is the true answer rather than a
+	 * refusal, because "no application I know of has that pid" is a fact. */
+	{
+		NSRunningApplication *current = [NSRunningApplication currentApplication];
+		NSRunningApplication *samePid;
+		NSRunningApplication *stranger;
+		NSArray *byIdentifier;
+		NSInteger architecture;
+		NSString *mainIdentifier = [[NSBundle mainBundle] bundleIdentifier];
+
+		check(current != nil, "`+currentApplication` answers an application for this process");
+		check([NSRunningApplication currentApplication] == current,
+		      "and the SAME object every time, which is what a caller comparing with `==` expects");
+		check(current != nil && [current processIdentifier] == getpid(),
+		      "its pid is this process's, which is the one pid this tier can publish");
+		check(current != nil && [[current bundleIdentifier] length] > 0,
+		      "and it carries an identifier");
+		check(mainIdentifier == nil || [[current bundleIdentifier] isEqualToString:mainIdentifier],
+		      "which is the main bundle's when this process HAS a bundle");
+
+		samePid = [NSRunningApplication runningApplicationWithProcessIdentifier:getpid()];
+		check(samePid == current, "the lookup BY PID finds it");
+		stranger = [NSRunningApplication runningApplicationWithProcessIdentifier:getpid() + 1];
+		check(stranger == nil,
+		      "and a pid nobody published answers nil — an ordinary nil, because a window server does not publish pids");
+
+		byIdentifier = [NSRunningApplication runningApplicationsWithBundleIdentifier:mainIdentifier];
+		check(byIdentifier != nil, "the filter by identifier answers an array even when nothing matches");
+		{
+			NSUInteger i;
+			BOOL allMatch = YES;
+
+			for (i = 0; i < [byIdentifier count]; i++) {
+				if (![[[byIdentifier objectAtIndex:i] bundleIdentifier] isEqualToString:mainIdentifier]) {
+					allMatch = NO;
+				}
+			}
+			check(allMatch, "and every element it answers carries the identifier that was asked for");
+		}
+		check([[NSRunningApplication runningApplicationsWithBundleIdentifier:nil] count] == 0,
+		      "a nil identifier matches nothing rather than everything");
+
+		/* THE ARCHITECTURE IS READ FROM THE EXECUTABLE'S OWN HEADER, through the bundle's door. This host is x86-64,
+		 * and the test asserts the SHAPE (a code from Foundation's enum) rather than a constant that would pin the
+		 * machine — plus the one equality that is checkable here: the answer for this process is the answer the bundle
+		 * itself gives. */
+		architecture = [current executableArchitecture];
+		printf("  (note: this process's executable architecture reads %ld)\n", (long)architecture);
+		check(architecture != 0, "`-executableArchitecture` reads a code from the executable's ELF header");
+		{
+			NSArray *codes = [[NSBundle mainBundle] executableArchitectures];
+
+			check([codes count] == 0 || architecture == (NSInteger)[[codes objectAtIndex:0] integerValue],
+			      "and it is the SAME code the bundle's own door reports for this executable");
+		}
+	}
+
 	[recorder release];
 	[pool release];
 	printf("workspace_services: %d case(s) failed\n", s_failures);

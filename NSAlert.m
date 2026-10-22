@@ -24,6 +24,7 @@
  * and `tests/panel_alert.m` drives it through `-sendEvent:`.
  */
 #import <AppKit/NSAlert.h>
+#import "AppKitRefusal.h"
 
 #import <AppKit/NSApplication.h>
 #import <AppKit/NSAttributedString.h>
@@ -295,6 +296,60 @@ static NSFont *fn_informative_font(void)
 	return alert;
 }
 
++ (NSAlert *)alertWithMessageText:(NSString *)message
+		    defaultButton:(NSString *)defaultButtonLabel
+		  alternateButton:(NSString *)alternateButtonLabel
+		      otherButton:(NSString *)otherButtonLabel
+	informativeTextWithFormat:(NSString *)format, ...
+{
+	NSAlert *alert = [self alertWithMessageText:message title:nil defaultButton:defaultButtonLabel
+				    alternateButton:alternateButtonLabel otherButton:otherButtonLabel];
+
+	if (format != nil) {
+		va_list args;
+		NSString *informative;
+
+		va_start(args, format);
+		informative = [[NSString alloc] initWithFormat:format arguments:args];
+		va_end(args);
+		[alert setInformativeText:informative];
+		[informative release];
+	}
+	return alert;
+}
+
+/* **AN ALERT OUT OF AN ERROR IS A TRANSLATION AND NOTHING MORE.** The message is the error's localized description; the
+ * informative run is its localized failure reason (nil when it has none, and nil text is simply no line); the buttons are
+ * its recovery options in the order it gives them, and an error offering no options gets the one button every alert needs
+ * — OK. THE DOMAIN AND CODE ARE NOT PRINTED: an alert is what a person reads, and the technical detail belongs in a log. */
++ (NSAlert *)alertWithError:(NSError *)error
+{
+	NSAlert *alert;
+	NSArray *options;
+	NSString *reason;
+
+	if (error == nil) {
+		return nil;
+	}
+	alert = [[[self alloc] init] autorelease];
+	[alert setMessageText:[error localizedDescription]];
+	reason = [error localizedFailureReason];
+	if (reason != nil) {
+		[alert setInformativeText:reason];
+	}
+	options = [error localizedRecoveryOptions];
+	if ([options count] == 0) {
+		[alert addButtonWithTitle:@"OK"];
+	} else {
+		NSUInteger i;
+
+		for (i = 0; i < [options count]; i++) {
+			[alert addButtonWithTitle:[[options objectAtIndex:i] description]];
+		}
+	}
+	return alert;
+}
+
 - (instancetype)init
 {
 	self = [super init];
@@ -331,6 +386,8 @@ static NSFont *fn_informative_font(void)
 	[_messageLines release];
 	[_informativeLines release];
 	[_accessoryView release];
+	[_suppressionButton release];
+	[_helpButton release];
 	[super dealloc];
 }
 
@@ -456,6 +513,15 @@ static NSFont *fn_informative_font(void)
 - (void)setShowsHelp:(BOOL)flag
 {
 	_showsHelp = flag ? YES : NO;
+	if (_showsHelp) {
+		[self cg_ensureHelpButton];
+		if (_window != nil && [_helpButton superview] != [_window contentView]) {
+			[[_window contentView] addSubview:_helpButton];
+		}
+	} else if (_helpButton != nil) {
+		[_helpButton removeFromSuperview];
+	}
+	[self layout];
 }
 
 - (NSString *)helpAnchor
@@ -469,6 +535,81 @@ static NSFont *fn_informative_font(void)
 
 	[_helpAnchor release];
 	_helpAnchor = copy;
+}
+
+/* ---- THE SUPPRESSION BUTTON, THE DELEGATE, AND THE HELP BUTTON --------------------------------- */
+
+- (BOOL)showsSuppressionButton
+{
+	return _suppressionButton != nil && ![_suppressionButton isHidden];
+}
+
+- (void)setShowsSuppressionButton:(BOOL)flag
+{
+	if (flag) {
+		/* **THE BUTTON IS MADE THE FIRST TIME THE FLAG IS SET, WITH AN EMPTY TITLE.** Apple's alert's suppression
+		 * button starts as a bare checkbox and the caller writes the words on it — which is why the title is not part
+		 * of this door: "do not show this again" is the CALLER's sentence, and an alert cannot know what it suppresses. */
+		if (_suppressionButton == nil) {
+			_suppressionButton = [[NSButton alloc] initWithFrame:NSMakeRect(0.0, 0.0, 200.0, 18.0)];
+			[_suppressionButton setButtonType:NSSwitchButton];
+			[_suppressionButton setTitle:@""];
+		}
+		[_suppressionButton setHidden:NO];
+		if (_window != nil && [_suppressionButton superview] != [_window contentView]) {
+			[[_window contentView] addSubview:_suppressionButton];
+		}
+	} else if (_suppressionButton != nil) {
+		[_suppressionButton setHidden:YES];
+	}
+	[self layout];
+}
+
+- (NSButton *)suppressionButton
+{
+	return _suppressionButton;
+}
+
+- (id <NSAlertDelegate>)delegate
+{
+	return (id <NSAlertDelegate>)_delegate;
+}
+
+- (void)setDelegate:(id <NSAlertDelegate>)anObject
+{
+	_delegate = anObject;	/* NOT RETAINED */
+}
+
+/* **THE HELP BUTTON IS THE CALLER OF `-alertShowHelp:`, AND ITS ANSWER IS WHAT MAKES THE DELEGATE DOOR REAL.** A YES
+ * from the delegate means it handled the request (opened its own window, say); anything else means "show the alert's help
+ * anchor", and this tier has no Help Viewer — so that branch is REFUSED BY NAME rather than silently doing nothing, and
+ * the message says which anchor it would have opened. */
+- (void)cg_helpButtonClicked:(id)sender
+{
+	BOOL handled = NO;
+
+	(void)sender;
+	if (_delegate != nil && [_delegate respondsToSelector:@selector(alertShowHelp:)]) {
+		handled = [_delegate alertShowHelp:self];
+	}
+	if (!handled) {
+		fn_refuse_window("-[NSAlert help]", "a Help Viewer to open the alert's help anchor (the delegate did not "
+				 "handle `-alertShowHelp:`, and this tier has no Help Viewer)");
+	}
+}
+
+/* THE "?" IS MADE WHEN THE FLAG IS SET, the same way the suppression button is: Apple's alert shows it in the title bar
+ * and this tier has no title-bar accessory, so it joins the BUTTON ROW at its left end — where a Help button sits on the
+ * alerts that have one. */
+- (void)cg_ensureHelpButton
+{
+	if (_helpButton != nil) {
+		return;
+	}
+	_helpButton = [[NSButton alloc] initWithFrame:NSMakeRect(0.0, 0.0, 24.0, AG_ALERT_BUTTON_HEIGHT)];
+	[_helpButton setTitle:@"?"];
+	[_helpButton setTarget:self];
+	[_helpButton setAction:@selector(cg_helpButtonClicked:)];
 }
 
 /* ---- THE WINDOW ----------------------------------------------------------------------------- */
@@ -648,9 +789,30 @@ static NSFont *fn_informative_font(void)
 						    accessoryHeight)];
 	}
 
+	/* **AND THE TWO BOXES THE SWEEP ADDS SHARE THE BUTTON ROW.** The HELP button sits at the far LEFT — the end a Help
+	 * button occupies on the alerts that have one — and the SUPPRESSION box beside it, which is where Apple puts "do not
+	 * show this again": opposite the answers, under the text it suppresses, so it reads as a remark about the question
+	 * rather than as another answer to it. Both are sized to fit and both are skipped when hidden. */
+	y = AG_ALERT_MARGIN;
+	if (_helpButton != nil && ![_helpButton isHidden]) {
+		[_helpButton setFrame:NSMakeRect(AG_ALERT_MARGIN, y, 24.0, AG_ALERT_BUTTON_HEIGHT)];
+		if ([_helpButton superview] != content) {
+			[content addSubview:_helpButton];
+		}
+	}
+	if (_suppressionButton != nil && ![_suppressionButton isHidden]) {
+		[_suppressionButton sizeToFit];
+		[_suppressionButton setFrame:NSMakeRect(AG_ALERT_MARGIN + ((_helpButton != nil && ![_helpButton isHidden]) ? 32.0 : 0.0),
+						       y + floor((AG_ALERT_BUTTON_HEIGHT - [_suppressionButton frame].size.height) / 2.0),
+						       [_suppressionButton frame].size.width,
+						       [_suppressionButton frame].size.height)];
+		if ([_suppressionButton superview] != content) {
+			[content addSubview:_suppressionButton];
+		}
+	}
+
 	/* **THE BUTTONS RUN RIGHT TO LEFT, FIRST BUTTON RIGHTMOST**, which is Apple's order and the reason the default
 	 * answer is the one under the Return key at the right edge. */
-	y = AG_ALERT_MARGIN;
 	x = contentWidth - AG_ALERT_MARGIN;
 	for (i = 0; i < [_buttons count]; i++) {
 		NSButton *button = [_buttons objectAtIndex:i];

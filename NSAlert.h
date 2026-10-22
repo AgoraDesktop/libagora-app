@@ -56,6 +56,17 @@ enum {
 	NSCriticalAlertStyle = 2
 };
 
+/* **THE DELEGATE HAS ONE QUESTION, AND IT IS ABOUT HELP.** Apple declares `NSAlertDelegate` with a single optional
+ * member — `-alertShowHelp:` — and the answer is whether the delegate handled the request itself: YES means "I opened my
+ * own help", NO (or no delegate) means "show the alert's help anchor", which this tier has no Help Viewer for and says so
+ * by name. The alert SENDS it, from the help button `-setShowsHelp:YES` puts in the button row — a delegate declared with
+ * no sender is a contract nobody honours, so the button is part of this slice rather than a later one. */
+@class NSAlert;
+@protocol NSAlertDelegate <NSObject>
+@optional
+- (BOOL)alertShowHelp:(NSAlert *)alert;
+@end
+
 @interface NSAlert : NSObject
 {
 	/* THE FOUR PIECES OF TEXT THE ALERT OWNS. `_title` is the WINDOW's title (the factory's `title:` argument);
@@ -85,6 +96,13 @@ enum {
 	NSPanel *_window;
 	NSAlertStyle _alertStyle;
 	BOOL _showsHelp;
+	/* **AND THE THREE THE SWEEP ADDS.** `_suppressionButton` is the "do not show this again" checkbox, made when
+	 * `-setShowsSuppressionButton:YES` and RETAINED; `_helpButton` is the "?" the `-setShowsHelp:` flag puts in the
+	 * button row, the caller of `-alertShowHelp:`; and `_delegate` is NOT retained — a delegate owned by the alert it
+	 * is told about would be a cycle, which is this tree's rule for every delegate. */
+	NSButton *_suppressionButton;
+	NSButton *_helpButton;
+	id _delegate;
 }
 
 /* **THE ERA'S CONVENIENCE CONSTRUCTOR.** `messageText` is the bold line, `title` is the window's title, and the three
@@ -96,6 +114,37 @@ enum {
 		    defaultButton:(nullable NSString *)defaultButtonLabel
 		  alternateButton:(nullable NSString *)alternateButtonLabel
 		      otherButton:(nullable NSString *)otherButtonLabel;
+
+/* **AND THE TWO CONSTRUCTORS THE 10.5 SURFACE ADDED.** The FORMAT one is the era's factory without a window title and
+ * with the informative text built from a printf-style format — the shape a caller with a number in the message needs.
+ * The ERROR one builds an alert out of an `NSError`: the message is its localized description, the informative text its
+ * localized failure reason, and the buttons come from its `localizedRecoveryOptions` (or a single OK). */
++ (NSAlert *)alertWithMessageText:(nullable NSString *)message
+		    defaultButton:(nullable NSString *)defaultButtonLabel
+		  alternateButton:(nullable NSString *)alternateButtonLabel
+		      otherButton:(nullable NSString *)otherButtonLabel
+	informativeTextWithFormat:(nullable NSString *)format, ... NS_FORMAT_FUNCTION(5, 6);
++ (NSAlert *)alertWithError:(NSError *)error;
+
+/* **THE SUPPRESSION BUTTON IS CREATED ON DEMAND, WHICH IS APPLE'S CONTRACT RATHER THAN AN OPTIMISATION.** A fresh alert
+ * answers nil for it; `-setShowsSuppressionButton:YES` makes one (an `NSSwitchButton` with an empty title, so the caller
+ * writes "Do not show this again" on it) and puts it at the LEFT of the button row; the caller reads its state back to
+ * know whether the person asked not to be asked again. The flag is separate from the button so that turning it off
+ * hides the box without destroying the answer it holds. */
+- (BOOL)showsSuppressionButton;
+- (void)setShowsSuppressionButton:(BOOL)flag;
+- (nullable NSButton *)suppressionButton;
+
+/* **AND THE DELEGATE, WHOSE ONE MESSAGE THE HELP BUTTON SENDS.** See the protocol above: a NO answer (or no delegate)
+ * leaves the help anchor with nowhere to go, and that is refused by name rather than pretending. */
+- (nullable id <NSAlertDelegate>)delegate;
+- (void)setDelegate:(nullable id <NSAlertDelegate>)anObject;
+
+/* **AND THE HELP BUTTON'S ACTION, WHICH IS PUBLIC BECAUSE A PROBE HAS TO SEND WHAT A PERSON WOULD.** Apple's alert shows
+ * a "?" in its title bar and routes it through a door this header does not declare; this tier puts the button in the
+ * button row, and this is the factory's action. It sends `-alertShowHelp:` and refuses by name when the delegate does not
+ * handle it — see the protocol above. It is named `cg_` because Apple has no such door at this pin. */
+- (void)cg_helpButtonClicked:(nullable id)sender;
 
 /* THE TWO PIECES OF TEXT AND THE ICON, each a copy (the strings) or a retained object (the icon). A nil icon means
  * "the application's icon", which is Apple's default. */

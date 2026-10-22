@@ -71,7 +71,8 @@ NS*.h / NS*.m                   the AppKit itself — window, view, application,
 tests/
   window.c                      the seam alone, with no AppKit
   keyboard.c                    the keymap translation, with no compositor anywhere
-  appkit_window.m               THE APPkit: a real NSWindow with a real NSView
+  appkit_window.m               THE APPkit: a real NSWindow with a real NSView, the status bar's two doors onto the
+                                reserve, and a status item that draws itself and FIRES ITS ACTION on a press
   appkit_events.m               the INPUT PATH: the seam's event, to the view that should get it
   control_ink.m                 the CONTROL layer: a view that draws its cell, and a button's face
   control_metrics.m             and the METRICS: a button's height and a line of text's
@@ -139,7 +140,8 @@ tests/
   segmented_control.m           the SEGMENTED CONTROL: segment geometry, selection, tracking, forwarding and ink
   path_control.m                the PATH BAR: URL decomposition, component geometry, styles, clicks and ink
   split_view.m                  the SPLIT VIEW: panes, divider positions, the drag, the collapse and the ink
-  browser.m                     the BROWSER: columns, the delegate's cells, the selection, the path and the width
+  browser.m                     the BROWSER: columns, the delegate's cells, the selection, the path and the width —
+                                and a branch's chevron drawn where a leaf draws nothing
   document.m                    the DOCUMENT family: a file, its change count, its undo and its windows, around a temp file
   save_panel.m                  the SAVE and OPEN PANELS: the listing, the filters, the accept, sheets and modeless runs
   popup_color_menu.m            the POP-UP's items, a COLOUR's space and -set, and the MENU's two flags
@@ -147,7 +149,8 @@ tests/
                                 now the DATA SOURCE, the completion of a prefix, and a list with its own row shape
   progress_indicator.m          the PROGRESS INDICATOR: range, clamp, the spinner's FRAMES, its size, its tint
                                 and the recess `-isBezeled` decides
-  panel_alert.m                 the PANEL and the ALERT: the click-to-key rule, the content and the two ways to run it
+  panel_alert.m                 the PANEL and the ALERT: the click-to-key rule, the content, the two ways to run it,
+                                the suppression box, and the delegate's one question
   search_field.m                the SEARCH FIELD: two ornaments, the sending rules, the timer and the recents menu
   image_draw.m                  an image rep draws UP in a y-up and a y-down context alike — and the WIDE door:
                                 a crop, an operation and a fraction, a background, the delegate and the hints
@@ -1573,6 +1576,34 @@ alone, and a document that ARRIVES is measured against the origin the clip alrea
 view that recentred on every `-setDocumentView:` would move a caller's visible region whenever it swapped content).
 `tests/clip_view.m` holds both halves.
 
+### The status item, the running application, and the browser's row
+
+**A STATUS ITEM NOW DRAWS ITSELF AND TAKES ITS OWN PRESS.** `NSStatusItem` was a window, a title and an action with no
+view to draw any of them: `-setTitle:` stored a string, and no press could ever reach `-action`. The item now makes a face
+for itself (`AGStatusBarItemView`) when the application does not hand one over, and that view is the reader for four
+doors that were otherwise stored values — `-isEnabled` (dimmed, and it sends nothing), `-sendActionOn:` (the mask decides
+whether the PRESS or the RELEASE is the moment; the door answers the mask it replaced), the tooltip (a view's property
+here), and the action/doubleAction pair, sent with the ITEM as the sender. `-highlightMode:` decides whether the press is
+DRAWN, and a press with a menu on the item opens the menu instead and sends nothing. `-popUpStatusItemMenu:` is no longer
+owed either: `NSMenu`'s session exists, and the item's own strip window is where it opens from. A disabled item still
+draws — its position is worth showing — in the era's grey.
+
+**THE RUNNING APPLICATION ANSWERS WHAT IT CAN TRUE, AND SAYS WHAT IT CANNOT.** `+currentApplication` is the process's own
+application (the same object every time, and the pid it carries is `getpid()`, the only pid this tier publishes — a window
+server publishes an IDENTIFIER, not a process); `+runningApplicationsWithBundleIdentifier:` filters the workspace's list;
+`+runningApplicationWithProcessIdentifier:` therefore finds the current process and answers nil for any other, which is
+the true answer rather than a refusal. `-executableArchitecture` asks the bundle, whose `-executableArchitectures` reads
+the executable's ELF header — and for a process with NO bundle (a tool, a test) it reads `/proc/self/exe`, because there
+is no bundle object to hand that door. **MEASURED while writing this: Foundation already declares the five architecture
+codes with THIS LIBRARY'S values (1..5), not Mach-O's cputype words** — the first version of the AppKit header declared a
+second set with Mach-O's numbers and the compiler refused the redefinition, which is the cheapest possible finding.
+
+**AND THE BROWSER'S ROW HAS ITS TWO PICTURES AND ITS CHEVRON.** `-alternateImage:` is what a SELECTED row shows instead
+of its own picture; `+branchImage`/`+highlightedBranchImage` are the marks drawn at a BRANCH's trailing edge — two
+ten-point triangles in ONE unit of arithmetic, one in the text colour and one in white — and `-highlightColorInView:` is
+the selection colour a highlighted row is drawn with. `-set` is the era's one-word shorthand for selected (state ON plus
+the highlight). MEASURED: a branch's row carries 14 dark points in its trailing twelve and a leaf's carries none.
+
 ### The platform's named images, and what a template is for
 
 **TWENTY OF APPLE'S `NSImageName…` CONSTANTS NOW HAVE PICTURES, AND THE PICTURES ARE THE PLATFORM'S.** The names
@@ -1739,9 +1770,21 @@ modal session, Return and Escape through `-sendEvent:`, and the sheet form's att
 `-runModal` is not called there for the reason `NSApplication.m` gives about its own probe: it is an unbounded loop, and
 a test that called it would hang rather than fail.
 
+**AND THE ALERT IS COMPLETE, WITH THE SUPPRESSION BOX AND THE DELEGATE'S ONE QUESTION REAL.** `-setShowsSuppressionButton:YES`
+makes an `NSSwitchButton` (with an EMPTY title, because "do not show this again" is the caller's sentence), puts it at
+the left of the button row opposite the answers, and hands it back so the caller can read the answer off the box;
+turning the flag off HIDES it without destroying that state. `NSAlertDelegate` is declared with its one optional member
+and SENT: `-setShowsHelp:YES` puts a "?" at the far left of the row, its action asks `-alertShowHelp:`, and a NO answer
+(or no delegate) is refused by name because this tier has no Help Viewer to open the anchor in. The two 10.5
+constructors are real: `+alertWithMessageText:defaultButton:alternateButton:otherButton:informativeTextWithFormat:` builds
+the informative run from a printf-style format, and `+alertWithError:` translates an `NSError` — its localized
+description as the message, its failure reason as the explanatory line, and one button per recovery option (or a single
+OK). MEASURED while writing it: this layer's `NSLocalizedDescriptionKey` value is the string `NSLocalizedDescriptionKey`
+while `NSLocalizedFailureReasonKey` is `NSLocalizedFailureReason` — **the key VALUES are not Apple's, so a test using
+literals reads nothing**; the probe uses the constants.
+
 **WHAT THE ALERT DOES NOT DO IS NAMED AT ITS DOORS.** The alert style is recorded and changes no pixels — this tier
-paints one panel shape and has no system icon art to choose between — and `-setShowsHelp:`/`-setHelpAnchor:` round-trip
-but grow no help button, because there is no Help system to show (`NSApplication -showHelp:` refuses by name). The sheet form does not order the panel out after
+paints one panel shape and has no system icon art to choose between. The sheet form does not order the panel out after
 `-endSheet:returnCode:`; Apple's own callback is the one that dismisses it, which is the same contract
 `NSApplication.h` quotes.
 

@@ -31,6 +31,14 @@
 
 @class NSImage;
 
+/* **THE ARCHITECTURE CODES ARE FOUNDATION'S, AND THIS HEADER DOES NOT DECLARE THEM AGAIN.** Apple files them in
+ * `NSRunningApplication.h`; in THIS layer they already exist in `NSBundle.h` — where the door that reads the executable's
+ * header lives — with THIS LIBRARY'S values (1..5, not Mach-O's cputype words). Declaring a second set here would be two
+ * answers to one question, so `-executableArchitecture` below answers one of `NSBundleExecutableArchitecture` and a caller
+ * that includes AppKit gets them through Foundation's umbrella, which is how every other cross-framework type works here.
+ * (The first version of this header DID declare them, with Mach-O's numbers, and the compiler refused the redefinition —
+ * the measurement that found the existing set.) */
+
 /* THE OPTIONS A DOCK'S CLICK PASSES. Apple's bits; this tree can honour the first one and ignores the second,
  * because "ignore other applications" is advice to a window manager that does not arbitrate focus that way. */
 enum {
@@ -51,6 +59,11 @@ typedef NSUInteger NSApplicationActivationOptions;
 	NSURL *_bundleURL;
 	NSString *_localizedName;
 	NSImage *_icon;
+	/* **AND THE ONE PID THIS TIER CAN TRULY KNOW.** Zero means "not published" — the state every application built from
+	 * the window server's list is in, because the server publishes `app_id` and not a process — while the CURRENT
+	 * application's object carries `getpid()` from the moment it is made. See the class door on why the lookup by pid
+	 * therefore answers for one process. */
+	pid_t _pid;
 }
 
 /* **THE IDENTIFIER IS THE APPLICATION'S NAME HERE**, because it is the only name the window server publishes: the
@@ -70,6 +83,18 @@ typedef NSUInteger NSApplicationActivationOptions;
  * no number to give. A caller that needs one (to signal, to `waitpid`) has the wrong tool until the session
  * component exists — see the header note. */
 @property (readonly) pid_t processIdentifier;
+
+/* **AND THE FOUR DOORS THE SWEEP ADDS — THREE THAT ASK, AND ONE THAT ANSWERS nil.** `+currentApplication` is the running
+ * application for THIS process (and the pid it carries is the one that is actually known); `+runningApplicationsWithBundleIdentifier:`
+ * is a filter over the workspace's list; `+runningApplicationWithProcessIdentifier:` is a lookup BY pid, and THIS TIER
+ * PUBLISHES A PID ONLY FOR THE CURRENT PROCESS — a window server says which application owns a window, not which process
+ * it is — so a query for any other pid answers nil, which is the true answer to "is there an application with that pid I
+ * know of". `-executableArchitecture` asks the BUNDLE, whose `-executableArchitectures` is the door that reads the
+ * header. */
++ (nullable NSRunningApplication *)currentApplication;
++ (nullable NSRunningApplication *)runningApplicationWithProcessIdentifier:(pid_t)pid;
++ (NSArray *)runningApplicationsWithBundleIdentifier:(NSString *)bundleIdentifier;
+- (NSInteger)executableArchitecture;
 
 /* **"IN FRONT" IS "HAS THE KEYBOARD"**, which is the only notion of frontmost this tree has: the window server
  * gives the keyboard to one window, and the application that owns it is the active one. */

@@ -22,6 +22,7 @@
 @class NSMenu;
 @class NSString;
 @class NSAttributedString;
+#include <AppKit/NSEvent.h>
 
 /* THE TWO LENGTHS THAT ARE NOT LENGTHS, and this layer's job is to resolve them: only AppKit knows how wide a
  * view wants to be, so the server is never told a sentinel — it is told a width in output coordinates. */
@@ -44,6 +45,18 @@
 	NSImage *_fAlternateImage;
 	NSMenu *_fMenu;
 	BOOL _fHighlightMode;
+	/* **AND THE VIEW THE ITEM MAKES FOR ITSELF.** A status item with no view of the application's is not blank: it draws
+	 * its title or image and it takes the press, which is what `-isEnabled`, `-sendActionOn:`, the tooltip and the action
+	 * pair are ABOUT. This is that view, kept so that `-setView:nil` restores it rather than leaving a window with no
+	 * content at all. */
+	NSView *_fInternalView;
+	/* **AND THE THREE THE SWEEP ADDS.** `_fEnabled` gates the action rather than the drawing; `_fActionMask` is the
+	 * event that sends it (Apple's `-sendActionOn:`, with `NSLeftMouseUpMask` as the default); and `_fToolTip` is the
+	 * string the item's own view shows. THE VIEW IS WHERE ALL THREE ARE OBEYED — see the note on the internal view in
+	 * the implementation — because a status item is a window and its view is what receives the press. */
+	BOOL _fEnabled;
+	NSEventMask _fActionMask;
+	NSString *_fToolTip;
 }
 
 - (NSStatusBar *)statusBar;
@@ -74,6 +87,17 @@
 - (BOOL)highlightMode;
 - (void)setHighlightMode:(BOOL)flag;
 
+/* **AND THE THREE DOORS THAT GATE THE ACTION AND NAME THE ITEM.** `-isEnabled`/`-setEnabled:` decide whether a press
+ * sends anything (a disabled item still draws, DIMMED, because its position is still worth showing); `-sendActionOn:`
+ * says WHICH event sends the action, with `NSLeftMouseUpMask` as the default and any mask the app's event loop can
+ * deliver accepted; and the tooltip pair is the string the item's view shows under the pointer. All three are obeyed by
+ * the view the item makes for itself — see `-setView:` — so none of them is state without a reader. */
+- (BOOL)isEnabled;
+- (void)setEnabled:(BOOL)flag;
+- (NSInteger)sendActionOn:(NSEventMask)mask;
+- (nullable NSString *)toolTip;
+- (void)setToolTip:(nullable NSString *)toolTip;
+
 - (NSMenu *)menu;
 - (void)setMenu:(NSMenu *)aMenu;
 
@@ -90,4 +114,7 @@
  * a .m because the bar is a different file and the two are one object's halves. */
 @interface NSStatusItem (AGORAStatusItemPrivate)
 - (id)cg_initWithStatusBar:(NSStatusBar *)bar length:(CGFloat)length;
+/* AND THE EVENT THE ACTION GOES OUT ON, which has no public getter in Apple's header — `-sendActionOn:` answers the
+ * PREVIOUS mask, so the current one is this seam's. The item's own view reads it. */
+- (NSEventMask)cg_actionMask;
 @end

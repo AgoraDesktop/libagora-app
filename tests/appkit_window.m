@@ -36,6 +36,7 @@
 #import <AppKit/NSScreen.h>
 #import <AppKit/NSStatusBar.h>
 #import <AppKit/NSStatusItem.h>
+#import <AppKit/AGStatusBarItemView.h>
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -88,6 +89,23 @@ static uint32_t now_ms(void)
  * solid field with three lighter notches. If this lands in the strip then an ITEM'S OWN APPLICATION put it there
  * and the server only decided where — which is the whole rule, made visible. */
 #define STATUS_ITEM_LENGTH 96
+
+/* AND A TARGET THAT COUNTS, so "the item's action fired" is a number. */
+@interface AGPressTarget : NSObject
+{
+@public
+	int fired;
+}
+- (void)fired:(id)sender;
+@end
+
+@implementation AGPressTarget
+- (void)fired:(id)sender
+{
+	(void)sender;
+	fired++;
+}
+@end
 
 @interface AGStatusItemView : NSView
 @end
@@ -333,6 +351,100 @@ int main(int argc, char **argv)
 
 					[item setView:mark];
 					[mark release];
+				}
+				/* **AND THE FIVE GATE DOORS, ON AN ITEM THE APPLICATION GAVE NO VIEW.** An item with no view of the
+				 * application's DRAWS ITSELF — that is what makes `-isEnabled`, `-sendActionOn:` and the tooltip reachable at
+				 * all: they are obeyed by the view the item makes, not stored. The mask door answers the mask it REPLACED,
+				 * which is Apple's signature and the only reading under which the answer is useful. */
+				{
+					NSStatusItem *selfDrawn = [bar statusItemWithLength:24.0];
+					NSInteger previous;
+
+					/* **THE VIEW COMES WITH THE WINDOW, AND THE WINDOW NEEDS A STRIP.** With no bar thickness there is no
+					 * screen to put an item on — the run above measures that as a reserve of 0 — so the two claims that
+					 * need a view are made only when there is one; the item's own doors are checked either way. */
+					fprintf(stderr, "appkit_status: a self-drawn item's view is %s, enabled %d\n",
+						[selfDrawn view] != nil ? "present" : "ABSENT",
+						(int)[selfDrawn isEnabled]);
+					if ([bar thickness] > 0.0 && [selfDrawn view] == nil) {
+						fprintf(stderr, "appkit_status: AN ITEM WITH NO VIEW DID NOT MAKE ONE\n");
+						return 1;
+					}
+					if (![selfDrawn isEnabled]) {
+						fprintf(stderr, "appkit_status: A FRESH ITEM IS NOT ENABLED\n");
+						return 1;
+					}
+					previous = [selfDrawn sendActionOn:NSLeftMouseDownMask];
+					fprintf(stderr, "appkit_status: the action mask was %ld and is now %ld\n",
+						(long)previous, (long)[selfDrawn sendActionOn:NSLeftMouseUpMask]);
+					if (previous != (NSInteger)NSLeftMouseUpMask) {
+						fprintf(stderr, "appkit_status: THE DEFAULT MASK IS NOT THE RELEASE\n");
+						return 1;
+					}
+					[selfDrawn setToolTip:@"A status item"];
+					if (![[selfDrawn toolTip] isEqualToString:@"A status item"]) {
+						fprintf(stderr, "appkit_status: THE TOOLTIP DID NOT ROUND-TRIP\n");
+						return 1;
+					}
+					if ([selfDrawn view] != nil && ![[[selfDrawn view] toolTip] isEqualToString:@"A status item"]) {
+						fprintf(stderr, "appkit_status: THE TOOLTIP DID NOT REACH THE VIEW\n");
+						return 1;
+					}
+					[selfDrawn setEnabled:NO];
+					if ([selfDrawn isEnabled]) {
+						fprintf(stderr, "appkit_status: A DISABLED ITEM STILL READS ENABLED\n");
+						return 1;
+					}
+					/* AND A TITLE, WHICH IS WHAT THE VIEW DRAWS WHEN IT IS NOT A PICTURE. Nothing here can read the
+					 * strip's pixels, so the claim is that the item accepts one and still has a view to draw it. */
+					[selfDrawn setTitle:@"Item"];
+					if (![[selfDrawn title] isEqualToString:@"Item"]) {
+						fprintf(stderr, "appkit_status: A TITLED ITEM LOST ITS TITLE\n");
+						return 1;
+					}
+					/* **AND THE ACTION IS ACTUALLY SENT, THROUGH THE VIEW THAT MAKES THE DOORS REAL.** The mask is set
+					 * to the PRESS, so the send happens before the press loop's own run-loop guard — which is exactly how
+					 * a program with no event source gets a status item's action to fire, and how this probe reaches the
+					 * path a pointer would. A DISABLED item then sends nothing through the same press. */
+					{
+						/* **AND THE VIEW IS BUILT HERE WHEN THE BAR HAS NO STRIP**, because the send path is the claim and
+						 * it needs no screen: a view handed the item is the same object the item makes for itself, and the
+						 * PRESS mask sends before the loop's own run-loop guard. */
+						AGStatusBarItemView *face = [selfDrawn view] != nil
+							? (AGStatusBarItemView *)[selfDrawn view]
+							: [[[AGStatusBarItemView alloc] initWithStatusItem:selfDrawn
+												  frame:NSMakeRect(0.0, 0.0, 24.0, 22.0)] autorelease];
+						AGPressTarget *watcher = [[AGPressTarget alloc] init];
+						NSEvent *press = [NSEvent mouseEventWithType:NSLeftMouseDown
+										    location:NSMakePoint(5.0, 5.0)
+									       modifierFlags:0
+										   timestamp:0.0
+										windowNumber:0
+										     context:nil
+										 eventNumber:1
+										  clickCount:1
+										    pressure:1.0];
+
+						[selfDrawn setTarget:watcher];
+						[selfDrawn setAction:@selector(fired:)];
+						[selfDrawn sendActionOn:NSLeftMouseDownMask];
+						[selfDrawn setEnabled:YES];
+						[face mouseDown:press];
+						fprintf(stderr, "appkit_status: a press on the item fired its action %d time(s)\n",
+							watcher->fired);
+						if (watcher->fired != 1) {
+							fprintf(stderr, "appkit_status: THE ITEM'S ACTION DID NOT FIRE ON THE PRESS\n");
+							return 1;
+						}
+						[selfDrawn setEnabled:NO];
+						[face mouseDown:press];
+						if (watcher->fired != 1) {
+							fprintf(stderr, "appkit_status: A DISABLED ITEM STILL SENT ITS ACTION\n");
+							return 1;
+						}
+						[watcher release];
+					}
+					[bar removeStatusItem:selfDrawn];
 				}
 			}
 		}

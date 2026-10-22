@@ -23,6 +23,10 @@ census 275.*
 `api-ledger: 361 metrics hold (117 classes, 3465 selectors of 4112, 33 protocols, 86 functions)`, 89 classes COMPLETE, refusal
 census 282.*
 
+*State after the session that picked THAT up (§16, the four peripherals): **27 commits**, tree clean, **137 tests passing**,
+`api-ledger: 361 metrics hold (117 classes, 3487 selectors of 4112, 34 protocols, 86 functions)`, 93 classes COMPLETE, refusal
+census 283.*
+
 ---
 
 ## 1. What this session did
@@ -743,3 +747,56 @@ file records that exact failure from a previous session. The exit status is the 
 4. **AND A SLICE IN libagora-drawing, NOT HERE**: a TIFF encoder (uncompressed, IFD and strips) behind
    `CGImageDestination`, which would turn the two `TIFFRepresentation` refusals into doors in one commit on that side and
    one line on this one. It is the only refusal in this class that is a missing *layer* rather than a missing mechanism.
+
+---
+
+## 16. The four peripherals: an alert with a box, a status item that works, a pid, and a chevron
+
+*Twenty-seventh commit of the pickup: `NSAlert` 27/27, `NSStatusItem` 30/30, `NSRunningApplication` 21/21 and
+`NSBrowserCell` 13/13 — 22 selectors, four classes COMPLETE — plus `NSAlertDelegate`. **3487 of 4112 selectors (84%), 34 of
+56 protocols, 93 of 117 classes complete, 625 missing.** 137 tests.*
+
+**THE ALERT GAINED ITS SUPPRESSION BOX, ITS DELEGATE AND ITS TWO CONSTRUCTORS.** `-setShowsSuppressionButton:YES` makes
+an `NSSwitchButton` with an EMPTY title (the words are the caller's — an alert cannot know what it suppresses), lays it
+out at the left of the button row opposite the answers, and hands it back so the answer is read off the box; turning the
+flag off hides it without destroying the state. `NSAlertDelegate`'s one member is SENT: `-setShowsHelp:YES` puts a "?" at
+the far left, its action asks `-alertShowHelp:`, and a NO answer is refused by name (no Help Viewer). `-...WithFormat:`
+builds the informative run from a printf format; `+alertWithError:` translates an `NSError` into message, reason and one
+button per recovery option.
+
+**AND A TRAP PAID FOR BY THE FIRST PROBE RUN: THE LAYER'S ERROR-KEY VALUES ARE NOT APPLE'S.** `NSLocalizedDescriptionKey`
+is the string `NSLocalizedDescriptionKey` while `NSLocalizedFailureReasonKey` is `NSLocalizedFailureReason` — one with the
+suffix and one without. A test that writes the literals reads NOTHING from either, and the failure looks like
+`+alertWithError:` being broken. Use the constants; the same shape is recorded in `HANDOFF.md` for the pasteboard's types.
+
+**THE STATUS ITEM WORKS NOW, AND THAT IS THE WHOLE POINT OF THIS SLICE'S LARGEST PIECE.** The previous handoff left five
+doors alone — "state with no reader until the status bar has a click path" — and this slice built the path rather than the
+five values. `NSStatusItem` makes a face for itself (`AGStatusBarItemView`, public in this tree's sense, with a header, so
+a probe can drive a press) when the application hands no view over; the view draws the title or the image, dims when the
+item is disabled, paints the pressed state when `-highlightMode:` says so, and sends the action on the event
+`-sendActionOn:` names — with the ITEM as the sender, which is what a caller's target sees. A press with a menu on the item
+opens the menu and sends nothing. `-popUpStatusItemMenu:` stopped being owed for the same reason: `NSMenu`'s session
+exists. MEASURED end to end under the headless compositor: a press fires the action exactly once, and a DISABLED item's
+press fires nothing. And a `-setView:nil` restores the item's own face rather than leaving a window with no content.
+
+**THE RUNNING APPLICATION ANSWERS WHAT IT CAN TRUE.** `+currentApplication` is the process's own (cached, and carrying
+`getpid()` — the ONLY pid this tier publishes, because a window server publishes an identifier and not a process), the
+filter by identifier is the workspace's list, and the lookup by pid therefore answers for the current process and nil for
+anything else. `-executableArchitecture` asks the bundle — and Foundation's `NSBundle -executableArchitectures` ALREADY
+reads the ELF header, so the first version of this method, with its own parser and Mach-O's numbers, was a second copy of
+a rule the layer below had. **THE SAME FINDING HAD A SECOND HALF: Foundation declares the five architecture codes with
+THIS LIBRARY'S values (1..5), so the AppKit header's own enum was a redefinition the compiler caught.**
+
+**AND THE BROWSER'S ROW HAS A CHEVRON THAT A LEAF HAS NOT.** Two class images drawn from one path (text colour and
+white), `-alternateImage:` for a selected row, `-highlightColorInView:` answering the selection colour, and `-set` as the
+era's shorthand for selected. MEASURED: 14 dark points in the trailing twelve for a branch, 0 for a leaf.
+
+### Where the next hour goes, after the peripherals
+
+1. **`NSTextStorage` 12 + `NSTextBlock` 10 + `NSSpellChecker` 10 + `NSTextInputContext` 8 = 40**, the storage's deprecated
+   attribute runs being the real part.
+2. **`NSCell` 9 + `NSApplication` 7 = 16**, the field-editor family being the design work.
+3. **And the two remaining families that are all one shape**: `NSMatrix`/`NSForm` would be a new class (134 selectors, the
+   largest single remaining view) and `NSCollectionView` was ruled out by the 10.11 plan's §9.3.
+4. **A LIVE PATH WORTH A SMALL SLICE**: `-comboBoxSelectionIsChanging:` and `-menu:willHighlightItem:` share one missing
+   seam — a menu view's highlight walk telling its owner. One door in `NSMenuView`, one delegate send, two controls served.
