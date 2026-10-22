@@ -136,6 +136,7 @@ tests/
   path_control.m                the PATH BAR: URL decomposition, component geometry, styles, clicks and ink
   split_view.m                  the SPLIT VIEW: panes, divider positions, the drag, the collapse and the ink
   browser.m                     the BROWSER: columns, the delegate's cells, the selection, the path and the width
+  document.m                    the DOCUMENT family: a file, its change count, its undo and its windows, around a temp file
   progress_indicator.m          the PROGRESS INDICATOR: range, clamp, spinner state and the bar's ink
   panel_alert.m                 the PANEL and the ALERT: the click-to-key rule, the content and the two ways to run it
   search_field.m                the SEARCH FIELD: two ornaments, the sending rules, the timer and the recents menu
@@ -933,7 +934,23 @@ the compositor is really gone.
   right at 03:00 and left at 09:00, the month grid's selected day is a filled accent chip and its neighbour is not, and the
   text-and-stepper style draws its two arrows in a strip the text-only style leaves empty.
 
-- **`ctest`: 133 of 133 passed** (the keyboard and the seam, the AppKit and its input path, the controls and their
+- **And the DOCUMENT FAMILY** (`ctest`, offscreen) — `NSDocument` (74 of 104 selectors) and `NSDocumentController`
+  (41 of 51), the application model: a URL, a type, a change count, an undo manager and the window controllers a subclass
+  makes. **A DOCUMENT IS A FILE PLUS THE HISTORY OF ITS EDITS**, and the probe drives a concrete subclass that implements
+  ONLY the modern data pair — `-readFromData:ofType:error:` and `-dataOfType:error:` — around a temp file: untitled,
+  edited, saved through the URL doors, opened by the controller, reverted from disk, saved again and closed. The default
+  `-readFromURL:` → file wrapper → `-regularFileContents` → `-readFromData:` path is the one exercised, so a data document
+  needs nothing else; the same order writes it back. **The change count follows the document's own undo manager**: an
+  undone action takes the count to zero and a redone one brings it back, through the did-undo/did-redo notifications the
+  document subscribes to; a save clears it and a revert clears it. **The controller is a class, not a global**: the probe's
+  subclass supplies its own type table (`AGTestText` / `AGDocTextDocument` / `.agdoc`) so no Info.plist is needed, and the
+  base's type→class→make/open chain is the same one a bundle's `CFBundleDocumentTypes` feeds. Opening a URL that is
+  already open answers the SAME document rather than a second, save-all saves the edited ones, and close-all REFUSES while
+  any document is edited — there is no unsaved-changes alert yet, and silently discarding edits is the one thing a close
+  must not do. **The panels are the next slice**: save-as and export refuse by name because there is no `NSSavePanel`, and
+  `-openDocument:` refuses because there is no `NSOpenPanel`; a direct `-saveToURL:…` is real.
+
+- **`ctest`: 134 of 134 passed** (the keyboard and the seam, the AppKit and its input path, the controls and their
   metrics, the field control and its cell and its bezel and its placeholder and what it may hold, the text path and its
   word granularity and the multi-line view and its wrapping and its scrolling and its READING OF THE STORE, the STORE
   the rich-text slice is built on and the REGION it is laid out in and the WEB that ties the three together and the
@@ -945,7 +962,7 @@ the compositor is really gone.
   what a drag costs, the resize by edge, the tracking engine, the clip view and the scroller and the scroll view and the
   drawn offset and the ruler it can wear and the TEXT RULER whose markers are tab stops and the block rects and
   attachment sizes the layout answers and the temporary-attribute table and the rect arrays, the chrome and what its
-  buttons do, the chrome theme, the menus and activation, and the manager's own ensure/invalidate doors).
+  buttons do, the chrome theme, the menus and activation, and the manager's own ensure/invalidate doors, and the document family's file round trip and change count).
 - **And the desktop's own text is SUB-PIXEL ANTIALIASED**, which is the AppKit's half of a renderer change in
   CoreGraphics: a window's surface is OPAQUE (`kCGImageAlphaNoneSkipFirst`), and the destination's opacity is
   exactly what decides whether a glyph is rasterised in colour. MEASURED on the live session: the window title's

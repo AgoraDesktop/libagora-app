@@ -1254,3 +1254,14 @@ target_link_libraries(date_picker PRIVATE App)
 
 add_test(NAME appkit-date-picker COMMAND date_picker)
 set_tests_properties(appkit-date-picker PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
+
+# **THE DOCUMENTS.** A concrete NSDocument subclass implements ONLY the modern data pair; the probe creates one untitled,
+# edits it, saves it through the URL door, opens it with a controller, reverts it, saves it again and closes it, with the
+# default wrapper -> data path exercised in both directions. The change count follows the document's own undo manager
+# through the notifications it subscribes to. The controller is a subclass with its own type table, so no Info.plist is
+# needed: the base's type -> class -> make/open chain is what is being tested. Close-all refuses while a document is edited.
+add_executable(document document.m)
+target_link_libraries(document PRIVATE App)
+
+add_test(NAME appkit-document COMMAND document)
+set_tests_properties(appkit-document PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
