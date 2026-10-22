@@ -1,9 +1,9 @@
+#!/usr/bin/env python3
 # Copyright © 2026 Kyle J. Cardoza.
 # SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
 
-#!/usr/bin/env python3
 """Read the compositor's own screenshot and assert that A MENU REACHED IT.
 
 **THIS IS THE CHECK THE DISPLAY PATH DID NOT HAVE.** Everything else about menus is asserted offscreen — a bitmap

@@ -1,9 +1,9 @@
+#!/bin/bash
 # Copyright © 2026 Kyle J. Cardoza.
 # SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
 
-#!/bin/bash
 # **THE PLACEMENT THAT NEEDS AN EDGE.** The conversion half of `menu_placement` is arithmetic and needs nothing; the
 # clamp half needs a SCREEN to clamp against, and a screen is what a compositor describes. So this runs the same
 # probe against Agora's own server and asserts the right-edge case actually ran — a skipped clamp must not be able to

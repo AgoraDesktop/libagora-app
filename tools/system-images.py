@@ -1,9 +1,9 @@
+#!/usr/bin/env python3
 # Copyright © 2026 Kyle J. Cardoza.
 # SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
 
-#!/usr/bin/env python3
 """system-images.py — the artwork behind `+[NSImage imageNamed:]`'s NSImageName… names.
 
 WHAT THIS IS. Twenty named template images — back, forward, refresh, stop, add, remove, share, the two

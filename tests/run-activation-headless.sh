@@ -1,9 +1,9 @@
+#!/bin/bash
 # Copyright © 2026 Kyle J. Cardoza.
 # SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
 
-#!/bin/bash
 # **ONLY THE ACTIVE APPLICATION'S MENUS SHOW, ON A HEADLESS COMPOSITOR.** Agora's own window server is the only
 # one with a menu bar for an application to put its menus in, so this test needs the sibling's binary — and it
 # SKIPS (77) when there is none, because a component's tests must not require another component's build.

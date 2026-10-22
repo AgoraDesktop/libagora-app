@@ -1,9 +1,7 @@
-/*
- * Copyright © 2026 Kyle J. Cardoza.
- * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
- * SPDX-License-Identifier: GPL-3.0-or-later
- * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
- */
+# Copyright © 2026 Kyle J. Cardoza.
+# SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
 
 # The claims census, checked in both directions — one script, two kinds of claim.
 #

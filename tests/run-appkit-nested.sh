@@ -1,9 +1,9 @@
+#!/bin/bash
 # Copyright © 2026 Kyle J. Cardoza.
 # SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
 
-#!/bin/bash
 # The AppKit's PIXEL test: a real NSWindow inside a NESTED compositor on the desktop (so it is visible), two
 # screenshots a second apart, read back by inspect.py. A headless run can only count frames; this one proves
 # the pixels a real NSView drew reached an output.

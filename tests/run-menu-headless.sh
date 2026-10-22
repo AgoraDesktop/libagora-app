@@ -1,9 +1,9 @@
+#!/bin/bash
 # Copyright © 2026 Kyle J. Cardoza.
 # SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
 
-#!/bin/bash
 # **THE DISPLAY PATH, ON A HEADLESS COMPOSITOR, IN ctest.** No desktop is needed: the menu's own window draws
 # through `NSWindow -cg_drawFrame` into the compositor's framebuffer, and the compositor's screenshot is what is
 # read back. That is the half no offscreen test can see.
