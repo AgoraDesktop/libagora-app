@@ -893,7 +893,18 @@ the compositor is really gone.
   doors wrap, a removal re-selects rather than showing nothing, and `-sizeOfLabel:` is the label's own measure with a least
   tab width. The ink is 1265 dark pixels: the bezel, the tabs and their labels.
 
-- **`ctest`: 130 of 130 passed** (the keyboard and the seam, the AppKit and its input path, the controls and their
+- **And the ANIMATION FAMILY** (`ctest`, offscreen) — `NSAnimation` (26), `NSAnimationContext` (5), `NSViewAnimation` (3) and
+  the `NSAnimationDelegate` protocol: 34 selectors, three classes, one protocol. An animation is **a number that goes 0 → 1 over
+  a duration**: `-currentProgress` is the fraction, `-currentValue` is that fraction mapped by the curve (this tier's own
+  arithmetic, named as such: `p²`, `1-(1-p)²` and a smoothstep, monotonic and agreeing with the line at both ends), and a
+  delegate that answers `-animation:valueForProgress:` **replaces** the curve. It is driven by an `NSTimer` at `-frameRate`;
+  `-setCurrentProgress:` is the one door the timer uses, which is why a test can step it by hand — but the probe also runs a
+  **real timed animation** (0.15 s, 60 fps, the run loop pumped) and requires it to END on its own, which a hand-stepped
+  animation cannot prove. Progress marks are announced once each, the chains start a second animation at the mark they name,
+  and **END is not STOP**: stepping a not-running animation to 1 announces no end at all. `NSViewAnimation` interpolates a
+  view's frame and a fade's alpha by the same value, and the context is a duration with a grouping scope nesting restores.
+
+- **`ctest`: 131 of 131 passed** (the keyboard and the seam, the AppKit and its input path, the controls and their
   metrics, the field control and its cell and its bezel and its placeholder and what it may hold, the text path and its
   word granularity and the multi-line view and its wrapping and its scrolling and its READING OF THE STORE, the STORE
   the rich-text slice is built on and the REGION it is laid out in and the WEB that ties the three together and the

@@ -8,8 +8,8 @@ spent.*
 *State at handover: **8 commits**, tree clean, **114 tests passing**, `api-ledger: 327 metrics
 hold (82 classes, 2652 selectors of 3517, 23 protocols, 86 functions)`.*
 
-*State after the session that picked it up (§9–§23): **24 commits**, tree clean, **130 tests passing**,
-`api-ledger: 354 metrics hold (106 classes, 3026 selectors of 3765, 27 protocols, 86 functions)`.*
+*State after the session that picked it up (§9–§24): **25 commits**, tree clean, **131 tests passing**,
+`api-ledger: 357 metrics hold (109 classes, 3060 selectors of 3799, 28 protocols, 86 functions)`.*
 
 ---
 
@@ -87,9 +87,9 @@ type's empty value and says on stderr what it wants — `AppKitRefusal.h`), or *
 ## 3. Current measured state
 
 ```
-classes   106 of 168   (63%)    62 missing
-selectors 3026 of 3765 (80%)   739 missing    67 of 104 classes at COMPLETE coverage
-protocols  27 of  56   (48%)    29 missing
+classes   109 of 168   (65%)    59 missing
+selectors 3060 of 3799 (81%)   739 missing    70 of 107 classes at COMPLETE coverage
+protocols  28 of  56   (50%)    28 missing
 functions  86 of  86 (100%)     0 missing     10 refuse by name
 methods  3289 declared, 4 with no body (0.1%)
 
@@ -692,3 +692,30 @@ selection exactly one is a subview, and it is the selected one's.
 **And one structural note:** `NSTabViewItem`'s ivars are `@public`, which is the rule `NSFont`'s substrate ivar already
 states — the tab view is the only thing that sets an item's state and adopts its pane, and a private setter triplet would be
 three doors to keep in step with three fields.
+
+---
+
+## 24. Animation: a number that moves, and the difference between END and STOP
+
+*Seventeenth commit of the pickup: `NSAnimation` (26), `NSAnimationContext` (5), `NSViewAnimation` (3) and the
+`NSAnimationDelegate` protocol — 34 selectors, three classes, one protocol. **109 of 168 classes, 28 of 56 protocols.***
+
+**THE WHOLE CLASS IS ONE NUMBER AND WHO HEARS ABOUT IT.** `-currentProgress` is the linear fraction of the duration,
+`-currentValue` is that fraction mapped by the curve or by the delegate, and `-setCurrentProgress:` is the ONE door the timer
+uses — which is why a probe can step an animation by hand and a caller with its own frame loop can drive one. The curves are
+this tier's own arithmetic and the header says so: Apple publishes the names and not its Bézier control points, so `p²`,
+`1-(1-p)²` and a smoothstep are used, monotonic, agreeing with the straight line at both ends — the properties the names
+promise, which is what the test checks rather than an exact curve nobody published.
+
+**A REAL TIMED RUN IS THE ASSERTION A HAND-STEPPED ANIMATION CANNOT MAKE.** The probe pumps the run loop for half a second on
+a 0.15-second animation at 60 fps and requires `-isAnimating` NO and `animationDidEnd:` heard — which proves the `NSTimer`
+went, the clock was read, and the finish path ran. The hand-stepped checks are there for the arithmetic; this one is there for
+the machine.
+
+**AND `END` IS NOT `STOP`, WHICH THE FIRST VERSION OF THE PROBE GOT WRONG.** It stepped a NOT-running animation to 1 and
+expected an `animationDidEnd:`; the door correctly announced nothing, because the end belongs to a running animation — a
+setter that announced one for an animation nobody started would be reporting a lifecycle that never happened. The test now
+asserts the absence on purpose, and the real end is asserted where it happens.
+
+**`-startWhenAnimation:reachesProgress:` IS THE ERA'S SEQUENCING**, there being no completion blocks: one animation starts (or
+stops) another at a mark, and the probe checks the second is idle until the first crosses it.

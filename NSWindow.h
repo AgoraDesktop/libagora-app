@@ -469,7 +469,7 @@ typedef NSUInteger NSWindowSharingType;
 			    backing:(NSBackingStoreType)bufferingType
 			      defer:(BOOL)flag;
 
-- (NSRect)frame;
+@property (readonly) NSRect frame;
 - (void)setFrame:(NSRect)frameRect display:(BOOL)flag;
 
 /* ============================================================================================ *
@@ -495,14 +495,10 @@ typedef NSUInteger NSWindowSharingType;
  * WHAT IS NOT HERE IS `-liveResize`'s BEHAVIOUR: `-preservesContentDuringLiveResize` and `-inLiveResize` describe a
  * LIVE RESIZE, and there is no live-resize protocol here — the window manager that would run one is the guest's. (The
  * drag session is a different thing and is here: `NSDragging.h`.) */
-- (NSSize)minSize;
-- (void)setMinSize:(NSSize)size;
-- (NSSize)maxSize;
-- (void)setMaxSize:(NSSize)size;
-- (NSSize)contentMinSize;
-- (void)setContentMinSize:(NSSize)size;
-- (NSSize)contentMaxSize;
-- (void)setContentMaxSize:(NSSize)size;
+@property NSSize minSize;
+@property NSSize maxSize;
+@property NSSize contentMinSize;
+@property NSSize contentMaxSize;
 /* **THE WINDOW NEEDS DRAWING AGAIN — APPLE'S DOOR, AND THE ONE THIS TIER DID NOT HAVE.** Without it a caller had
  * no way to say "this is stale": `-display` PAINTS NOW and gives up if the compositor still owns the buffer, so a
  * paint can be lost with nothing to retry it. `-setNeedsDisplay:` only SETS A FLAG, and the run loop calls
@@ -512,22 +508,20 @@ typedef NSUInteger NSWindowSharingType;
 
 - (void)setFrameOrigin:(NSPoint)aPoint;
 - (void)setContentSize:(NSSize)aSize;
-- (NSUInteger)styleMask;
+@property (readonly) NSUInteger styleMask;
 
-- (nullable NSString *)title;
-- (void)setTitle:(nullable NSString *)aString;
+@property (nullable, copy) NSString *title;
 
 /* THE DELEGATE IS NOT RETAINED — see the ivar note. */
-- (nullable id)delegate;
-- (void)setDelegate:(nullable id)anObject;
+@property (nullable, assign) id delegate;
 
 /* THE WINDOW'S NUMBER IS ITS X WINDOW ID, and -1 BEFORE THERE IS ONE, which is Apple's own answer for a
  * window with no number. */
-- (NSInteger)windowNumber;
+@property (readonly) NSInteger windowNumber;
 
-- (BOOL)isVisible;
-- (BOOL)isKeyWindow;
-- (BOOL)isMainWindow;
+@property (readonly, getter=isVisible) BOOL visible;
+@property (readonly, getter=isKeyWindow) BOOL keyWindow;
+@property (readonly, getter=isMainWindow) BOOL mainWindow;
 
 
 /* ============================================================================================ *
@@ -550,8 +544,7 @@ typedef NSUInteger NSWindowSharingType;
 /* THE CONTENT VIEW, WHICH IS THE VIEW TREE'S ROOT. Setting one RETAINS it and lays it out in the
  * window's CONTENT rect, which is the frame minus the chrome — so a titled window's content view is
  * where a caller draws and never where the title bar is. */
-- (nullable NSView *)contentView;
-- (void)setContentView:(nullable NSView *)aView;
+@property (nullable, strong) NSView *contentView;
 - (nullable NSResponder *)firstResponder;
 
 /* THE RESPONDER THAT GETS THE KEY EVENTS FIRST. It is set to the content view when one is installed, so a

@@ -61,9 +61,9 @@
 #
 # **AND THE MEASURED NUMBERS, RECOMPUTED RATHER THAN EDITED**, so a reader can see the shape without running anything:
 #
-#     classes   106 of 168   (63%)    62 missing
-#     selectors 3026 of 3765  (80%)  739 missing    67 of 104 classes at COMPLETE coverage
-#     protocols  27 of  56   (48%)    29 missing
+#     classes   109 of 168   (65%)    59 missing
+#     selectors 3060 of 3799  (81%)  739 missing    70 of 107 classes at COMPLETE coverage
+#     protocols  28 of  56   (50%)    28 missing
 #     functions  86 of  86 (100%)     0 missing    10 of them REFUSE BY NAME, which this count does not distinguish
 #                86 declared, 0 declared-not-defined, 0 defined-not-declared
 #     methods   3134 declared on this tree's own classes, 4 with NO body on the chain (0.1%)
@@ -120,9 +120,9 @@
 # Foundation's in this tree, so it is attributed to Foundation to avoid charging one class to two ledgers. The
 # manifest applies that rule at generation time via its second framework argument; the census never sees it.
 
-classes-missing 62
+classes-missing 59
 classes-offered 168
-classes-present 106
+classes-present 109
 fn:NSAccessibilityActionDescription 1
 fn:NSAccessibilityPostNotification 1
 fn:NSAccessibilityRaiseBadArgumentException 1
@@ -301,11 +301,11 @@ functions-defined-not-declared 0
 functions-missing 0
 functions-offered 86
 functions-present 86
-methods-declared 3450
+methods-declared 3484
 methods-declared-not-implemented 4
 proto:NSAlertDelegate 0
 proto:NSAnimatablePropertyContainer 0
-proto:NSAnimationDelegate 0
+proto:NSAnimationDelegate 1
 proto:NSApplicationDelegate 1
 proto:NSBrowserDelegate 1
 proto:NSChangeSpelling 0
@@ -359,11 +359,13 @@ proto:NSUserInterfaceItemSearching 0
 proto:NSUserInterfaceValidations 1
 proto:NSValidatedUserInterfaceItem 1
 proto:NSWindowDelegate 1
-protocols-missing 29
+protocols-missing 28
 protocols-offered 56
-protocols-present 27
+protocols-present 28
 sel:NSActionCell 6
 sel:NSAlert 20
+sel:NSAnimation 26
+sel:NSAnimationContext 5
 sel:NSApplication 88
 sel:NSBezierPath 72
 sel:NSBitmapImageRep 36
@@ -463,10 +465,11 @@ sel:NSToolbarItemGroup 2
 sel:NSTrackingArea 5
 sel:NSView 193
 sel:NSViewController 13
+sel:NSViewAnimation 3
 sel:NSWindow 243
 sel:NSWindowController 26
 sel:NSWorkspace 9
 selectors-missing 739
-selectors-offered 3765
-selectors-present 3026
+selectors-offered 3799
+selectors-present 3060
 selphantom:NSObject 4

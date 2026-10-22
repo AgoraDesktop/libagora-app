@@ -1221,3 +1221,14 @@ target_link_libraries(tab_view PRIVATE App)
 
 add_test(NAME appkit-tab-view COMMAND tab_view)
 set_tests_properties(appkit-tab-view PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
+
+# **THE ANIMATION FAMILY.** The curves are checked against the properties their names promise (ease-in below the line, ease-out
+# above it, ease-in-out symmetric), a delegate can REPLACE the curve, marks are announced once each, and the chains start a
+# second animation at the mark they name. Then a REAL TIMED RUN: the run loop pumps a 0.15-second animation and it must end on
+# its own — the assertion a hand-stepped animation cannot make. The view animation interpolates frames and fades by the value,
+# and the context's grouping is a scope nesting restores.
+add_executable(animation animation.m)
+target_link_libraries(animation PRIVATE App)
+
+add_test(NAME appkit-animation COMMAND animation)
+set_tests_properties(appkit-animation PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
