@@ -1232,6 +1232,16 @@ target_link_libraries(printing PRIVATE App)
 add_test(NAME appkit-printing COMMAND printing)
 set_tests_properties(appkit-printing PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
 
+# **THE TEXT VIEW'S SELECTION RANGES, ITS ATTRIBUTES AND ITS COMMANDS.** The ranges and their clamping, the four
+# granularities' expansion, the typing attributes reaching the next character typed, the selection band's ink read back
+# out of a bitmap, the editing contract's two forms, and every run and paragraph command asserted against the STORE
+# rather than against a flag — with a caret's command measured on the typing attributes instead.
+add_executable(text_view_attributes text_view_attributes.m)
+target_link_libraries(text_view_attributes PRIVATE App)
+
+add_test(NAME appkit-text-view-attributes COMMAND text_view_attributes)
+set_tests_properties(appkit-text-view-attributes PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
+
 # **THE STEPPER PAIR AND THE SECURE FIELD PAIR.** The stepper's press IS the step: the probe drives the cell's own tracking
 # hooks in each half of the control, in BOTH flips (a direction that a flip reverses), checks the clamp, the wrap, the action
 # a target receives and that a drag does not step again — then renders the cell and counts ink. The secure field's claim is

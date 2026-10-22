@@ -67,6 +67,7 @@
 #import <AppKit/NSTextInput.h>
 #import <AppKit/NSTextInputClient.h>
 
+@class NSParagraphStyle;
 @class NSTextStorage;
 @class NSLayoutManager;
 @class NSTextContainer;
@@ -75,6 +76,23 @@
 @class NSEvent;
 
 NS_ASSUME_NONNULL_BEGIN
+
+/* **THE ERA'S TWO SELECTION ENUMS.** Apple declares them in this header and not in Foundation, and their values are
+ * the header's own: an affinity is which end of a selection the caret is at (upstream is the start), and a granularity
+ * is the unit a selection prefers — the character, the word, the paragraph or the whole document. */
+typedef NSInteger NSTextSelectionAffinity;
+enum {
+	NSTextSelectionAffinityUpstream = 0,
+	NSTextSelectionAffinityDownstream = 1
+};
+
+typedef NSInteger NSTextSelectionGranularity;
+enum {
+	NSTextSelectionGranularityCharacter = 0,
+	NSTextSelectionGranularityWord = 1,
+	NSTextSelectionGranularityParagraph = 2,
+	NSTextSelectionGranularityDocument = 3
+};
 
 @interface NSTextView : NSText <NSTextInput, NSTextInputClient>
 {
@@ -133,6 +151,32 @@ NS_ASSUME_NONNULL_BEGIN
 	NSString *_cg_findString;	/* RETAINED: the last string searched for, set by action 7 or by a caller */
 	NSRange _cg_findIndicatorRange;	/* where the find indicator was asked to show */
 	BOOL _cg_findIndicatorActive;	/* YES until the next draw, which is how long the era's flash lasts */
+
+	/* ============================================================================================
+	 * THE SELECTION'S SHAPE AND THE ATTRIBUTES THE VIEW CARRIES.
+	 *
+	 * **THE RANGES ARE AN ARRAY ONLY WHEN THERE IS MORE THAN ONE.** `NSText`'s `_selectedRange` is the authority for a
+	 * single selection — every inherited door reads it — so a multi-range selection is the array, and the FIRST range
+	 * is also mirrored into `_selectedRange` so that "the selection" and "the ranges" cannot disagree about where the
+	 * caret's document position is. Clearing the array returns the view to the single-selection shape.
+	 * ========================================================================================== */
+	NSMutableArray *_cg_selectedRanges;	/* RETAINED: NSValue ranges, or nil for "the one in _selectedRange" */
+	NSTextSelectionAffinity _cg_selectionAffinity;
+	NSTextSelectionGranularity _cg_selectionGranularity;
+	/* THE ATTRIBUTES THE VIEW CARRIES RATHER THAN THE STORE: what new text gets, and what the three decorative runs
+	 * wear. Each is RETAINED (a copy) and each has a reader — `-typingAttributes` falls back to the default paragraph
+	 * style, `-insertText:` applies the typing attributes to the run it inserts, the marked run wears the marked
+	 * attributes, and the selection's own ink comes from the selected attributes. */
+	NSDictionary *_cg_typingAttributes;		/* RETAINED (a copy), or nil for "the insertion point's" */
+	NSParagraphStyle *_cg_defaultParagraphStyle;	/* RETAINED, or nil for the class's default */
+	NSDictionary *_cg_selectedTextAttributes;	/* RETAINED (a copy), or nil for the accent */
+	NSDictionary *_cg_markedTextAttributes;		/* RETAINED (a copy), or nil for a single underline */
+	/* AND THE TWO FLAGS THE ATTRIBUTE COMMANDS READ: whether `-changeAttributes:` may open the font panel, and whether
+	 * `-updateFontPanel` has one to talk to. Apple's defaults are both YES. */
+	BOOL _cg_usesFontPanel;
+	/* **THE FONT PANEL AND COLOUR PANEL TARGETS.** `-changeAttributes:` and `-changeColor:` install this view as the
+	 * panel's target with these actions, so a person's next choice lands on the selection rather than nowhere. */
+	BOOL _cg_panelTargetInstalled;
 }
 
 /* ==================================================================================================================
@@ -287,6 +331,110 @@ enum {
 /* **THE FLASH IS STATIC HERE AND THAT IS STATED.** Apple's indicator is an animated capsule; this tier draws a yellow
  * ring for one drawing pass and clears it, so a caller sees the feedback it asked for without an animation engine. */
 - (void)showFindIndicatorForRange:(NSRange)charRange;
+
+/* ==================================================================================================================
+ * THE SELECTION'S RANGES, ITS AFFINITY AND ITS GRANULARITY.
+ *
+ * **`-selectedRanges` IS THE ARRAY AND `-selectedRange` IS ITS FIRST MEMBER**, which is how Apple's own text system
+ * keeps one caret position while allowing several disjoint selections. A view that never had more than one selection
+ * answers a one-element array, so a caller that only ever asks this door sees the same thing it always did.
+ * ================================================================================================================ */
+
+- (NSArray *)selectedRanges;
+- (void)setSelectedRanges:(NSArray *)ranges;
+- (void)setSelectedRanges:(NSArray *)ranges affinity:(NSTextSelectionAffinity)affinity stillSelecting:(BOOL)stillSelecting;
+- (void)setSelectedRange:(NSRange)range affinity:(NSTextSelectionAffinity)affinity stillSelecting:(BOOL)stillSelecting;
+- (NSTextSelectionAffinity)selectionAffinity;
+- (NSTextSelectionGranularity)selectionGranularity;
+- (void)setSelectionGranularity:(NSTextSelectionGranularity)granularity;
+
+/* **AND THE EXPANSION, WHICH IS THE UNIT THE SELECTION COMMANDS USE.** Character answers the range it was given; word
+ * grows over letters, digits and underscore; paragraph grows to the newline boundaries; document is the whole text. A
+ * proposed range is CLAMPED first, so a range that runs past the end answers the end rather than overflowing it. */
+- (NSRange)selectionRangeForProposedRange:(NSRange)proposedRange
+			      granularity:(NSTextSelectionGranularity)granularity;
+
+/* ==================================================================================================================
+ * THE ATTRIBUTES THE VIEW CARRIES.
+ *
+ * **`-typingAttributes` IS WHAT NEW TEXT GETS, AND `-insertText:` APPLIES IT.** Apple's view takes the attributes at
+ * the insertion point when a caller set none; this tier answers the caller's dictionary when there is one, else the
+ * insertion point's run, else the default paragraph style plus the view's font — and the snippet the view inserts wears
+ * whatever it answers, which is what makes a "bold" toggle visible on the next keystroke rather than the next paste.
+ * ================================================================================================================ */
+
+- (NSDictionary *)typingAttributes;
+- (void)setTypingAttributes:(NSDictionary *)attrs;
+- (NSParagraphStyle *)defaultParagraphStyle;
+- (void)setDefaultParagraphStyle:(NSParagraphStyle *)style;
+
+/* **THE SELECTED AND MARKED RUNS' INK.** The selected pair's BACKGROUND colour is what the selection is filled with
+ * (the accent when nothing is set), and the marked pair's underline is applied to a composition as it arrives. Both are
+ * read where they are drawn rather than stored for a later slice. */
+- (NSDictionary *)selectedTextAttributes;
+- (void)setSelectedTextAttributes:(NSDictionary *)attributes;
+- (NSDictionary *)markedTextAttributes;
+- (void)setMarkedTextAttributes:(NSDictionary *)attributes;
+
+/* ==================================================================================================================
+ * WHAT A COMMAND MAY CHANGE, WHICH IS THE EDITING CONTRACT THE ATTRIBUTE COMMANDS ASK.
+ *
+ * `-shouldChangeTextInRange:replacementString:` is asked before every text edit and every attribute command, and a
+ * subclass answers NO to refuse one; the plural form asks about each range in turn. The four `rangeForUser…` pairs are
+ * the ranges a command SHOULD act on: the selection, the character a caret would affect, or the paragraphs it touches.
+ * ================================================================================================================ */
+
+- (BOOL)shouldChangeTextInRange:(NSRange)affectedCharRange replacementString:(nullable NSString *)replacementString;
+- (BOOL)shouldChangeTextInRanges:(NSArray *)affectedRanges
+	     replacementStrings:(nullable NSArray *)replacementStrings;
+
+- (NSRange)rangeForUserTextChange;
+- (NSArray *)rangesForUserTextChange;
+- (NSRange)rangeForUserCharacterAttributeChange;
+- (NSArray *)rangesForUserCharacterAttributeChange;
+- (NSRange)rangeForUserParagraphAttributeChange;
+- (NSArray *)rangesForUserParagraphAttributeChange;
+
+/* ==================================================================================================================
+ * THE ATTRIBUTE COMMANDS.
+ *
+ * **EACH ONE EDITS THE STORE OVER `-rangeForUserCharacterAttributeChange`** (or the paragraph range for the two
+ * paragraph commands), and each asks `-shouldChangeTextInRange:replacementString:` first — so a subclass that refuses
+ * an edit refuses the ATTRIBUTE change with it. Kerning and baseline are INCREMENTAL (Apple's commands add or subtract
+ * a point); the two "standard" spellings REMOVE the attribute, which is what "standard" means when the default is the
+ * font's own.
+ * ================================================================================================================ */
+
+- (void)loosenKerning:(nullable id)sender;
+- (void)tightenKerning:(nullable id)sender;
+- (void)turnOffKerning:(nullable id)sender;
+- (void)useStandardKerning:(nullable id)sender;
+- (void)lowerBaseline:(nullable id)sender;
+- (void)raiseBaseline:(nullable id)sender;
+- (void)turnOffLigatures:(nullable id)sender;
+- (void)useAllLigatures:(nullable id)sender;
+- (void)useStandardLigatures:(nullable id)sender;
+
+/* AND THE TWO THAT MOVE A PARAGRAPH RATHER THAN A RUN. `-setAlignment:range:` sets the alignment on every paragraph the
+ * range touches (each paragraph keeps its other style properties); the writing-direction pair does the same for the
+ * base direction, and `-toggleBaseWritingDirection:` flips it. */
+- (void)setAlignment:(NSTextAlignment)alignment range:(NSRange)range;
+- (void)setBaseWritingDirection:(NSWritingDirection)direction range:(NSRange)range;
+- (void)toggleBaseWritingDirection:(nullable id)sender;
+
+/* ==================================================================================================================
+ * THE TWO PANELS A COMMAND OPENS.
+ *
+ * `-changeAttributes:` opens the font panel and tells it what the selection is set in; `-changeColor:` opens the colour
+ * panel and makes this view its target, so the colour a person picks is applied to the selection. `-updateFontPanel`
+ * is the report back — it is what a caller with the font panel open calls after moving the caret.
+ * ================================================================================================================ */
+
+- (void)changeAttributes:(nullable id)sender;
+- (void)changeColor:(nullable id)sender;
+- (BOOL)usesFontPanel;
+- (void)setUsesFontPanel:(BOOL)flag;
+- (void)updateFontPanel;
 
 @end
 

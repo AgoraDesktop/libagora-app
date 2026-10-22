@@ -2220,6 +2220,36 @@ keywords and names, a three-page view and a tall one cut into three, a page rang
 PDF and EPS copying operations, both panels' sessions and the page layout's round trip, and a document's own ticket being
 a copy of the shared one.
 
+### The text view's selection ranges, and the commands that write a run
+
+**`NSTextView` IS THE DEEPEST CLASS HERE, SO IT LANDS IN SLICES, AND THIS ONE IS THE EDITING CONTRACT.** Forty-two doors
+in a category of their own (`NSTextViewAttributes.m`, because `NSTextView.m` is already the layout, the drawing, the input
+and the ruler): the selection's RANGES with their affinity and granularity, the four `-rangeForUser…` pairs a command
+acts on, the attributes the view carries for new text, the two `-shouldChangeTextInRange:…` gates every edit asks, and
+the commands themselves — kerning, baseline, ligatures, alignment, writing direction, and the two panels.
+
+**A COMMAND EDITS THE STORE OVER THE RANGE IT WAS TOLD, AND A CARET IS NOT A NO-OP.** A selection's run gets the
+attribute; a caret's command mutates the TYPING attributes instead, which is what makes "bold is on" true for the next
+keystroke rather than the previous one becoming bold. Every command asks `-shouldChangeTextInRange:replacementString:`
+first, so a subclass that refuses an edit refuses the attribute change with it — and nothing touches the layout manager
+or the string mirror, because the store notifies both.
+
+**THE ATTRIBUTES HAVE READERS RATHER THAN BEING STORED.** `-typingAttributes` is applied to the run `-insertText:`
+inserts; the selected-text attributes' background is what the selection band is filled with (the accent when nothing is
+set, which the probe reads back out of a bitmap); the marked-text attributes' underline is applied to a composition as it
+arrives; and the default paragraph style is where an empty view's typing attributes start. `-changeAttributes:` reports
+the selection's font to the manager and orders the font panel, and `-changeColor:` makes the view the colour panel's
+target so a picked colour lands on the selection.
+
+**PARAGRAPH COMMANDS COPY EACH PARAGRAPH'S OWN STYLE.** A range can span several paragraphs with different styles, so the
+one property is changed on a mutable copy of each rather than one style written over all of them — which would silently
+drop the line spacing, indents and tab stops the other paragraphs carried.
+
+`tests/text_view_attributes.m` asserts it in 62 checks: the ranges and their clamping, the four granularities' expansion,
+the typing attributes reaching the next character typed, the selection band's colour read out of a bitmap, both forms of
+the editing gate, every run command read back from the STORE (including the caret case), and the two paragraph commands
+measured on a two-paragraph document so "the other one is untouched" is a fact.
+
 ### Still absent, and why
 
 **NINE THINGS THAT USED TO BE ON THIS LIST ARE NOT ANY MORE, AND THE LIST IS CORRECTED RATHER THAN QUIETLY SHRUNK:**

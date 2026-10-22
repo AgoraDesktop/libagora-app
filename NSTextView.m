@@ -645,9 +645,16 @@ static void cg_announce(NSText *text, NSString *name, SEL delegateSelector)
 				CGFloat x0 = [self cg_clampBandX:NS_TEXT_INSET + [self cg_xForIndex:lo] toLine:i];
 				CGFloat x1 = [self cg_clampBandX:NS_TEXT_INSET + [self cg_xForIndex:hi] toLine:i];
 
-				[[NSColor cg_accentColor] setFill];
-				[[NSBezierPath bezierPathWithRect:
-					NSMakeRect(x0, baseline - [font ascender], x1 - x0, bandHeight)] fill];
+				{
+					/* **THE SELECTION'S INK IS THE SELECTED-TEXT ATTRIBUTES' BACKGROUND WHEN THERE IS ONE**, else
+					 * the platform's accent — so a caller that wants its own selection colour sets it on the view and
+					 * the drawing reads it, rather than a second selection-drawing path existing for that caller. */
+					NSColor *fill = [[self selectedTextAttributes] objectForKey:NSBackgroundColorAttributeName];
+
+					[(fill != nil ? fill : [NSColor cg_accentColor]) setFill];
+					[[NSBezierPath bezierPathWithRect:
+						NSMakeRect(x0, baseline - [font ascender], x1 - x0, bandHeight)] fill];
+				}
 			}
 		}
 	}
@@ -905,7 +912,27 @@ static void cg_announce(NSText *text, NSString *name, SEL delegateSelector)
 	target = (replacementRange.location != NSNotFound)
 		 ? replacementRange
 		 : ([self hasMarkedText] ? _cg_markedRange : _selectedRange);
+	{
+		NSRange edit = NSMakeRange(MIN(target.location, [_cg_textStorage length]),
+					   MIN(target.length, [_cg_textStorage length] - MIN(target.location, [_cg_textStorage length])));
+
+		if (![self shouldChangeTextInRange:edit replacementString:text]) {
+			return;
+		}
+	}
 	[self replaceCharactersInRange:target withString:text];
+	/* **AND A CALLER'S TYPING ATTRIBUTES ARE APPLIED TO WHAT WAS JUST TYPED.** The store already gave the inserted run
+	 * the attributes at the insertion point; a dictionary the caller set through `-setTypingAttributes:` then overrides
+	 * them, which is what makes "bold is on" true for the next keystroke. */
+	if (_cg_typingAttributes != nil) {
+		NSUInteger length = [_cg_textStorage length];
+		NSUInteger start = MIN((NSUInteger)target.location, length);
+		NSUInteger inserted = MIN([text length], length - start);
+
+		if (inserted > 0) {
+			[_cg_textStorage addAttributes:_cg_typingAttributes range:NSMakeRange(start, inserted)];
+		}
+	}
 }
 
 /* **AND THE TWO KEYS THAT MEANT "I AM DONE WITH THIS FIELD" NOW MEAN "PUT A BREAK HERE" AND "PUT A TAB HERE".** */
@@ -988,6 +1015,10 @@ static void cg_announce(NSText *text, NSString *name, SEL delegateSelector)
 	[self replaceCharactersInRange:target withString:text];
 	if ([text length] > 0) {
 		_cg_markedRange = NSMakeRange(location, [text length]);
+		/* **AND THE COMPOSITION WEARS THE MARKED ATTRIBUTES**, which is where that dictionary has its reader: the
+		 * underline a caller set appears under the characters as they arrive, through the same store the layout
+		 * manager draws from. */
+		[_cg_textStorage addAttributes:[self markedTextAttributes] range:_cg_markedRange];
 		[self setSelectedRange:NSMakeRange(location + selectedRange.location, selectedRange.length)];
 	} else {
 		_cg_markedRange = NSMakeRange(NSNotFound, 0);

@@ -54,6 +54,15 @@ extern NSString *NSUnderlineColorAttributeName;
 extern NSString *NSStrikethroughStyleAttributeName;
 extern NSString *NSStrikethroughColorAttributeName;
 
+/* **AND THE THREE KEYS THE TEXT VIEW'S ATTRIBUTE COMMANDS WRITE.** Apple declares these in FOUNDATION's
+ * `NSAttributedString.h`; this Foundation's does not, and this header is where the layer that CONSUMES them keeps its
+ * attribute names — so they are declared once, here, with the values Apple publishes: `NSKern` carries an `NSNumber`
+ * of points, `NSBaselineOffset` an `NSNumber` of points, and `NSLigature` one of 0 (none), 1 (standard) and 2 (all).
+ * The rule the rest of this block follows is unchanged: a key arrives with the class that reads it. */
+extern NSString *NSKernAttributeName;
+extern NSString *NSBaselineOffsetAttributeName;
+extern NSString *NSLigatureAttributeName;
+
 /* **AND WHAT A WHOLE PARAGRAPH OF A RUN IS SET IN.** The value is an `NSParagraphStyle`, and the one part of it the
  * layout reads TODAY is the alignment and the line-break mode; see `NSParagraphStyle.h` for the property-by-property
  * account of what is carried and what has a reader. */

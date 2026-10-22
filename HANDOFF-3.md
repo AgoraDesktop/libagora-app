@@ -437,3 +437,42 @@ the component's README and PROVENANCE record this as an unnumbered "Printing" se
 `NSTextView` 126 first — and then the absent groups in §2's table, of which the controllers/bindings are a design
 question before they are a slice. Workspace's own plan still owes W7 (cross-process drag), W8 (Get Info) and W9 (Quick
 Look); the print verb is the first thing in this component that the AppKit slice could not have provided alone.
+
+---
+
+## 13. The sixth pick-up: the text view's attributes, and the range a command acts on
+
+*One session, one commit: forty-two of `NSTextView`'s 126 outstanding selectors — the editing contract and the commands
+that use it — in a category file of their own.*
+
+**WHAT LANDED.** `NSTextViewAttributes.m` holds the selection's RANGES (with affinity and granularity, clamped, the first
+mirrored into `-selectedRange`), the four `-rangeForUser…` pairs, `-selectionRangeForProposedRange:granularity:`'s four
+expansions, the attributes the view carries for new text (typing, default paragraph style, selected and marked), the two
+`-shouldChangeTextInRange…` gates, and the commands: kerning, baseline, ligatures, alignment, base writing direction, and
+the two panels (`-changeAttributes:`, `-changeColor:`, `-usesFontPanel`, `-updateFontPanel`).
+
+**THE SHAPE OF THE SLICE, WHICH IS THE SHAPE THE REST OF `NSTextView` WILL TAKE.** A command is three steps — ask
+`-shouldChangeTextInRange:…`, take `-rangeForUserCharacterAttributeChange` (or the paragraph range), edit the STORE — and
+nothing in the file touches the layout manager or the string mirror, because the store notifies both. A CARET is not a
+no-op: the command mutates the TYPING attributes, which is what gives that dictionary a reader. The three decorative
+dictionaries are read where they are drawn (selection band fill, marked-run underline, empty-view default).
+
+**THE NUMBERS.** NSTextView 60 → 101 of 186; selectors 3947 → 3988 of 4505; missing **558 → 517**; methods 4468 → 4509.
+The refusal census did not move (292): the slice added no refusal and retired none. The suite is **142 tests**, with
+`appkit-text-view-attributes` (62 checks) as the new one.
+
+**TWO FACTS THE PROBE PAID FOR, BOTH WORTH THE NEXT SESSION'S TIME:**
+* **`NSParagraphStyle -copy` ON A MUTABLE STYLE RETURNS THE SAME OBJECT** — this tree has no zones and the immutable copy
+  is a retain — so `-setDefaultParagraphStyle:` keeps a caller's mutable style by reference. A defensive copy would need
+  `-mutableCopy` (and would change what the class means); recorded rather than "fixed" in a slice about the view.
+* **A RUN MADE BY `-setString:` CARRIES THE FONT AND NO PARAGRAPH STYLE**, so `-typingAttributes` answers the font and no
+  style until a command writes one. The probe asserts exactly that, which retired a wrong expectation rather than a bug.
+
+**WHERE THE NEXT HOUR IS, AND IT IS STILL `NSTextView`.** What remains (85) is mostly three clusters: the PASTEBOARD AND
+DRAG family (`-readSelectionFromPasteboard:`, `-writeSelectionToPasteboard:…`, `-readablePasteboardTypes`,
+`-writablePasteboardTypes`, the three drag doors, `-acceptableDragTypes`), the TEXT-CHECKING family (`-checkTextIn…`,
+`-enabledTextCheckingTypes`, `-handleTextCheckingResults:…`, the three automatic-detection toggles), and the CONTAINER /
+INSERTION-POINT family (`-initWithFrame:textContainer:`, `-textContainer`/`-setTextContainer:`, the two insets, the two
+insertion-point drawers, `-setConstrainedFrameSize:`). The pasteboard cluster is the one a document app needs next; the
+checking cluster waits on `NSTextCheckingResult`/`NSOrthography`, which Foundation here has not got (the async spell door
+already refuses for that reason).

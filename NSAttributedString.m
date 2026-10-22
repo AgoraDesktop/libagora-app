@@ -20,6 +20,11 @@ NSString *NSForegroundColorAttributeName = @"NSColor";
 NSString *NSBackgroundColorAttributeName = @"NSBackgroundColor";
 NSString *NSUnderlineStyleAttributeName = @"NSUnderline";
 NSString *NSUnderlineColorAttributeName = @"NSUnderlineColor";
+/* THE THREE THE TEXT VIEW'S COMMANDS WRITE. Apple's values are the bare names, which is what the constants' own strings
+ * are in this tier too — see the header's note on why they are declared here rather than in Foundation. */
+NSString *NSKernAttributeName = @"NSKern";
+NSString *NSBaselineOffsetAttributeName = @"NSBaselineOffset";
+NSString *NSLigatureAttributeName = @"NSLigature";
 NSString *NSStrikethroughStyleAttributeName = @"NSStrikethrough";
 NSString *NSStrikethroughColorAttributeName = @"NSStrikethroughColor";
 NSString *NSParagraphStyleAttributeName = @"NSParagraphStyle";

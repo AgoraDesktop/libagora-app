@@ -833,6 +833,33 @@ control added to the nil view was freed and its memory reused — which surfaced
 tall-view pagination, the page range, the three dispositions (including the two refusals), both copying operations, both
 panels, and the document/application doors — **72 checks**.
 
+## 34. The text view's attributes: a second slice of one deep class
+
+**`NSTextView`'s attribute surface IS A CATEGORY IN A FILE OF ITS OWN.** The class is the deepest here — layout,
+drawing, input, ruler, spelling — and its remaining 126 selectors were never one slice. The forty-two that landed are the
+EDITING CONTRACT: selection ranges/affinity/granularity, the `-rangeForUser…` pairs, the attributes the view carries,
+the two `-shouldChange…` gates, and the run/paragraph commands.
+
+- **A COMMAND IS THREE STEPS: ask, take the range, edit the STORE.** Nothing touches the layout manager or the string
+  mirror; the store notifies both, which is the one edit path this view has.
+- **A CARET IS NOT A NO-OP.** A command with an empty selection mutates the TYPING attributes, so the next character
+  typed wears the change — which is what makes `-typingAttributes` have a reader rather than being a stored dictionary.
+- **THE THREE DECORATIVE DICTIONARIES ARE READ WHERE THEY ARE DRAWN.** The selection band's fill is the
+  selected-text attributes' background (the accent when unset), the marked attributes' underline is applied to a
+  composition as it arrives, and the default paragraph style is where an empty view's typing attributes start.
+- **A PARAGRAPH COMMAND EDITS EACH PARAGRAPH'S OWN STYLE** through a mutable copy, so the properties it was not asked
+  about survive.
+
+Two facts the probe paid for: `NSParagraphStyle -copy` on a MUTABLE style returns the same object (this tree has no
+zones, and the immutable copy is a retain), so a caller who keeps mutating its style after `-setDefaultParagraphStyle:`
+is still mutating the view's; and a run made by `-setString:` carries the font and NO paragraph style, so
+`-typingAttributes` honestly answers the font until a command writes one.
+
+`tests/text_view_attributes.m` measures the ranges and their clamping, the four granularities, the typing attributes
+and their reach into the next inserted character, the selection band's colour in a bitmap, both editing gates, the run
+commands read back from the store (selection and caret), the two paragraph commands on a two-paragraph document, and the
+colour panel's target — **62 checks**.
+
 ## Keeping in sync
 
 The Fiwix AppKit is the origin and this repository has now diverged from it in the seam. A fix made there
