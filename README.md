@@ -874,7 +874,16 @@ the compositor is really gone.
   writer it already implemented — the test checks the conformance and one `protocol_getMethodDescription`, which is what the
   declaration buys over `-respondsToSelector:`.
 
-- **`ctest`: 128 of 128 passed** (the keyboard and the seam, the AppKit and its input path, the controls and their
+- **And `NSBox`** (`ctest`, offscreen) — the frame around other views, with an optional title. Its geometry is the one
+  arithmetic everything else derives from: `-borderRect` is the box's bounds, `-titleRect` is the band the title sits in
+  (seven positions, `NSNoTitle` empty), and the CONTENT view is a subview laid out inside the border and the margins with the
+  title's band taken off the TOP ONLY — `-setFrameFromContentFrame:` is the inverse, and the test goes round the loop (a
+  content frame in, the same frame back). **THE FIVE KINDS ARE FIVE PICTURES**: a separator is a line across the middle, a
+  custom box fills its rectangle with its own colour (4256 pixels of red), and a primary box is 139 pixels of ink ALL AT THE
+  EDGES with an empty middle, which is what "frame" means. The title is an `NSCell` (Apple's shape), so its face and
+  alignment are the cell's and `-titleFont` is a convenience over it.
+
+- **`ctest`: 129 of 129 passed** (the keyboard and the seam, the AppKit and its input path, the controls and their
   metrics, the field control and its cell and its bezel and its placeholder and what it may hold, the text path and its
   word granularity and the multi-line view and its wrapping and its scrolling and its READING OF THE STORE, the STORE
   the rich-text slice is built on and the REGION it is laid out in and the WEB that ties the three together and the

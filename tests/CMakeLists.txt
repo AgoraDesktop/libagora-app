@@ -1201,3 +1201,13 @@ target_link_libraries(glyph_info_image_cell PRIVATE App)
 
 add_test(NAME appkit-glyph-info-image-cell COMMAND glyph_info_image_cell)
 set_tests_properties(appkit-glyph-info-image-cell PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
+
+# **NSBox.** The geometry first — the content inside the border and the margins, the title's band above the content, and
+# `-setFrameFromContentFrame:` as the inverse — and then the FIVE KINDS as five pictures: a separator is a line across the
+# middle, a custom box fills its rectangle with its own colour, and a primary box is ink at the edges with an empty middle,
+# which is what "frame" means.
+add_executable(box box.m)
+target_link_libraries(box PRIVATE App)
+
+add_test(NAME appkit-box COMMAND box)
+set_tests_properties(appkit-box PROPERTIES ENVIRONMENT "${_agora_app_test_env}")

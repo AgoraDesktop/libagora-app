@@ -8,8 +8,8 @@ spent.*
 *State at handover: **8 commits**, tree clean, **114 tests passing**, `api-ledger: 327 metrics
 hold (82 classes, 2652 selectors of 3517, 23 protocols, 86 functions)`.*
 
-*State after the session that picked it up (§9–§21): **22 commits**, tree clean, **128 tests passing**,
-`api-ledger: 350 metrics hold (103 classes, 2945 selectors of 3684, 26 protocols, 86 functions)`.*
+*State after the session that picked it up (§9–§22): **23 commits**, tree clean, **129 tests passing**,
+`api-ledger: 351 metrics hold (104 classes, 2975 selectors of 3714, 26 protocols, 86 functions)`.*
 
 ---
 
@@ -87,8 +87,8 @@ type's empty value and says on stderr what it wants — `AppKitRefusal.h`), or *
 ## 3. Current measured state
 
 ```
-classes   103 of 168   (61%)    65 missing
-selectors 2945 of 3684 (80%)   739 missing    64 of 101 classes at COMPLETE coverage
+classes   104 of 168   (61%)    64 missing
+selectors 2975 of 3714 (80%)   739 missing    65 of 102 classes at COMPLETE coverage
 protocols  26 of  56   (46%)    30 missing
 functions  86 of  86 (100%)     0 missing     10 refuse by name
 methods  3289 declared, 4 with no body (0.1%)
@@ -635,3 +635,31 @@ guessed selector.
 typedefs it needs live inside the class body, so "after the typedefs" is still inside), and a line-based move then split a
 comment in half and left a fragment after the `#endif`. The fix was `git checkout` of the header and an anchor on the class's
 own `@end` — the §4 placement trap, in its third shape this session.
+
+---
+
+## 22. A census that counts one class it cannot be paid for, and `NSBox`
+
+*Fifteenth commit of the pickup: `NSBox` (30 selectors) — and a finding about the instrument that has been true since the
+censuses began.*
+
+**`NSFileWrapper` IS NOT THIS COMPONENT'S TO IMPLEMENT.** The session started on it, on the reasoning that it is the largest
+remaining class with an existing substrate (35 selectors, the RTFD/attachment tree). The compiler answered in one line:
+`redefinition of enumerator 'NSFileWrapperReadingImmediate'`. `NSFileWrapper` is a **Foundation** class in this stack —
+`libagora-base/NSFileWrapper.h`, 47 methods — which is also Apple's own home for it; the 10.6 AppKit umbrella imports
+Foundation, so `manifest` lists the class and `census` counts it MISSING, because the instrument scans THIS component's
+sources. **The count is one high by construction**, and the census now says so in prose rather than excusing it in code. It
+was found by trying to pay a debt that was already paid.
+
+The check that measured it: of the 65 classes the ledger called missing, exactly **one** is defined elsewhere in the
+installed prefix, and four are only forward-declared in this tree's headers (`NSCollectionView`, `NSDocument`,
+`NSFileWrapper`, `NSOpenPanel`).
+
+**`NSBox` WAS THE RIGHT CLASS AFTER THAT**, and its slice found an arithmetic error the value checks would not have: the
+content rectangle subtracted the title's band from BOTH margins (`NSInsetRect` with the band folded into `dy`) while
+`-setFrameFromContentFrame:` added it ONCE, so a round trip left the content seven points short. The test now goes round the
+loop — a content frame in, the same frame back — which is the only assertion that holds those two formulas together.
+
+**And the box's five kinds are checked as five pictures**, because a box that stored its kind and painted one face would pass
+every value check: a separator is a line across the middle, a custom box fills its rectangle, and a primary box is ink at the
+edges with an empty middle.

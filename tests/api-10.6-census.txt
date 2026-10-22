@@ -61,8 +61,8 @@
 #
 # **AND THE MEASURED NUMBERS, RECOMPUTED RATHER THAN EDITED**, so a reader can see the shape without running anything:
 #
-#     classes   103 of 168   (61%)    65 missing
-#     selectors 2945 of 3684  (80%)  739 missing    64 of 101 classes at COMPLETE coverage
+#     classes   104 of 168   (61%)    64 missing
+#     selectors 2975 of 3714  (80%)  739 missing    65 of 102 classes at COMPLETE coverage
 #     protocols  26 of  56   (46%)    30 missing
 #     functions  86 of  86 (100%)     0 missing    10 of them REFUSE BY NAME, which this count does not distinguish
 #                86 declared, 0 declared-not-defined, 0 defined-not-declared
@@ -74,6 +74,13 @@
 # when `NSRectFill` was absent, and that sentence was exactly the kind of prose this file's header warns about, still
 # reading "the tree does not yet fill a rectangle" three slices after it did. And the 50% on classes is the honest
 # version of the headline — the desktop CORE is deep, the periphery is empty.
+
+# **ONE OF THE MISSING CLASSES IS NOT THIS COMPONENT'S TO IMPLEMENT, AND THAT IS A FACT ABOUT THE INSTRUMENT.**
+# `NSFileWrapper` is a FOUNDATION class in this stack (`libagora-base/NSFileWrapper.h`, 47 methods), which is also Apple's own
+# home for it: the 10.6 AppKit umbrella imports Foundation, so `manifest` lists the class and `census` counts it missing
+# because it scans THIS component's sources. The count is therefore ONE HIGH BY CONSTRUCTION. It is written here rather than
+# special-cased in the tool, because a census that quietly excused entries would stop being a measurement — and it was found
+# by trying to implement the class and being told its enum was already declared.
 #
 # **AND THE SAME QUESTION TURNED ON THIS TREE RATHER THAN ON APPLE: `methods-declared-not-implemented`.** Everything above
 # asks what APPLE declares and this tier answers. That metric asks what THIS TIER declares and never implemented — a
@@ -113,9 +120,9 @@
 # Foundation's in this tree, so it is attributed to Foundation to avoid charging one class to two ledgers. The
 # manifest applies that rule at generation time via its second framework argument; the census never sees it.
 
-classes-missing 65
+classes-missing 64
 classes-offered 168
-classes-present 103
+classes-present 104
 fn:NSAccessibilityActionDescription 1
 fn:NSAccessibilityPostNotification 1
 fn:NSAccessibilityRaiseBadArgumentException 1
@@ -294,7 +301,7 @@ functions-defined-not-declared 0
 functions-missing 0
 functions-offered 86
 functions-present 86
-methods-declared 3369
+methods-declared 3399
 methods-declared-not-implemented 4
 proto:NSAlertDelegate 0
 proto:NSAnimatablePropertyContainer 0
@@ -360,6 +367,7 @@ sel:NSAlert 20
 sel:NSApplication 88
 sel:NSBezierPath 72
 sel:NSBitmapImageRep 36
+sel:NSBox 30
 sel:NSBrowser 56
 sel:NSBrowserCell 7
 sel:NSButton 31
@@ -457,6 +465,6 @@ sel:NSWindow 243
 sel:NSWindowController 26
 sel:NSWorkspace 9
 selectors-missing 739
-selectors-offered 3684
-selectors-present 2945
+selectors-offered 3714
+selectors-present 2975
 selphantom:NSObject 4
