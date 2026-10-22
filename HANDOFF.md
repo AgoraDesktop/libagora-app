@@ -8,8 +8,8 @@ spent.*
 *State at handover: **8 commits**, tree clean, **114 tests passing**, `api-ledger: 327 metrics
 hold (82 classes, 2652 selectors of 3517, 23 protocols, 86 functions)`.*
 
-*State after the session that picked it up (§9–§15): **16 commits**, tree clean, **122 tests passing**,
-`api-ledger: 329 metrics hold (84 classes, 2823 selectors of 3568, 23 protocols, 86 functions)`.*
+*State after the session that picked it up (§9–§16): **17 commits**, tree clean, **123 tests passing**,
+`api-ledger: 329 metrics hold (84 classes, 2829 selectors of 3568, 23 protocols, 86 functions)`.*
 
 ---
 
@@ -88,7 +88,7 @@ type's empty value and says on stderr what it wants — `AppKitRefusal.h`), or *
 
 ```
 classes    84 of 168   (50%)    84 missing
-selectors 2823 of 3568 (79%)   745 missing    45 of 83 classes at COMPLETE coverage
+selectors 2829 of 3568 (79%)   739 missing    46 of 83 classes at COMPLETE coverage
 protocols  23 of  56   (41%)    33 missing
 functions  86 of  86 (100%)     0 missing     10 refuse by name
 methods  3154 declared, 4 with no body (0.1%)
@@ -268,14 +268,12 @@ predicted: the four ruler commands were the last four selectors it owed.
 
 **Where to go next, re-ranked by reachable surface:**
 
-1. **The twelve one-selector-short classes are DONE (§15), and only the typesetter trio blocks the manager.**
-   `NSLayoutManager` has SIX selectors left: `typesetter`,
-   `setTypesetter:`, `glyphGenerator`, `setGlyphGenerator:`, `typesetterBehavior`, `setTypesetterBehavior:`. They block on
-   three classes the tier has not got — `NSTypesetter`, `NSGlyphGenerator` and `NSTypesetterBehavior` — so the next move is
-   to import those types (declaration, an enum, and storage) or to declare the six doors and refuse them by name. Everything
-   else in the manager is now reachable, which is why the next hour belongs to a different class: the SEVEN classes with
-   one selector missing each, and the panels (open/save, colour, font, print) that the surface plan names as the 10.6
-   periphery.
+1. **`NSLayoutManager` IS COMPLETE (§16) — all 136 selectors — and so are the twelve one-selector-short classes (§15).**
+   The manager's last six were the typesetter trio, spelled `id` for the reason §16 records. What is left in the text
+   system is the two classes those doors name, if anyone wants them: `NSTypesetter` (61 selectors — the era's own line
+   breaker, which Core Text replaces here) and `NSGlyphGenerator` (2). Everything else in the manager is reachable, so the
+   next hour belongs elsewhere: the panels (open/save, colour, font, print), the document and controller family, and the
+   33 missing protocols, all of which the surface plan names as the 10.6 periphery.
 2. **The substitution machinery** (the old §5.2, ~12 doors): the five flags are stored; the tables
    (`userQuotesArrayForLanguage:`, `userReplacementsDictionary`) are what would make typing through them real.
 3. **`NSTextView`'s ruler accessory** — the one door this slice refused. A tab-type control cluster is an
@@ -455,3 +453,31 @@ Complete coverage went from 33 to 45 of the 83 present classes.*
 A window's number is assigned when its surface is made, which needs a compositor, so `-windowNumber` answers -1 and the
 registry is empty. The probe asserts the CONTRACT — the door is exactly the application's lookup for the number — and says
 why a live window cannot appear in it.
+
+---
+
+## 16. Completing the layout manager: the typesetter trio
+
+*Ninth commit of the pickup: six doors, and `NSLayoutManager` is 136 of 136 — complete against the 10.6 manifest, and the
+first class of this size to finish.*
+
+**THE DOORS ARE SPELLED `id`, AND THAT IS THE TREE'S OWN RULE APPLIED TO A NEW CASE.** Apple names `NSTypesetter *` and
+`NSGlyphGenerator *`. This tier has neither class, and naming one in a header is exactly the trap `NSScreen.h` records: a
+name in a header can CREDIT a class row that no implementation answers to (NSScreen itself was "shipped" for three commits
+while no such class existed, because a `@class` in `NSWindow.h` was taken for a declaration). So the four object doors are
+`id` — the same spelling `NSEvent -trackingArea` uses — they round-trip, nil clears them, and the header says in as many
+words that NOTHING CONSULTS THEM: the breaker builds a `CTTypesetter` from the store and Core Text's shaper is the glyph
+generator, so there is no `NSTypesetter` in this tier's flow at all.
+
+**The behaviour is a real value, so it is treated as one.** Apple's `NSTypesetterBehavior` is `NSInteger`, its default is
+`NSTypesetterLatestBehavior` (-1), and the five numbers are pinned in the test — an enum edit that changed one would move a
+caller's archived setting without moving anything visible. Its home in Apple's headers is `NSTypesetter.h`, which this tier
+has not got, so the enum is declared beside its only users and the header says where it must MOVE when that class arrives:
+two declarations of one enum is how the two come to disagree.
+
+**The one behavioural difference from Apple is stated, not hidden:** `-typesetter` in Apple CREATES a default typesetter on
+first ask; this tier has none to make, so the answer is nil until a caller sets one.
+
+**What the census says now:** `NSLayoutManager` 136/136; complete classes 46 of the 83 present; selectors 2829 of 3568
+(79%). The text system's remaining debt is the two classes those doors name, and neither is a slice anyone needs: Core Text
+does both jobs here.

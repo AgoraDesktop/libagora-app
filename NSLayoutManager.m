@@ -264,6 +264,8 @@ static CGFloat fn_attachment_width(void *refCon)
 		_defaultAttachmentScaling = NSImageScaleProportionallyDown;
 		/* AND THE TEMPORARY RUNS, EMPTY; the rect buffer starts NULL and is grown by the first rectArray call. */
 		_temporaryMarks = [[NSMutableArray alloc] init];
+		/* AND THE ONE TRIO VALUE WITH A DEFAULT: Apple's own, which is what a caller checking the behaviour expects. */
+		_typesetterBehavior = NSTypesetterLatestBehavior;
 		_rectArray = NULL;
 		_rectArrayCount = 0;
 		_invalidatedRange = NSMakeRange(NSNotFound, 0);
@@ -5428,6 +5430,49 @@ static NSImage *fn_tab_marker_image(NSTextTabType type)
 - (NSFont *)substituteFontForFont:(NSFont *)originalFont
 {
 	return originalFont;
+}
+
+
+/* ==================================================================================================================
+ * THE TYPESETTER TRIO. Six doors, five of them one line, and the note that says why none of them is consulted lives in
+ * the header. The two objects are BORROWED — Apple's contract — so there is nothing to release.
+ * ================================================================================================================ */
+
+@end
+
+@implementation NSLayoutManager (AGTypesetter)
+
+- (id)typesetter
+{
+	return _typesetter;
+}
+
+- (void)setTypesetter:(id)typesetter
+{
+	_typesetter = typesetter;	/* NOT RETAINED: Apple's contract */
+}
+
+- (id)glyphGenerator
+{
+	return _glyphGenerator;
+}
+
+- (void)setGlyphGenerator:(id)glyphGenerator
+{
+	_glyphGenerator = glyphGenerator;	/* NOT RETAINED */
+}
+
+- (NSTypesetterBehavior)typesetterBehavior
+{
+	return (NSTypesetterBehavior)_typesetterBehavior;
+}
+
+- (void)setTypesetterBehavior:(NSTypesetterBehavior)behavior
+{
+	/* **A BEHAVIOUR CHANGE IS NOT A LAYOUT CHANGE HERE**, and the reason is the trio's whole story: no line height,
+	 * baseline or rounding in this tier reads the value, so marking the document stale would be a redraw that changed
+	 * nothing. It is stored and answered, and the header says so. */
+	_typesetterBehavior = (NSInteger)behavior;
 }
 
 @end

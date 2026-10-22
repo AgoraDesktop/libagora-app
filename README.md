@@ -797,7 +797,17 @@ the compositor is really gone.
   `NSScreen -colorSpace` (`NSColorSpace` is not in this tier). The refusal census moved 141 → 142 because the bezier
   refusal is an inline literal, and that is a deliberate edit.
 
-- **`ctest`: 122 of 122 passed** (the keyboard and the seam, the AppKit and its input path, the controls and their
+- **And `NSLayoutManager` is COMPLETE — 136 of 136** (`ctest`, offscreen). The last six are the typesetter trio, and they
+  are the one place this tier spells a door's type `id`: Apple names `NSTypesetter *` and `NSGlyphGenerator *`, this tier has
+  neither class, and NAMING ONE IN A HEADER IS THE TRAP `NSScreen.h` RECORDS — a name in a header can credit a class row no
+  implementation answers to. So the four object doors are `id` (the way `NSEvent -trackingArea` is), they round-trip and
+  nil clears, and **nothing consults them**, which is stated rather than implied: the breaker builds a `CTTypesetter` from
+  the store and Core Text's shaper is the glyph generator, so there is no `NSTypesetter` in the flow at all. The behaviour
+  is a real value with Apple's default (`NSTypesetterLatestBehavior`) and Apple's five numbers, pinned in the test; its enum
+  is declared beside its only users because Apple declares it in `NSTypesetter.h`, a header this tier has not got — and the
+  header says it must MOVE there on the day the class arrives.
+
+- **`ctest`: 123 of 123 passed** (the keyboard and the seam, the AppKit and its input path, the controls and their
   metrics, the field control and its cell and its bezel and its placeholder and what it may hold, the text path and its
   word granularity and the multi-line view and its wrapping and its scrolling and its READING OF THE STORE, the STORE
   the rich-text slice is built on and the REGION it is laid out in and the WEB that ties the three together and the

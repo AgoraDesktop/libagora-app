@@ -1137,3 +1137,12 @@ target_link_libraries(appkit_loose_ends PRIVATE App)
 
 add_test(NAME appkit-loose-ends COMMAND appkit_loose_ends)
 set_tests_properties(appkit-loose-ends PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
+
+# **THE MANAGER'S LAST SIX SELECTORS.** The two objects are `id` doors (their classes are not in this tier) and are
+# asserted as round trips plus the stated difference from Apple's on-demand typesetter; the behaviour is a real value whose
+# five numbers are PINNED here, because an enum edit that changed one would move a caller's archived setting.
+add_executable(text_typesetter_doors text_typesetter_doors.m)
+target_link_libraries(text_typesetter_doors PRIVATE App)
+
+add_test(NAME appkit-text-typesetter-doors COMMAND text_typesetter_doors)
+set_tests_properties(appkit-text-typesetter-doors PROPERTIES ENVIRONMENT "${_agora_app_test_env}")

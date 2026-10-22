@@ -115,6 +115,13 @@ NS_ASSUME_NONNULL_BEGIN
 	NSMutableArray *_blockRectOverrides;	/* RETAINED; FNBlockRect objects, one per overridden block */
 	NSMutableDictionary *_attachmentSizes;	/* RETAINED; NSNumber(character index) -> NSValue(NSSize) */
 	NSImageScaling _defaultAttachmentScaling;
+	/* **AND THE TYPESETTER TRIO, WHICH THIS TIER STORES AND DOES NOT CONSULT.** The layout here is Core Text's — a
+	 * `CTTypesetter` built from the store — so there is no `NSTypesetter` object in the flow at all; a caller that sets one
+	 * gets it back, and nothing reads it. The behaviour is a real value with a real default (`NSTypesetterLatestBehavior`),
+	 * which is what a caller checking `-typesetterBehavior` expects to see. */
+	id _typesetter;		/* NOT RETAINED: Apple's contract is a borrowed pointer */
+	id _glyphGenerator;		/* NOT RETAINED */
+	NSInteger _typesetterBehavior;
 	/* **AND THE TWO TABLES THE DRAWING PASS READS BESIDE THE STORE.** The marks are the temporary attributes, as a
 	 * sorted list of runs (an `FNTextMark`: a range and its dictionary); the rect array is the buffer the `rectArray…`
 	 * doors answer with, kept here because Apple's answer is a pointer valid until the next call. */
@@ -837,6 +844,45 @@ startingGlyphIndexes:(NSUInteger *)glyphIndexes
 				    paragraphStyle:(NSParagraphStyle *)style
 					      ruler:(NSRulerView *)aRulerView
 					    enabled:(BOOL)isEnabled;
+
+/* ==================================================================================================================
+ * THE TYPESETTER TRIO — the last six selectors this class owed, and the two types this tier has not got.
+ *
+ * **THE OBJECTS ARE SPELLED `id`, AND THAT IS THE TREE'S RECORDED RULE RATHER THAN A SHORTCUT.** Apple's doors name
+ * `NSTypesetter *` and `NSGlyphGenerator *`; this tier has neither class, and naming one in a header is exactly the trap
+ * `NSScreen.h` records — a name in a header can CREDIT a class row that no implementation answers to. So the doors are
+ * `id`, the way `NSEvent -trackingArea` is, and each answers its type's empty value (nil) until a caller sets one.
+ *
+ * **AND NOTHING CONSULTS THEM, WHICH IS SAID RATHER THAN IMPLIED.** The breaker here builds a `CTTypesetter` from the
+ * store on every layout; there is no `NSTypesetter` in the flow, and a glyph generator is what Core Text's shaper does
+ * with `CTLine`. A caller that sets either gets it back — round trip, nil clears, borrowed rather than retained — and a
+ * caller expecting the object to DO something should know that it does not.
+ *
+ * **THE BEHAVIOUR IS A REAL VALUE WITH A REAL DEFAULT.** Apple's enum is declared in `NSTypesetter.h`, a header this tier
+ * has not got, so it is declared here beside its only users; it must MOVE to `NSTypesetter.h` on the day that class
+ * arrives, because two declarations of one enum is how the two come to disagree. The default is
+ * `NSTypesetterLatestBehavior`, Apple's own, and the numbers are Apple's (the test pins them).
+ * ================================================================================================================ */
+
+typedef NSInteger NSTypesetterBehavior;
+enum {
+	NSTypesetterOriginalBehavior = 0,
+	NSTypesetterMacOSX10_2BehaviorWithBaselines = 1,
+	NSTypesetterMacOSX10_2Behavior = 2,
+	NSTypesetterMacOSX10_3Behavior = 3,
+	NSTypesetterLatestBehavior = -1
+};
+
+/* **Apple's `-typesetter` CREATES a default one on first ask; this tier has none to make**, so the answer is nil until a
+ * caller sets one. That is the one behavioural difference in the trio and it is stated here rather than left to be found. */
+- (nullable id)typesetter;
+- (void)setTypesetter:(nullable id)typesetter;
+
+- (nullable id)glyphGenerator;
+- (void)setGlyphGenerator:(nullable id)glyphGenerator;
+
+- (NSTypesetterBehavior)typesetterBehavior;
+- (void)setTypesetterBehavior:(NSTypesetterBehavior)behavior;
 
 @end
 
