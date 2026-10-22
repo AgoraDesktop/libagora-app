@@ -107,6 +107,8 @@ extern NSString *NSSystemColorsDidChangeNotification;
  * case where a version constant's value IS published, so it is transcribed rather than left open. */
 #define NSAppKitVersionNumberWithPatternColorLeakFix 641.0
 
+@class NSColorSpace;
+
 @interface NSColor : NSObject <NSCopying, NSSecureCoding>
 {
 	CGColorRef _cgColor;    /* RETAINED, and the only state this class has */
@@ -124,6 +126,15 @@ extern NSString *NSSystemColorsDidChangeNotification;
  * when the probe first passed NULL to what the header had called non-null. */
 + (nullable NSColor *)colorWithCGColor:(nullable CGColorRef)cgColor;
 @property (nullable, readonly) CGColorRef CGColor;
+
+/* **THE TWO SPACE DOORS AND THE ONE DRAWING DOOR.** `-colorSpace` wraps the engine's space in an `NSColorSpace`;
+ * `-colorSpaceName` answers the era's NAME for it — the five constants above — because that is what a caller compares
+ * against. A colour in a named space is CALIBRATED and one in an unnamed device space is a DEVICE colour, which is the
+ * distinction the engine's name-or-no-name carries. `-set` makes the colour the current context's fill AND stroke,
+ * which is what a caller who writes `[colour set]; NSRectFill(...)` is asking for. */
+- (nullable NSColorSpace *)colorSpace;
+- (nullable NSString *)colorSpaceName;
+- (void)set;
 
 /* THE COMPONENT CONSTRUCTORS, over the spaces this library has. Each returns nil only if Core
  * Graphics refused to build the colour, which for these spaces means a NULL space — it cannot

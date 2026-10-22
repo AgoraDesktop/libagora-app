@@ -60,6 +60,14 @@ NS_ASSUME_NONNULL_BEGIN
 - (NSInteger)indexOfItemWithTag:(NSInteger)tag;
 - (nullable id)itemWithTitle:(NSString *)title;
 - (nullable id)itemWithTag:(NSInteger)tag;
+- (void)addItemsWithTitles:(NSArray *)itemTitles;
+- (void)insertItemWithTitle:(NSString *)title atIndex:(NSInteger)index;
+- (void)removeItemWithTitle:(NSString *)title;
+- (NSArray *)itemTitles;
+- (NSInteger)indexOfItemWithRepresentedObject:(nullable id)object;
+- (NSInteger)indexOfItemWithTarget:(nullable id)target andAction:(nullable SEL)actionSelector;
+- (void)selectItem:(nullable id)item;
+@property BOOL autoenablesItems;
 
 /* WHAT IS CHOSEN — an index, an item, or the title the button therefore wears. All three are one fact. */
 - (nullable id)selectedItem;

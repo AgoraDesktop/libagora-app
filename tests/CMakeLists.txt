@@ -1277,3 +1277,14 @@ target_link_libraries(save_panel PRIVATE App)
 
 add_test(NAME appkit-save-panel COMMAND save_panel)
 set_tests_properties(appkit-save-panel PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
+
+# **THE POP-UP'S ITEMS, THE COLOUR'S SPACE AND THE MENU'S FLAGS.** The item arithmetic (add, insert, remove, titles,
+# the two index lookups) goes through the button into the cell's menu, and the cell's two flags are behaviour: a pick
+# copies the item's title unless usesItemFromMenu is off, and altersStateOfSelectedItem toggles the chosen row's state
+# instead of clearing the others. A colour answers its space name (calibrated for a named space, device for an unnamed
+# one) and -set is checked by filling a bitmap and reading the pixel back red.
+add_executable(popup_color_menu popup_color_menu.m)
+target_link_libraries(popup_color_menu PRIVATE App)
+
+add_test(NAME appkit-popup-color-menu COMMAND popup_color_menu)
+set_tests_properties(appkit-popup-color-menu PROPERTIES ENVIRONMENT "${_agora_app_test_env}")

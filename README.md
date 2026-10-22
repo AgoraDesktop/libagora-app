@@ -138,6 +138,7 @@ tests/
   browser.m                     the BROWSER: columns, the delegate's cells, the selection, the path and the width
   document.m                    the DOCUMENT family: a file, its change count, its undo and its windows, around a temp file
   save_panel.m                  the SAVE and OPEN PANELS: the listing, the filters, the accept, sheets and modeless runs
+  popup_color_menu.m            the POP-UP's items, a COLOUR's space and -set, and the MENU's two flags
   progress_indicator.m          the PROGRESS INDICATOR: range, clamp, spinner state and the bar's ink
   panel_alert.m                 the PANEL and the ALERT: the click-to-key rule, the content and the two ways to run it
   search_field.m                the SEARCH FIELD: two ornaments, the sending rules, the timer and the recents menu
@@ -970,7 +971,19 @@ the compositor is really gone.
   panel and file packages have no doors here, and an existing file is accepted without a replacement alert (the caller's
   save overwrites it) — both said in `NSSavePanel.h` rather than half-built.
 
-- **`ctest`: 135 of 135 passed** (the keyboard and the seam, the AppKit and its input path, the controls and their
+- **And the POP-UP BUTTON PAIR, a COLOUR's SPACE and the MENU's deprecated pair** (`ctest`, offscreen) — 30 selectors,
+  four classes completed. **The pop-up's item arithmetic is the menu's, spelled where a caller reaches it**: add, insert
+  and remove by title, `-itemTitles`, the represented-object and target/action lookups (the represented object by
+  IDENTITY, which is the tree's documented rule), and the cell's two behavioural flags — `-usesItemFromMenu` (YES by
+  default: a pick copies the row's title onto the button) and `-altersStateOfSelectedItem` (a pick toggles the row's own
+  state instead of clearing the others). **A fresh pop-up now HAS an empty menu**; with a nil one the nine item doors were
+  no-ops, which the probe showed before any of them could pass. **A colour knows its space**: `-colorSpace` wraps the
+  engine's space, `-colorSpaceName` answers the calibrated name for a named space and the device name for an unnamed one,
+  and `-set` is checked by filling a bitmap and reading the pixel back red. And the menu's `-isTornOff` and
+  `-allowsContextMenuPlugIns` round-trip — the second governs a mechanism Apple removed, so the flag is stored and no
+  plug-in is loaded.
+
+- **`ctest`: 136 of 136 passed** (the keyboard and the seam, the AppKit and its input path, the controls and their
   metrics, the field control and its cell and its bezel and its placeholder and what it may hold, the text path and its
   word granularity and the multi-line view and its wrapping and its scrolling and its READING OF THE STORE, the STORE
   the rich-text slice is built on and the REGION it is laid out in and the WEB that ties the three together and the
@@ -982,7 +995,7 @@ the compositor is really gone.
   what a drag costs, the resize by edge, the tracking engine, the clip view and the scroller and the scroll view and the
   drawn offset and the ruler it can wear and the TEXT RULER whose markers are tab stops and the block rects and
   attachment sizes the layout answers and the temporary-attribute table and the rect arrays, the chrome and what its
-  buttons do, the chrome theme, the menus and activation, and the manager's own ensure/invalidate doors, the document family's file round trip and change count, and the save and open panels).
+  buttons do, the chrome theme, the menus and activation, and the manager's own ensure/invalidate doors, the document family's file round trip and change count, the save and open panels, and the pop-up's items, a colour's space and the menu's flags).
 - **And the desktop's own text is SUB-PIXEL ANTIALIASED**, which is the AppKit's half of a renderer change in
   CoreGraphics: a window's surface is OPAQUE (`kCGImageAlphaNoneSkipFirst`), and the destination's opacity is
   exactly what decides whether a glyph is rasterised in colour. MEASURED on the live session: the window title's

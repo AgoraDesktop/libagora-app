@@ -164,6 +164,51 @@
 	return [(NSPopUpButtonCell *)[self cell] itemWithTag:tag];
 }
 
+- (void)addItemsWithTitles:(NSArray *)itemTitles
+{
+	[(NSPopUpButtonCell *)[self cell] addItemsWithTitles:itemTitles];
+}
+
+- (void)insertItemWithTitle:(NSString *)title atIndex:(NSInteger)index
+{
+	[(NSPopUpButtonCell *)[self cell] insertItemWithTitle:title atIndex:index];
+}
+
+- (void)removeItemWithTitle:(NSString *)title
+{
+	[(NSPopUpButtonCell *)[self cell] removeItemWithTitle:title];
+}
+
+- (NSArray *)itemTitles
+{
+	return [(NSPopUpButtonCell *)[self cell] itemTitles];
+}
+
+- (NSInteger)indexOfItemWithRepresentedObject:(id)object
+{
+	return [(NSPopUpButtonCell *)[self cell] indexOfItemWithRepresentedObject:object];
+}
+
+- (NSInteger)indexOfItemWithTarget:(id)target andAction:(SEL)actionSelector
+{
+	return [(NSPopUpButtonCell *)[self cell] indexOfItemWithTarget:target andAction:actionSelector];
+}
+
+- (void)selectItem:(id)item
+{
+	[(NSPopUpButtonCell *)[self cell] selectItem:item];
+}
+
+- (BOOL)autoenablesItems
+{
+	return [(NSPopUpButtonCell *)[self cell] autoenablesItems];
+}
+
+- (void)setAutoenablesItems:(BOOL)flag
+{
+	[(NSPopUpButtonCell *)[self cell] setAutoenablesItems:flag];
+}
+
 /* ---- WHAT IS CHOSEN ------------------------------------------------------------------------------- */
 
 - (id)selectedItem

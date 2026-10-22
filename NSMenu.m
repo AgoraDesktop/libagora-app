@@ -170,6 +170,9 @@ static NSString * const AGCoderMenuChangedMessagesKey = @"menuChangedMessagesEna
 		 * action nobody implemented stayed enabled. The probe found it the first time it asserted a DEFAULT rather
 		 * than a transition — the same shape as the flag above, which is why the sentence is written twice. */
 		_autoenablesItems = YES;
+		/* AND THE PLUG-IN FLAG, whose default is YES for the same reason: the mechanism is gone, but the ANSWER Apple
+		 * documents is still YES, and a caller reading it back before setting it must get that. */
+		_allowsContextMenuPlugIns = YES;
 	}
 	return self;
 }
@@ -580,6 +583,21 @@ static const CGFloat NSMenuStateColumnWidth = 20.0;
 - (id)font
 {
 	return _font;
+}
+
+- (BOOL)isTornOff
+{
+	return _tornOff;
+}
+
+- (BOOL)allowsContextMenuPlugIns
+{
+	return _allowsContextMenuPlugIns;
+}
+
+- (void)setAllowsContextMenuPlugIns:(BOOL)flag
+{
+	_allowsContextMenuPlugIns = flag ? YES : NO;
 }
 
 - (void)setFont:(id)font
@@ -1328,6 +1346,19 @@ static const CGFloat NSMenuStateColumnWidth = 20.0;
 		}
 	}
 	[menu popUpMenuPositioningItem:nil atLocation:where inView:view];
+}
+
++ (void)popUpContextMenu:(NSMenu *)menu withEvent:(id)event forView:(id)view withFont:(id)font
+{
+	/* **THE FONT VARIANT IS THE SAME POP, WITH THE MENU TOLD WHICH FACE TO USE.** Apple's 10.3 addition exists because a
+	 * context menu's font is the caller's choice; the positioning is the old door's, so it is called rather than copied. */
+	if (menu == nil) {
+		return;
+	}
+	if (font != nil) {
+		[menu setFont:font];
+	}
+	[NSMenu popUpContextMenu:menu withEvent:event forView:view];
 }
 
 - (void)cg_setMenuViewClass:(Class)aClass

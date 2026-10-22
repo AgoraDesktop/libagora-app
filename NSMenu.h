@@ -120,6 +120,7 @@ extern NSString *NSMenuDidEndTrackingNotification;
 	/* AND THE TEAR-OFF FLAG, which is the last piece of the session's state: a menu that has been TORN OFF stays up
 	 * instead of dismissing. */
 	BOOL _tornOff;
+	BOOL _allowsContextMenuPlugIns;
 	/* **AND WHETHER THE PRESS THAT OPENED THIS SESSION HAS BEEN RELEASED YET.** A menu opened by a CLICK stays
 	 * open after the button comes up — that is what clicking a menu bar title does on the Mac, and what a
 	 * right-click on a context menu does — so the FIRST release in a session is the gesture that opened it and is
@@ -177,6 +178,12 @@ extern NSString *NSMenuDidEndTrackingNotification;
  * `-allowsContextMenuPlugIns` was struck because it governs a mechanism macOS REMOVED, which is a different thing
  * and draws the other side of that line. */
 @property (readonly) BOOL tornOff;
+/* **THE 10.6 SPELLING OF THE SAME FACT, AND THE PLUG-IN FLAG.** `-isTornOff` is the getter the 10.6 header names; the
+ * property above is the deprecated spelling. The plug-in flag survives a mechanism Apple removed: it round-trips and
+ * no plug-in is loaded, which is the whole of what it can mean on a system that no longer has the mechanism. */
+- (BOOL)isTornOff;
+- (BOOL)allowsContextMenuPlugIns;
+- (void)setAllowsContextMenuPlugIns:(BOOL)flag;
 - (void)cg_setTornOff:(BOOL)flag;
 
 /* THE TWO CONSTRUCTORS AND THE ONE FACTORY Apple gives a menu: a title, and the title-less one. */
@@ -371,6 +378,8 @@ extern NSString *NSMenuDidEndTrackingNotification;
 		      atLocation:(NSPoint)location
 			  inView:(nullable id)view;
 + (void)popUpContextMenu:(NSMenu *)menu withEvent:(nullable id)event forView:(nullable id)view;
++ (void)popUpContextMenu:(NSMenu *)menu withEvent:(nullable id)event forView:(nullable id)view
+		withFont:(nullable id)font;
 /* THE MENU BAR IS THE DESKTOP'S, and the desktop draws its own chrome (D6); the zone pair needs zone-based
  * allocation, and this tier allocates through the runtime's default zone. */
 + (BOOL)menuBarVisible;

@@ -62,6 +62,11 @@ typedef enum {
 	 * `-synchronizeTitleAndSelectedItem`'s whole job. It is -1 for "nothing chosen", which is also what a menu-less
 	 * button answers, and that is why it is an `NSInteger` and not a count of anything. */
 	NSInteger _selectedIndex;
+	/* **THE TWO FLAGS THE 10.6 HEADER NAMES**: whether choosing toggles the item's own state (a popup of checkmarks
+	 * rather than a radio group), and whether selecting copies the item's title onto the button. The second starts YES,
+	 * which is what makes a popup button's face the chosen row by default. */
+	BOOL _altersStateOfSelectedItem;
+	BOOL _usesItemFromMenu;
 }
 
 /* **THE INITIALISER, WHICH IS APPLE'S AND TAKES THE ONE FACT THE INHERITED ONE CANNOT.** A popup button is a pull-
@@ -102,6 +107,22 @@ typedef enum {
 - (NSInteger)indexOfItemWithTag:(NSInteger)tag;
 - (nullable id)itemWithTitle:(NSString *)title;
 - (nullable id)itemWithTag:(NSInteger)tag;
+- (void)addItemsWithTitles:(NSArray *)itemTitles;
+- (void)insertItemWithTitle:(NSString *)title atIndex:(NSInteger)index;
+- (void)removeItemWithTitle:(NSString *)title;
+- (NSArray *)itemTitles;
+- (NSInteger)indexOfItemWithRepresentedObject:(nullable id)object;
+- (NSInteger)indexOfItemWithTarget:(nullable id)target andAction:(nullable SEL)actionSelector;
+- (void)selectItem:(nullable id)item;
+
+/* **THE TWO BEHAVIOURAL FLAGS, BOTH READ BY THE CODE BELOW.** `-autoenablesItems` is the MENU's switch and forwards;
+ * `-altersStateOfSelectedItem` makes a pick TOGGLE the row's state instead of clearing the others; `-usesItemFromMenu`
+ * (YES by default) is whether a pick copies the item's title onto the button. */
+@property BOOL autoenablesItems;
+@property BOOL altersStateOfSelectedItem;
+@property BOOL usesItemFromMenu;
+
+- (void)performClickWithFrame:(NSRect)frame inView:(nullable id)view;
 
 /* AND THE FOUR THAT WRITE. `-addItemWithTitle:` is Apple's convenience over the menu's own
  * `-addItemWithTitle:action:keyEquivalent:` with the action and the key blank, because a popup's items are chosen

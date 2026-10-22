@@ -101,9 +101,15 @@ static NSString * const AGCoderPopUpSelectedIndexKey = @"selectedIndex";
 {
 	self = [super initTextCell:stringValue];
 	if (self != nil) {
-		_menu = nil;
+		/* **A FRESH POP-UP HAS AN EMPTY MENU, NOT NO MENU.** Apple's control answers a menu from the start, and the
+		 * item doors below are its vocabulary; a nil menu made `-addItemWithTitle:` a no-op, which the probe found as
+		 * nine failures in a row. The menu is retained here like any other (`-setMenu:`'s rule). */
+		_menu = [[NSMenu alloc] initWithTitle:@""];
 		_pullsDown = pullDown;
 		_selectedIndex = -1;
+		/* **THE CELL'S TITLE COMES FROM THE CHOSEN ROW BY DEFAULT**, which is what a popup button is: the menu's
+		 * selection IS its face. `-setUsesItemFromMenu:NO` is the caller saying it will keep its own title. */
+		_usesItemFromMenu = YES;
 		/* APPLE'S DEFAULTS, AND ONE OF THEM IS A REAL CHOICE: `NSMaxYEdge` is the edge a popup opens TOWARD when
 		 * the geometry it was given does not fit it, and the top of the button is where a menu that hangs below
 		 * would flip to. Nothing here acts on it yet — `NSMenu` places the session itself — and it is declared,
@@ -279,6 +285,112 @@ static NSInteger fn_popup_index(NSInteger menu_index)
 	[[self controlView] setNeedsDisplay:YES];
 }
 
+- (void)addItemsWithTitles:(NSArray *)itemTitles
+{
+	NSUInteger i;
+
+	for (i = 0; i < [itemTitles count]; i++) {
+		[self addItemWithTitle:[itemTitles objectAtIndex:i]];
+	}
+}
+
+- (void)insertItemWithTitle:(NSString *)title atIndex:(NSInteger)index
+{
+	NSInteger count = [self numberOfItems];
+
+	if (_menu == nil || title == nil) {
+		return;
+	}
+	if (index < 0) {
+		index = 0;
+	}
+	if (index > count) {
+		index = count;
+	}
+	[(NSMenu *)_menu insertItemWithTitle:title action:NULL keyEquivalent:@"" atIndex:index];
+	[self cg_pointItemsAtSelf];
+	if (_selectedIndex >= index) {
+		_selectedIndex++;
+	}
+	[self synchronizeTitleAndSelectedItem];
+	[[self controlView] setNeedsDisplay:YES];
+}
+
+- (void)removeItemWithTitle:(NSString *)title
+{
+	NSInteger index;
+
+	if (_menu == nil || title == nil) {
+		return;
+	}
+	index = fn_popup_index([(NSMenu *)_menu indexOfItemWithTitle:title]);
+	if (index >= 0) {
+		[self removeItemAtIndex:index];
+	}
+}
+
+- (NSArray *)itemTitles
+{
+	NSMutableArray *titles = [NSMutableArray array];
+	NSInteger i, count = [self numberOfItems];
+
+	for (i = 0; i < count; i++) {
+		NSString *title = [self itemTitleAtIndex:i];
+
+		if (title != nil) {
+			[titles addObject:title];
+		}
+	}
+	return titles;
+}
+
+- (NSInteger)indexOfItemWithRepresentedObject:(id)object
+{
+	if (_menu == nil) {
+		return -1;
+	}
+	return fn_popup_index([(NSMenu *)_menu indexOfItemWithRepresentedObject:object]);
+}
+
+- (NSInteger)indexOfItemWithTarget:(id)target andAction:(SEL)actionSelector
+{
+	if (_menu == nil) {
+		return -1;
+	}
+	return fn_popup_index([(NSMenu *)_menu indexOfItemWithTarget:target andAction:actionSelector]);
+}
+
+- (void)selectItem:(id)item
+{
+	[self setSelectedItem:item];
+}
+
+- (BOOL)autoenablesItems
+{
+	return (_menu != nil) ? [(NSMenu *)_menu autoenablesItems] : YES;
+}
+
+- (void)setAutoenablesItems:(BOOL)flag
+{
+	[(NSMenu *)_menu setAutoenablesItems:flag];
+}
+
+- (BOOL)altersStateOfSelectedItem { return _altersStateOfSelectedItem; }
+- (void)setAltersStateOfSelectedItem:(BOOL)flag { _altersStateOfSelectedItem = flag; }
+
+- (BOOL)usesItemFromMenu { return _usesItemFromMenu; }
+- (void)setUsesItemFromMenu:(BOOL)flag
+{
+	_usesItemFromMenu = flag;
+	[self synchronizeTitleAndSelectedItem];
+	[[self controlView] setNeedsDisplay:YES];
+}
+
+- (void)performClickWithFrame:(NSRect)frame inView:(id)view
+{
+	[self attachPopUpWithFrame:frame inView:view];
+}
+
 - (void)removeItemAtIndex:(NSInteger)index
 {
 	if (_menu == nil || index < 0 || index >= [(NSMenu *)_menu numberOfItems]) {
@@ -336,10 +448,12 @@ static NSInteger fn_popup_index(NSInteger menu_index)
 	/* **AND THE ITEMS' `-state` FOLLOWS, because that is the menu's own way of saying which row is chosen** — a
 	 * button wearing one title over a menu showing its tick on another row is the two halves of one fact disagreeing
 	 * in public. `NSMenuItem -state` draws the tick, so this is not bookkeeping: it is the ink. */
-	for (i = 0; i < count; i++) {
-		[[self itemAtIndex:i] setState:(i == index) ? NSOnState : NSOffState];
+	if (!_altersStateOfSelectedItem) {
+		for (i = 0; i < count; i++) {
+			[[self itemAtIndex:i] setState:(i == index) ? NSOnState : NSOffState];
+		}
 	}
-	if (!_pullsDown && _selectedIndex >= 0) {
+	if (_usesItemFromMenu && !_pullsDown && _selectedIndex >= 0) {
 		NSString *title = [self itemTitleAtIndex:_selectedIndex];
 
 		if (title != nil) {
@@ -416,7 +530,7 @@ static NSInteger fn_popup_index(NSInteger menu_index)
 			break;
 		}
 	}
-	if (_selectedIndex >= 0) {
+	if (_usesItemFromMenu && _selectedIndex >= 0) {
 		NSString *title = [self itemTitleAtIndex:_selectedIndex];
 
 		if (title != nil) {
@@ -481,6 +595,12 @@ static NSInteger fn_popup_index(NSInteger menu_index)
 {
 	NSInteger index = [self indexOfItem:sender];
 
+	/* **A PICK CAN TOGGLE THE ROW RATHER THAN BE THE ONLY TICK.** With `-altersStateOfSelectedItem` the chosen item's
+	 * own state flips and the other rows keep theirs, which is how a popup of independent checkmarks behaves; the
+	 * default is a radio-like group where the selection clears the rest. */
+	if (index >= 0 && _altersStateOfSelectedItem) {
+		[(NSMenuItem *)sender setState:([(NSMenuItem *)sender state] == NSOnState) ? NSOffState : NSOnState];
+	}
 	if (index >= 0 && !_pullsDown) {
 		[self selectItemAtIndex:index];
 	}

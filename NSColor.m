@@ -1681,4 +1681,60 @@ static void fn_refuse_catalog(const char *which)
 	return color;
 }
 
+/* ---- THE SPACE DOORS AND -set -------------------------------------------------------------------- */
+
+- (NSColorSpace *)colorSpace
+{
+	CGColorSpaceRef space = (_cgColor != NULL) ? CGColorGetColorSpace(_cgColor) : NULL;
+
+	if (space == NULL) {
+		return nil;
+	}
+	return [[[NSColorSpace alloc] initWithCGColorSpace:space] autorelease];
+}
+
+/* **A NAMED SPACE IS CALIBRATED; AN UNNAMED ONE IS A DEVICE SPACE.** CoreGraphics names the colour spaces it shares and
+ * leaves a per-process device space unnamed, which is exactly the distinction the era's five names draw. The mapping is
+ * the answer, not a guess: `CGColorSpaceCopyName` says which side of it this colour is on. */
+- (NSString *)colorSpaceName
+{
+	CGColorSpaceRef space = (_cgColor != NULL) ? CGColorGetColorSpace(_cgColor) : NULL;
+	CFStringRef engineName;
+	BOOL named;
+	CGColorSpaceModel model;
+
+	if (space == NULL) {
+		return nil;
+	}
+	engineName = CGColorSpaceCopyName(space);
+	named = (engineName != NULL);
+	if (engineName != NULL) {
+		CFRelease(engineName);
+	}
+	model = CGColorSpaceGetModel(space);
+	switch (model) {
+	case kCGColorSpaceModelRGB:
+		return named ? NSCalibratedRGBColorSpace : NSDeviceRGBColorSpace;
+	case kCGColorSpaceModelMonochrome:
+		return named ? NSCalibratedWhiteColorSpace : NSDeviceGrayColorSpace;
+	case kCGColorSpaceModelCMYK:
+		return NSDeviceCMYKColorSpace;
+	default:
+		return nil;
+	}
+}
+
+/* **`-set` IS THE CURRENT CONTEXT'S FILL AND STROKE.** A caller with no context gets nothing rather than a crash: there
+ * is nothing to draw into, and the door's contract is "make this the colour for what I draw next". */
+- (void)set
+{
+	NSGraphicsContext *context = [NSGraphicsContext currentContext];
+	CGContextRef c = (context != nil) ? [context CGContext] : NULL;
+
+	if (c != NULL && _cgColor != NULL) {
+		CGContextSetFillColorWithColor(c, _cgColor);
+		CGContextSetStrokeColorWithColor(c, _cgColor);
+	}
+}
+
 @end
