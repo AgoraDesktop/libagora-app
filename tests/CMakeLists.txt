@@ -1179,3 +1179,14 @@ target_link_libraries(stepper_and_secure PRIVATE App)
 
 add_test(NAME appkit-stepper-and-secure COMMAND stepper_and_secure)
 set_tests_properties(appkit-stepper-and-secure PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
+
+# **THE NIB CONNECTIONS AND THE PASTEBOARD ITEM.** A connector's claim is the graph it joins, so the probe checks the objects
+# on the other side (an outlet through KVC, an action as a real target/selector pair) and that the base class changes
+# nothing. The item is checked as round trips, as LAZINESS (a provider is not asked until its type is read, and is asked once
+# because the answer is cached), and then through `NSPasteboard -writeObjects:` — the writer contract by
+# -respondsToSelector:, which is how a class becomes a writer in a tier that has not got NSPasteboardWriting.
+add_executable(nib_connectors_and_items nib_connectors_and_items.m)
+target_link_libraries(nib_connectors_and_items PRIVATE App)
+
+add_test(NAME appkit-nib-connectors-and-items COMMAND nib_connectors_and_items)
+set_tests_properties(appkit-nib-connectors-and-items PROPERTIES ENVIRONMENT "${_agora_app_test_env}")

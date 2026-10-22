@@ -849,7 +849,19 @@ the compositor is really gone.
   bullets are the width of the password and the caret sits on them; `-echosBullets` defaults YES, and the probe renders the
   field with the flag on and off and compares the ink.
 
-- **`ctest`: 126 of 126 passed** (the keyboard and the seam, the AppKit and its input path, the controls and their
+- **And the NIB CONNECTIONS and the PASTEBOARD ITEM** (`ctest`, offscreen): `NSNibConnector` (8), its two subclasses (1
+  each) and `NSPasteboardItem` (9) — nineteen selectors, four classes, and the tier is at **100 of 168 classes**. A
+  connector holds the two objects and the label, and `-establishConnection` is the base's documented no-op; the OUTLET
+  subclass writes through `-setValue:forKeyPath:` and the CONTROL subclass sets the target/action pair, with the label as
+  the selector NAME. The outlet catches the KVC exception and refuses — because `NSObject` answers
+  `-setValue:forKeyPath:` for every object, so a `-respondsToSelector:` guard cannot tell a view from a string, and
+  `NSNib`'s own connection pass catches the same exception for the same reason. `-replaceObject:withObject:` substitutes a
+  nib's placeholder BY IDENTITY at either end. `NSPasteboardItem` carries several types in order, string and property-list
+  conveniences over the bytes, and a PROVIDER it asks lazily and caches (tested: zero asks until its type is read, one
+  after). It is a writer without declaring `NSPasteboardWriting` — the tier has not got that protocol — because
+  `-writeObjects:` sends the writer contract by `-respondsToSelector:`, so a board accepts an item and carries its string.
+
+- **`ctest`: 127 of 127 passed** (the keyboard and the seam, the AppKit and its input path, the controls and their
   metrics, the field control and its cell and its bezel and its placeholder and what it may hold, the text path and its
   word granularity and the multi-line view and its wrapping and its scrolling and its READING OF THE STORE, the STORE
   the rich-text slice is built on and the REGION it is laid out in and the WEB that ties the three together and the

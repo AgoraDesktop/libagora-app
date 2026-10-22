@@ -8,8 +8,8 @@ spent.*
 *State at handover: **8 commits**, tree clean, **114 tests passing**, `api-ledger: 327 metrics
 hold (82 classes, 2652 selectors of 3517, 23 protocols, 86 functions)`.*
 
-*State after the session that picked it up (§9–§19): **20 commits**, tree clean, **126 tests passing**,
-`api-ledger: 341 metrics hold (96 classes, 2911 selectors of 3650, 23 protocols, 86 functions)`.*
+*State after the session that picked it up (§9–§20): **21 commits**, tree clean, **127 tests passing**,
+`api-ledger: 345 metrics hold (100 classes, 2930 selectors of 3669, 23 protocols, 86 functions)`.*
 
 ---
 
@@ -87,8 +87,8 @@ type's empty value and says on stderr what it wants — `AppKitRefusal.h`), or *
 ## 3. Current measured state
 
 ```
-classes    96 of 168   (57%)    72 missing
-selectors 2911 of 3650 (80%)   739 missing    57 of 94 classes at COMPLETE coverage
+classes   100 of 168   (60%)    68 missing
+selectors 2930 of 3669 (80%)   739 missing    61 of 98 classes at COMPLETE coverage
 protocols  23 of  56   (41%)    33 missing
 functions  86 of  86 (100%)     0 missing     10 refuse by name
 methods  3289 declared, 4 with no body (0.1%)
@@ -268,13 +268,14 @@ predicted: the four ruler commands were the last four selectors it owed.
 
 **Where to go next, re-ranked by reachable surface:**
 
-1. **THE MISSING CLASSES CONTINUE (§17–§19): the colour values, the image reps and the stepper/secure pairs are DONE.**
-   Next by the same argument: the NIB CONNECTORS (`NSNibConnector`, `NSNibOutletConnector`, `NSNibControlConnector` — 10
-   selectors, and `NSNib` already encodes the connections), `NSPasteboardItem` (9, the item-based pasteboard API beside
-   `NSPasteboard`), `NSViewController`'s `NSCollectionViewItem` (3), the three tiny reps left (`NSCIImageRep` is done;
-   `NSImageCell` 6, `NSGlyphInfo` 6, `NSTouch` 6), and `NSFileWrapper` (35 — the RTFD and attachment substrate).
-   After those the surface is the big subsystems the plan names — documents (104 + 51), printing (46 + 41 + 27 + 20), the
-   panels, and the controller family — which want a design rather than a slice.
+1. **THE MISSING CLASSES CONTINUE (§17–§20): the colour values, the image reps, the stepper/secure pairs, the nib
+   connectors and the pasteboard item are DONE — 100 of 168 classes.** Next by the same argument: the three six-selector
+   classes (`NSImageCell` 6, `NSGlyphInfo` 6, `NSTouch` 6), `NSCollectionViewItem` (3), `NSViewController`'s collection-view
+   family (`NSCollectionView` 28 + the item), `NSFileWrapper` (35 — the RTFD and attachment substrate), and the NIB
+   CONNECTORS' missing other half: the `NSPasteboardReading`/`NSPasteboardWriting` PROTOCOLS (two of the 33 missing), which
+   would let `NSPasteboardItem` declare what it already implements by `-respondsToSelector:`. After those the surface is
+   the big subsystems the plan names — documents (104 + 51), printing (46 + 41 + 27 + 20), the panels, and the controller
+   family — which want a design rather than a slice.
 
 2. **`NSLayoutManager` IS COMPLETE (§16) — all 136 selectors — and so are the twelve one-selector-short classes (§15).**
    The manager's last six were the typesetter trio, spelled `id` for the reason §16 records. What is left in the text
@@ -580,3 +581,31 @@ whose *declared* behaviour differed from what a subclass needed (`-cg_lineHeight
 * **THE SECURE FIELD IS ONE OVERRIDE, IN THE DOOR THAT IS BOTH DRAWN AND MEASURED.** `-cg_contentText` is what the base
   draws AND what it measures, so bullets are the width of the password and the caret sits on them by construction. The
   probe renders the field twice (flag on and off) and compares the dark ink: 40 pixels of bullets against 146 of letters.
+
+---
+
+## 20. The nib's connections, and a pasteboard item
+
+*Thirteenth commit of the pickup: `NSNibConnector` and its two subclasses, and `NSPasteboardItem` — 19 selectors, four
+classes. **100 of 168 classes are now present**; complete coverage 57 → 61 of the 98 present classes.*
+
+**THE CONNECTOR IS AN OBJECT BECAUSE A NIB'S CONNECTION IS DATA, AND ITS TWO SUBCLASSES ARE TWO APPLICATIONS.** The base
+holds `source`, `destination` and `label`, and its `-establishConnection` does nothing — Apple's own contract. The outlet
+subclass writes a key path; the control subclass sets a target and an action, with the label as the selector NAME. The
+identity substitution (`-replaceObject:withObject:`) is the loader's door, and it compares by pointer because a nib's
+placeholder is a stand-in OBJECT rather than a name.
+
+**The one that had to catch an exception:** `NSObject` answers `-setValue:forKeyPath:` for EVERY object, so a
+`-respondsToSelector:` guard cannot tell a view with an outlet from a string with none — the only test is the write, and it
+raises. `NSNib`'s own connection pass already catches that exception for that reason; the connector now does too, so a
+defective connection is SKIPPED with a message rather than taking the load down.
+
+**`NSPasteboardItem` is a writer without declaring the protocol it writes by.** `NSPasteboard -writeObjects:` sends
+`-writableTypesForPasteboard:` and `-pasteboardPropertyListForType:` through `-respondsToSelector:` — the file's own stated
+rule, because `NSPasteboardWriting` is a row this tier has not got. So the item implements the two METHODS and a board
+accepts it; the test writes an item and reads its string back off the board. Its provider is asked LAZILY (zero asks until
+its type is read) and the answer is cached (one ask, not two).
+
+**And a runtime detail the test had to learn:** this runtime keeps TYPED selector records, so `NSSelectorFromString("x")`
+and the compiler's `@selector(x)` need not be the same POINTER. A probe comparing actions must compare NAMES; the
+connector's job is the name, which is what a nib's label can promise.

@@ -61,8 +61,8 @@
 #
 # **AND THE MEASURED NUMBERS, RECOMPUTED RATHER THAN EDITED**, so a reader can see the shape without running anything:
 #
-#     classes    96 of 168   (57%)    72 missing
-#     selectors 2911 of 3650  (80%)  739 missing    57 of 94 classes at COMPLETE coverage
+#     classes   100 of 168   (60%)    68 missing
+#     selectors 2930 of 3669  (80%)  739 missing    61 of 98 classes at COMPLETE coverage
 #     protocols  23 of  56   (41%)    33 missing
 #     functions  86 of  86 (100%)     0 missing    10 of them REFUSE BY NAME, which this count does not distinguish
 #                86 declared, 0 declared-not-defined, 0 defined-not-declared
@@ -113,9 +113,9 @@
 # Foundation's in this tree, so it is attributed to Foundation to avoid charging one class to two ledgers. The
 # manifest applies that rule at generation time via its second framework argument; the census never sees it.
 
-classes-missing 72
+classes-missing 68
 classes-offered 168
-classes-present 96
+classes-present 100
 fn:NSAccessibilityActionDescription 1
 fn:NSAccessibilityPostNotification 1
 fn:NSAccessibilityRaiseBadArgumentException 1
@@ -294,7 +294,7 @@ functions-defined-not-declared 0
 functions-missing 0
 functions-offered 86
 functions-present 86
-methods-declared 3332
+methods-declared 3353
 methods-declared-not-implemented 4
 proto:NSAlertDelegate 0
 proto:NSAnimatablePropertyContainer 0
@@ -390,12 +390,16 @@ sel:NSMenuItemCell 23
 sel:NSMenuView 5
 sel:NSMutableParagraphStyle 22
 sel:NSNib 4
+sel:NSNibConnector 8
+sel:NSNibControlConnector 1
+sel:NSNibOutletConnector 1
 sel:NSOutlineView 30
 sel:NSPDFImageRep 7
 sel:NSPICTImageRep 4
 sel:NSPanel 6
 sel:NSParagraphStyle 21
 sel:NSPasteboard 31
+sel:NSPasteboardItem 9
 sel:NSPathCell 26
 sel:NSPathComponentCell 4
 sel:NSPathControl 16
@@ -450,6 +454,6 @@ sel:NSWindow 243
 sel:NSWindowController 26
 sel:NSWorkspace 9
 selectors-missing 739
-selectors-offered 3650
-selectors-present 2911
+selectors-offered 3669
+selectors-present 2930
 selphantom:NSObject 4
