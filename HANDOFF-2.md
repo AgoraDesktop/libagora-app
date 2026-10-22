@@ -31,6 +31,10 @@ census 283.*
 passing**, `api-ledger: 361 metrics hold (117 classes, 3519 selectors of 4112, 34 protocols, 86 functions)`, 96 classes COMPLETE,
 refusal census 286.*
 
+*State after the session that picked THAT up (§18, the input sources): **29 commits**, tree clean, **137 tests passing**,
+`api-ledger: 361 metrics hold (117 classes, 3527 selectors of 4112, 34 protocols, 86 functions)`, 97 classes COMPLETE, refusal
+census 287.*
+
 ---
 
 ## 1. What this session did
@@ -860,3 +864,47 @@ layer enum as Apple's (-1/0/1). The door maps one to the other in one place.
    `-comboBoxSelectionIsChanging:` and `-menu:willHighlightItem:` their sender.
 4. And then the surface is the peripheries the plan named: `NSMatrix`/`NSForm` (a new class, 134 selectors), the
    controller family, printing, colour/font panels.
+
+---
+
+## 18. The input sources: a registry measured with xkbcommon, and the placeholder it replaced
+
+*Twenty-ninth commit of the pickup: `NSTextInputContext` 16/16 — eight selectors, one class COMPLETE. **3527 of 4112
+selectors (85%), 97 of 117 classes complete, 585 missing.** 137 tests.*
+
+**THE REGISTRY IS MEASURED RATHER THAN DECLARED.** Apple's input-source list is a system service; this layer has xkbcommon
+(already linked for the keymap test) and the machine's XKB data, so `+keyboardInputSources` COMPILES A KEYMAP FOR EACH
+CANDIDATE and offers only the ones that build. Nine candidates cover the common Latin layouts plus Russian and Japanese;
+`+setSelectedKeyboardInputSource:` accepts any identifier the machine can build, not only the nine, and REFUSES one it
+cannot by name. The selection defaults to `XKB_DEFAULT_LAYOUT` (the variable the keyboard layer itself reads), then `us`,
+then whatever builds — so the selected input source and the keyboard a person is typing on agree.
+
+**A SETTING NEEDS A READER, AND THIS ONE'S IS THE ORDER.** The chosen layout comes FIRST in `+keyboardInputSources` and in
+an unrestricted `-textInputSources`, so a caller that takes the first source gets the one that was chosen. The context's
+`-setAllowedInputSourceLocales:` then NARROWS that list — a context restricted to `de_DE` offers exactly German — which is
+the second real reader, and `NSAllowsAnyInputSource` is the sentinel that widens it back. `-acceptsGlyphInfo` is the one
+door here that is RECORDED WITHOUT A READER, and the header says so in as many words: the one source this tier ships is a
+keyboard and a keyboard sends no glyph info.
+
+**AND A PLACEHOLDER TWO TESTS HAD PINNED IS GONE.** With no input method installed, `-textInputSources` answered the single
+string `"AgoraKeyboard"` — a stand-in for "there is a keyboard" — and `-selectedInputSource` answered it too. Both now
+answer the registry (and the selected layout), which is Apple's model. `tests/text_input_method.m` and
+`tests/text_input_context.m` moved with it rather than keeping the placeholder alive: a stale assertion is how a
+placeholder becomes an API.
+
+**THE MEASUREMENT'S OWN NOISE IS WORTH KNOWING.** Probing a layout that does not build makes xkbcommon print its include
+paths and "Failed to compile keymap" on stderr, so the refusal for `zz-nonsense` arrives with xkbcommon's own explanation
+above it. That is the library saying why, which is the same preference this tier has; a caller filtering stderr should
+expect it.
+
+### Where the next hour goes, after the input sources
+
+1. **`NSCell` 9 + `NSApplication` 7 = 16** — the field-editor family (`-editWithFrame:…`, `-selectWithFrame:…`,
+   `-endEditing:`, `-fieldEditorForView:`, `-trackMouse:…`) is the design work: the control's session machinery already
+   does this internally, and exposing it without a second session is the problem to solve.
+2. **The shared menu-highlight seam** (§16's note): one door in `NSMenuView` and one delegate send would give both
+   `-comboBoxSelectionIsChanging:` and `-menu:willHighlightItem:` their sender.
+3. **And then the 51 absent classes**, of which the plan's own list names `NSMatrix`/`NSForm` (134 selectors, a real new
+   view), `NSCollectionView` (10.11 only — ruled out by §9.3), the controller family, printing, and the colour/font
+   panels. At 85% of selectors with 97 of 117 classes complete, what is left is mostly WHOLE CLASSES rather than loose
+   doors.

@@ -91,13 +91,18 @@ int main(void)
 		[text release];
 	}
 
-	/* 4. **AND THE SOURCE DOORS NAME THE ONE KEYBOARD THIS TIER HAS.** */
+	/* 4. **AND THE SOURCE DOORS NAME THE KEYBOARD'S LAYOUTS, WHICH ARE THIS TIER'S INPUT SOURCES.** This used to assert
+	 * ONE source — a placeholder string for "there is a keyboard" — and the sweep replaced it with the registry: the
+	 * layouts the machine can build, with the SELECTED one first. See section 6 for the registry's own claims. */
 	{
 		NSText *text = [[NSText alloc] initWithFrame:NSMakeRect(0.0, 0.0, 200.0, 24.0)];
 		NSTextInputContext *context = (NSTextInputContext *)[text inputContext];
+		NSArray *listed = [context textInputSources];
 
-		check([[context textInputSources] count] == 1, "one input source is listed — the stock keyboard");
-		check([context selectedInputSource] != nil, "and it is the selected one");
+		check([listed count] > 0, "the input sources are the keyboard layouts the machine can build");
+		check([[context selectedInputSource] isKindOfClass:[NSString class]] &&
+		      [listed containsObject:[context selectedInputSource]],
+		      "and the selected source is one of them");
 		[text release];
 	}
 
@@ -112,6 +117,85 @@ int main(void)
 		[context discardMarkedText];
 		check(![view hasMarkedText], "and `-discardMarkedText` ends the composition through its client");
 		check([[view string] isEqualToString:@"ab"], "leaving the characters that were composed");
+		[view release];
+	}
+
+	/* ============================================================================================
+	 * 6. AND THE EIGHT THE SWEEP ADDS: THE LAYOUTS THIS MACHINE CAN BUILD, AND THE CONTEXT'S LIMITS.
+	 * ============================================================================================ */
+	{
+		NSArray *sources = [NSTextInputContext keyboardInputSources];
+		NSString *selected;
+		NSTextInputContext *context;
+		NSTextView *view;
+
+		printf("        (layouts this machine can build: %lu)\n", (unsigned long)[sources count]);
+		check(sources != nil && [sources count] > 0,
+		      "`+keyboardInputSources` answers the layouts this machine can build, not an empty list");
+		check([sources containsObject:@"us"],
+		      "which includes the U.S. layout, because a machine with no US keymap could not be a desktop");
+		{
+			NSUInteger i;
+			BOOL allStrings = YES;
+
+			for (i = 0; i < [sources count]; i++) {
+				if (![[sources objectAtIndex:i] isKindOfClass:[NSString class]]) {
+					allStrings = NO;
+				}
+			}
+			check(allStrings, "each source is an identifier string");
+		}
+
+		/* THE SELECTION IS VALIDATED AND ITS READER IS THE ORDER: the chosen layout comes FIRST. */
+		selected = [NSTextInputContext selectedKeyboardInputSource];
+		check(selected != nil, "`+selectedKeyboardInputSource` answers an identifier");
+		check([[sources objectAtIndex:0] isEqualToString:selected],
+		      "and the selected layout is FIRST in the list, which is what makes the selection visible");
+		if ([sources containsObject:@"de"]) {
+			[NSTextInputContext setSelectedKeyboardInputSource:@"de"];
+			check([[NSTextInputContext selectedKeyboardInputSource] isEqualToString:@"de"],
+			      "selecting the German layout takes");
+			check([[[NSTextInputContext keyboardInputSources] objectAtIndex:0] isEqualToString:@"de"],
+			      "and moves it to the front of the list");
+		}
+		[NSTextInputContext setSelectedKeyboardInputSource:@"zz-nonsense"];
+		check(![[NSTextInputContext selectedKeyboardInputSource] isEqualToString:@"zz-nonsense"],
+		      "a layout this machine cannot build is REFUSED rather than selected");
+		[NSTextInputContext setSelectedKeyboardInputSource:@"us"];
+
+		/* AND THE NAME A MENU SHOWS: a known layout's name, and an unknown identifier back rather than a guess. */
+		check([[NSTextInputContext localizedNameForInputSource:@"us"] isEqualToString:@"U.S."],
+		      "`+localizedNameForInputSource:` names a layout the table knows");
+		check([[NSTextInputContext localizedNameForInputSource:@"de_CH"] isEqualToString:@"de_CH"],
+		      "and answers an identifier it does not know rather than inventing a name");
+
+		/* THE CONTEXT'S TWO LIMITS. The locale list narrows `-textInputSources`, and its default allows anything. */
+		view = [[NSTextView alloc] initWithFrame:NSMakeRect(0.0, 0.0, 200.0, 60.0)];
+		context = (NSTextInputContext *)[view inputContext];
+		check([[context allowedInputSourceLocales] containsObject:NSAllowsAnyInputSource],
+		      "a fresh context allows any input source, which is Apple's default");
+		check([[context textInputSources] count] == [sources count],
+		      "so it offers every layout the machine can build");
+		[context setAllowedInputSourceLocales:[NSArray arrayWithObject:@"de_DE"]];
+		check([[context allowedInputSourceLocales] isEqual:[NSArray arrayWithObject:@"de_DE"]],
+		      "`-setAllowedInputSourceLocales:` round-trips");
+		{
+			NSArray *narrowed = [context textInputSources];
+
+			printf("        (restricted to de_DE: %lu source(s))\n", (unsigned long)[narrowed count]);
+			check([narrowed count] <= 1, "a context restricted to de_DE offers at most the German layout");
+			if ([sources containsObject:@"de"]) {
+				check([narrowed isEqual:[NSArray arrayWithObject:@"de"]],
+				      "and offers exactly it — the restriction is BEHAVIOUR, not storage");
+			}
+		}
+		[context setAllowedInputSourceLocales:[NSArray arrayWithObject:NSAllowsAnyInputSource]];
+		check([[context textInputSources] count] == [sources count], "and the sentinel widens it back to every layout");
+
+		/* THE GLYPH-INFO FLAG IS RECORDED, AND THE HEADER SAYS NOTHING HERE READS IT. */
+		check(![context acceptsGlyphInfo], "a fresh context does not accept glyph info, which is the era's default");
+		[context setAcceptsGlyphInfo:YES];
+		check([context acceptsGlyphInfo], "and `-setAcceptsGlyphInfo:` round-trips");
 		[view release];
 	}
 

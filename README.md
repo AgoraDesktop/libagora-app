@@ -94,7 +94,8 @@ tests/
   text_paragraph_style.m        and the PARAGRAPH STYLE: the value object, and the alignment and line-break mode
   text_paragraph_geometry.m     and its GEOMETRY: the indents, the spacings and the line heights the layout reads
   text_attachment.m             and the ATTACHMENT: a character that stands for a picture, and the cell that draws it
-  text_input_context.m          and the INPUT CONTEXT: where a key goes before the view, and where a composition lives
+  text_input_context.m          and the INPUT CONTEXT: where a key goes before the view, where a composition lives, and
+                                the KEYBOARD LAYOUT REGISTRY this machine can actually build
   text_input_method.m           and the METHOD: a dead key composes with the next keystroke, marked until it does
   text_candidate_list.m         and the CANDIDATE LIST: a letter's readings, the window under the caret, and the pick
   text_writing_direction.m      and the BASE DIRECTION: what NATURAL alignment means, and the locale's language direction
@@ -1576,6 +1577,30 @@ line scroll then clamped back to 0 instead of stepping. `-constrainScrollPoint:`
 alone, and a document that ARRIVES is measured against the origin the clip already has (CLAMPED, not centred: a clip
 view that recentred on every `-setDocumentView:` would move a caller's visible region whenever it swapped content).
 `tests/clip_view.m` holds both halves.
+
+### And the input sources are keyboard layouts the machine can actually build
+
+**`NSTextInputContext`'s last eight doors are a REGISTRY MEASURED RATHER THAN DECLARED.** Apple's input-source registry is
+a system service; this layer has xkbcommon and the machine's XKB data, so `+keyboardInputSources` compiles a keymap for
+each candidate layout and offers only the ones that BUILD — a distribution that ships no German layout does not offer
+German, which is the difference between a list of promises and a list of facts. Nine candidates cover the common Latin
+layouts plus Russian and Japanese, and `+setSelectedKeyboardInputSource:` accepts any identifier this machine can build,
+not merely the nine. **THE SELECTION'S READER IS THE ORDER**: the chosen layout comes FIRST in the list, so a caller that
+takes the first source gets the one that was chosen, and a menu built from the array leads with it. The default is
+`XKB_DEFAULT_LAYOUT` when the keyboard layer is using that, then `us`, then whatever builds — so the selected input source
+and the keyboard a person is typing on agree. A layout the machine cannot build is REFUSED BY NAME rather than selected
+and left broken.
+
+**AND THE CONTEXT'S TWO LIMITS ARE BEHAVIOUR.** `-setAllowedInputSourceLocales:` narrows what `-textInputSources` offers:
+a context restricted to `de_DE` offers exactly the German layout and nothing else, and `NSAllowsAnyInputSource` widens it
+back. `-acceptsGlyphInfo` is the input-method contract's flag and is RECORDED, with the header saying plainly that the
+one source this tier ships is a keyboard and a keyboard sends no glyph info — the door exists for the input method written
+against it.
+
+**THIS REPLACED A PLACEHOLDER THAT TWO TESTS HAD PINNED.** With no method installed, `-textInputSources` used to answer the
+single string `"AgoraKeyboard"` — a stand-in for "there is a keyboard" — and `-selectedInputSource` answered it too. Both
+now answer the layout registry (and the selected layout), which is Apple's model, so both claims moved in
+`tests/text_input_method.m` and `tests/text_input_context.m` rather than being worked around.
 
 ### The text layer's remaining doors: the old storage API, a guesser, and a block's own width
 

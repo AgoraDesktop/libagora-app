@@ -62,11 +62,11 @@
 # **AND THE MEASURED NUMBERS, RECOMPUTED RATHER THAN EDITED**, so a reader can see the shape without running anything:
 #
 #     classes   117 of 168   (70%)    51 missing
-#     selectors 3519 of 4112  (85%)  593 missing    96 of 117 classes at COMPLETE coverage
+#     selectors 3527 of 4112  (85%)  585 missing    97 of 117 classes at COMPLETE coverage
 #     protocols  34 of  56   (60%)    22 missing
 #     functions  86 of  86 (100%)     0 missing    10 of them REFUSE BY NAME, which this count does not distinguish
 #                86 declared, 0 declared-not-defined, 0 defined-not-declared
-#     methods   4002 declared on this tree's own classes, 8 with NO body on the chain (0.2%)
+#     methods   4010 declared on this tree's own classes, 8 with NO body on the chain (0.2%)
 #
 # Three things those five lines say together. The 80% on selectors is the strongest part of the tree and the reason a
 # hand count that looked only at filenames undersold it by a factor of two. THE FUNCTIONS ARE FINISHED — 86 of 86, and
@@ -304,7 +304,7 @@ functions-defined-not-declared 0
 functions-missing 0
 functions-offered 86
 functions-present 86
-methods-declared 4002
+methods-declared 4010
 methods-declared-not-implemented 8
 proto:NSAlertDelegate 1
 proto:NSAnimatablePropertyContainer 0
@@ -463,7 +463,7 @@ sel:NSTextBlock 21
 sel:NSTextContainer 17
 sel:NSTextField 30
 sel:NSTextFieldCell 16
-sel:NSTextInputContext 8
+sel:NSTextInputContext 16
 sel:NSTextList 6
 sel:NSTextStorage 25
 sel:NSTextTab 6
@@ -480,7 +480,7 @@ sel:NSViewController 13
 sel:NSWindow 243
 sel:NSWindowController 26
 sel:NSWorkspace 9
-selectors-missing 593
+selectors-missing 585
 selectors-offered 4112
-selectors-present 3519
+selectors-present 3527
 selphantom:NSObject 8

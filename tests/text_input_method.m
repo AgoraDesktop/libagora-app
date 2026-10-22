@@ -60,9 +60,13 @@ int main(void)
 		NSTextInputContext *context = (NSTextInputContext *)[text inputContext];
 		AGInputMethod *method = [[AGInputMethod alloc] init];
 
-		check([[context textInputSources] count] == 1
-		      && [[[context textInputSources] objectAtIndex:0] isEqualToString:@"AgoraKeyboard"],
-		      "with nothing installed the one source is the stock keyboard");
+		/* **THE PLACEHOLDER BECAME THE REGISTRY.** This used to assert ONE source — "AgoraKeyboard", the stand-in for
+		 * "there is a keyboard" — and the sweep replaced it with the layout registry: with no method installed the
+		 * sources are the keyboard layouts this machine can build, and the selected one is among them (see
+		 * `tests/text_input_context.m` for the registry's own claims). */
+		check([[context textInputSources] count] > 0
+		      && [[context textInputSources] containsObject:[context selectedInputSource]],
+		      "with nothing installed the sources are the keyboard's layouts");
 		check([context inputSource] == nil, "and there is no method behind it");
 		[context setInputSource:method];
 		check([context inputSource] == method, "`-setInputSource:` installs the method");
@@ -72,8 +76,8 @@ int main(void)
 		check([[context selectedInputSource] isEqualToString:@"AgoraInputMethod"], "named as the selected one");
 		[context setInputSource:nil];
 		check([context inputSource] == nil
-		      && [[context selectedInputSource] isEqualToString:@"AgoraKeyboard"],
-		      "and uninstalling it restores the stock keyboard");
+		      && [[context textInputSources] containsObject:[context selectedInputSource]],
+		      "and uninstalling it restores the keyboard's layouts");
 		[method release];
 		[text release];
 	}
