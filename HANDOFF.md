@@ -8,8 +8,8 @@ spent.*
 *State at handover: **8 commits**, tree clean, **114 tests passing**, `api-ledger: 327 metrics
 hold (82 classes, 2652 selectors of 3517, 23 protocols, 86 functions)`.*
 
-*State after the session that picked it up (§9–§11): **12 commits**, tree clean, **118 tests passing**,
-`api-ledger: 329 metrics hold (84 classes, 2756 selectors of 3568, 23 protocols, 86 functions)`.*
+*State after the session that picked it up (§9–§12): **13 commits**, tree clean, **119 tests passing**,
+`api-ledger: 329 metrics hold (84 classes, 2774 selectors of 3568, 23 protocols, 86 functions)`.*
 
 ---
 
@@ -88,12 +88,12 @@ type's empty value and says on stderr what it wants — `AppKitRefusal.h`), or *
 
 ```
 classes    84 of 168   (50%)    84 missing
-selectors 2756 of 3568 (77%)   812 missing    33 of 83 classes at COMPLETE coverage
+selectors 2774 of 3568 (78%)   794 missing    33 of 83 classes at COMPLETE coverage
 protocols  23 of  56   (41%)    33 missing
 functions  86 of  86 (100%)     0 missing     10 refuse by name
 methods  3154 declared, 4 with no body (0.1%)
 
-text system:  NSLayoutManager 80/136 · NSTextView 60/186 · NSTextStorage 13/25 · NSTextContainer 17/17
+text system:  NSLayoutManager 98/136 · NSTextView 60/186 · NSTextStorage 13/25 · NSTextContainer 17/17
               NSText 39/39 (COMPLETE) · NSRulerView 32/32 (COMPLETE) · NSRulerMarker 19/19 (COMPLETE)
 ```
 
@@ -268,12 +268,13 @@ predicted: the four ruler commands were the last four selectors it owed.
 
 **Where to go next, re-ranked by reachable surface:**
 
-1. **`NSLayoutManager`'s remaining 56 selectors — temporary attributes and the rect arrays are LANDED (§10, §11).**
-   What is left, by what a caller reaches: the INVALIDATION/ensure family (~8, of which the manager already implements
-   four privately — `invalidateLayoutForCharacterRange:` and friends are public doors over machinery that exists);
-   `getLineFragmentInsertionPointsForCharacterAtIndex:…` (the caret's positions on a line, one writing direction here);
-   the TYPESETTER and glyph-generator setters (~10, mostly declaration + storage); and non-contiguous layout (~4, which
-   this tier's full-layout model answers NO to).
+1. **`NSLayoutManager`'s remaining 38 selectors — temporary attributes, rect arrays and the invalidation family are
+   LANDED (§10–§12).** What is left: the GLYPH STORE's editing doors (`getGlyphsInRange:…`, `setGlyphs:…`,
+   `setLocations:…`, `setLineFragmentRect:…`, ~8 — these write the shadow the glyph store keeps, and each has to decide
+   what a mutation means when the fragments are rebuilt from the store); the TYPESETTER/glyph-generator cluster (~8, which
+   needs `NSTypesetter`/`NSGlyphGenerator`/`NSTypesetterBehavior` to exist first — three of the missing 84 classes); the
+   strike/underline ink pair (~4); `getLineFragmentInsertionPointsForCharacterAtIndex:…`; and the non-contiguous-layout
+   flags (~4, which this tier's full-layout model answers NO to).
 2. **The substitution machinery** (the old §5.2, ~12 doors): the five flags are stored; the tables
    (`userQuotesArrayForLanguage:`, `userReplacementsDictionary`) are what would make typing through them real.
 3. **`NSTextView`'s ruler accessory** — the one door this slice refused. A tab-type control cluster is an
@@ -330,3 +331,32 @@ when the index is not inside one; that is the contract the walk depends on, and 
 * **`withinSelected…` has nothing to decide in this tier**, and the door says so: the breaker produces no extra-line
   fragment for a trailing newline (the newline's glyph belongs to the line it ends), so both selections answer the same
   rects. The branch is kept — the rule is the door's, not the layout's — and the test asserts today's state.
+
+---
+
+## 12. Being told what changed, three ways
+
+*Fifth commit of the pickup: 18 doors — ensure, invalidate, the container tidings, the extra line and two font
+measurements. `NSLayoutManager` is 98 of 136.*
+
+**The three kinds of staleness Apple separates are one in this tier, and the doors still differ in what a caller
+observes.** Glyph, layout and display invalidation all mark the same record (the fragments are rebuilt from the store), so
+the interesting part of the slice is where each one LANDS: the record, the view's damage rect, or a full re-wrap for a
+geometry change. That is also how the test is written — each door is checked where a caller could see it, not by reading
+the flag it set.
+
+**Three smaller decisions, all stated at the door:**
+
+* **`-invalidateLayoutForCharacterRange:isSoft:` records softness in prose and acts on none of it** — Apple's soft
+  invalidation defers the layout of marked text, and this tier already lays out only when asked.
+* **A display invalidation offsets the bounding rect by the container's line-fragment padding** before asking the view,
+  because that is where this tier's text views put their container. The padding is added on BOTH axes, so a view that
+  placed its container elsewhere gets a wider damage rect rather than a wrong one.
+* **`-glyphRangeForBoundingRect:` hits a fragment by its FLOW BAND, not its ink.** A rect that clips the end of an
+  indented line still covers that line, and the used rect would answer "no glyphs here" for the leading space.
+
+**And one thing worth remembering about the tier's own test tools:** `-[NSView display]` is not implemented here (only
+`-displayRect:` and the `-displayIfNeeded…` family), so a probe that wants to clear pending damage before asserting on it
+sets `-setNeedsDisplay:NO`. The first version of this test aborted on the missing door, which is the same class of
+surprise as `-NSTextBlock setWidth:…forEdge:` in §10: a declared door is not an implemented one, and only the probe finds
+out.

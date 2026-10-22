@@ -121,6 +121,11 @@ NS_ASSUME_NONNULL_BEGIN
 	NSMutableArray *_temporaryMarks;	/* RETAINED; FNTextMark objects, sorted by range, non-overlapping */
 	NSRect *_rectArray;		/* OWNED; reallocated per call, freed with the manager */
 	NSUInteger _rectArrayCount;
+	/* **AND THE EXTRA LINE FRAGMENT'S RECORD.** Nothing in this tier's layout writes it; the door that sets it does, and
+	 * the getters answer it, which is what a layout subclass needs to publish the line it made. */
+	NSRect _extraLineRect;
+	NSRect _extraLineUsedRect;
+	NSTextContainer *_extraLineContainer;	/* BORROWED: the container owns no record of it */
 
 }
 
@@ -163,6 +168,79 @@ NS_ASSUME_NONNULL_BEGIN
 
 /* AND THE DOOR EVERYTHING ELSE USES TO MARK A RANGE STALE, which the edit above is spelled in. */
 - (void)invalidateLayoutForCharacterRange:(NSRange)charRange actualCharacterRange:(nullable NSRangePointer)actualCharRange;
+
+/* ==================================================================================================================
+ * THE INVALIDATION AND ENSURE FAMILY — how a caller says "this changed" and "make sure that is laid out".
+ *
+ * **THREE KINDS OF STALENESS, AND ONLY ONE OF THEM IS THIS TIER'S LAYOUT.** Apple separates GLYPH GENERATION (the
+ * shaping), LAYOUT (the line breaking and placement) and DISPLAY (the pixels). This tier regenerates all three together
+ * from the store, on demand — the fragments ARE the layout and the lines carry the glyphs — so the three doors all end in
+ * one invalidation and are separate only because a caller sends them separately. What each one still does on its own is
+ * what the caller can observe: `-invalidateGlyphsOnLayoutInvalidationForGlyphRange:` converts GLYPHS to characters before
+ * marking (its argument is a glyph range and the layout is keyed by characters), and the two DISPLAY doors reach the
+ * container's text view instead of the layout.
+ *
+ * **`-invalidateLayoutForCharacterRange:isSoft:` RECORDS ITS SOFTNESS AND ACTS ON NONE OF IT**, which is stated rather
+ * than implied: a soft invalidation is Apple's deferral for marked text, and this tier already lays out only when asked,
+ * so there is no eager pass to defer.
+ *
+ * **A DISPLAY INVALIDATION ASKS THE VIEW FOR THE BOUNDING RECT**, not for the whole view: the rect is the layout's own
+ * (container coordinates) offset by the container's line-fragment padding, which is where this tier's text views put
+ * their container. A view that places its container elsewhere still gets a correct — if wider — damage rect, because the
+ * rect is grown by the padding on both axes.
+ * ================================================================================================================ */
+
+- (void)ensureGlyphsForCharacterRange:(NSRange)charRange;
+- (void)ensureGlyphsForGlyphRange:(NSRange)glyphRange;
+
+- (void)invalidateGlyphsForCharacterRange:(NSRange)charRange
+			   changeInLength:(NSInteger)delta
+		     actualCharacterRange:(nullable NSRangePointer)actualCharRange;
+- (void)invalidateGlyphsOnLayoutInvalidationForGlyphRange:(NSRange)glyphRange;
+- (void)invalidateLayoutForCharacterRange:(NSRange)charRange
+				 isSoft:(BOOL)flag
+		     actualCharacterRange:(nullable NSRangePointer)actualCharRange;
+- (void)invalidateDisplayForCharacterRange:(NSRange)charRange;
+- (void)invalidateDisplayForGlyphRange:(NSRange)glyphRange;
+
+/* WHAT IS NOT LAID OUT YET, BY REFERENCE — the pair Apple's single-answer doors answer one at a time. */
+- (void)getFirstUnlaidCharacterIndex:(nullable NSUInteger *)charIndex glyphIndex:(nullable NSUInteger *)glyphIndex;
+
+/* **AND WHICH GLYPHS A RECTANGLE COVERS, which is how an editor decides what to redraw from a damage rect.** The
+ * `withoutAdditionalLayout:` spelling is taken and ignored for the same reason the line-fragment pair's is: this tier
+ * lays a container out in full when anything is asked of it. */
+- (NSRange)glyphRangeForBoundingRect:(NSRect)bounds inTextContainer:(NSTextContainer *)container;
+- (NSRange)glyphRangeForBoundingRectWithoutAdditionalLayout:(NSRect)bounds inTextContainer:(NSTextContainer *)container;
+
+/* **AND THE TWO THINGS ABOUT A CONTAINER'S SURROUNDINGS THAT CHANGE A LAYOUT AND A PICTURE.** A geometry change
+ * re-wraps everything; a text-view change is a picture that moved and needs repainting. */
+- (void)textContainerChangedGeometry:(NSTextContainer *)container;
+- (void)textContainerChangedTextView:(NSTextContainer *)container;
+
+/* ==================================================================================================================
+ * THE EXTRA LINE FRAGMENT — the line after a trailing newline, stored and answered.
+ *
+ * **THIS TIER'S BREAKER DOES NOT PRODUCE ONE** (the newline's glyph belongs to the line it ends — see the rect-array
+ * doors' note), so the getters answer what a subclass last set and `NSZeroRect`/nil before that. The pair is not a stub:
+ * a custom layout manager that DOES produce the fragment stores it here and every reader of these doors — including a
+ * view drawing a caret past the last newline — sees what it said.
+ * ================================================================================================================ */
+
+- (NSRect)extraLineFragmentRect;
+- (NSRect)extraLineFragmentUsedRect;
+- (nullable NSTextContainer *)extraLineFragmentTextContainer;
+- (void)setExtraLineFragmentRect:(NSRect)aRect usedRect:(NSRect)usedRect textContainer:(NSTextContainer *)aContainer;
+
+/* ==================================================================================================================
+ * AND THE TWO FONT MEASUREMENTS THE LAYOUT ANSWERS WITHOUT A LAYOUT.
+ *
+ * `-defaultLineHeightForFont:` is the line a font asks for — ascender minus the (negative) descender, plus its leading —
+ * and `-defaultBaselineOffsetForFont:` is where the baseline sits in that line, which is the ascender. They are the
+ * numbers `-cg_lineHeight` uses, asked for one font instead of the manager's own.
+ * ================================================================================================================ */
+
+- (CGFloat)defaultLineHeightForFont:(NSFont *)aFont;
+- (CGFloat)defaultBaselineOffsetForFont:(NSFont *)aFont;
 
 /* **AND THE RECORD, ASKED — THIS TIER'S OWN NAME FOR IT.** Apple exposes the invalidation only through the DELEGATE
  * (there is no getter), and a probe cannot watch a delegate method and also read what it was told about; this door is

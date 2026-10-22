@@ -742,7 +742,18 @@ the compositor is really gone.
   until the next call): one rect per line at the line's height, a caret's zero-width rect, and this tier's layout, which
   produces no extra line fragment for a trailing newline — stated at the door rather than pretended.
 
-- **`ctest`: 118 of 118 passed** (the keyboard and the seam, the AppKit and its input path, the controls and their
+- **And the manager can be TOLD what changed, three ways** (`ctest`, offscreen): the invalidation and ensure family is
+  here. `-ensureGlyphsForCharacterRange:` and its glyph spelling make the layout exist; the three invalidations end in the
+  three places a caller can observe — the stale record (published as `-cg_invalidatedRange`, because Apple exposes it only
+  through the delegate), the TEXT VIEW'S DAMAGE RECT for a display invalidation, and a re-wrap for a container geometry
+  change. `-invalidateGlyphsOnLayoutInvalidationForGlyphRange:` is the one with arithmetic in it: its argument is a GLYPH
+  range and the record is keyed by CHARACTERS, so the test compares what was recorded against `-characterRangeForGlyph*
+  Range:`'s own answer. `-glyphRangeForBoundingRect:inTextContainer:` answers which glyphs a damage rect covers (a rect
+  covering no line is `NSNotFound`), `-textContainerChangedTextView:` repaints the view, the extra line fragment is a
+  stored pair this tier's breaker never produces, and `-defaultLineHeightForFont:`/`-defaultBaselineOffsetForFont:` are
+  the font's own ascender/descender/leading rather than a second line-height constant.
+
+- **`ctest`: 119 of 119 passed** (the keyboard and the seam, the AppKit and its input path, the controls and their
   metrics, the field control and its cell and its bezel and its placeholder and what it may hold, the text path and its
   word granularity and the multi-line view and its wrapping and its scrolling and its READING OF THE STORE, the STORE
   the rich-text slice is built on and the REGION it is laid out in and the WEB that ties the three together and the
@@ -754,7 +765,7 @@ the compositor is really gone.
   what a drag costs, the resize by edge, the tracking engine, the clip view and the scroller and the scroll view and the
   drawn offset and the ruler it can wear and the TEXT RULER whose markers are tab stops and the block rects and
   attachment sizes the layout answers and the temporary-attribute table and the rect arrays, the chrome and what its
-  buttons do, the chrome theme, the menus and activation).
+  buttons do, the chrome theme, the menus and activation, and the manager's own ensure/invalidate doors).
 - **And the desktop's own text is SUB-PIXEL ANTIALIASED**, which is the AppKit's half of a renderer change in
   CoreGraphics: a window's surface is OPAQUE (`kCGImageAlphaNoneSkipFirst`), and the destination's opacity is
   exactly what decides whether a glyph is rasterised in colour. MEASURED on the live session: the window title's

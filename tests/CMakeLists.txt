@@ -1096,3 +1096,13 @@ target_link_libraries(text_temporary_attributes PRIVATE App)
 
 add_test(NAME appkit-text-temporary-attributes COMMAND text_temporary_attributes)
 set_tests_properties(appkit-text-temporary-attributes PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
+
+# **THE MANAGER'S STATE DOORS: ensure, invalidate, and the container tidings.** Three kinds of staleness end in three
+# observable places — the stale record (published as cg_invalidatedRange because Apple has no getter), the text view's
+# damage rect, and a layout that exists — and each is checked where a caller could see it. The glyph→character translation
+# is asserted against the manager's own map, and the two font doors against the font's own numbers.
+add_executable(text_manager_state text_manager_state.m)
+target_link_libraries(text_manager_state PRIVATE App)
+
+add_test(NAME appkit-text-manager-state COMMAND text_manager_state)
+set_tests_properties(appkit-text-manager-state PROPERTIES ENVIRONMENT "${_agora_app_test_env}")

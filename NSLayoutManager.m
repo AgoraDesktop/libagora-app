@@ -4632,3 +4632,210 @@ static NSImage *fn_tab_marker_image(NSTextTabType type)
 }
 
 @end
+
+/* ==================================================================================================================
+ * THE INVALIDATION AND ENSURE FAMILY, THE CONTAINER TIDINGS, THE EXTRA LINE AND TWO FONT MEASUREMENTS.
+ *
+ * The three kinds of staleness this tier has are one: a store edit marks the layout stale and the next question rebuilds
+ * it. So the ensure doors ask for the layout, the glyph and layout invalidation doors mark it, and the display doors go
+ * to the VIEW — which is the only place a pixel can be asked for. The conversion that is not a no-op is the glyph-range
+ * one: a caller names glyphs and the record is keyed by characters, so it translates through the map the manager already
+ * keeps.
+ * ================================================================================================================ */
+
+@implementation NSLayoutManager (AGInvalidation)
+
+- (void)ensureGlyphsForCharacterRange:(NSRange)charRange
+{
+	(void)charRange;
+	/* **A TIER THAT LAYS OUT IN FULL NEEDS NO RANGE.** The question "make sure these characters have glyphs" is answered
+	 * by laying out, and laying out produces every glyph; a partial pass would be a second layout path with nothing to
+	 * gain while the fragments are rebuilt from the store in one walk. */
+	[self cg_ensureLayout];
+}
+
+- (void)ensureGlyphsForGlyphRange:(NSRange)glyphRange
+{
+	(void)glyphRange;
+	[self cg_ensureLayout];
+}
+
+- (void)invalidateGlyphsForCharacterRange:(NSRange)charRange changeInLength:(NSInteger)delta
+		     actualCharacterRange:(NSRange *)actualCharRange
+{
+	/* **THE DELTA IS THE STORE'S ALREADY.** Apple's parameter is the length change the caller made, which the store
+	 * reports through `-textStorage:edited:…`; by the time a caller sends this the string is the new one, so the delta
+	 * changes nothing about WHAT is stale and is recorded only in this comment. */
+	(void)delta;
+	[self invalidateLayoutForCharacterRange:charRange actualCharacterRange:actualCharRange];
+}
+
+- (void)invalidateGlyphsOnLayoutInvalidationForGlyphRange:(NSRange)glyphRange
+{
+	NSRange chars = [self characterRangeForGlyphRange:glyphRange actualGlyphRange:NULL];
+
+	/* The layout is keyed by CHARACTERS, so a caller naming glyphs is translated — which is the one thing this door does
+	 * that the two-character-range door beside it does not. */
+	[self invalidateLayoutForCharacterRange:chars actualCharacterRange:NULL];
+}
+
+- (void)invalidateLayoutForCharacterRange:(NSRange)charRange isSoft:(BOOL)flag
+		     actualCharacterRange:(NSRange *)actualCharRange
+{
+	/* **SOFTNESS IS RECORDED IN THE SENTENCE AND NOWHERE ELSE.** Apple's soft invalidation defers the layout of marked
+	 * text; this tier lays out only when somebody asks, so the deferral is the only behaviour there is. */
+	(void)flag;
+	[self invalidateLayoutForCharacterRange:charRange actualCharacterRange:actualCharRange];
+}
+
+/* **THE DAMAGE RECT IS THE LAYOUT'S, MOVED INTO THE VIEW.** The bounding rect is in container coordinates; this tier's
+ * text views put their container at their own origin plus the line-fragment padding, so the rect is offset by that
+ * padding before the view is asked. A view that put its container somewhere else would get a slightly wrong rect — and
+ * the padding's growth on BOTH axes is what keeps the answer safe rather than merely close. */
+- (void)cg_invalidateDisplayForGlyphRange:(NSRange)glyphRange
+{
+	NSUInteger i;
+
+	[self cg_ensureLayout];
+	for (i = 0; i < [_textContainers count]; i++) {
+		NSTextContainer *container = [_textContainers objectAtIndex:i];
+		NSTextView *view = (NSTextView *)[container textView];
+		NSRect bounds;
+
+		if (view == nil) {
+			continue;
+		}
+		bounds = [self boundingRectForGlyphRange:glyphRange inTextContainer:container];
+		if (NSIsEmptyRect(bounds)) {
+			continue;
+		}
+		{
+			CGFloat padding = [container lineFragmentPadding];
+
+			bounds = NSInsetRect(bounds, -padding, -padding);
+		}
+		[view setNeedsDisplayInRect:bounds];
+	}
+}
+
+- (void)invalidateDisplayForGlyphRange:(NSRange)glyphRange
+{
+	[self cg_invalidateDisplayForGlyphRange:glyphRange];
+}
+
+- (void)invalidateDisplayForCharacterRange:(NSRange)charRange
+{
+	NSRange glyphs = [self glyphRangeForCharacterRange:charRange actualCharacterRange:NULL];
+
+	[self cg_invalidateDisplayForGlyphRange:glyphs];
+}
+
+- (void)getFirstUnlaidCharacterIndex:(NSUInteger *)charIndex glyphIndex:(NSUInteger *)glyphIndex
+{
+	/* THE TWO ANSWERS THIS TIER ALREADY HAS, ASKED TOGETHER — which is what Apple's door is for. */
+	[self cg_ensureLayout];
+	if (charIndex != NULL) {
+		*charIndex = [self firstUnlaidCharacterIndex];
+	}
+	if (glyphIndex != NULL) {
+		*glyphIndex = [self firstUnlaidGlyphIndex];
+	}
+}
+
+- (NSRange)glyphRangeForBoundingRect:(NSRect)bounds inTextContainer:(NSTextContainer *)container
+{
+	NSUInteger index;
+	NSMutableArray *fragments;
+	NSRange range = NSMakeRange(NSNotFound, 0);
+	NSUInteger i;
+
+	if (container == nil) {
+		return range;
+	}
+	index = [_textContainers indexOfObjectIdenticalTo:container];
+	if (index == NSNotFound) {
+		return range;
+	}
+	[self cg_ensureLayout];
+	fragments = [_fragments objectAtIndex:index];
+	for (i = 0; i < [fragments count]; i++) {
+		FNFragment *fragment = [fragments objectAtIndex:i];
+
+		/* **A FRAGMENT IS HIT BY ITS FLOW BAND, NOT ITS INK.** A rect that clips the end of a line still covers that
+		 * line's glyphs, and a caller redrawing a band should be told about the whole line it intersected; the used rect
+		 * would answer "no glyphs here" for the leading space of an indented line. */
+		if (!NSIntersectsRect(fragment->rect, bounds)) {
+			continue;
+		}
+		if (range.location == NSNotFound) {
+			range = fragment->glyphs;
+		} else {
+			NSUInteger lo = MIN(range.location, fragment->glyphs.location);
+			NSUInteger hi = MAX(NSMaxRange(range), NSMaxRange(fragment->glyphs));
+
+			range = NSMakeRange(lo, hi - lo);
+		}
+	}
+	return range;
+}
+
+- (NSRange)glyphRangeForBoundingRectWithoutAdditionalLayout:(NSRect)bounds inTextContainer:(NSTextContainer *)container
+{
+	return [self glyphRangeForBoundingRect:bounds inTextContainer:container];
+}
+
+/* A GEOMETRY CHANGE RE-WRAPS EVERYTHING: the container's size is what the breaker was handed, and in this tier every
+ * container's fragments are rebuilt together, so the whole store is stale rather than the container's share of it. */
+- (void)textContainerChangedGeometry:(NSTextContainer *)container
+{
+	(void)container;
+	[self invalidateLayoutForCharacterRange:NSMakeRange(0, [_textStorage length]) actualCharacterRange:NULL];
+}
+
+/* **AND A VIEW THAT CHANGED IS A PICTURE THAT MOVED.** There is no layout to redo — the geometry is the container's —
+ * so the view is asked to repaint, which is the whole of what this door can mean here. */
+- (void)textContainerChangedTextView:(NSTextContainer *)container
+{
+	NSTextView *view = (NSTextView *)[container textView];
+
+	[view setNeedsDisplay:YES];
+}
+
+- (NSRect)extraLineFragmentRect
+{
+	return _extraLineRect;
+}
+
+- (NSRect)extraLineFragmentUsedRect
+{
+	return _extraLineUsedRect;
+}
+
+- (NSTextContainer *)extraLineFragmentTextContainer
+{
+	return _extraLineContainer;
+}
+
+- (void)setExtraLineFragmentRect:(NSRect)aRect usedRect:(NSRect)usedRect textContainer:(NSTextContainer *)aContainer
+{
+	_extraLineRect = aRect;
+	_extraLineUsedRect = usedRect;
+	_extraLineContainer = aContainer;	/* BORROWED */
+}
+
+- (CGFloat)defaultLineHeightForFont:(NSFont *)aFont
+{
+	if (aFont == nil) {
+		return 0.0;
+	}
+	/* **ASCENDER MINUS A NEGATIVE DESCENDER, PLUS THE LEADING** — the font's own numbers, which is Apple's contract for
+	 * this door and the same arithmetic the layout's baseline uses. */
+	return [aFont ascender] - [aFont descender] + [aFont leading];
+}
+
+- (CGFloat)defaultBaselineOffsetForFont:(NSFont *)aFont
+{
+	return (aFont != nil) ? [aFont ascender] : 0.0;
+}
+
+@end

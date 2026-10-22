@@ -62,13 +62,13 @@
 # **AND THE MEASURED NUMBERS, RECOMPUTED RATHER THAN EDITED**, so a reader can see the shape without running anything:
 #
 #     classes    84 of 168   (50%)    84 missing
-#     selectors 2756 of 3568  (77%)  812 missing    33 of 83 classes at COMPLETE coverage
+#     selectors 2774 of 3568  (78%)  794 missing    33 of 83 classes at COMPLETE coverage
 #     protocols  23 of  56   (41%)    33 missing
 #     functions  86 of  86 (100%)     0 missing    10 of them REFUSE BY NAME, which this count does not distinguish
 #                86 declared, 0 declared-not-defined, 0 defined-not-declared
 #     methods   3134 declared on this tree's own classes, 4 with NO body on the chain (0.1%)
 #
-# Three things those five lines say together. The 77% on selectors is the strongest part of the tree and the reason a
+# Three things those five lines say together. The 78% on selectors is the strongest part of the tree and the reason a
 # hand count that looked only at filenames undersold it by a factor of two. THE FUNCTIONS ARE FINISHED — 86 of 86, and
 # the two disagreement counts are zero — which is why this paragraph no longer calls them the weakest part: it said so
 # when `NSRectFill` was absent, and that sentence was exactly the kind of prose this file's header warns about, still
@@ -294,7 +294,7 @@ functions-defined-not-declared 0
 functions-missing 0
 functions-offered 86
 functions-present 86
-methods-declared 3175
+methods-declared 3193
 methods-declared-not-implemented 4
 proto:NSAlertDelegate 0
 proto:NSAnimatablePropertyContainer 0
@@ -377,7 +377,7 @@ sel:NSFontDescriptor 17
 sel:NSGraphicsContext 28
 sel:NSImage 68
 sel:NSImageRep 33
-sel:NSLayoutManager 80
+sel:NSLayoutManager 98
 sel:NSMenu 64
 sel:NSMenuItem 56
 sel:NSMenuItemCell 21
@@ -438,7 +438,7 @@ sel:NSViewController 13
 sel:NSWindow 243
 sel:NSWindowController 26
 sel:NSWorkspace 9
-selectors-missing 812
+selectors-missing 794
 selectors-offered 3568
-selectors-present 2756
+selectors-present 2774
 selphantom:NSObject 4
