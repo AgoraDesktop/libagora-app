@@ -8,8 +8,8 @@ handoff is still worth reading; nothing in it was wrong, and §2's instrument ru
 *State at this handover: **18 commits**, tree clean, **132 tests passing**, `api-ledger: 355 metrics hold (111 classes,
 3096 selectors of 3835, 28 protocols, 86 functions)`. 101 files changed, +16,946/−140.*
 
-*State after the session that picked this file up (§8–§9): **20 commits**, tree clean, **133 tests passing**, `api-ledger: 357
-metrics hold (113 classes, 3156 selectors of 3895, 29 protocols, 86 functions)`.*
+*State after the session that picked this file up (§8–§10): **21 commits**, tree clean, **134 tests passing**, `api-ledger: 359
+metrics hold (115 classes, 3271 selectors of 4050, 29 protocols, 86 functions)`.*
 
 ---
 
@@ -37,6 +37,7 @@ metrics hold (113 classes, 3156 selectors of 3895, 29 protocols, 86 functions)`.
 | `a23a9b1` | **`NSLevelIndicator`/Cell** — the value that becomes a colour. |
 | `e2e3e52` | **`NSDatePicker`/Cell** and `NSDatePickerCellDelegate` — a formatted date, the subfield a step applies to, the veto; and the stepper's arrows, which pointed inward (§8). |
 | `e7ba264` | **The demonstration's new-controls strip**, and the two `NSBox` title bugs it found (§9). |
+| `0420c08` | **`NSDocument` + `NSDocumentController`** — the file, the change count, the undo wiring, the window controllers and the type table (§10). |
 
 Plus, in the workspace: the gitlink advanced after each of those.
 
@@ -63,23 +64,23 @@ The same discovery retired a misreading: "the largest remaining class is `NSFile
 ## 3. Current measured state
 
 ```
-classes   113 of 168   (67%)    55 missing      (one of them Foundation's — see §2)
-selectors 3156 of 3895 (81%)   739 missing     74 of 113 classes at COMPLETE coverage
+classes   115 of 168   (68%)    53 missing      (one of them Foundation's — see §2)
+selectors 3271 of 4050 (81%)   779 missing     74 of 115 classes at COMPLETE coverage
 protocols  29 of  56   (52%)    27 missing
 functions  86 of  86  (100%)     0 missing      10 refuse by name
-methods  3596 declared, 4 with no body (0.1%)
+methods  3713 declared, 4 with no body (0.1%)
 
 text system:  NSLayoutManager 136/136 (COMPLETE) · NSText 39/39 (COMPLETE) · NSTextView 60/186 ·
               NSTextStorage 13/25 · NSTextContainer 17/17 · NSRulerView 32/32 · NSRulerMarker 19/19
 
-suites: 133 tests, ~60 s;  censuses: api-10.6 (357 metrics), refusal (140), owed (19)
+suites: 134 tests, ~60 s;  censuses: api-10.6 (359 metrics), refusal (143), owed (19)
 ```
 
-The honest reading: **the manager and the text system's geometry are finished; the remaining 55 classes are the peripheries**
-— the document and controller family, the panels (open/save, colour, font, print), the printing objects, the still-missing
-controls (`NSMatrix`, `NSCollectionView`, `NSImageView`), the speech/sound/movie machinery, OpenGL, QuickDraw,
-and the three typesetter classes (`NSTypesetter`, `NSATSTypesetter`, `NSSimpleHorizontalTypesetter`, `NSGlyphGenerator`), which
-Core Text replaces here.
+The honest reading: **the manager and the text system's geometry are finished, and the application model now exists; the
+remaining 53 classes are the peripheries** — the REST of the document family (`NSPersistentDocument`, the controller family),
+the panels (open/save, colour, font, print), the printing objects, the still-missing controls (`NSMatrix`, `NSCollectionView`,
+`NSImageView`), the speech/sound/movie machinery, OpenGL, QuickDraw, and the three typesetter classes (`NSTypesetter`,
+`NSATSTypesetter`, `NSSimpleHorizontalTypesetter`, `NSGlyphGenerator`), which Core Text replaces here.
 
 ---
 
@@ -322,3 +323,59 @@ is what saw them, which is what a demonstration is for.
 **WHAT IS NOT THERE, AND WHY.** `NSImageView`, `NSMatrix`, `NSColorWell`, `NSTokenField`, `NSCollectionView` and `NSDrawer`
 have no class in this tier, so the gallery cannot show them. `NSBrowser` exists but is a columned data view and belongs beside the table
 and outline. Apart from it, the window now shows every control class the 10.6 surface here implements.
+
+---
+
+## 10. The document core: a file, a change count, and the windows that show it
+
+*Twenty-first commit of the pickup: `NSDocument` 74 of 104 selectors and `NSDocumentController` 41 of 51 — 115 selectors,
+two classes. **115 of 168 classes; selectors 3271 of 4050.***
+
+**A DOCUMENT IS A FILE PLUS THE HISTORY OF ITS EDITS.** The probe's `AGDocTextDocument` implements ONLY
+`-readFromData:ofType:error:` and `-dataOfType:error:`; the default `-readFromURL:` builds an `NSFileWrapper` and hands
+`-regularFileContents` to the data door, and `-writeToURL:ofType:error:` asks `-fileWrapperOfType:` for a wrapper around the
+same data and writes it atomically. The probe goes round that loop: untitled → edit → save-as to a temp file → close → open
+with the controller → read the text back → revert from disk → save → close all. A package subclass overrides the wrapper pair
+instead; the 10.3 data hooks (`-loadDataRepresentation:ofType:`/`-dataRepresentationOfType:`) are still tried when the modern
+door declines, which is the one compatibility branch that matters.
+
+**THE CHANGE COUNT HAS TWO SOURCES AND ONE WRITER.** `-updateChangeCount:` is the writer; the document registers for its undo
+manager's did-undo/did-redo notifications, so an action undone takes the count to zero and a redone action brings it back
+without the application calling the door. A save clears it; a revert clears it and empties the undo stack. Every window
+controller is told `-setDocumentEdited:` as the predicate moves.
+
+**THE CONTROLLER IS A CLASS, NOT A GLOBAL.** The base reads `CFBundleDocumentTypes` once (type name, `NSDocumentClass`,
+extensions, Editor role) for `-documentClassForType:`, `-defaultType`, `-displayNameForType:`, `-typeFromFileExtension:` and
+`-typeForContentsOfURL:error:`. The probe's subclass supplies those three answers from a table of its own, so no Info.plist is
+needed and the base's type → class → make/open chain is what is exercised. `-openDocumentWithContentsOfURL:display:error:` adds
+the document, makes its window controllers and notes it recent; opening a URL that is already open answers the SAME document.
+
+**CLOSE-ALL IS SAFE RATHER THAN CLEVER.** There is no unsaved-changes alert in this tier, so if any document is edited,
+`-closeAllDocumentsWithDelegate:didCloseAllSelector:contextInfo:` closes NONE and tells the delegate NO. Discarding edits
+silently is the one failure a close-all must not have; when the alert exists that branch becomes the alert.
+
+**THE PANELS ARE NAMED REFUSALS, NOT HALF-BUILT DOORS.** `-saveDocumentAs:`, `-saveDocumentTo:`,
+`-runModalSavePanelForSaveOperation:…` and `-[NSDocumentController openDocument:]` refuse by name; `-saveDocument:` refuses
+only when the document has no URL (the panel path), and a direct `-saveToURL:ofType:forSaveOperation:error:` is real. The
+refusal census moved 140 → 143 for exactly those three sites.
+
+**TWO FINDINGS WORTH KEEPING.** `NSTemporaryDirectory()` in this tree answers `/System/Temporary Files/`, which does not exist
+on this host — MEASURED, `-createDirectoryAtPath:` failed EACCES and every save then failed ENOENT; the probe names `/tmp`
+itself and the Foundation gap is recorded rather than silently worked around. And **an undo action must register its own
+inverse or the redo stack is EMPTY**: the probe's first `-bump:` action did not, so `-canRedo` was NO after a successful undo
+and the test looked like a document bug. That is the undo manager's model (Apple's too), and the test now registers the inverse.
+
+### Where the next hour goes
+
+1. **`NSSavePanel` (47) + `NSOpenPanel` (15) + `NSOpenSavePanelDelegate`.** The panel pair is what the three refusals above
+   are waiting for, and it makes `-saveDocumentAs:`, `-openDocument:`, `-runModalSavePanelForSaveOperation:` and the
+   document controller's UI actions real. `NSPanel` is 6/6 and sheets exist, so the substrate is present. This is the
+   critical-path continuation, not a new direction.
+2. **The completion sweep** (211 selectors over 23 classes, each ≤15 short) if a one-session, mostly-forward win is wanted:
+   it would take the tree from 74 to ~97 complete classes and 81% to ~86%. It is a polished set of existing controls, not a
+   new capability.
+3. **`NSBrowser`'s 64** for the Workspace's Column view, **`NSWorkspace`'s 49** for the shell's launch/file verbs, or the text
+   editing commands (`NSResponder` 57 + `NSTextView` 126) for the deepest subsystem.
+4. **NOT 10.6 `NSCollectionView`.** §5.2 above predates this session's reading of the plan: §9.3 says the 10.6
+   item-prototype API is deprecated and the 10.11 layout API is the target, so 28 selectors spent on the 10.6 shape would be
+   a façade. The item controller can keep waiting for the layout stack.
