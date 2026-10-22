@@ -8,8 +8,8 @@ handoff is still worth reading; nothing in it was wrong, and §2's instrument ru
 *State at this handover: **18 commits**, tree clean, **132 tests passing**, `api-ledger: 355 metrics hold (111 classes,
 3096 selectors of 3835, 28 protocols, 86 functions)`. 101 files changed, +16,946/−140.*
 
-*State after the session that picked this file up (§8–§10): **21 commits**, tree clean, **134 tests passing**, `api-ledger: 359
-metrics hold (115 classes, 3271 selectors of 4050, 29 protocols, 86 functions)`.*
+*State after the session that picked this file up (§8–§11): **22 commits**, tree clean, **135 tests passing**, `api-ledger: 361
+metrics hold (117 classes, 3332 selectors of 4112, 30 protocols, 86 functions)`.*
 
 ---
 
@@ -38,6 +38,7 @@ metrics hold (115 classes, 3271 selectors of 4050, 29 protocols, 86 functions)`.
 | `e2e3e52` | **`NSDatePicker`/Cell** and `NSDatePickerCellDelegate` — a formatted date, the subfield a step applies to, the veto; and the stepper's arrows, which pointed inward (§8). |
 | `e7ba264` | **The demonstration's new-controls strip**, and the two `NSBox` title bugs it found (§9). |
 | `0420c08` | **`NSDocument` + `NSDocumentController`** — the file, the change count, the undo wiring, the window controllers and the type table (§10). |
+| `13b4928` | **`NSSavePanel` + `NSOpenPanel`** and the delegate — the browser, the filters, the accept, and the document doors they retire (§11). |
 
 Plus, in the workspace: the gitlink advanced after each of those.
 
@@ -64,16 +65,16 @@ The same discovery retired a misreading: "the largest remaining class is `NSFile
 ## 3. Current measured state
 
 ```
-classes   115 of 168   (68%)    53 missing      (one of them Foundation's — see §2)
-selectors 3271 of 4050 (81%)   779 missing     74 of 115 classes at COMPLETE coverage
-protocols  29 of  56   (52%)    27 missing
+classes   117 of 168   (70%)    51 missing      (one of them Foundation's — see §2)
+selectors 3332 of 4112 (81%)   780 missing     75 of 117 classes at COMPLETE coverage
+protocols  30 of  56   (54%)    26 missing
 functions  86 of  86  (100%)     0 missing      10 refuse by name
-methods  3713 declared, 4 with no body (0.1%)
+methods  3802 declared, 8 with no body (0.2%)
 
 text system:  NSLayoutManager 136/136 (COMPLETE) · NSText 39/39 (COMPLETE) · NSTextView 60/186 ·
               NSTextStorage 13/25 · NSTextContainer 17/17 · NSRulerView 32/32 · NSRulerMarker 19/19
 
-suites: 134 tests, ~60 s;  censuses: api-10.6 (359 metrics), refusal (143), owed (19)
+suites: 135 tests, ~60 s;  censuses: api-10.6 (361 metrics), refusal (141), owed (19)
 ```
 
 The honest reading: **the manager and the text system's geometry are finished, and the application model now exists; the
@@ -367,15 +368,78 @@ and the test looked like a document bug. That is the undo manager's model (Apple
 
 ### Where the next hour goes
 
-1. **`NSSavePanel` (47) + `NSOpenPanel` (15) + `NSOpenSavePanelDelegate`.** The panel pair is what the three refusals above
-   are waiting for, and it makes `-saveDocumentAs:`, `-openDocument:`, `-runModalSavePanelForSaveOperation:` and the
-   document controller's UI actions real. `NSPanel` is 6/6 and sheets exist, so the substrate is present. This is the
-   critical-path continuation, not a new direction.
+1. **`NSSavePanel` + `NSOpenPanel`** — LANDED, see §11. The three refusals above are gone and the document family's
+   save-as/export/open now run the panels.
 2. **The completion sweep** (211 selectors over 23 classes, each ≤15 short) if a one-session, mostly-forward win is wanted:
-   it would take the tree from 74 to ~97 complete classes and 81% to ~86%. It is a polished set of existing controls, not a
+   it would take the tree from 75 to ~97 complete classes and 81% to ~86%. It is a polished set of existing controls, not a
    new capability.
 3. **`NSBrowser`'s 64** for the Workspace's Column view, **`NSWorkspace`'s 49** for the shell's launch/file verbs, or the text
    editing commands (`NSResponder` 57 + `NSTextView` 126) for the deepest subsystem.
 4. **NOT 10.6 `NSCollectionView`.** §5.2 above predates this session's reading of the plan: §9.3 says the 10.6
    item-prototype API is deprecated and the 10.11 layout API is the target, so 28 selectors spent on the 10.6 shape would be
    a façade. The item controller can keep waiting for the layout stack.
+
+---
+
+## 11. The panel pair: a file browser that returns a URL, and the doors it retired
+
+*Twenty-second commit of the pickup: `NSSavePanel` 44 of 47, `NSOpenPanel` 15 of 15 (COMPLETE) and `NSOpenSavePanelDelegate`
+— 59 selectors, two classes, one protocol. **117 of 168 classes, 30 of 56 protocols, 75 of 117 complete.***
+
+**ONE BROWSER, TWO PANELS.** The panel is a real `NSPanel` with the era's shape: the directory path and an Up button, the
+directory's entries with `..` at the top, a name field, New Folder, Cancel and the accept button. The listing is directory
+entries sorted with the delegate's deprecated comparator when it answers (directories first), filtered by
+`-panel:shouldShowFilename:`, `-panel:shouldEnableURL:` and — for an open panel only — the extensions in
+`-allowedFileTypes`; a save panel deliberately still shows other files, because it must be able to overwrite one. The probe
+drives a temp directory through selection, navigation (into `sub` and back out through `..`), the allowed type's extension,
+the deprecated `-requiredFileType`'s, a delegate rename, a delegate veto, and an existing file (accepted: there is no
+replacement alert in this tier, and the header says so). `NSOpenPanel` shares the accept path and its four flags answer one
+file, many files, a directory, or a refusal when files cannot be chosen.
+
+**THE THREE RUN FORMS AND THE SESSION'S OWNERSHIP.** `-runModal` runs an application-modal session and returns the code;
+`-beginSheetModalForWindow:completionHandler:` attaches the panel, and `-cg_sheetDidEnd:` orders it out, clears the parent
+and calls the block; `-beginWithCompletionHandler:` shows it modelessly and calls the block when it is dismissed. The sheet
+and modeless forms RETAIN the panel for the session (`cg_retainSession`) and autorelease it at the end, so the
+`+savePanel`-autoreleased object survives the run. The deprecated begin forwards through a block that calls the caller's
+did-end selector with its own IMP.
+
+**THE DOCUMENT DOORS THE PANELS RETIRED.** `-saveDocumentAs:`, `-saveDocumentTo:` and a `-saveDocument:` with no URL now
+build a panel from the document — the file's directory and name (or the controller's directory and "Untitled"), the writable
+types' extensions, a "Save"/"Save As"/"Export" title and prompt — and run it as a sheet when the document has a window, or
+application-modally when it has none. The write goes through the same `-saveToURL:…` the probe already tests. **Export is a
+COPY**: `NSSaveToOperation` writes where the panel says and stops, so the document keeps its URL and type and its change
+count; a save-as makes the file the document's own. `-[NSDocumentController openDocument:]` runs an `NSOpenPanel` filtered by
+the bundle's document types, through the two new doors `-URLsFromRunningOpenPanel` and `-runModalOpenPanel:forTypes:`. The
+refusal census fell 143 → 141: the document's save-panel sites and the controller's open site are real doors now.
+
+**FOUR THINGS THE PROBE PAID FOR.**
+
+* **THIS RUNTIME'S BLOCKS ARE NOT `-copy` OBJECTS.** `[handler copy]` segfaulted inside `objc_msgSend_fpret` in the first
+  sheet run; `Block_copy`/`Block_release` are the house rule the Foundation files already follow (the undo manager and the
+  notification centre both say so). MEASURED, and it cost a debug build to find because the crash names the runtime rather
+  than the line.
+* **`-setDelegate:` MUST RE-READ THE LISTING**, because the filters are the delegate's. A panel whose types and delegate are
+  set after it is built would otherwise show the entries the delegate hides until the next navigation — the probe's
+  `secret.txt` stayed visible.
+* **`NSOKButton`/`NSCancelButton` LIVE IN `NSPanel.h`**, where the tree had neither. They are added there, because a caller
+  comparing `-runModal`'s answer to a bare `1` is exactly what a symbol is for.
+* **THE FOUR 10.2 SAVE-PANEL HOOKS ARE AN `NSObject` CATEGORY**, as Apple declares them, so the bodyless count goes 4 → 8
+  for the same informal-protocol reason the editing hooks did. The census prose now names both sets instead of calling the
+  number "the four".
+
+**NOT DECLARED, AND SAID SO IN THE HEADER:** the expanded save panel (`-isExpanded`/`-setExpanded:`) and file packages
+(`-treatsFilePackagesAsDirectories`), three of the 47 selectors; the panel has one layout and no package metadata. There is
+also no replacement confirmation: an existing file's URL is accepted and the caller's save overwrites it.
+
+### Where the next hour goes, after the panels
+
+1. **The completion sweep** (211 selectors over 23 classes, each ≤15 short) is now the cheapest large win: 75 → ~98 complete
+   classes and 81% → ~86%, almost all forwards. `NSProgressIndicator` 11, `NSButton` 8, `NSPopUpButton(+Cell)` 23,
+   `NSComboBox(+Cell)` 31, `NSScrollView` 12, `NSImage`+`NSImageRep` 16, `NSBrowserCell` 6, `NSStatusItem` 5, `NSMenu` 4,
+   `NSAlert` 7, `NSScroller` 8, `NSCell` 9.
+2. **`NSBrowser`'s 64** for the Workspace's Column view (index paths, type-select, titles, autosave, drag), or **`NSWorkspace`'s
+   49** for the shell's launch/file verbs.
+3. **The text editing commands** (`NSResponder` 57 + `NSTextView` 126) for the deepest subsystem.
+4. **The document/panel leftovers**: `NSDocument` 30 (print, autosave, error presentation, the deprecated file forms) and
+   `NSDocumentController` 8 (`-reviewUnsavedDocuments…`, `-presentError…`, `-autosavingDelay`), and the three panel selectors
+   above. Print and autosave are their own subsystems and are honestly absent rather than half-built.
