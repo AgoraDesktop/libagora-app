@@ -294,4 +294,9 @@
 	return _cachedImage;
 }
 
+- (NSData *)PDFRepresentation
+{
+	return _data;
+}
+
 @end

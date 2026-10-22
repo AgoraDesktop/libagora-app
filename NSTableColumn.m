@@ -311,6 +311,21 @@ static CGFloat fn_column_clamp(NSTableColumn *column, CGFloat width)
 	return _resizingMask;
 }
 
+/* THE BOOLEAN SPELLING OF THE MASK'S USER BIT. See the header. */
+- (BOOL)isResizable
+{
+	return (_resizingMask & NSTableColumnUserResizingMask) != 0;
+}
+
+- (void)setResizable:(BOOL)flag
+{
+	if (flag) {
+		_resizingMask |= NSTableColumnUserResizingMask;
+	} else {
+		_resizingMask &= ~NSTableColumnUserResizingMask;
+	}
+}
+
 /* ---- THE SORT PROTOTYPE, THE TOOL TIP AND HIDDEN ------------------------------------------------ */
 
 - (void)setSortDescriptorPrototype:(NSSortDescriptor *)sortDescriptor

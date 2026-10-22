@@ -68,6 +68,10 @@ typedef NSUInteger NSTextFieldBezelStyle;
 	 * ROUNDED is the default, which is Apple's for a text field — and it is SET rather than left to the zeroing,
 	 * because zero is SQUARE here: the opposite of the button family, where zero is not a bezel style at all. */
 	NSTextFieldBezelStyle _bezelStyle;
+	/* **AND THE INPUT-SOURCE LOCALES A FIELD MAY BE TYPED IN.** Apple's door exists for the input methods a field will
+	 * accept; this tier stores the array and answers it (a field's editing already accepts every input method the window
+	 * has, so the list is a RESTRICTION a caller can record and a subsystem can consult). */
+	NSArray *_allowedInputSourceLocales;	/* RETAINED */
 	/* **AND WHAT AN EMPTY FIELD SAYS IT IS FOR, WHICH IS THE CELL'S RATHER THAN THE CONTROL'S.** Apple declares the
 	 * pair on `NSTextFieldCell`; the control's own `-placeholderString` is a 10.10 addition and stays out with the rest
 	 * of the after-10.6 surface, so a caller reaches through the cell — which is what the demo does. BOTH ARE COPIES,
@@ -217,6 +221,11 @@ typedef NSUInteger NSTextFieldBezelStyle;
  * with the string left as it was — answering whether there was a session to throw away. */
 - (nullable NSText *)cg_currentEditor;
 - (BOOL)cg_abortEditing;
+
+/* THE INPUT-SOURCE LOCALE LIST: stored, answered, and copied with the cell's value semantics. nil means "no
+ * restriction", which is the default and what every field in this tier does. */
+- (nullable NSArray *)allowedInputSourceLocales;
+- (void)setAllowedInputSourceLocales:(nullable NSArray *)localeIdentifiers;
 
 @end
 

@@ -39,6 +39,8 @@
  */
 #import <AppKit/NSEvent.h>
 #import <AppKit/NSTrackingArea.h>
+#import <AppKit/NSApplication.h>
+#import <AppKit/NSWindow.h>
 
 #include "AppKitRefusal.h"	/* fn_refuse_window — the one refusal message, in one place (the .m files
 				 * import it, never the headers: NSView.m, NSWindow.m and NSApplication.m all do). */
@@ -107,6 +109,15 @@ static NSMutableArray *s_monitors;
 @synthesize modifierFlags = _modifierFlags;
 @synthesize timestamp = _timestamp;
 @synthesize windowNumber = _windowNumber;
+
+/* **THE WINDOW IS THE APPLICATION'S REGISTRY'S ANSWER, NOT A POINTER THIS OBJECT KEEPS.** A retained window would keep a
+ * closed window alive for as long as any event that touched it was in flight; the number is the era's own indirection and
+ * the registry is the one place that knows which window still exists. An event with no window answers nil, which is what
+ * the registry says for a number no live window carries. */
+- (NSWindow *)window
+{
+	return [[NSApplication sharedApplication] windowWithWindowNumber:_windowNumber];
+}
 @synthesize context = _context;
 @synthesize locationInWindow = _locationInWindow;
 @synthesize clickCount = _clickCount;

@@ -8,6 +8,7 @@
  * unreachable.
  */
 #import <AppKit/NSScreen.h>
+#import <AppKit/AppKitRefusal.h>
 #import <Foundation/NSArray.h>
 #import <Foundation/NSDictionary.h>
 #import <Foundation/NSNumber.h>
@@ -176,6 +177,15 @@ static AGWindowServer *fn_screen_server(void)
 	/* ONE, BECAUSE NOTHING SCALES HERE: this tree's windows are in pixels and the compositor has one coordinate
 	 * space. A Retina-shaped factor would be a promise about a backing store that does not exist yet. */
 	return 1.0;
+}
+
+/* THE NAMED REFUSAL. See the header: the type is Apple's and the class is not in this tier. */
+- (NSColorSpace *)colorSpace
+{
+	fn_refuse_window("-colorSpace",
+			 "an NSColorSpace, which is one of the classes this tier has not got; the screen's own colour "
+			 "model is CoreGraphics' and is reachable through the display's own doors");
+	return nil;
 }
 
 @end

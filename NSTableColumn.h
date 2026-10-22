@@ -83,6 +83,12 @@ enum {
 - (void)setResizingMask:(NSUInteger)resizingMask;
 - (NSUInteger)resizingMask;
 
+/* **AND THE BOOLEAN SPELLING, WHICH IS THE MASK'S USER BIT RATHER THAN A SECOND FIELD.** Apple's `-isResizable` is "may
+ * the user resize this column", which is exactly `NSTableColumnUserResizingMask`; two fields would be two answers to one
+ * question, and a view that set one while a header drag read the other would resize a column it was told not to. */
+- (BOOL)isResizable;
+- (void)setResizable:(BOOL)flag;
+
 /* THE SORT PROTOTYPE. The header turns a click into a descriptor from this key; nil means the column does not sort. */
 - (void)setSortDescriptorPrototype:(nullable NSSortDescriptor *)sortDescriptor;
 - (nullable NSSortDescriptor *)sortDescriptorPrototype;

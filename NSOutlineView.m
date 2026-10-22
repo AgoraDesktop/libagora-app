@@ -756,4 +756,18 @@ static NSString * const AGCoderOutlineAutosaveKey = @"autosaveExpandedItems";
 	[self fn_selectionDidChangeFrom:before];
 }
 
+/* THE DROP RECORD. See the header: the item is borrowed and -1 in the index means "on the item". */
+- (void)setDropItem:(id)item dropChildIndex:(NSInteger)index
+{
+	_dropItem = item;
+	_dropChildIndex = index;
+	[self setNeedsDisplay:YES];
+}
+
+- (BOOL)shouldCollapseAutoExpandedItemsForDeposited:(BOOL)deposited
+{
+	(void)deposited;
+	return YES;
+}
+
 @end

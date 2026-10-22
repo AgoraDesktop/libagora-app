@@ -62,7 +62,7 @@
 # **AND THE MEASURED NUMBERS, RECOMPUTED RATHER THAN EDITED**, so a reader can see the shape without running anything:
 #
 #     classes    84 of 168   (50%)    84 missing
-#     selectors 2806 of 3568  (79%)  762 missing    33 of 83 classes at COMPLETE coverage
+#     selectors 2823 of 3568  (79%)  745 missing    45 of 83 classes at COMPLETE coverage
 #     protocols  23 of  56   (41%)    33 missing
 #     functions  86 of  86 (100%)     0 missing    10 of them REFUSE BY NAME, which this count does not distinguish
 #                86 declared, 0 declared-not-defined, 0 defined-not-declared
@@ -294,7 +294,7 @@ functions-defined-not-declared 0
 functions-missing 0
 functions-offered 86
 functions-present 86
-methods-declared 3225
+methods-declared 3242
 methods-declared-not-implemented 4
 proto:NSAlertDelegate 0
 proto:NSAnimatablePropertyContainer 0
@@ -358,7 +358,7 @@ protocols-present 23
 sel:NSActionCell 6
 sel:NSAlert 20
 sel:NSApplication 88
-sel:NSBezierPath 71
+sel:NSBezierPath 72
 sel:NSBitmapImageRep 36
 sel:NSBrowser 56
 sel:NSBrowserCell 7
@@ -371,23 +371,23 @@ sel:NSComboBox 22
 sel:NSComboBoxCell 20
 sel:NSControl 37
 sel:NSCursor 35
-sel:NSEvent 64
+sel:NSEvent 65
 sel:NSFont 36
-sel:NSFontDescriptor 17
+sel:NSFontDescriptor 18
 sel:NSGraphicsContext 28
 sel:NSImage 68
 sel:NSImageRep 33
 sel:NSLayoutManager 130
 sel:NSMenu 64
 sel:NSMenuItem 56
-sel:NSMenuItemCell 21
+sel:NSMenuItemCell 23
 sel:NSMenuView 5
-sel:NSMutableParagraphStyle 20
+sel:NSMutableParagraphStyle 22
 sel:NSNib 4
-sel:NSOutlineView 28
-sel:NSPDFImageRep 6
+sel:NSOutlineView 30
+sel:NSPDFImageRep 7
 sel:NSPanel 6
-sel:NSParagraphStyle 20
+sel:NSParagraphStyle 21
 sel:NSPasteboard 31
 sel:NSPathCell 26
 sel:NSPathComponentCell 4
@@ -399,7 +399,7 @@ sel:NSResponder 88
 sel:NSRunningApplication 17
 sel:NSRulerMarker 19
 sel:NSRulerView 32
-sel:NSScreen 9
+sel:NSScreen 10
 sel:NSScrollView 43
 sel:NSScroller 15
 sel:NSSearchField 4
@@ -412,7 +412,7 @@ sel:NSSpellChecker 29
 sel:NSSplitView 18
 sel:NSStatusBar 5
 sel:NSStatusItem 25
-sel:NSTableColumn 27
+sel:NSTableColumn 29
 sel:NSTableHeaderCell 2
 sel:NSTableHeaderView 7
 sel:NSTableView 103
@@ -420,8 +420,8 @@ sel:NSText 39
 sel:NSTextAttachment 5
 sel:NSTextBlock 11
 sel:NSTextContainer 17
-sel:NSTextField 29
-sel:NSTextFieldCell 14
+sel:NSTextField 30
+sel:NSTextFieldCell 16
 sel:NSTextInputContext 8
 sel:NSTextList 6
 sel:NSTextStorage 13
@@ -438,7 +438,7 @@ sel:NSViewController 13
 sel:NSWindow 243
 sel:NSWindowController 26
 sel:NSWorkspace 9
-selectors-missing 762
+selectors-missing 745
 selectors-offered 3568
-selectors-present 2806
+selectors-present 2823
 selphantom:NSObject 4

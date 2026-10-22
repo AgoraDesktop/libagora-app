@@ -215,6 +215,12 @@ NS_ASSUME_NONNULL_BEGIN
 - (NSAffineTransform *)matrix;
 - (nullable NSFontDescriptor *)fontDescriptorWithMatrix:(nullable NSAffineTransform *)matrix;
 
+/* **AND THE CLASS DOOR THAT BUILDS ONE FROM A NAME AND A MATRIX**, which is the pair Apple gives a caller starting from
+ * nothing rather than deriving from an existing descriptor. It composes the two measured facts: the name is
+ * `kCTFontNameAttribute` and the matrix is the data `fn_matrix_data` packs. */
++ (nullable NSFontDescriptor *)fontDescriptorWithName:(nullable NSString *)fontName
+					      matrix:(nullable NSAffineTransform *)matrix;
+
 /* **THE DESCRIPTOR'S STYLE DOOR, COMPOSED RATHER THAN DUPLICATED**: the font answers the style, and the descriptor
  * is that font's own `-fontDescriptor` — so the two doors cannot disagree about which face a style names, which is
  * the whole reason this one is written through the other. */

@@ -8,8 +8,8 @@ spent.*
 *State at handover: **8 commits**, tree clean, **114 tests passing**, `api-ledger: 327 metrics
 hold (82 classes, 2652 selectors of 3517, 23 protocols, 86 functions)`.*
 
-*State after the session that picked it up (§9–§14): **15 commits**, tree clean, **121 tests passing**,
-`api-ledger: 329 metrics hold (84 classes, 2806 selectors of 3568, 23 protocols, 86 functions)`.*
+*State after the session that picked it up (§9–§15): **16 commits**, tree clean, **122 tests passing**,
+`api-ledger: 329 metrics hold (84 classes, 2823 selectors of 3568, 23 protocols, 86 functions)`.*
 
 ---
 
@@ -88,7 +88,7 @@ type's empty value and says on stderr what it wants — `AppKitRefusal.h`), or *
 
 ```
 classes    84 of 168   (50%)    84 missing
-selectors 2806 of 3568 (79%)   762 missing    33 of 83 classes at COMPLETE coverage
+selectors 2823 of 3568 (79%)   745 missing    45 of 83 classes at COMPLETE coverage
 protocols  23 of  56   (41%)    33 missing
 functions  86 of  86 (100%)     0 missing     10 refuse by name
 methods  3154 declared, 4 with no body (0.1%)
@@ -268,7 +268,8 @@ predicted: the four ruler commands were the last four selectors it owed.
 
 **Where to go next, re-ranked by reachable surface:**
 
-1. **`NSLayoutManager` has SIX selectors left, and they are one cluster: the typesetter trio.** `typesetter`,
+1. **The twelve one-selector-short classes are DONE (§15), and only the typesetter trio blocks the manager.**
+   `NSLayoutManager` has SIX selectors left: `typesetter`,
    `setTypesetter:`, `glyphGenerator`, `setGlyphGenerator:`, `typesetterBehavior`, `setTypesetterBehavior:`. They block on
    three classes the tier has not got — `NSTypesetter`, `NSGlyphGenerator` and `NSTypesetterBehavior` — so the next move is
    to import those types (declaration, an enum, and storage) or to declare the six doors and refuse them by name. Everything
@@ -417,3 +418,40 @@ one line, and the test that found it is the one that counts pixels: plain draw 0
   door's name promises a BOUNDARY rather than the common case.
 * `-showPackedGlyphs:…` refuses by name (the pre-10.4 `NSPackedGlyphs` encoding is not a `CGGlyph` array) and
   `-substituteFontForFont:` answers the font itself (no screen-font variants).
+
+---
+
+## 15. The loose ends: twelve classes, seventeen doors
+
+*Eighth commit of the pickup: everything that was a selector or two short, so the "almost complete" list is empty.
+Complete coverage went from 33 to 45 of the 83 present classes.*
+
+| Class | Doors | What it does |
+|---|---|---|
+| `NSEvent` | `-window` | the application's registry lookup by number — the class it names exists now, so §4's note about the instrument is retired |
+| `NSFontDescriptor` | `+fontDescriptorWithName:matrix:` | the name and matrix attributes composed, and read back through `-matrix` |
+| `NSPDFImageRep` | `-PDFRepresentation` | the bytes it parsed, not a re-encode |
+| `NSParagraphStyle` / `NSMutableParagraphStyle` | `-headerLevel`, `-setHeaderLevel:`, `-setParagraphStyle:` | stored, copied, and carried by the bulk assignment (whose arrays are copies) |
+| `NSScreen` | `-colorSpace` | **refused by name**: `NSColorSpace` is not in this tier |
+| `NSTextField` | `-setTitleWithMnemonic:` | the era's marker rule: `&&` → `&`, a single `&` dropped |
+| `NSMenuItemCell` | `-menuView`/`-setMenuView:` | borrowed back-pointer |
+| `NSOutlineView` | `-setDropItem:dropChildIndex:`, `-shouldCollapseAutoExpandedItemsForDeposited:` | the drop record (and a redraw) and a policy that answers YES |
+| `NSTableColumn` | `-isResizable`/`-setResizable:` | the mask's USER bit, so the boolean and a header drag cannot disagree |
+| `NSTextFieldCell` | `-allowedInputSourceLocales`/setter | stored, copied with the cell |
+| `NSBezierPath` | `-setAssociatedPoints:atIndex:` | **refused by name**: a CGPath is append-only, the same reason its unindexed twin gives |
+
+**What this slice learned to be careful about, twice:**
+
+* **`@end` IS NOT A UNIQUE ANCHOR IN A HEADER.** A door appended before a file's LAST `@end` landed inside the
+  `NSTextFieldDelegate` PROTOCOL — it compiled, and the warning was one line in a `-may not respond` note. The lesson is
+  the §4 placement trap in a new place: anchor on a unique ADJACENT LINE, and check that the door is inside the class the
+  header is about.
+* **A PROPERTY DECLARED ON THE BASE CLASS MUST BE IMPLEMENTED ON THE BASE CLASS.** `-headerLevel` was written into
+  `@implementation NSMutableParagraphStyle` (next to the other setters) and the first `[style headerLevel]` on a copied
+  style aborted with "not implemented": a copy of a mutable style is still answered by the base implementation's
+  `-copy`, and the base class did not have the getter. The fix is placement, not logic.
+
+**And one honest gap recorded in the test rather than papered over:** the event's window has NO positive case headlessly.
+A window's number is assigned when its surface is made, which needs a compositor, so `-windowNumber` answers -1 and the
+registry is empty. The probe asserts the CONTRACT — the door is exactly the application's lookup for the number — and says
+why a live window cannot appear in it.

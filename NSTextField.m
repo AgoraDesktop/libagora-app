@@ -383,4 +383,28 @@
 	}
 }
 
+/* THE MARKER RULE, ONCE: `&&` is a literal `&`, a single `&` is dropped. See the header. */
+- (void)setTitleWithMnemonic:(NSString *)title
+{
+	NSMutableString *plain = [NSMutableString string];
+	NSUInteger i = 0;
+
+	while (title != nil && i < [title length]) {
+		unichar c = [title characterAtIndex:i];
+
+		if (c == '&') {
+			if (i + 1 < [title length] && [title characterAtIndex:i + 1] == '&') {
+				[plain appendString:@"&"];
+				i += 2;
+				continue;
+			}
+			i += 1;	/* the mnemonic marker itself, which this tier has nothing to bind */
+			continue;
+		}
+		[plain appendFormat:@"%C", c];
+		i += 1;
+	}
+	[self setStringValue:plain];
+}
+
 @end

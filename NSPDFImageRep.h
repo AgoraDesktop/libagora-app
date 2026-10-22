@@ -52,6 +52,12 @@ NS_ASSUME_NONNULL_BEGIN
 /* THE CURRENT PAGE'S CROP BOX, ORIGIN AT ZERO — the rectangle `-drawInRect:` maps the page into. */
 @property (readonly) NSRect bounds;
 
+/* **THE BYTES THE REP WAS MADE FROM, WHICH IS WHAT A WRITE PATH NEEDS.** `NSPDFImageRep` is the one image rep whose
+ * source is a document rather than pixels, so a caller serialising a pasteboard entry or an RTFD package asks for the
+ * document back rather than a re-encode. The rep holds the data it parsed, so the answer is that object — the SAME bytes,
+ * not a copy — and nil for a rep that was not made from data (which this class cannot be, but the door's type allows). */
+- (nullable NSData *)PDFRepresentation;
+
 @end
 
 NS_ASSUME_NONNULL_END

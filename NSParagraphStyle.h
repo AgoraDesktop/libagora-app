@@ -100,6 +100,11 @@ typedef NSUInteger NSLineBreakMode;
 	 * cell. The array is retained; `NSParagraphStyle` is a value, so the blocks in it are copied with it. */
 	NSArray *_textBlocks;	/* RETAINED */
 	NSArray *_textLists;	/* RETAINED */
+	/* **AND THE OUTLINE LEVEL, WHICH IS A PARAGRAPH PROPERTY APPLE KEEPS FOR HTML IMPORT.** 0 is body text, 1..6 are the
+	 * HTML `<h1>`..`<h6>` levels; the value is stored, copied with the style and answered, and nothing in this tier's
+	 * layout consults it because a header level is a document STRUCTURE rather than a shape — that is stated so a reader
+	 * does not go looking for the code that indents it. */
+	NSInteger _headerLevel;
 }
 
 /* **ONE SHARED DEFAULT, WHICH IS APPLE'S OWN DOOR AND THE REASON A RUN WITH NO STYLE STILL HAS ONE.** The default has
@@ -166,6 +171,9 @@ typedef NSUInteger NSLineBreakMode;
  * answers an EMPTY ARRAY rather than nil, which is what `-textBlocks` already does beside it and what a caller iterating
  * one expects. */
 - (NSArray *)textLists;
+
+/* THE OUTLINE LEVEL. See the ivar's note: stored and answered, and not consulted by the layout. */
+- (NSInteger)headerLevel;
 - (void)setTextLists:(NSArray *)textLists;
 
 @end
@@ -195,6 +203,12 @@ typedef NSUInteger NSLineBreakMode;
 - (void)setTextBlocks:(NSArray *)textBlocks;
 - (void)addTextBlock:(NSTextBlock *)textBlock;
 - (void)removeTextBlock:(NSTextBlock *)textBlock;
+
+/* **AND THE TWO DOORS THAT ARE THIS CLASS'S ALONE.** `-setHeaderLevel:` is the mutable twin of the read door, and
+ * `-setParagraphStyle:` copies EVERY property of another style into the receiver — the bulk assignment a caller uses to
+ * apply a template, and the one place where the value semantics are visible: the arrays are copied, not shared. */
+- (void)setHeaderLevel:(NSInteger)level;
+- (void)setParagraphStyle:(NSParagraphStyle *)style;
 @end
 
 NS_ASSUME_NONNULL_END

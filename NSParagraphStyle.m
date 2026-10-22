@@ -108,6 +108,7 @@ static NSParagraphStyle *fn_defaultParagraphStyle = nil;
 		_hyphenationFactor = style->_hyphenationFactor;
 		_tighteningFactorForTruncation = style->_tighteningFactorForTruncation;
 		_defaultTabInterval = style->_defaultTabInterval;
+		_headerLevel = style->_headerLevel;
 		/* **AND THE BLOCKS ARE COPIED, not shared**, because a paragraph style is a value: a caller that changed an
 		 * array it had handed to a store would be changing the document behind the store's back. The array is immutable
 		 * and every block in it is copied. */
@@ -243,12 +244,48 @@ static NSParagraphStyle *fn_defaultParagraphStyle = nil;
 	return (_textBlocks != nil) ? _textBlocks : [NSArray array];
 }
 
+- (NSInteger)headerLevel
+{
+	return _headerLevel;
+}
+
+
 @end
 
 @implementation NSMutableParagraphStyle
 
 /* THE SETTERS ARE ONE ASSIGNMENT EACH, because the value is already validated by its TYPE — an alignment is one of five
  * cases and a distance is a CGFloat, so there is nothing here to refuse. */
+- (void)setHeaderLevel:(NSInteger)level { _headerLevel = level; }
+
+/* **THE BULK ASSIGNMENT, PROPERTY BY PROPERTY.** Every scalar is an assignment; the three arrays go through this class's
+ * own copying setters, so a caller that later changed the source style's blocks cannot reach into the receiver. */
+- (void)setParagraphStyle:(NSParagraphStyle *)style
+{
+	if (style == nil || style == self) {
+		return;
+	}
+	_alignment = style->_alignment;
+	_lineBreakMode = style->_lineBreakMode;
+	_baseWritingDirection = style->_baseWritingDirection;
+	_lineHeightMultiple = style->_lineHeightMultiple;
+	_maximumLineHeight = style->_maximumLineHeight;
+	_minimumLineHeight = style->_minimumLineHeight;
+	_firstLineHeadIndent = style->_firstLineHeadIndent;
+	_headIndent = style->_headIndent;
+	_tailIndent = style->_tailIndent;
+	_lineSpacing = style->_lineSpacing;
+	_paragraphSpacing = style->_paragraphSpacing;
+	_paragraphSpacingBefore = style->_paragraphSpacingBefore;
+	_hyphenationFactor = style->_hyphenationFactor;
+	_tighteningFactorForTruncation = style->_tighteningFactorForTruncation;
+	_defaultTabInterval = style->_defaultTabInterval;
+	_headerLevel = style->_headerLevel;
+	[self setTabStops:style->_tabStops];
+	[self setTextBlocks:style->_textBlocks];
+	[self setTextLists:style->_textLists];
+}
+
 - (void)setAlignment:(NSTextAlignment)alignment { _alignment = alignment; }
 - (void)setLineBreakMode:(NSLineBreakMode)lineBreakMode { _lineBreakMode = lineBreakMode; }
 - (void)setBaseWritingDirection:(NSWritingDirection)baseWritingDirection { _baseWritingDirection = baseWritingDirection; }

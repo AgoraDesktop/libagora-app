@@ -142,6 +142,12 @@ NS_ASSUME_NONNULL_BEGIN
 - (void)textDidEndEditing:(NSNotification *)notification;
 - (void)textDidChange:(NSNotification *)notification;
 
+/* **THE DEPRECATED MNEMONIC DOOR, WHICH IS REAL BECAUSE ITS RULE IS SIMPLE.** Apple deprecated it in 10.0 (use
+ * `-setStringValue:`), and its behaviour is not a stub: the marker is `&`, a doubled `&&` is one literal ampersand, and a
+ * single one introduces the mnemonic character and is REMOVED from the title. Since this tier has no keyboard-mnemonic
+ * machinery, the visible half is the whole of it. */
+- (void)setTitleWithMnemonic:(nullable NSString *)title;
+
 @end
 
 /* **AND THE TWO FLAGS ABOUT WHAT THIS FIELD MAY HOLD, IN THE CATEGORY APPLE PUTS THEM IN.**
@@ -166,6 +172,7 @@ NS_ASSUME_NONNULL_BEGIN
  * which is a narrower and truer statement than re-listing seven methods that already exist one header over. It is
  * declared HERE because Apple declares it here, which is the rule the whole tree follows. */
 @protocol NSTextFieldDelegate <NSControlTextEditingDelegate>
+
 @end
 
 NS_ASSUME_NONNULL_END

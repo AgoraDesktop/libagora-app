@@ -46,6 +46,7 @@
  * header here would close that circle. The forward declaration is all this header needs — every use of the type in it
  * is a pointer. */
 @class NSTrackingArea;
+@class NSWindow;
 
 /* THE EVENT TYPES. A plain C enum plus a typedef, which is what Apple's own header does — `NSEventType`
  * is not an NS_ENUM in the 10.6 header and does not become one here, because the era is the ground. */
@@ -308,11 +309,11 @@ NS_ASSUME_NONNULL_BEGIN
  * `_charactersIgnoringModifiers`, `_context` and `_vendorDefined` are RETAINED, and `_context` is an
  * NSGraphicsContext, which this tree has — so its header is imported rather than forward-declared.
  *
- * AND ONE MEMBER IS DELIBERATELY ABSENT FOR A REASON WORTH RECORDING: `-window` and `-windowNumber` are
- * a pair, and only the NUMBER is here. `NSWindow` does not exist yet, and this ledger's instrument counts
- * a `@class` FORWARD DECLARATION as declaring the class — so naming NSWindow in this header would credit
- * NSWindow's own class row, which is the §58 over-crediting family in yet another shape and a defect in
- * the instrument rather than in Apple's spelling. The number is stored; the object comes with stage C.
+ * **AND `-window` IS HERE NOW, BECAUSE `NSWindow` IS.** The pair was split while the class did not exist — this
+ * ledger's instrument counted a `@class` FORWARD DECLARATION as declaring the class, so naming NSWindow in this header
+ * would have credited NSWindow's own row (the §58 over-crediting family, a defect in the instrument rather than in
+ * Apple's spelling). The class exists, the number was always stored, and the object is the application's registry
+ * lookup — so the door answers what Apple's does and the note that explained its absence is retired.
  * THE SAME RULE DECIDES THREE MORE DECLARATIONS BELOW, and each says so where it stands: `-trackingArea`
  * answers `id`, the touch door takes a word-sized phase and an `id` view, and the two CGEvent doors are
  * spelled with a `void *` — because `NSTrackingArea`, `NSTouchPhase` and `CGEventRef` are names whose class
@@ -382,6 +383,9 @@ NS_ASSUME_NONNULL_BEGIN
 @property (readonly) NSUInteger modifierFlags;
 @property (readonly) NSTimeInterval timestamp;
 @property (readonly) NSInteger windowNumber;
+/* **AND THE WINDOW THE NUMBER NAMES, WHEN IT NAMES ONE.** An event with no window (a global mouse move, a periodic tick)
+ * answers nil; the number is 0 for those, and the application's registry has no window with that number. */
+- (nullable NSWindow *)window;
 @property (readonly, nullable) NSGraphicsContext *context;
 @property (readonly) NSPoint locationInWindow;
 @property (readonly) NSInteger clickCount;

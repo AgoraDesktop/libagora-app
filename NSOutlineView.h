@@ -91,6 +91,11 @@ extern NSString *NSOutlineViewItemDidCollapseNotification;
 	BOOL _indentationMarkerFollowsCell;
 	BOOL _autoresizesOutlineColumn;
 	BOOL _autosaveExpandedItems;
+	/* **AND THE DROP TARGET, WHICH IS A RECORD RATHER THAN A GESTURE.** `-setDropItem:dropChildIndex:` is what a data
+	 * source (or the table's own drag path) says before the rows are redrawn: WHICH item the drop would land on and WHICH
+	 * child index it would take. The item is borrowed — the tree owns its items — and -1 in the index means "on the item". */
+	id _dropItem;			/* NOT RETAINED */
+	NSInteger _dropChildIndex;
 }
 
 - (void)setDataSource:(nullable id <NSOutlineViewDataSource>)aSource;
@@ -132,6 +137,16 @@ extern NSString *NSOutlineViewItemDidCollapseNotification;
 /* THE EXPANSION FLAGS THIS SLICE RECORDS BUT DOES NOT PERSIST. */
 - (BOOL)autosaveExpandedItems;
 - (void)setAutosaveExpandedItems:(BOOL)save;
+
+/* **THE DROP TARGET, SET AND NOT DRAWN.** Apple's door records where a drag would land so the table can draw its
+ * insertion indicator; this tier records the pair so a data source and a subclass can read it back, and the indicator
+ * itself is the table row drawing's, which follows the same record when it arrives. */
+- (void)setDropItem:(nullable id)item dropChildIndex:(NSInteger)index;
+
+/* **AND THE AUTO-EXPANDED COLLAPSE QUESTION, WHICH IS A POLICY THE APP ANSWERS.** Apple's default is YES (items a drag
+ * expanded are collapsed again when it ends); `deposited` distinguishes a completed drop from a cancelled one, and both
+ * answer YES here because this tier has no auto-expansion to collapse — the flag is the app's to override. */
+- (BOOL)shouldCollapseAutoExpandedItemsForDeposited:(BOOL)deposited;
 
 @end
 

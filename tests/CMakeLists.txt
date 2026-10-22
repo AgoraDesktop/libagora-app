@@ -1126,3 +1126,14 @@ target_link_libraries(text_glyph_bulk PRIVATE App)
 
 add_test(NAME appkit-text-glyph-bulk COMMAND text_glyph_bulk)
 set_tests_properties(appkit-text-glyph-bulk PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
+
+# **TWELVE CLASSES THAT WERE A SELECTOR OR TWO SHORT.** Each door is checked where a caller sees it: the event's window is
+# the registry's answer, the descriptor's matrix reads back through its own matrix door, the PDF rep answers the bytes it
+# parsed, the paragraph style carries its outline level through a copy and through -setParagraphStyle:, the field strips
+# the mnemonic marker, and the column's boolean IS the mask bit. The two refusals (indexed bezier points, the screen's
+# colour space) are asserted as UNCHANGED STATE rather than as stderr output.
+add_executable(appkit_loose_ends appkit_loose_ends.m)
+target_link_libraries(appkit_loose_ends PRIVATE App)
+
+add_test(NAME appkit-loose-ends COMMAND appkit_loose_ends)
+set_tests_properties(appkit-loose-ends PROPERTIES ENVIRONMENT "${_agora_app_test_env}")

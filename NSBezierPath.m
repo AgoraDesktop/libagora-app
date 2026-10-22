@@ -1149,6 +1149,16 @@ static void fn_rev_emit(CGMutablePathRef out, const fn_rev_elem *r)
 			"is no element to rewrite (read them with -elementAtIndex:associatedPoints: instead)\n");
 }
 
+/* THE INDEXED SPELLING OF THE SAME REFUSAL. See the header: naming an element does not make a CGPath rewritable. */
+- (void)setAssociatedPoints:(NSPointArray)points atIndex:(NSInteger)index
+{
+	(void)points;
+	fprintf(stderr, "APPKIT-REFUSE: -setAssociatedPoints:atIndex: rewrites the points of an existing element "
+			"(index %ld) and this class adds straight to a CGMutablePathRef — a CGPath is append-only, so "
+			"there is no element to rewrite (read them with -elementAtIndex:associatedPoints: instead)\n",
+			(long)index);
+}
+
 /* ---- THE FOUR GLYPH DOORS, EACH REFUSED BY NAME ---------------------------------------------- *
  * Every one of them needs a FONT: three take an `NSFont` outright and the fourth takes the glyphs a font
  * would have produced. NSFont is stage F's largest class and the glyph-outline machinery lives there, so

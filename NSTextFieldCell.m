@@ -104,6 +104,7 @@ static NSString * const AGCoderFieldPlaceholderAttributedKey = @"placeholderAttr
 	[_textColor release];
 	[_placeholderString release];
 	[_placeholderAttributedString release];
+	[_allowedInputSourceLocales release];
 	[super dealloc];
 }
 
@@ -758,6 +759,20 @@ static NSString * const AGCoderFieldPlaceholderAttributedKey = @"placeholderAttr
 	NSTextMovement movement = (raw != nil) ? (NSTextMovement)[raw integerValue] : NSTextMovementOther;
 
 	[self fn_finishEditing:[notification object] keep:(movement != NSTextMovementCancel) movement:movement];
+}
+
+- (NSArray *)allowedInputSourceLocales
+{
+	return _allowedInputSourceLocales;
+}
+
+- (void)setAllowedInputSourceLocales:(NSArray *)localeIdentifiers
+{
+	NSArray *held = (localeIdentifiers != nil)
+		? [[NSArray alloc] initWithArray:localeIdentifiers copyItems:YES] : nil;
+
+	[_allowedInputSourceLocales release];
+	_allowedInputSourceLocales = held;
 }
 
 @end

@@ -39,6 +39,16 @@ static NSColor *fn_item_ink(BOOL enabled, BOOL highlighted);
 
 @implementation NSMenuItemCell
 
+- (id)menuView
+{
+	return _menuView;
+}
+
+- (void)setMenuView:(id)menuView
+{
+	_menuView = menuView;	/* NOT RETAINED: the view owns its cells, so a retain here would be a cycle */
+}
+
 /* ============================================================================================
  * ARCHIVING: THE ONE DESIGN FACT, NOT THE FOUR MEASUREMENTS.
  * ============================================================================================ */

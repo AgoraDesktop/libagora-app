@@ -381,6 +381,22 @@ static NSData *fn_matrix_data(NSAffineTransform *transform)
 		[NSDictionary dictionaryWithObject:data forKey:(NSString *)kCTFontMatrixAttribute]];
 }
 
+/* THE CLASS DOOR: a name attribute and a matrix attribute in one descriptor, which is the same composition
+ * `-fontDescriptorWithMatrix:` performs on an existing one. A nil name or a nil matrix is nil, as the header states. */
++ (NSFontDescriptor *)fontDescriptorWithName:(NSString *)fontName matrix:(NSAffineTransform *)matrix
+{
+	NSData *data = fn_matrix_data(matrix);
+	NSMutableDictionary *attributes;
+
+	if (fontName == nil || data == nil) {
+		return nil;
+	}
+	attributes = [NSMutableDictionary dictionary];
+	[attributes setObject:fontName forKey:(NSString *)kCTFontNameAttribute];
+	[attributes setObject:data forKey:(NSString *)kCTFontMatrixAttribute];
+	return [self fontDescriptorWithFontAttributes:attributes];
+}
+
 - (NSFontDescriptor *)fontDescriptorWithSize:(CGFloat)newPointSize
 {
 	return [self fontDescriptorByAddingAttributes:

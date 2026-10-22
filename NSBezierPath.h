@@ -310,6 +310,12 @@ extern const NSBezierPathElement NSLineToBezierPathElement;
  * like it had moved it. */
 - (void)setAssociatedPoints:(nullable NSPointArray)points;
 
+/* **AND THE INDEXED SPELLING REFUSES FOR THE SAME REASON, NOT A SECOND ONE.** `-setAssociatedPoints:atIndex:` names the
+ * element to rewrite, which changes WHICH element a caller is asking about and not WHETHER the substrate can rewrite one:
+ * a CGPath is append-only, so there is still no element to reach. Apple's 10.6 header declares the pair together; so does
+ * this one, and both doors say the same thing on stderr. */
+- (void)setAssociatedPoints:(nullable NSPointArray)points atIndex:(NSInteger)index;
+
 - (void)fill;
 - (void)stroke;
 

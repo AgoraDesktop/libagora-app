@@ -28,6 +28,7 @@ NS_ASSUME_NONNULL_BEGIN
 @class NSArray;
 @class NSDictionary;
 @class NSString;
+@class NSColorSpace;
 
 /* **AND `-depth` IS HERE NOW, BECAUSE ITS ENCODING IS NO LONGER A GUESS.** It was left out while
  * `NSBitsPerPixelFromDepth` and its family were unwritten, because a packed value with a guessed encoding and no
@@ -63,6 +64,15 @@ NS_ASSUME_NONNULL_BEGIN
 /* AND THE USER'S NAME FOR IT, plus the deprecated scale factor the era's code asks for. */
 @property (readonly, copy) NSString *localizedName;
 @property (readonly) CGFloat userSpaceScaleFactor;
+
+/* **THE SCREEN'S COLOUR SPACE IS NAMED AND REFUSED.** Apple answers an `NSColorSpace`, and `NSColorSpace` is one of the
+ * classes this tier has not got — so the door takes its Apple type, answers nil (the empty value of a pointer) and says on
+ * stderr what is missing. Declaring it keeps a caller's compile line intact and the refusal honest; inventing a colour
+ * space object would be worse than saying no.
+ *
+ * `@class` IS ENOUGH HERE AND IS NOT AN OVER-CREDIT: the census counts a class present when the tree DEFINES it, and this
+ * header only names the type a door's signature needs. */
+- (nullable NSColorSpace *)colorSpace;
 
 @end
 

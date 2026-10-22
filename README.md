@@ -782,7 +782,22 @@ the compositor is really gone.
   per glyph, `-substituteFontForFont:` answers the font itself, and `-showPackedGlyphs:…` refuses the pre-10.4
   `NSPackedGlyphs` encoding by name.
 
-- **`ctest`: 121 of 121 passed** (the keyboard and the seam, the AppKit and its input path, the controls and their
+- **And TWELVE CLASSES THAT WERE A SELECTOR OR TWO SHORT are finished** (`ctest`, offscreen). `NSEvent -window` is the
+  application registry's lookup (the number was always stored; the class it names now exists, so the note that explained
+  its absence is retired). `+[NSFontDescriptor fontDescriptorWithName:matrix:]` composes the two measured attributes and
+  the test reads the matrix back through `-matrix`. `NSPDFImageRep -PDFRepresentation` answers the bytes the rep parsed —
+  the same object, not a re-encode. `NSParagraphStyle -headerLevel` (and the mutable `-setHeaderLevel:`/`-setParagraphStyle:`)
+  carries the outline level through a copy and through the bulk assignment, whose arrays are copies. `NSTextField
+  -setTitleWithMnemonic:` implements the era's marker rule (`&&` is one literal `&`, a single `&` is dropped).
+  `NSTableColumn -isResizable` IS the mask's user bit rather than a second field, so the boolean and a header drag cannot
+  disagree. `NSMenuItemCell -menuView`, `NSOutlineView -setDropItem:dropChildIndex:` (with its redraw) and
+  `-shouldCollapseAutoExpandedItemsForDeposited:`, and `NSTextFieldCell -allowedInputSourceLocales` are stored and
+  answered. TWO DOORS REFUSE BY NAME and the test asserts unchanged state rather than stderr: `NSBezierPath
+  -setAssociatedPoints:atIndex:` (a CGPath is append-only, which is the same reason its unindexed twin gives) and
+  `NSScreen -colorSpace` (`NSColorSpace` is not in this tier). The refusal census moved 141 → 142 because the bezier
+  refusal is an inline literal, and that is a deliberate edit.
+
+- **`ctest`: 122 of 122 passed** (the keyboard and the seam, the AppKit and its input path, the controls and their
   metrics, the field control and its cell and its bezel and its placeholder and what it may hold, the text path and its
   word granularity and the multi-line view and its wrapping and its scrolling and its READING OF THE STORE, the STORE
   the rich-text slice is built on and the REGION it is laid out in and the WEB that ties the three together and the

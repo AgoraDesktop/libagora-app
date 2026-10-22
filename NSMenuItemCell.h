@@ -58,6 +58,9 @@ NS_ASSUME_NONNULL_BEGIN
 	/* NOT RETAINED, AND THAT IS APPLE'S ARRANGEMENT: a cell belongs to the menu view it draws in and points AT
 	 * the item it draws, so retaining here would make the item and its cell own each other. */
 	id _menuItem;
+	/* **AND THE VIEW THAT DRAWS IT, BORROWED FOR THE SAME REASON.** Apple declares the pair on this cell so a menu view can
+	 * hand its cells a way back to itself; a retained view would make the menu view and its cells own each other. */
+	id _menuView;
 	/* THE FOUR WIDTHS `-calcSize` FILLS IN, and the two flags that say whether anything needs doing: `-needsSizing`
 	 * is what makes `-calcSize` cheap to call often, and `-needsDisplay` is what the drawing doors consult. */
 	CGFloat _stateImageWidth;
@@ -144,6 +147,10 @@ NS_ASSUME_NONNULL_BEGIN
  * published, so there is no schema to read, which is the same reason every other archived object in this tier
  * refuses. */
 - (nullable instancetype)initWithCoder:(NSCoder *)coder;
+
+/* THE MENU VIEW THIS CELL DRAWS IN, which is the cell's back-pointer to its host. Borrowed: the view owns its cells. */
+- (nullable id)menuView;
+- (void)setMenuView:(nullable id)menuView;
 
 @end
 
