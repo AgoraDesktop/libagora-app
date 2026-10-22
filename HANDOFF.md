@@ -1,0 +1,215 @@
+# libagora-app — a handoff
+
+*Written at the end of a session that built the AppKit's function layer, the API census that
+measures it, and the first four slices of the text system. It is written for whoever picks the
+tree up next: what exists, what it cost to make trustworthy, and where the next hour is best
+spent.*
+
+*State at handover: **8 commits**, tree clean, **114 tests passing**, `api-ledger: 327 metrics
+hold (82 classes, 2652 selectors of 3517, 23 protocols, 86 functions)`.*
+
+---
+
+## 1. What this session did
+
+| Commit | What it landed |
+|---|---|
+| `f4d0581` | **The function layer** — 86 of 86 non-inline 10.6 C functions (10 refuse by name), plus `tools/api-ledger`, the committed SDK manifest, and the census gate. |
+| `0e62918` | `NSLayoutManager` **fragment queries** (7 selectors): what is laid out, which container holds a glyph, `withoutAdditionalLayout:` forms. |
+| `bc82650` | **Glyph↔character mapping** (7): the cluster-table doors, on machinery the tree already had. |
+| `f929843` | **The glyph store** (15): per-glyph records as a *shadow* of the layout, with real field mutation and three count-changing refusals. |
+| `da6afbd` | **`NSSpellChecker`** (29 of 39) over the machine's own dictionary, plus the 18 `NSTextView` doors it unblocks. |
+| `325de1b` | **The squiggle** — underline doors on the manager, and `-setSpellingState:range:` reaching the pixels. |
+| `a54fed4` | **Finding** — `NSFindPanelAction`, next/previous with wrap, and a static find indicator. |
+| `c1f3b3e` | Housekeeping: a committed `.pyc` removed and ignored. |
+
+67 files, ~15.4k lines. Two new test binaries per slice on average; 114 tests in total.
+
+---
+
+## 2. The instrument, which is the real deliverable
+
+**Before this session the tree had no way to answer "how much of the AppKit do we have?"** Three
+hand counts gave 4%, 44% and 54%, each measuring a different thing. That is now recomputable.
+
+```
+tools/api-ledger manifest <framework-dir> [<other> ...]      -> the SDK's facts, as a file
+tools/api-ledger census   <manifest> <src> [--library <so>] -> "name count" metrics
+tools/api-ledger check    <manifest> <src> <census> [--library <so>]
+tools/api-ledger missing  <manifest> <src> [--library <so>] -> what is absent, ranked
+```
+
+| Artifact | What it is |
+|---|---|
+| `api/10.6/appkit-manifest.txt` | 5,519 lines of **facts** from the real 10.6 SDK: 168 classes + superclasses, 56 protocols, 87 functions, 5,208 selectors. No Apple prose, no redistributable headers. |
+| `api/10.6/README.md` | The recipe to regenerate it (`phracker/MacOSX-SDKs`), and the two-measurements explanation. |
+| `tests/api-10.6-census.txt` | 436 lines of pinned metrics — eight aggregates, one `sel:` line per shared class, `fn:`/`fndecl:` per function, `selphantom:` per class that declares a body it never built. |
+| `tests/api_census.cmake` | The gate: two-directional comparison, arithmetic check, and two **fault** checks that are not drift. |
+| `tools/api-ledger` | 695 lines of parser. All the parsing lives here; CMake keeps the comparison visible. |
+
+**Run it:**
+
+```sh
+cd libagora-app/build && cmake .. && make -j4 App
+ctest -R appkit-api-census --output-on-failure
+cd .. && ./tools/api-ledger missing api/10.6/appkit-manifest.txt . --library build/libagora-app.so
+```
+
+### What it measures, and the four things it learned to stop getting wrong
+
+* **A function counts when `nm -D --defined-only` reports it**, not when a header mentions it.
+  `functions-declared` is kept beside it, and the two disagreement counts
+  (`functions-declared-not-defined`, `functions-defined-not-declared`) are checked as **faults**,
+  because neither is a number to move. This is what caught five depth functions that had been
+  declared since `NSGraphics.h` was written, called by `NSScreen`, and **never defined** — the
+  shared library carried unresolved references to four of them.
+* **Inheritance is resolved** (the plan's §2.4 requirement). Not doing so reported
+  `NSTextView 0 of 130` for a class that inherits its editing surface from `NSText`.
+* **`methods-declared-not-implemented`** turns the same question on *this tree*: 2,989 declared
+  selectors, **4 with no body on the chain** — all four informal-protocol hooks on `NSObject`.
+  Its measurement history is the argument for keeping it: **1,138 → 118 → 47 → 4**, each step a
+  reader blind spot, not a change in the tree (subclass-summed; `@synthesize`; `getter=`; the
+  tree's `FN_FLAG_PAIR` accessor macros). Each is documented at the code that fixed it.
+* **`functions-offered` is 86, not 87**, because `NSEventMaskFromType` is `NS_INLINE` — a bodied
+  door that is *supposed* to have no symbol.
+
+### The disposition vocabulary
+
+Every door is one of: **real** (does what Apple documents), **refused by name** (answers its
+type's empty value and says on stderr what it wants — `AppKitRefusal.h`), or **pinned debt**
+(a count in a census that may only move deliberately). 10 of the 86 functions refuse.
+
+---
+
+## 3. Current measured state
+
+```
+classes    82 of 168   (49%)    86 missing
+selectors 2652 of 3517 (75%)   865 missing    31 of 81 classes at COMPLETE coverage
+protocols  23 of  56   (41%)    33 missing
+functions  86 of  86 (100%)     0 missing     10 refuse by name
+methods  2989 declared, 4 with no body (0.1%)
+
+text system:  NSLayoutManager 57/136 · NSTextView 46/186 · NSTextStorage 13/25 · NSTextContainer 17/17
+```
+
+The honest reading: **the desktop core is deep, the periphery is empty, and the functions are
+done.** The remaining 86 classes are dominated by the 10.6 debts the plan named — documents,
+open/save panels, printing, the controller family, colour/font panels — plus the post-10.6 pile
+(`NSCollectionView` layouts, `NSAppearance`, gestures) that is *not owed* under the current pin.
+
+---
+
+## 4. Traps this session paid for, so the next one need not
+
+**Parser traps** (all documented in `tools/api-ledger`'s header, with the wrong answer each produced):
+
+* A pattern that consumed the delimiter after a name put `m.end()` past the `;`, so a forward
+  declaration was read as a definition and swallowed a 113-selector class block.
+* `^\s*([-+])` line-anchored matching plus `m.start()` gives an **empty prefix** — the `typedef`
+  and `inline` guards were dead code for three revisions because the prefix ran to the line start.
+* `@synthesize`, `@property (getter=isHidden)`, and `FN_FLAG_PAIR(setOneShot, isOneShot, _iv)`
+  all create accessors with **no method line to find**. Any new metric must decide about all three.
+
+**Foundation traps** — `libagora-base` is a from-scratch reimplementation, not Apple's:
+
+* `-[NSSet member:]` is a **linear scan**. Inserting 100k dictionary words is quadratic and hangs;
+  `NSSpellChecker` uses an open-addressed C hash set instead. **Check what an operation costs
+  before using it for bulk data.**
+* `NSMutableSet` is not a map: looking a tag up with `-member:` silently misses (an `NSMutableSet`
+  can never be `isEqual:` to an `NSNumber`). That was the ignore-list bug.
+* `NSBitmapImageRep -colorAtX:y:` indexes rows from the **opposite end** to the drawing
+  coordinates. Five confident wrong test failures came from that; the sampler now converts once.
+
+**Test traps:**
+
+* A one-point dotted rule on a fractional y is **antialiased**. A "near-pure colour" assertion
+  calls a correct line absent; ask whether the colour *dominates* instead.
+* Sampling one pixel to assert a *region's* property is the same class of bug as counting a
+  substring — the segmented-control test sampled a pixel inside the letter `B` and called the
+  plate wrong.
+* Several tests are **region** assertions on purpose: the nine-part image composer fills all 768
+  pixels of its frame and nothing outside it, which fails if any corner, edge or centre is wrong.
+
+**Placement traps** (four occurrences, one cause):
+
+Inserting a declaration into an existing header or implementation is where this session lost the
+most time. `NS_ASSUME_NONNULL_END` sits **after `@end`** in most headers here, so inserting before
+it puts methods outside the class; ivar blocks end with a bare `}` that is easy to overshoot; and
+appending to a `.m` lands after the last `@end`. **Anchor on a unique adjacent line, verify the
+result compiles before writing more, and never `git checkout --` a file that carries intended
+changes** (that mistake wiped 36 declarations once and had to be rebuilt by hand).
+
+---
+
+## 5. Where to spend the next hour
+
+Ranked by reachable surface per unit of work, with entry points.
+
+### 5.1 `NSRulerView` — 15 `NSTextView` doors + 2 `NSLayoutManager` ones
+
+The last piece of the text system that is **geometry** (which this tree now does well) rather than
+a new subsystem. One class, plus `NSRulerMarker`.
+
+* Declare `NSRulerView.h`/`.m`; `NSTextView` gains `rulerView:didAddMarker:`, `…didMoveMarker:`,
+  `…didRemoveMarker:`, `…handleMouseDown:`, `…willMoveMarker:`, and `isRulerVisible` /
+  `setRulerVisible:`; the manager gains `rulerAccessoryViewForTextView:paragraphStyle:ruler:enabled:`
+  and `rulerMarkersForTextView:paragraphStyle:ruler:`.
+* The markers are tab stops, which `NSTextTab` and `NSParagraphStyle` already carry.
+
+### 5.2 The substitution machinery — ~12 doors, and the tables already exist
+
+The five flags are stored (`_automaticQuoteSubstitution`, …). What is missing is the *tables*:
+`NSSpellChecker` has `userQuotesArrayForLanguage:` and `userReplacementsDictionary`. Wire typing
+through them and the `toggle*Substitution:` pair becomes visible behaviour instead of a stored bit.
+
+### 5.3 `NSLayoutManager` text-block and attachment rects — 11 doors
+
+`boundsRectForTextBlock:atIndex:effectiveRange:`, `layoutRectForTextBlock:glyphRange:`,
+`attachmentSizeForGlyphAtIndex:`, `showAttachmentCell:inRect:characterIndex:`. The boxes exist
+(`FNBox`, `cg_drawBlocksForGlyphRange:`); these doors expose what is already computed.
+
+### 5.4 Leave these as declared refusals
+
+* **Sharing/links** (10 in `NSTextView`) — need a services registry the tree has no equivalent of.
+* **Grammar** — `checkGrammarOfString:` needs an engine that does not exist on this platform.
+* **OpenGL, QuickDraw, movies** — the plan's A11: declare and refuse, ~2 days total, no reachable
+  surface gained.
+
+---
+
+## 6. How to add a slice without breaking the instruments
+
+1. **Measure first**: `./tools/api-ledger missing …` tells you the cluster sizes, so you pick by
+   reachable surface rather than by name recognition.
+2. **Write the header declaration where Apple declares it**, inside the `@interface`.
+3. **Implement**, and make every deviation a comment at the door: what it does not do, and why.
+   A refusal that answers its type's empty value beats a stub that looks implemented.
+4. **Test the claim, not the code**: pixel tests for drawing, round trips for mappings, and a
+   *negative* assertion wherever the positive one could pass for the wrong reason (unmarked view
+   draws no red; second draw leaves no find ring).
+5. **Let the gate fail** (`ctest -R appkit-api-census`), then re-pin `tests/api-10.6-census.txt`
+   in the same commit and say in the message what moved. That failure is the instrument working.
+6. **Run the whole suite**: `cd build && ctest -j4` — it is 50 seconds, and there is no excuse.
+
+If a metric's meaning changes (as `functions-present` did, from declared to defined), the gate
+will report drift in every affected line. That is correct: re-pin deliberately.
+
+---
+
+## 7. Two things a reader should not have to rediscover
+
+* **A CENSUS'S METRICS ARE PINNED AND ITS PROSE IS NOT.** `tests/api-10.6-census.txt` carries hand-written summary
+  lines above the 436 metrics; this session left one of them reading "80 declared" for three slices after the number
+  became 86, and the gate did not notice, because a comment is not a metric. A warning now sits beside that block.
+  When re-pinning, recompute the prose from `api-ledger census` instead of editing it by eye.
+* **The censuses are claims, and they are checked in both directions per file.** Changing one is a
+  deliberate act with a diff. `tests/refusal_census.txt` (141) and `tests/owed_census.txt` (19)
+  count what the tree says it *cannot* do; `tests/api-10.6-census.txt` counts what it *can*. Both
+  kinds drift the same way, which is why `claims_census.cmake` holds them identically — and why it
+  now strips comment lines before splitting, because a semicolon in prose used to fragment the
+  census into a line that was not `file count`.
+* **The refusal census only counts inline `APPKIT-REFUSE` literals.** Doors that call the shared
+  `fn_refuse_window` helper — which is most of the new ones — are invisible to it. Ten function
+  refusals and a handful of method refusals therefore do not appear in the 141. If that matters,
+  the fix is a second needle for `fn_refuse_window(` call sites, not a bigger comment.

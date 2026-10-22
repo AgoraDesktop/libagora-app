@@ -33,6 +33,11 @@
 # inherits most of its surface from `NSText`, which is the single most instructive false negative this instrument has
 # produced.
 #
+# **AND THE COMMENT LINES IN THIS BLOCK ARE PROSE, WHICH IS TO SAY THEY CAN GO STALE.** The metrics below are pinned
+# and the gate fails if one moves; the four lines above are hand-written summaries of them, and this file carried
+# "80 declared" for three slices after the number became 86 — the gate did not notice, because a comment is not a
+# metric. Recompute them when you re-pin, from `api-ledger census`, rather than editing the numbers by eye.
+#
 # **A FUNCTION COUNTS WHEN IT IS A SYMBOL, NOT WHEN A HEADER MENTIONS IT.** `functions-present` is answered by
 # `nm -D --defined-only` on the built library, which is the question a caller's link line asks; `functions-declared`
 # is the header count kept beside it, and the two disagreement counts are pinned at zero because neither is drift.
@@ -60,7 +65,7 @@
 #     selectors 2652 of 3517  (75%)  865 missing    31 of 81 classes at COMPLETE coverage
 #     protocols  23 of  56   (41%)    33 missing
 #     functions  86 of  86 (100%)     0 missing    10 of them REFUSE BY NAME, which this count does not distinguish
-#                80 declared, 0 declared-not-defined, 0 defined-not-declared
+#                86 declared, 0 declared-not-defined, 0 defined-not-declared
 #     methods   2989 declared on this tree's own classes, 4 with NO body on the chain (0.1%)
 #
 # Three things those four lines say together. The 74% on selectors is the strongest part of the tree and the reason
