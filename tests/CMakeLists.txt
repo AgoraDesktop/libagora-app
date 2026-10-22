@@ -1157,3 +1157,14 @@ target_link_libraries(color_and_shadow PRIVATE App)
 add_test(NAME appkit-color-and-shadow COMMAND color_and_shadow)
 set_tests_properties(appkit-color-and-shadow PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
 
+
+# **THE IMAGE REP FAMILY: five classes.** Each is checked at the door a caller reaches first — the custom rep's draw
+# selector is INVOKED (and its rectangle checked by value), the cached rep is captured from a window whose content draws a
+# known colour and then BLITTED so the pixels prove it, the EPS rep parses a real %%BoundingBox: line and refuses to render,
+# and the two unavailable formats refuse at their constructors. The registry assertions include a format that has no class,
+# so the nil answers cannot pass for want of a registry.
+add_executable(image_rep_family image_rep_family.m)
+target_link_libraries(image_rep_family PRIVATE App)
+
+add_test(NAME appkit-image-rep-family COMMAND image_rep_family)
+set_tests_properties(appkit-image-rep-family PROPERTIES ENVIRONMENT "${_agora_app_test_env}")

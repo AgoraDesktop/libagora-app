@@ -823,7 +823,21 @@ the compositor is really gone.
   this tier has no ColorSync and the door says so instead of pretending the numbers were managed. The refusal census moved
   142 → 140 as those two literals went.
 
-- **`ctest`: 124 of 124 passed** (the keyboard and the seam, the AppKit and its input path, the controls and their
+- **And the IMAGE REP FAMILY: five classes** (`ctest`, offscreen) — `NSCustomImageRep` (3), `NSCachedImageRep` (4),
+  `NSEPSImageRep` (5), and `NSPICTImageRep` (4) / `NSCIImageRep` (3) as declared, refusing classes. `NSCustomImageRep`
+  holds a delegate and a draw selector and INVOKES it with the era's three arguments: the rep, the rectangle **by value**
+  and YES for a screen draw — through the method's own IMP, because `-performSelector:` cannot carry an `NSRect` and this
+  tier's `NSInvocation` refuses a 32-byte argument. `NSCachedImageRep` is a real CACHE: a blank canvas, or a window
+  rectangle rendered ONCE through the view's own `-cacheDisplayInRect:toBitmapImageRep:` and then blitted by the base
+  class's `-CGImage` path — the test captures a window whose content paints red and counts the red pixels back.
+  `NSEPSImageRep` PARSES THE HEADER: `+canInitWithData:` sniffs `%!PS`, `%%BoundingBox:` gives the size (so an EPS loads
+  with its page dimensions), the bytes come back through `-EPSRepresentation`, and **`-drawInRect:` refuses by name**
+  because rendering PostScript needs an interpreter and `CGPSConverter` is not here. The class registers itself with
+  `NSImageRep`, which is what makes `+imageRepClassForData:` answer it for an EPS file. `NSPICTImageRep` and `NSCIImageRep`
+  refuse at their constructors (no QuickDraw player, no Core Image) and their sniffs answer NO rather than promising a
+  decode they cannot do.
+
+- **`ctest`: 125 of 125 passed** (the keyboard and the seam, the AppKit and its input path, the controls and their
   metrics, the field control and its cell and its bezel and its placeholder and what it may hold, the text path and its
   word granularity and the multi-line view and its wrapping and its scrolling and its READING OF THE STORE, the STORE
   the rich-text slice is built on and the REGION it is laid out in and the WEB that ties the three together and the

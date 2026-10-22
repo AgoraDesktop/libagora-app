@@ -8,8 +8,8 @@ spent.*
 *State at handover: **8 commits**, tree clean, **114 tests passing**, `api-ledger: 327 metrics
 hold (82 classes, 2652 selectors of 3517, 23 protocols, 86 functions)`.*
 
-*State after the session that picked it up (§9–§17): **18 commits**, tree clean, **124 tests passing**,
-`api-ledger: 332 metrics hold (87 classes, 2870 selectors of 3609, 23 protocols, 86 functions)`.*
+*State after the session that picked it up (§9–§18): **19 commits**, tree clean, **125 tests passing**,
+`api-ledger: 337 metrics hold (92 classes, 2889 selectors of 3628, 23 protocols, 86 functions)`.*
 
 ---
 
@@ -87,8 +87,8 @@ type's empty value and says on stderr what it wants — `AppKitRefusal.h`), or *
 ## 3. Current measured state
 
 ```
-classes    87 of 168   (52%)    81 missing
-selectors 2870 of 3609 (80%)   739 missing    49 of 86 classes at COMPLETE coverage
+classes    92 of 168   (55%)    76 missing
+selectors 2889 of 3628 (80%)   739 missing    54 of 91 classes at COMPLETE coverage
 protocols  23 of  56   (41%)    33 missing
 functions  86 of  86 (100%)     0 missing     10 refuse by name
 methods  3289 declared, 4 with no body (0.1%)
@@ -268,13 +268,14 @@ predicted: the four ruler commands were the last four selectors it owed.
 
 **Where to go next, re-ranked by reachable surface:**
 
-1. **THE MISSING CLASSES HAVE STARTED LANDING (§17): `NSColorSpace`, `NSShadow`, `NSGradient`.** The next three by the
-   same argument (existing substrate, real behaviour, reachable) are the IMAGE REPS (`NSEPSImageRep`, `NSPICTImageRep`,
-   `NSCachedImageRep`, `NSCustomImageRep`, `NSCIImageRep` — 5 classes, 21 selectors, and `NSImageRep`'s registry already
-   dispatches to them), the STEPPER pair (`NSStepper`, `NSStepperCell` — 20 selectors, a real control on the existing cell
-   and tracking substrate) and `NSSecureTextField`/`NSSecureTextFieldCell` (2 selectors: bullet display on the field that
-   exists). After those the surface is the big subsystems the plan names — documents (104 + 51), printing (46 + 41 + 27 +
-   20), the panels, and the controller family — which want a design rather than a slice.
+1. **THE MISSING CLASSES CONTINUE (§17, §18): the colour values and all five image reps are DONE.** Next by the same
+   argument (existing substrate, real behaviour, reachable): the STEPPER PAIR (`NSStepper`, `NSStepperCell` — 20
+   selectors, a real control on the existing cell and tracking substrate), `NSSecureTextField`/`NSSecureTextFieldCell` (2
+   selectors: bullet display on the field that exists), the NIB CONNECTORS (`NSNibConnector`, `NSNibOutletConnector`,
+   `NSNibControlConnector` — 10 selectors, and `NSNib` already encodes the connections), and `NSPasteboardItem` (9, the
+   item-based pasteboard API beside `NSPasteboard`). After those the surface is the big subsystems the plan names —
+   documents (104 + 51), printing (46 + 41 + 27 + 20), the panels, and the controller family — which want a design rather
+   than a slice.
 
 2. **`NSLayoutManager` IS COMPLETE (§16) — all 136 selectors — and so are the twelve one-selector-short classes (§15).**
    The manager's last six were the typesetter trio, spelled `id` for the reason §16 records. What is left in the text
@@ -521,3 +522,38 @@ RETIRE REFUSALS the tree had recorded: `NSColor`'s colour-space pair and `NSScre
 **One test trap, again the same family:** a screen exists headlessly but its `-depth` is 0 (no output), so `-colorSpace`
 answers nil — and the probe now asserts the CONTRACT (nil when the depth names no space, the RGB space when it does) rather
 than a constant. The first version failed for the right reason and the wrong claim.
+
+---
+
+## 18. The image rep family: five classes, three real and two named
+
+*Eleventh commit of the pickup: `NSCustomImageRep`, `NSCachedImageRep`, `NSEPSImageRep`, `NSPICTImageRep`, `NSCIImageRep` —
+19 selectors, five classes. Complete coverage 49 → 54 of the 91 present classes; 92 of 168 classes present.*
+
+**THE FAMILY WAS THE RIGHT NEXT SLICE BECAUSE `NSImageRep` ALREADY DISPATCHES TO IT.** The registry, the sniff contract and
+the base class's `-CGImage` blit were all here; what was missing was the five classes that use them. Three are real and two
+are honest absences, and each says which at its door:
+
+* `NSCustomImageRep` invokes its draw selector with the era's three arguments — the rep, the rectangle **by value**, and
+  YES for a screen draw — through `-methodForSelector:`'s IMP, because `-performSelector:` cannot carry an `NSRect` and
+  **this tier's `NSInvocation` refuses a 32-byte argument** ("marshals register arguments only", which its own header
+  states). The signature is checked at construction, so a rep that cannot draw is never made.
+* `NSCachedImageRep` is a real cache: a blank canvas, or a window rectangle rendered ONCE through the view's own
+  `-cacheDisplayInRect:toBitmapImageRep:` and blitted by the base's `-CGImage`. MEASURED: a capture of a red view blits
+  2400 of 2400 pixels red.
+* `NSEPSImageRep` parses the header — `%!PS` for the sniff, `%%BoundingBox:` for the size — and REFUSES TO RENDER, because
+  rendering PostScript needs an interpreter and `CGPSConverter` is not in this tier. It registers itself, which is what
+  makes `+imageRepClassForData:` answer it for an EPS file.
+* `NSPICTImageRep` and `NSCIImageRep` refuse at their constructors (no QuickDraw player, no Core Image) and their sniffs
+  answer NO rather than promising a decode they cannot do. The test also asks about a format with **no** rep and about PNG,
+  so their nil answers cannot pass merely because the registry is empty.
+
+**A test that passed and still crashed, which is the worst shape a bug can take.** `+imageRepWithData:` returns an
+AUTORELEASED rep and the test released it as well; every check printed `ok`, the summary printed "all checks passed", and
+the process segfaulted in `emptyPool` at the pool's drain. The fix is one line in the test, and the lesson is the handoff's
+own: a suite that reports from stdout cannot see a failure that happens after the last printf — the exit status can.
+
+**And one environment scare worth recording:** mid-slice, six unrelated tests failed. They failed with this slice STASHED
+too — the concurrent Swift session was rebuilding `build-prefix` (libobjc, libagora-base, libagora-drawing) while the suite
+ran. After it settled, 124 of 125 passed again with the slice in place. A failing suite is evidence only once you know
+which libraries the binaries actually loaded.
