@@ -746,6 +746,36 @@ and re-deriving them in `NSWindow.m` is how the two would drift.
 on a control does not move it, the run of non-control points is wider than any gap between items (which is the
 flexible space being the handle rather than an item), and an immovable window does not move at all.
 
+## 31. The colour panels: a catalog, a well, and a picker whose grid is the face
+
+**`NSColorList`, `NSColorWell`, `NSColorPanel`, `NSColorPicker` AND THEIR TWO PROTOCOLS ARE THIS REPOSITORY'S OWN
+CODE**, written against the 10.6 declarations. Four decisions are the ones to know:
+
+- **THE FILE IS A PROPERTY LIST OF THIS TREE'S SHAPE.** Apple's `.clr` is undocumented, so `-writeToFile:` writes the
+  list's name, its key order and each colour's four components, and `-initWithName:fromFile:` requires that shape —
+  an Apple file answers nil rather than an empty list. The keys are kept in an ARRAY beside the dictionary, because
+  `-allKeys` is ordered and a dictionary would answer hash order.
+- **EDITABILITY IS A PATH TEST.** A list under `~/Library/Colors` may be changed and one under `/Library/Colors` may
+  not; the three mutators and a standard-path write refuse by name for the second kind. `+availableColorLists`
+  re-scans rather than caching, so a file that appears while the process runs is found.
+- **THE WELL OWNS ITS TARGET/ACTION AND DOES NOT PUSH A COLOUR TO THE PANEL.** `NSControl` keeps the pair on its cell
+  and a well has none, so the four doors are overridden. Activation sets the panel's target and action to the well;
+  `-setColor:` deliberately does not tell the panel, because the panel's target IS the active well and the report back
+  through `-takeColorFrom:` would set the well's colour again — measured as unbounded recursion.
+- **THE PANEL IS A SINGLETON WITH A PRIVATE CONTENT VIEW, AND ITS PICKER IS A PALETTE.** The chips, swatch and alpha
+  ramp are drawn by `AGColorPanelView`; the picker's view is a real subview, so its click handling is an ordinary
+  `-mouseDown:`. `NSColorPicker` conforms to `NSColorPickingDefault` and `NSColorPickingCustom` and answers the grid;
+  the eight modes select the same picker, which is a stated limit rather than a hidden one.
+
+Two facts the probe paid for and the code now states: the standard path's write must create INTERMEDIATE directories
+(`~/Library` need not exist), and a target the panel holds is not retained, so a probe — or a caller — that releases
+its target without clearing the panel leaves a dangling send.
+
+`tests/colour_panels.m` measures the list's order and file round trip, the catalog chain through
+`+[NSColor colorWithCatalogName:colorName:]`, the well's ink and activation handshake, the panel's chips and mode click,
+the picker's generated grid and a cell click, the swatch and alpha ramp in pixels, the accessory view, and the drag's
+pasteboard round trip — **62 checks**.
+
 ## Keeping in sync
 
 The Fiwix AppKit is the origin and this repository has now diverged from it in the seam. A fix made there

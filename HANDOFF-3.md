@@ -279,3 +279,49 @@ after it was written.
 the cheapest — six classes over `NSColorSpace`/`NSColor`/`NSFont`, all of which exist, and it would give
 `NSColor +colorWithCatalogName:` its reader. Printing (§6 item 3) is the largest single debt by refusal count.
 `NSTextView`'s 126 selectors remain the deepest subsystem in the tree and are still not a one-session slice.
+
+---
+
+## 9. The second pick-up: the colour panels
+
+*One session, one commit, and §6's item 2 cut in half: the four COLOUR classes plus their two protocols — 52
+selectors — leaving `NSFontManager` (51) and `NSFontPanel` (10) for the next one.*
+
+**WHAT LANDED.** `NSColorList` (an ordered, file-backed named collection; the file is a property list of this tree's
+own shape, and a system list's mutators refuse by name), `NSColorWell` (a cell-less control that draws its swatch,
+installs itself as the shared panel's target on activation and reports back through `-takeColorFrom:`),
+`NSColorPanel` (the singleton, with two CLASS configuration doors, a private content view for the chips/swatch/alpha
+ramp, the accessory band and the picker host), `NSColorPicker` (a 40-cell palette conforming to both era protocols),
+and `NSColorPickingDefault` + `NSColorPickingCustom`. **AND THE CATALOG DOORS GOT THEIR READER**:
+`+[NSColor colorWithCatalogName:colorName:]` was a refusal "because `NSColorList` does not exist" and now reads the
+list; the four COMPONENT doors still refuse, for the reason that survived — a colour does not remember the list it
+came from.
+
+**THE NUMBERS.** classes 120 → 124 of 168, selectors 3677 → 3729 of 4246 → 4298, protocols 36 → 38, methods 4166 →
+4230. Missing selectors: still 569 (all 52 new ones are answered, and `selectors-offered` grows with the present set).
+106 of the 122 classes with a surface are at COMPLETE coverage. Refusal census **288 → 293** — `NSColorList`'s four
+deliberate ones and one in `NSColor.m` for the two cases the catalog lookup still cannot answer. The suite is **139
+tests**, with `appkit-colour-panels` (62 checks) as the new one.
+
+**THREE THINGS THIS SESSION PAID FOR:**
+
+* **A WELL THAT PUSHED ITS COLOUR TO THE PANEL RECURSED FOREVER.** The panel's target IS the active well, so
+  `-setColor:` → panel `-setColor:` → `-takeColorFrom:` → well `-setColor:` — measured as a stack overflow in the
+  first probe run. A well tells the panel where its colour starts (at `-activate:`) and never again.
+* **THE STANDARD COLOUR-LIST PATH NEEDS INTERMEDIATE DIRECTORIES.** `~/Library` need not exist on this system, so the
+  one-directory `-createDirectoryAtPath:` failed and every standard-path write looked like an uneditable list.
+* **THE PANEL'S TARGET IS NOT RETAINED, AND THE PROBE HAD TO SAY SO.** Releasing the target without clearing the
+  panel left a dangling send that crashed one test-case later, in `-sendAction:to:from:` — the shape `HANDOFF-2.md`
+  §4 records for a freed delegate, one class over.
+
+**A CONCURRENT SESSION IS RELICENSING THIS REPOSITORY**, on branch `relicense-lgpl3-gpl3`, and its header sweep has
+written C-style headers into `.cmake` scripts, `#` lines ABOVE the shebang in `.sh` runners, and `/*` at the top of
+the Python `tools/api-ledger`. Three gates (`appkit-api-census`, `appkit-refusal-census`, `appkit-readme-refs`) and
+`appkit-menu-headless` therefore fail for reasons OUTSIDE this slice; the API census was verified directly with
+`tools/api-ledger check` and the refusal census by re-counting, both holding. **WHOEVER PICKS THIS UP SHOULD RE-RUN
+THE SUITE AFTER THAT SWEEP LANDS**, and the sweep must not put a C comment in a CMake file or a `#` line above a
+shebang.
+
+**WHERE THE NEXT HOUR IS:** `NSFontManager` + `NSFontPanel` finish §6's item 2 (61 selectors), and `libagora-text`
+already has `CTFontCollection`, `CTFontDescriptor` and `CTFontManager`, so enumeration is not the blocker. Printing
+(§6 item 3) remains the largest single debt by refusal count; `NSTextView`'s 126 selectors remain the deepest.

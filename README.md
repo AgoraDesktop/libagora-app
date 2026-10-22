@@ -2107,6 +2107,51 @@ change, a per-column stable sort, a prototype copied per position, the keyboard'
 pointer, a session on the right cell, and the ink — the accent on a selected plain cell, a cell background under it,
 the grid's background in the gap, and a form cell's label band stopping where the value band starts.
 
+### The colour list, the well, and the panel that is one window
+
+**A COLOUR LIST IS A NAMED, ORDERED SET OF COLOURS, AND IT IS A FILE.** `NSColorList` keeps its keys in INSERTION
+order in an array beside the dictionary, because a palette that answered its keys in hash order would reorder its
+swatches between launches; the file it writes is a property list of this tree's own shape (the list's name, its keys,
+and each colour's four components — Apple's `.clr` is undocumented and is not reproduced, so an Apple file fails the
+shape test and reads as nil rather than as an empty list). A list loaded from `~/Library/Colors` is editable and one
+from `/Library/Colors` is not, and its three mutators refuse by name rather than changing in memory and losing the
+change. `+availableColorLists` re-scans both directories every call.
+
+**AND THAT IS WHAT `+[NSColor colorWithCatalogName:colorName:]` WAS FOR.** The door has answered nil-and-a-refusal
+since the colour slice "because `NSColorList` does not exist"; it now asks the named list for the colour. The four
+COMPONENT doors stay refusals for a reason that survived the subsystem's arrival: a colour built from a list is a
+`CGColor` like any other — this class's only state — so it does not remember the list it came from.
+
+**`NSColorWell` IS A CONTROL WITH NO CELL**, so its target/action pair is its own, for the same reason `NSMatrix`'s is.
+A click activates it: the well makes itself the SHARED panel's target and action, hands it its colour and orders it
+front. The panel's report comes back through `-takeColorFrom:`, which stores the colour and sends the well's own action
+— and a well does NOT push a colour to the panel from `-setColor:`, which is what broke an unbounded recursion the
+first time the probe set a colour on an active well.
+
+**THE PANEL IS ONE WINDOW, AND ITS FACE IS THREE PIECES.** A row of mode chips (one `NSButtonCell` per mode the mask
+offers, each carrying its picker's image and tooltip), the picker's own view hosted below them, then the colour's swatch
+and an optional 32-step alpha ramp, with the caller's accessory view in a reserved band at the foot. A chip click
+selects a mode; an alpha-ramp click sets the colour's alpha; the swatch is drawn opaque and the ramp is where
+transparency is read. `+setPickerMask:` and `+setPickerMode:` are CLASS doors because the panel is a singleton, and a
+call before the panel exists is kept for the one that will.
+
+**THE PICKER IS A PALETTE, AND IT SAYS SO.** `NSColorPicker` conforms to both era protocols: it draws a 40-cell grid
+whose first cells are the panel's attached colour lists in their own order, filled out with a generated hue/brightness
+ramp, and a click in a cell sets the panel's colour to that cell's. The eight 10.6 modes all select it — the mode moves
+the chip and the tooltip, not the grid — and there is no wheel, slider, crayon or CMYK picker in this tier. A caller
+with one subclasses and answers `-provideNewView:` and `-setColor:`, and the panel hosts it unchanged.
+
+**AND THE DRAG GOES THROUGH THE LEGACY DOOR.** `-dragColor:withEvent:fromView:` is a real session: the colour is
+written to `NSDragPboard` under `NSColorPboardType`, a swatch image is made for the pointer, and the drag begins from
+the caller's view — the pasteboard-taking `-dragImage:…` door, because `NSColor` is not an `NSPasteboardWriting` in this
+tree and the modern door would make the session fill its own board. A drop target is the caller's.
+
+`tests/colour_panels.m` asserts the chain end to end in 62 checks: a list's insertion order through a save and a load,
+a file that is not a list answering nil, the system/user editability split, a list written to the standard directory
+and found by `+colorListNamed:` and read by `+[NSColor colorWithCatalogName:colorName:]`, the well's swatch in pixels
+and its activation handshake, the panel's singleton identity, its chips and a chip click, the picker's grid and a cell
+click, the swatch and ramp in pixels, the accessory view going in and out, and the drag's pasteboard round trip.
+
 ### Still absent, and why
 
 **NINE THINGS THAT USED TO BE ON THIS LIST ARE NOT ANY MORE, AND THE LIST IS CORRECTED RATHER THAN QUIETLY SHRUNK:**
