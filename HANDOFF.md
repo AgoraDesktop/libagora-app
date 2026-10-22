@@ -8,8 +8,8 @@ spent.*
 *State at handover: **8 commits**, tree clean, **114 tests passing**, `api-ledger: 327 metrics
 hold (82 classes, 2652 selectors of 3517, 23 protocols, 86 functions)`.*
 
-*State after the session that picked it up (§9–§24): **25 commits**, tree clean, **131 tests passing**,
-`api-ledger: 357 metrics hold (109 classes, 3060 selectors of 3799, 28 protocols, 86 functions)`.*
+*State after the session that picked it up (§9–§25): **26 commits**, tree clean, **132 tests passing**,
+`api-ledger: 359 metrics hold (111 classes, 3096 selectors of 3835, 28 protocols, 86 functions)`.*
 
 ---
 
@@ -87,8 +87,8 @@ type's empty value and says on stderr what it wants — `AppKitRefusal.h`), or *
 ## 3. Current measured state
 
 ```
-classes   109 of 168   (65%)    59 missing
-selectors 3060 of 3799 (81%)   739 missing    70 of 107 classes at COMPLETE coverage
+classes   111 of 168   (66%)    57 missing
+selectors 3096 of 3835 (81%)   739 missing    72 of 109 classes at COMPLETE coverage
 protocols  28 of  56   (50%)    28 missing
 functions  86 of  86 (100%)     0 missing     10 refuse by name
 methods  3289 declared, 4 with no body (0.1%)
@@ -719,3 +719,28 @@ asserts the absence on purpose, and the real end is asserted where it happens.
 
 **`-startWhenAnimation:reachesProgress:` IS THE ERA'S SEQUENCING**, there being no completion blocks: one animation starts (or
 stops) another at a mark, and the probe checks the second is idle until the first crosses it.
+
+---
+
+## 25. The level indicator: a value that becomes a colour
+
+*Eighteenth commit of the pickup: `NSLevelIndicator` (16) + `NSLevelIndicatorCell` (20) — 36 selectors, two classes. **111 of
+168 classes.***
+
+**THE CLASS'S OPINION IS THE REASON IT EXISTS.** A progress bar says how far; a level indicator says how far AND whether that is
+bad — two thresholds (warning, critical) that change the fill's colour to the platform's orange and red. That is a PIXEL claim,
+so the probe reads pixels: at 40% with a warning at 50 the bar's left is exactly `0.00/1.00/0.00` and its right is the control
+face `0.90/0.90/0.90`; at 60 it is `1.00/0.50/0.00`; at 90 it is red.
+
+**Four styles, four pictures:** a continuous bar, a discrete row of segments (2 of 4 lit at half the range), a rating of stars
+(filled ones in the level colour, empty in the shadow colour, or a caller's image instead) and the relevancy bar in the accent
+colour.
+
+**And the same door the stepper's slice found:** `NSCell -setDoubleValue:` answers only for an `NSTextCellType` cell, so the
+value lives in this cell and every write goes through one clamped setter. That is now the second class to need it, which is
+worth saying plainly: **in this tier, "a cell with a numeric value" means overriding the value pair**, because the base's is a
+text cell's.
+
+**One detail worth having written down:** the ticks are `N` marks over `N − 1` intervals, so a five-mark bar has a tick at each
+end and three between — the arithmetic `-tickMarkValueAtIndex:` is the definition, and `-rectOfTickMarkAtIndex:` is that
+fraction of the bar's width.

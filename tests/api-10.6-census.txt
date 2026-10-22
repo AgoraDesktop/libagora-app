@@ -61,8 +61,8 @@
 #
 # **AND THE MEASURED NUMBERS, RECOMPUTED RATHER THAN EDITED**, so a reader can see the shape without running anything:
 #
-#     classes   109 of 168   (65%)    59 missing
-#     selectors 3060 of 3799  (81%)  739 missing    70 of 107 classes at COMPLETE coverage
+#     classes   111 of 168   (66%)    57 missing
+#     selectors 3096 of 3835  (81%)  739 missing    72 of 109 classes at COMPLETE coverage
 #     protocols  28 of  56   (50%)    28 missing
 #     functions  86 of  86 (100%)     0 missing    10 of them REFUSE BY NAME, which this count does not distinguish
 #                86 declared, 0 declared-not-defined, 0 defined-not-declared
@@ -120,9 +120,9 @@
 # Foundation's in this tree, so it is attributed to Foundation to avoid charging one class to two ledgers. The
 # manifest applies that rule at generation time via its second framework argument; the census never sees it.
 
-classes-missing 59
+classes-missing 57
 classes-offered 168
-classes-present 109
+classes-present 111
 fn:NSAccessibilityActionDescription 1
 fn:NSAccessibilityPostNotification 1
 fn:NSAccessibilityRaiseBadArgumentException 1
@@ -301,7 +301,7 @@ functions-defined-not-declared 0
 functions-missing 0
 functions-offered 86
 functions-present 86
-methods-declared 3484
+methods-declared 3523
 methods-declared-not-implemented 4
 proto:NSAlertDelegate 0
 proto:NSAnimatablePropertyContainer 0
@@ -397,6 +397,8 @@ sel:NSImage 68
 sel:NSImageCell 6
 sel:NSImageRep 33
 sel:NSLayoutManager 136
+sel:NSLevelIndicator 16
+sel:NSLevelIndicatorCell 20
 sel:NSMenu 64
 sel:NSMenuItem 56
 sel:NSMenuItemCell 23
@@ -470,6 +472,6 @@ sel:NSWindow 243
 sel:NSWindowController 26
 sel:NSWorkspace 9
 selectors-missing 739
-selectors-offered 3799
-selectors-present 3060
+selectors-offered 3835
+selectors-present 3096
 selphantom:NSObject 4

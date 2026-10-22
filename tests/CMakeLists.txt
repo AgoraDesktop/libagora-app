@@ -1232,3 +1232,13 @@ target_link_libraries(animation PRIVATE App)
 
 add_test(NAME appkit-animation COMMAND animation)
 set_tests_properties(appkit-animation PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
+
+# **THE LEVEL INDICATOR.** The claim is that the value becomes a PICTURE and the thresholds become a COLOUR: half full is a bar
+# whose left is the level colour and whose right is the ground, warning is the platform's orange, critical is red — and the
+# discrete and rating styles are lit segments and filled stars. A value check cannot see any of that, which is why the probe
+# reads pixels.
+add_executable(level_indicator level_indicator.m)
+target_link_libraries(level_indicator PRIVATE App)
+
+add_test(NAME appkit-level-indicator COMMAND level_indicator)
+set_tests_properties(appkit-level-indicator PROPERTIES ENVIRONMENT "${_agora_app_test_env}")

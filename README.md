@@ -904,7 +904,17 @@ the compositor is really gone.
   and **END is not STOP**: stepping a not-running animation to 1 announces no end at all. `NSViewAnimation` interpolates a
   view's frame and a fade's alpha by the same value, and the context is a duration with a grouping scope nesting restores.
 
-- **`ctest`: 131 of 131 passed** (the keyboard and the seam, the AppKit and its input path, the controls and their
+- **And `NSLevelIndicator` with its cell** (`ctest`, offscreen) — 36 selectors, two classes. **The claim is that the value
+  becomes a picture and the thresholds become a colour**: the probe renders the cell and reads pixels — at 40% the left of the
+  bar is green and the right is the ground (0.00/1.00/0.00 against 0.90/0.90/0.90), above the warning threshold the fill is the
+  platform's orange, above the critical one red — which is the whole difference between a level indicator and a progress bar,
+  and invisible to a value check. The four styles are four pictures: the discrete style lights **2 of 4 segments** at half its
+  range, and the rating style fills stars in the level colour (76 coloured pixels for three of five). The value pair is
+  overridden on the cell for the same reason the stepper's was (`NSCell -setDoubleValue:` answers only for text cells), the
+  clamp is checked at both ends and through the control's forwards, and the ticks are N marks over N−1 intervals with both ends
+  included.
+
+- **`ctest`: 132 of 132 passed** (the keyboard and the seam, the AppKit and its input path, the controls and their
   metrics, the field control and its cell and its bezel and its placeholder and what it may hold, the text path and its
   word granularity and the multi-line view and its wrapping and its scrolling and its READING OF THE STORE, the STORE
   the rich-text slice is built on and the REGION it is laid out in and the WEB that ties the three together and the
