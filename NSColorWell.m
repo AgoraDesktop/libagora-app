@@ -1,8 +1,10 @@
 /*
  * NSColorWell — a swatch that opens the colour panel.
  *
- * Copyright © 2026 Kyle J. Cardoza. MIT licensed — see LICENSE.
- * SPDX-License-Identifier: MIT
+ * Copyright © 2026 Kyle J. Cardoza.
+ * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
+ * SPDX-License-Identifier: LGPL-3.0-or-later
+ * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **THE WELL IS THE PANEL'S CLIENT AND THE PANEL IS THE WELL'S FACE.** A click activates the well, which sets the panel's
  * target and action to itself; every change the panel then makes comes back through `-takeColorFrom:`, which stores the

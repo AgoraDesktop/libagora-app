@@ -1,8 +1,10 @@
 /*
  * NSColorPanel — the shared colour panel.
  *
- * Copyright © 2026 Kyle J. Cardoza. MIT licensed — see LICENSE.
- * SPDX-License-Identifier: MIT
+ * Copyright © 2026 Kyle J. Cardoza.
+ * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
+ * SPDX-License-Identifier: LGPL-3.0-or-later
+ * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **THE PANEL IS A SINGLETON, A CONTENT VIEW, AND A PICKER.** The singleton is the two class doors and the two class
  * configurations; the content view is the chips, the swatch and the alpha ramp; the picker is `NSColorPicker`'s view,
