@@ -2,8 +2,10 @@
  * popup_color_menu — NSPopUpButton/Cell, NSColor and NSMenu: the item arithmetic, the colour-space doors and the menu's
  * deprecated pair.
  *
- * Copyright © 2026 Kyle J. Cardoza. MIT licensed — see LICENSE.
- * SPDX-License-Identifier: MIT
+ * Copyright © 2026 Kyle J. Cardoza.
+ * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **THE POP-UP'S ITEM ARITHMETIC IS THE MENU'S, AND THE CELL IS WHERE IT IS SPELLED.** The probe adds, inserts and removes
  * titles through the button, reads them back as an array, finds an item by its represented object and by its

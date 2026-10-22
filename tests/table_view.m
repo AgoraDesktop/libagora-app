@@ -1,8 +1,10 @@
 /*
  * table_view — the cell-based table: its columns, rows, header, selection and drawing.
  *
- * Copyright © 2026 Kyle J. Cardoza. MIT licensed.
- * SPDX-License-Identifier: MIT
+ * Copyright © 2026 Kyle J. Cardoza.
+ * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **THE TABLE IS A GEOMETRY AND A MODEL, SO BOTH ARE ASKED.** The model questions are the data source's row count,
  * the columns' widths and the selection; the geometry questions are where a row, a column, a cell and a header sit,

@@ -1,8 +1,10 @@
 /*
  * NSCollectionViewItem.h — ONE ITEM'S VIEW CONTROLLER.
  *
- * Copyright © 2026 Kyle J. Cardoza. MIT licensed — see LICENSE.
- * SPDX-License-Identifier: MIT
+ * Copyright © 2026 Kyle J. Cardoza.
+ * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
+ * SPDX-License-Identifier: LGPL-3.0-or-later
+ * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **COLLECTION VIEWS WORK BY RECYCLING CONTROLLERS, AND THIS IS THE CONTROLLER.** A collection view shows a grid of items
  * that are made, shown, scrolled out of sight and REUSED; each item is an `NSViewController` whose view is the tile, which is

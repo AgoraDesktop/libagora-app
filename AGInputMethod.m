@@ -1,8 +1,10 @@
 /*
  * AGInputMethod.m — the dead-key table, and the state it keeps between two keystrokes.
  *
- * Copyright © 2026 Kyle J. Cardoza. MIT licensed — see LICENSE.
- * SPDX-License-Identifier: MIT
+ * Copyright © 2026 Kyle J. Cardoza.
+ * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
+ * SPDX-License-Identifier: LGPL-3.0-or-later
+ * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **A DEAD KEY IS A COMPOSITION WITH ONE READING.** The first keystroke puts the accent in the store AS MARKED TEXT, so
  * the person sees it waiting and the caret sits after it; the second either REPLACES that mark with one composed

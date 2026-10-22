@@ -1,8 +1,10 @@
 /*
  * NSAttributedStringRTF.m — the RTF reader, which is the half this tier's Foundation does not have.
  *
- * Copyright © 2026 Kyle J. Cardoza. MIT licensed — see LICENSE.
- * SPDX-License-Identifier: MIT
+ * Copyright © 2026 Kyle J. Cardoza.
+ * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
+ * SPDX-License-Identifier: LGPL-3.0-or-later
+ * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **THE PARSER UNDERSTANDS THE SUBSET THE TIER CAN DRAW.** RTF is ASCII with control words and two tables: a FONT
  * TABLE (`\fN` names a face) and a COLOUR TABLE (`\redN\greenN\blueN` is one entry, indexed from 1 because index 0

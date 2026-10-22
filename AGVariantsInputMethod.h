@@ -1,8 +1,10 @@
 /*
  * AGVariantsInputMethod.h — A LETTER'S VARIANT READINGS, OFFERED AND PICKED.
  *
- * Copyright © 2026 Kyle J. Cardoza. MIT licensed — see LICENSE.
- * SPDX-License-Identifier: MIT
+ * Copyright © 2026 Kyle J. Cardoza.
+ * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
+ * SPDX-License-Identifier: LGPL-3.0-or-later
+ * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **THIS IS A CANDIDATE-BASED METHOD, WHICH IS WHAT THE DEAD-KEY ONE IS NOT.** A letter has several precomposed
  * readings — `a` is also `à á â ã ä å` — and only the person knows which one is meant, so the method HOLDS the letter

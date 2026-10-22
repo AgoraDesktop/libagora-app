@@ -1,8 +1,10 @@
 /*
  * appkit_window — a real NSWindow, drawn by a real NSView, on Agora's window server.
  *
- * Copyright © 2026 Kyle J. Cardoza. MIT licensed.
- * SPDX-License-Identifier: MIT
+ * Copyright © 2026 Kyle J. Cardoza.
+ * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * WHAT THIS IS FOR. `tests/window.c` drives the SEAM. This drives APPkit: it makes an `NSWindow`, gives it an
  * `NSView` that overrides `-drawRect:`, orders it front and pumps events — so a passing run means the whole

@@ -1,3 +1,8 @@
+# Copyright © 2026 Kyle J. Cardoza.
+# SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
+
 #!/bin/bash
 # The seam's PIXEL test: a nested compositor on the X11 desktop (so the window is visible), two captured
 # screenshots a second apart, and inspect.py reads the pixels back out.

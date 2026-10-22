@@ -1,8 +1,10 @@
 /*
  * NSTextList.m — the marker for an item number, in the formats Apple documents.
  *
- * Copyright © 2026 Kyle J. Cardoza. MIT licensed — see LICENSE.
- * SPDX-License-Identifier: MIT
+ * Copyright © 2026 Kyle J. Cardoza.
+ * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
+ * SPDX-License-Identifier: LGPL-3.0-or-later
+ * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **THE NUMBERING IS ARITHMETIC AND IT IS THE ONLY ARITHMETIC HERE.** Four families cover the formats: positional
  * radix (decimal, hexadecimal, octal), Roman numerals, ALPHABETIC — which is BIJECTIVE base 26 rather than base 26,

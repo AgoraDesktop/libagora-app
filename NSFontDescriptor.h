@@ -1,8 +1,10 @@
 /*
  * NSFontDescriptor.h — the AppKit's font description: the value an `NSFont` is asked for by.
  *
- * Copyright © 2026 Kyle J. Cardoza. MIT licensed — see LICENSE.
- * SPDX-License-Identifier: MIT
+ * Copyright © 2026 Kyle J. Cardoza.
+ * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
+ * SPDX-License-Identifier: LGPL-3.0-or-later
+ * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **THIS IS THE SECOND HALF OF `NSFont` AND THE FIRST HALF OF NOTHING ELSE.** §A10bv could not ship
  * `+fontWithDescriptor:size:` or `-fontDescriptor` because this class did not exist; §A10bu's measurement is why

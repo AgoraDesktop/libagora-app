@@ -1,8 +1,10 @@
 /*
  * date_picker — NSDatePicker and NSDatePickerCell: a formatted date, the subfield a step applies to, and the delegate's veto.
  *
- * Copyright © 2026 Kyle J. Cardoza. MIT licensed — see LICENSE.
- * SPDX-License-Identifier: MIT
+ * Copyright © 2026 Kyle J. Cardoza.
+ * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **THE CLAIM IS THAT THE TEXT IS A FORMATTED DATE OF THE CELL'S OWN DOORS, NOT OF A HIDDEN DEFAULT.** The probe sets a UTC
  * calendar, an en_US locale and a UTC zone, formats a fixed instant, and requires the cell's text to equal a formatter built

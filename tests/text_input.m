@@ -1,7 +1,10 @@
 /*
  * text_input — can a person type into an NSText, and does the keyboard reach it?
  *
- * Copyright © 2026 Kyle J. Cardoza. MIT licensed. SPDX-License-Identifier: MIT
+ * Copyright © 2026 Kyle J. Cardoza.
+ * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **THE WHOLE PATH IS EXERCISED, NOT THE PIECES.** A key arrives as an `NSEvent`, `-interpretKeyEvents:` turns it into
  * a command, the command edits the string or moves the caret, and the view is marked for redisplay — so what this

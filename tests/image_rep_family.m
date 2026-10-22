@@ -1,8 +1,10 @@
 /*
  * image_rep_family — the five rep classes: a delegate, a cached capture, an EPS header, and two named refusals.
  *
- * Copyright © 2026 Kyle J. Cardoza. MIT licensed — see LICENSE.
- * SPDX-License-Identifier: MIT
+ * Copyright © 2026 Kyle J. Cardoza.
+ * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **EACH CLASS IS CHECKED AT THE DOOR A CALLER REACHES FIRST.** The custom rep's draw selector is INVOKED and its arguments
  * are checked (the rectangle arrives by value, not as a pointer, because the invocation carries it); the cached rep is

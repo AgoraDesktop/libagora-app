@@ -1,8 +1,10 @@
 /*
  * drag_session — the in-process drag: the source, the destination, the masks and the image.
  *
- * Copyright © 2026 Kyle J. Cardoza. MIT licensed.
- * SPDX-License-Identifier: MIT
+ * Copyright © 2026 Kyle J. Cardoza.
+ * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **EVERY DOOR HERE IS ASKED WHERE IT LIVES.** The source begins a session with
  * `-beginDraggingSessionWithItems:event:source:` and the legacy `-dragImage:...`; the application's own dispatch

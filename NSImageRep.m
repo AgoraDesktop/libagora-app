@@ -1,8 +1,10 @@
 /*
  * NSImageRep — the metadata every representation has, and the one drawing rule they share.
  *
- * Copyright © 2026 Kyle J. Cardoza. MIT licensed — see LICENSE.
- * SPDX-License-Identifier: MIT
+ * Copyright © 2026 Kyle J. Cardoza.
+ * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
+ * SPDX-License-Identifier: LGPL-3.0-or-later
+ * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * THE MRC OWNERSHIP IS SMALL AND EXPLICIT: this class owns exactly `_colorSpaceName` (copied in, so a
  * caller may pass a mutable string and let it go) and nothing else — the pixels belong to the

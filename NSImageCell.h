@@ -1,8 +1,10 @@
 /*
  * NSImageCell.h — A CELL WHOSE CONTENT IS AN IMAGE, PLACED THREE WAYS.
  *
- * Copyright © 2026 Kyle J. Cardoza. MIT licensed — see LICENSE.
- * SPDX-License-Identifier: MIT
+ * Copyright © 2026 Kyle J. Cardoza.
+ * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
+ * SPDX-License-Identifier: LGPL-3.0-or-later
+ * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **THE IMAGE IS THE BASE CELL'S; THE THREE FACTS ABOUT IT ARE THIS CLASS'S.** `NSCell` already holds an image and draws it
  * — a button's face uses the same field — so an image cell is that image plus the era's three choices: how it ALIGNS in the

@@ -1,8 +1,10 @@
 /*
  * progress_indicator — the bar's range, clamp and ink.
  *
- * Copyright © 2026 Kyle J. Cardoza. MIT licensed.
- * SPDX-License-Identifier: MIT
+ * Copyright © 2026 Kyle J. Cardoza.
+ * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  */
 #import <AppKit/NSApplication.h>
 #import <AppKit/NSBitmapImageRep.h>

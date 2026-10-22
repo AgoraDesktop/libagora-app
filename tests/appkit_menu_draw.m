@@ -1,7 +1,10 @@
 /*
  * appkit_menu_draw — a POPPED-UP MENU, on a real display, for a person to look at.
  *
- * Copyright © 2026 Kyle J. Cardoza. MIT licensed. SPDX-License-Identifier: MIT
+ * Copyright © 2026 Kyle J. Cardoza.
+ * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **THIS IS A DEMO RATHER THAN A TEST, AND IT IS HERE BECAUSE "CAN I SEE IT" IS A REASON.** The ink tests assert
  * pixels offscreen; this one puts a menu up on a display so that what they assert can also be LOOKED at. It is

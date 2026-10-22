@@ -1,8 +1,10 @@
 /*
  * NSDocumentController — the open documents, the type table, and the one place a document is made.
  *
- * Copyright © 2026 Kyle J. Cardoza. MIT licensed — see LICENSE.
- * SPDX-License-Identifier: MIT
+ * Copyright © 2026 Kyle J. Cardoza.
+ * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
+ * SPDX-License-Identifier: LGPL-3.0-or-later
+ * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * The type table is read from `CFBundleDocumentTypes` once, lazily: each entry is a dictionary with a `CFBundleTypeName`,
  * an `NSDocumentClass` and a `CFBundleTypeExtensions` array. A subclass that wants a table it owns overrides

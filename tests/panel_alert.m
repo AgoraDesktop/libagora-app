@@ -1,8 +1,10 @@
 /*
  * panel_alert — a helper window's three answers, and an alert's content, layout and return codes.
  *
- * Copyright © 2026 Kyle J. Cardoza. MIT licensed.
- * SPDX-License-Identifier: MIT
+ * Copyright © 2026 Kyle J. Cardoza.
+ * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * WHY THIS EXISTS. `NSPanel` and `NSAlert` are the two classes the file manager's conflict question said it could not
  * have, and the four `NSWindow` flags a panel is built from (`floating`, `worksWhenModal`, `modalPanel`, `hidesOnDeactivate`)

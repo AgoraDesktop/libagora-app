@@ -1,7 +1,7 @@
 # THE REFUSAL CENSUS — every refusal site in this library, by file.
 #
-# Copyright © 2026 Kyle J. Cardoza. MIT licensed — see LICENSE.
-# SPDX-License-Identifier: MIT
+# Copyright © 2026 Kyle J. Cardoza.
+# SPDX-License-Identifier: GPL-3.0-or-later
 #
 # A REFUSAL IS A CLAIM ABOUT WHAT THIS LAYER CANNOT DO, and a claim held only in prose drifts: a door quietly
 # acquiring a real implementation is an improvement nobody records, and a real door quietly becoming a refusal is
@@ -38,6 +38,11 @@
 # AND IT ROSE BY EIGHT WHEN THE COMBO BOX'S ROWS BECAME A DATA SOURCE'S: seven refusals for the array doors a
 # source replaces and the three list doors the session has no mechanism for, plus one that was already in the file.
 #
+# AND IT ROSE BY FIVE IN THE COLOUR-PANEL SLICE, ALL DELIBERATE: `NSColorList`'s four (the three mutators of a list that
+# came from a system directory, and a standard-path write of one), and one in `NSColor.m` — the CATALOG LOOKUP stopped
+# being a refusal when `NSColorList` landed, but it still names the two cases it cannot answer (no such list, no such
+# key), and a site is a site.
+#
 # THE COUNT IS A FILE'S MENTIONS RATHER THAN ITS EXECUTED STATEMENTS, and that was already true before the widening
 # (`NSCell.m`'s six are all prose). It is a per-file DRIFT detector: a file that gains or loses a refusal changes a
 # line, and a file whose comment names one has to keep naming it.
@@ -53,7 +58,8 @@ NSButtonCell.m                   1
 NSCIImageRep.m                   2
 NSCachedImageRep.m               1
 NSCell.m                         6
-NSColor.m                        16
+NSColor.m                        17
+NSColorList.m                    4
 NSColorSpace.m                   4
 NSComboBoxCell.m                 9
 NSCustomImageRep.m               2
@@ -100,4 +106,4 @@ NSWindow.m                       24
 # `fn_refuse_window` spelling was simply invisible to a census that counted the `APPKIT-REFUSE` literal, so every
 # refusal written the house way — which is the way the header asks for — moved no number.
 #
-# total: 288
+# total: 293

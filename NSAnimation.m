@@ -1,8 +1,10 @@
 /*
  * NSAnimation — a duration, a curve, and a value that moves.
  *
- * Copyright © 2026 Kyle J. Cardoza. MIT licensed — see LICENSE.
- * SPDX-License-Identifier: MIT
+ * Copyright © 2026 Kyle J. Cardoza.
+ * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
+ * SPDX-License-Identifier: LGPL-3.0-or-later
+ * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * The number goes 0 → 1 over the duration; the curve maps it; the delegate hears about marks and endings. The timer is the
  * driver and `-setCurrentProgress:` is the one door it uses, which is why a caller (or a test) can step the animation by hand.

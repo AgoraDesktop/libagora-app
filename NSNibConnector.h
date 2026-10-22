@@ -1,8 +1,10 @@
 /*
  * NSNibConnector.h — A CONNECTION BETWEEN TWO OBJECTS IN A NIB, AS AN OBJECT.
  *
- * Copyright © 2026 Kyle J. Cardoza. MIT licensed — see LICENSE.
- * SPDX-License-Identifier: MIT
+ * Copyright © 2026 Kyle J. Cardoza.
+ * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
+ * SPDX-License-Identifier: LGPL-3.0-or-later
+ * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **A NIB'S CONNECTION IS TWO OBJECTS AND A NAME, AND THAT IS WHAT THIS CLASS HOLDS.** `-source` is the object the
  * connection is APPLIED TO (a view with an outlet, a control with an action), `-destination` is the object it names, and

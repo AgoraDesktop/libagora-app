@@ -1,8 +1,10 @@
 /*
  * text_layout_overflow.m — THE SECOND CONTAINER: TEXT THAT DOES NOT FIT THE FIRST IS CARRIED TO THE NEXT.
  *
- * Copyright © 2026 Kyle J. Cardoza. MIT licensed — see LICENSE.
- * SPDX-License-Identifier: MIT
+ * Copyright © 2026 Kyle J. Cardoza.
+ * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **A CONTAINER'S OWN HEIGHT IS THE OVERFLOW EDGE, AND THIS PROBE PUTS IT THERE ON PURPOSE.** `NSTextContainer` is a
  * region with a size, and until now every probe gave it a height taller than the text so the height never mattered —

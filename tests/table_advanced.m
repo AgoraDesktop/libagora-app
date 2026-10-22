@@ -1,8 +1,10 @@
 /*
  * table_advanced — the table's other half: variable heights, type-select, column reordering, autosave and editing.
  *
- * Copyright © 2026 Kyle J. Cardoza. MIT licensed.
- * SPDX-License-Identifier: MIT
+ * Copyright © 2026 Kyle J. Cardoza.
+ * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **EACH FEATURE IS ASKED WHERE IT LIVES.** Variable heights are the row geometry and `-noteHeightOfRowsWithIndexesChanged:`;
  * type-select is a sequence of key events against the data source's strings; column reordering is the header's

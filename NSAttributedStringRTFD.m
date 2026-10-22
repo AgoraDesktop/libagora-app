@@ -1,8 +1,10 @@
 /*
  * NSAttributedStringRTFD.m — RTFD: the same RTF document, wrapped in a package that carries its pictures as files.
  *
- * Copyright © 2026 Kyle J. Cardoza. MIT licensed — see LICENSE.
- * SPDX-License-Identifier: MIT
+ * Copyright © 2026 Kyle J. Cardoza.
+ * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
+ * SPDX-License-Identifier: LGPL-3.0-or-later
+ * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **RTFD IS RTF PLUS A DIRECTORY, AND THAT IS THE WHOLE IDEA.** A standalone RTF file carries a picture INLINE, as
  * `{\pict\pngblip…}` hex — which is what this tier's RTF writer has always done — and a package document carries each

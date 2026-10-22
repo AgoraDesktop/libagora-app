@@ -1,7 +1,10 @@
 /*
  * button_sweep — the button pair finished: the forwards, the alternate mnemonic, the shading, and the three ink doors.
  *
- * Copyright © 2026 Kyle J. Cardoza. MIT licensed. SPDX-License-Identifier: MIT
+ * Copyright © 2026 Kyle J. Cardoza.
+ * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **TWENTY DOORS OVER TWO CLASSES, AND EVERY ONE OF THEM IS TESTED AS A CLAIM RATHER THAN AS A SETTER.** The button's
  * eight are FORWARDS, so each is checked by asking the CELL what it now answers — a button that stored its own copy

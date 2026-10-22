@@ -1,8 +1,10 @@
 /*
  * stepper_and_secure — four classes: the stepper pair and the secure field pair.
  *
- * Copyright © 2026 Kyle J. Cardoza. MIT licensed — see LICENSE.
- * SPDX-License-Identifier: MIT
+ * Copyright © 2026 Kyle J. Cardoza.
+ * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **THE STEPPER'S CLAIM IS THAT THE PRESS IS THE STEP, AND THAT THE ARROW PRESSED DECIDES THE DIRECTION.** The probe drives
  * the cell's own tracking hooks — the non-modal protocol the slider uses — with points in each half of the control, and

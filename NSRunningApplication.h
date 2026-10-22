@@ -1,8 +1,10 @@
 /*
  * NSRunningApplication.h — an application the window server can see is running.
  *
- * Copyright © 2026 Kyle J. Cardoza. MIT licensed.
- * SPDX-License-Identifier: MIT
+ * Copyright © 2026 Kyle J. Cardoza.
+ * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
+ * SPDX-License-Identifier: LGPL-3.0-or-later
+ * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **WHAT THIS CAN HONESTLY BE IN THIS TREE, AND WHAT IT CANNOT.** On the Mac an `NSRunningApplication` is a live
  * Process Manager record: a pid, a launch date, a hidden flag, and a `terminate` that can be escalated to a

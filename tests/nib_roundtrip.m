@@ -1,7 +1,10 @@
 /*
  * nib_roundtrip.m — the first-party nib format's round trip, and the three rules that make it safe.
  *
- * Copyright © 2026 Kyle J. Cardoza. MIT licensed — see LICENSE.
+ * Copyright © 2026 Kyle J. Cardoza.
+ * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * WHAT THIS PROVES, IN ORDER:
  *

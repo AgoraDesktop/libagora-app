@@ -2,7 +2,10 @@
  * NSGlyphPacking.m — `NSConvertGlyphsToPackedGlyphs`.
  *
  * © 2026 Kyle J. Cardozo. MIT licence (see LICENSE at the repository root).
- * SPDX-License-Identifier: MIT
+ * Copyright © 2026 Kyle J. Cardoza.
+ * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
+ * SPDX-License-Identifier: LGPL-3.0-or-later
+ * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **THE THREE INTEGER-WIDTH PACKINGS ARE REAL AND THE TWO EUC PACKINGS REFUSE.** A glyph buffer in this tier is a run of
  * 16-bit `NSGlyph` values, and moving each into one, two or four bytes is a shift and a store. European/Japanese EUC is

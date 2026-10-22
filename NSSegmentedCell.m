@@ -1,8 +1,10 @@
 /*
  * NSSegmentedCell — the face and the tracking of a row of segments.
  *
- * Copyright © 2026 Kyle J. Cardoza. MIT licensed.
- * SPDX-License-Identifier: MIT
+ * Copyright © 2026 Kyle J. Cardoza.
+ * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
+ * SPDX-License-Identifier: LGPL-3.0-or-later
+ * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **A SEGMENT IS A RECORD, NOT A VIEW.** Each one carries a label, an image, an image-scaling rule, a width, a tag,
  * an enabled flag, a selected flag, a menu and a tool tip. The cell keeps those records in one array and derives the

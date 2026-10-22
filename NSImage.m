@@ -1,8 +1,10 @@
 /*
  * NSImage — a container of representations that answers drawing requests by choosing one.
  *
- * Copyright © 2026 Kyle J. Cardoza. MIT licensed — see LICENSE.
- * SPDX-License-Identifier: MIT
+ * Copyright © 2026 Kyle J. Cardoza.
+ * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
+ * SPDX-License-Identifier: LGPL-3.0-or-later
+ * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * THE OWNERSHIP IS THE WHOLE OF THIS FILE'S DIFFICULTY, and it is small: this class owns `_reps` and
  * nothing else. `-addRepresentation:` RETAINS its argument (an image outlives the local that made the

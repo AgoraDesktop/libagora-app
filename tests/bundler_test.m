@@ -1,7 +1,10 @@
 /*
  * bundler_test — a bundle for more than one machine, written and then READ BACK by NSBundle.
  *
- * Copyright © 2026 Kyle J. Cardoza. MIT licensed — see LICENSE.
+ * Copyright © 2026 Kyle J. Cardoza.
+ * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * The writer and the reader are two halves of one decision, so the test would be worth little if it checked only the
  * files: what matters is that `NSBundle -executablePath` picks the binary for THIS machine out of a bundle that carries

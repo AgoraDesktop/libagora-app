@@ -1,8 +1,10 @@
 /*
  * NSDockMenu.h — an application's dock menu, and the Dock's half of showing it.
  *
- * Copyright © 2026 Kyle J. Cardoza. MIT licensed.
- * SPDX-License-Identifier: MIT
+ * Copyright © 2026 Kyle J. Cardoza.
+ * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
+ * SPDX-License-Identifier: LGPL-3.0-or-later
+ * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **THIS IS NOT APPLE'S CLASS, AND IT EXISTS BECAUSE TWO PROCESSES HAVE TO AGREE ABOUT A MENU.** On the Mac the
  * Dock is Apple's and asks an application for its tile's items over a private channel; Agora's Dock is a program of

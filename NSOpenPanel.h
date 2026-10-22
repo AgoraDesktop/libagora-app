@@ -1,8 +1,10 @@
 /*
  * NSOpenPanel.h — THE SAVE PANEL, ASKED A DIFFERENT QUESTION: WHAT TO OPEN, AND HOW MANY.
  *
- * Copyright © 2026 Kyle J. Cardoza. MIT licensed — see LICENSE.
- * SPDX-License-Identifier: MIT
+ * Copyright © 2026 Kyle J. Cardoza.
+ * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
+ * SPDX-License-Identifier: LGPL-3.0-or-later
+ * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **THE BROWSER IS THE SAME ONE; THE FLAGS ARE THE CLASS.** An open panel is an `NSSavePanel` whose prompt is "Open",
  * whose title is "Open", whose name label is "Name:", and which accepts files or directories according to

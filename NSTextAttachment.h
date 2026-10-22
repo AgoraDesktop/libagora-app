@@ -1,8 +1,10 @@
 /*
  * NSTextAttachment.h — THE OBJECT AN ATTRIBUTED STRING CARRIES WHERE A PICTURE GOES.
  *
- * Copyright © 2026 Kyle J. Cardoza. MIT licensed — see LICENSE.
- * SPDX-License-Identifier: MIT
+ * Copyright © 2026 Kyle J. Cardoza.
+ * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
+ * SPDX-License-Identifier: LGPL-3.0-or-later
+ * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **AN ATTACHMENT IS A CHARACTER THAT STANDS FOR SOMETHING ELSE.** Apple's model is one character of
  * `NSAttachmentCharacter` (U+FFFC, the OBJECT REPLACEMENT CHARACTER) in the string, with an `NSTextAttachment` as

@@ -1,8 +1,10 @@
 /*
  * AGSwitch.h — a control that is off or on, and says so with a knob.
  *
- * Copyright © 2026 Kyle J. Cardoza. MIT licensed — see LICENSE.
- * SPDX-License-Identifier: MIT
+ * Copyright © 2026 Kyle J. Cardoza.
+ * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
+ * SPDX-License-Identifier: LGPL-3.0-or-later
+ * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **APPLE HAS NO DOOR FOR THIS IN THE ERA THIS TREE PINS.** A switch arrived as `NSSwitch` in 10.15; in 10.5 and 10.6
  * the only thing shaped like one is `NSSwitchButton`, which is a CHECKBOX with a label and not a track. So this is the

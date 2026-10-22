@@ -1,7 +1,7 @@
 # THE 10.6 API CENSUS — how much of the Mac OS X 10.6 AppKit this tree answers, pinned.
 #
-# Copyright © 2026 Kyle J. Cardoza. MIT licensed — see LICENSE.
-# SPDX-License-Identifier: MIT
+# Copyright © 2026 Kyle J. Cardoza.
+# SPDX-License-Identifier: GPL-3.0-or-later
 #
 # The third census in this suite, and the one that measures the OTHER direction. `refusal_census.txt` holds what the
 # implementation says it cannot do; `owed_census.txt` holds what the headers say they do not do yet; both are claims

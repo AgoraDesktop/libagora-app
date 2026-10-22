@@ -1,8 +1,10 @@
 /*
  * save_panel — NSSavePanel and NSOpenPanel: the listing, the filters, the accept, and the three ways to run it.
  *
- * Copyright © 2026 Kyle J. Cardoza. MIT licensed — see LICENSE.
- * SPDX-License-Identifier: MIT
+ * Copyright © 2026 Kyle J. Cardoza.
+ * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **THE CLAIM IS THAT A PANEL RETURNS THE URL THE LISTING AND THE NAME FIELD SAY.** The probe builds a temp directory with
  * files, a directory and a hidden file, points a save panel at it, and accepts names: a plain one, one that gains the

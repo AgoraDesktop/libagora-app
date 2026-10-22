@@ -1,8 +1,10 @@
 /*
  * text_container.m — A REGION, THE FOUR FACTS ABOUT IT, AND THE ONE COMPUTATION THAT READS THEM.
  *
- * Copyright © 2026 Kyle J. Cardoza. MIT licensed — see LICENSE.
- * SPDX-License-Identifier: MIT
+ * Copyright © 2026 Kyle J. Cardoza.
+ * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **THE CONTAINER'S WHOLE CLAIM IS GEOMETRY, SO THE PROBE IS EXACT RECTANGLES.** A proposed fragment inside the
  * region answers itself; one that runs over an edge answers the part that fits; one that misses entirely answers

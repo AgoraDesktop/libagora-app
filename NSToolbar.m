@@ -1,8 +1,10 @@
 /*
  * NSToolbar — the strip between the title bar and the content.
  *
- * Copyright © 2026 Kyle J. Cardoza. MIT licensed.
- * SPDX-License-Identifier: MIT
+ * Copyright © 2026 Kyle J. Cardoza.
+ * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
+ * SPDX-License-Identifier: LGPL-3.0-or-later
+ * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **THE VIEW IS A SUBVIEW OF THE CONTENT VIEW, AND THAT IS NOT AN ACCIDENT OF DRAWING.** The toolbar band sits above
  * the content rect, so a view at `y = content.height` is outside its superview's bounds — and `NSView`'s live draw

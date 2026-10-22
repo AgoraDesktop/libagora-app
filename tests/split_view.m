@@ -1,8 +1,10 @@
 /*
  * split_view — panes, dividers, the collapse, the constraints and the ink.
  *
- * Copyright © 2026 Kyle J. Cardoza. MIT licensed.
- * SPDX-License-Identifier: MIT
+ * Copyright © 2026 Kyle J. Cardoza.
+ * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **A SPLIT VIEW IS GEOMETRY, A GESTURE AND A DELEGATE AT ONCE, SO THIS FILE ASKS ALL THREE.** The geometry half is
  * the pane frames, the divider positions and the possible ranges; the gesture half is a press inside a divider's

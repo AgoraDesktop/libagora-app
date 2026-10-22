@@ -1,7 +1,10 @@
 /*
  * NSNib — the first-party interface format: the root's shape, the writer, and the reader with its allow-list.
  *
- * Copyright © 2026 Kyle J. Cardoza. MIT licensed — see LICENSE.
+ * Copyright © 2026 Kyle J. Cardoza.
+ * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
+ * SPDX-License-Identifier: LGPL-3.0-or-later
+ * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * See the header for the format and the four rules the reader keeps. What is worth repeating here is the ORDER of
  * the checks in `-instantiateNibWithOwner:topLevelObjects:`, because the order is the security story:

@@ -1,7 +1,10 @@
 /*
  * image_draw — the one rule an image rep's `-drawInRect:` has to keep: UP IS UP IN BOTH KINDS OF VIEW.
  *
- * Copyright © 2026 Kyle J. Cardoza. MIT licensed. SPDX-License-Identifier: MIT
+ * Copyright © 2026 Kyle J. Cardoza.
+ * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **THE BUG THIS PINS WAS VISIBLE IN WORKSPACE AND MEASURED THERE.** The Desktop and the file window's
  * `WSIconView` are the two coordinate systems AppKit builds: the first draws in a y-up space, the second is

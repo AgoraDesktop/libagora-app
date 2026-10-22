@@ -1,8 +1,10 @@
 /*
  * NSToolbar_internal.h — the doors NSWindow and NSToolbarItem use on each other.
  *
- * Copyright © 2026 Kyle J. Cardoza. MIT licensed — see LICENSE.
- * SPDX-License-Identifier: MIT
+ * Copyright © 2026 Kyle J. Cardoza.
+ * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
+ * SPDX-License-Identifier: LGPL-3.0-or-later
+ * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **THE TOOLBAR'S VIEW IS PRIVATE, BUT THE WINDOW HAS TO HOST IT.** `NSToolbarView` is an implementation class: it
  * owns the layout, the item rectangles and the custom item views, and no caller outside `NSToolbar.m` should name it.

@@ -1,8 +1,10 @@
 /*
  * NSSegmentedControl — a row of segments that acts as one control.
  *
- * Copyright © 2026 Kyle J. Cardoza. MIT licensed.
- * SPDX-License-Identifier: MIT
+ * Copyright © 2026 Kyle J. Cardoza.
+ * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
+ * SPDX-License-Identifier: LGPL-3.0-or-later
+ * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **EVERY DOOR IS A FORWARD, AND THAT IS THE CLASS.** The segments, their contents, the selection and the tracking
  * are the cell's; the view supplies a frame and a cell and asks its cell to draw. The one decision here is the

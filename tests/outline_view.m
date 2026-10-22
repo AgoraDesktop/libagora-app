@@ -1,8 +1,10 @@
 /*
  * outline_view — the table's tree: roots, children, disclosure, levels and selection.
  *
- * Copyright © 2026 Kyle J. Cardoza. MIT licensed.
- * SPDX-License-Identifier: MIT
+ * Copyright © 2026 Kyle J. Cardoza.
+ * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **AN OUTLINE IS A TABLE WITH A FLATTENED TREE, SO THE TEST ASKS BOTH HALVES.** The tree half is the flattened
  * rows, their levels, the item at a row and the row for an item; the table half is the outline column's inset cell,

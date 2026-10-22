@@ -1,8 +1,10 @@
 /*
  * text_editing_commands.m — `-transpose:` AND THE INSERTIONS THAT IGNORE A FIELD'S ROLE.
  *
- * Copyright © 2026 Kyle J. Cardoza. MIT licensed — see LICENSE.
- * SPDX-License-Identifier: MIT
+ * Copyright © 2026 Kyle J. Cardoza.
+ * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **THE COMMANDS THE RESPONDER NAMED AS OWED, IMPLEMENTED WHERE THEY BELONG.** `-transpose:` is pure string
  * arithmetic over a position — no layout, no width, no marked range — so it is the one command in that named list that

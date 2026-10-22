@@ -2,7 +2,10 @@
  * text_glyph_store — the layout manager's per-glyph record, and what a caller can do to it.
  *
  * © 2026 Kyle J. Cardozo. MIT licence (see LICENSE at the repository root).
- * SPDX-License-Identifier: MIT
+ * Copyright © 2026 Kyle J. Cardoza.
+ * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **THE STORE IS A SHADOW OF THE LAYOUT, SO THIS TEST ASSERTS BOTH HALVES OF THAT CLAIM.** A shadow has to agree with
  * what it shadows — the glyph, the character and the location a caller reads must be the shaper's answers, not zeros —

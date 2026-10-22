@@ -1,8 +1,10 @@
 /*
  * NSComboBoxCell.h — THE OTHER FIELD WITH A CHIP IN IT, AND THE ONE TRIANGLE THAT TELLS THEM APART.
  *
- * Copyright © 2026 Kyle J. Cardoza. MIT licensed — see LICENSE.
- * SPDX-License-Identifier: MIT
+ * Copyright © 2026 Kyle J. Cardoza.
+ * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
+ * SPDX-License-Identifier: LGPL-3.0-or-later
+ * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **THIS CELL DRAWS THE SAME FIELD AS `NSPopUpButtonCell` AND DIFFERS IN ONE MARK.** The sample's gallery draws the
  * two controls on adjacent rows, and it draws them as the same control twice: a one-point bordered rectangle, radius

@@ -1,8 +1,10 @@
 /*
  * text_input_method.m — THE INPUT METHOD: A KEYSTROKE COMPOSED WITH THE ONE AFTER IT.
  *
- * Copyright © 2026 Kyle J. Cardoza. MIT licensed — see LICENSE.
- * SPDX-License-Identifier: MIT
+ * Copyright © 2026 Kyle J. Cardoza.
+ * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **A DEAD KEY IS A COMPOSITION THAT SPANS TWO KEYSTROKES, AND THE PROBE DRIVES IT THROUGH THE CONTEXT.** The context
  * is handed a source; the source is handed each key before the standard binding. The accent goes into the store MARKED

@@ -1,8 +1,10 @@
 /*
  * text_block_rects — the block's two rectangles and an attachment's size, which are the layout's answers to a caller.
  *
- * Copyright © 2026 Kyle J. Cardoza. MIT licensed — see LICENSE.
- * SPDX-License-Identifier: MIT
+ * Copyright © 2026 Kyle J. Cardoza.
+ * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **THE CLAIMS ARE THREE AND EACH IS CHECKABLE WITHOUT KNOWING THE LAYOUT'S ARITHMETIC.**
  *

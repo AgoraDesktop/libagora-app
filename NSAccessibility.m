@@ -2,7 +2,10 @@
  * NSAccessibility.m — the tree utilities, over whatever answers the informal protocol.
  *
  * © 2026 Kyle J. Cardozo. MIT licence (see LICENSE at the repository root).
- * SPDX-License-Identifier: MIT
+ * Copyright © 2026 Kyle J. Cardoza.
+ * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
+ * SPDX-License-Identifier: LGPL-3.0-or-later
+ * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **THE ELEMENT IS ASKED RATHER THAN INSPECTED.** Cocoa's accessibility element is a duck type: any object answering
  * `-accessibilityRole`, `-accessibilityParent`, `-accessibilityIsIgnored` and `-accessibilityChildren` is one. So this

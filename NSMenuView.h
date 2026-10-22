@@ -1,7 +1,10 @@
 /*
  * NSMenuView.h — the view that lays out a menu's items and draws them.
  *
- * Copyright © 2026 Kyle J. Cardoza. MIT licensed. SPDX-License-Identifier: MIT
+ * Copyright © 2026 Kyle J. Cardoza.
+ * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
+ * SPDX-License-Identifier: LGPL-3.0-or-later
+ * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **THE CALLER `NSMenuItemCell` WAS WRITTEN FOR.** This tree had the menu, the items and the CELL — 1,900 lines of
  * working tracking, item data and per-item geometry — and no VIEW. That is why `NSMenu -menuRepresentation`

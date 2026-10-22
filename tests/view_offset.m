@@ -1,7 +1,10 @@
 /*
  * view_offset — the one thing a scroll moves: a non-zero BOUNDS ORIGIN.
  *
- * Copyright © 2026 Kyle J. Cardoza. MIT licensed. SPDX-License-Identifier: MIT
+ * Copyright © 2026 Kyle J. Cardoza.
+ * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **A `bounds` ORIGIN THAT IS NOT ZERO IS WHAT "SCROLLED" MEANS**, and it is read in exactly three places: the
  * coordinate conversions a click goes through, the `-displayRect:` a live window draws through, and the

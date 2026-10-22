@@ -1,8 +1,10 @@
 /*
  * NSCursor — the pointer's state: its image, its hot spot, and the stack a view pushes.
  *
- * Copyright © 2026 Kyle J. Cardoza. MIT licensed — see LICENSE.
- * SPDX-License-Identifier: MIT
+ * Copyright © 2026 Kyle J. Cardoza.
+ * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
+ * SPDX-License-Identifier: LGPL-3.0-or-later
+ * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * THE STACK IS THE WHOLE POINT, and it is why this class is worth writing before any window exists. A view
  * that wants a resize cursor while the mouse is over its divider does not set one and remember to put the

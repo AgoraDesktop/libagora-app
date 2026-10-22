@@ -1,8 +1,10 @@
 /*
  * NSTableColumn — one column's width, cells and sort prototype.
  *
- * Copyright © 2026 Kyle J. Cardoza. MIT licensed.
- * SPDX-License-Identifier: MIT
+ * Copyright © 2026 Kyle J. Cardoza.
+ * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
+ * SPDX-License-Identifier: LGPL-3.0-or-later
+ * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * The width is the only piece with arithmetic: a set clamps to the range, a range change pulls the width back inside
  * it, and every change asks the table to re-tile because a column's width is the table's frame. The two cells are

@@ -1,8 +1,10 @@
 /*
  * text_coding.m — `NSCoding` on the two text-layout values: an archived list and an archived block.
  *
- * Copyright © 2026 Kyle J. Cardoza. MIT licensed — see LICENSE.
- * SPDX-License-Identifier: MIT
+ * Copyright © 2026 Kyle J. Cardoza.
+ * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **BOTH CLASSES DECLARE `<NSCoding, NSCopying>` IN THE 10.6 SDK** — `NSTextList` in its own header and `NSTextBlock` in
  * `NSTextTable.h`, which is where the SDK keeps the block — and neither had the pair until now. The probe archives and

@@ -1,8 +1,10 @@
 /*
  * NSScrollView_internal.h — the header seam a table uses.
  *
- * Copyright © 2026 Kyle J. Cardoza. MIT licensed — see LICENSE.
- * SPDX-License-Identifier: MIT
+ * Copyright © 2026 Kyle J. Cardoza.
+ * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
+ * SPDX-License-Identifier: LGPL-3.0-or-later
+ * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **THE HEADER IS A SIBLING OF THE CLIP VIEW.** It does not scroll vertically with the document and it does follow the
  * horizontal offset; that is a property of the scroll view's layout, so the scroll view is where the header lives.

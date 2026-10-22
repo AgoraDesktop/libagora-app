@@ -1,8 +1,10 @@
 /*
  * AGStatusBarItemView.h — the view a status item makes for itself: its face, and its press.
  *
- * Copyright © 2026 Kyle J. Cardoza. MIT licensed — see LICENSE.
- * SPDX-License-Identifier: MIT
+ * Copyright © 2026 Kyle J. Cardoza.
+ * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
+ * SPDX-License-Identifier: LGPL-3.0-or-later
+ * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **A STATUS ITEM IS A WINDOW, AND SOMETHING IN IT HAS TO TAKE THE PRESS.** Apple's is a private button
  * (`NSStatusBarButton`); this tier's is this view, and it is the reader for four doors that were otherwise stored values:

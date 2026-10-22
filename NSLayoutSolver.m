@@ -1,8 +1,10 @@
 /*
  * NSLayoutSolver.m — linear equations, iteratively projected, written back as frames.
  *
- * Copyright © 2026 Kyle J. Cardoza. MIT licensed — see LICENSE.
- * SPDX-License-Identifier: MIT
+ * Copyright © 2026 Kyle J. Cardoza.
+ * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
+ * SPDX-License-Identifier: LGPL-3.0-or-later
+ * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **WHY A PROJECTION SOLVER RATHER THAN CASSOWARY.** Every constraint here is a linear equation, a half-space or a
  * pair of them, over the four numbers of each managed view's frame. Required constraints are convex sets the answer

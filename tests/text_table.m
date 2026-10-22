@@ -1,8 +1,10 @@
 /*
  * text_table.m — THE BOX A PARAGRAPH IS SET IN: `NSTextBlock`, its table cell, and the ground the manager draws.
  *
- * Copyright © 2026 Kyle J. Cardoza. MIT licensed — see LICENSE.
- * SPDX-License-Identifier: MIT
+ * Copyright © 2026 Kyle J. Cardoza.
+ * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **THE BLOCK IS A VALUE AND THE MANAGER IS ITS READER.** `NSTextBlock` measures three layers on four edges, holds a
  * ground and four border colours, and knows how to draw itself; the layout manager finds the block a line carries in

@@ -1,3 +1,8 @@
+# Copyright © 2026 Kyle J. Cardoza.
+# SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
+
 #!/bin/bash
 # **THE MENU BAR'S USABLE REGION, AGAINST AGORA'S OWN SERVER** — the number an application cannot derive. It needs a
 # compositor that speaks `agora_shell`, so it runs against `window-server` and SKIPS (77) without one.

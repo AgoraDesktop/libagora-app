@@ -1,7 +1,10 @@
 /*
  * workspace_services — NSWorkspace and NSRunningApplication, measured.
  *
- * Copyright © 2026 Kyle J. Cardoza. MIT licensed. SPDX-License-Identifier: MIT
+ * Copyright © 2026 Kyle J. Cardoza.
+ * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **THE WINDOW LIST IS FED IN DIRECTLY, WHICH IS WHY THIS TEST NEEDS NO COMPOSITOR.** `NSWorkspace`'s whole model is
  * one diff over two snapshots, and the snapshot is a plain array of rows — so the interesting half (launch,

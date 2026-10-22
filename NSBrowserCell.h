@@ -1,8 +1,10 @@
 /*
  * NSBrowserCell.h — the cell a browser's rows draw.
  *
- * Copyright © 2026 Kyle J. Cardoza. MIT licensed — see LICENSE.
- * SPDX-License-Identifier: MIT
+ * Copyright © 2026 Kyle J. Cardoza.
+ * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
+ * SPDX-License-Identifier: LGPL-3.0-or-later
+ * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **THE BROWSER'S CELL IS A TEXT-FIELD CELL WITH TWO BROWSER FACTS.** A row has a picture and a title like any cell,
  * and it is a LEAF (nothing opens to its right) or a BRANCH, and LOADED when its column has been read. The drawing is

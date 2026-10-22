@@ -1,8 +1,10 @@
 /*
  * text_attachment.m — AN ATTACHMENT: A CHARACTER THAT STANDS FOR A PICTURE, AND THE CELL THAT DRAWS IT.
  *
- * Copyright © 2026 Kyle J. Cardoza. MIT licensed — see LICENSE.
- * SPDX-License-Identifier: MIT
+ * Copyright © 2026 Kyle J. Cardoza.
+ * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **THE MODEL IS A CHARACTER AND AN ATTRIBUTE, AND THE PROBE CHECKS BOTH ENDS.** `NSAttachmentCharacter` (U+FFFC) is
  * the character; `NSAttachmentAttributeName` carries the `NSTextAttachment`; and the layout manager draws the

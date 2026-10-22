@@ -1,8 +1,10 @@
 /*
  * NSStringDrawing.h — drawing a string where a caller says, which is the ink layer §A10bt found missing.
  *
- * Copyright © 2026 Kyle J. Cardoza. MIT licensed — see LICENSE.
- * SPDX-License-Identifier: MIT
+ * Copyright © 2026 Kyle J. Cardoza.
+ * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
+ * SPDX-License-Identifier: LGPL-3.0-or-later
+ * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **§A10bt RETRACTED "a font is ink in this tier" AND NAMED THE GAP AS A LAYER.** The font arrived (§A10bv,
  * §A10bw); this file is the other half — the six doors that put a string on a surface — and it is the layer

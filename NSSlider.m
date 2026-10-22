@@ -1,7 +1,10 @@
 /*
  * NSSlider — a control whose value is a position.
  *
- * Copyright © 2026 Kyle J. Cardoza. MIT licensed — see LICENSE.
+ * Copyright © 2026 Kyle J. Cardoza.
+ * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
+ * SPDX-License-Identifier: LGPL-3.0-or-later
+ * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **THE WHOLE FILE IS THE CELL, THE FORWARDS, AND ONE VIEW DOOR.** That is not a small class making excuses: a
  * control's design is that the CELL owns what is drawn and what the value is, and a slider is the control where that

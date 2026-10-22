@@ -1,8 +1,10 @@
 /*
  * NSSecureTextField.h — A FIELD WHOSE INK IS BULLETS.
  *
- * Copyright © 2026 Kyle J. Cardoza. MIT licensed — see LICENSE.
- * SPDX-License-Identifier: MIT
+ * Copyright © 2026 Kyle J. Cardoza.
+ * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
+ * SPDX-License-Identifier: LGPL-3.0-or-later
+ * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **THE CLASS IS THE CELL, INSTALLED.** Apple declares no selectors of its own on `NSSecureTextField` — the whole surface is
  * `NSTextField`'s — so this class is one `-initWithFrame:` that makes an `NSSecureTextFieldCell` instead of a plain field

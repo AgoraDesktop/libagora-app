@@ -2,7 +2,10 @@
  * functions_target3 — the phantom fixes and the last six function doors.
  *
  * © 2026 Kyle J. Cardozo. MIT licence (see LICENSE at the repository root).
- * SPDX-License-Identifier: MIT
+ * Copyright © 2026 Kyle J. Cardoza.
+ * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **THE THREE PHANTOMS WERE FOUND BY THE CENSUS, SO THEY ARE PINNED BY A TEST THAT WOULD HAVE FAILED BEFORE.** A
  * declared property with no accessors is not a documentation gap: `-setRepresentedObject:` was an unrecognized

@@ -1,3 +1,8 @@
+# Copyright © 2026 Kyle J. Cardoza.
+# SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
+
 #!/bin/bash
 # The AppKit against AGORA'S OWN WINDOW SERVER, which is the only compositor that can answer `-visibleFrame`:
 # a stock one has no furniture to subtract and says the whole screen. What this asserts is the RESERVE — the

@@ -1,8 +1,10 @@
 /*
  * NSCachedImageRep.h — A REP THAT HOLDS PIXELS SOMEBODY ELSE DREW.
  *
- * Copyright © 2026 Kyle J. Cardoza. MIT licensed — see LICENSE.
- * SPDX-License-Identifier: MIT
+ * Copyright © 2026 Kyle J. Cardoza.
+ * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
+ * SPDX-License-Identifier: LGPL-3.0-or-later
+ * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **THE REP FOR A REGION ALREADY RENDERED.** Two shapes: a WINDOW and a rectangle of it (the era's way to keep a piece of
  * a window as an image), or a blank CANVAS of a given size and depth that a caller fills in. This tier can honour both for

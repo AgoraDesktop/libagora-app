@@ -1,8 +1,10 @@
 /*
  * text_table_collapse.m — `-collapsesBorders`: AN EDGE TWO CELLS SHARE IS DRAWN ONCE, NOT TWICE.
  *
- * Copyright © 2026 Kyle J. Cardoza. MIT licensed — see LICENSE.
- * SPDX-License-Identifier: MIT
+ * Copyright © 2026 Kyle J. Cardoza.
+ * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **THE CLAIM IS ABOUT INK, SO THE PROBE READS PIXELS.** A cell's box is its CELL (its column's width), not the extent
  * of its glyphs, so two cells side by side actually meet at the column boundary. When the table collapses its borders

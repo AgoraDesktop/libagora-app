@@ -1,8 +1,10 @@
 /*
  * NSTabView — a set of panes with tabs along one edge.
  *
- * Copyright © 2026 Kyle J. Cardoza. MIT licensed — see LICENSE.
- * SPDX-License-Identifier: MIT
+ * Copyright © 2026 Kyle J. Cardoza.
+ * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
+ * SPDX-License-Identifier: LGPL-3.0-or-later
+ * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * The pair is one object graph: the view owns the items, an item owns its pane, and exactly one pane is IN the view's
  * hierarchy. Selection is the whole behaviour — everything else is geometry (where the strip is and what is left for the

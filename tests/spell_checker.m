@@ -2,7 +2,10 @@
  * spell_checker — the word-list checker, and the text view doors that reach it.
  *
  * © 2026 Kyle J. Cardozo. MIT licence (see LICENSE at the repository root).
- * SPDX-License-Identifier: MIT
+ * Copyright © 2026 Kyle J. Cardoza.
+ * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **THIS IS THE FIRST CLASS IN THE TIER WHOSE BACKING IS THE MACHINE'S OWN DATA**, so the test has to be careful about
  * what it claims. It asserts the CONTRACT — a misspelled word is found, a spelled one is not, an ignored or learned word

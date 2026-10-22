@@ -1,7 +1,10 @@
 /*
  * window_chrome — is the title bar Agora's, and is it the shapes it says it is?
  *
- * Copyright © 2026 Kyle J. Cardoza. MIT licensed. SPDX-License-Identifier: MIT
+ * Copyright © 2026 Kyle J. Cardoza.
+ * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **THE CHROME IS THE CLIENT'S, SO IT CAN BE DRAWN WITHOUT A COMPOSITOR — AND THAT IS WHY THIS FILE CAN EXIST.**
  * The window server draws no title bar (see `agora-shell.xml`: its share of the model is the shadow, the work area

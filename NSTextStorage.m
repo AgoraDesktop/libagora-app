@@ -1,8 +1,10 @@
 /*
  * NSTextStorage.m — an attributed string that says what was edited, and coalesces until it is asked.
  *
- * Copyright © 2026 Kyle J. Cardoza. MIT licensed — see LICENSE.
- * SPDX-License-Identifier: MIT
+ * Copyright © 2026 Kyle J. Cardoza.
+ * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
+ * SPDX-License-Identifier: LGPL-3.0-or-later
+ * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **THE TWO OVERRIDES UNDER "THE PRIMITIVES" ARE THE CLASS.** Apple's header states the contract in one sentence —
  * "These primitives should perform the change then call `-edited:range:changeInLength:` to get everything else to

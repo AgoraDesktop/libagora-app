@@ -1,8 +1,10 @@
 /*
  * NSSearchField.m — a search field is a text field whose cell has two ornaments, and a press that can miss the text.
  *
- * Copyright © 2026 Kyle J. Cardoza. MIT licensed — see LICENSE.
- * SPDX-License-Identifier: MIT
+ * Copyright © 2026 Kyle J. Cardoza.
+ * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
+ * SPDX-License-Identifier: LGPL-3.0-or-later
+ * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  */
 #import <AppKit/NSSearchField.h>
 #import <AppKit/NSSearchFieldCell.h>

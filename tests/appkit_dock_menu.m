@@ -1,8 +1,10 @@
 /*
  * appkit_dock_menu — the format a tile's menu crosses by, and the ids it comes back by.
  *
- * Copyright © 2026 Kyle J. Cardoza. MIT licensed.
- * SPDX-License-Identifier: MIT
+ * Copyright © 2026 Kyle J. Cardoza.
+ * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **THE TRANSPORT HAS TWO HALVES AND NEITHER OF THEM NEEDS A COMPOSITOR.** An application writes a menu as a JSON
  * description and the Dock reads one back into an `NSMenu`; that is a pure conversion of a tree into a string and

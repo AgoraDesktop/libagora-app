@@ -1,8 +1,10 @@
 /*
  * control_drag — how many times does a window DRAW while a slider is being dragged?
  *
- * Copyright © 2026 Kyle J. Cardoza. MIT licensed.
- * SPDX-License-Identifier: MIT
+ * Copyright © 2026 Kyle J. Cardoza.
+ * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **"LAGGY TO DRAG AND SNAPPY TO CLICK" IS A NUMBER, AND THIS IS THE INSTRUMENT.** A click is one event and one
  * frame; a drag at a hand's rate is a HUNDRED events, and the question is how many frames the window commits for

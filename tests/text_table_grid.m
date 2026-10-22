@@ -1,8 +1,10 @@
 /*
  * text_table_grid.m — THE GRID: CELLS SIDE BY SIDE, COLUMNS MEASURED, ROWS AS TALL AS THEIR TALLEST CELL.
  *
- * Copyright © 2026 Kyle J. Cardoza. MIT licensed — see LICENSE.
- * SPDX-License-Identifier: MIT
+ * Copyright © 2026 Kyle J. Cardoza.
+ * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **THE CLAIM IS WHERE THE CELLS LAND, SO THE PROBE READS THE MANAGER'S OWN GEOMETRY.** A table's cells are paragraphs
  * whose style carries a `NSTextTableBlock`; the layout manager lays them out as a grid — each cell inside its own

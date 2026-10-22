@@ -2,7 +2,10 @@
  * NSImageComposition.m — the nine-slice and three-slice image composers.
  *
  * © 2026 Kyle J. Cardozo. MIT licence (see LICENSE at the repository root).
- * SPDX-License-Identifier: MIT
+ * Copyright © 2026 Kyle J. Cardoza.
+ * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
+ * SPDX-License-Identifier: LGPL-3.0-or-later
+ * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **A NINE-SLICE ASSET IS HOW THE ERA KEPT A BUTTON'S CORNERS FROM SMEARING**, and the contract is entirely about which
  * rectangle each slice lands in: the four corners at their natural size, the four edges stretched along their axis

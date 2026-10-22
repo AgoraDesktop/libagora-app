@@ -1,3 +1,8 @@
+# Copyright © 2026 Kyle J. Cardoza.
+# SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
+
 # libagora-app's tests.
 #
 # `keyboard` needs nothing but a keymap, so it always runs. `window` needs a COMPOSITOR, which is a property
@@ -1193,6 +1198,18 @@ target_link_libraries(matrix PRIVATE App)
 
 add_test(NAME appkit-matrix COMMAND matrix)
 set_tests_properties(appkit-matrix PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
+
+# **THE COLOUR PANELS: A LIST, A WELL, THE SHARED PANEL AND THE PICKER IT HOSTS.** The chain is the claim — a list
+# written to the standard directory is found by name, which is what `+[NSColor colorWithCatalogName:colorName:]` now
+# reads; a well's swatch is its colour in pixels; the panel is ONE window whose chips choose a mode and whose swatch and
+# alpha ramp are where the content view says they are; a click in the picker's grid sets the panel's colour to that
+# cell's colour; and the drag door's pasteboard half round-trips through `+colorFromPasteboard:` while the session
+# itself answers NO without a window.
+add_executable(colour_panels colour_panels.m)
+target_link_libraries(colour_panels PRIVATE App)
+
+add_test(NAME appkit-colour-panels COMMAND colour_panels)
+set_tests_properties(appkit-colour-panels PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
 
 # **THE STEPPER PAIR AND THE SECURE FIELD PAIR.** The stepper's press IS the step: the probe drives the cell's own tracking
 # hooks in each half of the control, in BOTH flips (a direction that a flip reverses), checks the clamp, the wrap, the action

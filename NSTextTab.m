@@ -1,8 +1,10 @@
 /*
  * NSTextTab.m — a location, a kind, and the options Apple names no key for.
  *
- * Copyright © 2026 Kyle J. Cardoza. MIT licensed — see LICENSE.
- * SPDX-License-Identifier: MIT
+ * Copyright © 2026 Kyle J. Cardoza.
+ * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
+ * SPDX-License-Identifier: LGPL-3.0-or-later
+ * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **THE CLASS IS A VALUE, SO `-copy` IS A RETAIN** and the only arithmetic is the mapping between the type and the
  * alignment, which are the same vocabulary spelled two ways. A decimal tab has no alignment counterpart — it lines

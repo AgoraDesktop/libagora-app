@@ -1,8 +1,10 @@
 /*
  * NSMenuItemCell — where each part of a menu item goes, and what it needs before it can be painted.
  *
- * Copyright © 2026 Kyle J. Cardoza. MIT licensed — see LICENSE.
- * SPDX-License-Identifier: MIT
+ * Copyright © 2026 Kyle J. Cardoza.
+ * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
+ * SPDX-License-Identifier: LGPL-3.0-or-later
+ * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * THE ARITHMETIC HERE IS THE WHOLE POINT OF THE CLASS, SO IT IS IN ONE PLACE AND IT IS STATED ONCE: a menu row
  * runs left to right as STATE IMAGE, IMAGE, TITLE, then the KEY EQUIVALENT against the right edge. The three rect

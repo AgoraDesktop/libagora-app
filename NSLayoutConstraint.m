@@ -1,8 +1,10 @@
 /*
  * NSLayoutConstraint.m — the equation, its activation, and the owner it is solved by.
  *
- * Copyright © 2026 Kyle J. Cardoza. MIT licensed — see LICENSE.
- * SPDX-License-Identifier: MIT
+ * Copyright © 2026 Kyle J. Cardoza.
+ * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
+ * SPDX-License-Identifier: LGPL-3.0-or-later
+ * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * THE CLASS DOES NOT SOLVE ANYTHING. It is a value — two sides, a relation, a multiplier, a constant and a
  * priority — and the engine in `NSLayoutSolver.m` is what turns a window's worth of these into frames. Keeping

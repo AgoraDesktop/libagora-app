@@ -1,8 +1,10 @@
 /*
  * NSDatePicker — a date shown as text, the subfield a step applies to, and the delegate that may refuse it.
  *
- * Copyright © 2026 Kyle J. Cardoza. MIT licensed — see LICENSE.
- * SPDX-License-Identifier: MIT
+ * Copyright © 2026 Kyle J. Cardoza.
+ * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
+ * SPDX-License-Identifier: LGPL-3.0-or-later
+ * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * The cell owns the date, the two bounds, the interval and the six doors that decide how the date READS; the control forwards.
  * The text is produced by an `NSDateFormatter` configured from the cell's own calendar, locale and time zone, and the pattern

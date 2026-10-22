@@ -1,8 +1,10 @@
 /*
  * keyboard — evdev codes and a keymap, turned into text, with no compositor anywhere.
  *
- * Copyright © 2026 Kyle J. Cardoza. MIT licensed.
- * SPDX-License-Identifier: MIT
+ * Copyright © 2026 Kyle J. Cardoza.
+ * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * WHY THIS IS A TEST AND NOT A SMOKE RUN. Input cannot be exercised end to end here — a headless seat
  * advertises no keyboard, and typing into a nested compositor from a script is not reproducible — so the

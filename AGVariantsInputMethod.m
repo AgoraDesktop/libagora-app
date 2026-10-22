@@ -1,8 +1,10 @@
 /*
  * AGVariantsInputMethod.m — a composition held open while the person picks, and the variant table it picks from.
  *
- * Copyright © 2026 Kyle J. Cardoza. MIT licensed — see LICENSE.
- * SPDX-License-Identifier: MIT
+ * Copyright © 2026 Kyle J. Cardoza.
+ * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
+ * SPDX-License-Identifier: LGPL-3.0-or-later
+ * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **THE COMPOSITION IS ONE MARKED LETTER AND AN INDEX.** The letter goes into the store as marked text through the
  * client's own door; the candidate window shows the plain letter and its variants with the index on one of them; and

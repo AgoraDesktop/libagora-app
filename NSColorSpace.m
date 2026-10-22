@@ -1,8 +1,10 @@
 /*
  * NSColorSpace — the model a colour's numbers are numbers IN.
  *
- * Copyright © 2026 Kyle J. Cardoza. MIT licensed — see LICENSE.
- * SPDX-License-Identifier: MIT
+ * Copyright © 2026 Kyle J. Cardoza.
+ * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
+ * SPDX-License-Identifier: LGPL-3.0-or-later
+ * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * The class is thin on purpose: every fact it answers is the `CGColorSpace`'s own, and the only state here is that
  * object. The nine named spaces are made on first ask and held for the process — one object per space, because a space is

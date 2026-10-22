@@ -1,8 +1,10 @@
 /*
  * NSRunningApplication.m — an application, as far as the window server can tell.
  *
- * Copyright © 2026 Kyle J. Cardoza. MIT licensed.
- * SPDX-License-Identifier: MIT
+ * Copyright © 2026 Kyle J. Cardoza.
+ * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
+ * SPDX-License-Identifier: LGPL-3.0-or-later
+ * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * THE ORDER EVERY LAZY DOOR TAKES: the identifier is all this object is GIVEN, so the bundle is resolved from it
  * once (Launch Services), and the name, the executable and the icon are read from the bundle once. An application

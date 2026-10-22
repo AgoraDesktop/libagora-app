@@ -1,8 +1,10 @@
 /*
  * NSColor — one retained CGColorRef, and every member a mapping onto it.
  *
- * Copyright © 2026 Kyle J. Cardoza. MIT licensed — see LICENSE.
- * SPDX-License-Identifier: MIT
+ * Copyright © 2026 Kyle J. Cardoza.
+ * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
+ * SPDX-License-Identifier: LGPL-3.0-or-later
+ * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * THE ENGINE IS WHAT MAKES THE GETTERS POSSIBLE, and it is also what makes them a stated deviation:
  * Apple raises from `-redComponent` for a colour outside an RGB space, while this file asks
@@ -23,6 +25,8 @@
 #import <AppKit/NSImageRep.h>
 #import <AppKit/NSImage.h>
 #import <AppKit/NSPasteboard.h>
+/* AND THE CATALOG, WHICH `+colorWithCatalogName:colorName:` NOW READS. */
+#import <AppKit/NSColorList.h>
 #import <Foundation/NSArray.h>
 #import <Foundation/NSDictionary.h>
 #import <Foundation/NSNumber.h>
@@ -1280,16 +1284,37 @@ static void fn_hsv_to_rgb(CGFloat h, CGFloat s, CGFloat v, CGFloat *r, CGFloat *
 	}
 }
 
-/* THE CATALOG AND THE PATTERN REFUSE BY NAME. A catalog colour needs `NSColorList` — a named collection
- * read from disk — and a pattern colour needs a `CGPattern`-backed `CGColor` to draw through; this tree
- * has neither, and a colour object holding an image it cannot tile would be a half-implementation. */
+/* **THE CATALOG LOOKUP IS A REAL DOOR NOW, BECAUSE `NSColorList` EXISTS.** It asks the named list — through the class
+ * door that scans `~/Library/Colors` and `/Library/Colors` — for the colour under the key, and a missing list or a
+ * missing key answers nil with the reason printed. That is the same empty-value-plus-a-name shape the rest of this
+ * file's refusals take, and it is a DIFFERENT answer from the one this door gave before this slice: the subsystem it
+ * named (a catalog) is here.
+ *
+ * AND THE FOUR COMPONENT DOORS BELOW STILL REFUSE, FOR A REASON THAT SURVIVED THE SUBSYSTEM'S ARRIVAL: a colour built
+ * from a list is a `CGColor` like any other — this class's only state — so it does not REMEMBER the list it came from,
+ * and `-catalogNameComponent` has nothing to answer with. A caller that needs the name keeps the pair it asked with. */
 + (nullable NSColor *)colorWithCatalogName:(NSString *)listName colorName:(NSString *)colorName
 {
-	(void)colorName;
-	fprintf(stderr, "APPKIT-REFUSE: +colorWithCatalogName:colorName: needs NSColorList, the catalog "
-			"colour collections read from disk, and this tree has none (asked for \"%s\")\n",
-		listName == nil ? "" : [listName UTF8String]);
-	return nil;
+	NSColorList *list;
+
+	if (listName == nil || colorName == nil) {
+		return nil;
+	}
+	list = [NSColorList colorListNamed:listName];
+	if (list == nil) {
+		fprintf(stderr, "APPKIT-REFUSE: +colorWithCatalogName:colorName: has no colour list named \"%s\" in "
+				"~/Library/Colors or /Library/Colors\n", [listName UTF8String]);
+		return nil;
+	}
+	{
+		NSColor *colour = [list colorWithKey:colorName];
+
+		if (colour == nil) {
+			fprintf(stderr, "APPKIT-REFUSE: +colorWithCatalogName:colorName: list \"%s\" has no colour "
+					"named \"%s\"\n", [listName UTF8String], [colorName UTF8String]);
+		}
+		return colour;
+	}
 }
 
 + (nullable NSColor *)colorWithPatternImage:(NSImage *)image
@@ -1522,13 +1547,14 @@ static BOOL s_ignoresAlpha;
 /* ---- THE CATALOG NAMES, WHICH THIS TIER ANSWERS RATHER THAN RAISES ----------------------------- *
  * THE ERA'S OWN NOTE SAYS WHAT APPLE DOES: "Not all of the methods apply to all colors; if called, they
  * raise." This tier's rule for a component it cannot answer is the one this class's own header states —
- * CONVERT RATHER THAN RAISE — and here there is nothing to convert: a catalog is a list of NAMED colours
- * looked up on a device, and this tree has no catalog at all. So the answer is nil with the reason printed,
- * which is the shape every other refusal in this file takes. */
+ * CONVERT RATHER THAN RAISE — and here there is nothing to convert: THE CATALOG SUBSYSTEM EXISTS NOW
+ * (`NSColorList`, and `+colorWithCatalogName:colorName:` reads it), but a colour does not carry the list
+ * it came from, because this class's only state is its `CGColor`. So the answer is nil with the reason
+ * printed, which is the shape every other refusal in this file takes. */
 static void fn_refuse_catalog(const char *which)
 {
-	fprintf(stderr, "APPKIT-REFUSE: %s needs a colour catalog — a list of named colours looked up on a "
-			"device — and this tree has none, so the answer is nil rather than a name nobody gave\n",
+	fprintf(stderr, "APPKIT-REFUSE: %s needs a colour that REMEMBERS the catalog it was built from, and this "
+			"class's only state is its CGColor — keep the list name and the colour name beside the colour\n",
 		which);
 }
 

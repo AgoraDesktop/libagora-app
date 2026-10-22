@@ -1,8 +1,10 @@
 /*
  * AGComboListCell.h — A LIST'S ROW: no check-mark gutter, no shortcut column, and the marked row filled edge to edge.
  *
- * Copyright © 2026 Kyle J. Cardoza. MIT licensed — see LICENSE.
- * SPDX-License-Identifier: MIT
+ * Copyright © 2026 Kyle J. Cardoza.
+ * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
+ * SPDX-License-Identifier: LGPL-3.0-or-later
+ * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **A MENU'S ROW AND A LIST'S ROW ARE THE SAME ROW WITH TWO COLUMNS TAKEN OFF.** `NSMenuItemCell` lays a row out in
  * four strips: a state-image GUTTER for the check mark, the item's image, the title, and a key-equivalent column

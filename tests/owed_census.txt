@@ -1,7 +1,7 @@
 # THE OWED CENSUS — every `OWED` claim in this library's headers, by file.
 #
-# Copyright © 2026 Kyle J. Cardoza. MIT licensed — see LICENSE.
-# SPDX-License-Identifier: MIT
+# Copyright © 2026 Kyle J. Cardoza.
+# SPDX-License-Identifier: GPL-3.0-or-later
 #
 # The companion of `refusal_census.txt`: a refusal is what the IMPLEMENTATION says it cannot do, and an owed note is
 # what the HEADER says it does not do yet. Both are claims, both drift, and `claims_census.cmake` holds both the same

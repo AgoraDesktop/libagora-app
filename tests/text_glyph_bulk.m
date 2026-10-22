@@ -1,8 +1,10 @@
 /*
  * text_glyph_bulk — the glyph store's range doors, the strike ink, and three singles.
  *
- * Copyright © 2026 Kyle J. Cardoza. MIT licensed — see LICENSE.
- * SPDX-License-Identifier: MIT
+ * Copyright © 2026 Kyle J. Cardoza.
+ * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **THE CLAIM FOR THE BULK DOORS IS THAT THEY READ THE SAME RECORD ONE AT A TIME AND A RANGE AT A TIME.** The probe lays
  * out a line, reads it with `-glyphAtIndex:` and with `-getGlyphsInRange:…`, and compares — then writes a location with

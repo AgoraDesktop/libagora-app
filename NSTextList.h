@@ -1,8 +1,10 @@
 /*
  * NSTextList.h — a list a paragraph belongs to: a marker format, an option, and the marker for an item number.
  *
- * Copyright © 2026 Kyle J. Cardoza. MIT licensed — see LICENSE.
- * SPDX-License-Identifier: MIT
+ * Copyright © 2026 Kyle J. Cardoza.
+ * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
+ * SPDX-License-Identifier: LGPL-3.0-or-later
+ * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **THE SURFACE BELOW IS A TRANSCRIPTION OF THE 10.6 SDK's `NSTextList.h`, WHICH IS THIRTY-FOUR LINES AND DECLARES
  * NOTHING ELSE.** That is worth saying because the obvious assumption is wrong: **Apple's 10.6 header declares NO

@@ -1,7 +1,10 @@
 /*
  * display_damage — a partial display paints the part, and only the part.
  *
- * Copyright © 2026 Kyle J. Cardoza. MIT licensed. SPDX-License-Identifier: MIT
+ * Copyright © 2026 Kyle J. Cardoza.
+ * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **THE HALF OF "DRAW ONLY WHAT CHANGED" THAT IS INVISIBLE FROM OUTSIDE.** `NSWindow -displayIfNeeded` asks the
  * content view for the union of every invalidated rectangle and hands it to `-displayRect:`; the window used to

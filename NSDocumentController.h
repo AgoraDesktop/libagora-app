@@ -1,8 +1,10 @@
 /*
  * NSDocumentController.h — THE DOCUMENTS AN APPLICATION HAS OPEN, AND THE TYPES IT CAN MAKE.
  *
- * Copyright © 2026 Kyle J. Cardoza. MIT licensed — see LICENSE.
- * SPDX-License-Identifier: MIT
+ * Copyright © 2026 Kyle J. Cardoza.
+ * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
+ * SPDX-License-Identifier: LGPL-3.0-or-later
+ * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **THE CONTROLLER IS THE APPLICATION'S DOCUMENT LIST AND ITS TYPE TABLE.** It makes documents (untitled or from a URL),
  * hands them to the window machinery, remembers the open ones, notes the recent ones, and answers which subclass and which

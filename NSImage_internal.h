@@ -2,8 +2,10 @@
  * NSImage_internal.h — the two doors a template image needs, and they are not public because only the
  * platform itself makes one.
  *
- * Copyright © 2026 Kyle J. Cardoza. MIT licensed — see LICENSE.
- * SPDX-License-Identifier: MIT
+ * Copyright © 2026 Kyle J. Cardoza.
+ * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
+ * SPDX-License-Identifier: LGPL-3.0-or-later
+ * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * APPLE'S `-isTemplate` IS A PROPERTY OF THE ARTWORK, NOT A DRAWING INSTRUCTION. A template image is allowed to
  * be drawn in any ink, and on the Mac it is the CONTROL that decides which: a button's ink is the label's ink, a

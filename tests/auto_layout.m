@@ -1,7 +1,10 @@
 /*
  * auto_layout — does a constraint become a frame, in the parent's coordinates and both ways up?
  *
- * Copyright © 2026 Kyle J. Cardoza. MIT licensed. SPDX-License-Identifier: MIT
+ * Copyright © 2026 Kyle J. Cardoza.
+ * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **THIS IS THE FIRST SLICE OF AUTO LAYOUT, AND ITS SUBJECT IS THE EQUATION RATHER THAN THE API TOUR.** A view's
  * geometry is the four numbers of its frame; a constraint is an equation those numbers must satisfy. The probe

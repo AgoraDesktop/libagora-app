@@ -1,8 +1,10 @@
 /*
  * NSLayoutAnchor.m — two views, one attribute each, and the equation between them.
  *
- * Copyright © 2026 Kyle J. Cardoza. MIT licensed — see LICENSE.
- * SPDX-License-Identifier: MIT
+ * Copyright © 2026 Kyle J. Cardoza.
+ * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
+ * SPDX-License-Identifier: LGPL-3.0-or-later
+ * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * EVERY DOOR HERE IS A CALL TO `+[NSLayoutConstraint constraintWithItem:...]`. That is deliberate rather than
  * incidental: the constructor is where the equation's shape is checked and where the refusal messages live, so an

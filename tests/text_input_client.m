@@ -1,8 +1,10 @@
 /*
  * text_input_client.m — `NSTextInputClient`: the protocol a modern input method drives a view through.
  *
- * Copyright © 2026 Kyle J. Cardoza. MIT licensed — see LICENSE.
- * SPDX-License-Identifier: MIT
+ * Copyright © 2026 Kyle J. Cardoza.
+ * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **THE PROTOCOL IS DECLARED BY 10.6 AND WAS ABSENT HERE**, while the machinery it belongs to was not: a marked-text
  * composition, an input-method context, a dead-key table and a candidate window were all built, and the CONTRACT a

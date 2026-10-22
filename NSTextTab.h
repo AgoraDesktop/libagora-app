@@ -1,8 +1,10 @@
 /*
  * NSTextTab.h — A STOP: the place a tab in a paragraph goes, and how the text lines up there.
  *
- * Copyright © 2026 Kyle J. Cardoza. MIT licensed — see LICENSE.
- * SPDX-License-Identifier: MIT
+ * Copyright © 2026 Kyle J. Cardoza.
+ * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
+ * SPDX-License-Identifier: LGPL-3.0-or-later
+ * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **A TAB STOP IS A PLACE, AND THIS IS THE OBJECT THAT NAMES IT.** A tab character does not advance by a width; it
  * advances TO the next stop, and this class is that stop — a location in points along the line and the alignment the

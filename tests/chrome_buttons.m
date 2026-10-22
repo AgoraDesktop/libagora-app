@@ -1,8 +1,10 @@
 /*
  * chrome_buttons — does a click on the title bar's X, minus and plus DO anything, and only when it should?
  *
- * Copyright © 2026 Kyle J. Cardoza. MIT licensed.
- * SPDX-License-Identifier: MIT
+ * Copyright © 2026 Kyle J. Cardoza.
+ * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **THE CHROME HAD THREE ANSWERS AND ONLY TWO OF THEM EXISTED.** Where a button is (`fn_chrome_layout`) and what it
  * is DRAWN in (`fn_chrome_state`) were both wired — a press lit the theme's pressed art — and the third, what a

@@ -1,8 +1,10 @@
 /*
  * NSPathCell — a path as a row of component cells.
  *
- * Copyright © 2026 Kyle J. Cardoza. MIT licensed.
- * SPDX-License-Identifier: MIT
+ * Copyright © 2026 Kyle J. Cardoza.
+ * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
+ * SPDX-License-Identifier: LGPL-3.0-or-later
+ * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **THE LAYOUT IS THE PATH'S.** Components are measured from their own cells, separators are inserted between them,
  * and when the row is wider than the frame the middle components are hidden and an ellipsis takes their place. The

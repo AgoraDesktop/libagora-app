@@ -1,8 +1,10 @@
 /*
  * dock_menu — a tile's menu, from the delegate's answer to the class that sends the item back.
  *
- * Copyright © 2026 Kyle J. Cardoza. MIT licensed.
- * SPDX-License-Identifier: MIT
+ * Copyright © 2026 Kyle J. Cardoza.
+ * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **THE WHOLE ROUND TRIP, THROUGH BOTH PROCESSES' WORTH OF MACHINERY, IN ONE PROCESS.** The Dock asking and the
  * application answering are two programs in a session; a test cannot be two programs and stay a sequence, so this

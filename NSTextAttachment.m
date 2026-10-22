@@ -1,8 +1,10 @@
 /*
  * NSTextAttachment.m — the attachment, its picture, and the cell that draws it.
  *
- * Copyright © 2026 Kyle J. Cardoza. MIT licensed — see LICENSE.
- * SPDX-License-Identifier: MIT
+ * Copyright © 2026 Kyle J. Cardoza.
+ * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
+ * SPDX-License-Identifier: LGPL-3.0-or-later
+ * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **THE CELL IS THE ONLY THING HERE WITH ARITHMETIC, AND IT IS THE IMAGE'S OWN SIZE.** `NSTextAttachment` is two
  * retained pointers and the convenience that gives a picture an attachment cell when it has none; the cell answers

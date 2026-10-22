@@ -1,8 +1,10 @@
 /*
  * NSWorkspace.m — the running applications, what opens a file, and an icon.
  *
- * Copyright © 2026 Kyle J. Cardoza. MIT licensed.
- * SPDX-License-Identifier: MIT
+ * Copyright © 2026 Kyle J. Cardoza.
+ * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
+ * SPDX-License-Identifier: LGPL-3.0-or-later
+ * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **THE WINDOW LIST IS A SNAPSHOT, SO THIS IS A DIFF.** Every change the compositor sees sends the whole list —
  * `begin`, a row per window, `done` — and `-cg_applyWindowList:count:` is the one place that turns two consecutive

@@ -1,8 +1,10 @@
 /*
  * NSButtonCell — a cell that knows it is a button, and the link that lets a menu item's cell be re-based.
  *
- * Copyright © 2026 Kyle J. Cardoza. MIT licensed — see LICENSE.
- * SPDX-License-Identifier: MIT
+ * Copyright © 2026 Kyle J. Cardoza.
+ * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
+ * SPDX-License-Identifier: LGPL-3.0-or-later
+ * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * THE WHOLE SLICE IS STORAGE WITH ONE COPY, and the interesting parts are the two that could have been guessed at:
  * `-alternateTitle` is a copy (a caller's mutable string must not change the button's face later), and the sound and

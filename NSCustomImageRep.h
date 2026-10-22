@@ -1,8 +1,10 @@
 /*
  * NSCustomImageRep.h — A REP THAT DRAWS BY ASKING SOMEBODY ELSE.
  *
- * Copyright © 2026 Kyle J. Cardoza. MIT licensed — see LICENSE.
- * SPDX-License-Identifier: MIT
+ * Copyright © 2026 Kyle J. Cardoza.
+ * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
+ * SPDX-License-Identifier: LGPL-3.0-or-later
+ * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **THE ONLY IMAGE REP WHOSE PIXELS ARE A MESSAGE.** Every other rep decodes a format; this one holds a DELEGATE and a
  * selector, and `-drawInRect:` sends that selector to that delegate so the delegate can draw whatever it likes into the

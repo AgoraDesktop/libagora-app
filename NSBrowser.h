@@ -1,8 +1,10 @@
 /*
  * NSBrowser.h — a chain of columns: a list, and the next list for the selected row.
  *
- * Copyright © 2026 Kyle J. Cardoza. MIT licensed — see LICENSE.
- * SPDX-License-Identifier: MIT
+ * Copyright © 2026 Kyle J. Cardoza.
+ * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
+ * SPDX-License-Identifier: LGPL-3.0-or-later
+ * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **THIS IS A TABLE-BACKED BROWSER, AND THE TABLES ARE PRIVATE.** Apple's class is a matrix of `NSBrowserCell`s per
  * column; each column here is an `NSTableView` inside one horizontal `NSScrollView`, and the browser is the table data

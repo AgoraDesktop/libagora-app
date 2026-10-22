@@ -1,8 +1,10 @@
 /*
  * nib_connectors_and_items — the two nib connections and the pasteboard item.
  *
- * Copyright © 2026 Kyle J. Cardoza. MIT licensed — see LICENSE.
- * SPDX-License-Identifier: MIT
+ * Copyright © 2026 Kyle J. Cardoza.
+ * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **A CONNECTOR'S CLAIM IS THE GRAPH IT JOINS, SO THE PROBE CHECKS THE OBJECTS ON THE OTHER SIDE.** An outlet connector is
  * applied and the destination arrives through KVC on the source; an action connector is applied and the source is a control

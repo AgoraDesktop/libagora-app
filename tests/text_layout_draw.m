@@ -1,8 +1,10 @@
 /*
  * text_layout_draw.m — THE INK: THE LAYOUT MANAGER DRAWING WHAT IT LAID OUT.
  *
- * Copyright © 2026 Kyle J. Cardoza. MIT licensed — see LICENSE.
- * SPDX-License-Identifier: MIT
+ * Copyright © 2026 Kyle J. Cardoza.
+ * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **THE CLAIM IS WHERE THE INK LANDS, SO THE PROBE READS PIXELS.** Two lines are two bands of ink; the ORIGIN the
  * caller gives moves them; a glyph range over ONE line draws that line and not the other; and a foreground colour in

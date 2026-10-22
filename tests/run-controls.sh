@@ -1,3 +1,8 @@
+# Copyright © 2026 Kyle J. Cardoza.
+# SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
+
 #!/bin/bash
 # The CONTROLS demonstration, on a display, nested inside the desktop you are sitting at — for LOOKING at and
 # iterating on the window chrome and its theme, rather than for asserting anything.

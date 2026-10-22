@@ -1,8 +1,10 @@
 /*
  * NSCIImageRep — declared and refused. See the header: there is no Core Image in this tier.
  *
- * Copyright © 2026 Kyle J. Cardoza. MIT licensed — see LICENSE.
- * SPDX-License-Identifier: MIT
+ * Copyright © 2026 Kyle J. Cardoza.
+ * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
+ * SPDX-License-Identifier: LGPL-3.0-or-later
+ * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  */
 #import "NSCIImageRep.h"
 #import "AppKitRefusal.h"

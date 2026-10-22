@@ -1,8 +1,10 @@
 /*
  * NSSavePanel.h — A PANEL OVER THE FILE SYSTEM: WHERE TO SAVE, OR WHAT TO OPEN.
  *
- * Copyright © 2026 Kyle J. Cardoza. MIT licensed — see LICENSE.
- * SPDX-License-Identifier: MIT
+ * Copyright © 2026 Kyle J. Cardoza.
+ * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
+ * SPDX-License-Identifier: LGPL-3.0-or-later
+ * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **A SAVE PANEL IS A FILE BROWSER THAT RETURNS A URL.** It is a real `NSPanel` (so it floats, hides on deactivate and is
  * never main), with the era's shape: a directory path at the top, a list of what is in it, a name field and two buttons.

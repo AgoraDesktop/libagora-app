@@ -1,8 +1,10 @@
 /*
  * NSTextBlock.m — the box: three layers of widths, a ground, and four edges.
  *
- * Copyright © 2026 Kyle J. Cardoza. MIT licensed — see LICENSE.
- * SPDX-License-Identifier: MIT
+ * Copyright © 2026 Kyle J. Cardoza.
+ * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
+ * SPDX-License-Identifier: LGPL-3.0-or-later
+ * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **THE CLASS IS A LEDGER AND TWO ARITHMETICS.** Every door above stores or answers one of: a background colour, four
  * border colours, or three layers of four widths with a value type each. The two arithmetics are the geometry pair —

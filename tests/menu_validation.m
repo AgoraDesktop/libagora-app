@@ -1,7 +1,10 @@
 /*
  * menu_validation — does a menu VALIDATE its items, and does an item SAY it is on?
  *
- * Copyright © 2026 Kyle J. Cardoza. MIT licensed. SPDX-License-Identifier: MIT
+ * Copyright © 2026 Kyle J. Cardoza.
+ * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **TWO THINGS A MENU HAS TO BE ABLE TO SAY, AND NEITHER COULD BE SAID.** Menu VALIDATION is what greys out an
  * item that cannot be chosen right now, and its protocol (`NSMenuValidation`) is also the one place an item's

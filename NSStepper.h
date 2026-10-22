@@ -1,8 +1,10 @@
 /*
  * NSStepper.h — A PAIR OF ARROWS THAT MOVES ONE NUMBER.
  *
- * Copyright © 2026 Kyle J. Cardoza. MIT licensed — see LICENSE.
- * SPDX-License-Identifier: MIT
+ * Copyright © 2026 Kyle J. Cardoza.
+ * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
+ * SPDX-License-Identifier: LGPL-3.0-or-later
+ * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **THE CONTROL IS A SHELL AROUND ITS CELL, WHICH IS WHERE THE FOUR FACTS LIVE.** Range, step and the two policies are
  * `NSStepperCell`'s; this class makes one in `-initWithFrame:` and forwards, which is the same shape `NSSlider` and

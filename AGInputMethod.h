@@ -1,8 +1,10 @@
 /*
  * AGInputMethod.h — THE TIER'S INPUT METHOD: A DEAD KEY COMPOSES WITH THE NEXT ONE.
  *
- * Copyright © 2026 Kyle J. Cardoza. MIT licensed — see LICENSE.
- * SPDX-License-Identifier: MIT
+ * Copyright © 2026 Kyle J. Cardoza.
+ * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
+ * SPDX-License-Identifier: LGPL-3.0-or-later
+ * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **THIS IS THE CLASS `NSTextInputContext.h` SAID THE TIER DID NOT HAVE.** A context sends every key to its input
  * source before the standard key binding, and a source that composes owns state ACROSS KEYSTROKES. This one is a

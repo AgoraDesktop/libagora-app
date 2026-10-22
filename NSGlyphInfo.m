@@ -1,8 +1,10 @@
 /*
  * NSGlyphInfo — a glyph named by something other than its index.
  *
- * Copyright © 2026 Kyle J. Cardoza. MIT licensed — see LICENSE.
- * SPDX-License-Identifier: MIT
+ * Copyright © 2026 Kyle J. Cardoza.
+ * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
+ * SPDX-License-Identifier: LGPL-3.0-or-later
+ * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * The three factories store the three facts; the name factory also RESOLVES through the engine, so a name that the font
  * does not have answers nil rather than a glyph info that names nothing.

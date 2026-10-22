@@ -1,8 +1,10 @@
 /*
  * NSOpenGL.h — the three context-independent OpenGL doors, declared and refused.
  *
- * Copyright © 2026 Kyle J. Cardoza. MIT licensed — see LICENSE.
- * SPDX-License-Identifier: MIT
+ * Copyright © 2026 Kyle J. Cardoza.
+ * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
+ * SPDX-License-Identifier: LGPL-3.0-or-later
+ * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **THESE ARE THE ONLY GL NAMES THIS TIER DECLARES, AND THEY ARE DECLARED SO THEY CAN REFUSE BY NAME.** Agora has no
  * OpenGL: the compositor speaks Wayland and the drawing tier speaks Core Graphics, so `NSOpenGLContext`,

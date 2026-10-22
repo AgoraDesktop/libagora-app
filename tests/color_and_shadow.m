@@ -1,8 +1,10 @@
 /*
  * color_and_shadow — NSColorSpace, NSShadow, NSGradient, and the two refusals they retire.
  *
- * Copyright © 2026 Kyle J. Cardoza. MIT licensed — see LICENSE.
- * SPDX-License-Identifier: MIT
+ * Copyright © 2026 Kyle J. Cardoza.
+ * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **THE THREE CLASSES ARE VALUES, SO MOST OF THIS TEST IS ROUND TRIPS AND ARITHMETIC.** The nine named spaces exist, answer
  * the engine's model and component count, and are SINGLETONS (a space is a value, and two objects for one value is how a

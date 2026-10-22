@@ -1,8 +1,10 @@
 /*
  * NSWindow_internal.h — the window's drag seam for the tracking engine.
  *
- * Copyright © 2026 Kyle J. Cardoza. MIT licensed — see LICENSE.
- * SPDX-License-Identifier: MIT
+ * Copyright © 2026 Kyle J. Cardoza.
+ * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
+ * SPDX-License-Identifier: LGPL-3.0-or-later
+ * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * NOT INSTALLED AND NOT PUBLIC. A view that runs a modal drag loop (a divider, a split view) owns the pointer for
  * the length of the drag; re-walking the tracking tree for every motion event is both pointless and, in a browser

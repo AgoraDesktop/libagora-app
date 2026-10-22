@@ -1,8 +1,10 @@
 /*
  * text_container_region.m — A SHAPED CONTAINER'S REGION IS WHAT THE LAYOUT USES.
  *
- * Copyright © 2026 Kyle J. Cardoza. MIT licensed — see LICENSE.
- * SPDX-License-Identifier: MIT
+ * Copyright © 2026 Kyle J. Cardoza.
+ * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **`-lineFragmentRectForProposedRect:…` IS THE CONTAINER'S WHOLE JOB**, and until this slice the manager never
  * asked it: every line was the container's width minus its padding, so a subclass that returned a narrower, offset

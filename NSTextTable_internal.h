@@ -1,8 +1,10 @@
 /*
  * NSTextTable_internal.h — the collapse-aware drawing door, which Apple's signature has no room for.
  *
- * Copyright © 2026 Kyle J. Cardoza. MIT licensed — see LICENSE.
- * SPDX-License-Identifier: MIT
+ * Copyright © 2026 Kyle J. Cardoza.
+ * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
+ * SPDX-License-Identifier: LGPL-3.0-or-later
+ * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * NOT INSTALLED. Apple's `-drawBackgroundForBlock:withFrame:inView:characterRange:layoutManager:` has no edge mask, and a
  * collapsing table needs one: a shared edge is drawn by ONE of the two cells that meet there. The mask is carried in

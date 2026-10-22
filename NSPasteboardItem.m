@@ -1,8 +1,10 @@
 /*
  * NSPasteboardItem — several types, one object.
  *
- * Copyright (c) 2026 Kyle J. Cardoza. MIT licensed — see LICENSE.
- * SPDX-License-Identifier: MIT
+ * Copyright © 2026 Kyle J. Cardoza.
+ * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
+ * SPDX-License-Identifier: LGPL-3.0-or-later
+ * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * A dictionary of types to bytes with an ordered type list, plus two conveniences that are the reason the class exists at
  * all: a string is bytes in one encoding, and a property list is a serialized object. The provider is asked lazily and its

@@ -1,8 +1,10 @@
 /*
  * AGComboListView.h — A MENU'S SESSION WITH A LIST'S MARK: the row a combo box currently holds.
  *
- * Copyright © 2026 Kyle J. Cardoza. MIT licensed — see LICENSE.
- * SPDX-License-Identifier: MIT
+ * Copyright © 2026 Kyle J. Cardoza.
+ * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
+ * SPDX-License-Identifier: LGPL-3.0-or-later
+ * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **A COMBO BOX'S LIST IS NOT A MENU, AND THE TWO THINGS THEY DISAGREE ABOUT ARE BOTH ANSWERED HERE.**
  *

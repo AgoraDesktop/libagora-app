@@ -1,8 +1,10 @@
 /*
  * NSPasteboardItem.h — ONE ITEM ON A PASTEBOARD: several types, each with its own value.
  *
- * Copyright © 2026 Kyle J. Cardoza. MIT licensed — see LICENSE.
- * SPDX-License-Identifier: MIT
+ * Copyright © 2026 Kyle J. Cardoza.
+ * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
+ * SPDX-License-Identifier: LGPL-3.0-or-later
+ * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **A BOARD USED TO BE TYPES AND VALUES; AN ITEM IS THE SAME THING GROUPED.** `NSPasteboard`'s first API puts one value per
  * type on the whole board, so a drag carrying a file and a preview and a URL has to be three types that all mean "the same

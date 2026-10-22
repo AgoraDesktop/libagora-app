@@ -1,8 +1,10 @@
 /*
  * text_layout_web.m — THE WEB: A STORE, THE MANAGERS IT TELLS, AND THE CONTAINERS A MANAGER OWNS.
  *
- * Copyright © 2026 Kyle J. Cardoza. MIT licensed — see LICENSE.
- * SPDX-License-Identifier: MIT
+ * Copyright © 2026 Kyle J. Cardoza.
+ * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **SLICE ONE OF THE LAYOUT MANAGER HAS NO GLYPHS, SO WHAT IT HAS IS THE WIRING — AND WIRING IS EXACTLY THE THING THAT
  * CAN BE TESTED IN BOTH DIRECTIONS.** Each pair of objects is checked from BOTH sides (the manager knows its store and

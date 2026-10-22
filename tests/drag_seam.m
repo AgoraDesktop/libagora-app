@@ -1,8 +1,10 @@
 /*
  * drag_seam — the drag IMAGE on the glass, against Agora's own headless window server.
  *
- * Copyright © 2026 Kyle J. Cardoza. MIT licensed.
- * SPDX-License-Identifier: MIT
+ * Copyright © 2026 Kyle J. Cardoza.
+ * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **THE OFFSCREEN PROBE MEASURES THE SESSION; THIS ONE MEASURES THE WINDOW.** A borderless, transparent, floating
  * window is what a client-side compositor gives a drag image, and none of that can be asked without a connection.

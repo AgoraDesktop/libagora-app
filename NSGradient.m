@@ -1,8 +1,10 @@
 /*
  * NSGradient — the ramp, its stops, and the six ways to place it.
  *
- * Copyright © 2026 Kyle J. Cardoza. MIT licensed — see LICENSE.
- * SPDX-License-Identifier: MIT
+ * Copyright © 2026 Kyle J. Cardoza.
+ * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
+ * SPDX-License-Identifier: LGPL-3.0-or-later
+ * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * The engine holds the ramp; this class holds the stops (so `-getColor:location:atIndex:` and
  * `-interpolatedColorAtLocation:` can answer WITHOUT the engine) and the space the interpolation is measured in. Drawing

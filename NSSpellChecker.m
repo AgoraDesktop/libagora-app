@@ -2,7 +2,10 @@
  * NSSpellChecker.m — a word-list checker, and the refusals where no backing exists.
  *
  * © 2026 Kyle J. Cardozo. MIT licence (see LICENSE at the repository root).
- * SPDX-License-Identifier: MIT
+ * Copyright © 2026 Kyle J. Cardoza.
+ * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
+ * SPDX-License-Identifier: LGPL-3.0-or-later
+ * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **THE DICTIONARY IS DISCOVERED, NOT COMPILED IN.** Two candidates in the order the era's systems had them, then
  * `en_US.dic` (hunspell's format, whose first line is a count and whose entries carry affix flags after a slash). Only

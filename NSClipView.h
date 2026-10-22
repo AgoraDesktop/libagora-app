@@ -1,3 +1,10 @@
+/*
+ * Copyright © 2026 Kyle J. Cardoza.
+ * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
+ * SPDX-License-Identifier: LGPL-3.0-or-later
+ * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
+ */
+
 /* NSClipView.h — the view that clips and scrolls a document.
  *
  * © 2026 Kyle J. Cardozo. MIT licence (see LICENSE at the repository root).

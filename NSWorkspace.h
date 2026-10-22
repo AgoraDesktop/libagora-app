@@ -1,8 +1,10 @@
 /*
  * NSWorkspace.h — the application-wide services: what is running, what opens a file, and an item's icon.
  *
- * Copyright © 2026 Kyle J. Cardoza. MIT licensed.
- * SPDX-License-Identifier: MIT
+ * Copyright © 2026 Kyle J. Cardoza.
+ * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
+ * SPDX-License-Identifier: LGPL-3.0-or-later
+ * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **THIS IS APPKIT'S FACE OVER THREE COMPONENTS, NOT A FOURTH ONE.** Launch Services answers what opens a file and
  * what a bundle is; Icon Services draws the icon; the window server says what is running. `NSWorkspace` is where an

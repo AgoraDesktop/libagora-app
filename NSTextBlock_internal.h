@@ -1,8 +1,10 @@
 /*
  * NSTextBlock_internal.h — the painter, as a door a table can reach without re-entering a block's own override.
  *
- * Copyright © 2026 Kyle J. Cardoza. MIT licensed — see LICENSE.
- * SPDX-License-Identifier: MIT
+ * Copyright © 2026 Kyle J. Cardoza.
+ * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
+ * SPDX-License-Identifier: LGPL-3.0-or-later
+ * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * NOT INSTALLED, and this tier's own door. `NSTextBlock` draws its ground and its edges; `NSTextTableBlock` forwards its
  * drawing to its TABLE, so that subclassing `NSTextTable` and overriding its

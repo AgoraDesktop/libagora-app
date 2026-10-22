@@ -1,8 +1,10 @@
 /*
  * text_paragraph_style.m — THE PARAGRAPH STYLE: THE VALUE OBJECT, AND THE TWO PROPERTIES THE LAYOUT READS.
  *
- * Copyright © 2026 Kyle J. Cardoza. MIT licensed — see LICENSE.
- * SPDX-License-Identifier: MIT
+ * Copyright © 2026 Kyle J. Cardoza.
+ * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **THE CLASS IS A LEDGER, SO THE FIRST HALF OF THE PROBE READS THE LEDGER.** `+defaultParagraphStyle` answers the
  * era's defaults (natural alignment, word wrapping, zero everywhere else), a `-mutableCopy` of it takes every setter,

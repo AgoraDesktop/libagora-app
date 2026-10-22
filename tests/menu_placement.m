@@ -1,8 +1,10 @@
 /*
  * menu_placement — where a popped-up menu's panel actually goes.
  *
- * Copyright © 2026 Kyle J. Cardoza. MIT licensed.
- * SPDX-License-Identifier: MIT
+ * Copyright © 2026 Kyle J. Cardoza.
+ * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **THE BUG THIS FILE EXISTS FOR WAS REPORTED AS "right-click menus from the dock are appearing on the left side of
  * the screen".** The Dock's window is 64 points wide at x = 1216, a tile is clicked at about x = 20 IN THAT WINDOW,

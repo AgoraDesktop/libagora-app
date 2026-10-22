@@ -2,7 +2,10 @@
  * NSKeyValueBinding.m — `NSIsControllerMarker`.
  *
  * © 2026 Kyle J. Cardozo. MIT licence (see LICENSE at the repository root).
- * SPDX-License-Identifier: MIT
+ * Copyright © 2026 Kyle J. Cardoza.
+ * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
+ * SPDX-License-Identifier: LGPL-3.0-or-later
+ * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **NO IS THE TRUE ANSWER HERE RATHER THAN A PLACEHOLDER.** An Apple controller marker is one of four shared
  * singleton objects that a binding controller substitutes for "not applicable" or "multiple values". This tier has no

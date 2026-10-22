@@ -1,8 +1,10 @@
 /*
  * NSGradient.h — A RAMP BETWEEN COLOURS: the stops, the interpolation, and the four drawing doors.
  *
- * Copyright © 2026 Kyle J. Cardoza. MIT licensed — see LICENSE.
- * SPDX-License-Identifier: MIT
+ * Copyright © 2026 Kyle J. Cardoza.
+ * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
+ * SPDX-License-Identifier: LGPL-3.0-or-later
+ * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **A GRADIENT IS STOPS IN A COLOUR SPACE, AND EVERY OTHER DOOR IS A CONSEQUENCE.** The stops are colours and locations
  * along 0..1; the space decides what "half way between" means, which is why it is a constructor argument rather than a

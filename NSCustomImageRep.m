@@ -1,8 +1,10 @@
 /*
  * NSCustomImageRep — a rep whose pixels are a message.
  *
- * Copyright © 2026 Kyle J. Cardoza. MIT licensed — see LICENSE.
- * SPDX-License-Identifier: MIT
+ * Copyright © 2026 Kyle J. Cardoza.
+ * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
+ * SPDX-License-Identifier: LGPL-3.0-or-later
+ * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * The delegate draws, and this class does three things: check at construction that it can, send the message on every
  * draw, and answer the two facts back. There is no format, no bytes and no `-CGImage` — which is why it overrides

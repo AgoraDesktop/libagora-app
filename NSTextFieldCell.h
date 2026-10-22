@@ -1,8 +1,10 @@
 /*
  * NSTextFieldCell.h — THE CELL THAT OWNS A FIELD'S FACE, ITS STRING, AND THE SESSION THAT EDITS IT.
  *
- * Copyright © 2026 Kyle J. Cardoza. MIT licensed — see LICENSE.
- * SPDX-License-Identifier: MIT
+ * Copyright © 2026 Kyle J. Cardoza.
+ * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
+ * SPDX-License-Identifier: LGPL-3.0-or-later
+ * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **THIS IS THE CLASS THE TIER HAS BEEN DRAWING BY HAND.** A text field's face is one point of border at radius four
  * with the text inset from the edge — and until now that face was drawn in TWO places that had no right to agree:

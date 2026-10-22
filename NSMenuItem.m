@@ -1,8 +1,10 @@
 /*
  * NSMenuItem — one row of a menu, and almost entirely storage.
  *
- * Copyright © 2026 Kyle J. Cardoza. MIT licensed — see LICENSE.
- * SPDX-License-Identifier: MIT
+ * Copyright © 2026 Kyle J. Cardoza.
+ * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
+ * SPDX-License-Identifier: LGPL-3.0-or-later
+ * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * WHAT THE CLASS DECIDES RATHER THAN STORES IS FOUR THINGS, and each is here because it is the reason the row
  * is not just a field:

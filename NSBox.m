@@ -1,8 +1,10 @@
 /*
  * NSBox — a frame around other views, with an optional title.
  *
- * Copyright © 2026 Kyle J. Cardoza. MIT licensed — see LICENSE.
- * SPDX-License-Identifier: MIT
+ * Copyright © 2026 Kyle J. Cardoza.
+ * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
+ * SPDX-License-Identifier: LGPL-3.0-or-later
+ * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * The box is geometry and ink: `-borderRect` and `-titleRect` are the two rectangles everything else is derived from, the
  * content view is a subview laid out inside them, and the five kinds are drawn with the platform's own helpers. The title

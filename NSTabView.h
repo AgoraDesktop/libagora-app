@@ -1,8 +1,10 @@
 /*
  * NSTabView.h — A SET OF PANES WITH TABS ALONG ONE EDGE.
  *
- * Copyright © 2026 Kyle J. Cardoza. MIT licensed — see LICENSE.
- * SPDX-License-Identifier: MIT
+ * Copyright © 2026 Kyle J. Cardoza.
+ * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
+ * SPDX-License-Identifier: LGPL-3.0-or-later
+ * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **A TAB VIEW IS A SELECTION OVER VIEWS, AND THE TABS ARE ITS LABELS.** It holds an ordered list of `NSTabViewItem`s; each
  * item carries a VIEW and a LABEL; exactly one item is selected, and its view is the one in the tab view's own hierarchy.

@@ -1,8 +1,10 @@
 /*
  * NSLayoutAnchor_internal.h — how a view makes an anchor.
  *
- * Copyright © 2026 Kyle J. Cardoza. MIT licensed — see LICENSE.
- * SPDX-License-Identifier: MIT
+ * Copyright © 2026 Kyle J. Cardoza.
+ * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
+ * SPDX-License-Identifier: LGPL-3.0-or-later
+ * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **AN ANCHOR HAS NO PUBLIC INITIALISER, BECAUSE AN ANCHOR WITH NO ITEM IS NOT AN ANCHOR.** Apple's class is made
  * only by a view's anchor doors, and this tier keeps that shape: `NSView` calls the factory below, and a caller who

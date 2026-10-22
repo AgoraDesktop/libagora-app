@@ -1,8 +1,10 @@
 /*
  * NSRulerView — the strip that measures a document, and the markers that sit on it.
  *
- * Copyright © 2026 Kyle J. Cardoza. MIT licensed — see LICENSE.
- * SPDX-License-Identifier: MIT
+ * Copyright © 2026 Kyle J. Cardoza.
+ * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
+ * SPDX-License-Identifier: LGPL-3.0-or-later
+ * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * The file holds BOTH classes because Apple declares both in one header and because the marker's geometry is the
  * ruler's geometry: `-imageRectInRuler` is a location the marker was given and a thickness the ruler reserves. The

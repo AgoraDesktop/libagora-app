@@ -1,8 +1,10 @@
 /*
  * NSTextField.m — a field cell in a view, and the three doors a click needs to become an edit.
  *
- * Copyright © 2026 Kyle J. Cardoza. MIT licensed — see LICENSE.
- * SPDX-License-Identifier: MIT
+ * Copyright © 2026 Kyle J. Cardoza.
+ * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
+ * SPDX-License-Identifier: LGPL-3.0-or-later
+ * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **THE CLASS IS A CELL IT MAKES, A WALL OF FORWARDS, AND TWO DOORS THE CELL COULD NOT REACH.** The forwards are the
  * face and the two flags, each ending at the cell because the cell is what shows the string and what would be typed

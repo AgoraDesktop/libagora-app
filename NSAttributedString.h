@@ -1,8 +1,10 @@
 /*
  * NSAttributedString.h (AppKit) — the attribute NAMES, which are the AppKit's and not Foundation's.
  *
- * Copyright © 2026 Kyle J. Cardoza. MIT licensed — see LICENSE.
- * SPDX-License-Identifier: MIT
+ * Copyright © 2026 Kyle J. Cardoza.
+ * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
+ * SPDX-License-Identifier: LGPL-3.0-or-later
+ * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **APPLE SPLITS THE ATTRIBUTED STRING BETWEEN TWO FRAMEWORKS, AND THIS FILE IS THE SPLIT.** Foundation owns the
  * CLASS (`NSAttributedString` and its range API, which this tree already ships); the AppKit owns the KEYS that

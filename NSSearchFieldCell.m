@@ -1,8 +1,10 @@
 /*
  * NSSearchFieldCell.m — the field face, two ornament cells and the recents behind the magnifier.
  *
- * Copyright © 2026 Kyle J. Cardoza. MIT licensed — see LICENSE.
- * SPDX-License-Identifier: MIT
+ * Copyright © 2026 Kyle J. Cardoza.
+ * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
+ * SPDX-License-Identifier: LGPL-3.0-or-later
+ * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  */
 #import <AppKit/NSSearchFieldCell.h>
 #import <AppKit/NSButtonCell.h>

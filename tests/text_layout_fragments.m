@@ -1,8 +1,10 @@
 /*
  * text_layout_fragments.m — THE FRAGMENTS: A STORE LAID INTO A CONTAINER'S LINES.
  *
- * Copyright © 2026 Kyle J. Cardoza. MIT licensed — see LICENSE.
- * SPDX-License-Identifier: MIT
+ * Copyright © 2026 Kyle J. Cardoza.
+ * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **THE CLAIM IS GEOMETRY, SO THE PROBE READS POINTS.** A store with three newlines in a wide container is three
  * line fragments; the same paragraph in a narrow one is more, because the width is the container's; `-usedRectFor...`

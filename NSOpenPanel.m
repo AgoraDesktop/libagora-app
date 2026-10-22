@@ -1,8 +1,10 @@
 /*
  * NSOpenPanel — the save panel with the open panel's flags and the deprecated opening forms.
  *
- * Copyright © 2026 Kyle J. Cardoza. MIT licensed — see LICENSE.
- * SPDX-License-Identifier: MIT
+ * Copyright © 2026 Kyle J. Cardoza.
+ * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
+ * SPDX-License-Identifier: LGPL-3.0-or-later
+ * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * The base class owns the browser, the listing and the accept path; this file is the flags, the two results (`-URLs` and
  * the deprecated `-filenames`) and the 10.3 begin/run forms. The flags are read by the base's accept path, so there is

@@ -1,8 +1,10 @@
 /*
  * NSTextTable.m — the grid's few facts, and the cell's place in them.
  *
- * Copyright © 2026 Kyle J. Cardoza. MIT licensed — see LICENSE.
- * SPDX-License-Identifier: MIT
+ * Copyright © 2026 Kyle J. Cardoza.
+ * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
+ * SPDX-License-Identifier: LGPL-3.0-or-later
+ * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **THE TWO CLASSES ARE LEDGERS TOO.** `NSTextTable` stores four facts (columns, algorithm, and the two flags) and
  * answers them; `NSTextTableBlock` stores a retained table and four integers, and answers them. The cell's inheritance

@@ -1,7 +1,10 @@
 /*
  * agora-bundler — the Project Builder role's first executable piece: an application bundle, for MORE THAN ONE MACHINE.
  *
- * Copyright © 2026 Kyle J. Cardoza. MIT licensed — see LICENSE.
+ * Copyright © 2026 Kyle J. Cardoza.
+ * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **THE PRODUCT OF A PROJECT IS A `.app`, AND ON AGORA THAT MEANS SEVERAL BINARIES, NOT ONE FAT ONE.** Apple's universal
  * binary is a Mach-O container with several architectures inside; the ELF loaders on Linux and the BSDs have no such

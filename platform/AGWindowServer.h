@@ -1,8 +1,10 @@
 /*
  * AGWindowServer.h — the seam between AppKit's windows and whatever is displaying them.
  *
- * Copyright © 2026 Kyle J. Cardoza. MIT licensed.
- * SPDX-License-Identifier: MIT
+ * Copyright © 2026 Kyle J. Cardoza.
+ * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
+ * SPDX-License-Identifier: LGPL-3.0-or-later
+ * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * WHAT THIS IS FOR. `NSWindow` has to put pixels on a screen and get events back, and it must not know
  * HOW. The Fiwix import it came from knows: it opens an X11 display and calls XCreateSimpleWindow,

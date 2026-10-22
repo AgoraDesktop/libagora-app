@@ -1,8 +1,10 @@
 /*
  * text_layout_glyphs.m — THE GLYPH STORE: THE GENERATED LINES, AND THE DOORS THAT WALK THEM.
  *
- * Copyright © 2026 Kyle J. Cardoza. MIT licensed — see LICENSE.
- * SPDX-License-Identifier: MIT
+ * Copyright © 2026 Kyle J. Cardoza.
+ * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **THE MANAGER NOW KEEPS THE GLYPHS IT GENERATED, AND THE MAP IS COMPUTED FROM THEM.** Before this slice `CTLine`
  * was rebuilt at every draw and `-numberOfGlyphs` answered the store's character count by FIAT; now the layout keeps

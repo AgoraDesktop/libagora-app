@@ -1,8 +1,10 @@
 /*
  * text_attachment_tracking.m — A PICTURE IN THE TEXT IS PRESSED, TRACKED AND RELEASED BY THE VIEW.
  *
- * Copyright © 2026 Kyle J. Cardoza. MIT licensed — see LICENSE.
- * SPDX-License-Identifier: MIT
+ * Copyright © 2026 Kyle J. Cardoza.
+ * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **THE TRACKING FAMILY IS DRIVEN BY THE TEXT VIEW'S OWN EVENT STREAM, NOT BY A MODAL LOOP.** `NSCell` refuses
  * `-trackMouse:inRect:ofView:untilMouseUp:` because a loop built from guessed coordination can hang the guest. This

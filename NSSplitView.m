@@ -1,8 +1,10 @@
 /*
  * NSSplitView — panes, dividers, and the geometry between them.
  *
- * Copyright © 2026 Kyle J. Cardoza. MIT licensed.
- * SPDX-License-Identifier: MIT
+ * Copyright © 2026 Kyle J. Cardoza.
+ * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
+ * SPDX-License-Identifier: LGPL-3.0-or-later
+ * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **THE LAYOUT IS THE PANES' EXTENTS, NOT A SECOND ARRAY OF DIVIDER POSITIONS.** Every geometry door derives a
  * divider's leading edge from the frames before it: pane 0 starts at 0, each pane adds its extent and one divider,

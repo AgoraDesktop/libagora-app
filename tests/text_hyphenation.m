@@ -1,8 +1,10 @@
 /*
  * text_hyphenation.m — THE HYPHENATION FACTOR, READ AS A HYPHENATION ZONE, AND THE HYPHEN DRAWN.
  *
- * Copyright © 2026 Kyle J. Cardoza. MIT licensed — see LICENSE.
- * SPDX-License-Identifier: MIT
+ * Copyright © 2026 Kyle J. Cardoza.
+ * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **THE LAST PROPERTY OF `NSParagraphStyle` WITH NO READER HAS ONE, AND WHAT IT DOES IS A MEASUREMENT.** Apple's
  * sentence for the factor is "0.0 means no hyphenation; 1.0 means hyphenate as much as possible", from which the

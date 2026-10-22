@@ -1,8 +1,10 @@
 /*
  * text_marked_text.m — THE MARKED TEXT: WHAT AN INPUT METHOD COMPOSES THROUGH `NSTextInput`.
  *
- * Copyright © 2026 Kyle J. Cardoza. MIT licensed — see LICENSE.
- * SPDX-License-Identifier: MIT
+ * Copyright © 2026 Kyle J. Cardoza.
+ * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **A COMPOSITION IS AN ORDINARY EDIT WITH A REMEMBERED RANGE.** The input method calls `-setMarkedText:selectedRange:`
  * on every keystroke, and the string it hands over is the WHOLE composition so far; the view puts those characters in

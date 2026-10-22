@@ -1,8 +1,10 @@
 /*
  * NSLayoutAnchor.h — the constraint factories, one per axis.
  *
- * Copyright © 2026 Kyle J. Cardoza. MIT licensed — see LICENSE.
- * SPDX-License-Identifier: MIT
+ * Copyright © 2026 Kyle J. Cardoza.
+ * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
+ * SPDX-License-Identifier: LGPL-3.0-or-later
+ * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **AN ANCHOR IS A VIEW AND ONE ATTRIBUTE, AND NOTHING ELSE.** `[label leadingAnchor]` answers "label's leading
  * edge"; the three comparison doors turn two anchors into the equation in `NSLayoutConstraint.h`. The point of the

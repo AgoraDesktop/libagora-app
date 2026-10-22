@@ -1,3 +1,10 @@
+/*
+ * Copyright © 2026 Kyle J. Cardoza.
+ * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
+ */
+
 # Every test file the README names exists.
 #
 # usage: cmake -DREADME=<path> -DTESTS_DIR=<path to libagora-app/tests> -P readme_refs.cmake

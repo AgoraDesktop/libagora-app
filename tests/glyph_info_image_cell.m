@@ -1,8 +1,10 @@
 /*
  * glyph_info_image_cell — NSGlyphInfo, NSImageCell, NSCollectionViewItem, and the three pasteboard protocols.
  *
- * Copyright © 2026 Kyle J. Cardoza. MIT licensed — see LICENSE.
- * SPDX-License-Identifier: MIT
+ * Copyright © 2026 Kyle J. Cardoza.
+ * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **THE GLYPH INFO'S CLAIM IS THAT A NAME RESOLVES THROUGH THE FACE OR NOT AT ALL.** The probe asks a real font for a glyph by
  * name (a name the face has, and one it has not), then checks the identifier pair and the base-string refusal. The

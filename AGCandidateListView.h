@@ -1,8 +1,10 @@
 /*
  * AGCandidateListView.h — THE ROW OF READINGS AN INPUT METHOD OFFERS, AND THE ONE PICKED.
  *
- * Copyright © 2026 Kyle J. Cardoza. MIT licensed — see LICENSE.
- * SPDX-License-Identifier: MIT
+ * Copyright © 2026 Kyle J. Cardoza.
+ * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
+ * SPDX-License-Identifier: LGPL-3.0-or-later
+ * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **THIS IS THE THING THE CANDIDATE WINDOW DRAWS, AND IT IS A VIEW FOR THE SAME REASON A MENU'S ROWS ARE.** A menu's
  * row layout lives in `NSMenuView` and its per-row ink in a cell; a candidate list is smaller but the same shape — a

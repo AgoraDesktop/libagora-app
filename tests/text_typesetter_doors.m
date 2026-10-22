@@ -1,8 +1,10 @@
 /*
  * text_typesetter_doors — the manager's last six selectors, and the two types this tier has not got.
  *
- * Copyright © 2026 Kyle J. Cardoza. MIT licensed — see LICENSE.
- * SPDX-License-Identifier: MIT
+ * Copyright © 2026 Kyle J. Cardoza.
+ * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **THE CLAIM IS A ROUND TRIP AND A STATED ABSENCE.** The typesetter and the glyph generator are `id` doors because the
  * classes they name do not exist here; the probe sets a stand-in object, reads it back, clears it with nil, and checks the

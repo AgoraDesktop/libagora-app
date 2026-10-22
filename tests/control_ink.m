@@ -1,7 +1,10 @@
 /*
  * control_ink — does a CONTROL draw its CELL, and does a BUTTON's cell put a face on a surface?
  *
- * Copyright © 2026 Kyle J. Cardoza. MIT licensed. SPDX-License-Identifier: MIT
+ * Copyright © 2026 Kyle J. Cardoza.
+ * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **THE CONTROL LAYER'S WHOLE POINT IS THAT A VIEW DELEGATES ITS FACE TO A CELL, SO THIS ASKS THE TWO HALVES
  * SEPARATELY AND THEN TOGETHER.** Offscreen, because the ink is the claim: a bitmap rep and a graphics context

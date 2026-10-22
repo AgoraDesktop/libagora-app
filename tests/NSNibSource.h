@@ -1,7 +1,10 @@
 /*
  * NSNibSource.h — the nib format's TEXT SOURCE, and the compiler that turns it into the archive a nib is.
  *
- * Copyright © 2026 Kyle J. Cardoza. MIT licensed — see LICENSE.
+ * Copyright © 2026 Kyle J. Cardoza.
+ * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **THE ARCHIVE IS THE PRODUCT AND THE SOURCE IS WHAT A PERSON EDITS.** `NSNib.h` describes a keyed archive, which is
  * `btree`/XML plist bytes: correct for a runtime to read and useless to review. This is the other half of that split,

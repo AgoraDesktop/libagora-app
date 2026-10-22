@@ -1,8 +1,10 @@
 /*
  * NSDocument — the file, the contents, the change count, the undo manager and the windows.
  *
- * Copyright © 2026 Kyle J. Cardoza. MIT licensed — see LICENSE.
- * SPDX-License-Identifier: MIT
+ * Copyright © 2026 Kyle J. Cardoza.
+ * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
+ * SPDX-License-Identifier: LGPL-3.0-or-later
+ * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * The read and write paths are Apple's in Apple's order: a URL becomes a file wrapper, a wrapper's regular-file contents
  * become data, and a subclass overrides the data pair — or the wrapper pair for a package. The deprecated file doors

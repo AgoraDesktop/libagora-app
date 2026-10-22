@@ -1,8 +1,10 @@
 /*
  * box — NSBox: the kind, the title's band, the content view, and the ink.
  *
- * Copyright © 2026 Kyle J. Cardoza. MIT licensed — see LICENSE.
- * SPDX-License-Identifier: MIT
+ * Copyright © 2026 Kyle J. Cardoza.
+ * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **THE CLAIM IS THE GEOMETRY AND THEN THE PIXELS.** A box's content view sits inside the border and the margins; a title
  * at `NSAtTop` takes a band across the top edge, which is why the content starts below it; and `-setFrameFromContentFrame:`
