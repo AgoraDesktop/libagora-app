@@ -193,23 +193,21 @@
 
 /* ---- THE INK ------------------------------------------------------------------------------------ */
 
-/* A TRIANGLE, POINTING UP OR DOWN, inside the arrow's band. */
-- (void)cg_drawArrowInRect:(NSRect)rect up:(BOOL)up pressed:(BOOL)pressed
+/* A TRIANGLE, POINTING UP OR DOWN, inside the arrow's band. **"UP" IS A DIRECTION ON THE SCREEN, NOT A SIGN OF Y**: in a
+ * flipped view the up arrow's apex is the band's SMALLER y, and in an unflipped one it is the larger. The first version
+ * put the apex at `NSMaxY` in both and drew the two arrows INWARD — a stepper whose top arrow pointed down and whose bottom
+ * arrow pointed up, which every press test passed because a press only reads the band, not the triangle. */
+- (void)cg_drawArrowInRect:(NSRect)rect up:(BOOL)up pressed:(BOOL)pressed flipped:(BOOL)flipped
 {
 	CGFloat mid = NSMidX(rect);
-	CGFloat top = NSMaxY(rect);
-	CGFloat bottom = NSMinY(rect);
+	BOOL apexAtMax = up ? !flipped : flipped;
+	CGFloat apex = apexAtMax ? NSMaxY(rect) : NSMinY(rect);
+	CGFloat base = apexAtMax ? NSMinY(rect) : NSMaxY(rect);
 	NSBezierPath *path = [NSBezierPath bezierPath];
 
-	if (up) {
-		[path moveToPoint:NSMakePoint(mid, top)];
-		[path lineToPoint:NSMakePoint(mid - AG_STEPPER_ARROW_WIDTH / 2.0, bottom)];
-		[path lineToPoint:NSMakePoint(mid + AG_STEPPER_ARROW_WIDTH / 2.0, bottom)];
-	} else {
-		[path moveToPoint:NSMakePoint(mid, bottom)];
-		[path lineToPoint:NSMakePoint(mid - AG_STEPPER_ARROW_WIDTH / 2.0, top)];
-		[path lineToPoint:NSMakePoint(mid + AG_STEPPER_ARROW_WIDTH / 2.0, top)];
-	}
+	[path moveToPoint:NSMakePoint(mid, apex)];
+	[path lineToPoint:NSMakePoint(mid - AG_STEPPER_ARROW_WIDTH / 2.0, base)];
+	[path lineToPoint:NSMakePoint(mid + AG_STEPPER_ARROW_WIDTH / 2.0, base)];
 	[path closePath];
 	[(pressed ? [NSColor controlDarkShadowColor] : [NSColor controlTextColor]) setFill];
 	[path fill];
@@ -225,8 +223,10 @@
 	NSRect upper = NSMakeRect(NSMinX(cellFrame), NSMidY(cellFrame), NSWidth(cellFrame), NSHeight(cellFrame) / 2.0);
 	NSRect lower = NSMakeRect(NSMinX(cellFrame), NSMinY(cellFrame), NSWidth(cellFrame), NSHeight(cellFrame) / 2.0);
 	BOOL flipped = (controlView != nil) ? [controlView isFlipped] : NO;
-	NSRect upBand = NSInsetRect(flipped ? upper : lower, AG_STEPPER_ARROW_INSET, AG_STEPPER_ARROW_INSET);
-	NSRect downBand = NSInsetRect(flipped ? lower : upper, AG_STEPPER_ARROW_INSET, AG_STEPPER_ARROW_INSET);
+	/* THE UP ARROW IS THE ONE AT THE TOP OF THE SCREEN — the larger y unflipped, the smaller y flipped — and the tracking
+	 * door above uses the same test, so the arrow a press steps is the arrow it hit. */
+	NSRect upBand = NSInsetRect(flipped ? lower : upper, AG_STEPPER_ARROW_INSET, AG_STEPPER_ARROW_INSET);
+	NSRect downBand = NSInsetRect(flipped ? upper : lower, AG_STEPPER_ARROW_INSET, AG_STEPPER_ARROW_INSET);
 
 	[[NSColor controlColor] setFill];
 	[face fill];
@@ -237,8 +237,8 @@
 	[[NSColor controlShadowColor] setFill];
 	NSRectFill(NSMakeRect(NSMinX(cellFrame) + 1.0, NSMidY(cellFrame), NSWidth(cellFrame) - 2.0, 1.0));
 
-	[self cg_drawArrowInRect:upBand up:YES pressed:(_pressedSide == 1)];
-	[self cg_drawArrowInRect:downBand up:NO pressed:(_pressedSide == -1)];
+	[self cg_drawArrowInRect:upBand up:YES pressed:(_pressedSide == 1) flipped:flipped];
+	[self cg_drawArrowInRect:downBand up:NO pressed:(_pressedSide == -1) flipped:flipped];
 }
 
 @end

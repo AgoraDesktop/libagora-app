@@ -1242,3 +1242,15 @@ target_link_libraries(level_indicator PRIVATE App)
 
 add_test(NAME appkit-level-indicator COMMAND level_indicator)
 set_tests_properties(appkit-level-indicator PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
+
+# **THE DATE PICKER.** A date field is a text field whose text is a FORMATTED date of the cell's own locale, calendar and
+# time zone, so the probe changes each door and requires the text to follow (de_DE's day-first order, a +12 zone that moves
+# the day, an element flag that removes a field). The subfield a click selects is the run measured in that text, and stepping
+# it is the CALENDAR's arithmetic (January 31 + 1 month is February 28). The delegate's one in/out message is exercised three
+# ways — accept, replace, refuse — and the pictures are pixels: the hour hand at 03:00 and 09:00, the month grid's accent
+# chip, and the stepper's arrows in a strip the text-only style leaves empty.
+add_executable(date_picker date_picker.m)
+target_link_libraries(date_picker PRIVATE App)
+
+add_test(NAME appkit-date-picker COMMAND date_picker)
+set_tests_properties(appkit-date-picker PROPERTIES ENVIRONMENT "${_agora_app_test_env}")

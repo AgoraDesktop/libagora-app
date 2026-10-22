@@ -8,7 +8,9 @@
  * the cell's own tracking hooks — the non-modal protocol the slider uses — with points in each half of the control, and
  * checks the value, the clamp at the ends, the wrap, the action the target receives, and that a drag does NOT step again.
  * The direction check is the one a flip can break, so the probe runs the same press on a FLIPPED and an UNFLIPPED view and
- * requires opposite answers from the same half.
+ * requires opposite answers from the same half. **AND THE PICTURE HAS TO AGREE WITH THE PRESS**: the render checks that the
+ * up arrow is WIDEST AT ITS BASE, because the first version drew both triangles pointing inward — a top arrow that pointed
+ * down — and every press assertion still passed, since a press reads a band rather than a triangle.
  *
  * **AND THE SECURE FIELD'S CLAIM IS THE INK.** `-cg_contentText` is what the base draws AND measures, so the test checks
  * that a secure cell answers one bullet per character (and the same count back with `-echosBullets` off), then renders the
@@ -194,6 +196,27 @@ int main(void)
 				}
 				printf("  (note: the stepper cell drew %d dark pixels)\n", ink);
 				check(ink > 40, "the cell paints its bezel and two arrows");
+				/* **AND THE ARROW POINTS OUT, NOT IN.** The press tests above read the BAND, so a cell that drew its
+				 * top triangle pointing down would pass every one of them — which is what shipped until this check.
+				 * The up arrow's apex is near the top of its band and its base near the middle, so the row nearer the
+				 * middle must have MORE ink. The bitmap's rows run opposite the drawing, so y converts once. */
+				{
+					int apex = 0, base = 0;
+
+					for (x = 15; x < 25; x++) {
+						NSColor *a = [rep colorAtX:x y:(39 - 35)];
+						NSColor *b = [rep colorAtX:x y:(39 - 25)];
+
+						if (a != nil && [a redComponent] < 0.75) {
+							apex++;
+						}
+						if (b != nil && [b redComponent] < 0.75) {
+							base++;
+						}
+					}
+					printf("  (note: the up arrow's apex row has %d ink pixels, its base row %d)\n", apex, base);
+					check(base > apex, "and its up arrow is widest at the base: it points UP, not inward");
+				}
 				[rep release];
 			}
 

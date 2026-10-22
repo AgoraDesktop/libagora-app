@@ -914,7 +914,20 @@ the compositor is really gone.
   clamp is checked at both ends and through the control's forwards, and the ticks are N marks over N−1 intervals with both ends
   included.
 
-- **`ctest`: 132 of 132 passed** (the keyboard and the seam, the AppKit and its input path, the controls and their
+- **And `NSDatePicker` with its cell** (`ctest`, offscreen) — 60 selectors, two classes, and the
+  `NSDatePickerCellDelegate` protocol with its one in/out message. **A DATE FIELD IS A TEXT FIELD WHOSE TEXT IS A FORMATTED
+  DATE**, and the format is the cell's own doors: the probe formats one fixed instant and requires the text to equal a
+  formatter built from the same skeleton, locale, calendar and time zone, then CHANGES EACH DOOR and requires the text to
+  follow — de_DE puts the day first and calls June "Juni", a +12 zone moves 14:35 to 02:35 THE NEXT DAY, and clearing the
+  time flags removes the colon. **The subfield a click selects is the run measured in that text**: the locale's pattern is
+  walked in its own order, each field is formatted on its own and found in the finished string, so hit-testing and drawing
+  cannot disagree. Stepping is the CALENDAR's arithmetic — January 31 stepped by one month is February 28 — and the
+  delegate's one in/out message is exercised three ways: stored, REPLACED (a proposal shifted by a day lands where the
+  delegate said) and REFUSED (a nil date leaves the cell where it was). The pictures are pixels: the clock's hour hand points
+  right at 03:00 and left at 09:00, the month grid's selected day is a filled accent chip and its neighbour is not, and the
+  text-and-stepper style draws its two arrows in a strip the text-only style leaves empty.
+
+- **`ctest`: 133 of 133 passed** (the keyboard and the seam, the AppKit and its input path, the controls and their
   metrics, the field control and its cell and its bezel and its placeholder and what it may hold, the text path and its
   word granularity and the multi-line view and its wrapping and its scrolling and its READING OF THE STORE, the STORE
   the rich-text slice is built on and the REGION it is laid out in and the WEB that ties the three together and the
