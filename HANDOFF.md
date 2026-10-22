@@ -9,7 +9,10 @@ spent.*
 hold (82 classes, 2652 selectors of 3517, 23 protocols, 86 functions)`.*
 
 *State after the session that picked it up (§9–§25): **26 commits**, tree clean, **132 tests passing**,
-`api-ledger: 359 metrics hold (111 classes, 3096 selectors of 3835, 28 protocols, 86 functions)`.*
+`api-ledger: 355 metrics hold (111 classes, 3096 selectors of 3835, 28 protocols, 86 functions)`.*
+
+**That session left its own handoff — `HANDOFF-2.md`** — which is the place to start: this file is the record of how the tree
+reached its state, and that one is what a reader needs to go on from it. §9–§25 below are the same session's running notes.
 
 ---
 
