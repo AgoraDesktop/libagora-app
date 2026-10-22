@@ -4,7 +4,6 @@
  * Copyright © 2026 Kyle J. Cardoza.
  * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
  * SPDX-License-Identifier: GPL-3.0-or-later
- * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **THE MANAGER NOW KEEPS THE GLYPHS IT GENERATED, AND THE MAP IS COMPUTED FROM THEM.** Before this slice `CTLine`
  * was rebuilt at every draw and `-numberOfGlyphs` answered the store's character count by FIAT; now the layout keeps

@@ -4,7 +4,6 @@
  * Copyright © 2026 Kyle J. Cardoza.
  * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
  * SPDX-License-Identifier: LGPL-3.0-or-later
- * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * Ten doors, all forwards. The initialiser makes the cell; everything else answers it or tells it, which is the same rule
  * `NSSlider` records: a control whose face is its cell should not also keep the values.

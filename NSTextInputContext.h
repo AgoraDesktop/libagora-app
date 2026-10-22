@@ -4,7 +4,6 @@
  * Copyright © 2026 Kyle J. Cardoza.
  * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
  * SPDX-License-Identifier: LGPL-3.0-or-later
- * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **APPLE'S OWN SENTENCE FOR THIS CLASS IS "an object that represents the input context for a text view", AND THE
  * CONTEXT IS WHERE KEY EVENTS GO BEFORE THE TEXT VIEW SEES THEM.** `NSResponder -interpretKeyEvents:` hands each key

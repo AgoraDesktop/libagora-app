@@ -4,7 +4,6 @@
  * Copyright © 2026 Kyle J. Cardoza.
  * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
  * SPDX-License-Identifier: GPL-3.0-or-later
- * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **THIS IS THE CLASS THAT MAKES THE OTHER TWO USEFUL, SO WHAT IT IS TESTED ON IS THE JOINING.** A clip view scrolls
  * and a scroller reports; neither knows about the other, and this class is the only thing that turns one into the

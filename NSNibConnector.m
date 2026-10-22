@@ -4,7 +4,6 @@
  * Copyright © 2026 Kyle J. Cardoza.
  * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
  * SPDX-License-Identifier: LGPL-3.0-or-later
- * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * Three fields, two substitutions and two applications. The interesting part is that the base is deliberately powerless: the
  * GRAPH is the objects', and the connector is only the instruction that joins them.

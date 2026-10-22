@@ -4,7 +4,6 @@
  * Copyright © 2026 Kyle J. Cardoza.
  * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
  * SPDX-License-Identifier: GPL-3.0-or-later
- * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **THE FOUNDATION BELOW ALREADY WRITES RTF; WHAT IT CANNOT DO IS READ ONE INTO APPKIT ATTRIBUTES**, because the
  * value of `NSFontAttributeName` is an `NSFont` and Foundation has no such class. So the probe feeds the reader a

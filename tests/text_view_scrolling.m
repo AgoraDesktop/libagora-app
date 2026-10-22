@@ -4,7 +4,6 @@
  * Copyright © 2026 Kyle J. Cardoza.
  * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
  * SPDX-License-Identifier: GPL-3.0-or-later
- * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **SLICE III IS TWO DOORS ON `NSView` AND ONE ON THE TEXT VIEW, AND THIS CHECKS ALL THREE AGAINST A REAL CLIP VIEW.**
  * `-scrollRectToVisible:` finds the closest enclosing clip view, works in ITS coordinates and moves the origin just

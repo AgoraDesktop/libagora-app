@@ -4,7 +4,6 @@
  * Copyright © 2026 Kyle J. Cardoza.
  * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
  * SPDX-License-Identifier: GPL-3.0-or-later
- * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **`NSNaturalTextAlignment` IS NOT AN EDGE, IT IS A QUESTION, AND THE BASE DIRECTION IS THE ANSWER.** A left-to-right
  * paragraph aligns natural text LEFT and a right-to-left one aligns it RIGHT, so the layout manager resolves the one

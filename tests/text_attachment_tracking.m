@@ -4,7 +4,6 @@
  * Copyright © 2026 Kyle J. Cardoza.
  * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
  * SPDX-License-Identifier: GPL-3.0-or-later
- * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **THE TRACKING FAMILY IS DRIVEN BY THE TEXT VIEW'S OWN EVENT STREAM, NOT BY A MODAL LOOP.** `NSCell` refuses
  * `-trackMouse:inRect:ofView:untilMouseUp:` because a loop built from guessed coordination can hang the guest. This

@@ -4,7 +4,6 @@
  * Copyright © 2026 Kyle J. Cardoza.
  * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
  * SPDX-License-Identifier: LGPL-3.0-or-later
- * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **EVERY DOOR HERE IS A ROW OR A LOOP OVER ROWS, AND THAT IS THE CLASS.** A form's entry index is a matrix row; its
  * column is always zero; its cells are `NSFormCell`s. So there is no geometry here — `NSMatrix` owns that — and no

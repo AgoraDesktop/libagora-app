@@ -4,7 +4,6 @@
  * Copyright © 2026 Kyle J. Cardoza.
  * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
  * SPDX-License-Identifier: LGPL-3.0-or-later
- * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **THE ENUMERATION IS ONE CACHED ARRAY, AND EVERY NAME QUESTION READS IT.** Core Text answers "every face" through a
  * collection, so `-fn_allDescriptors` asks once, keeps the descriptors, and the family, member, name and trait doors

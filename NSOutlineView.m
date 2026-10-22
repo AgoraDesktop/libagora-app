@@ -4,7 +4,6 @@
  * Copyright © 2026 Kyle J. Cardoza.
  * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
  * SPDX-License-Identifier: LGPL-3.0-or-later
- * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **THE TREE IS FLATTENED ONCE PER CHANGE, NOT WALKED PER DRAW.** `-reloadData` asks the data source for the roots and
  * then walks every open item depth-first into `_flattenedItems`, with a parallel level array. `-itemAtRow:`,

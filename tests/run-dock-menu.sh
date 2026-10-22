@@ -2,7 +2,6 @@
 # Copyright © 2026 Kyle J. Cardoza.
 # SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
 # SPDX-License-Identifier: GPL-3.0-or-later
-# Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
 
 # **A TILE'S MENU, AGAINST AGORA'S OWN SERVER** — the round trip needs `agora_shell` version 6, so it runs against
 # `window-server` and SKIPS (77) when there is none to run against.

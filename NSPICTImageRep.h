@@ -4,7 +4,6 @@
  * Copyright © 2026 Kyle J. Cardoza.
  * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
  * SPDX-License-Identifier: LGPL-3.0-or-later
- * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **PICT IS THE ERA'S VECTOR-METAFILE FORMAT AND THIS TIER HAS NO DECODER FOR IT.** Apple's class parses the picture —
  * its bounds, its resolution, its QuickDraw drawing opcodes — and plays it back through QuickDraw, which is a drawing stack

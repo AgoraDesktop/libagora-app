@@ -4,7 +4,6 @@
  * Copyright © 2026 Kyle J. Cardoza.
  * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
  * SPDX-License-Identifier: GPL-3.0-or-later
- * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **THE CONTROL IS A FORWARDER, SO THE PROBE ASKS BOTH HALVES.** The public NSSegmentedControl doors are checked for
  * their answers and their storage, and the cell's private geometry door is used to pin the segment arithmetic: fixed

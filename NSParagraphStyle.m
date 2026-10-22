@@ -4,7 +4,6 @@
  * Copyright © 2026 Kyle J. Cardoza.
  * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
  * SPDX-License-Identifier: LGPL-3.0-or-later
- * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **THE CLASS IS A LEDGER AND A COPY, WHICH IS THE WHOLE OF IT.** Every door above answers a scalar that was set when
  * the style was made; the only arithmetic is the copy that turns an immutable style into a mutable one and back. THAT

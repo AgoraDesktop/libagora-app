@@ -4,7 +4,6 @@
  * Copyright © 2026 Kyle J. Cardoza.
  * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
  * SPDX-License-Identifier: LGPL-3.0-or-later
- * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **A SWITCH IS A TRACK AND A KNOB, AND THE SAMPLE MEASURES BOTH.** `Argentum Mockup.png` draws four of them beside its
  * four-state legend, and the numbers are the sample's rather than this file's:

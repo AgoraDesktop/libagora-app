@@ -4,7 +4,6 @@
  * Copyright © 2026 Kyle J. Cardoza.
  * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
  * SPDX-License-Identifier: GPL-3.0-or-later
- * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **THIS IS THE INSIDE OF A SCROLL VIEW, AND IT IS THE HALF THAT CAN BE CHECKED WITHOUT ONE.** `NSClipView.h` says
  * the arithmetic "is the whole of it" and that a clip view without an `NSScrollView` is "still useful and still

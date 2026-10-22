@@ -4,7 +4,6 @@
  * Copyright © 2026 Kyle J. Cardoza.
  * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
  * SPDX-License-Identifier: GPL-3.0-or-later
- * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **THE CLAIM IS THAT THE VALUE BECOMES A PICTURE AND THE THRESHOLDS BECOME A COLOUR.** The probe renders the cell at three
  * values and reads what the pixels say: half full is a bar whose left half is the color and whose right half is the ground;

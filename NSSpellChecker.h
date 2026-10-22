@@ -4,7 +4,6 @@
  * Copyright © 2026 Kyle J. Cardoza.
  * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
  * SPDX-License-Identifier: LGPL-3.0-or-later
- * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **THIS ONE IS REAL, AND IT IS REAL BECAUSE THE BACKING EXISTS.** The plan's disposition table allows "adapted" when a
  * platform equivalent stands in for Apple's mechanism, and a spell checker is exactly that: Apple asks its own service,

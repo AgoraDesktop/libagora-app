@@ -4,7 +4,6 @@
  * Copyright © 2026 Kyle J. Cardoza.
  * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
  * SPDX-License-Identifier: LGPL-3.0-or-later
- * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **THE FUNCTIONS ARE HERE AND THE PROTOCOLS ARE NOT, WHICH IS THE PLAN'S ORDER RATHER THAN AN OMISSION.** The 10.11
  * plan stages accessibility as "a tree, then a bridge": the tree utilities are answerable over this tier's view

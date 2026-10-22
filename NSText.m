@@ -4,7 +4,6 @@
  * Copyright © 2026 Kyle J. Cardoza.
  * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
  * SPDX-License-Identifier: LGPL-3.0-or-later
- * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **ONE RUN, ONE LINE, AND EVERY EDIT SPELLED AS A RANGE REPLACEMENT.** That is the whole of this class's model, and it
  * is deliberately less than Apple's: Apple's `NSText` carries an `NSTextContainer` chain and lays out as many lines as

@@ -4,7 +4,6 @@
  * Copyright © 2026 Kyle J. Cardoza.
  * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
  * SPDX-License-Identifier: GPL-3.0-or-later
- * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **A CANDIDATE LIST IS THREE THINGS: A LIST, A WINDOW, AND A METHOD.** The list holds the readings and the selected
  * one and draws them (checked as ink and as the accent fill, which MOVES when the selection does); the window sizes

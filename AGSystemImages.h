@@ -5,7 +5,6 @@
  * Copyright © 2026 Kyle J. Cardoza.
  * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
  * SPDX-License-Identifier: LGPL-3.0-or-later
- * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * APPLE'S NAMES EXISTED HERE BEFORE THE PICTURES DID. `NSImage.h` has declared all 57 `NSImageName…` constants
  * for as long as the tier has had an `NSImage`, and `+imageNamed:` answered every one of them with a BUNDLE

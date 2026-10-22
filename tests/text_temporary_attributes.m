@@ -4,7 +4,6 @@
  * Copyright © 2026 Kyle J. Cardoza.
  * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
  * SPDX-License-Identifier: GPL-3.0-or-later
- * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **THE CLAIM IS THAT A TEMPORARY ATTRIBUTE IS INK, NOT AN EDIT.** The probe sets a red foreground over one character,
  * draws the line into a bitmap and counts red pixels; then removes the attribute, draws again, and requires them gone.

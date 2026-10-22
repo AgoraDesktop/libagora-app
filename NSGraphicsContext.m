@@ -4,7 +4,6 @@
  * Copyright © 2026 Kyle J. Cardoza.
  * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
  * SPDX-License-Identifier: LGPL-3.0-or-later
- * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * THERE ARE TWO STACKS HERE AND CONFLATING THEM IS THE ONLY REAL MISTAKE THIS FILE CAN MAKE.
  * `-saveGraphicsState`/`-restoreGraphicsState` are the RECEIVER's, and they are pure forwards to

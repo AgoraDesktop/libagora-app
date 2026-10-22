@@ -4,7 +4,6 @@
  * Copyright © 2026 Kyle J. Cardoza.
  * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
  * SPDX-License-Identifier: GPL-3.0-or-later
- * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **THE CLAIM IS THAT A FONT PANEL CAN ACTUALLY CHANGE A FONT**, so the probe walks the chain the panel walks: the
  * manager enumerates the machine's faces, a family's members are real rows, a conversion answers a face, the four

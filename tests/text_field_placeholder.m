@@ -4,7 +4,6 @@
  * Copyright © 2026 Kyle J. Cardoza.
  * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
  * SPDX-License-Identifier: GPL-3.0-or-later
- * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **A PLACEHOLDER IS INK, SO THIS PROBE READS INK.** The claims worth making are not about an ivar: that an empty field
  * with a placeholder DRAWS something and one without draws NOTHING; that what it draws is DIMMER than the field's real

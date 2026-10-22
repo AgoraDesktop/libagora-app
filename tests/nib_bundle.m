@@ -4,7 +4,6 @@
  * Copyright © 2026 Kyle J. Cardoza.
  * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
  * SPDX-License-Identifier: GPL-3.0-or-later
- * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **EVERY OTHER NIB TEST SO FAR USED A PATH, AND AN APPLICATION NEVER DOES.** A Mac application says
  * `[[NSViewController alloc] initWithNibName:@"Main" bundle:nil]`, the bundle finds `Contents/Resources/Main.nib`,

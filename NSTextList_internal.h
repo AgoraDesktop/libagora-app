@@ -4,7 +4,6 @@
  * Copyright © 2026 Kyle J. Cardoza.
  * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
  * SPDX-License-Identifier: LGPL-3.0-or-later
- * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * NOT INSTALLED, and this tier's own door. **`NSTextListPrependEnclosingMarker` NEEDS A FACT THAT NO PUBLIC API CARRIES**:
  * a list that prepends its enclosing marker has to know which list encloses it, and 10.6 gives no setter for that —

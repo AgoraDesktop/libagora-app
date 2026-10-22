@@ -4,7 +4,6 @@
  * Copyright © 2026 Kyle J. Cardoza.
  * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
  * SPDX-License-Identifier: LGPL-3.0-or-later
- * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **THE CLASS IS TWO MAPS AND A NAME**, and the file is a property list of this tree's own shape (see the header). The
  * two decisions worth naming are both about EDITABILITY: a list loaded from a system directory refuses its three

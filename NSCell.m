@@ -4,7 +4,6 @@
  * Copyright © 2026 Kyle J. Cardoza.
  * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
  * SPDX-License-Identifier: LGPL-3.0-or-later
- * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * THE CLASS IS MOSTLY A HEADER SO FAR, AND THAT IS THE HONEST SHAPE OF ITS FIRST SLICE: the types it is declared in
  * terms of, and the four pieces of state a caller can set without anything being drawn. The rest of Apple's cell —

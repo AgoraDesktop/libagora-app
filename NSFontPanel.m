@@ -4,7 +4,6 @@
  * Copyright © 2026 Kyle J. Cardoza.
  * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
  * SPDX-License-Identifier: LGPL-3.0-or-later
- * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **THE FACE IS A SCROLLING FAMILY LIST, A SIZE ROW AND THE CALLER'S BAND.** The list is a real `NSScrollView` around
  * a document view that draws one row per family — 115 families on this machine, so a list that could not scroll would

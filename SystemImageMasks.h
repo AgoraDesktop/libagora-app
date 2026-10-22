@@ -5,7 +5,6 @@
  * Copyright © 2026 Kyle J. Cardoza.
  * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
  * SPDX-License-Identifier: LGPL-3.0-or-later AND MIT
- * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * THE ART IS DERIVED FROM BOOTSTRAP ICONS v1.13.2 (MIT, © 2019-2024 The Bootstrap Authors) AND RESTYLED; see
  * art/system-images/PROVENANCE for the derivation and the notice, which travels with any copy of this table.

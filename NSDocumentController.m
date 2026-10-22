@@ -4,7 +4,6 @@
  * Copyright © 2026 Kyle J. Cardoza.
  * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
  * SPDX-License-Identifier: LGPL-3.0-or-later
- * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * The type table is read from `CFBundleDocumentTypes` once, lazily: each entry is a dictionary with a `CFBundleTypeName`,
  * an `NSDocumentClass` and a `CFBundleTypeExtensions` array. A subclass that wants a table it owns overrides

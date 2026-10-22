@@ -4,7 +4,6 @@
  * Copyright © 2026 Kyle J. Cardoza.
  * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
  * SPDX-License-Identifier: LGPL-3.0-or-later
- * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **EVERY CONTROL IN THIS TIER SO FAR HAS BEEN ONE SUBSYSTEM WEARING A CELL.** A button is the cell layer; a slider
  * is the cell layer with a value that is a position; a scroller is the cell layer with a value that is a fraction.

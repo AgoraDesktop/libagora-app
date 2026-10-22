@@ -5,7 +5,6 @@
  * Copyright © 2026 Kyle J. Cardoza.
  * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
  * SPDX-License-Identifier: GPL-3.0-or-later
- * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **THE CLAIM WORTH TESTING IS THAT A FIND MENU WORKS WITH NO FIND PANEL**, because that is the split Apple's own API
  * makes: the sender's TAG is one of ten actions and only three of them want a panel. So the test drives the actions a

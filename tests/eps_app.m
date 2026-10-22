@@ -5,7 +5,6 @@
  * Copyright © 2026 Kyle J. Cardoza.
  * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
  * SPDX-License-Identifier: GPL-3.0-or-later
- * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * THE RENDERER IS GHOSTSCRIPT, when the host has it: this tree has no PostScript interpreter, so the only
  * honest proof that the view's drawing survived is another implementation reading the file. The structural

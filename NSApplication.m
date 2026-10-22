@@ -4,7 +4,6 @@
  * Copyright © 2026 Kyle J. Cardoza.
  * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
  * SPDX-License-Identifier: LGPL-3.0-or-later
- * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * THE LOOP IS DELIBERATELY BOUNDED AND THAT IS A STATED DEVIATION. Apple's run loop waits in the run loop
  * until an event or a timer wakes it; this tree has no timer service wired into the loop yet, so each pass

@@ -4,7 +4,6 @@
  * Copyright © 2026 Kyle J. Cardoza.
  * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
  * SPDX-License-Identifier: GPL-3.0-or-later
- * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * THIS IS THE SPIKE, REWRITTEN AGAINST THE INTERFACE. It uses nothing but <AGWindowServer.h>: no Wayland
  * type, no xdg-shell name, no shm. That is the point of it — if the seam is ever reimplemented (Agora's own

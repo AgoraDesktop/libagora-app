@@ -4,7 +4,6 @@
  * Copyright © 2026 Kyle J. Cardoza.
  * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
  * SPDX-License-Identifier: LGPL-3.0-or-later
- * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * NOT INSTALLED. Apple's `-drawBackgroundForBlock:withFrame:inView:characterRange:layoutManager:` has no edge mask, and a
  * collapsing table needs one: a shared edge is drawn by ONE of the two cells that meet there. The mask is carried in

@@ -4,7 +4,6 @@
  * Copyright © 2026 Kyle J. Cardoza.
  * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
  * SPDX-License-Identifier: GPL-3.0-or-later
- * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **A SLIDER IS A CONTROL WHOSE VALUE IS A POSITION, AND THE ONLY INTERESTING CLAIMS ARE THE TWO GEOMETRIC ONES.**
  * Everything else here — the range, the clamps, the forwards — is the same "the cell owns it and the control forwards

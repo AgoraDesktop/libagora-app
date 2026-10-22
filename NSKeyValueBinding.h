@@ -4,7 +4,6 @@
  * Copyright © 2026 Kyle J. Cardoza.
  * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
  * SPDX-License-Identifier: LGPL-3.0-or-later
- * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **ONE FUNCTION, AND ITS ANSWER HERE IS NO FOR EVERYTHING.** Apple's controller markers are four shared singleton
  * objects an `NSController` substitutes for "not applicable", "multiple values" and the rest; this tier has no binding

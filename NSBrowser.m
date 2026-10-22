@@ -4,7 +4,6 @@
  * Copyright © 2026 Kyle J. Cardoza.
  * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
  * SPDX-License-Identifier: LGPL-3.0-or-later
- * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * THE PRIVATE SHAPE: one horizontal `NSScrollView` around a document view, and one `NSScrollView` per column inside
  * it, each with an `NSTableView` as its document. The browser is the data source and delegate of every one of those

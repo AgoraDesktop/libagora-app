@@ -4,7 +4,6 @@
  * Copyright © 2026 Kyle J. Cardoza.
  * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
  * SPDX-License-Identifier: LGPL-3.0-or-later
- * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **THE GEOMETRY IS WRITTEN ONCE AND ASKED TWO WAYS.** `-testPart:` and `-rectForPart:` are not two implementations
  * of the same layout: every part's rectangle comes from one of the four private `fn_` helpers below, and `-testPart:`

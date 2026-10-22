@@ -4,7 +4,6 @@
  * Copyright © 2026 Kyle J. Cardoza.
  * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
  * SPDX-License-Identifier: GPL-3.0-or-later
- * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **EACH OF THESE IS A REAL DOOR WITH A SMALL CLAIM, AND EACH CLAIM IS CHECKED WHERE A CALLER SEES IT.** The event's
  * window is the application's registry lookup rather than a pointer it kept; the font descriptor's name+matrix door

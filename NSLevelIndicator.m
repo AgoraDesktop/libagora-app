@@ -4,7 +4,6 @@
  * Copyright © 2026 Kyle J. Cardoza.
  * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
  * SPDX-License-Identifier: LGPL-3.0-or-later
- * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * The cell owns the range, the two thresholds, the value and the ticks; the control forwards. The drawing is one function of
  * the style, and the colour is a function of how the value compares with the thresholds — which is the class's whole opinion.

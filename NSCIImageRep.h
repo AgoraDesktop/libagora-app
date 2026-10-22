@@ -4,7 +4,6 @@
  * Copyright © 2026 Kyle J. Cardoza.
  * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
  * SPDX-License-Identifier: LGPL-3.0-or-later
- * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **CORE IMAGE IS A FILTER GRAPH AND A GPU PIPELINE, AND NEITHER IS HERE.** Apple's rep wraps a `CIImage` so an AppKit image
  * can be produced by a Core Image chain; this tier has no Core Image at all — `NSColor +colorWithCIColor:` refuses for the

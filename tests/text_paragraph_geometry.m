@@ -4,7 +4,6 @@
  * Copyright © 2026 Kyle J. Cardoza.
  * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
  * SPDX-License-Identifier: GPL-3.0-or-later
- * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **THE PROPERTIES THAT WERE CARRIED AND UNREAD ARE READ NOW, AND EACH ONE IS A MEASUREMENT.** The line's x comes from
  * the two head indents, its WIDTH from the tail indent, its HEIGHT from the multiple and the two clamps, and the SPACE

@@ -4,7 +4,6 @@
  * Copyright © 2026 Kyle J. Cardoza.
  * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
  * SPDX-License-Identifier: LGPL-3.0-or-later
- * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * WHAT THIS IS. `NSStatusBar` is the object a status item is made from, and the answers here are the WindowServer's
  * rather than AppKit's: `-thickness` is how much of the screen the menu bar takes, which is precisely what

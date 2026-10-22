@@ -4,7 +4,6 @@
  * Copyright © 2026 Kyle J. Cardoza.
  * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
  * SPDX-License-Identifier: LGPL-3.0-or-later
- * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **A BLOCK IS WHAT MAKES A PARAGRAPH MORE THAN ITS LINES: A BOX AROUND THEM.** Apple's own sentence for the class is
  * "a rectangular area... that is used to lay out a portion of text", and the three things a box can have are the

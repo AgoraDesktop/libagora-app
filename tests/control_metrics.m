@@ -4,7 +4,6 @@
  * Copyright © 2026 Kyle J. Cardoza.
  * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
  * SPDX-License-Identifier: GPL-3.0-or-later
- * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **THE TWO HALVES ARE ONE BUG, WHICH IS WHY THEY ARE ONE PROBE.** A push button came out 35.2 points tall — a
  * property of the FONT rather than of the control — and the font half of that was wrong too: a 13-point line measured

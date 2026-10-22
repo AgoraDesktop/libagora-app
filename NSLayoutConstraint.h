@@ -4,7 +4,6 @@
  * Copyright © 2026 Kyle J. Cardoza.
  * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
  * SPDX-License-Identifier: LGPL-3.0-or-later
- * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **THIS IS A DELIBERATE POST-10.6 SLICE, AND IT SAYS SO RATHER THAN PRETENDING OTHERWISE.** The era pins this tier
  * is measured against are 10.2/10.5/10.6, and Auto Layout is 10.7's: the class, the attributes and the priorities in

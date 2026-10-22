@@ -4,7 +4,6 @@
  * Copyright © 2026 Kyle J. Cardoza.
  * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
  * SPDX-License-Identifier: LGPL-3.0-or-later
- * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * One browser serves both panels. The listing is the directory's contents with the delegate's filters applied, sorted
  * with the delegate's comparator when it answers one; a directory is navigated or chosen by the open panel's flags; the

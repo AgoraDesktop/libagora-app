@@ -4,7 +4,6 @@
  * Copyright © 2026 Kyle J. Cardoza.
  * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
  * SPDX-License-Identifier: GPL-3.0-or-later
- * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **THIS PROBE NEEDS NO FONT, WHICH MAKES IT THE FIRST CONTROL HERE THAT IS FULLY CHECKABLE OFFSCREEN.** A switch has
  * no text at all: its value is where the knob is and its state is what the track is filled with, and both are pixels

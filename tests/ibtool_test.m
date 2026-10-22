@@ -4,7 +4,6 @@
  * Copyright © 2026 Kyle J. Cardoza.
  * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
  * SPDX-License-Identifier: GPL-3.0-or-later
- * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * The tool is a real executable and the only honest way to test it is to RUN it: this program builds a nib, writes it,
  * spawns `ibtool` for each verb and checks the exit status and the output. The fixture is built here rather than checked

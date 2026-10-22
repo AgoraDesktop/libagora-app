@@ -4,7 +4,6 @@
  * Copyright © 2026 Kyle J. Cardoza.
  * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
  * SPDX-License-Identifier: GPL-3.0-or-later
- * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **THIS DOOR REFUSED FOR THE WHOLE LIFE OF THIS CLASS, AND THE REFUSAL WAS THE MEASUREMENT**: "this tree's Core
  * Graphics has the PNG and JPEG decoders and no `CGImageDestination`, so there is nothing to encode with". Core

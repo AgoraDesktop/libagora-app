@@ -4,7 +4,6 @@
  * Copyright © 2026 Kyle J. Cardoza.
  * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
  * SPDX-License-Identifier: GPL-3.0-or-later
- * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **THE CLAIM IS A COLOUR IN A PIXEL, WHICH IS THE ONLY WAY AN ATTRIBUTE THAT DRAWS SOMETHING BESIDES GLYPHS CAN BE
  * SEEN.** A foreground colour is gleaned from the glyphs themselves; a BACKGROUND fills the space BETWEEN and BEHIND

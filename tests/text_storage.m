@@ -4,7 +4,6 @@
  * Copyright © 2026 Kyle J. Cardoza.
  * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
  * SPDX-License-Identifier: GPL-3.0-or-later
- * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **THE CLASS'S WHOLE CLAIM IS A RELATIONSHIP: the primitives change the string, and `-edited:range:changeInLength:`
  * records WHAT changed so that `-processEditing` can tell the world ONCE.** So what is measured here is not "the text

@@ -4,7 +4,6 @@
  * Copyright © 2026 Kyle J. Cardoza.
  * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
  * SPDX-License-Identifier: LGPL-3.0-or-later
- * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **THIS IS NOT APPLE'S API AND IS NOT INSTALLED FOR A CLIENT TO CALL.** It is the engine `NSView` uses, split into
  * its own file because a solver and a view are different jobs: the view owns a tree, a window and a drawing model,

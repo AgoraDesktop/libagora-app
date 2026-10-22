@@ -4,7 +4,6 @@
  * Copyright © 2026 Kyle J. Cardoza.
  * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
  * SPDX-License-Identifier: LGPL-3.0-or-later
- * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **THE TABLE IS A MODEL VIEW, AND THIS FILE IS THE MODEL'S GEOMETRY.** The data source answers how many rows and
  * what each cell's value is; the columns answer how wide they are and which cells draw them; this class answers where

@@ -4,7 +4,6 @@
  * Copyright © 2026 Kyle J. Cardoza.
  * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
  * SPDX-License-Identifier: LGPL-3.0-or-later
- * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * THE DISPLAY SEAM IS `AGWindowServer`'s, AND IT USED TO BE XLIB'S. This file opened an X display, made an
  * `XCreateSimpleWindow` on it, pumped it with `XNextEvent`, translated keys with `XLookupString` and put its

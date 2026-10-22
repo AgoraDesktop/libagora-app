@@ -4,7 +4,6 @@
  * Copyright © 2026 Kyle J. Cardoza.
  * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
  * SPDX-License-Identifier: LGPL-3.0-or-later
- * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **A TABLE IS A BLOCK WITH COLUMNS, AND A CELL IS A BLOCK WITH A PLACE IN THEM.** `NSTextTable` is an `NSTextBlock`
  * — it has a ground and edges like any other box — plus the two things a grid adds: how many columns it has and how

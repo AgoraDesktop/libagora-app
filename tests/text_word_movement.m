@@ -4,7 +4,6 @@
  * Copyright © 2026 Kyle J. Cardoza.
  * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
  * SPDX-License-Identifier: GPL-3.0-or-later
- * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **A WORD IS A RUN OF THE STRING'S OWN CHARACTERS, SO THIS NEEDS NO LAYOUT MODEL.** `NSResponder.h` used to name the
  * word commands among the family that needed a layout model — words, paragraphs, several lines — and that reason was

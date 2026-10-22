@@ -4,7 +4,6 @@
  * Copyright © 2026 Kyle J. Cardoza.
  * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
  * SPDX-License-Identifier: LGPL-3.0-or-later
- * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **A DATE PICKER IS A FIELD WHOSE TEXT IS A FORMATTED DATE.** It is not a calendar widget with a text mode bolted on: the
  * cell takes a date, a set of ELEMENT FLAGS saying which parts of it to show, and a locale, calendar and time zone, and the

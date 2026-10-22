@@ -4,7 +4,6 @@
  * Copyright © 2026 Kyle J. Cardoza.
  * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
  * SPDX-License-Identifier: LGPL-3.0-or-later
- * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * THE STORE IS TWO CONTAINERS AND A COUNTER, and the counter is the part with a contract: Apple's
  * `-changeCount` is how a client knows whether the pasteboard moved under it, so EVERY mutation advances it

@@ -5,7 +5,6 @@
  * Copyright © 2026 Kyle J. Cardoza.
  * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
  * SPDX-License-Identifier: GPL-3.0-or-later
- * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **THE CLAIM IS THAT THE THREE KINDS OF STALENESS END IN THREE OBSERVABLE PLACES.** A glyph/layout invalidation ends in
  * the manager's stale record (which this tier publishes as `-cg_invalidatedRange` because Apple has no getter); a DISPLAY

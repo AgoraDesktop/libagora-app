@@ -4,7 +4,6 @@
  * Copyright © 2026 Kyle J. Cardoza.
  * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
  * SPDX-License-Identifier: LGPL-3.0-or-later
- * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * NOT INSTALLED, and this tier's own door. `NSTextBlock` draws its ground and its edges; `NSTextTableBlock` forwards its
  * drawing to its TABLE, so that subclassing `NSTextTable` and overriding its

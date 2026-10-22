@@ -4,7 +4,6 @@
  * Copyright © 2026 Kyle J. Cardoza.
  * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
  * SPDX-License-Identifier: GPL-3.0-or-later
- * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **WHY THIS IS AN OFFSCREEN TEST, AND WHY IT IS THE RIGHT SHAPE.** Every one of `NSMenuItemCell`'s six drawing
  * doors refused for "THE INK" until this row: the geometry was real and the ink was refused, and the refusal was

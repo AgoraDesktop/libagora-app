@@ -4,7 +4,6 @@
  * Copyright © 2026 Kyle J. Cardoza.
  * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
  * SPDX-License-Identifier: LGPL-3.0-or-later
- * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **THE RULER IS THE STRIP BESIDE A DOCUMENT THAT MEASURES IT, AND IT IS TWO CLASSES RATHER THAN ONE.** The view owns
  * the geometry — which strip of the scroll view it is, how thick it is, what unit its hash marks are in, and where the

@@ -4,7 +4,6 @@
  * Copyright © 2026 Kyle J. Cardoza.
  * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
  * SPDX-License-Identifier: LGPL-3.0-or-later
- * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **THE CLASS IS A STORE AND A SWITCH.** Everything above "THE GEOMETRY" is four values and a borrowed pointer; the
  * geometry below it is one intersection, one clip and one carry-back. There is no state machine, no cache and no

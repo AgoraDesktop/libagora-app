@@ -4,7 +4,6 @@
  * Copyright © 2026 Kyle J. Cardoza.
  * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
  * SPDX-License-Identifier: LGPL-3.0-or-later
- * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * Both shapes end at one JPEG-free bitmap rep, and the base class's `-CGImage` blit does the drawing. The window form
  * renders its rectangle ONCE, through the view's own `-cacheDisplayInRect:toBitmapImageRep:`, which is the same path

@@ -4,7 +4,6 @@
  * Copyright © 2026 Kyle J. Cardoza.
  * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
  * SPDX-License-Identifier: GPL-3.0-or-later
- * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **THE CLASS IS FIVE DOORS AND ONE OPTION (10.6's whole header), AND ITS ONLY BEHAVIOUR IS ARITHMETIC**: the marker
  * for an item number in a named format. So that is what is measured — every family the implementation claims, with the

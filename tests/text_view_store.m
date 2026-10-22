@@ -4,7 +4,6 @@
  * Copyright © 2026 Kyle J. Cardoza.
  * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
  * SPDX-License-Identifier: GPL-3.0-or-later
- * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **THIS IS THE SLICE WHERE THE VIEW'S OWN LAYOUT GOES AWAY.** `NSTextView` used to hold a plain `NSMutableString` and
  * a `malloc`'d array of visual lines it computed itself; now it owns an `NSTextStorage`, an `NSLayoutManager` and an

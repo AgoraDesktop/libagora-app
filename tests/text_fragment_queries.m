@@ -5,7 +5,6 @@
  * Copyright © 2026 Kyle J. Cardoza.
  * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
  * SPDX-License-Identifier: GPL-3.0-or-later
- * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **THIS IS THE FIRST SLAB OF THE TEXT SYSTEM'S REMAINING SURFACE**, and it is the one that needs no cluster mapping:
  * the manager already keeps a fragment per line carrying the character span, the glyph span, two rects and a baseline,

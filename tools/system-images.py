@@ -2,7 +2,6 @@
 # Copyright © 2026 Kyle J. Cardoza.
 # SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
 # SPDX-License-Identifier: GPL-3.0-or-later
-# Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
 
 """system-images.py — the artwork behind `+[NSImage imageNamed:]`'s NSImageName… names.
 
@@ -329,7 +328,6 @@ def main():
  * Copyright © 2026 Kyle J. Cardoza.
  * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
  * SPDX-License-Identifier: LGPL-3.0-or-later AND MIT
- * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * THE ART IS DERIVED FROM BOOTSTRAP ICONS v1.13.2 (MIT, © 2019-2024 The Bootstrap Authors) AND RESTYLED; see
  * art/system-images/PROVENANCE for the derivation and the notice, which travels with any copy of this table.
@@ -364,7 +362,6 @@ extern const size_t AGSystemImageGlyphCount;
  * Copyright © 2026 Kyle J. Cardoza.
  * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
  * SPDX-License-Identifier: LGPL-3.0-or-later AND MIT
- * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * Derived from Bootstrap Icons v1.13.2 (MIT, © 2019-2024 The Bootstrap Authors), restyled as a stroke on their
  * 16-unit grid. The notice is in art/system-images/PROVENANCE and travels with this table.
@@ -386,7 +383,6 @@ extern const size_t AGSystemImageGlyphCount;
  * Copyright © 2026 Kyle J. Cardoza.
  * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
  * SPDX-License-Identifier: LGPL-3.0-or-later AND MIT
- * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **THE PAIRS ARE SPELLED WITH THE CONSTANTS AND NOT WITH THEIR STRINGS.** `NSImageNameGoLeftTemplate` is an
  * identifier whose value is a string this tree chose, so naming the identifier here means a rename breaks the
@@ -408,7 +404,6 @@ const AGSystemImageName AGSystemImageNames[] = {
  * Copyright © 2026 Kyle J. Cardoza.
  * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
  * SPDX-License-Identifier: LGPL-3.0-or-later AND MIT
- * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **THE PAIRS ARE SPELLED WITH THE ADDRESSES OF THE CONSTANTS.** A global variable's VALUE is not a constant
  * expression in C, so `{ NSImageNameGoLeftTemplate, … }` does not compile in a static initializer while

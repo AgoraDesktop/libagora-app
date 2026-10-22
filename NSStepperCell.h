@@ -4,7 +4,6 @@
  * Copyright © 2026 Kyle J. Cardoza.
  * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
  * SPDX-License-Identifier: LGPL-3.0-or-later
- * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **A STEPPER IS A PAIR OF ARROWS THAT MOVES ONE NUMBER.** The control holds the cell, the cell holds the four facts that
  * decide what a press does — the range, the step, whether the value wraps at the ends and whether holding repeats — and

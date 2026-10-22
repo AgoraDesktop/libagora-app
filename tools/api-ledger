@@ -5,7 +5,6 @@
 # Copyright © 2026 Kyle J. Cardoza.
 # SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
 # SPDX-License-Identifier: GPL-3.0-or-later
-# Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
 #
 # **WHY THIS EXISTS.** `COCOA-10.11-SURFACE-PLAN.md` §2 calls for a ledger and says what it is for: every name in
 # the surface gets exactly one disposition, and an OMITTED name is a bug rather than a disposition. Until this file

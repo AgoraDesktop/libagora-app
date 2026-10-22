@@ -4,7 +4,6 @@
  * Copyright © 2026 Kyle J. Cardoza.
  * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
  * SPDX-License-Identifier: GPL-3.0-or-later
- * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **THE CLAIM IS THAT PROGRESS BECOMES VALUE BY A CURVE THE NAMES DESCRIBE, AND THAT THE DELEGATE HEARS THE THREE MOMENTS.**
  * The probe steps an animation by hand (the same door the timer uses) and checks each curve at 0.25, 0.5 and 0.75 against the

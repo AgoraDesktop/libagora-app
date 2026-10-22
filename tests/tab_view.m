@@ -4,7 +4,6 @@
  * Copyright © 2026 Kyle J. Cardoza.
  * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
  * SPDX-License-Identifier: GPL-3.0-or-later
- * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **THE CLAIM IS THAT SELECTION IS A SWAP OF PANES, NOT A PILE OF HIDDEN VIEWS.** The probe adds three items with three
  * distinct views and checks that exactly ONE is in the tab view's hierarchy at a time, that it is the selected item's, and that

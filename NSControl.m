@@ -4,7 +4,6 @@
  * Copyright © 2026 Kyle J. Cardoza.
  * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
  * SPDX-License-Identifier: LGPL-3.0-or-later
- * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **THE CLASS IS MOSTLY FORWARDING, AND THAT IS THE DESIGN RATHER THAN A SHORTCUT.** Every value door asks the cell
  * because the cell is where the coercion and the formatter live; every face door asks the cell, or redraws and lets

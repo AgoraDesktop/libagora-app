@@ -4,7 +4,6 @@
  * Copyright © 2026 Kyle J. Cardoza.
  * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
  * SPDX-License-Identifier: LGPL-3.0-or-later
- * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **WHAT AN ITEM IS, AND WHY THERE IS NO POSITION ANYWHERE IN THIS FILE.** An item has a LENGTH — how wide it is —
  * and a view, a title, an image, a menu, a target and an action. It has NO frame, and that is not an omission: an

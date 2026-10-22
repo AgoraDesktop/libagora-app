@@ -4,7 +4,6 @@
  * Copyright © 2026 Kyle J. Cardoza.
  * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
  * SPDX-License-Identifier: GPL-3.0-or-later
- * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **THE CLAIM IS THREE THINGS AND EACH IS A MEASUREMENT.** That this tier can READ an XPM at all (the pipeline's
  * decoders are PNG and JPEG, so nothing else could load one); that a resolved theme decides the chrome's GEOMETRY

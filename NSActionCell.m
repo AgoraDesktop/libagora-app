@@ -4,7 +4,6 @@
  * Copyright © 2026 Kyle J. Cardoza.
  * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
  * SPDX-License-Identifier: LGPL-3.0-or-later
- * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * THE IMPLEMENTATION IS EMPTY ON PURPOSE AND THE HEADER SAYS WHY: this class adds no member, because the three
  * Apple declares on it — `target`, `action` and `tag` — are already on this tree's `NSCell`, which is where the era

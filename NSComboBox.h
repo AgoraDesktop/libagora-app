@@ -4,7 +4,6 @@
  * Copyright © 2026 Kyle J. Cardoza.
  * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
  * SPDX-License-Identifier: LGPL-3.0-or-later
- * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **ALMOST EVERY DOOR HERE IS A FORWARD**, in the shape `NSPopUpButton` records for its own: a cell can decide and
  * draw, and what a view contributes is a coordinate space and a window to put a list in. THE PRESS IS THE ONE DOOR

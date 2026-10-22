@@ -4,7 +4,6 @@
  * Copyright © 2026 Kyle J. Cardoza.
  * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
  * SPDX-License-Identifier: LGPL-3.0-or-later
- * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * One override, in the door the base class draws and measures through: `-cg_contentText` answers a string of bullets as long
  * as the value. Nothing else in this file — the face, the border, the session — is a field's, and a secure field is a field.

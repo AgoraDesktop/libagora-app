@@ -2,7 +2,6 @@
 # Copyright © 2026 Kyle J. Cardoza.
 # SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
 # SPDX-License-Identifier: GPL-3.0-or-later
-# Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
 
 # The AppKit's own test: a real NSWindow under a headless compositor. Exit 77 means SKIP, and the assertion is
 # that the view was asked to draw at least once — which cannot happen until the compositor has configured the

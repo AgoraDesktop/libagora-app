@@ -4,7 +4,6 @@
  * Copyright © 2026 Kyle J. Cardoza.
  * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
  * SPDX-License-Identifier: LGPL-3.0-or-later
- * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **THIS FILE IS WHERE THE SUBSTRATE MEETS THE SURFACE, AND THE MEETING COSTS ONE TRANSLATION — WHICH IS THE COST
  * OF `dec-7dca575a46b17524` MADE MEASURABLE.** `CTLineCreateWithAttributedString` reads the font out of the

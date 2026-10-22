@@ -5,7 +5,6 @@
  * Copyright © 2026 Kyle J. Cardoza.
  * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
  * SPDX-License-Identifier: GPL-3.0-or-later
- * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **THE MAPPING IS NOT THE IDENTITY, AND THAT IS THE CLAIM WORTH TESTING.** A fragment keeps a CHARACTER span and a
  * GLYPH span separately because they differ — a ligature is one glyph for two characters — so these doors go through

@@ -4,7 +4,6 @@
  * Copyright © 2026 Kyle J. Cardoza.
  * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
  * SPDX-License-Identifier: LGPL-3.0-or-later AND MIT
- * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **THE PAIRS ARE SPELLED WITH THE ADDRESSES OF THE CONSTANTS.** A global variable's VALUE is not a constant
  * expression in C, so `{ NSImageNameGoLeftTemplate, … }` does not compile in a static initializer while

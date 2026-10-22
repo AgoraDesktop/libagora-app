@@ -4,7 +4,6 @@
  * Copyright © 2026 Kyle J. Cardoza.
  * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
  * SPDX-License-Identifier: GPL-3.0-or-later
- * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **THE BOX IS THE LAYOUT MANAGER'S FIXED-SIZE NON-GLYPH RUN.** An attachment is a character; this tier's engine
  * measures it as a placeholder glyph, and the manager records the DIFFERENCE between the box's width and that

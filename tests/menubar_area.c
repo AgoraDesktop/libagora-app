@@ -4,7 +4,6 @@
  * Copyright © 2026 Kyle J. Cardoza.
  * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
  * SPDX-License-Identifier: GPL-3.0-or-later
- * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **THE ASSERTION IS THAT TWO QUESTIONS GET TWO ANSWERS.** The work area is a VERTICAL reserve for windows and
  * begins at x = 0, because the bar spans the whole screen — that is the Mac's `-visibleFrame` and it is not going

@@ -4,7 +4,6 @@
  * Copyright © 2026 Kyle J. Cardoza.
  * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
  * SPDX-License-Identifier: LGPL-3.0-or-later
- * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * The drawing is the whole class: the base's `-drawWithFrame:inView:` paints the bezel and then asks
  * `-drawInteriorWithFrame:inView:`, which this class overrides to place the image by the three facts. The frame styles are

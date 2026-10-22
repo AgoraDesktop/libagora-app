@@ -4,7 +4,6 @@
  * Copyright © 2026 Kyle J. Cardoza.
  * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
  * SPDX-License-Identifier: LGPL-3.0-or-later
- * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **THIS IS THE FOUNDATION OF THE TEXT-VIEW SLICE THE `NSTextView` HEADER NAMES**, and it is a FOUNDATION rather than a
  * feature: a document's characters and attributes live here, every edit announces itself, and the things that DRAW it

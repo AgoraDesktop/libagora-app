@@ -4,7 +4,6 @@
  * Copyright © 2026 Kyle J. Cardoza.
  * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
  * SPDX-License-Identifier: GPL-3.0-or-later
- * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **THE CLAIMS ARE OF THREE KINDS, AND EACH IS READ WHERE IT LIVES.** The GEOMETRY is read from the published
  * rectangles (the text sits between the ornaments, and the editor lands on the same rect). The INK is read from a

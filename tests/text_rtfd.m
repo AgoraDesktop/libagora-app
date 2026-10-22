@@ -4,7 +4,6 @@
  * Copyright © 2026 Kyle J. Cardoza.
  * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
  * SPDX-License-Identifier: GPL-3.0-or-later
- * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **WHAT IS MEASURED HERE IS THE PACKAGE, NOT THE TEXT.** The RTF probe (`text_rtf.m`) already proves the text codec
  * in both directions; this one proves the thing RTFD adds: that a document's pictures become FILES beside a `TXT.rtf`

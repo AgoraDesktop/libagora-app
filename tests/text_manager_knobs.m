@@ -5,7 +5,6 @@
  * Copyright © 2026 Kyle J. Cardoza.
  * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
  * SPDX-License-Identifier: GPL-3.0-or-later
- * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **MOST OF THESE ARE STORED, AND THE TEST SAYS SO BY CHECKING THE ROUND TRIP RATHER THAN AN EFFECT.** A flag that has no
  * effect in this tier is still a real door — a caller sets it and reads it back — and the header names what each would

@@ -4,7 +4,6 @@
  * Copyright © 2026 Kyle J. Cardoza.
  * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
  * SPDX-License-Identifier: LGPL-3.0-or-later
- * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **THE HEADER IS PARSEABLE AND THE LANGUAGE IS NOT.** An EPS file begins with comments — `%!PS-Adobe-3.0 EPSF-3.0` and the
  * `%%BoundingBox:` line that says how big the drawing is — and that is a real, testable fact: this class reads the bounds,

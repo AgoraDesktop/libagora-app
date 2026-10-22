@@ -4,7 +4,6 @@
  * Copyright © 2026 Kyle J. Cardoza.
  * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
  * SPDX-License-Identifier: GPL-3.0-or-later
- * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **THE CELL'S OWN PROBE DRIVES THE CELL; THIS ONE DRIVES THE CONTROL.** `tests/text_field_cell.m` begins a session
  * by hand — a window lends an editor, a caller tells the cell to begin — which is the right instrument for the cell's

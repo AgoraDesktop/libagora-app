@@ -4,7 +4,6 @@
  * Copyright © 2026 Kyle J. Cardoza.
  * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
  * SPDX-License-Identifier: LGPL-3.0-or-later
- * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **A SHADOW IS A VALUE UNTIL `-set` MAKES IT A STATE.** The object holds three numbers and a colour; everything that
  * draws reads them from the GRAPHICS CONTEXT, which is why `-set` is the only door with an effect: it hands the offset,

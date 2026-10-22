@@ -4,7 +4,6 @@
  * Copyright © 2026 Kyle J. Cardoza.
  * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
  * SPDX-License-Identifier: GPL-3.0-or-later
- * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **THE MODEL DID NOT CHANGE AND THE LAYOUT DID, SO BOTH ARE CHECKED.** `cg_lineCount` is still the count of
  * `\n`-terminated runs — a fact about the STRING, unmoved by the view's width — while `cg_visualLineCount` is the count

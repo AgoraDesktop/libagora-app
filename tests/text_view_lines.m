@@ -4,7 +4,6 @@
  * Copyright © 2026 Kyle J. Cardoza.
  * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
  * SPDX-License-Identifier: GPL-3.0-or-later
- * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **A LINE IS A `\n`-TERMINATED RUN, SO EVERY CLAIM HERE IS A CLAIM ABOUT WHERE THINGS LAND.** The line model is
  * checked as arithmetic (counts and ranges, including the two edges a naive split gets wrong: a trailing newline is an

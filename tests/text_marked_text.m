@@ -4,7 +4,6 @@
  * Copyright © 2026 Kyle J. Cardoza.
  * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
  * SPDX-License-Identifier: GPL-3.0-or-later
- * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **A COMPOSITION IS AN ORDINARY EDIT WITH A REMEMBERED RANGE.** The input method calls `-setMarkedText:selectedRange:`
  * on every keystroke, and the string it hands over is the WHOLE composition so far; the view puts those characters in

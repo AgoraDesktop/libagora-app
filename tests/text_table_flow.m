@@ -4,7 +4,6 @@
  * Copyright © 2026 Kyle J. Cardoza.
  * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
  * SPDX-License-Identifier: GPL-3.0-or-later
- * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **A TABLE FLOWS AT A ROW BOUNDARY, AND ITS COLUMNS DO NOT MOVE.** A row that does not fit the container it is being
  * laid into begins the next container, so a tall table is not clipped whole and a short one is not moved. The probe

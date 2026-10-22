@@ -4,7 +4,6 @@
  * Copyright © 2026 Kyle J. Cardoza.
  * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
  * SPDX-License-Identifier: LGPL-3.0-or-later
- * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **THE CLASS IS A VALUE PLUS ONE BIT OF LIVE STATE, AND THE BIT IS THE INTERESTING HALF.** The value — a rectangle,
  * an option word, an owner, a dictionary — is what the constructor stores and the accessors answer; the bit is

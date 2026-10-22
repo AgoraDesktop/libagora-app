@@ -5,7 +5,6 @@
  * Copyright © 2026 Kyle J. Cardoza.
  * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
  * SPDX-License-Identifier: LGPL-3.0-or-later
- * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **THE WHOLE FILE IS A TRANSLATION LAYER AND THAT IS ITS CORRECT SHAPE.** The 10.6 caller passes a title, a printf
  * format and up to three button names, and gets 1000/1001/1002 back. `NSAlert` already owns the panel, the layout, the

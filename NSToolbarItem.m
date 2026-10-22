@@ -4,7 +4,6 @@
  * Copyright © 2026 Kyle J. Cardoza.
  * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
  * SPDX-License-Identifier: LGPL-3.0-or-later
- * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * The storage is the header's; what lives here is the fallbacks, the forwarding to a custom view, and `-validate`.
  * The validation order is Apple's and it is the whole point of the class: a validator that answers

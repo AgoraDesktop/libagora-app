@@ -4,7 +4,6 @@
  * Copyright © 2026 Kyle J. Cardoza.
  * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
  * SPDX-License-Identifier: LGPL-3.0-or-later
- * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **THIS IS THE DOOR BETWEEN A TEXT VIEW AND SOMETHING THAT COMPOSES TEXT, AND IT IS A PROTOCOL RATHER THAN A CLASS
  * BECAUSE THE OTHER SIDE IS NOT THIS TIER'S.** Apple's own header declares it in the AppKit and describes it as "the

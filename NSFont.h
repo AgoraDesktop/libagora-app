@@ -4,7 +4,6 @@
  * Copyright © 2026 Kyle J. Cardoza.
  * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
  * SPDX-License-Identifier: LGPL-3.0-or-later
- * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **THIS IS THE FIRST APPKIT UNIT THE CORE TEXT LAYER WAS BUILT FOR.** §A10bt retracted "a font is ink in this
  * tier" and named the gap as a LAYER rather than an engine; `docs/design/coretext-plan.md` built that layer

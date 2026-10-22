@@ -4,7 +4,6 @@
  * Copyright © 2026 Kyle J. Cardoza.
  * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
  * SPDX-License-Identifier: LGPL-3.0-or-later
- * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **THE FILE IS THE TILING AND THE TWO-WAY LOOP.** Everything else a scroll view appears to own is one of the three
  * objects it was built to join: the content view is an `NSClipView` (which owns the document and the scroll

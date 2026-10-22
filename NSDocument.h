@@ -4,7 +4,6 @@
  * Copyright © 2026 Kyle J. Cardoza.
  * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
  * SPDX-License-Identifier: LGPL-3.0-or-later
- * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **A DOCUMENT IS A FILE PLUS THE HISTORY OF ITS EDITS.** That is the whole model: a URL, a type, a modification date, a
  * CHANGE COUNT that answers `-isDocumentEdited`, an undo manager that moves that count as the user undoes and redoes, and

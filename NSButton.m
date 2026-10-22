@@ -4,7 +4,6 @@
  * Copyright © 2026 Kyle J. Cardoza.
  * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
  * SPDX-License-Identifier: LGPL-3.0-or-later
- * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * EVERY DOOR HERE IS A FORWARD, and the one thing the class decides is what KIND of cell it makes: a text cell, so a
  * title can be set on it; bordered and bezeled, so it has a face; and momentary by default, because that is what a

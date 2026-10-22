@@ -4,7 +4,6 @@
  * Copyright © 2026 Kyle J. Cardoza.
  * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
  * SPDX-License-Identifier: GPL-3.0-or-later
- * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **AN EDIT IS THREE DOORS AND A ROUND TRIP, SO THAT IS WHAT THIS PROBE DRIVES.** A window lends an editor, a cell is
  * told to begin a session with it, and the cell takes the string back when the session ends — and the claim worth

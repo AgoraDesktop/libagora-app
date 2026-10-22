@@ -4,7 +4,6 @@
  * Copyright © 2026 Kyle J. Cardoza.
  * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
  * SPDX-License-Identifier: GPL-3.0-or-later
- * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **THE PATH IS THE MODEL AND THE COMPONENT CELLS ARE THE ROWS.** Setting a file URL decomposes it into one
  * NSPathComponentCell per path component, each with its own prefix URL; the geometry places them with separators,

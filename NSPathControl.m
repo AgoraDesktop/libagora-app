@@ -4,7 +4,6 @@
  * Copyright © 2026 Kyle J. Cardoza.
  * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
  * SPDX-License-Identifier: LGPL-3.0-or-later
- * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * The cell owns the path and the drawing. This file creates the cell, forwards the 10.6 doors, adds the double-click
  * gesture and the per-component hover, and stores the drag-source masks the era's header declares. The single click

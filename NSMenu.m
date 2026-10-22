@@ -4,7 +4,6 @@
  * Copyright © 2026 Kyle J. Cardoza.
  * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
  * SPDX-License-Identifier: LGPL-3.0-or-later
- * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * THE WHOLE CLASS IS ONE INVARIANT, KEPT IN ONE PLACE: AN ITEM IN THIS LIST KNOWS WHICH MENU HOLDS IT, AND A
  * MENU ATTACHED TO AN ITEM KNOWS WHICH ITEM HOLDS IT. Both directions are maintained by the four doors that

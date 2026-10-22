@@ -4,7 +4,6 @@
  * Copyright © 2026 Kyle J. Cardoza.
  * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
  * SPDX-License-Identifier: GPL-3.0-or-later
- * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * WHY THIS EXISTS. `tests/appkit_window.m` proves a window appears and paints. It does NOT prove anything
  * arrives at it: the headless compositor has no seat, so a run of that test sees zero events and says so. The

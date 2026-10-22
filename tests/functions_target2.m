@@ -5,7 +5,6 @@
  * Copyright © 2026 Kyle J. Cardoza.
  * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
  * SPDX-License-Identifier: GPL-3.0-or-later
- * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **THE MODAL AND SHEET DOORS ARE NOT RUN HERE, AND THAT IS A DELIBERATE LIMIT RATHER THAN AN OVERSIGHT.** `NSRunAlertPanel`
  * and `NSBeginAlertSheet` put a panel on screen and wait for a person; in a headless suite they would hang or block, so

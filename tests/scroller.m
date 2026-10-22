@@ -4,7 +4,6 @@
  * Copyright © 2026 Kyle J. Cardoza.
  * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
  * SPDX-License-Identifier: GPL-3.0-or-later
- * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **A SCROLLER IS TWO INVERSE ARITHMETICS, AND THIS PROBE IS BOTH.** The first turns the value pair into geometry:
  * `-rectForPart:` places the knob from `-floatValue` and `-knobProportion`. The second turns a point back into a

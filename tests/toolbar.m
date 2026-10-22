@@ -4,7 +4,6 @@
  * Copyright © 2026 Kyle J. Cardoza.
  * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
  * SPDX-License-Identifier: GPL-3.0-or-later
- * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **THE TOOLBAR IS FOUR CONTRACTS AT ONCE, SO THIS ASKS ALL FOUR.** It is a DELEGATE-driven list (the default
  * identifiers become items, in order), a FRAME's band (showing it preserves the content and grows the window),

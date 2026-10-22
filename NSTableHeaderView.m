@@ -4,7 +4,6 @@
  * Copyright © 2026 Kyle J. Cardoza.
  * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
  * SPDX-License-Identifier: LGPL-3.0-or-later
- * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * The header draws through the columns' own header cells, so a column's title and face are the column's rather than a
  * second copy here. It has TWO gestures: a divider drag resizes the column within its min/max, and a drag on the body

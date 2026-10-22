@@ -4,7 +4,6 @@
  * Copyright © 2026 Kyle J. Cardoza.
  * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
  * SPDX-License-Identifier: GPL-3.0-or-later
- * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **A FORMAT WHOSE ONLY CLIENT IS A GUI IS A FORMAT NOBODY CAN TEST.** `DEVELOPMENT-TOOLS.md` puts this tool ahead of the
  * canvas for exactly that reason: it reads, checks and re-writes the same archives the reader and the writer do, with no

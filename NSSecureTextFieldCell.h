@@ -4,7 +4,6 @@
  * Copyright © 2026 Kyle J. Cardoza.
  * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
  * SPDX-License-Identifier: LGPL-3.0-or-later
- * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **THE VALUE IS THE STRING; THE INK IS BULLETS.** A password field holds what was typed and shows a dot per character, and
  * this tier has one place where a field's displayed text is decided — `-cg_contentText`, which the base class's drawing AND

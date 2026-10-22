@@ -4,7 +4,6 @@
  * Copyright © 2026 Kyle J. Cardoza.
  * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
  * SPDX-License-Identifier: GPL-3.0-or-later
- * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **THE POINT OF THIS PROBE IS THE CHAIN, AND IT CAN BE DRIVEN WITH NO EVENT LOOP AT ALL.** A popup button is two
  * subsystems joined, so the interesting question is not what it looks like but whether a ROW CHOSEN IN A MENU reaches

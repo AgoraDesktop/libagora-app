@@ -4,7 +4,6 @@
  * Copyright © 2026 Kyle J. Cardoza.
  * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
  * SPDX-License-Identifier: LGPL-3.0-or-later
- * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **A BOX IS A BORDER, A TITLE AND A CONTENT VIEW, AND THAT IS ALL IT IS.** It groups controls on a form: the border is
  * drawn from the border type and width, the title sits at one of the seven positions the era names, and the CONTENT VIEW

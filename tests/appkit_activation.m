@@ -4,7 +4,6 @@
  * Copyright © 2026 Kyle J. Cardoza.
  * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
  * SPDX-License-Identifier: GPL-3.0-or-later
- * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **A MENU BAR IS THE ACTIVE APPLICATION'S, AND AN APPLICATION IS ACTIVE WHEN IT HAS THE KEYBOARD.** The
  * compositor already says which CLIENT has the keyboard — `wl_keyboard.enter` to the one whose surface is

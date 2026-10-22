@@ -4,7 +4,6 @@
  * Copyright © 2026 Kyle J. Cardoza.
  * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
  * SPDX-License-Identifier: LGPL-3.0-or-later
- * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **AN ANIMATION IS A NUMBER THAT GOES FROM 0 TO 1 OVER A DURATION**, and everything else is how that number is produced and
  * who is told about it. `-currentProgress` is the linear fraction of the duration that has passed; `-currentValue` is that

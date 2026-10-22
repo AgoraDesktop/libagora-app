@@ -4,7 +4,6 @@
  * Copyright © 2026 Kyle J. Cardoza.
  * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
  * SPDX-License-Identifier: LGPL-3.0-or-later
- * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * The press is the step; the release only clears the ink. The bezel and the two triangles are drawn here because a stepper
  * is one of the controls with no cell of a family beside it to inherit a face from — the button's bezel and the slider's

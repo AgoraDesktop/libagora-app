@@ -4,7 +4,6 @@
  * Copyright © 2026 Kyle J. Cardoza.
  * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
  * SPDX-License-Identifier: LGPL-3.0-or-later
- * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **A PDF REP IS THE ONE REP THAT IS NOT ONE IMAGE**, which is why Apple gives it a page count and a current
  * page rather than a pixel width. The bytes are parsed by `CGPDFDocument` from Core Graphics; `-pageCount` is its

@@ -4,7 +4,6 @@
  * Copyright © 2026 Kyle J. Cardoza.
  * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
  * SPDX-License-Identifier: GPL-3.0-or-later
- * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **THE PUBLIC CONTRACT IS THE DELEGATE'S.** A column asks how many rows it has; a row's cell is filled by
  * `-browser:willDisplayCell:atRow:column:`; selecting a row loads the column to its right; a leaf has no right-hand

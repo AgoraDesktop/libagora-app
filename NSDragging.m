@@ -4,7 +4,6 @@
  * Copyright © 2026 Kyle J. Cardoza.
  * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
  * SPDX-License-Identifier: LGPL-3.0-or-later
- * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **THE SESSION LIVES IN THE APPLICATION, NOT IN THE WINDOW SERVER.** A drag is a pointer that has left its view
  * but not its button: the source view's window takes the pointer for the duration (the same real capture a window

@@ -4,7 +4,6 @@
  * Copyright © 2026 Kyle J. Cardoza.
  * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
  * SPDX-License-Identifier: LGPL-3.0-or-later
- * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **THE VIEW USED TO CARRY ITS OWN LAYOUT AND DOES NOT ANY MORE.** Slice IV built the trio — `NSTextStorage`,
  * `NSTextContainer`, `NSLayoutManager` — and the manager already knew how to break a store into line fragments, place a

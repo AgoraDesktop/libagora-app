@@ -5,7 +5,6 @@
  * Copyright © 2026 Kyle J. Cardoza.
  * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
  * SPDX-License-Identifier: GPL-3.0-or-later
- * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **THE NAMES EXISTED BEFORE THE PICTURES DID, AND THIS IS WHAT KEEPS THEM TOGETHER.** `NSImageNameGoLeftTemplate`
  * and its siblings are strings in `NSImage.h`; `AGSystemImages` draws twenty of them from a generated table of

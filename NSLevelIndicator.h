@@ -4,7 +4,6 @@
  * Copyright © 2026 Kyle J. Cardoza.
  * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
  * SPDX-License-Identifier: LGPL-3.0-or-later
- * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **A LEVEL INDICATOR IS A READ-ONLY MEASURE WITH A COLOUR OPINION.** It shows a value in a range the way a meter does —
  * continuously, as discrete segments, as a row of stars, or as a relevance bar — and it changes the fill's COLOUR at two

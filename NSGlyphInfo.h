@@ -4,7 +4,6 @@
  * Copyright © 2026 Kyle J. Cardoza.
  * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
  * SPDX-License-Identifier: LGPL-3.0-or-later
- * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **THE ATTRIBUTE THAT SURVIVES A FONT CHANGE.** A run of text is a sequence of characters; a glyph is what a FONT made of
  * them, and the same character is a different glyph in a different face. `NSGlyphInfo` is the era's way to say "this

@@ -4,7 +4,6 @@
  * Copyright © 2026 Kyle J. Cardoza.
  * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
  * SPDX-License-Identifier: LGPL-3.0-or-later
- * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **THIS CLASS IS FORWARDS PLUS ONE LINE, WHICH IS APPLE'S SHAPE FOR IT.** Everything a popup button KNOWS — the menu,
  * what is chosen, what the items are, where the arrow sits — is `NSPopUpButtonCell`'s, because a menu is a face's

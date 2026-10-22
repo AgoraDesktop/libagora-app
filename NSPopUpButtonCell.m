@@ -4,7 +4,6 @@
  * Copyright © 2026 Kyle J. Cardoza.
  * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
  * SPDX-License-Identifier: LGPL-3.0-or-later
- * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **THE CELL'S WORK IS FOUR THINGS, AND THREE OF THEM ARE SMALL.** It points every item in its menu at itself, so a
  * pick comes back; it keeps an index and the items' `-state` saying the same thing; it draws an arrow; and it hands

@@ -4,7 +4,6 @@
  * Copyright © 2026 Kyle J. Cardoza.
  * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
  * SPDX-License-Identifier: GPL-3.0-or-later
- * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **THE CLAIM THIS FILE EXISTS FOR IS A COUNT.** A pop-up's chip carries two triangles knocked out of it and a combo
  * box's carries one, and "one" is a number a probe can measure: draw the chip, walk the column down its middle, and

@@ -4,7 +4,6 @@
  * Copyright © 2026 Kyle J. Cardoza.
  * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
  * SPDX-License-Identifier: GPL-3.0-or-later
- * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **THIS IS THE TEST THE CLASS WAS MISSING.** The tree had a menu, items and a cell that could draw a title, and
  * nothing that arranged cells into rows — so nothing ever called one. What is asserted here is the arrangement:

@@ -4,7 +4,6 @@
  * Copyright © 2026 Kyle J. Cardoza.
  * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
  * SPDX-License-Identifier: LGPL-3.0-or-later
- * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * THE CLASS IS STORAGE PLUS ONE ASSERTION, and the assertion is the interesting half: Apple's event
  * accessors answer what the event was BUILT with, and nothing here computes or normalises anything. The

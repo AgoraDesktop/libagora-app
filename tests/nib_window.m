@@ -4,7 +4,6 @@
  * Copyright © 2026 Kyle J. Cardoza.
  * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
  * SPDX-License-Identifier: GPL-3.0-or-later
- * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **THIS IS THE LAST CODING PATH IN THE FORMAT THAT HAD NEVER RUN.** Every other nib test builds views; a window's
  * `-initWithCoder:` is a different animal — it derives the frame, the style mask and the backing store, calls the

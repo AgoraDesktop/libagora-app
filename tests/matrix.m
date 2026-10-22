@@ -4,7 +4,6 @@
  * Copyright © 2026 Kyle J. Cardoza.
  * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
  * SPDX-License-Identifier: GPL-3.0-or-later
- * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **A MATRIX IS THE FIRST CONTROL WHOSE FACE IS PLURAL, SO THIS PROBE ASKS THE PLURAL QUESTIONS.** Where the button
  * sweep asked "is the face drawn", this asks "WHICH cell was drawn", "which cell is selected", "where did the cell

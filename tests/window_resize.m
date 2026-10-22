@@ -4,7 +4,6 @@
  * Copyright © 2026 Kyle J. Cardoza.
  * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
  * SPDX-License-Identifier: GPL-3.0-or-later
- * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **A WINDOW THAT CAN BE MOVED BY ITS CHROME AND NOT RESIZED IS HALF A WINDOW.** The move was built first
  * (a press on the bar that misses a button) and the resize is the same gesture on the same handle — so what this

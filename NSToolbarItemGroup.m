@@ -4,7 +4,6 @@
  * Copyright © 2026 Kyle J. Cardoza.
  * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
  * SPDX-License-Identifier: LGPL-3.0-or-later
- * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * The class is deliberately thin: the toolbar's own layout flattens a group without a custom view into its subitems,
  * so the group needs only to own them and to refuse a member that would make the adjacency undefined.

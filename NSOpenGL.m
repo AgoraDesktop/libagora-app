@@ -5,7 +5,6 @@
  * Copyright © 2026 Kyle J. Cardoza.
  * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
  * SPDX-License-Identifier: LGPL-3.0-or-later
- * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **A REFUSAL IS THE DISPOSITION THE PLAN ASSIGNS TO A11**, and the plan is explicit that it is a supported outcome
  * rather than a gap: "no GL, no QuickDraw, no movie decoder". Each door here answers its type's empty value AND names

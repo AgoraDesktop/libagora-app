@@ -4,7 +4,6 @@
  * Copyright © 2026 Kyle J. Cardoza.
  * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
  * SPDX-License-Identifier: GPL-3.0-or-later
- * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **TWO FLAGS AND THE DOOR THAT CARRIES THEM, WHICH IS THE PART THAT WAS NOT WIRED.** `NSCell` has carried
  * `-allowsEditingTextAttributes` and `-importsGraphics` since the cell family's first slice, and the field EDITOR has

@@ -4,7 +4,6 @@
  * Copyright © 2026 Kyle J. Cardoza.
  * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
  * SPDX-License-Identifier: LGPL-3.0-or-later
- * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * ONE FACTORY, ONE IVAR, AND NO MEASURING. Every door in this file either asks the substrate (`CTFontGetAscent`,
  * `…CopyCharacterSet`, `…GetBoundingBox`) or names a `CTFontUIFontType` — which is why the file is short: the

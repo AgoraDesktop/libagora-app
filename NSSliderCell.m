@@ -4,7 +4,6 @@
  * Copyright © 2026 Kyle J. Cardoza.
  * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
  * SPDX-License-Identifier: LGPL-3.0-or-later
- * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **THE CELL IS WHERE "WHAT VALUE IS THIS POINT" LIVES, AND THAT IS THE WHOLE SHAPE OF THIS FILE.** Everything else
  * is derived from the value and the range: the knob's rectangle (a fraction along the travel), the track (the middle

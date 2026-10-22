@@ -5,7 +5,6 @@
  * Copyright © 2026 Kyle J. Cardoza.
  * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
  * SPDX-License-Identifier: LGPL-3.0-or-later
- * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **THE 10.6 `NSGraphics.h` FUNCTIONS HAD NO GROUND IN THIS TIER AT ALL, AND THAT WAS THE SINGLE WORST MEASUREMENT IN
  * THE API CENSUS.** `tests/api-10.6-census.txt` recorded 11 of 87 C functions, and 29 of the 76 missing ones were these:

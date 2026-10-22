@@ -4,7 +4,6 @@
  * Copyright © 2026 Kyle J. Cardoza.
  * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
  * SPDX-License-Identifier: GPL-3.0-or-later
- * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **A COMPILER IS ONLY AS USEFUL AS ITS REFUSALS**, so this program spends as much of itself on the files that must NOT
  * compile as on the one that must. Each refusal is a sentence naming the object, the key and — for the parser — the line,

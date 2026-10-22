@@ -5,7 +5,6 @@
  * Copyright © 2026 Kyle J. Cardoza.
  * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
  * SPDX-License-Identifier: GPL-3.0-or-later
- * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **THE CLAIM IS THAT A DOCUMENT GOES ROUND A FILE AND COMES BACK THE SAME.** A concrete `NSDocument` subclass implements
  * only `-readFromData:ofType:error:` and `-dataOfType:error:`; the probe creates one untitled, edits it, saves it through

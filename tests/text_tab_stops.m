@@ -4,7 +4,6 @@
  * Copyright © 2026 Kyle J. Cardoza.
  * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
  * SPDX-License-Identifier: GPL-3.0-or-later
- * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **A TAB IS A PLACE, NOT A WIDTH, SO THE CLAIM IS WHERE THE NEXT CHARACTER LANDS.** `NSTextTab` names a location and
  * a kind; the manager copies them into the `CTParagraphStyle` it builds; and `CTLine` advances a `\t` to the next stop

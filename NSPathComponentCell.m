@@ -4,7 +4,6 @@
  * Copyright © 2026 Kyle J. Cardoza.
  * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
  * SPDX-License-Identifier: LGPL-3.0-or-later
- * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * The title is the inherited string value. This file adds the picture and the URL and the one piece of drawing the
  * path cell asks for: `-drawInteriorWithFrame:inView:`. The background and the separators belong to the path cell,

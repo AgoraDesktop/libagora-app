@@ -5,7 +5,6 @@
  * Copyright © 2026 Kyle J. Cardoza.
  * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
  * SPDX-License-Identifier: GPL-3.0-or-later
- * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **THE POINT OF THIS TEST IS THAT A RECORDED RANGE BECOMES INK.** The previous slice made
  * `-setSpellingState:range:` store the pair and said plainly that nothing drew it; this one draws it, so the assertion

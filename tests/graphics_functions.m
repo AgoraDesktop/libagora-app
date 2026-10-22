@@ -5,7 +5,6 @@
  * Copyright © 2026 Kyle J. Cardoza.
  * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
  * SPDX-License-Identifier: GPL-3.0-or-later
- * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **THE FUNCTIONS ARE THE TIER'S WORST MEASURED GAP, SO THEY ARE PINNED BY PIXELS RATHER THAN BY COMPILING.** A
  * declaration that links and draws nothing would satisfy the API census and fail every caller, which is exactly the

@@ -4,7 +4,6 @@
  * Copyright © 2026 Kyle J. Cardoza.
  * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
  * SPDX-License-Identifier: LGPL-3.0-or-later
- * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **THE SURFACE BELOW IS TRANSCRIBED FROM THE 10.6 SDK's `NSTextInputClient.h`**, which declares fifteen doors and nothing
  * else — no classes, no constants — and it is the protocol a text view conforms to when an INPUT METHOD drives it. Two

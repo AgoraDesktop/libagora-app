@@ -4,7 +4,6 @@
  * Copyright © 2026 Kyle J. Cardoza.
  * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
  * SPDX-License-Identifier: LGPL-3.0-or-later
- * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **THE STANDARD KEY BINDING MOVED HERE FROM `NSResponder`, AND THAT MOVE IS THE WHOLE POINT.** A key arrives, the
  * context sends it to the input source, and — when the source declines — what is left is the mapping a US keyboard

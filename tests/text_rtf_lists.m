@@ -4,7 +4,6 @@
  * Copyright © 2026 Kyle J. Cardoza.
  * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
  * SPDX-License-Identifier: GPL-3.0-or-later
- * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **WHAT THIS MEASURES IS THE SHAPE THE FORMAT REQUIRES, NOT THAT SOMETHING CALLED A LIST WAS WRITTEN.** Three things
  * have to be true together to be a list a reader can reconstruct: the definitions are in the HEADER as a `{\listtable}`

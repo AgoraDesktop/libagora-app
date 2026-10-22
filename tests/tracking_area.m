@@ -4,7 +4,6 @@
  * Copyright © 2026 Kyle J. Cardoza.
  * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
  * SPDX-License-Identifier: GPL-3.0-or-later
- * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **AN AREA IS A RECTANGLE, AN OWNER AND A SCOPE, AND THE SCOPE IS THE PART THAT WAS A BUG.** Before this class the
  * window decided "the pointer crossed into the deepest view under it" for EVERY view of whatever window the pointer

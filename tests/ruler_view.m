@@ -4,7 +4,6 @@
  * Copyright © 2026 Kyle J. Cardoza.
  * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
  * SPDX-License-Identifier: GPL-3.0-or-later
- * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **THE CLAIMS ARE THE FOUR THE CLASS MAKES.** First, the thickness is one sum three classes agree on. Second, a
  * marker's rectangle is its location plus its image plus its origin, in the orientation it was given. Third, every

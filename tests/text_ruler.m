@@ -4,7 +4,6 @@
  * Copyright © 2026 Kyle J. Cardoza.
  * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
  * SPDX-License-Identifier: GPL-3.0-or-later
- * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **THE CLAIM IS A ROUND TRIP, NOT A COUNT.** Showing a text view's ruler asks the layout manager for one marker per tab
  * stop; dragging a marker asks the ruler's client to rebuild the paragraph's tab stops from the marker list; and the

@@ -4,7 +4,6 @@
  * Copyright © 2026 Kyle J. Cardoza.
  * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
  * SPDX-License-Identifier: LGPL-3.0-or-later
- * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **THE COMPOSITION IS ONE MARKED LETTER AND AN INDEX.** The letter goes into the store as marked text through the
  * client's own door; the candidate window shows the plain letter and its variants with the index on one of them; and

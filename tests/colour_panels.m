@@ -4,7 +4,6 @@
  * Copyright © 2026 Kyle J. Cardoza.
  * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
  * SPDX-License-Identifier: GPL-3.0-or-later
- * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **THE SLICE'S CLAIM IS A CHAIN, SO THE PROBE WALKS IT.** A list is a file (`NSColorList`), a well is a control that
  * shows a colour and hands the panel its target (`NSColorWell`), the panel is one shared window with a face

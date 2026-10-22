@@ -4,7 +4,6 @@
  * Copyright © 2026 Kyle J. Cardoza.
  * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
  * SPDX-License-Identifier: LGPL-3.0-or-later
- * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **THE DETERMINATE BAR IS THE ONE THE FILE OPERATIONS NEED: a minimum, a maximum and a value.** The bar's track
  * and fill are drawn here (the accent is `+cg_accentColor`, the same one a selection wears), and the value is clamped

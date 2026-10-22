@@ -4,7 +4,6 @@
  * Copyright © 2026 Kyle J. Cardoza.
  * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
  * SPDX-License-Identifier: LGPL-3.0-or-later
- * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * NOT INSTALLED. `NSAttributedStringRTF.m` holds the codec in both directions; this declares the writer's body to the
  * one other caller that needs it — `NSAttributedStringRTFD.m`, whose document is a DIRECTORY whose text part is an RTF

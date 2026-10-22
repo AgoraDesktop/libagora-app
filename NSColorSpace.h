@@ -4,7 +4,6 @@
  * Copyright © 2026 Kyle J. Cardoza.
  * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
  * SPDX-License-Identifier: LGPL-3.0-or-later
- * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **THE THIRD THING A COLOUR IS, BESIDE ITS NUMBERS AND ITS ALPHA.** `NSColor`'s getters answer components in a space,
  * and `-colorUsingColorSpace:` converts between them; both need this object to name WHICH space, which is why the class

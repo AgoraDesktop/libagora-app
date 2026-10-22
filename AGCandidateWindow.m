@@ -4,7 +4,6 @@
  * Copyright © 2026 Kyle J. Cardoza.
  * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
  * SPDX-License-Identifier: LGPL-3.0-or-later
- * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **THE PLACEMENT IS ONE SUBTRACTION.** The client answers the caret's rectangle in screen coordinates; the window's
  * content is as tall as the list, so its origin is the caret's x and the caret's y LESS its own height — a panel that
