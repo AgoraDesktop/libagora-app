@@ -177,6 +177,11 @@ enum {
 	/* **THE FONT PANEL AND COLOUR PANEL TARGETS.** `-changeAttributes:` and `-changeColor:` install this view as the
 	 * panel's target with these actions, so a person's next choice lands on the selection rather than nowhere. */
 	BOOL _cg_panelTargetInstalled;
+
+	/* **AND WHETHER A PASTE MAY CARRY A PICTURE.** Apple's default is NO: an RTFD paste with attachments is accepted only
+	 * by a view that allows editing images, and this flag is read where the paste is decoded rather than stored for a
+	 * later slice. */
+	BOOL _cg_allowsImageEditing;
 }
 
 /* ==================================================================================================================
@@ -435,6 +440,52 @@ enum {
 - (BOOL)usesFontPanel;
 - (void)setUsesFontPanel:(BOOL)flag;
 - (void)updateFontPanel;
+
+/* ==================================================================================================================
+ * THE CLIPBOARD AND THE DRAG.
+ *
+ * **THE VIEW WRITES RICH TEXT AND READS IT BACK.** A copy puts the selection on a pasteboard as RTF (the AppKit-aware
+ * writer `-RTFRepresentation`), as RTFD (which can carry an attachment), and as a plain string; a paste asks for the
+ * RICHEST type the board has and falls back to the string. The two type lists are the view's declaration of what it can
+ * read and write, and `-acceptableDragTypes` is the same list for a drop.
+ *
+ * **AND A DROP LANDS AT THE INSERTION POINT.** Mapping a dragged point to a character index needs the layout manager's
+ * point-to-glyph door, which this tier does not have — so `-performDragOperation:` inserts at the selection and says so,
+ * rather than pretending to compute a position it cannot.
+ * ================================================================================================================ */
+
+- (NSArray *)readablePasteboardTypes;
+- (NSArray *)writablePasteboardTypes;
+- (NSArray *)acceptableDragTypes;
+- (nullable NSString *)preferredPasteboardTypeFromArray:(NSArray *)availableTypes
+			       restrictedToTypesFromArray:(NSArray *)allowedTypes;
+
+- (BOOL)writeSelectionToPasteboard:(NSPasteboard *)pboard type:(NSString *)type;
+- (BOOL)writeSelectionToPasteboard:(NSPasteboard *)pboard types:(NSArray *)types;
+- (BOOL)readSelectionFromPasteboard:(NSPasteboard *)pboard;
+- (BOOL)readSelectionFromPasteboard:(NSPasteboard *)pboard type:(NSString *)type;
+
+/* THE FIVE COMMANDS, WHICH ARE `NSResponder`'S NAMES IMPLEMENTED HERE.** `-copy:` writes, `-cut:` writes and deletes,
+ * `-paste:` reads, and each does nothing when the pasteboard has nothing the view can use. */
+- (void)copy:(nullable id)sender;
+- (void)cut:(nullable id)sender;
+- (void)paste:(nullable id)sender;
+- (void)delete:(nullable id)sender;
+- (void)pasteAsPlainText:(nullable id)sender;
+- (void)pasteAsRichText:(nullable id)sender;
+
+/* THE DRAG SOURCE. The image is the selection's ink, drawn into an image the drag can carry; `-dragOperationForDraggingInfo:type:`
+ * is the operation a drop from this view offers, and `-updateDragTypeRegistration` registers `-acceptableDragTypes` with
+ * the view's own destination list. */
+- (nullable NSImage *)dragImageForSelectionWithEvent:(NSEvent *)event origin:(NSPointPointer)origin;
+- (BOOL)dragSelectionWithEvent:(nullable NSEvent *)event offset:(NSSize)mouseOffset slideBack:(BOOL)slideBack;
+- (NSDragOperation)dragOperationForDraggingInfo:(id <NSDraggingInfo>)dragInfo type:(nullable NSString *)type;
+- (void)updateDragTypeRegistration;
+- (void)cleanUpAfterDragOperation;
+
+/* AND WHETHER A PASTE MAY CARRY A PICTURE — see the ivar's note. */
+- (BOOL)allowsImageEditing;
+- (void)setAllowsImageEditing:(BOOL)flag;
 
 @end
 

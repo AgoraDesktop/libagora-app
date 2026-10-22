@@ -2250,6 +2250,28 @@ the typing attributes reaching the next character typed, the selection band's co
 the editing gate, every run command read back from the STORE (including the caret case), and the two paragraph commands
 measured on a two-paragraph document so "the other one is untouched" is a fact.
 
+### The text view's clipboard, and the RTF reader it found broken
+
+**A COPY WRITES THREE SPELLINGS AND A PASTE TAKES THE RICHEST.** `-copy:` puts the selection on a pasteboard as RTFD
+(which can carry an attachment), as RTF and as a plain string; `-paste:` asks the board for the richest type the view
+can read — RTFD, then RTF, then the string, with the modern UTI spelling accepted — and falls back down the list.
+`-cut:` is a copy and a delete, `-pasteAsPlainText:` and `-pasteAsRichText:` are the same read restricted to one type,
+and a copy with no selection takes the paragraph, which is what lets a person copy a line without selecting it. The
+seventeen doors are the type registry (`-readablePasteboardTypes`, `-writablePasteboardTypes`, `-acceptableDragTypes`,
+`-preferredPasteboardTypeFromArray:restrictedToTypesFromArray:`), the four read/write doors, the six commands, and the
+drag source and destination over the same types — `-allowsImageEditing` is read where a paste is decoded.
+
+**AND THE PROBE FOUND THE RTF READER DISCARDING EVERY FONT NAME.** A bold selection copied and pasted came back
+regular. The bytes were right (`{\fonttbl{\f0 Figtree-Bold;}}` and `\f0`), but the parser stored its **mutable name
+buffer** into the font table by reference and then cleared it — so every entry was the empty string,
+`[NSFont fontWithName:@"" size:]` failed, and every run of every RTF read in this tree silently became the system font.
+The fix is one copy; the probe's assertion that the pasted run's face survives is what now holds it.
+
+`tests/text_view_pasteboard.m` asserts it in 24 checks: the registry and its preference door, a real round trip through
+the general pasteboard with the run's font intact, the plain and rich commands taking different types off one board, a
+cut, the paragraph-copy rule, and the drag source's image, registration and operation — with the drop side left to the
+drag suite that can build a session.
+
 ### Still absent, and why
 
 **NINE THINGS THAT USED TO BE ON THIS LIST ARE NOT ANY MORE, AND THE LIST IS CORRECTED RATHER THAN QUIETLY SHRUNK:**

@@ -476,3 +476,39 @@ INSERTION-POINT family (`-initWithFrame:textContainer:`, `-textContainer`/`-setT
 insertion-point drawers, `-setConstrainedFrameSize:`). The pasteboard cluster is the one a document app needs next; the
 checking cluster waits on `NSTextCheckingResult`/`NSOrthography`, which Foundation here has not got (the async spell door
 already refuses for that reason).
+
+---
+
+## 14. The seventh pick-up: the text view's clipboard, and a silent loss in the RTF reader
+
+*One session, one commit: seventeen `NSTextView` selectors (the clipboard, its type registry, the drag source and
+destination) plus the six `NSResponder` commands they implement — and the fix for a defect the probe found one layer
+down.*
+
+**WHAT LANDED.** `NSTextViewPasteboard.m` holds `-readablePasteboardTypes`/`-writablePasteboardTypes`/`-acceptableDragTypes`,
+`-preferredPasteboardTypeFromArray:restrictedToTypesFromArray:`, the four read/write doors, `-copy:`/`-cut:`/`-paste:`/
+`-delete:`/`-pasteAsPlainText:`/`-pasteAsRichText:`, `-allowsImageEditing`, and the drag source and destination
+(`-dragImageForSelectionWithEvent:origin:`, `-dragSelectionWithEvent:offset:slideBack:`,
+`-dragOperationForDraggingInfo:type:`, `-updateDragTypeRegistration`, `-cleanUpAfterDragOperation`, plus the four
+destination overrides). A paste puts the characters in through `-insertText:` and then applies the runs, so there is one
+edit path rather than a second one that could forget the mirror.
+
+**THE FIND, WHICH IS WHY THE PROBE EXISTS.** A bold selection copied and pasted back REGULAR. The RTF bytes were right —
+`{\fonttbl{\f0 Figtree-Bold;}}`, `\f0`, `\fs32` — but the reader stored its MUTABLE name buffer into the font table by
+reference and cleared it on the next line, so every name was `@""`, `[NSFont fontWithName:@"" size:]` returned nil, and
+the substitution fallback made every run of every RTF read in this tree the system font. **A copy in
+`NSAttributedStringRTF.m`** fixes it; the probe asserts the pasted run's face, which is the only thing that would have
+caught it.
+
+**THE NUMBERS.** NSTextView 101 → 118 of 186; selectors 3988 → 4005 of 4505; missing **517 → 500**; methods 4509 → 4530.
+The refusal census did not move (292). The suite is **143 tests**, with `appkit-text-view-pasteboard` (24 checks) as the
+new one.
+
+**WHERE THE NEXT HOUR IS.** `NSTextView` still owes 68: the TEXT-CHECKING family (`-checkTextIn…`,
+`-enabledTextCheckingTypes`, `-handleTextCheckingResults:…`, the three automatic-detection toggles) which waits on
+`NSTextCheckingResult`/`NSOrthography` that this Foundation has not got; the CONTAINER/INSERTION-POINT family
+(`-initWithFrame:textContainer:`, `-textContainer`/`-setTextContainer:`, `-replaceTextContainer:`, the two insets, the
+two caret drawers, `-setConstrainedFrameSize:`, `-characterIndexForInsertionAtPoint:` — which wants the layout manager's
+point-to-glyph door and would retire the "a drop lands at the insertion point" limit); and the smaller LINK/SERVICES
+group (`-clickedOnLink:atIndex:`, `-displaysLinkToolTips`, `-registerForServices`) which needs a link attribute and a
+services registry. The container family is the one that unblocks the others and is the obvious next slice.

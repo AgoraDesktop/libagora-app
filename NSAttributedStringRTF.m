@@ -725,8 +725,14 @@ NSString *fn_rtf_text(NSAttributedString *source, NSMutableDictionary *attachmen
 					while ((NSInteger)[fontNames count] <= pendingFont) {
 						[fontNames addObject:@"Times"];
 					}
+					/* **THE NAME IS STORED AS A COPY, AND THAT IS THE FIX FOR A SILENT LOSS.** `pendingName` is a
+					 * MUTABLE buffer reused for every entry: storing it by reference and then clearing it below left
+					 * `fontNames` holding the EMPTY string, so `-FN_PUSH_MARK()`'s
+					 * `[NSFont fontWithName:@"" size:]` failed and every run of every RTF was read as the system
+					 * font — MEASURED by the pasteboard probe, where a bold selection pasted back regular. */
 					[fontNames replaceObjectAtIndex:(NSUInteger)pendingFont
-						withObject:(([pendingName length] > 0) ? (NSString *)pendingName : (NSString *)@"Times")];
+						withObject:(([pendingName length] > 0)
+							? (NSString *)[[pendingName copy] autorelease] : (NSString *)@"Times")];
 					pendingFont = -1;
 					[pendingName setString:@""];
 				} else {

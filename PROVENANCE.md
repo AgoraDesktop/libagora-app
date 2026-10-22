@@ -860,6 +860,28 @@ and their reach into the next inserted character, the selection band's colour in
 commands read back from the store (selection and caret), the two paragraph commands on a two-paragraph document, and the
 colour panel's target — **62 checks**.
 
+## 35. The text view's clipboard, and the RTF reader's lost font names
+
+**THE CLIPBOARD IS ONE PATH IN AND ONE PATH OUT.** A copy writes RTFD, RTF and the string in that order; a paste asks
+for the richest type the view can read and falls back, and the characters go in through `-insertText:` with the runs
+applied over the range it landed in — one edit path, so the mirror, the selection, the notifications and the layout all
+follow. The type registry is the view's (`-readablePasteboardTypes` / `-writablePasteboardTypes` /
+`-acceptableDragTypes`), and the drag source and destination use the same list, so a type the view can paste is a type
+it can accept.
+
+**AND THE PROBE FOUND A SILENT LOSS IN THE RTF READER, NOT IN THE CLIPBOARD.** A bold selection copied and pasted back
+regular. The writer's bytes were right; the reader stored its **mutable font-name buffer** into the font table by
+reference and then cleared it, so every name became `@""`, `[NSFont fontWithName:@"" size:]` failed, and **every run of
+every RTF read in this tree** became the system font. One `-copy` in `NSAttributedStringRTF.m` fixes it, and the probe's
+assertion on the pasted run's face is the guard.
+
+Two limits are stated rather than hidden: a drop lands at the INSERTION POINT (a dragged point cannot be mapped to a
+character index without the layout manager's point-to-glyph door, which this tier has not got), and the attachment half
+of `-allowsImageEditing` is read in the paste path but the probe cannot build an RTFD carrying a file.
+
+`tests/text_view_pasteboard.m` measures the registry, a real round trip through the general pasteboard with the run's
+font, the plain and rich commands, the cut, the paragraph-copy rule, and the drag source — **24 checks**.
+
 ## Keeping in sync
 
 The Fiwix AppKit is the origin and this repository has now diverged from it in the seam. A fix made there

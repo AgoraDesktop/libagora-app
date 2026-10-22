@@ -1242,6 +1242,16 @@ target_link_libraries(text_view_attributes PRIVATE App)
 add_test(NAME appkit-text-view-attributes COMMAND text_view_attributes)
 set_tests_properties(appkit-text-view-attributes PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
 
+# **THE TEXT VIEW'S CLIPBOARD AND ITS DRAGS.** A real round trip through the general pasteboard: copy writes RTFD, RTF and
+# the string; paste into another view reads the richest type and the run's font comes back; the plain and rich commands
+# take different types off the same board; a cut empties the view and fills the board; and the drag source's image, type
+# registration and operation are measured without a window (the drop side needs a session, which the drag suite builds).
+add_executable(text_view_pasteboard text_view_pasteboard.m)
+target_link_libraries(text_view_pasteboard PRIVATE App)
+
+add_test(NAME appkit-text-view-pasteboard COMMAND text_view_pasteboard)
+set_tests_properties(appkit-text-view-pasteboard PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
+
 # **THE STEPPER PAIR AND THE SECURE FIELD PAIR.** The stepper's press IS the step: the probe drives the cell's own tracking
 # hooks in each half of the control, in BOTH flips (a direction that a flip reverses), checks the clamp, the wrap, the action
 # a target receives and that a drag does not step again — then renders the cell and counts ink. The secure field's claim is
