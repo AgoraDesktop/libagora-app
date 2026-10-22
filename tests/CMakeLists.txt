@@ -1252,6 +1252,20 @@ target_link_libraries(text_view_pasteboard PRIVATE App)
 add_test(NAME appkit-text-view-pasteboard COMMAND text_view_pasteboard)
 set_tests_properties(appkit-text-view-pasteboard PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
 
+# **THE TEXT VIEW'S CONTAINER, ITS MARGIN AND THE POINT THAT MAPS TO A CHARACTER.** The margin is checked in PIXELS —
+# the ink moves by exactly the inset that was set, in both directions — and the point-to-character door is checked in
+# BOTH margins against the character boxes `-firstRectForCharacterRange:` reports, so the drawing and the hit test are
+# held to one coordinate space rather than to their own arithmetic. The caret is the door's reader: no session, no ink;
+# a session, dark ink in the control colour; a colour set, green ink in the same column and none of the old. The two
+# doors no pixel can witness (the dirty rect and the insertion-point state) are checked with a recording subclass, and
+# the container doors are checked from both sides: the manager's list, the container's back-pointer, and the size
+# `-setTextContainer:` carries into a container that `-replaceTextContainer:` deliberately does not.
+add_executable(text_view_container text_view_container.m)
+target_link_libraries(text_view_container PRIVATE App m)
+
+add_test(NAME appkit-text-view-container COMMAND text_view_container)
+set_tests_properties(appkit-text-view-container PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
+
 # **THE STEPPER PAIR AND THE SECURE FIELD PAIR.** The stepper's press IS the step: the probe drives the cell's own tracking
 # hooks in each half of the control, in BOTH flips (a direction that a flip reverses), checks the clamp, the wrap, the action
 # a target receives and that a drag does not step again — then renders the cell and counts ink. The secure field's claim is

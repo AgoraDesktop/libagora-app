@@ -58,25 +58,49 @@ static void cg_announce(NSText *text, NSString *name, SEL delegateSelector)
 
 - (instancetype)initWithFrame:(NSRect)frameRect
 {
+	return [self initWithFrame:frameRect textContainer:nil];
+}
+
+/* **APPLE'S DESIGNATED INITIALISER, AND THE ONE A CALLER WITH A CONTAINER OF ITS OWN USES.** A `nil` container builds
+ * this class's own — the same one `-initWithFrame:` has always built — so the two doors differ in one branch and a view
+ * can never be made with no container by accident. A container that IS supplied is adopted: it is retained here, told
+ * whose container it is, put on the manager's list, and given the view's width, because a wrapping view's container is
+ * its width and a container narrower than its view would draw text in a column the frame does not show. */
+- (instancetype)initWithFrame:(NSRect)frameRect textContainer:(NSTextContainer *)container
+{
 	self = [super initWithFrame:frameRect];
 	if (self != nil) {
+		BOOL supplied = (container != nil);
+
 		/* APPLE'S DEFAULT FOR A TEXT VIEW, and the one a scroll view needs: the view is as tall as its text. */
 		_cg_verticallyResizable = YES;
 		/* **AND A TEXT VIEW USES A RULER UNLESS IT IS TOLD NOT TO**, which is Apple's default: the line a ruler
 		 * draws is there for the asking, and merely asking does not build one. */
 		_usesRuler = YES;
 		_cg_markedRange = NSMakeRange(NSNotFound, 0);
+		/* **THE MARGIN IS THE VIEW'S AND THE PADDING IS THE CONTAINER'S.** The default is Apple's (0, 0) with this
+		 * tier's own four-point first-line inset added to the height — see the header for why that deviation exists
+		 * and why the width defaults to zero (the container's line-fragment padding supplies the left air). */
+		_cg_textContainerInset = NSMakeSize(0.0, NS_TEXT_INSET);
+		_cg_textContainerOrigin = NSMakePoint(_cg_textContainerInset.width, _cg_textContainerInset.height);
+		_cg_originValid = YES;
 		/* **AND THE TRIO IS BUILT HERE, IN THE ONE DIRECTION THAT CANNOT CYCLE.** The view retains the STORE, the
 		 * store retains the MANAGER, the manager retains the CONTAINER, and the container holds a BORROWED pointer
 		 * back to this view. The padding is the field's own inset, so the manager's lines start where every other
 		 * text surface in this tier starts. */
 		_cg_textStorage = [[NSTextStorage alloc] init];
 		_cg_layoutManager = [[NSLayoutManager alloc] init];
-		_cg_textContainer = [[NSTextContainer alloc] initWithContainerSize:frameRect.size];
-		[_cg_textContainer setLineFragmentPadding:NS_TEXT_INSET];
+		if (container == nil) {
+			container = [[[NSTextContainer alloc] initWithContainerSize:frameRect.size] autorelease];
+			[container setLineFragmentPadding:NS_TEXT_INSET];
+		}
+		_cg_textContainer = [container retain];
 		[_cg_textContainer setTextView:self];
 		[_cg_textStorage addLayoutManager:_cg_layoutManager];
 		[_cg_layoutManager addTextContainer:_cg_textContainer];
+		if (supplied) {
+			[self cg_sizeContainerToFrame];
+		}
 		/* **AND EVERY EDIT THE STORE ANNOUNCES REACHES THE MIRROR.** A direct store edit — a caller adding a run —
 		 * and the view's own edits alike, so the base class's string is never older than the store by more than the
 		 * synchronous notification itself. */
@@ -91,6 +115,7 @@ static void cg_announce(NSText *text, NSString *name, SEL delegateSelector)
 	[[NSNotificationCenter defaultCenter] removeObserver:self name:NSTextStorageDidProcessEditingNotification
 		object:_cg_textStorage];
 	[self cg_endAttachmentTracking];
+	[_cg_insertionPointColor release];
 	[_cg_textContainer setTextView:nil];
 	[_cg_textContainer release];
 	[_cg_layoutManager release];
@@ -150,6 +175,265 @@ static void cg_announce(NSText *text, NSString *name, SEL delegateSelector)
 - (NSTextContainer *)textContainer
 {
 	return _cg_textContainer;
+}
+
+/* ============================================================================================ *
+ * THE CONTAINER, ITS INSET, ITS ORIGIN AND THE INSERTION POINT                                  *
+ * ============================================================================================ */
+
+/* **THE FRAME'S WIDTH REACHES THE CONTAINER LESS THE TWO SIDES OF THE INSET**, which is what makes an inset a MARGIN
+ * rather than a shift: with the default width of zero this is the frame's width exactly, which is the arithmetic every
+ * line in this class was written against. The height stays ZERO — unbounded — for the reason `-cg_setHeightToLayout`
+ * gives: a wrapping document's height is the layout's answer, never an input. */
+- (void)cg_sizeContainerToFrame
+{
+	CGFloat width = [self frame].size.width - 2.0 * _cg_textContainerInset.width;
+
+	if (width < 0.0) {
+		width = 0.0;
+	}
+	[_cg_textContainer setContainerSize:NSMakeSize(width, 0.0)];
+	/* **AND A NEW CONTAINER WIDTH IS A NEW WRAP**, which the manager cannot see for itself: nothing observes a
+	 * container's size, so a caller that changes it without invalidating gets the OLD lines laid out in the new width —
+	 * MEASURED in this slice's own probe, which set a narrow frame and counted one line where three were asked for. */
+	[_cg_layoutManager invalidateLayoutForCharacterRange:NSMakeRange(0, [_cg_textStorage length])
+					     actualCharacterRange:NULL];
+}
+
+/* **THE ONE PLACE A CONTAINER IS HANDED OVER, AND THE THREE THINGS THAT MUST MOVE TOGETHER.** The old container leaves
+ * the manager's list (its borrowed back-pointer cleared first, because a detached container that still names a view is
+ * the shape that sends a message to a dead object), the new one joins it and is told whose it is, and the origin is
+ * invalidated because a different container is a different origin. `sizedToFrame` is the ONLY difference between the
+ * two public doors: `-setTextContainer:` adopts a container as this view's, so the view's width reaches it;
+ * `-replaceTextContainer:` re-points the text system without the geometry following. */
+- (void)cg_adoptTextContainer:(NSTextContainer *)container sizedToFrame:(BOOL)sizedToFrame
+{
+	NSTextContainer *previous = _cg_textContainer;
+
+	_cg_textContainer = [container retain];
+	if (previous != nil) {
+		NSArray *held;
+		NSUInteger i;
+
+		[previous setTextView:nil];
+		held = [[_cg_layoutManager textContainers] retain];
+		for (i = 0; i < [held count]; i++) {
+			if ([held objectAtIndex:i] == previous) {
+				[_cg_layoutManager removeTextContainerAtIndex:i];
+				break;
+			}
+		}
+		[held release];
+		[previous release];
+	}
+	if (_cg_textContainer != nil) {
+		[_cg_textContainer setTextView:self];
+		/* **A CONTAINER THIS MANAGER ALREADY HOLDS IS NOT ADDED TWICE.** `-addTextContainer:` appends, so adopting
+		 * the view's own empty second container again would leave the manager laying the same text out twice. */
+		if ([_cg_textContainer layoutManager] != _cg_layoutManager) {
+			[_cg_layoutManager addTextContainer:_cg_textContainer];
+		}
+		if (sizedToFrame) {
+			[self cg_sizeContainerToFrame];
+		}
+	}
+	[self invalidateTextContainerOrigin];
+	[self setNeedsDisplay:YES];
+	/* **AND ONLY AN ADOPTION RE-SIZES THE VIEW.** `-replaceTextContainer:` is documented as re-pointing the text system
+	 * without the view's geometry following, so it must not re-fit the height — a re-fit would carry the frame's width
+	 * into the new container, which is the very thing that door does not do. */
+	if (sizedToFrame) {
+		[self cg_fitHeight];
+	}
+}
+
+- (void)setTextContainer:(NSTextContainer *)container
+{
+	if (container == _cg_textContainer) {
+		return;
+	}
+	[self cg_adoptTextContainer:container sizedToFrame:YES];
+}
+
+- (void)replaceTextContainer:(NSTextContainer *)newContainer
+{
+	if (newContainer == _cg_textContainer) {
+		return;
+	}
+	[self cg_adoptTextContainer:newContainer sizedToFrame:NO];
+}
+
+- (NSSize)textContainerInset
+{
+	return _cg_textContainerInset;
+}
+
+/* **MOVING THE MARGIN MOVES EVERYTHING THE VIEW DRAWS**, which is why this door invalidates the origin, the display and
+ * the height in that order: the origin is what the drawing, the hit test and the caret all read, the display is stale
+ * because the ink moved, and the height is settled again because a narrower container re-wraps. */
+- (void)setTextContainerInset:(NSSize)inset
+{
+	if (NSEqualSizes(inset, _cg_textContainerInset)) {
+		return;
+	}
+	_cg_textContainerInset = inset;
+	[self invalidateTextContainerOrigin];
+	[self cg_sizeContainerToFrame];
+	[_cg_layoutManager invalidateLayoutForCharacterRange:NSMakeRange(0, [_cg_textStorage length])
+					     actualCharacterRange:NULL];
+	[self setNeedsDisplay:YES];
+	[self cg_fitHeight];
+}
+
+/* **THE ORIGIN IS THE INSET, AND IT IS CACHED ON PURPOSE.** In a flipped view the container's origin in view coordinates
+ * IS the inset — there is no other term today. Apple's door exists because in Apple's text system there IS another term
+ * (the ruler's reserved band and the container's own origin), so the cache is the seam that term will be added behind;
+ * `-invalidateTextContainerOrigin` is the door that will have to be called when it is, and every reader below already
+ * goes through this accessor rather than reading the ivar. A cache that is always right is still a cache: it is built
+ * once per invalidation, and `-setTextContainerInset:` is one of the two things that invalidates it. */
+- (NSPoint)textContainerOrigin
+{
+	if (!_cg_originValid) {
+		_cg_textContainerOrigin = NSMakePoint(_cg_textContainerInset.width, _cg_textContainerInset.height);
+		_cg_originValid = YES;
+	}
+	return _cg_textContainerOrigin;
+}
+
+- (void)invalidateTextContainerOrigin
+{
+	_cg_originValid = NO;
+	[self setNeedsDisplay:YES];
+}
+
+/* **`-setConstrainedFrameSize:` IS THE FLOOR UNDER A WRAPPING VIEW'S HEIGHT.** The width is the caller's — it is the
+ * container's width, so it is the one number that decides the wrap — and the height is the larger of what was asked for
+ * and what the layout needs, because a frame shorter than its text clips a document that has no scroll bar of its own.
+ * A view that is NOT vertically resizable takes the height it was handed: it was given a frame on purpose, and
+ * constraining it would be the second opinion this door exists to avoid. */
+- (void)setConstrainedFrameSize:(NSSize)desiredSize
+{
+	NSSize size = desiredSize;
+
+	[self cg_sizeContainerToFrame];
+	if (_cg_verticallyResizable && _cg_textContainer != nil) {
+		CGFloat width = desiredSize.width - 2.0 * _cg_textContainerInset.width;
+		CGFloat needed;
+
+		if (width < 0.0) {
+			width = 0.0;
+		}
+		[_cg_textContainer setContainerSize:NSMakeSize(width, 0.0)];
+		[_cg_layoutManager invalidateLayoutForCharacterRange:NSMakeRange(0, [_cg_textStorage length])
+						     actualCharacterRange:NULL];
+		[_cg_layoutManager ensureLayoutForTextContainer:_cg_textContainer];
+		needed = [_cg_layoutManager usedRectForTextContainer:_cg_textContainer].size.height
+			 + 2.0 * _cg_textContainerInset.height;
+		if (size.height < needed) {
+			size.height = needed;
+		}
+	}
+	[super setFrameSize:size];
+}
+
+/* ============================================================================================ *
+ * THE BACKDROP, THE CARET AND THE TWO DOORS THAT SAY WHO DECIDES                                *
+ * ============================================================================================ */
+
+/* **THE BACKDROP IS A DOOR BECAUSE IT IS THE ONE PART OF THE DRAWING A SUBCLASS REPLACES.** Apple's view fills here and
+ * its `-drawRect:` calls it before the selection and the glyphs; so does this one, and `-drawsBackground` is what it
+ * reads. A view with the flag off fills nothing rather than filling white, which is the difference between a document
+ * and a label. */
+- (void)drawViewBackgroundInRect:(NSRect)rect
+{
+	(void)rect;
+	if (!_drawsBackground) {
+		return;
+	}
+	[[self backgroundColor] != nil ? [self backgroundColor] : [NSColor controlBackgroundColor] setFill];
+	[[NSBezierPath bezierPathWithRect:[self bounds]] fill];
+}
+
+/* **WHETHER A CARET IS WANTED AT ALL.** `_editing` IS the field-editor relationship in this tier — it is set while the
+ * view is the window's first responder and an edit is in flight — so this is the same condition `-drawRect:` used to
+ * spell inline, now named where a subclass can answer it differently. */
+- (BOOL)shouldDrawInsertionPoint
+{
+	return (_editing && [self isEditable]);
+}
+
+/* **THE CARET IS FILLED IN THE CALLER'S COLOUR, AND `turnedOn:NO` DRAWS NOTHING.** Apple's flag is the blink's erase
+ * half; this tier's caret does not blink (there is no timer, see below), and the view repaints the whole rect it
+ * dirties, so "off" is the absence of ink rather than a background-coloured bar — which is what a turned-off caret looks
+ * like on a document whose background the view does not own. */
+- (void)drawInsertionPointInRect:(NSRect)rect color:(NSColor *)color turnedOn:(BOOL)turnedOn
+{
+	if (!turnedOn) {
+		return;
+	}
+	[(color != nil ? color : [NSColor controlTextColor]) setFill];
+	[[NSBezierPath bezierPathWithRect:rect] fill];
+}
+
+- (NSColor *)insertionPointColor
+{
+	return _cg_insertionPointColor;
+}
+
+/* **THE SETTER TOUCHES THE CARET'S RECT AND NOT THE WHOLE VIEW.** Changing the pen colour changes one point-wide bar, so
+ * a caller changing it per keystroke does not repaint a document — which is the reason `-setNeedsDisplayInRect:` is
+ * used here rather than `-setNeedsDisplay:YES`. */
+- (void)setInsertionPointColor:(NSColor *)color
+{
+	if (color == _cg_insertionPointColor) {
+		return;
+	}
+	[color retain];
+	[_cg_insertionPointColor release];
+	_cg_insertionPointColor = color;
+	[self setNeedsDisplayInRect:[self cg_rectForCharacterIndex:_selectedRange.location]];
+}
+
+/* **THERE IS NO TIMER TO RESTART, SO THE DOOR DIRTIES THE CARET'S RECT INSTEAD.** Apple's view blinks its insertion point
+ * from a timer this class does not own; the state change a blink would follow — the caret moved, the view became
+ * editable, the selection changed — is exactly what makes the caret's rect stale, so that is what the door does. It is a
+ * real door with a real effect rather than a note about an absent timer. */
+- (void)updateInsertionPointStateAndRestartTimer:(BOOL)flag
+{
+	(void)flag;
+	[self setNeedsDisplayInRect:[self cg_rectForCharacterIndex:_selectedRange.location]];
+}
+
+/* **A DIRTY RECT THAT MAY NOT RE-LAY-OUT.** The flag exists so that a caller repainting a narrow strip cannot trigger a
+ * layout pass. NOTHING in this tier's `-drawRect:` lays out: the layout is invalidated by EDITS and WIDTH CHANGES and by
+ * nothing else, so the second argument has nothing to suppress and the forward is the whole behaviour. Said here
+ * because a stored flag nobody reads is the failure this tree keeps re-learning. */
+- (void)setNeedsDisplayInRect:(NSRect)invalidRect avoidAdditionalLayout:(BOOL)flag
+{
+	(void)flag;
+	[self setNeedsDisplayInRect:invalidRect];
+}
+
+/* **WHICH CHARACTER AN INSERTION AT A POINT LANDS BEFORE**, in this view's coordinates: the manager's
+ * point-to-glyph door, given the point moved out of the view's margin and into the container's coordinates. This is the
+ * inverse of `-cg_rectForCharacterIndex:`, and it is what makes a drop land where it was dropped rather than at the
+ * insertion point. A point past the last line answers the end of the text — an insertion there is legal and is what a
+ * drop below the last line means — and NSNotFound is reserved for a view with no layout to ask at all. */
+- (NSUInteger)characterIndexForInsertionAtPoint:(NSPoint)point
+{
+	NSUInteger length = [_cg_textStorage length];
+	NSPoint origin = [self textContainerOrigin];
+	NSUInteger index;
+
+	if (_cg_textContainer == nil) {
+		return NSNotFound;
+	}
+	index = [_cg_layoutManager cg_glyphIndexForPoint:NSMakePoint(point.x - origin.x, point.y - origin.y)
+						inTextContainer:_cg_textContainer];
+	if (index == NSNotFound) {
+		return NSNotFound;
+	}
+	return (index > length) ? length : index;
 }
 
 /* THE MIRROR, AND THE TWO THINGS THAT HAPPEN WHEN IT MOVES: the display is stale and the height may be. */
@@ -337,28 +621,32 @@ static void cg_announce(NSText *text, NSString *name, SEL delegateSelector)
 	return (count > 0) ? (count - 1) : 0;
 }
 
-/* **A LINE'S BASELINE, MEASURED DOWN FROM THE TOP OF THE VIEW** — the container origin's inset plus the baseline the
+/* **A LINE'S BASELINE, MEASURED DOWN FROM THE TOP OF THE VIEW** — the container origin's y plus the baseline the
  * MANAGER recorded for the fragment, which is per-fragment once a paragraph style can change the line height. It takes
  * a VISUAL line's index: a wrapped line's second part is a line of its own for every purpose this file has. */
 - (CGFloat)cg_baselineForLine:(NSUInteger)line
 {
 	NSRange range = [self cg_visualLineRangeAtIndex:line];
 
-	return NS_TEXT_INSET + [_cg_layoutManager cg_baselineForGlyphAtIndex:range.location];
+	return [self textContainerOrigin].y + [_cg_layoutManager cg_baselineForGlyphAtIndex:range.location];
 }
 
-/* THE X OF A CHARACTER INDEX, measured from the LEFT EDGE OF THE VISUAL LINE it lands on — the manager's offset less
- * its fragment padding, so every caller adds the one inset itself, exactly as before. */
+/* **THE X OF A CHARACTER INDEX, IN THIS VIEW'S COORDINATES** — the container origin's x plus the manager's offset in the
+ * container. The offset already includes the container's own line-fragment padding, and the origin is the margin the
+ * view adds, so this is the one sum a caller needs; it used to be spelled as a subtraction of the padding here and an
+ * addition of the same number at every call site, which only agreed while the two were the same constant. */
 - (CGFloat)cg_xForIndex:(NSUInteger)index
 {
-	return [_cg_layoutManager cg_offsetForGlyphAtIndex:index] - NS_TEXT_INSET;
+	return [self textContainerOrigin].x + [_cg_layoutManager cg_offsetForGlyphAtIndex:index];
 }
 
 /* **THE INVERSE, WHICH IS WHAT A CLICK ASKS: WHICH VISUAL LINE FROM THE y, THEN WHICH CHARACTER FROM THE x.** The
- * manager does both; the view only moves the point out of its own inset and into the container's coordinates. */
+ * manager does both; the view only moves the point out of its own margin and into the container's coordinates. */
 - (NSUInteger)cg_indexForPoint:(NSPoint)point
 {
-	return [_cg_layoutManager cg_glyphIndexForPoint:NSMakePoint(point.x, point.y - NS_TEXT_INSET)
+	NSPoint origin = [self textContainerOrigin];
+
+	return [_cg_layoutManager cg_glyphIndexForPoint:NSMakePoint(point.x - origin.x, point.y - origin.y)
 					      inTextContainer:_cg_textContainer];
 }
 
@@ -369,8 +657,9 @@ static void cg_announce(NSText *text, NSString *name, SEL delegateSelector)
 {
 	NSRange range = [self cg_visualLineRangeAtIndex:line];
 	NSRect used = [_cg_layoutManager lineFragmentUsedRectForGlyphAtIndex:range.location effectiveRange:NULL];
+	NSPoint origin = [self textContainerOrigin];
 
-	return [_cg_layoutManager cg_glyphIndexForPoint:NSMakePoint(NS_TEXT_INSET + x, used.origin.y + used.size.height / 2.0)
+	return [_cg_layoutManager cg_glyphIndexForPoint:NSMakePoint(x - origin.x, used.origin.y + used.size.height / 2.0)
 					      inTextContainer:_cg_textContainer];
 }
 
@@ -400,7 +689,8 @@ static void cg_announce(NSText *text, NSString *name, SEL delegateSelector)
 	CGFloat height;
 
 	[_cg_layoutManager ensureLayoutForTextContainer:_cg_textContainer];
-	height = [_cg_layoutManager usedRectForTextContainer:_cg_textContainer].size.height + 2.0 * NS_TEXT_INSET;
+	height = [_cg_layoutManager usedRectForTextContainer:_cg_textContainer].size.height
+		 + 2.0 * [self textContainerOrigin].y;
 	if (height != [self frame].size.height) {
 		/* **THE CONTAINER FOLLOWS THE FRAME IN WIDTH AND NOT IN HEIGHT, AND THAT ASYMMETRY IS THE POINT.** The manager
 		 * wraps to the container's width; a ZERO height means UNBOUNDED, which is what a scrolling document is — its
@@ -434,7 +724,7 @@ static void cg_announce(NSText *text, NSString *name, SEL delegateSelector)
 	NSUInteger line = [self cg_visualLineIndexForCharacterIndex:index];
 	CGFloat baseline = [self cg_baselineForLine:line];
 
-	return NSMakeRect(NS_TEXT_INSET + [self cg_xForIndex:index], baseline - [font ascender], 1.0,
+	return NSMakeRect([self cg_xForIndex:index], baseline - [font ascender], 1.0,
 			  [font ascender] - [font descender]);
 }
 
@@ -562,15 +852,15 @@ static void cg_announce(NSText *text, NSString *name, SEL delegateSelector)
 	}
 }
 
-/* **AND THE WIDTH IS THE CONTAINER'S.** A resize carries the new size into the container, marks the layout stale —
- * a wrap depends on the width and an overflow on the height, so neither is assumed unchanged — and re-fits when the
- * WIDTH moved, because that is what re-wraps. */
+/* **AND THE WIDTH IS THE CONTAINER'S.** A resize carries the new size into the container — LESS THE TWO SIDES OF THE
+ * VIEW'S INSET, so an inset is a margin around the text rather than a shift of it — marks the layout stale, and re-fits
+ * when the WIDTH moved, because that is what re-wraps. */
 - (void)setFrameSize:(NSSize)newSize
 {
 	BOOL widthChanged = (newSize.width != [self frame].size.width);
 
 	[super setFrameSize:newSize];
-	[_cg_textContainer setContainerSize:NSMakeSize(newSize.width, 0.0)];
+	[self cg_sizeContainerToFrame];
 	[_cg_layoutManager invalidateLayoutForCharacterRange:NSMakeRange(0, [_cg_textStorage length])
 					     actualCharacterRange:NULL];
 	if (widthChanged) {
@@ -597,8 +887,10 @@ static void cg_announce(NSText *text, NSString *name, SEL delegateSelector)
 {
 	NSRange range = [self cg_visualLineRangeAtIndex:line];
 	NSRect used = [_cg_layoutManager lineFragmentUsedRectForGlyphAtIndex:range.location effectiveRange:NULL];
-	CGFloat min = used.origin.x;
-	CGFloat max = used.origin.x + used.size.width;
+	/* THE USED RECT IS THE CONTAINER'S AND THE BAND IS THE VIEW'S, so the margin is added to the bounds and not to the x:
+	 * the answer has to be in the same coordinates as the argument. */
+	CGFloat min = used.origin.x + [self textContainerOrigin].x;
+	CGFloat max = min + used.size.width;
 
 	if (x < min) {
 		return min;
@@ -621,10 +913,9 @@ static void cg_announce(NSText *text, NSString *name, SEL delegateSelector)
 	if (cg == NULL) {
 		return;
 	}
-	if (_drawsBackground) {
-		[[self backgroundColor] != nil ? [self backgroundColor] : [NSColor controlBackgroundColor] setFill];
-		[[NSBezierPath bezierPathWithRect:[self bounds]] fill];
-	}
+	/* **THE BACKDROP IS A DOOR, NOT THREE LINES OF THIS METHOD**, because it is the one part of a text view's drawing a
+	 * subclass replaces: a document with a watermark, a gutter, a paper colour. Everything below reads what it did. */
+	[self drawViewBackgroundInRect:dirtyRect];
 	/* **THE SELECTION IS CLIPPED TO EACH VISUAL LINE, ONE LINE AT A TIME**, which is what makes a selection that spans
 	 * a break or a wrap draw as a band on each line it covers. The newline itself carries no band: there is no glyph
 	 * there to highlight. */
@@ -642,8 +933,8 @@ static void cg_announce(NSText *text, NSString *name, SEL delegateSelector)
 
 			if (lo < hi) {
 				CGFloat baseline = [self cg_baselineForLine:i];
-				CGFloat x0 = [self cg_clampBandX:NS_TEXT_INSET + [self cg_xForIndex:lo] toLine:i];
-				CGFloat x1 = [self cg_clampBandX:NS_TEXT_INSET + [self cg_xForIndex:hi] toLine:i];
+				CGFloat x0 = [self cg_clampBandX:[self cg_xForIndex:lo] toLine:i];
+				CGFloat x1 = [self cg_clampBandX:[self cg_xForIndex:hi] toLine:i];
 
 				{
 					/* **THE SELECTION'S INK IS THE SELECTED-TEXT ATTRIBUTES' BACKGROUND WHEN THERE IS ONE**, else
@@ -659,8 +950,10 @@ static void cg_announce(NSText *text, NSString *name, SEL delegateSelector)
 		}
 	}
 	/* AND THE STORE'S OWN INK, WHICH IS THE MANAGER'S TO LAY DOWN — backgrounds first, then the glyphs and the rules. */
-	[_cg_layoutManager drawBackgroundForGlyphRange:NSMakeRange(0, n) atPoint:NSMakePoint(0.0, NS_TEXT_INSET)];
-	[_cg_layoutManager drawGlyphsForGlyphRange:NSMakeRange(0, n) atPoint:NSMakePoint(0.0, NS_TEXT_INSET)];
+	[_cg_layoutManager drawBackgroundForGlyphRange:NSMakeRange(0, n)
+		atPoint:NSMakePoint([self textContainerOrigin].x, [self textContainerOrigin].y)];
+	[_cg_layoutManager drawGlyphsForGlyphRange:NSMakeRange(0, n)
+		atPoint:NSMakePoint([self textContainerOrigin].x, [self textContainerOrigin].y)];
 	/* **AND THE SPELLING MARKS, WHICH THE VIEW OWNS BECAUSE THE MANAGER DOES NOT DECIDE WHAT IS MISSPELLED.** Each range
 	 * a caller marked through `-setSpellingState:range:` is drawn as the era's red dotted rule, through the manager's
 	 * own underline door — so the geometry comes from the layout and only the DECISION is the view's. */
@@ -684,8 +977,8 @@ static void cg_announce(NSText *text, NSString *name, SEL delegateSelector)
 
 			if (lo < hi) {
 				CGFloat baseline = [self cg_baselineForLine:i];
-				CGFloat x0 = [self cg_clampBandX:NS_TEXT_INSET + [self cg_xForIndex:lo] toLine:i];
-				CGFloat x1 = [self cg_clampBandX:NS_TEXT_INSET + [self cg_xForIndex:hi] toLine:i];
+				CGFloat x0 = [self cg_clampBandX:[self cg_xForIndex:lo] toLine:i];
+				CGFloat x1 = [self cg_clampBandX:[self cg_xForIndex:hi] toLine:i];
 
 				[[NSColor controlTextColor] setFill];
 				[[NSBezierPath bezierPathWithRect:NSMakeRect(x0, baseline + 2.0, x1 - x0, 1.0)] fill];
@@ -693,14 +986,17 @@ static void cg_announce(NSText *text, NSString *name, SEL delegateSelector)
 		}
 	}
 	/* AND THE CARET, ON WHICHEVER VISUAL LINE IT IS ON — which is the LAST line that starts at or before it, so a caret
-	 * just after a hard break sits on the empty line it opened. */
-	if (_editing && [self isEditable]) {
+	 * just after a hard break sits on the empty line it opened. **AND IT GOES THROUGH THE DOOR, WHICH IS WHAT MAKES
+	 * `-insertionPointColor` REAL**: the colour below is the view's own, and the rect is the same one a caller would
+	 * compute, so a subclass that overrides the drawing door gets every caret in the view and not just one it draws. */
+	if ([self shouldDrawInsertionPoint]) {
 		NSUInteger caretLine = [self cg_visualLineIndexForCharacterIndex:_selectedRange.location];
 		CGFloat baseline = [self cg_baselineForLine:caretLine];
-		CGFloat x = NS_TEXT_INSET + [self cg_xForIndex:_selectedRange.location];
+		NSRect caret = NSMakeRect([self cg_xForIndex:_selectedRange.location], baseline - [font ascender], 1.0,
+					  bandHeight);
+		NSColor *pen = [self insertionPointColor];
 
-		[[NSColor controlTextColor] setFill];
-		[[NSBezierPath bezierPathWithRect:NSMakeRect(x, baseline - [font ascender], 1.0, bandHeight)] fill];
+		[self drawInsertionPointInRect:caret color:(pen != nil ? pen : [NSColor controlTextColor]) turnedOn:YES];
 	}
 }
 
@@ -729,7 +1025,7 @@ static void cg_announce(NSText *text, NSString *name, SEL delegateSelector)
 		return NSZeroRect;
 	}
 	line = [self cg_visualLineIndexForCharacterIndex:index];
-	return NSMakeRect(NS_TEXT_INSET + [self cg_xForIndex:index],
+	return NSMakeRect([self cg_xForIndex:index],
 			  [self cg_baselineForLine:line] - size.height, size.width, size.height);
 }
 
@@ -1419,7 +1715,10 @@ static NSString * const AGRulerLineHeightMultipleKey = @"LineHeightMultiple";
 		 * eight points of tick, a nine-point label above it, and the markers in the band the scroll view reserves for
 		 * them — so fifteen is one point too many and fourteen is what the drawing actually spends. */
 		[ruler setRuleThickness:14.0];
-		[ruler setOriginOffset:NS_TEXT_INSET];
+		/* **AND THE RULER'S ZERO IS WHERE THE TEXT'S ZERO IS**: the container's padding plus whatever margin the view
+		 * has put around it, or a tab stop at 40 points would be drawn 40 points from the view's edge while the text
+		 * it belongs to starts at the margin. */
+		[ruler setOriginOffset:[self textContainerOrigin].x + NS_TEXT_INSET];
 		[ruler setClientView:self];
 	}
 	[self updateRuler];
@@ -1934,8 +2233,8 @@ static NSString * const AGRulerLineHeightMultipleKey = @"LineHeightMultiple";
 		}
 		rect = [_cg_layoutManager boundingRectForGlyphRange:glyphs inTextContainer:container];
 	}
-	rect.origin.x += NS_TEXT_INSET;
-	rect.origin.y += NS_TEXT_INSET;
+	rect.origin.x += [self textContainerOrigin].x;
+	rect.origin.y += [self textContainerOrigin].y;
 	rect = NSInsetRect(rect, -2.0, -1.0);
 	[[NSColor colorWithCalibratedRed:1.0 green:0.85 blue:0.15 alpha:0.28] setFill];
 	[[NSBezierPath bezierPathWithRect:rect] fill];
@@ -1986,13 +2285,15 @@ static NSString * const AGRulerLineHeightMultipleKey = @"LineHeightMultiple";
 		lineRect = [_cg_layoutManager lineFragmentRectForGlyphAtIndex:glyphRange.location
 								  effectiveRange:&lineRange];
 		/* **THE ORIGIN IS THE ONE THE GLYPHS WERE DRAWN AT**, or the rule lands above the words it belongs to: the
-		 * text is drawn at `(0, NS_TEXT_INSET)` a few lines up, and the underline door is told the same origin so the
-		 * two agree. Getting this wrong is invisible in isolation and obvious on screen. */
+		 * text is drawn at the container origin a few hundred lines up, and the underline door is told the same origin
+		 * so the two agree. Getting this wrong is invisible in isolation and obvious on screen — and it is why the
+		 * origin is asked for rather than spelled, so a view with a `-textContainerInset` keeps its rules under its
+		 * words. */
 		[_cg_layoutManager underlineGlyphRange:glyphRange
 					 underlineType:NSUnderlinePatternDot | NSUnderlineStyleSingle
 				      lineFragmentRect:lineRect
 			       lineFragmentGlyphRange:lineRange
-				       containerOrigin:NSMakePoint(0.0, NS_TEXT_INSET)];
+				       containerOrigin:[self textContainerOrigin]];
 	}
 }
 

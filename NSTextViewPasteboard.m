@@ -16,8 +16,11 @@
  * landed in. A second edit path that wrote the store directly would have to reproduce all four, and the first one to
  * forget would be a view whose text and mirror disagree.
  *
- * **AND A DROP LANDS AT THE INSERTION POINT.** Mapping a dragged point to a character index needs the layout manager's
- * point-to-glyph door, which this tier has not got; the drop inserts where the caret is and the header says so.
+ * **AND A DROP LANDS WHERE IT WAS DROPPED.** The point-to-glyph door the previous slice said this tier lacked is
+ * `-characterIndexForInsertionAtPoint:` now (`NSTextView.m`): the drag's window-space location is converted into the
+ * view's coordinates, the view moves it out of its own margin and into the container's, and the manager answers the
+ * character. The drop then sets the insertion point before it reads the pasteboard, so a drop and a paste differ in
+ * exactly one thing — where the text goes.
  */
 #import <AppKit/NSTextView.h>
 
@@ -503,9 +506,17 @@
 
 - (BOOL)performDragOperation:(id <NSDraggingInfo>)sender
 {
-	/* **THE DROP LANDS AT THE INSERTION POINT**, because this tier cannot map a dragged point to a character index;
-	 * see the header. The text is read through the same door a paste uses, so a drop and a paste cannot disagree about
-	 * what a type means. */
+	/* **THE DROP LANDS WHERE IT WAS DROPPED.** The drag's location arrives in the destination WINDOW's coordinates
+	 * (see `NSDragging.h`), the view converts it into its own, and `-characterIndexForInsertionAtPoint:` is the
+	 * mapping the previous slice recorded as missing — so the insertion point is set before the pasteboard is read and
+	 * the text goes where the pointer was. The text is read through the same door a paste uses, so a drop and a paste
+	 * cannot disagree about what a type means; they disagree only about WHERE, which is the point. */
+	NSUInteger index = [self characterIndexForInsertionAtPoint:[self convertPoint:[sender draggingLocation]
+								fromView:nil]];
+
+	if (index != NSNotFound) {
+		[self setSelectedRange:NSMakeRange(index, 0)];
+	}
 	return [self readSelectionFromPasteboard:[sender draggingPasteboard]];
 }
 

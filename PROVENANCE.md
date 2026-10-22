@@ -875,12 +875,49 @@ reference and then cleared it, so every name became `@""`, `[NSFont fontWithName
 every RTF read in this tree** became the system font. One `-copy` in `NSAttributedStringRTF.m` fixes it, and the probe's
 assertion on the pasted run's face is the guard.
 
-Two limits are stated rather than hidden: a drop lands at the INSERTION POINT (a dragged point cannot be mapped to a
-character index without the layout manager's point-to-glyph door, which this tier has not got), and the attachment half
-of `-allowsImageEditing` is read in the paste path but the probe cannot build an RTFD carrying a file.
+Two limits are stated rather than hidden: the attachment half of `-allowsImageEditing` is read in the paste path but
+the probe cannot build an RTFD carrying a file, and a drop used to land at the INSERTION POINT rather than where it was
+released — **that limit was RETIRED by the next slice**, which added the point-to-insertion door this paragraph said was
+missing (see §36), and the sentence stays here as the record of what was true when this slice shipped.
 
 `tests/text_view_pasteboard.m` measures the registry, a real round trip through the general pasteboard with the run's
 font, the plain and rich commands, the cut, the paragraph-copy rule, and the drag source — **24 checks**.
+
+## 36. The text view's container: one coordinate space for the margin, the drawing and the hit test
+
+**THE VIEW HAD ONE NUMBER SPELLED TWO WAYS AND THIS SLICE MADE IT TWO NUMBERS SPELLED ONCE.** The container's
+line-fragment padding and the view's own four-point inset were the same constant, and the arithmetic that used them
+cancelled: `-cg_xForIndex:` subtracted the padding and every caller added the inset back. That agrees only while the
+two are equal, so the moment a caller could set a margin it would have been off by the padding. The view now has
+`-textContainerInset` (a margin, carried into the container as `frame width − 2 × inset.width`), `-textContainerOrigin`
+(the container's origin in the view's coordinates, cached so `-invalidateTextContainerOrigin` has a reader), and
+`-cg_xForIndex:` answers a VIEW coordinate outright. **THE DEFAULT INSET IS (0, `NS_TEXT_INSET`), NOT APPLE'S (0, 0),
+AND THAT IS DELIBERATE**: every pixel of this class was measured down from the field's own four-point air, and a
+default of zero would have moved every document up four points to buy nothing.
+
+**THE INVERSE IS THE POINT.** `-characterIndexForInsertionAtPoint:` is the manager's point-to-glyph door with the
+margin divided out, and it is the door the clipboard slice's record said was missing; `-performDragOperation:` now sets
+the insertion point from the drag's location before it reads the pasteboard, so the "a drop lands at the insertion
+point" limit in §35 is retired rather than restated.
+
+**AND THE CARET BECAME A DOOR WITH A READER.** `-drawRect:` no longer fills its own bar: it asks
+`-shouldDrawInsertionPoint` and calls `-drawInsertionPointInRect:color:turnedOn:`, so `-insertionPointColor` is read
+where the pen is chosen. The backdrop moved the same way, into `-drawViewBackgroundInRect:`, which is the one part of a
+text view's drawing a subclass replaces.
+
+**THE TRAPS THIS SLICE PAID FOR.** A new container WIDTH is a new wrap and **the manager cannot see it**: nothing
+observes a container's size, so `-setConstrainedFrameSize:` with a narrow width laid the OLD lines out in the new
+container and the probe counted one line where five were asked for. The size change and the `-invalidateLayout…` have
+to happen together, which is why they are one private door now. And a probe that renders a text view has to know that
+installing it as a content view makes it the window's FIRST RESPONDER: "there is no caret here" is a claim you cannot
+make about a fresh view, only about one whose session you ended.
+
+`tests/text_view_container.m` measures the default and the deviation, the ink moving by exactly the margin set (in both
+axes), the round trip between a character's box and its index **in two different margins** (fourteen boxes each, every
+one of them answered at both ends of the box), the two edges (below the last line, left of a wrapped one), the caret in
+both colours with the no-session negative, the two doors a pixel cannot witness (with a recording subclass), the four
+container doors including `nil`, and `-setConstrainedFrameSize:` as a floor that still decides the wrap — **51
+checks**.
 
 ## Keeping in sync
 

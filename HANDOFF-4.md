@@ -6,10 +6,11 @@ and two slices of `NSTextView`. `HANDOFF.md`, `HANDOFF-2.md` and `HANDOFF-3.md` 
 of them was wrong, and the second file's §2 instrument rules and §4 traps are the ones these sessions used most. **THIS
 FILE'S §2 NUMBERS SUPERSEDE `HANDOFF-3.md`'s**, which are six slices old.*
 
-*State at this handover: **six slice commits** since the eighth handoff (and the relicense sweep that touched every file
-in the meantime), tree clean, **143 tests passing in about 77 s**, `api-ledger check` holding **375 metrics** —
-**131 of 168 classes (78%), 4005 of 4505 selectors (89%), 39 of 56 protocols (70%), 86 of 86 functions**, 4530 methods
+*State at this handover: **seven slice commits** since the eighth handoff (and the relicense sweep that touched every
+file in the meantime), tree clean, **144 tests passing in about 75 s**, `api-ledger check` holding **375 metrics** —
+**131 of 168 classes (78%), 4021 of 4505 selectors (89%), 39 of 56 protocols (70%), 86 of 86 functions**, 4546 methods
 declared with 8 having no body, **113 of the 129 classes with a surface at COMPLETE coverage** — refusal census **292**.*
+*(`HANDOFF-3.md`'s §2 numbers are two slices older than these; the numbers in this file's §2 are current as of §9.)*
 
 ---
 
@@ -37,25 +38,27 @@ and a different commit line; it is recorded here because the AppKit slice is wha
 
 ```
 classes   131 of 168   (78%)    37 missing
-selectors 4005 of 4505 (89%)   500 missing   113 of 129 classes at COMPLETE coverage
+selectors 4021 of 4505 (89%)   484 missing   113 of 129 classes at COMPLETE coverage
 protocols  39 of  56   (70%)    17 missing
 functions  86 of  86  (100%)     0 missing    10 refuse by name
-methods   4530 declared on this tree's own classes, 8 with NO body on the chain (0.2%)
+methods   4546 declared on this tree's own classes, 8 with NO body on the chain (0.2%)
 ```
 
-**THE 500 MISSING SELECTORS ARE STILL CONCENTRATED, AND THE CONCENTRATION HAS MOVED INWARD.** The ledger's debt list,
-largest first:
+**THE 484 MISSING SELECTORS ARE STILL CONCENTRATED, AND THE CONCENTRATION HAS MOVED INWARD AGAIN.** The ledger's debt
+list, largest first:
 
 ```
-NSTextView 68   NSBrowser 64   NSResponder 57   NSWorkspace 49   NSMenuView 37
+NSTextView 52   NSBrowser 64   NSResponder 57   NSWorkspace 49   NSMenuView 37
 NSFont 35       NSText 31      NSView 28        NSControl 28     NSTableView 20
 NSDocument 19   NSWindow 18    NSSlider 18      NSSliderCell 17  NSDocumentController 8
 NSSavePanel 3
 ```
 
-Everything below `NSSliderCell` is five doors or fewer in a class that is otherwise complete. **`NSTextView` IS NOW THE
-ONLY CLASS WITH A SUBSYSTEM-SIZED DEBT** — its remaining 68 are three clusters (the container/insertion-point family, the
-text-checking family, and the link/services pair), described in §6.
+Everything below `NSSliderCell` is five doors or fewer in a class that is otherwise complete. **`NSTextView`'S DEBT HAS
+STOPPED BEING SUBSYSTEM-SIZED IN SHAPE**: 68 became 52 in §9, what went was the CONTAINER AND INSERTION-POINT family,
+and what is left is three clusters — the text-checking family (BLOCKED on `NSTextCheckingResult`/`NSOrthography`, which
+Foundation here has not got), the link/services pair, and the undo and smart-insert doors. `NSBrowser`'s 64 is now the
+largest single debt in the component, and it is the one the next slice should take.
 
 **THE 37 ABSENT CLASSES GROUP CLEANLY:**
 
@@ -199,14 +202,12 @@ comments to `.cmake`, `.sh` or Python files breaks the gates — that happened, 
 Ranked by reachable surface per unit of work, and the ranking now starts with the class this tree has and has not
 finished:
 
-1. **`NSTextView`'s remaining 68 — the CONTAINER AND INSERTION-POINT family first.** `-initWithFrame:textContainer:`,
-   `-textContainer`/`-setTextContainer:`/`-replaceTextContainer:`, `-textContainerInset`/`-setTextContainerInset:`,
-   `-textContainerOrigin`/`-invalidateTextContainerOrigin`, `-setConstrainedFrameSize:`, `-drawViewBackgroundInRect:`,
-   `-drawInsertionPointInRect:color:turnedOn:`, `-shouldDrawInsertionPoint`,
-   `-updateInsertionPointStateAndRestartTimer:`, `-insertionPointColor`/`-setInsertionPointColor:`,
-   `-setNeedsDisplayInRect:avoidAdditionalLayout:`, and `-characterIndexForInsertionAtPoint:`. **THE LAST ONE IS THE
-   KEY**: it needs the layout manager's point-to-glyph door, and adding that door retires the "a drop lands at the
-   insertion point" limit the clipboard slice recorded and gives the container family its arithmetic.
+1. **`NSTextView`'s remaining 52, and the biggest usable cluster in it is the SMART-INSERT pair plus the undo
+   bookkeeping.** `-smartInsertForString:replacingRange:beforeString:afterString:`, the three `-smart…Delete…` doors,
+   `-toggleSmartInsertDelete:` and its flag are self-contained string arithmetic over doors the base class already has;
+   `-allowsUndo`, `-breakUndoCoalescing` and `-isCoalescingUndo` need an undo manager that Foundation here may not have —
+   **MEASURE THAT FIRST** and refuse by name if it does not, rather than storing a flag nobody reads. `-didChangeText`
+   is one line and is only meaningful once an undo group exists.
 2. **The rest of `NSTextView`**: the LINK/SERVICES pair (`-clickedOnLink:atIndex:`, `-displaysLinkToolTips`,
    `-registerForServices`) which needs a link attribute constant; and the TEXT-CHECKING family (`-checkTextIn…`,
    `-enabledTextCheckingTypes`, `-handleTextCheckingResults:…`, the three automatic-detection toggles), which is BLOCKED
@@ -255,8 +256,11 @@ finished:
   than one range, so the single-selection shape stays the cheap one and every inherited door keeps working.
 * **THIS TREE'S STRINGS ARE BYTE SEQUENCES, NOT CHARACTER SEQUENCES** for non-ASCII (`HANDOFF-2.md` §4): the word and
   paragraph granularities use ASCII `isalnum` and `_`, and say so.
-* **THE SUITE IS 143 TESTS IN ABOUT 77 SECONDS, AND `ctest --test-dir build -j4` IS THE GATE.** The exit status is the
+* **THE SUITE IS 144 TESTS IN ABOUT 75 SECONDS, AND `ctest --test-dir build -j4` IS THE GATE.** The exit status is the
   witness, not the tail of the output.
+* **INSTALLING A VIEW AS A WINDOW'S CONTENT VIEW MAKES IT THE WINDOW'S FIRST RESPONDER**, so a text view handed back by
+  `-setContentView:` is already `_editing`. "There is no caret here" is a claim you can make only about a view whose
+  session you ended (`-resignFirstResponder`), not about a fresh one — this cost §9's slice two false failures.
 
 ---
 
@@ -274,3 +278,71 @@ session that lands a slice should:
    both are read by people who will never open this file.
 4. Leave §1–§7 above ALONE unless a slice changes a number in them; when it does, change that number and say in the new
    section that it moved. A handoff that quietly drifts is the thing these files exist to prevent.
+
+## 9. The text view's container, its margin and the drop — one coordinate space
+
+*Session of the seventh slice, picking §6's first item off the list above. Its commit is "AppKit: the text view's
+container, its margin, and the drop's own door"; tree clean; `ctest --test-dir build -j4` green at **144 tests in 75 s**
+with `appkit-api-census` re-pinned in the same commit. (The subject rather than the hash, because the file lives inside
+the commit and a hash cannot name its own.)*
+
+**WHAT LANDED.** Sixteen selectors, all of them `NSTextView`'s, in the family §6 ranked first:
+`-initWithFrame:textContainer:` (now the designated initialiser), `-setTextContainer:`, `-replaceTextContainer:`,
+`-textContainerInset`/`-setTextContainerInset:`, `-textContainerOrigin`/`-invalidateTextContainerOrigin`,
+`-setConstrainedFrameSize:`, `-drawViewBackgroundInRect:`, `-shouldDrawInsertionPoint`,
+`-drawInsertionPointInRect:color:turnedOn:`, `-insertionPointColor`/`-setInsertionPointColor:`,
+`-updateInsertionPointStateAndRestartTimer:`, `-setNeedsDisplayInRect:avoidAdditionalLayout:` and
+**`-characterIndexForInsertionAtPoint:`**. The last one is the point of the slice: the manager's point-to-glyph door was
+already there, so the drop's limit was a missing SUM, not a missing engine — `-performDragOperation:` now sets the
+insertion point from `-[NSDraggingInfo draggingLocation]` before it reads the pasteboard, and the "a drop lands at the
+insertion point" note in `NSTextView.h`, `PROVENANCE.md` §35 and `NSTextViewPasteboard.m` is retired in all three
+places rather than left to contradict the code.
+
+**THE ARITHMETIC THAT HAD TO MOVE WITH IT.** The view had been spelling one number twice: `-cg_xForIndex:` subtracted
+the container's line-fragment padding and every call site added `NS_TEXT_INSET` back, which agrees only while the two
+constants are equal. The helper now answers a VIEW x (origin + the manager's offset), the call sites stopped adding,
+`-cg_indexForPoint:`, `-cg_indexOnLine:atX:`, `-cg_clampBandX:toLine:`, the attachment hit box, the selection band, the
+composition rule, the find indicator and the spelling underline all take their origin from `-textContainerOrigin`
+instead of the module constant. **THE DEFAULT INSET IS (0, `NS_TEXT_INSET`) AND NOT APPLE'S (0, 0)** — a deviation
+written in the header, because every existing pixel of every document is measured down from the field's four-point air
+and a default of zero would have moved all of it to buy nothing.
+
+**THE NUMBERS MOVED, SO §1, §2, §6 AND §7 ABOVE CHANGED WITH THEM** (see §8's rule 4):
+
+```
+selectors       4005 -> 4021 of 4505   (missing 500 -> 484)
+methods-declared 4530 -> 4546
+NSTextView       118 -> 134 of 186     (debt 68 -> 52)
+tests            143 -> 144            (the new suite)
+```
+
+`classes`, `protocols`, `functions` and the refusal census (**292**) did NOT move: no class, protocol or function was
+added, and no refusal was added or retired — the drop's comment was the only refusal-adjacent thing and it was a limit,
+not a named refusal. `tests/api-10.6-census.txt` is re-pinned with its prose block recomputed from
+`./tools/api-ledger census` (the four summary lines now read 4021/484/4546) and its "offered/answered" history line
+extended to 4021.
+
+**TRAPS THIS SLICE PAID FOR, each one caught by its own probe.**
+
+* **A NEW CONTAINER WIDTH IS A NEW WRAP, AND THE MANAGER CANNOT SEE IT.** Nothing observes `NSTextContainer
+  -setContainerSize:`, so `-setConstrainedFrameSize:` with a narrow width laid the OLD lines out in the new container and
+  the probe counted one line where five were asked for. The size change and `-invalidateLayoutForCharacterRange:` have
+  to happen together — they are one private door (`-cg_sizeContainerToFrame`) now, which is also what `-setFrameSize:`
+  and `-setTextContainerInset:` call.
+* **A CONTAINER IS ON ONE MANAGER, AND `-addTextContainer:` APPENDS WITHOUT CHECKING.** Adopting a container this manager
+  already holds would list it twice and lay the text out twice, so the adoption asks `-layoutManager` first. The removal
+  path clears the old container's `-textView:` BEFORE it leaves the list, because a detached container that still names a
+  view is the shape that sends to freed memory.
+* **INSTALLING A VIEW AS A CONTENT VIEW MAKES IT THE FIRST RESPONDER.** §7 now carries this as a general trap; here it
+  produced two false failures — "no caret outside an editing session" was asked of a view that had a session, and "no
+  text with no container" was answered by a caret drawn at a zeroed x.
+* **A ONE-POINT BAR AT A FRACTIONAL x HAS NO DARK COLUMN.** The caret is drawn at the layout's own 19.344, so it straddles
+  two pixel columns and neither is the pure pen colour. The probe counts ink over both columns; asserting "dark" of one
+  would have been asserting that the layout landed on a whole number.
+* **A PROBE THAT MEASURES "WHERE THE INK BEGINS" MEASURES THE ANTIALIAS TOO.** The first stem's leftmost DARK column is 5
+  when the padding is 4, so the absolute assertion is a range and the DELTA is exact — 12 points for a 12-point margin,
+  which is the claim anyway.
+
+**WHERE THE NEXT HOUR GOES.** §6's ranking is rewritten above: `NSTextView`'s remaining 52 with the smart-insert and undo
+doors first (measuring whether Foundation here has an undo manager before storing a flag), then `NSBrowser` 64 — which is
+now the component's largest single debt and the one the Workspace's column view would feel.

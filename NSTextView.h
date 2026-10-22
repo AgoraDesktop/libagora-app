@@ -74,6 +74,7 @@
 @class NSRulerView;
 @class NSRulerMarker;
 @class NSEvent;
+@class NSColor;
 
 NS_ASSUME_NONNULL_BEGIN
 
@@ -103,6 +104,16 @@ enum {
 	NSTextStorage *_cg_textStorage;		/* RETAINED */
 	NSLayoutManager *_cg_layoutManager;	/* RETAINED (the store also retains it) */
 	NSTextContainer *_cg_textContainer;	/* RETAINED (the manager also retains it) */
+	/* **THE MARGIN AROUND THE CONTAINER, AND WHERE THE CONTAINER'S ORIGIN THEREFORE SITS.** These are two facts and one
+	 * of them is derived: the inset is the caller's and the origin is the point the container's (0,0) occupies in this
+	 * VIEW's coordinates, which in a flipped view is the inset itself. The origin is CACHED rather than recomputed so
+	 * that `-invalidateTextContainerOrigin` has something to invalidate — see that door's note. */
+	NSSize _cg_textContainerInset;		/* the view's margin around the container, in points */
+	NSPoint _cg_textContainerOrigin;		/* CACHED: the container's origin in this view's coordinates */
+	BOOL _cg_originValid;
+	/* **AND THE COLOUR THE CARET IS DRAWN IN.** `nil` answers the control text colour, which is Apple's default for a
+	 * programmatically made view; a caller that sets one gets it read where the caret is filled. */
+	NSColor *_cg_insertionPointColor;	/* RETAINED, or nil for the control text colour */
 	/* **AND WHETHER THIS VIEW IS TALL ENOUGH FOR ITS OWN LAYOUT.** Apple's default for a text view is YES — one inside
 	 * a scroll view grows and shrinks with its text — and a caller that gave the view a frame on purpose says NO. */
 	BOOL _cg_verticallyResizable;
@@ -233,6 +244,67 @@ enum {
 - (void)setTextStorage:(NSTextStorage *)storage;
 - (nullable NSLayoutManager *)layoutManager;
 - (nullable NSTextContainer *)textContainer;
+
+/* ==================================================================================================================
+ * THE CONTAINER, ITS INSET, ITS ORIGIN AND THE INSERTION POINT.
+ *
+ * **A TEXT VIEW'S CONTAINER IS ITS WIDTH.** That is the class's whole layout contract in one sentence: `-setFrameSize:`
+ * carries the frame's width into the container (less the two sides of the inset), the manager wraps to it, and the
+ * view's height is then the layout's answer. So the four doors below are not decoration — they are the way a view is
+ * put together with a container a caller built, moved to another one, or given margins.
+ *
+ * **`-setTextContainer:` SIZES THE CONTAINER AND `-replaceTextContainer:` DOES NOT**, which is the one difference
+ * between the two doors and Apple's own: the first is the view adopting a container as ITS container (so the view's
+ * width reaches it at once), the second is the text system being re-pointed at a different container WITHOUT the
+ * view's geometry following — a measurement a caller does before it settles on a width. Both set the container's
+ * `-textView:` to this view, and both leave the previous container detached from the manager's list.
+ *
+ * **`-textContainerInset` IS A MARGIN AND THE CONTAINER'S `-lineFragmentPadding` IS AIR.** Apple keeps them apart and
+ * so does this tier: the inset moves the container's ORIGIN inside the view, the padding moves the first glyph inside
+ * the container. **THE DEFAULT HERE IS (0, `NS_TEXT_INSET`) AND THAT IS A STATED DEVIATION FROM APPLE'S (0, 0)** —
+ * this tier's text view has always measured its first line down from the field's own four-point inset, every drawing,
+ * hit-test and caret in the class is written in those coordinates, and a default of zero would move every pixel of
+ * every document up by four points. The width defaults to zero because the left air is the padding's, which is where
+ * it has always come from; a caller that wants a margin on both sides sets both numbers.
+ *
+ * **THE CARET IS DRAWN THROUGH A DOOR, NOT IN `-drawRect:`.** `-shouldDrawInsertionPoint` decides, the view's own
+ * `-drawRect:` asks it, and `-drawInsertionPointInRect:color:turnedOn:` does the filling — which is why a caller that
+ * changes `-insertionPointColor` sees the change: the drawing reads it.
+ * ================================================================================================================ */
+
+/* Apple's designated initialiser, and the one that takes a container built somewhere else. `nil` builds the trio's own
+ * — the same one `-initWithFrame:` builds — so a subclass overriding this door alone still gets a working view. */
+- (instancetype)initWithFrame:(NSRect)frameRect textContainer:(nullable NSTextContainer *)container;
+- (void)setTextContainer:(nullable NSTextContainer *)container;
+- (void)replaceTextContainer:(nullable NSTextContainer *)newContainer;
+- (NSSize)textContainerInset;
+- (void)setTextContainerInset:(NSSize)inset;
+
+/* Where the container's origin sits in this view, and the door that says "recompute it". */
+- (NSPoint)textContainerOrigin;
+- (void)invalidateTextContainerOrigin;
+
+/* **THE FRAME A WRAPPING VIEW WILL ACCEPT.** The width is the caller's; the HEIGHT may not be smaller than the layout
+ * needs, which is the constraint — so a caller asking for a frame too short for its text gets the taller frame back. */
+- (void)setConstrainedFrameSize:(NSSize)desiredSize;
+
+/* The backdrop, drawn from `-drawRect:` before the selection and the glyphs. */
+- (void)drawViewBackgroundInRect:(NSRect)rect;
+
+/* The caret: whether it is wanted, how it is filled, and the two doors a drawing pass and a state change go through. */
+- (BOOL)shouldDrawInsertionPoint;
+- (void)drawInsertionPointInRect:(NSRect)rect color:(NSColor *)color turnedOn:(BOOL)turnedOn;
+- (nullable NSColor *)insertionPointColor;
+- (void)setInsertionPointColor:(nullable NSColor *)color;
+- (void)updateInsertionPointStateAndRestartTimer:(BOOL)flag;
+
+/* **A REDRAW THAT MUST NOT RE-LAY-OUT.** A caller marking a small rect dirty can say so here; this tier's drawing pass
+ * does not lay out at all (edits and width changes do), so the flag has nothing to suppress and the door says why. */
+- (void)setNeedsDisplayInRect:(NSRect)invalidRect avoidAdditionalLayout:(BOOL)flag;
+
+/* **THE DROP'S ARITHMETIC, AND THE INVERSE OF THE CARET'S RECT** — which character an insertion at a point in THIS
+ * view's coordinates would land before. `NSNotFound` only when there is no layout to ask. */
+- (NSUInteger)characterIndexForInsertionAtPoint:(NSPoint)point;
 
 /* ---- THE MODEL: A LINE IS A `\n`-TERMINATED RUN, AND NONE OF THIS DEPENDS ON THE VIEW'S WIDTH ---------------- */
 
@@ -449,9 +521,10 @@ enum {
  * RICHEST type the board has and falls back to the string. The two type lists are the view's declaration of what it can
  * read and write, and `-acceptableDragTypes` is the same list for a drop.
  *
- * **AND A DROP LANDS AT THE INSERTION POINT.** Mapping a dragged point to a character index needs the layout manager's
- * point-to-glyph door, which this tier does not have — so `-performDragOperation:` inserts at the selection and says so,
- * rather than pretending to compute a position it cannot.
+ * **AND A DROP LANDS WHERE IT WAS DROPPED.** `-characterIndexForInsertionAtPoint:` is the mapping the earlier slice
+ * said was missing: the manager's point-to-glyph door exists, the view converts the drop's point into the container's
+ * coordinates through `-textContainerOrigin`, and the drop sets the selection there before it reads the pasteboard —
+ * so a drop and a paste differ in exactly one thing, which is where the text goes.
  * ================================================================================================================ */
 
 - (NSArray *)readablePasteboardTypes;

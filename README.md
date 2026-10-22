@@ -2272,6 +2272,39 @@ the general pasteboard with the run's font intact, the plain and rich commands t
 cut, the paragraph-copy rule, and the drag source's image, registration and operation — with the drop side left to the
 drag suite that can build a session.
 
+### The text view's container, its margin, and the drop that lands where it was dropped
+
+**A TEXT VIEW'S CONTAINER IS ITS WIDTH**, and until this slice the view had no way to say so to a container a caller
+built. `-initWithFrame:textContainer:` is now the designated initialiser and adopts a container (the view's width
+reaches it, its `-textView:` names the view, the manager lays it out once); `-setTextContainer:` moves the trio to
+another one and sizes it; `-replaceTextContainer:` re-points the text system **without** the geometry following, which
+is the one difference between the two doors and Apple's own distinction. `nil` is allowed and leaves the view with no
+container — no text drawn, and the insertion door answering `NSNotFound` — rather than with a dead one.
+
+**AND THE MARGIN AND THE HIT TEST ARE ONE COORDINATE SPACE.** `-textContainerInset` is the margin around the container
+and `-textContainerOrigin` is where the container's origin sits in the view; every drawing, caret and hit test below
+reads the origin rather than the module's constant. The default is **(0, `NS_TEXT_INSET`), a stated deviation from
+Apple's (0, 0)** — this class's pixels were all measured down from the field's own four-point air — and the width
+defaults to zero because the left air is the container's line-fragment padding. `-characterIndexForInsertionAtPoint:`
+is the inverse of the caret's rect, and it is what the clipboard slice said was missing: **`-performDragOperation:` now
+sets the insertion point from the drag's location before it reads the pasteboard**, so a drop lands where it was
+dropped instead of where the caret happened to be.
+
+**THE CARET AND THE BACKDROP BECAME DOORS WITH READERS.** `-drawRect:` asks `-shouldDrawInsertionPoint` and calls
+`-drawInsertionPointInRect:color:turnedOn:`, so `-insertionPointColor` is read where the pen is chosen; the fill moved
+into `-drawViewBackgroundInRect:`, the one part of a text view's drawing a subclass replaces.
+`-setNeedsDisplayInRect:avoidAdditionalLayout:` and `-updateInsertionPointStateAndRestartTimer:` say what they do — the
+first forwards because nothing in this drawing pass lays out, and the second dirties the caret's own rect because there
+is no blink timer to restart. `-setConstrainedFrameSize:` is a floor under the height and still decides the wrap.
+
+`tests/text_view_container.m` asserts it in 51 checks: the defaults and the deviation, ink moving by exactly the margin
+set (12 points right, 16 down, measured in a bitmap), a character's box answered at both ends in two different margins,
+the two edges, the caret in the control colour and then in green with the no-session negative control, the two doors no
+pixel can witness (through a recording subclass), the four container doors including `nil`, and the constrained frame.
+One trap is recorded there: **a new container width is a new wrap and the manager cannot see it** — nothing observes a
+container's size, so the size change and the invalidation have to happen together, or the old lines are laid out in the
+new container.
+
 ### Still absent, and why
 
 **NINE THINGS THAT USED TO BE ON THIS LIST ARE NOT ANY MORE, AND THE LIST IS CORRECTED RATHER THAN QUIETLY SHRUNK:**
