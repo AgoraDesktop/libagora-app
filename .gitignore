@@ -20,3 +20,7 @@
 # mechanism is documented in the README and the MIT fixture used by the tests lives in tests/fixtures/chrome.
 /themes/
 /resources/
+
+# Python bytecode, which the ledger tools must never be committed with.
+__pycache__/
+*.pyc
