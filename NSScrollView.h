@@ -18,10 +18,10 @@
  * geometry. That is why a knob dragged to the end and a document scrolled by code end in the same place: both are
  * read back from the clip view rather than remembered anywhere else.
  *
- * WHAT IS NOT HERE, STATED RATHER THAN STUBBED: the ruler (`NSRulerView` and the `-horizontalRulerView` family) and
- * the header view, because neither class exists in this tier; the ruler is the one part `NSClipView.h` names when it
- * says a scroll view is "the frame, the scrollers and the ruler". `-scrollWheel:` is not declared either: the seam
- * reports no wheel axis yet, so a door taking a wheel event would have nothing to read.
+ * WHAT IS NOT HERE, STATED RATHER THAN STUBBED: the header view is not an Apple door and lives in the private seam the
+ * table uses, and `-scrollWheel:` is not declared either: the seam reports no wheel axis yet, so a door taking a wheel
+ * event would have nothing to read. THE RULERS ARE HERE — `NSRulerView` arrived with the text slice, and the scroll view
+ * tiles the two strips it names and keeps their bounds on the document, which is the whole of the relationship.
  */
 #ifndef APPKIT_NSSCROLLVIEW_H
 #define APPKIT_NSSCROLLVIEW_H
@@ -34,6 +34,7 @@ NS_ASSUME_NONNULL_BEGIN
 @class NSClipView;
 @class NSScroller;
 @class NSEvent;
+@class NSRulerView;
 
 @interface NSScrollView : NSView <NSSecureCoding>
 {
@@ -48,6 +49,18 @@ NS_ASSUME_NONNULL_BEGIN
 	NSView *_headerView;
 	NSScroller *_vScroller;
 	NSScroller *_hScroller;
+	/* **THE TWO RULERS, BORROWED LIKE THE HEADER.** `-addSubview:` retains them, and a second owning pointer would be a
+	 * second owner of a thing the view hierarchy already keeps; the flag is whether they are in the strip at all, which
+	 * is a different question from whether they exist. */
+	NSRulerView *_vRuler;
+	NSRulerView *_hRuler;
+	/* **"HAS" AND "SHOWS" ARE TWO FLAGS AND THE VIEWS ARE A THIRD THING.** Apple's `-verticalRulerView` CREATES the
+	 * ruler on demand when the scroll view has been told it has one, so what a caller sets is an INTENTION and what
+	 * `-tile` builds is the object; a ruler that exists while hidden keeps its markers, which is the whole reason
+	 * visibility is not the same question. */
+	BOOL _wantsVerticalRuler;
+	BOOL _wantsHorizontalRuler;
+	BOOL _rulersVisible;
 	NSBorderType _borderType;
 	NSColor *_backgroundColor;	/* RETAINED: this class's own, not a subview's */
 	BOOL _drawsBackground;
@@ -125,6 +138,27 @@ NS_ASSUME_NONNULL_BEGIN
 - (void)setLineScroll:(CGFloat)aFloat;
 - (CGFloat)pageScroll;
 - (void)setPageScroll:(CGFloat)aFloat;
+
+/* **THE RULERS, WHICH ARE THE THIRD KIND OF STRIP A SCROLL VIEW CAN WEAR.** `-hasVerticalRuler` says whether one EXISTS,
+ * `-setHasVerticalRuler:` creates or removes it, and `-rulersVisible` says whether the ones that exist are SHOWING —
+ * which is the era's split and the reason hiding a ruler does not throw away its markers.
+ *
+ * `+rulerViewClass`/`+setRulerViewClass:` ARE CLASS METHODS, as Apple's are: they name the class a scroll view
+ * instantiates when a caller asks for a ruler without handing one over, so a subclass with its own ruler gets it
+ * everywhere without each scroll view being configured. */
++ (Class)rulerViewClass;
++ (void)setRulerViewClass:(Class)aClass;
+
+- (BOOL)hasVerticalRuler;
+- (void)setHasVerticalRuler:(BOOL)flag;
+- (BOOL)hasHorizontalRuler;
+- (void)setHasHorizontalRuler:(BOOL)flag;
+- (nullable NSRulerView *)verticalRulerView;
+- (void)setVerticalRulerView:(nullable NSRulerView *)aRulerView;
+- (nullable NSRulerView *)horizontalRulerView;
+- (void)setHorizontalRulerView:(nullable NSRulerView *)aRulerView;
+- (BOOL)rulersVisible;
+- (void)setRulersVisible:(BOOL)flag;
 
 /* **THE LOOP'S TWO HALVES, AS PUBLIC DOORS.** `-reflectScrolledClipView:` is what the clip view calls when it has
  * moved (the default `NSView` answer does nothing); `-scrollClipView:toPoint:` is what the scroller's action calls to

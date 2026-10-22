@@ -1054,3 +1054,13 @@ target_link_libraries(find_actions PRIVATE App)
 
 add_test(NAME appkit-find-actions COMMAND find_actions)
 set_tests_properties(appkit-find-actions PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
+
+# **THE RULER, WHICH IS GEOMETRY RATHER THAN A SUBSYSTEM.** The claims are the four the class makes: the thickness sum
+# the scroll view sizes by, the marker rectangle's orientation arithmetic, every list change going through the client's
+# questions, and the hash marks being the UNIT's arithmetic — asserted by finding the tick row and checking that its ink
+# lands on multiples of five, then again after the origin moves by three.
+add_executable(ruler_view ruler_view.m)
+target_link_libraries(ruler_view PRIVATE App)
+
+add_test(NAME appkit-ruler-view COMMAND ruler_view)
+set_tests_properties(appkit-ruler-view PROPERTIES ENVIRONMENT "${_agora_app_test_env}")

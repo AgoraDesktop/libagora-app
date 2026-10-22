@@ -685,7 +685,25 @@ the compositor is really gone.
   and the child clip is the child's FRAME region rather than its bounds rect — which was the same value only while the
   origin was zero. MEASURED: a mark at a document's own y 100..120 draws at 110 with the clip view at the top and at
   10 after a scroll of 100, in one run, through `-displayRect:`.
-- **`ctest`: 82 of 82 passed** (the keyboard and the seam, the AppKit and its input path, the controls and their
+- **And the strip that measures the document** (`ctest`, offscreen): `NSRulerView` and `NSRulerMarker` are here, and
+  `NSScrollView` wears them. The ruler does not scroll — it moves its BOUNDS ORIGIN onto the document, which the scroll
+  view keeps equal to the clip view's for the ruler's own axis, so a mark drawn at document coordinate 300 lands under
+  the character at 300. Both orientations are FLIPPED (a stated deviation from Apple, whose vertical ruler is not), so
+  a marker location is a coordinate in the client's own direction. The thickness is one sum the three classes agree on
+  (`ruleThickness` + the two reserves), which is what `-tile` takes off the content's edge; the corner square belongs
+  to the vertical ruler. A marker is an image at a location plus an origin across the ruler, and its
+  `-thicknessRequiredInRuler` is its HEIGHT for a horizontal ruler and its WIDTH for a vertical one. Every change to
+  the marker list goes through the client view's informal protocol (`shouldAdd`/`willAdd`/`didAdd`, the move trio, the
+  remove pair, `handleMouseDown:`) and a refusal is honoured; the DRAG is real and runs from the ruler's own event
+  stream, absolutely from where the pointer grabbed the marker, with one `didMove` on the release rather than one per
+  pixel. The hash marks are the UNIT's arithmetic: four units are built in, `+registerUnitWithName:…` adds a fifth,
+  an unregistered name is REFUSED BY NAME rather than accepted and drawn as nothing, and `-originOffset` moves the whole
+  ladder. `tests/ruler_view.m` checks all four claims and finds the tick row by counting, then asserts its ink lands on
+  multiples of five and lands on multiples of five plus three after the origin moves — a claim about the ruler rather
+  than about the sampler's row order. `NSRulerMarker -trackMouse:adding:` is the one refusal: the modal loop `NSCell`
+  already declines to build.
+
+- **`ctest`: 115 of 115 passed** (the keyboard and the seam, the AppKit and its input path, the controls and their
   metrics, the field control and its cell and its bezel and its placeholder and what it may hold, the text path and its
   word granularity and the multi-line view and its wrapping and its scrolling and its READING OF THE STORE, the STORE
   the rich-text slice is built on and the REGION it is laid out in and the WEB that ties the three together and the
@@ -695,7 +713,7 @@ the compositor is really gone.
   whose dead key composes with the next keystroke and the CANDIDATE LIST a variants method shows under the caret and the
   BASE DIRECTION that decides what natural alignment means,
   what a drag costs, the resize by edge, the tracking engine, the clip view and the scroller and the scroll view and the
-  drawn offset, the chrome and what its buttons do, the chrome theme, the menus and activation).
+  drawn offset and the ruler it can wear, the chrome and what its buttons do, the chrome theme, the menus and activation).
 - **And the desktop's own text is SUB-PIXEL ANTIALIASED**, which is the AppKit's half of a renderer change in
   CoreGraphics: a window's surface is OPAQUE (`kCGImageAlphaNoneSkipFirst`), and the destination's opacity is
   exactly what decides whether a glyph is rasterised in colour. MEASURED on the live session: the window title's

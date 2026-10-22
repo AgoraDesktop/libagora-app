@@ -13,6 +13,7 @@
 #import <AppKit/NSScrollView.h>
 #import <AppKit/NSClipView.h>
 #import <AppKit/NSScroller.h>
+#import <AppKit/NSRulerView.h>
 #import <AppKit/NSBezierPath.h>
 #import <AppKit/NSGraphicsContext.h>
 #import <Foundation/NSGeometry.h>
@@ -54,6 +55,16 @@ static NSString * const AGCoderScrollDrawsBackgroundKey = @"drawsBackground";
 static NSString * const AGCoderScrollAutohideKey = @"autohidesScrollers";
 static NSString * const AGCoderScrollLineKey = @"lineScroll";
 static NSString * const AGCoderScrollPageKey = @"pageScroll";
+static NSString * const AGCoderScrollVRulerKey = @"verticalRuler";
+static NSString * const AGCoderScrollHRulerKey = @"horizontalRuler";
+static NSString * const AGCoderScrollRulersVisibleKey = @"rulersVisible";
+static NSString * const AGCoderScrollWantsVRulerKey = @"wantsVerticalRuler";
+static NSString * const AGCoderScrollWantsHRulerKey = @"wantsHorizontalRuler";
+
+/* **THE CLASS A SCROLL VIEW INSTANTIATES FOR A RULER IT WAS NOT HANDED.** One per process, as Apple's is, and
+ * `NSRulerView` itself is the default — a caller with a subclass (a ruler that knows about its own document) installs it
+ * once and every scroll view built afterwards gets it. */
+static Class gRulerViewClass = Nil;
 
 - (void)encodeWithCoder:(NSCoder *)aCoder
 {
@@ -68,6 +79,11 @@ static NSString * const AGCoderScrollPageKey = @"pageScroll";
 	[aCoder encodeBool:_autohidesScrollers forKey:AGCoderScrollAutohideKey];
 	[aCoder encodeDouble:(double)_lineScroll forKey:AGCoderScrollLineKey];
 	[aCoder encodeDouble:(double)_pageScroll forKey:AGCoderScrollPageKey];
+	[aCoder encodeObject:_vRuler forKey:AGCoderScrollVRulerKey];
+	[aCoder encodeObject:_hRuler forKey:AGCoderScrollHRulerKey];
+	[aCoder encodeBool:_rulersVisible forKey:AGCoderScrollRulersVisibleKey];
+	[aCoder encodeBool:_wantsVerticalRuler forKey:AGCoderScrollWantsVRulerKey];
+	[aCoder encodeBool:_wantsHorizontalRuler forKey:AGCoderScrollWantsHRulerKey];
 }
 
 - (instancetype)initWithCoder:(NSCoder *)aDecoder
@@ -103,12 +119,38 @@ static NSString * const AGCoderScrollPageKey = @"pageScroll";
 	if ([aDecoder containsValueForKey:AGCoderScrollPageKey]) {
 		_pageScroll = [aDecoder decodeDoubleForKey:AGCoderScrollPageKey];
 	}
+	if ([aDecoder containsValueForKey:AGCoderScrollWantsVRulerKey]) {
+		_wantsVerticalRuler = [aDecoder decodeBoolForKey:AGCoderScrollWantsVRulerKey];
+	}
+	if ([aDecoder containsValueForKey:AGCoderScrollWantsHRulerKey]) {
+		_wantsHorizontalRuler = [aDecoder decodeBoolForKey:AGCoderScrollWantsHRulerKey];
+	}
 	if ([aDecoder containsValueForKey:AGCoderScrollContentViewKey]) {
 		id clip = [aDecoder decodeObjectForKey:AGCoderScrollContentViewKey];
 
 		if ([clip isKindOfClass:[NSClipView class]]) {
 			[self setContentView:clip];
 		}
+	}
+	/* **THE RULERS COME BACK THROUGH THEIR OWN DOORS, WHICH IS WHAT RE-ESTABLISHES THE RELATIONSHIP.** Decoding the view
+	 * alone would give a ruler with no scroll view, no orientation and no client — three nils a caller would have to
+	 * repair by hand. */
+	if ([aDecoder containsValueForKey:AGCoderScrollVRulerKey]) {
+		id ruler = [aDecoder decodeObjectForKey:AGCoderScrollVRulerKey];
+
+		if ([ruler isKindOfClass:[NSRulerView class]]) {
+			[self setVerticalRulerView:ruler];
+		}
+	}
+	if ([aDecoder containsValueForKey:AGCoderScrollHRulerKey]) {
+		id ruler = [aDecoder decodeObjectForKey:AGCoderScrollHRulerKey];
+
+		if ([ruler isKindOfClass:[NSRulerView class]]) {
+			[self setHorizontalRulerView:ruler];
+		}
+	}
+	if ([aDecoder containsValueForKey:AGCoderScrollRulersVisibleKey]) {
+		[self setRulersVisible:[aDecoder decodeBoolForKey:AGCoderScrollRulersVisibleKey]];
 	}
 	return self;
 }
@@ -218,6 +260,11 @@ static NSString * const AGCoderScrollPageKey = @"pageScroll";
 - (void)setDocumentView:(NSView *)aView
 {
 	[_contentView setDocumentView:aView];
+	/* **THE RULERS MEASURE THE DOCUMENT, SO THEY ARE TOLD WHICH ONE IT IS.** A ruler's client is the thing its markers
+	 * sit beside; leaving the previous document there would make a tab stop land at an offset from a view that is no
+	 * longer on screen. */
+	[_vRuler setClientView:aView];
+	[_hRuler setClientView:aView];
 	/* AND THE BARS ARE TOLD AT ONCE, because a document that arrived may be shorter or longer than the last one and
 	 * the knob's size is the visible fraction of it. */
 	[self reflectScrolledClipView:_contentView];
@@ -332,6 +379,154 @@ static NSString * const AGCoderScrollPageKey = @"pageScroll";
 	[self tile];
 }
 
+/* ---- THE RULERS ------------------------------------------------------------------------------------------ */
+
++ (Class)rulerViewClass
+{
+	return (gRulerViewClass != Nil) ? gRulerViewClass : [NSRulerView class];
+}
+
++ (void)setRulerViewClass:(Class)aClass
+{
+	gRulerViewClass = (aClass != Nil) ? aClass : [NSRulerView class];
+}
+
+- (BOOL)hasVerticalRuler
+{
+	return _wantsVerticalRuler;
+}
+
+- (void)setHasVerticalRuler:(BOOL)flag
+{
+	BOOL value = flag ? YES : NO;
+
+	if (value == _wantsVerticalRuler) {
+		return;
+	}
+	_wantsVerticalRuler = value;
+	if (!value) {
+		[self setVerticalRulerView:nil];
+		return;
+	}
+	/* **BUILT ON DEMAND AND ONLY WHEN IT WOULD BE SEEN.** A hidden ruler that was never shown costs nothing to defer;
+	 * `-verticalRulerView` builds it the moment a caller asks, and `-setRulersVisible:YES` does the same. */
+	if (_rulersVisible) {
+		(void)[self verticalRulerView];
+	}
+	[self tile];
+}
+
+- (BOOL)hasHorizontalRuler
+{
+	return _wantsHorizontalRuler;
+}
+
+- (void)setHasHorizontalRuler:(BOOL)flag
+{
+	BOOL value = flag ? YES : NO;
+
+	if (value == _wantsHorizontalRuler) {
+		return;
+	}
+	_wantsHorizontalRuler = value;
+	if (!value) {
+		[self setHorizontalRulerView:nil];
+		return;
+	}
+	if (_rulersVisible) {
+		(void)[self horizontalRulerView];
+	}
+	[self tile];
+}
+
+- (NSRulerView *)verticalRulerView
+{
+	if (_vRuler == nil && _wantsVerticalRuler) {
+		NSRulerView *ruler = [[[[self class] rulerViewClass] alloc] initWithScrollView:self
+										orientation:NSVerticalRuler];
+
+		[self setVerticalRulerView:ruler];
+		[ruler release];
+	}
+	return _vRuler;
+}
+
+- (void)setVerticalRulerView:(NSRulerView *)aRulerView
+{
+	if (aRulerView == _vRuler) {
+		return;
+	}
+	[_vRuler removeFromSuperview];
+	_vRuler = aRulerView;
+	if (_vRuler != nil) {
+		_wantsVerticalRuler = YES;
+		[_vRuler setScrollView:self];
+		[_vRuler setOrientation:NSVerticalRuler];
+		[_vRuler setClientView:[self documentView]];
+		[_vRuler setHidden:!_rulersVisible];
+		[self addSubview:_vRuler];
+	} else {
+		_wantsVerticalRuler = NO;
+	}
+	[self tile];
+}
+
+- (NSRulerView *)horizontalRulerView
+{
+	if (_hRuler == nil && _wantsHorizontalRuler) {
+		NSRulerView *ruler = [[[[self class] rulerViewClass] alloc] initWithScrollView:self
+										orientation:NSHorizontalRuler];
+
+		[self setHorizontalRulerView:ruler];
+		[ruler release];
+	}
+	return _hRuler;
+}
+
+- (void)setHorizontalRulerView:(NSRulerView *)aRulerView
+{
+	if (aRulerView == _hRuler) {
+		return;
+	}
+	[_hRuler removeFromSuperview];
+	_hRuler = aRulerView;
+	if (_hRuler != nil) {
+		_wantsHorizontalRuler = YES;
+		[_hRuler setScrollView:self];
+		[_hRuler setOrientation:NSHorizontalRuler];
+		[_hRuler setClientView:[self documentView]];
+		[_hRuler setHidden:!_rulersVisible];
+		[self addSubview:_hRuler];
+	} else {
+		_wantsHorizontalRuler = NO;
+	}
+	[self tile];
+}
+
+- (BOOL)rulersVisible
+{
+	return _rulersVisible;
+}
+
+- (void)setRulersVisible:(BOOL)flag
+{
+	BOOL value = flag ? YES : NO;
+
+	if (value == _rulersVisible) {
+		return;
+	}
+	_rulersVisible = value;
+	/* **SHOWING CREATES WHAT THE SCROLL VIEW HAS BEEN TOLD IT HAS.** The two `-verticalRulerView`/`-horizontalRulerView`
+	 * calls are the creation path, so the flag and the object can never disagree about whether a ruler exists. */
+	if (value) {
+		(void)[self verticalRulerView];
+		(void)[self horizontalRulerView];
+	}
+	[_vRuler setHidden:!value];
+	[_hRuler setHidden:!value];
+	[self tile];
+}
+
 /* ---- THE LAYOUT ----------------------------------------------------------------------------------------- */
 
 /* **A FRAME CHANGE RE-TILES, WHICH IS WHAT MAKES A HEADER AND THE BARS FOLLOW A RESIZE.** `-tile` is the one layout
@@ -355,6 +550,11 @@ static NSString * const AGCoderScrollPageKey = @"pageScroll";
 	CGFloat vw = 0.0;
 	CGFloat hh = 0.0;
 	CGFloat headerHeight = 0.0;
+	/* **THE TWO RULER STRIPS, WHICH ARE PART OF THE LAYOUT AND NOT ONLY OF THE INK.** A visible ruler takes its whole
+	 * required thickness out of the content: the vertical one off the left, the horizontal one off the top. A HIDDEN
+	 * ruler takes nothing, which is what makes hiding one give the document its room back. */
+	CGFloat vrulerW = (_rulersVisible && _vRuler != nil) ? [_vRuler requiredThickness] : 0.0;
+	CGFloat hrulerH = (_rulersVisible && _hRuler != nil) ? [_hRuler requiredThickness] : 0.0;
 	CGFloat usedVW;
 	CGFloat usedHH;
 	NSRect content;
@@ -422,9 +622,9 @@ static NSString * const AGCoderScrollPageKey = @"pageScroll";
 	 * subtracted from the content's, so the content starts at the bottom and ends at the header's bottom — NOT at
 	 * the scroll view's top. The first version also ADDED the header's height to the content's origin, which put the
 	 * header above the scroll view's own frame and clipped it away. */
-	content = NSMakeRect(NSMinX(frame) + border, NSMinY(frame) + border + usedHH,
-			     NSWidth(frame) - 2.0 * border - usedVW,
-			     NSHeight(frame) - 2.0 * border - usedHH - headerHeight);
+	content = NSMakeRect(NSMinX(frame) + border + vrulerW, NSMinY(frame) + border + usedHH,
+			     NSWidth(frame) - 2.0 * border - usedVW - vrulerW,
+			     NSHeight(frame) - 2.0 * border - usedHH - headerHeight - hrulerH);
 	if (content.size.width < 0.0) {
 		content.size.width = 0.0;
 	}
@@ -432,6 +632,17 @@ static NSString * const AGCoderScrollPageKey = @"pageScroll";
 		content.size.height = 0.0;
 	}
 	[_contentView setFrame:content];
+	/* **THE CORNER SQUARE BELONGS TO THE VERTICAL RULER.** It runs the full height of the content area — including the
+	 * strip the horizontal ruler takes — so the two never overlap and there is no fourth view to draw the corner. The
+	 * horizontal ruler starts to the right of it, which is what puts a text ruler's zero in line with the text. */
+	if (_vRuler != nil) {
+		[_vRuler setFrame:NSMakeRect(NSMinX(frame) + border, NSMinY(frame) + border + usedHH,
+					     vrulerW, NSHeight(frame) - 2.0 * border - usedHH)];
+	}
+	if (_hRuler != nil) {
+		[_hRuler setFrame:NSMakeRect(NSMinX(frame) + border + vrulerW, NSMaxY(frame) - border - hrulerH,
+					     NSWidth(frame) - 2.0 * border - usedVW - vrulerW, hrulerH)];
+	}
 	if (_headerView != nil) {
 		NSRect header = NSMakeRect(NSMinX(content), NSMaxY(content), NSWidth(content), headerHeight);
 
@@ -482,6 +693,8 @@ static NSString * const AGCoderScrollPageKey = @"pageScroll";
 	CGFloat vw = wantV ? NSWidth([_vScroller frame]) : 0.0;
 	CGFloat hh = wantH ? NSHeight([_hScroller frame]) : 0.0;
 	CGFloat headerHeight = (_headerView != nil) ? NSHeight([_headerView frame]) : 0.0;
+	CGFloat vrulerW = (_rulersVisible && _vRuler != nil) ? [_vRuler requiredThickness] : 0.0;
+	CGFloat hrulerH = (_rulersVisible && _hRuler != nil) ? [_hRuler requiredThickness] : 0.0;
 	BOOL showV = wantV;
 	BOOL showH = wantH;
 	NSInteger pass;
@@ -500,8 +713,8 @@ static NSString * const AGCoderScrollPageKey = @"pageScroll";
 	showV = NO;
 	showH = NO;
 	for (pass = 0; pass < 3; pass++) {
-		CGFloat availW = NSWidth([self bounds]) - 2.0 * border - (showV ? vw : 0.0);
-		CGFloat availH = NSHeight([self bounds]) - 2.0 * border - (showH ? hh : 0.0) - headerHeight;
+		CGFloat availW = NSWidth([self bounds]) - 2.0 * border - (showV ? vw : 0.0) - vrulerW;
+		CGFloat availH = NSHeight([self bounds]) - 2.0 * border - (showH ? hh : 0.0) - headerHeight - hrulerH;
 		BOOL needV = wantV && docSize.height > availH;
 		BOOL needH = wantH && docSize.width > availW;
 
@@ -673,6 +886,24 @@ static NSString * const AGCoderScrollPageKey = @"pageScroll";
 
 		origin.x = [aClipView bounds].origin.x;
 		[_headerView setBoundsOrigin:origin];
+	}
+	/* **AND EACH RULER FOLLOWS THE OFFSET ITS OWN AXIS MEASURES.** The vertical ruler moves its window down the document
+	 * as the document scrolls up, and the horizontal one does the same with x; the OTHER coordinate is left alone
+	 * because a vertical ruler does not care where the page is horizontally. That is what makes a mark drawn at
+	 * document coordinate 300 appear under the character at 300. */
+	if (_vRuler != nil) {
+		NSPoint origin = [_vRuler bounds].origin;
+
+		origin.y = [aClipView bounds].origin.y;
+		[_vRuler setBoundsOrigin:origin];
+		[_vRuler invalidateHashMarks];
+	}
+	if (_hRuler != nil) {
+		NSPoint origin = [_hRuler bounds].origin;
+
+		origin.x = [aClipView bounds].origin.x;
+		[_hRuler setBoundsOrigin:origin];
+		[_hRuler invalidateHashMarks];
 	}
 	[self cg_syncScroller:_vScroller vertical:YES];
 	[self cg_syncScroller:_hScroller vertical:NO];
