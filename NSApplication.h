@@ -232,6 +232,11 @@ typedef NSUInteger NSApplicationPresentationOptions;
 	id _helpMenu;
 	/* NOT RETAINED, as Apple's is not: the door reports the event being processed. */
 	NSEvent *_cg_currentEvent;
+	/* **AND THE MENU THIS APPLICATION GAVE THE DOCK.** A tile's menu crosses to another process as a DESCRIPTION and
+	 * only its ids come back — so the tree those ids name has to be kept here, and it is RETAINED because the Dock
+	 * may take its time and the menu must outlive the answer that described it. Replaced on every ask; see
+	 * `-cg_dockMenu`. */
+	id _cg_dockMenu;
 }
 
 /* THE ONE APPLICATION OBJECT. Apple's is made on first ask and lives for the process; `-run` refuses to do
@@ -599,13 +604,19 @@ extern NSString *NSApplicationWillTerminateNotification;
 			  withSettings:(NSDictionary *)printSettings
 		      showPrintPanels:(BOOL)showPrintPanels;
 /* AND THE DOCK MENU, WHOSE RETURN TYPE IS `id` HERE AND `NSMenu` IN APPLE'S HEADER. Menus are stage D, and a
- * `@class NSMenu` forward would FLIP THE `class NSMenu` LEDGER ROW to shipped — a name-based ledger cannot tell
+ * `@class NSMenu` forward would FLIP the `class NSMenu` LEDGER ROW to shipped — a name-based ledger cannot tell
  * a forward declaration from a class, which is a trap this tree has already walked into once. So the type is
  * `id` and the reason is stated with it.
  *
- * LIKE THE PRINTING DOOR ABOVE, IT IS DECLARED AND NOT ASKED: there is no dock in this tier (see
- * `-requestUserAttention:` for the same absence said out loud), so a delegate may implement this and nothing
- * calls it. */
+ * **AND IT IS ASKED NOW.** It used to be declared and not asked, because "the dock" was an absence in this tier —
+ * and the Dock is still a separate program, not a part of the framework. What changed is that there is a way for the
+ * question to reach it across a connection: a shell component asks the application for the items of a tile's menu
+ * (`agora_window.dock_menu_requested`), this class puts the question to its delegate and KEEPS the answer, and
+ * `NSDockMenu` carries a description of it to the Dock and a chosen item's id back. See `NSDockMenu.h` for the two
+ * halves and the format, and `-cg_dockMenu` in the implementation for the question itself.
+ *
+ * WHAT THE DOCK DOES WITH IT IS THE DOCK'S: Apple's composes the application's items with its own above them, and
+ * Agora's Dock does the same — the answer here is the application's items ALONE. */
 - (nullable id)applicationDockMenu:(NSApplication *)sender;
 @end
 

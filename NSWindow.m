@@ -46,6 +46,8 @@
 #include <math.h>	/* sqrt — how far a two-point diagonal reaches past its centreline */
 
 #import "AppKitRefusal.h"
+#import "NSDockMenu.h"	/* the dock menu's description, which this window carries out for the application */
+#import "NSMenu.h"
 #import <CoreGraphics/CGBitmapContext.h>
 
 #import <AppKit/NSWindow.h>
@@ -202,6 +204,11 @@
 /* **AND THE ONE THAT IS NOT ABOUT THIS WINDOW AT ALL.** A shell's reopen ask arrives at a window because window ids
  * are the only names the two sides share, but the answer belongs to the application. */
 - (BOOL)cg_handleReopen;
+/* **AND THE TWO A DOCK TILE'S MENU ARRIVES THROUGH, which cross the same way and for the same reason.** The menu is
+ * the delegate's answer to `-applicationDockMenu:`, so the APPLICATION is what holds it — a window is only the address
+ * the question arrived at and the thing that has a connection to answer on. */
+- (nullable id)cg_dockMenu;
+- (void)cg_performDockMenuItem:(NSInteger)identifier;
 @end
 
 /* THE TITLE BAR'S HEIGHT, AND IT IS OURS. A titled window's FRAME is its content plus its chrome, and this
@@ -618,6 +625,34 @@ static void fn_ag_frame(void *context, uint32_t time_ms)
 	/* NOT `-cg_drawFrame`: a frame callback is an invitation, and a window with nothing new to draw must
 	 * decline it or the desktop becomes a busy loop. See `-cg_frameCallback`. */
 	[w cg_frameCallback];
+}
+
+/* ---- AND A DOCK TILE'S MENU, WHICH ARRIVES AT A WINDOW AND IS ANSWERED BY THE APPLICATION ------------- */
+
+/* **A SHELL IS ASKING FOR THIS APPLICATION'S DOCK MENU, AND A WINDOW IS ONLY THE ADDRESS.** The menu is the
+ * delegate's answer to `-applicationDockMenu:`, so the application builds it and keeps it — the ids that come back
+ * name rows in THAT tree — and this window's only part is carrying the description out on the connection it owns.
+ *
+ * **AN APPLICATION ALWAYS ANSWERS, EVEN WITH NOTHING TO SAY.** The Dock is holding a panel open for this answer, so
+ * no menu is the empty description and not silence; a client that never answered would leave the Dock waiting out its
+ * timeout for a right-click that could have been drawn immediately. */
+static void fn_dock_menu_request(void *context, AGWindow *window)
+{
+	NSMenu *menu = [[NSApplication sharedApplication] cg_dockMenu];
+	NSString *description = [NSDockMenu cg_descriptionForMenu:menu];
+
+	(void)context;
+	AGWindowSetDockMenu(window, description != nil ? [description UTF8String] : "");
+}
+
+/* **AND THE PERSON CHOSE ONE OF THE ROWS THIS APPLICATION PUBLISHED.** The id is the one the description gave it, so
+ * the application is what turns it back into an `NSMenuItem` and sends its action — which is why the seam says
+ * nothing about what a menu means. */
+static void fn_dock_menu_action(void *context, AGWindow *window, int item)
+{
+	(void)context;
+	(void)window;
+	[[NSApplication sharedApplication] cg_performDockMenuItem:(NSInteger)item];
 }
 
 @implementation NSWindow
@@ -1804,6 +1839,9 @@ static void fn_draw_chrome(CGContextRef c, NSWindow *w, NSRect content)
 	_cg_windowNumber = s_nextNumberOfWindow++;
 	AGWindowSetEventHandler(_agwindow, fn_ag_event, self);
 	AGWindowSetFrameHandler(_agwindow, fn_ag_frame, self);
+	/* **AND THE TWO DOORS OF A TILE'S MENU**, which are not events because one has no argument (a question) and the
+	 * other's is an ITEM rather than a position. */
+	AGWindowSetDockMenuHandlers(_agwindow, fn_dock_menu_request, fn_dock_menu_action, self);
 	/* **AND THE SERVER IS TOLD THE FRAME IT WAS MADE WITH.** `-initWithContentRect:` sets `_frame` DIRECTLY
 	 * rather than through `-setFrame:`, so a window that is never moved afterwards would never have told the
 	 * server where it is — MEASURED as a window at the origin however far from it the application had asked.

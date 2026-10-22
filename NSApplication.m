@@ -26,6 +26,7 @@
  * the arithmetic rather than like a missing import. */
 #import "NSMenu.h"
 #import "NSMenuItem.h"
+#import "NSDockMenu.h"	/* the ids a tile's menu crosses by, and the tree they name */
 #import "NSColor.h"
 
 #import <Foundation/NSThread.h>
@@ -250,6 +251,7 @@ BOOL NSApplicationLoad(void)
 {
 	[_windows release];
 	[_eventQueue release];
+	[_cg_dockMenu release];
 	[super dealloc];
 }
 
@@ -1389,6 +1391,66 @@ static double s_last_report;
 								hasVisibleWindows:hasVisibleWindows];
 	}
 	return NO;
+}
+
+/* ============================================================================================
+ * THE DOCK MENU: THE APPLICATION'S HALF OF A RIGHT-CLICK ON ITS TILE.
+ *
+ * **THE QUESTION IS APPLE'S, AND IT HAS BEEN DECLARED HERE FOR LONGER THAN THERE WAS A DOCK TO ASK IT.**
+ * `-applicationDockMenu:` is a delegate method in the 10.6 surface this tree follows, and until now nothing asked
+ * it: there was no Dock. There is one, so the question is put, and the answer is KEPT — because the menu has to
+ * cross to another process as a description and only its ids can come back, and an id needs a tree to name.
+ *
+ * **THE MENU IS REPLACED ON EVERY ASK, WHICH IS THE POINT OF ASKING AT ALL.** A dock menu is a picture of what the
+ * application can do at this moment, so asking again rebuilds it and the previous tree is released; a pick that
+ * arrives after a rebuild is looked up in the numbering the new answer published, and an item's action is sent to
+ * the target the application itself gave it.
+ * ============================================================================================ */
+- (NSMenu *)cg_dockMenu
+{
+	NSMenu *menu = nil;
+
+	if (_delegate != nil && [_delegate respondsToSelector:@selector(applicationDockMenu:)]) {
+		/* THE DELEGATE'S ANSWER IS TYPED `id` IN THE PROTOCOL — see the note there, which explains why a forward
+		 * declaration of NSMenu could not be used instead — so what came back is checked rather than assumed: an
+		 * answer that is not a menu is no menu. */
+		menu = [(id <NSApplicationDelegate>)_delegate applicationDockMenu:self];
+	}
+	if (![menu isKindOfClass:[NSMenu class]]) {
+		menu = nil;
+	}
+	/* **AND THE APPLICATION VALIDATES ITS OWN ITEMS, BECAUSE IT IS THE ONLY ONE THAT CAN.** A menu's enabling walk
+	 * asks each item's target `-validateMenuItem:` — and those targets are this process's objects, so the answer has
+	 * to be made HERE, before the menu is described. The Dock cannot re-run it: it will hold the same rows with a
+	 * target of its own, and re-validating there would enable every row whose id the Dock can send. */
+	[menu update];
+	[menu retain];
+	[_cg_dockMenu release];
+	_cg_dockMenu = menu;
+	return menu;
+}
+
+- (void)cg_performDockMenuItem:(NSInteger)identifier
+{
+	NSMenuItem *item = [NSDockMenu cg_itemForID:identifier inMenu:_cg_dockMenu];
+	NSMenu *owner;
+	NSInteger index;
+
+	/* **THE ID NAMES A ROW IN THE MENU THIS APPLICATION GAVE THE DOCK, AND NOTHING ELSE.** A stale id — the tree was
+	 * rebuilt between the answer and the pick — names no row, and doing nothing is the honest answer to a question
+	 * about an item that is no longer there. */
+	if (item == nil) {
+		return;
+	}
+	/* **AND THE DISPATCH IS THE MENU'S OWN, ONE LAYER DOWN.** Sending the item's action here would be a second copy
+	 * of the target/action pair — a named target or the responder chain, plus the two notifications — and the row may
+	 * live in a SUBMENU, so the item's OWNING MENU is what is asked to do it. This is the same call the Dock's
+	 * tracking loop would have made had the menu been drawn in this process. */
+	owner = [item menu];
+	index = (owner != nil) ? [owner indexOfItem:item] : NSNotFound;
+	if (index != NSNotFound) {
+		[owner performActionForItemAtIndex:index];
+	}
 }
 
 - (void)hide:(id)sender

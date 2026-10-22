@@ -918,3 +918,24 @@ add_executable(menu_placement menu_placement.m)
 target_link_libraries(menu_placement PRIVATE App)
 add_test(NAME appkit-menu-placement COMMAND menu_placement)
 set_tests_properties(appkit-menu-placement PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
+
+# **AND THE FORMAT A TILE'S MENU CROSSES BY.** The Dock is another process, so an application's dock menu travels as
+# a JSON description and comes back as ids: this asserts that the round trip is a FIXED POINT, that only the rows a
+# person can choose are numbered, that the numbering runs across submenus, and that an id finds its own row again.
+# No compositor and no window: the two conversions are pure NSMenu work, so this runs anywhere.
+add_executable(appkit_dock_menu appkit_dock_menu.m)
+target_link_libraries(appkit_dock_menu PRIVATE App)
+add_test(NAME appkit-dock-menu COMMAND appkit_dock_menu)
+set_tests_properties(appkit-dock-menu PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
+
+# **AND THE SAME ROUND TRIP AGAINST AGORA'S OWN SERVER**, which is where the two PROCESSES' worth of machinery meet:
+# the delegate's answer becomes a description, the description crosses `agora_shell` version 6, and a rebuilt `NSMenu`
+# comes back with a pick going home by an id. It needs a compositor that speaks that protocol, so it runs against
+# `window-server` and SKIPS (77) when there is none to run against.
+add_executable(dock_menu dock_menu.m)
+target_link_libraries(dock_menu PRIVATE App)
+add_test(NAME appkit-dock-menu-wire
+  COMMAND "${CMAKE_CURRENT_SOURCE_DIR}/run-dock-menu.sh"
+	  "$<TARGET_FILE:dock_menu>" "${AGORA_WINDOW_SERVER_BINARY}")
+set_tests_properties(appkit-dock-menu-wire PROPERTIES SKIP_RETURN_CODE 77
+  ENVIRONMENT "${_agora_app_test_env}")

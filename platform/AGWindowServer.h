@@ -358,6 +358,62 @@ void AGWindowRequestClose(AGWindowServer *server, unsigned int id);
  * `agora_shell` version 5 never answers, which is the silence every older door has. */
 void AGWindowReopen(AGWindowServer *server, unsigned int id);
 
+/* ============================================================================================ *
+ * A DOCK TILE'S MENU: A QUESTION, AN ANSWER, AND A CHOICE.
+ *                                                                                                *
+ * **THE ONE THING A SHELL NEEDS THAT IS NOT A WINDOW'S PROPERTY.** A Dock's right-click on a  *
+ * tile shows the items the APPLICATION offers for that tile, and the menu is the Dock's to     *
+ * draw: it sits at the Dock's edge, with the Dock's own items under the application's, and an   *
+ * application cannot draw in another application's window. So the answer travels — a           *
+ * DESCRIPTION of the application's items, produced by `-applicationDockMenu:` and carried as    *
+ * an opaque string — and a choice travels back by the id the application gave the item it       *
+ * published.
+ *                                                                                                *
+ * IT IS A ROUND TRIP AND NOT A CACHE, because a tile's menu is a picture of what the           *
+ * application can do AT THIS MOMENT ("Open Recent" changes with the documents) — the Mac's     *
+ * Dock asks its applications the same way, which is why `-applicationDockMenu:` is a method     *
+ * rather than a stored property. The APP asks and waits, bounded; the DOCK is what a caller     *
+ * of the two doors below is.
+ * ============================================================================================ */
+
+/* The answer: the application's identifier and its menu, in the AppKit's own format (see `NSDockMenu`). An empty
+ * string means "no dock menu" and is an ANSWER, not a failure. */
+typedef void (*AGDockMenuFunction)(void *context, const char *app_id, const char *menu);
+
+/* Tell this connection where an answer goes. One handler per connection because a client is one dock and a dock
+ * shows one menu at a time; a NULL handler turns the door off. */
+void AGWindowServerSetDockMenuHandler(AGWindowServer *server, AGDockMenuFunction function, void *context);
+
+/* **ASK `id`'S APPLICATION FOR ITS DOCK MENU.** The id is any window of that application from the window list —
+ * the frontmost one is the honest choice — and it is an address rather than a subject. Answers 1 when the ask was
+ * sent, 0 when the compositor cannot carry it (no `agora_shell`, or one older than version 6), in which case no
+ * answer will arrive. **ONE ASK AT A TIME PER CONNECTION**: asking again abandons the earlier question, because a
+ * dock has one menu open and a stale answer would be a menu nobody asked for. */
+int AGWindowRequestDockMenu(AGWindowServer *server, unsigned int id);
+
+/* Give up on the answer that has not come — a Dock that timed out. Harmless when there is nothing outstanding. */
+void AGWindowCancelDockMenu(AGWindowServer *server);
+
+/* **AND THE ROW THE PERSON PICKED, SENT HOME.** The id is the one the application gave the item in the description
+ * it published; the server forwards `agora_window.dock_menu_action` to the window named here and nothing more,
+ * because turning an id back into an item is the application's own object graph. `id` is the same window the ask
+ * named, so the application finds the menu where it left it. */
+void AGWindowActivateDockMenuItem(AGWindowServer *server, unsigned int id, int item);
+
+/* The two directions of the application's half, for one window: "a shell is asking for your menu" and "the person
+ * chose the item you gave this id". The second is what makes the first more than a picture: the AppKit finds the
+ * `NSMenuItem` it published and sends its action, which is what its own tracking loop would have done. Separately
+ * handled because neither is an `AGEvent` — one has no argument and the other's is an item, not a position. */
+typedef void (*AGDockMenuRequestFunction)(void *context, AGWindow *window);
+typedef void (*AGDockMenuActionFunction)(void *context, AGWindow *window, int item);
+void AGWindowSetDockMenuHandlers(AGWindow *window, AGDockMenuRequestFunction request,
+				 AGDockMenuActionFunction action, void *context);
+
+/* **AND THE ANSWER.** The description of this window's application's dock menu, or NULL/empty for "no items of my
+ * own" — which an application that is asked must say, because the Dock is holding a menu open for it and a
+ * question left unanswered is a timeout. A compositor that speaks no `agora_window` version 6 never hears it. */
+void AGWindowSetDockMenu(AGWindow *window, const char *menu);
+
 /* WHETHER THIS APPLICATION HAS THE KEYBOARD, and a door to be told when that changes. Zero when the connection is
  * NULL, which is the honest answer for "no server, no focus". */
 int AGWindowServerIsActive(AGWindowServer *server);

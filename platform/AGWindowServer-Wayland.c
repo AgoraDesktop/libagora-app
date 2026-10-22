@@ -170,6 +170,12 @@ struct AGWindow {
 	void *event_context;
 	AGFrameFunction frame_fn;
 	void *frame_context;
+	/* **AND THE TWO DOORS OF A DOCK TILE'S MENU, which are not `AGEvent`s**: one has no argument at all — it is a
+	 * question — and the other's is an ITEM rather than a position, so folding either into the event struct would
+	 * be a field every other window carried for one caller's sake. */
+	AGDockMenuRequestFunction dock_menu_request_fn;
+	AGDockMenuActionFunction dock_menu_action_fn;
+	void *dock_menu_context;
 
 	struct AGWindow *next;
 };
@@ -235,6 +241,12 @@ struct AGWindowServer {
 	AGWindowInfo list_rows[AG_WINDOW_LIST_MAX];
 	int list_count;
 	int list_in_snapshot;
+	/* **AND THE MENU A DOCK IS WAITING FOR.** One at a time, because a dock shows one menu at a time: the ask is
+	 * abandoned and replaced by a second one, and the answer destroys it. The handler is the caller's, and it runs
+	 * INSIDE the dispatch that delivered the answer, which is what lets a caller wait for it without a queue. */
+	struct agora_dock_menu *dock_menu;
+	AGDockMenuFunction dock_menu_fn;
+	void *dock_menu_context;
 
 	AGWindow *windows;
 	AGWindow *keyboard_focus;
@@ -1393,12 +1405,40 @@ static void agora_window_reopen(void *data, struct agora_window *window)
 	ag_window_deliver(w, &event);
 }
 
+/* **AND A SHELL ASKING FOR THIS APPLICATION'S DOCK MENU.** The answer is the application's — its delegate's
+ * `-applicationDockMenu:` — so this hands the question up and says nothing itself; `AGWindowSetDockMenu` is the way
+ * back. The AppKit answers from its own window-level handler, which is why the seam has no opinion here. */
+static void agora_window_dock_menu_requested(void *data, struct agora_window *window)
+{
+	AGWindow *w = data;
+
+	(void)window;
+	if (w->dock_menu_request_fn != NULL) {
+		w->dock_menu_request_fn(w->dock_menu_context, w);
+	}
+}
+
+/* **AND THE PERSON CHOSE ONE OF THE ITEMS IT PUBLISHED.** The id is the one the application gave the item when it
+ * answered, and turning it back into an object is the application's job for the same reason the menu was. */
+static void agora_window_dock_menu_action(void *data, struct agora_window *window, int32_t item)
+{
+	AGWindow *w = data;
+
+	(void)window;
+	if (w->dock_menu_action_fn != NULL) {
+		w->dock_menu_action_fn(w->dock_menu_context, w, (int)item);
+	}
+}
+
 static const struct agora_window_listener agora_window_listener = {
-	/* IN THE PROTOCOL'S OWN ORDER: `close`, `work_area_changed`, `pointer_global`, `reopen`. */
+	/* IN THE PROTOCOL'S OWN ORDER: `close`, `work_area_changed`, `pointer_global`, `reopen`,
+	 * `dock_menu_requested`, `dock_menu_action`. */
 	agora_window_close,
 	agora_window_work_area_changed,
 	agora_window_pointer_global,
 	agora_window_reopen,
+	agora_window_dock_menu_requested,
+	agora_window_dock_menu_action,
 };
 
 /* ============================================================================================ *
@@ -1514,6 +1554,118 @@ void AGWindowReopen(AGWindowServer *server, unsigned int id)
 	wl_display_flush(server->display);
 }
 
+/* ============================================================================================ *
+ * A DOCK TILE'S MENU, FROM THE ASKING SIDE.
+ *                                                                                                *
+ * **THE ANSWER IS DELIVERED INSIDE THE DISPATCH THAT BROUGHT IT**, and the proxy is destroyed     *
+ * before the handler runs — so a caller can wait for it with a plain loop that dispatches until   *
+ * its own flag flips, which is what a right-click does: it cannot return to a run loop it is not *
+ * in. The alternative, a queue of answers, would be a buffer for a question that is already       *
+ * answered by the time the next frame is drawn.
+ * ============================================================================================ */
+static void dock_menu_menu(void *data, struct agora_dock_menu *object, const char *app_id, const char *menu)
+{
+	AGWindowServer *server = data;
+	AGDockMenuFunction fn = server->dock_menu_fn;
+	void *context = server->dock_menu_context;
+
+	/* THE QUESTION IS OVER, WHATEVER THE CALLER DOES WITH THE ANSWER: the proxy goes now, so a second dispatch cannot
+	 * deliver a second menu and a caller that forgets to cancel leaves nothing outstanding. */
+	if (server->dock_menu == object) {
+		agora_dock_menu_destroy(object);
+		server->dock_menu = NULL;
+	}
+	if (fn != NULL) {
+		fn(context, app_id != NULL ? app_id : "", menu != NULL ? menu : "");
+	}
+}
+
+static const struct agora_dock_menu_listener dock_menu_listener = {
+	dock_menu_menu,
+};
+
+void AGWindowServerSetDockMenuHandler(AGWindowServer *server, AGDockMenuFunction function, void *context)
+{
+	if (server == NULL) {
+		return;
+	}
+	server->dock_menu_fn = function;
+	server->dock_menu_context = context;
+}
+
+int AGWindowRequestDockMenu(AGWindowServer *server, unsigned int id)
+{
+	struct agora_dock_menu *menu;
+
+	if (server == NULL || server->shell == NULL) {
+		return 0;
+	}
+	/* **THE SHELL'S VERSION IS THE CAP, SO ASK FOR THE DOOR THAT EXISTS.** `get_dock_menu` is version 6; a
+	 * compositor that speaks an older Agora protocol never answers, which is the silence every other door this seam
+	 * lacks has — and it is reported here rather than waited out, because a right-click with nothing to wait for
+	 * should show the Dock's own items now. */
+	if (wl_proxy_get_version((struct wl_proxy *)server->shell) < 6) {
+		return 0;
+	}
+	/* ONE QUESTION AT A TIME: a dock has one menu open, so an earlier ask is abandoned rather than queued. */
+	AGWindowCancelDockMenu(server);
+	menu = agora_shell_get_dock_menu(server->shell, id);
+	if (menu == NULL) {
+		return 0;
+	}
+	server->dock_menu = menu;
+	agora_dock_menu_add_listener(menu, &dock_menu_listener, server);
+	wl_display_flush(server->display);
+	return 1;
+}
+
+void AGWindowCancelDockMenu(AGWindowServer *server)
+{
+	if (server == NULL || server->dock_menu == NULL) {
+		return;
+	}
+	/* A DESTRUCTOR, AND THE SERVER FORGETS THE QUESTION WITH IT — so a timeout costs one round trip's worth of
+	 * server state and nothing else. */
+	agora_dock_menu_destroy(server->dock_menu);
+	server->dock_menu = NULL;
+	wl_display_flush(server->display);
+}
+
+void AGWindowActivateDockMenuItem(AGWindowServer *server, unsigned int id, int item)
+{
+	if (server == NULL || server->shell == NULL) {
+		return;
+	}
+	if (wl_proxy_get_version((struct wl_proxy *)server->shell) < 6) {
+		return;
+	}
+	agora_shell_dock_menu_action(server->shell, id, (int32_t)item);
+	wl_display_flush(server->display);
+}
+
+void AGWindowSetDockMenuHandlers(AGWindow *window, AGDockMenuRequestFunction request,
+				 AGDockMenuActionFunction action, void *context)
+{
+	if (window == NULL) {
+		return;
+	}
+	window->dock_menu_request_fn = request;
+	window->dock_menu_action_fn = action;
+	window->dock_menu_context = context;
+}
+
+void AGWindowSetDockMenu(AGWindow *window, const char *menu)
+{
+	if (window == NULL || window->agora == NULL) {
+		return;
+	}
+	if (wl_proxy_get_version((struct wl_proxy *)window->agora) < 6) {
+		return;
+	}
+	agora_window_set_dock_menu(window->agora, menu != NULL ? menu : "");
+	wl_display_flush(window->server->display);
+}
+
 static void registry_global(void *data, struct wl_registry *registry, uint32_t name, const char *interface,
 			    uint32_t version)
 {
@@ -1562,10 +1714,10 @@ static void registry_global(void *data, struct wl_registry *registry, uint32_t n
 		 *
 		 * **ASKED FOR AT THE HIGHEST VERSION THIS SEAM UNDERSTANDS, CAPPED BY THE COMPOSITOR'S.** The shell's own
 		 * requests matter now: `get_window_list`, `activate_window` and `close_window` arrived in 3, `set_activatable`
-		 * rides shell 4, and `reopen_window` arrived in 5 — and a window made from a shell bound at 2 is a version 2
-		 * window whose `set_reserved` is the last thing it has. */
+		 * rides shell 4, `reopen_window` arrived in 5, and `get_dock_menu` and `dock_menu_action` arrived in 6 — and
+		 * a window made from a shell bound at 2 is a version 2 window whose `set_reserved` is the last thing it has. */
 		server->shell = wl_registry_bind(registry, name, &agora_shell_interface,
-						version < 5 ? version : 5);
+						version < 6 ? version : 6);
 	}
 }
 

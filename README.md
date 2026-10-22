@@ -1434,6 +1434,27 @@ proves the identifier → bundle → `CFBundleName` → Icon Services chain, wit
 a snapshot whose only row is at a desktop level proves the furniture split, and that a click on it asks for a window
 rather than raising one.
 
+### A tile's menu, which is the first menu this tree sends anywhere
+
+**`-applicationDockMenu:` WAS DECLARED HERE YEARS BEFORE ANYTHING COULD ASK IT, AND NOW TWO PROCESSES DO.** The Dock
+is a program of its own, so the items an application offers for its tile cannot be an `NSMenu` reference handed to a
+caller: the PANEL is the Dock's (it sits at the Dock's edge, with the Dock's own rows under the application's) and the
+ITEMS are the application's (only it knows what choosing one means). `NSDockMenu` is the transport, and it has one
+door per side:
+
+- the application writes its menu as a DESCRIPTION — a JSON array of rows, each with a title, its `enabled` flag, its
+  `state` and an `id` for every row a person can choose, with submenus nested under `submenu` and separators marked
+  `separator` — and answers `agora_window.dock_menu_requested` with it;
+- the Dock asks (`agora_shell.get_dock_menu`), waits bounded, and builds an `NSMenu` from the description whose rows
+  carry the application's ids in `-representedObject`; a pick goes home as `agora_shell.dock_menu_action`, and the
+  APPLICATION finds its own `NSMenuItem` and sends its own action.
+
+**IT IS ASKED WHEN THE MENU OPENS AND NOT CACHED**, because a dock menu is a picture of what the application can do at
+that moment — which is why Apple's is a delegate METHOD. And **the ids are a pre-order walk** on both sides, so the two
+processes agree about which row is which without a table to keep in step. `tests/appkit_dock_menu.m` (25 checks, no
+compositor) proves the round trip is a FIXED POINT and that only choosable rows are numbered;
+`tests/dock_menu.m` proves the whole conversation across a real connection, by being both ends of it.
+
 ### PDF: the view's page, the rep, and the pasteboard
 
 **THREE DOORS THAT REFUSED BY NAME ARE NOW ONE CHAIN, AND EACH LINK IS THE ROLE IT SHOULD HAVE.** `-[NSView
