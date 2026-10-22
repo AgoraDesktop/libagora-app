@@ -1211,6 +1211,17 @@ target_link_libraries(colour_panels PRIVATE App)
 add_test(NAME appkit-colour-panels COMMAND colour_panels)
 set_tests_properties(appkit-colour-panels PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
 
+# **THE FONT MANAGER AND THE FONT PANEL.** The enumeration is the machine's faces (families, member rows, a name that
+# resolves), the traits and weights agree with each other, every conversion answers a face, the four action doors record
+# an action and send `-changeFont:` to a target that converts back through the manager, the collections store, the font
+# menu builds and its one delegate door declines a family, and the panel's two clicks — a family row and a size chip —
+# change the panel's font, install it as the manager's selection and fire the target.
+add_executable(font_manager font_manager.m)
+target_link_libraries(font_manager PRIVATE App)
+
+add_test(NAME appkit-font-manager COMMAND font_manager)
+set_tests_properties(appkit-font-manager PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
+
 # **THE STEPPER PAIR AND THE SECURE FIELD PAIR.** The stepper's press IS the step: the probe drives the cell's own tracking
 # hooks in each half of the control, in BOTH flips (a direction that a flip reverses), checks the clamp, the wrap, the action
 # a target receives and that a drag does not step again — then renders the cell and counts ink. The secure field's claim is

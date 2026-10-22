@@ -2152,6 +2152,39 @@ and found by `+colorListNamed:` and read by `+[NSColor colorWithCatalogName:colo
 and its activation handshake, the panel's singleton identity, its chips and a chip click, the picker's grid and a cell
 click, the swatch and ramp in pixels, the accessory view going in and out, and the drag's pasteboard round trip.
 
+### The font manager, and the panel that drives it
+
+**`NSFontManager` IS THE QUERY ENGINE AND THE ACTION SENDER, AND THE TWO HALVES ARE WHY A PANEL CAN CHANGE A FONT.** The
+enumeration is real: `CTFontCollectionCreateFromAvailableFonts` and the collection's matching door give every face the
+machine has, a family's members are Apple's four-field rows (`[name, face, weight, traits]`), and every name resolves
+to a font. The conversions are pure functions of a font and a request — size, family, face, trait, weight — and they go
+through FACE NAMES rather than a matching descriptor, because a descriptor carrying a changed trait dictionary is a
+question whose nearest answer is not a promise about the face a caller wanted. All 51 selectors are answered, including
+the named-collection store and the built font menu.
+
+**AND THE TRAITS AND WEIGHTS ARE READ FROM THE FACE, NOT FROM ITS DESCRIPTOR — WHICH WAS MEASURED, NOT ASSUMED.** The
+descriptors this tree's matcher returns carry exactly three facts (URL, PostScript name, family), so
+`kCTFontTraitsAttribute` is always absent and a reader that trusted it would report every face on the machine as
+regular. `CTFontGetSymbolicTraits` reads the OS/2 and `head` tables and `CTFontCopyTraits` computes the normalised
+weight from `usWeightClass`, so the manager creates the face and asks it. The era's 0…15 weight is the line through
+(0.0 → 5, 0.6 → 9), which puts thin at 0 and black at 12.
+
+**`NSFontPanel` IS A SCROLLING FAMILY LIST, A ROW OF SIZE CHIPS AND THE CALLER'S BAND.** 115 families on this machine,
+so the list is a real `NSScrollView` rather than a clipped grid; both lists are hit-tested where they are drawn. A click
+changes the panel's font, installs it as the manager's selection and calls `-modifyFontViaPanel:`, which sends
+`-changeFont:` to the manager's target — the target calls back through `-convertFont:` and gets the panel's family at the
+text's own size, which is exactly what a text view does.
+
+Ten selectors, the two class singletons, the accessory view, `-worksWhenModal`, and the era's styles panel remains a
+named refusal (`-orderFrontStylesPanel:`), because a second window with its own collection browser is a slice of its own.
+
+`tests/font_manager.m` asserts it in 77 checks: the machine's families and member rows, a member's name resolving, the
+bold/regular weight split both ways, every conversion answering a face (size, family keeping emphasis, trait gained and
+lost, the `NSUnboldFontMask` spelling, face, the mask projection, the attributes walk), the action recorded before it is
+sent and the target's call back producing the panel's font, a disabled manager staying silent, the collection store, the
+font menu and its one delegate door, and the panel's two clicks — a family row and a size chip — each changing the font,
+moving the selection and firing the target.
+
 ### Still absent, and why
 
 **NINE THINGS THAT USED TO BE ON THIS LIST ARE NOT ANY MORE, AND THE LIST IS CORRECTED RATHER THAN QUIETLY SHRUNK:**

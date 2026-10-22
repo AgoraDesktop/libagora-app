@@ -43,6 +43,9 @@
 # being a refusal when `NSColorList` landed, but it still names the two cases it cannot answer (no such list, no such
 # key), and a site is a site.
 #
+# AND IT ROSE BY ONE IN THE FONT-MANAGER SLICE: `-orderFrontStylesPanel:` names the era's separate styles panel, which
+# this tier has not built — the font panel's family and size lists are the choice that exists.
+#
 # THE COUNT IS A FILE'S MENTIONS RATHER THAN ITS EXECUTED STATEMENTS, and that was already true before the widening
 # (`NSCell.m`'s six are all prose). It is a per-file DRIFT detector: a file that gains or loses a refusal changes a
 # line, and a file whose comment names one has to keep naming it.
@@ -67,6 +70,7 @@ NSDocument.m                     1
 NSDragging.m                     4
 NSEPSImageRep.m                  2
 NSEvent.m                        11
+NSFontManager.m                  1
 NSGlyphInfo.m                    2
 NSGlyphPacking.m                 1
 NSGradient.m                     5
@@ -106,4 +110,4 @@ NSWindow.m                       24
 # `fn_refuse_window` spelling was simply invisible to a census that counted the `APPKIT-REFUSE` literal, so every
 # refusal written the house way — which is the way the header asks for — moved no number.
 #
-# total: 293
+# total: 294

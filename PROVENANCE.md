@@ -776,6 +776,31 @@ its target without clearing the panel leaves a dangling send.
 the picker's generated grid and a cell click, the swatch and alpha ramp in pixels, the accessory view, and the drag's
 pasteboard round trip — **62 checks**.
 
+## 32. The font manager reads the face, not the descriptor
+
+**`NSFontManager` AND `NSFontPanel` ARE THIS REPOSITORY'S OWN CODE**, written against the 10.6 declarations. Four
+decisions are the ones to know:
+
+- **THE ENUMERATION IS CORE TEXT'S, CACHED ONCE.** `CTFontCollectionCreateFromAvailableFonts` plus the collection's
+  matching door, wrapped into `NSFontDescriptor`s and kept; there is no reload door, which is the era's own shape.
+- **TRAITS AND WEIGHTS COME FROM THE FACE'S TABLES.** MEASURED: the matcher's descriptors carry only URL, PostScript
+  name and family, so `kCTFontTraitsAttribute` is always absent and a descriptor-based reader reports every face as
+  regular. `CTFontGetSymbolicTraits` (OS/2 + `head`) and `CTFontCopyTraits` (`usWeightClass`) are the answer, so the
+  manager creates each face once and caches `[weight, traits]` by PostScript name.
+- **CONVERSIONS GO THROUGH FACE NAMES, NOT A MATCHING DESCRIPTOR.** A descriptor asking for a changed trait is a
+  question for the matcher; the member list is a promise. The family's members are searched for the wanted bit, the
+  closest weight decides, and the result is built by PostScript name.
+- **THE ACTION IS RECORDED BEFORE IT IS SENT**, which is what makes a `-changeFont:` handler's call back through
+  `-convertFont:` work; a disabled manager sends nothing. The panel owns no conversion code beyond
+  `-panelConvertFont:`'s pure form.
+
+Two limits are stated at the door rather than hidden: the era's styles panel refuses by name, and the small-caps, poster,
+compressed and narrow trait masks are never reported because this Core Text has no symbolic bit to read them from.
+
+`tests/font_manager.m` measures the machine's enumeration, the member rows, both weight directions, every conversion,
+the action/target round trip, the collections, the font menu's delegate door, and the panel's family and size clicks —
+**77 checks**.
+
 ## Keeping in sync
 
 The Fiwix AppKit is the origin and this repository has now diverged from it in the seam. A fix made there

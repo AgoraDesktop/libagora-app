@@ -325,3 +325,41 @@ shebang.
 **WHERE THE NEXT HOUR IS:** `NSFontManager` + `NSFontPanel` finish §6's item 2 (61 selectors), and `libagora-text`
 already has `CTFontCollection`, `CTFontDescriptor` and `CTFontManager`, so enumeration is not the blocker. Printing
 (§6 item 3) remains the largest single debt by refusal count; `NSTextView`'s 126 selectors remain the deepest.
+
+---
+
+## 10. The third pick-up: the font pair, and §6's item 2 finished
+
+*One session, one commit: `NSFontManager` (51 selectors) and `NSFontPanel` (10), which completes §6's second item —
+`NSColorList`, `NSColorWell`, `NSColorPanel`, `NSColorPicker`, `NSFontManager`, `NSFontPanel`, six classes and two
+protocols, 113 selectors — and leaves §6's ranking with printing at the top.*
+
+**WHAT LANDED.** The manager's enumeration is Core Text's, cached: families, PostScript names, Apple's four-field member
+rows, and name/trait/descriptor queries. The conversions are size, family, face, trait (both directions, including the
+era's `NSUnboldFontMask`/`NSUnitalicFontMask` spellings), weight, the mask projection and the attributes walk. The four
+action doors record an action and send `-changeFont:`, and `-convertFont:` applies the recorded one, which is the loop a
+text view closes. The collections and the font menu (with its one delegate door) are real stores and builds. The panel
+is a scrolling family list, eight size chips and the caller's band; both click paths change the panel's font, install it
+as the manager's selection and fire the target.
+
+**THE NUMBERS.** classes 124 → 126 of 168, selectors 3729 → 3790 of 4298 → 4359, methods 4230 → 4301. Missing
+selectors: still 569. 108 of the 124 classes with a surface are at COMPLETE coverage. Refusal census **293 → 294** (the
+styles panel). The suite is **140 tests**, with `appkit-font-manager` (77 checks) as the new one, 69 s.
+
+**THE MEASUREMENT THAT MATTERS, BECAUSE IT CHANGED THE DESIGN.** The descriptors this tree's font matcher returns carry
+exactly three facts — URL, PostScript name, family — so `kCTFontTraitsAttribute` is ALWAYS absent from them. A
+descriptor-based traits reader therefore reports every face on the machine as regular, and the first probe run did
+exactly that (`the machine has a family with a bold member` failed). The manager now creates the face
+(`CTFontCreateWithName`) and asks it: `CTFontGetSymbolicTraits` reads OS/2 and `head`, `CTFontCopyTraits` computes the
+normalised weight from `usWeightClass`. The `[weight, traits]` pair is cached by PostScript name, because the member
+rows would otherwise load a face per draw.
+
+**AND THE ERA'S WEIGHT SCALE IS THE LINE THROUGH THE ENGINE'S TWO LANDMARKS**, not an affine map of the whole range:
+Core Text's normalised weight has 0.0 at `usWeightClass` 400 and 0.6 at 700; the era's has 5 at regular and 9 at bold.
+Mapping through those two points puts thin at 0 and black at 12 inside the 0…15 word, which is where those faces belong.
+
+**WHERE THE NEXT HOUR IS.** Printing (§6 item 3) is now the largest single debt by refusal count and the one the handoff
+has been carrying longest: `NSPrintInfo` + `NSPrintOperation` alone would retire most of the refusals in `NSDocument`,
+`NSApplication -application:printFiles:`, the alert's print paths and `-print:`. After that, §6's item 5 — the 569
+selectors in classes this tree HAS, largest first: `NSTextView` 126, `NSBrowser` 64, `NSResponder` 57, `NSWorkspace`
+49, `NSMenuView` 37, `NSFont` 35, `NSText` 31.
