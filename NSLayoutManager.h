@@ -217,7 +217,49 @@ NS_ASSUME_NONNULL_BEGIN
  * unconfirmed text an input method is composing, and a temporary attribute is a run the layout sees and the store does
  * not. Both are the input-method slice's, and both are NAMED rather than half-drawn. */
 
+/* ==================================================================================================================
+ * THE FRAGMENT QUERIES — what is laid out, and which container holds a given glyph.
+ *
+ * **THESE ARE THE DOORS THAT NEED NO CLUSTER MAPPING**, which is why they come first. A fragment here carries the
+ * CHARACTER span the breaker decided, the GLYPH span the shaper produced, the line's two rects and its baseline — so
+ * "which line is this glyph in", "where does that line start", "is this index real" and "which container is it in" are
+ * arithmetic over that record. The glyph-to-character doors (`characterIndexForGlyphAtIndex:` and its inverse) need the
+ * shaper's cluster table and are NOT here; a mapping invented without it would answer a plausible wrong index, which is
+ * worse than answering nothing.
+ *
+ * **`withoutAdditionalLayout:` IS TAKEN AND IGNORED**, and that is stated rather than implied: this tier lays a
+ * container out in full when it is asked for anything, so there is no partially-laid state for the flag to protect.
+ * The two-argument doors and the three-argument doors therefore answer the same rect, and the test asserts exactly that
+ * so the claim stays true.
+ * ================================================================================================================ */
+
+/* Is this a glyph index the manager has? Apple's own question, and it is the guard every other door needs. */
+- (BOOL)isValidGlyphIndex:(NSUInteger)glyphIndex;
+
+/* How much has NOT been laid out. This tier lays out on demand and in full, so after asking these are the totals: the
+ * store's length and the manager's glyph count. */
+- (NSUInteger)firstUnlaidCharacterIndex;
+- (NSUInteger)firstUnlaidGlyphIndex;
+
+/* THE CONTAINER THAT HOLDS A GLYPH, and by reference the whole range that container carries — NOT the line's range,
+ * which is what `-lineFragmentRectForGlyphAtIndex:…` answers. */
+- (nullable NSTextContainer *)textContainerForGlyphAtIndex:(NSUInteger)glyphIndex
+					    effectiveRange:(nullable NSRangePointer)effectiveGlyphRange;
+- (nullable NSTextContainer *)textContainerForGlyphAtIndex:(NSUInteger)glyphIndex
+					    effectiveRange:(nullable NSRangePointer)effectiveGlyphRange
+				     withoutAdditionalLayout:(BOOL)flag;
+
+/* THE LINE'S TWO RECTS, asking-the-same-question forms of the pair above them. */
+- (NSRect)lineFragmentRectForGlyphAtIndex:(NSUInteger)glyphIndex
+			   effectiveRange:(nullable NSRangePointer)effectiveGlyphRange
+		    withoutAdditionalLayout:(BOOL)flag;
+- (NSRect)lineFragmentUsedRectForGlyphAtIndex:(NSUInteger)glyphIndex
+			       effectiveRange:(nullable NSRangePointer)effectiveGlyphRange
+			withoutAdditionalLayout:(BOOL)flag;
+
+
 @end
+
 
 NS_ASSUME_NONNULL_END
 

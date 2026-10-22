@@ -2931,3 +2931,104 @@ static BOOL fn_cell_owns_edge(CGFloat thisWidth, CGFloat otherWidth, BOOL tieGoe
 }
 
 @end
+
+
+/* ==================================================================================================================
+ * THE FRAGMENT QUERIES.
+ *
+ * See the header for what these can and cannot answer: they are arithmetic over the fragments the manager already
+ * keeps, and the two glyph-to-character doors are deliberately absent because they would need the shaper's cluster
+ * table. **A RESULT FROM A DOOR THAT CANNOT BE SURE IS WORSE THAN NO DOOR**, which is the same rule the depth
+ * vocabulary states — "-1/nil answers for a depth that is not one of the three" — applied to an index.
+ * ================================================================================================================ */
+
+@implementation NSLayoutManager (AGFragmentQueries)
+
+- (BOOL)isValidGlyphIndex:(NSUInteger)glyphIndex
+{
+	[self cg_ensureLayout];
+	return glyphIndex < [self numberOfGlyphs] ? YES : NO;
+}
+
+- (NSUInteger)firstUnlaidCharacterIndex
+{
+	[self cg_ensureLayout];
+	return [[self textStorage] length];
+}
+
+- (NSUInteger)firstUnlaidGlyphIndex
+{
+	[self cg_ensureLayout];
+	return [self numberOfGlyphs];
+}
+
+/* The glyph range a whole container carries, taken from its fragments rather than from the store: the union runs from
+ * the first fragment's start to the last one's end, which is what "the range this container holds" means. */
+- (NSRange)ag_glyphRangeForContainer:(NSTextContainer *)container
+{
+	NSUInteger count = [self cg_lineFragmentCountForTextContainer:container];
+	NSRange first, last;
+
+	if (count == 0) {
+		return NSMakeRange(NSNotFound, 0);
+	}
+	first = [self cg_lineFragmentRangeAtIndex:0 inTextContainer:container];
+	last = [self cg_lineFragmentRangeAtIndex:count - 1 inTextContainer:container];
+	if (first.location == NSNotFound || last.location == NSNotFound) {
+		return NSMakeRange(NSNotFound, 0);
+	}
+	return NSMakeRange(first.location, last.location + last.length - first.location);
+}
+
+- (NSTextContainer *)textContainerForGlyphAtIndex:(NSUInteger)glyphIndex
+				   effectiveRange:(NSRangePointer)effectiveGlyphRange
+{
+	NSArray *containers;
+	NSUInteger i, count;
+
+	[self cg_ensureLayout];
+	containers = [self textContainers];
+	count = [containers count];
+	for (i = 0; i < count; i++) {
+		NSTextContainer *container = [containers objectAtIndex:i];
+		NSRange range = [self ag_glyphRangeForContainer:container];
+
+		if (range.location != NSNotFound && glyphIndex >= range.location
+		    && glyphIndex < range.location + range.length) {
+			if (effectiveGlyphRange != NULL) {
+				*effectiveGlyphRange = range;
+			}
+			return container;
+		}
+	}
+	if (effectiveGlyphRange != NULL) {
+		*effectiveGlyphRange = NSMakeRange(NSNotFound, 0);
+	}
+	return nil;
+}
+
+- (NSTextContainer *)textContainerForGlyphAtIndex:(NSUInteger)glyphIndex
+				   effectiveRange:(NSRangePointer)effectiveGlyphRange
+			    withoutAdditionalLayout:(BOOL)flag
+{
+	(void)flag;
+	return [self textContainerForGlyphAtIndex:glyphIndex effectiveRange:effectiveGlyphRange];
+}
+
+- (NSRect)lineFragmentRectForGlyphAtIndex:(NSUInteger)glyphIndex
+			  effectiveRange:(NSRangePointer)effectiveGlyphRange
+		   withoutAdditionalLayout:(BOOL)flag
+{
+	(void)flag;
+	return [self lineFragmentRectForGlyphAtIndex:glyphIndex effectiveRange:effectiveGlyphRange];
+}
+
+- (NSRect)lineFragmentUsedRectForGlyphAtIndex:(NSUInteger)glyphIndex
+			      effectiveRange:(NSRangePointer)effectiveGlyphRange
+		       withoutAdditionalLayout:(BOOL)flag
+{
+	(void)flag;
+	return [self lineFragmentUsedRectForGlyphAtIndex:glyphIndex effectiveRange:effectiveGlyphRange];
+}
+
+@end

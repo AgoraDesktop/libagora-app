@@ -1001,3 +1001,12 @@ target_link_libraries(functions_target3 PRIVATE App)
 
 add_test(NAME appkit-functions-target3 COMMAND functions_target3)
 set_tests_properties(appkit-functions-target3 PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
+
+# **THE FIRST SLAB OF THE TEXT SYSTEM'S REMAINING SURFACE** — the fragment queries, which need no cluster mapping. The
+# test asserts the two claims the header makes (the flag's inertness, and container-range vs line-range), because a
+# documented deviation nothing checks is how a comment and a behaviour drift apart.
+add_executable(text_fragment_queries text_fragment_queries.m)
+target_link_libraries(text_fragment_queries PRIVATE App)
+
+add_test(NAME appkit-text-fragment-queries COMMAND text_fragment_queries)
+set_tests_properties(appkit-text-fragment-queries PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
