@@ -5,12 +5,14 @@
  * SPDX-License-Identifier: MIT
  *
  * **THIS IS A TABLE-BACKED BROWSER, AND THE TABLES ARE PRIVATE.** Apple's class is a matrix of `NSBrowserCell`s per
- * column; this tree has no `NSMatrix` (and no `NSBrowserCell` before this slice), so each column is an `NSTableView`
- * inside one horizontal `NSScrollView`, and the browser is the table data source and delegate. The PUBLIC surface is
- * the 10.6 one: the delegate answers how many rows a column has, the `-browser:willDisplayCell:atRow:column:` door
- * fills each `NSBrowserCell`, and selecting a row loads the column to its right. The old
- * `-browser:createRowsForColumn:inMatrix:` form is the one part that cannot exist without `NSMatrix` and is named
- * as absent rather than stubbed.
+ * column; each column here is an `NSTableView` inside one horizontal `NSScrollView`, and the browser is the table data
+ * source and delegate. The PUBLIC surface is the 10.6 one: the delegate answers how many rows a column has, the
+ * `-browser:willDisplayCell:atRow:column:` door fills each `NSBrowserCell`, and selecting a row loads the column to
+ * its right. The old `-browser:createRowsForColumn:inMatrix:` form is the one part that is not here, and **ITS REASON
+ * HAS CHANGED RATHER THAN EXPIRED**: `NSMatrix` now exists, but a matrix is what APPLE'S browser's columns ARE, and
+ * this tree's columns are tables — so there is no matrix for the delegate to fill, and handing it a temporary one it
+ * does not own would be a stub with a real signature. The header names that absence rather than a door nobody could
+ * use; a cell-based delegate using `willDisplayCell` is the supported path.
  *
  * **THE COLUMNS ARE A 256-SLOT POOL, AND THE EMPTY ONES ARE VISIBLE.** A browser builds all of its column slots
  * when it loads rather than growing and shrinking the view list: Finder's own shape, and the reason a column's width

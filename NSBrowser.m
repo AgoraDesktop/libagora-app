@@ -10,9 +10,10 @@
  * `-browser:numberOfRowsInColumn:` and `-browser:willDisplayCell:atRow:column:`; selecting a row asks the delegate
  * for the column to its right. Each column scrolls vertically on its own, and its width is its own.
  *
- * THE MATRIX FORM IS THE ONE THING THAT IS NOT HERE. Apple's `-browser:createRowsForColumn:inMatrix:` needs an
- * `NSMatrix`, which this tree has not got; the header names that absence rather than a stub that would never be
- * called. A cell-based delegate using `willDisplayCell` is the supported path.
+ * THE MATRIX FORM IS THE ONE THING THAT IS NOT HERE, AND `NSMatrix` NOW EXISTS — so the reason is the browser's
+ * SHAPE rather than a missing class. Apple's columns ARE matrices; this tree's are tables, so there is no matrix for
+ * `-browser:createRowsForColumn:inMatrix:` to hand a delegate, and a temporary one would be a stub with a real
+ * signature. A cell-based delegate using `willDisplayCell` is the supported path.
  */
 #import <AppKit/NSBrowser.h>
 #import <AppKit/NSBrowserCell.h>

@@ -1182,6 +1182,18 @@ target_link_libraries(image_rep_family PRIVATE App)
 add_test(NAME appkit-image-rep-family COMMAND image_rep_family)
 set_tests_properties(appkit-image-rep-family PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
 
+# **THE GRID AND THE FORM.** The first control in this tier whose face is PLURAL: the grid's arithmetic both ways, a
+# gap that is not a cell, selection stored apart from the highlight drawn, the four modes' click policies, cells that
+# MOVE (rather than copy) through a shape change, a per-column stable sort, a prototype copied per position, the
+# keyboard's click and key equivalent without a pointer, a field session on the RIGHT cell, and the ink — a selected
+# plain cell in the accent, a cell background under it, the grid's background in the gap, and a form cell's label band
+# stopping where the value band starts.
+add_executable(matrix matrix.m)
+target_link_libraries(matrix PRIVATE App)
+
+add_test(NAME appkit-matrix COMMAND matrix)
+set_tests_properties(appkit-matrix PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
+
 # **THE STEPPER PAIR AND THE SECURE FIELD PAIR.** The stepper's press IS the step: the probe drives the cell's own tracking
 # hooks in each half of the control, in BOTH flips (a direction that a flip reverses), checks the clamp, the wrap, the action
 # a target receives and that a drag does not step again — then renders the cell and counts ink. The secure field's claim is

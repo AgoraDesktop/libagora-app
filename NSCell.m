@@ -36,7 +36,9 @@
  * collide with the tree's, and the head of the file is where an import belongs. `NSView.h` only FORWARD-declares
  * `NSCursor`, so the door cannot name `+IBeamCursor` without this line. See appkit-plan.md §A10bg. */
 #import <AppKit/NSCursor.h>
-/* AND THE ONE IMPORT §A10br'S DOOR NEEDED — `NSErrors.h`, for the AppKit's own exception name that `-compare:` is
+/* AND THE ARCHIVER, WHICH `-copy` AT THE FOOT OF THIS FILE MAKES A CELL'S COPY THROUGH. Foundation's keyed
+ * archiver is the one description of a cell's state that cannot drift from the two coding methods above. */
+#import <Foundation/NSKeyedArchiver.h>/* AND THE ONE IMPORT §A10br'S DOOR NEEDED — `NSErrors.h`, for the AppKit's own exception name that `-compare:` is
  * documented to raise. It names a CONSTANT rather than a type, so nothing about it collides, and it stands beside the
  * other import for the same reason: the head of the file is where an import belongs. APPLE'S `NSCell.h` DOES NOT IMPORT
  * THIS HEADER EITHER — the SDK reaches the constant through the umbrella `AppKit.h` — so the include graph is Apple's,
@@ -298,6 +300,38 @@ static NSString * const AGCoderCellActionKey = @"action";
 + (BOOL)supportsSecureCoding
 {
 	return YES;
+}
+
+/* ============================================================================================
+ * ARCHIVING'S OTHER FACE: THE COPY.
+ * ============================================================================================ */
+/* **A CELL IS <NSCopying> IN APPLE'S HEADER AND THIS TREE DECLARED THE CONFORMANCE AND NO METHOD**, which was
+ * MEASURED rather than suspected: `-copy` on a cell raised `doesNotRecognizeSelector:` where a copy was meant, and
+ * `NSMatrix -setPrototype:` is the first caller that needs one — Apple's whole contract for a prototype is "each
+ * position gets a copy of it". The archiving pair above is already a complete description of a cell's state, so the
+ * copy is that description taken one step further: encode, decode, and the result is a cell of the SAME class with
+ * the same values and none of the same storage. It is slower than a hand-written clone and it cannot drift from the
+ * coding — which is the property that matters, because a hand-written copy would be a second list of the fields and
+ * the two would disagree the first time one of them grew.
+ *
+ * THE RETURN IS OWNED (+1), as `-copy` must be; `+unarchiveObjectWithData:` answers an autoreleased object, so the
+ * retain below is the difference. A subclass that declares extra state gets a correct copy for free as long as that
+ * state is coded, which is the same requirement its archive already has.
+ *
+ * **THE DOOR IS `-copy` RATHER THAN COCOA'S `-copyWithZone:`** because THIS FOUNDATION REMOVED EVERY `NSZone`-TAKING
+ * METHOD: `NSCopying` here declares `-copy` and the override point is the entry point (see `libagora-base/NSObject.h`).
+ * A class written against Apple's spelling would not conform on this stack, which is the cost that header records. */
+- (id)copy
+{
+	NSData *data;
+	id copy;
+
+	data = [NSKeyedArchiver archivedDataWithRootObject:self];
+	if (data == nil) {
+		return nil;
+	}
+	copy = [NSKeyedUnarchiver unarchiveObjectWithData:data];
+	return [copy retain];
 }
 
 - (instancetype)init

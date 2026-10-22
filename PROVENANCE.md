@@ -443,10 +443,11 @@ Agora's headless server.
 **`NSBrowser.h`, `NSBrowser.m`, `NSBrowserCell.h` AND `NSBrowserCell.m` ARE THIS REPOSITORY'S OWN CODE**, written
 against the 10.6 declarations. Four decisions are the ones to know:
 
-- **A COLUMN IS AN `NSTableView`.** The tree has no `NSMatrix`, so the browser owns one horizontal `NSScrollView`
-  and a document view of side-by-side tables; the browser is their data source and delegate and maps a sender back
-  to its column by identity. The public delegate surface is the cell-based 10.6 one; the old
-  `-browser:createRowsForColumn:inMatrix:` form is absent because the class it names is absent.
+- **A COLUMN IS AN `NSTableView`.** The browser owns one horizontal `NSScrollView` and a document view of
+  side-by-side tables; the browser is their data source and delegate and maps a sender back to its column by
+  identity. The public delegate surface is the cell-based 10.6 one; the old
+  `-browser:createRowsForColumn:inMatrix:` form is absent because this tree's columns are tables rather than
+  matrices — `NSMatrix` itself has since landed, so the absence is the browser's shape rather than a missing class.
 - **A SELECTION ASKS FOR THE COLUMN TO ITS RIGHT.** `-tableViewSelectionDidChange:` records the row, truncates the
   columns after it, asks the delegate for `column + 1`, and builds or removes that column. A leaf returns zero rows
   and leaves the browser as it was. The browser's own `-selectRow:inColumn:` goes through the same table door.

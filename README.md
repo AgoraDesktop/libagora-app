@@ -1379,7 +1379,7 @@ it.
 ### The browser, and the next column
 
 **`NSBrowser` IS HERE AS A TABLE-BACKED BROWSER.** Apple's class is an `NSMatrix` of `NSBrowserCell`s per column;
-this tree has no `NSMatrix`, so each column is an `NSTableView` inside its own vertical `NSScrollView`, all inside one
+this tree's columns are `NSTableView`s inside their own vertical `NSScrollView`s, all inside one
 horizontal `NSScrollView`; the browser is the data source and delegate of every one of them. **THE COLUMNS ARE A
 256-SLOT POOL BUILT ON THE FIRST LOAD**, Finder's own shape: an empty slot stays a visible empty column and keeps its
 width, and `-cg_activeColumnCount` says how many have rows. Only the active columns and the empty slots that fit in
@@ -1394,8 +1394,9 @@ is a drag handle in the user-resizing mode. Multiple/empty selection, horizontal
 
 **`NSBrowserCell` IS THE ROW'S CELL.** It is a text-field cell with the picture and the leaf/loaded pair, drawing
 the sixteen-point image beside the title exactly as the sidebar's cell does. The old
-`-browser:createRowsForColumn:inMatrix:` form is the one part that cannot exist without `NSMatrix`, and the header
-names that absence rather than a stub nobody could call.
+`-browser:createRowsForColumn:inMatrix:` form is still absent, and its reason has changed rather than expired:
+`NSMatrix` exists now, but a matrix is what Apple's columns ARE and this tree's are tables, so there is no matrix for
+the delegate to fill. The header names that absence rather than a stub with a real signature.
 
 **A SELECTION SCROLLS TO THE NEWEST COLUMN, AT THE DOCUMENT'S END.** Selecting a branch opens the column to its
 right, and the clip view goes all the way over so that column is against the right edge; `-scrollColumnToVisible:`
@@ -2067,6 +2068,44 @@ pasteboard type, a two-page document and the current-page clamp — 24 checks, n
 What is still absent on this subject: `-dataWithEPSInsideRect:` and PostScript output, PRINTING (`NSPrintOperation`
 still refuses), and `+graphicsContextWithAttributes:` still does not turn a data destination into a PDF page — the
 attributes carry no page size, so the sized routes above are the ones to use.
+
+### The grid, the form, and a cell that copies itself
+
+**`NSMatrix` IS THE FIRST CONTROL IN THIS TIER WHOSE FACE IS PLURAL.** Every control before it owns one cell and
+forwards to it; a matrix owns `rows × columns` and has to turn a point into a (row, column), a selection into a set,
+and a tab into a move between cells. All 95 of its 10.6 selectors are answered, and the three things it owns are named
+in its header: the grid (a flat row-major `NSCell **`, which is the shape `-cells` publishes and the reason insertion
+and removal are memmoves), the selection, and the field session. `NSForm` and `NSFormCell` are the other 39: a form is
+a one-column radio matrix of cells that each draw a right-aligned label in a title band and an editable field after it,
+and `-setEntryWidth:` is the arithmetic that makes a form's fields line up. 134 selectors, three classes and one
+protocol — the largest single piece of the remaining view surface.
+
+**SELECTION AND HIGHLIGHT ARE TWO BITS, BECAUSE APPLE'S DOOR NEEDS TWO.** `-setSelectionFrom:to:anchor:highlight:NO`
+selects a range without drawing it, which one bit cannot express: `_selected` is the selection and `[cell isHighlighted]`
+is what is drawn. Every selecting door sets both except that one, and `-highlightCell:atRow:column:` sets only the
+second — which is what lets the tracking loop light the cell under the pointer without choosing it.
+
+**THE FOUR MODES ARE FOUR CLICK POLICIES, NOT FOUR GEOMETRIES.** A radio click selects and turns its cell on and the
+others off; a list click replaces the selection unless a modifier asks to extend it from the anchor; a track click
+toggles the cell's own state (`-setNextState:`) and leaves nothing selected; a highlight click leaves nothing behind.
+The grid, the drawing and the session are identical in all four.
+
+**AND THE FIRST CLEAN-UP THE SLICE NEEDED WAS IN A CLASS ONE LEVEL DOWN.** `NSMatrix -setPrototype:` promises Apple's
+contract — every position gets a COPY of the prototype — and `NSCell` had declared `<NSCopying>` since its first slice
+with no method behind it, so `-copy` was a `doesNotRecognizeSelector:`. `-copy` is now the coding pair taken one step
+further (encode, decode), which means it cannot drift from the archive; and because this Foundation removed every
+`NSZone`-taking method, the door is `-copy` rather than Cocoa's `-copyWithZone:`.
+
+**TWO MORE TRAPS THE PROBE FOUND, EACH ONE ALREADY IN THE HANDOFFS' SHAPE.** The sort door shuffled RETained pointers
+and released the grid's own references afterwards, freeing cells that were still in it — a crash in the first check
+after the door, and the reason the shuffle is now over borrowed addresses only. And `NSTextFieldCell
+-selectWithFrame:…` asked `[[controlView window] makeFirstResponder:]` without checking that there IS a window, so an
+offscreen matrix's session was torn down by the same `NO` that means "refused" — the exact trap `NSCell`'s copy of
+that method had already recorded and fixed. `tests/matrix.m` asserts all of it in 75 checks: the grid's arithmetic both
+ways, a gap that is not a cell, selection without highlight, the four modes' values, cells that MOVE through a shape
+change, a per-column stable sort, a prototype copied per position, the keyboard's click and key equivalent without a
+pointer, a session on the right cell, and the ink — the accent on a selected plain cell, a cell background under it,
+the grid's background in the gap, and a form cell's label band stopping where the value band starts.
 
 ### Still absent, and why
 

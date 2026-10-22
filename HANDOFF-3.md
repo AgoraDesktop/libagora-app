@@ -234,3 +234,48 @@ handful of loose ends. The 51 absent classes are the other half, and they are su
 * **THE SUITE IS 137 TESTS IN ABOUT SIXTY-FOUR SECONDS.** It is runnable after every change, and a session that does not
   run it before committing is the one that ships a red gate — `HANDOFF-2.md`'s §4 account of a green-looking run that was
   loading the wrong library is the reason the exit status is part of step 6.
+
+---
+
+## 8. The first pick-up: the grid
+
+*One session, one commit, and it is the first item of §6's ranking: `NSMatrix` + `NSForm` + `NSFormCell`, 134
+selectors, three classes and `NSMatrixDelegate`.*
+
+**WHAT LANDED.** All 134 selectors: the grid (a flat row-major `NSCell **`, because that is the shape `-cells`
+publishes and the reason insertion and removal are memmoves), the selection (`_selected` stored apart from the cells'
+highlight bits, because `-setSelectionFrom:to:anchor:highlight:NO` exists precisely to tell the two apart), the four
+modes as four CLICK POLICIES rather than four geometries, the tracking loop (a copy of `NSControl`'s, including its
+no-run-loop guard), the keyboard (arrows move the KEY cell, Tab traverses or leaves, a cell's key equivalent is a
+click), the field session re-homed to the matrix, per-column stable sorting, tool tips keyed by cell, and archiving.
+The form is a one-column radio matrix of cells that each draw a right-aligned label in a title band and an editable
+field after it; `-setEntryWidth:` is the arithmetic that lines a form's fields up.
+
+**THE NUMBERS.** classes 117 → 120 of 168, selectors 3543 → 3677 of 4112 → 4246, protocols 35 → 36, methods 4031 →
+4166. `selectors-offered` MOVES WITH the present set (a class appearing adds its manifest rows to both sides of the
+fraction), which is why the missing count — 569 — did not move at all. 102 of the 118 classes with a surface are now
+at COMPLETE coverage. The suite is **138 tests in ~70 s**, 137 green plus the new `appkit-matrix` (75 checks).
+
+**THREE THINGS THIS SESSION PAID FOR, each already the shape of a trap in §4:**
+
+* **`NSCell` DECLARED `<NSCopying>` AND HAD NO `-copy`.** `NSMatrix -setPrototype:` promises Apple's contract — every
+  position gets a copy — and `-copy` was a `doesNotRecognizeSelector:`. It is now the coding pair taken one step
+  further (encode, decode), so it cannot drift from the archive. **AND THE DOOR IS `-copy`, NOT `-copyWithZone:`**:
+  this Foundation removed every `NSZone`-taking method, so `NSCopying` here declares the entry point itself.
+* **`NSTextFieldCell -selectWithFrame:…` ASKED A WINDOWLESS VIEW FOR FIRST RESPONDER.** `[nil makeFirstResponder:]`
+  answers NO and NO there means "refused", so an offscreen matrix's session was placed and then torn down. `NSCell`'s
+  copy of the same method had already recorded and fixed this; the subclass's copy had not. The guard is now in both.
+* **AN INSERTION SORT THAT RETAINED AND THEN RELEASED THE GRID'S OWN REFERENCES** freed cells still in the matrix —
+  a crash in the first check after the door. The shuffle is over borrowed addresses only.
+
+**AND ONE REFUSAL HAD ITS GROUND REMOVED RATHER THAN ITS REASON.** `NSBrowser`'s
+`-browser:createRowsForColumn:inMatrix:` was refused "because `NSMatrix` does not exist". It does now, and the refusal
+is STILL RIGHT for a different reason: Apple's columns ARE matrices, this tree's are tables, so there is no matrix to
+hand the delegate. `NSBrowser.h`, `NSBrowser.m`, `README.md` and `PROVENANCE.md` say the new reason. That is §4's
+last trap ("when a slice lands the ground under an old refusal, re-read the refusal") paying out on the first slice
+after it was written.
+
+**WHERE THE NEXT HOUR IS, given §6's ranking and this session's cost:** the palette/panel group (§6 item 2) is now
+the cheapest — six classes over `NSColorSpace`/`NSColor`/`NSFont`, all of which exist, and it would give
+`NSColor +colorWithCatalogName:` its reader. Printing (§6 item 3) is the largest single debt by refusal count.
+`NSTextView`'s 126 selectors remain the deepest subsystem in the tree and are still not a one-session slice.

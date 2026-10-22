@@ -232,7 +232,7 @@ typedef NSUInteger NSControlSize;
 
 
 
-@interface NSCell : NSObject <NSSecureCoding>
+@interface NSCell : NSObject <NSSecureCoding, NSCopying>
 {
 	/* APPLE'S OWN LAYOUT IS A BITFIELD STRUCT (`struct __CFlags`), and this tier's is plain ivars: the layout is
 	 * ours, which is the rule the plan applies to every private field — what must match Apple is the SURFACE. */
@@ -1171,6 +1171,14 @@ enum {
  * does not include `NSView`. */
 - (void)drawWithFrame:(NSRect)cellFrame inView:(nullable id)controlView;
 - (void)drawInteriorWithFrame:(NSRect)cellFrame inView:(nullable id)controlView;
+
+/* AND THE COPY, WHICH APPLE DECLARES AND THIS TREE HAD DECLARED ONLY THE CONFORMANCE FOR. `-copy` was a
+ * `doesNotRecognizeSelector:` — measured by `NSMatrix -setPrototype:`, whose whole contract is that every position gets
+ * a copy of the prototype. The implementation is the archiving pair taken one step further (encode, decode), so the
+ * copy cannot drift from the coding; see `NSCell.m` for that argument and for the ownership of the answer. **AND IT
+ * IS `-copy` RATHER THAN COCOA'S `-copyWithZone:`** because this Foundation removed every `NSZone`-taking method: the
+ * protocol's member here IS `-copy`, and the override point is the entry point (see `libagora-base/NSObject.h`). */
+- (id)copy;
 
 @end
 

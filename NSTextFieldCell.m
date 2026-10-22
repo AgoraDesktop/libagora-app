@@ -591,7 +591,11 @@ static NSString * const AGCoderFieldPlaceholderAttributedKey = @"placeholderAttr
 	 * been put in the view and every session flag is set, so the refusal has to be UNDONE here: otherwise a field
 	 * nobody is allowed to edit would still show a caret in a view and answer `-currentEditor` with it. MEASURED, the
 	 * window's `-makeFirstResponder:` fails in exactly this case and its answer is the signal. */
-	if (![[controlView window] makeFirstResponder:textObj]) {
+	/* **AND A VIEW WITH NO WINDOW HAS NO RESPONDER CHAIN TO JOIN, SO THE QUESTION IS ONLY ASKED WHEN THERE IS ONE.**
+	 * This is the same clause, and the same measurement, `NSCell -selectWithFrame:…` records: a cell placed offscreen —
+	 * a probe, a matrix in a bitmap, a form being measured before its window exists — was having a session it had every
+	 * right to begin torn down, because `[nil makeFirstResponder:]` answers NO and NO here means "refused". */
+	if ([controlView window] != nil && ![[controlView window] makeFirstResponder:textObj]) {
 		[textObj setDelegate:nil];
 		[textObj removeFromSuperview];
 		_editorDelegate = nil;
