@@ -8,8 +8,8 @@ spent.*
 *State at handover: **8 commits**, tree clean, **114 tests passing**, `api-ledger: 327 metrics
 hold (82 classes, 2652 selectors of 3517, 23 protocols, 86 functions)`.*
 
-*State after the session that picked it up (§9–§20): **21 commits**, tree clean, **127 tests passing**,
-`api-ledger: 345 metrics hold (100 classes, 2930 selectors of 3669, 23 protocols, 86 functions)`.*
+*State after the session that picked it up (§9–§21): **22 commits**, tree clean, **128 tests passing**,
+`api-ledger: 350 metrics hold (103 classes, 2945 selectors of 3684, 26 protocols, 86 functions)`.*
 
 ---
 
@@ -87,9 +87,9 @@ type's empty value and says on stderr what it wants — `AppKitRefusal.h`), or *
 ## 3. Current measured state
 
 ```
-classes   100 of 168   (60%)    68 missing
-selectors 2930 of 3669 (80%)   739 missing    61 of 98 classes at COMPLETE coverage
-protocols  23 of  56   (41%)    33 missing
+classes   103 of 168   (61%)    65 missing
+selectors 2945 of 3684 (80%)   739 missing    64 of 101 classes at COMPLETE coverage
+protocols  26 of  56   (46%)    30 missing
 functions  86 of  86 (100%)     0 missing     10 refuse by name
 methods  3289 declared, 4 with no body (0.1%)
 
@@ -268,14 +268,13 @@ predicted: the four ruler commands were the last four selectors it owed.
 
 **Where to go next, re-ranked by reachable surface:**
 
-1. **THE MISSING CLASSES CONTINUE (§17–§20): the colour values, the image reps, the stepper/secure pairs, the nib
-   connectors and the pasteboard item are DONE — 100 of 168 classes.** Next by the same argument: the three six-selector
-   classes (`NSImageCell` 6, `NSGlyphInfo` 6, `NSTouch` 6), `NSCollectionViewItem` (3), `NSViewController`'s collection-view
-   family (`NSCollectionView` 28 + the item), `NSFileWrapper` (35 — the RTFD and attachment substrate), and the NIB
-   CONNECTORS' missing other half: the `NSPasteboardReading`/`NSPasteboardWriting` PROTOCOLS (two of the 33 missing), which
-   would let `NSPasteboardItem` declare what it already implements by `-respondsToSelector:`. After those the surface is
-   the big subsystems the plan names — documents (104 + 51), printing (46 + 41 + 27 + 20), the panels, and the controller
-   family — which want a design rather than a slice.
+1. **THE MISSING CLASSES CONTINUE (§17–§21): 103 of 168 classes and 26 of 56 protocols.** What is left among the SMALL
+   ones is `NSTouch` (6 selectors — but it has no public initialiser, so nothing in this tier can produce one) and
+   `NSCollectionView` (28) around the item just added. The largest remaining single class is `NSFileWrapper` (35 — the RTFD
+   and attachment substrate, and `NSImageRep`'s file doors already name its shape); then the surface is the big subsystems
+   the plan names — documents (104 + 51), printing (46 + 41 + 27 + 20), the panels, and the controller family — which want a
+   design rather than a slice. The 30 MISSING PROTOCOLS are a cheaper axis: most are delegate protocols a class already
+   sends informally (`NSTableViewDelegate` is present, the drag and collection ones are not).
 
 2. **`NSLayoutManager` IS COMPLETE (§16) — all 136 selectors — and so are the twelve one-selector-short classes (§15).**
    The manager's last six were the typesetter trio, spelled `id` for the reason §16 records. What is left in the text
@@ -609,3 +608,30 @@ its type is read) and the answer is cached (one ask, not two).
 **And a runtime detail the test had to learn:** this runtime keeps TYPED selector records, so `NSSelectorFromString("x")`
 and the compiler's `@selector(x)` need not be the same POINTER. A probe comparing actions must compare NAMES; the
 connector's job is the name, which is what a nib's label can promise.
+
+---
+
+## 21. Small classes and the protocols that were owed
+
+*Fourteenth commit of the pickup: `NSGlyphInfo` (6), `NSImageCell` (6), `NSCollectionViewItem` (3), and the three pasteboard
+protocols. **103 of 168 classes, 26 of 56 protocols.***
+
+**`NSGlyphInfo` REFUSES BOTH OF THE ENGINE'S "NO" ANSWERS.** `CTFontGetGlyphWithName` says `.notdef` (0) for a name a face
+maps to nothing and `kCGFontIndexInvalid` (0xFFFF) for one it has never heard of — two different answers for one question, and
+a glyph info that took either would be naming a glyph nobody asked for. The index factory keeps the documented gap: this tier
+has no glyph-to-name lookup, so `-glyphName` is nil there and the header says so.
+
+**THE IMAGE CELL'S THREE FACTS ARE PIXELS, SO THE PROBE READS PIXELS.** Alignment, scaling and frame style are stored values a
+cell could ignore; the test renders the cell in three configurations and checks the RED INK'S EXTENT (`x 0..9` left, `W-10..W-1`
+right, full cell under `NSImageScaleAxesIndependently`). A stored-and-ignored fact fails those and passes every value check.
+
+**AND THE PROTOCOLS WERE THE CHEAPEST REMAINING AXIS.** `NSPasteboardWriting`, `NSPasteboardReading` and
+`NSPasteboardItemDataProvider` are now declared, which lets `NSPasteboardItem` say it CONFORMS to the writer it already
+implemented by `-respondsToSelector:` — the previous slice's note said the protocol was a row still owed, and this closes it.
+The declaration also typed the provider's optional method, so the provider's answer is a declared contract rather than a
+guessed selector.
+
+**A placement lesson, again:** the protocol block's first two attempts landed INSIDE `@interface NSPasteboard` (the option
+typedefs it needs live inside the class body, so "after the typedefs" is still inside), and a line-based move then split a
+comment in half and left a fragment after the `#endif`. The fix was `git checkout` of the header and an anchor on the class's
+own `@end` — the §4 placement trap, in its third shape this session.

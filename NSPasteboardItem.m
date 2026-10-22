@@ -96,8 +96,9 @@
 		return data;
 	}
 	if (_provider != nil && [_providerTypes containsObject:type]
-	    && [_provider respondsToSelector:@selector(pasteboard:item:provideDataForType:)]) {
-		[_provider pasteboard:nil item:self provideDataForType:type];
+	    && [(id<NSPasteboardItemDataProvider>)_provider respondsToSelector:
+									  @selector(pasteboard:item:provideDataForType:)]) {
+		[(id<NSPasteboardItemDataProvider>)_provider pasteboard:nil item:self provideDataForType:type];
 		data = [_data objectForKey:type];
 	}
 	return data;

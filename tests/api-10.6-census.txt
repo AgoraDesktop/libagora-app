@@ -61,9 +61,9 @@
 #
 # **AND THE MEASURED NUMBERS, RECOMPUTED RATHER THAN EDITED**, so a reader can see the shape without running anything:
 #
-#     classes   100 of 168   (60%)    68 missing
-#     selectors 2930 of 3669  (80%)  739 missing    61 of 98 classes at COMPLETE coverage
-#     protocols  23 of  56   (41%)    33 missing
+#     classes   103 of 168   (61%)    65 missing
+#     selectors 2945 of 3684  (80%)  739 missing    64 of 101 classes at COMPLETE coverage
+#     protocols  26 of  56   (46%)    30 missing
 #     functions  86 of  86 (100%)     0 missing    10 of them REFUSE BY NAME, which this count does not distinguish
 #                86 declared, 0 declared-not-defined, 0 defined-not-declared
 #     methods   3134 declared on this tree's own classes, 4 with NO body on the chain (0.1%)
@@ -113,9 +113,9 @@
 # Foundation's in this tree, so it is attributed to Foundation to avoid charging one class to two ledgers. The
 # manifest applies that rule at generation time via its second framework argument; the census never sees it.
 
-classes-missing 68
+classes-missing 65
 classes-offered 168
-classes-present 100
+classes-present 103
 fn:NSAccessibilityActionDescription 1
 fn:NSAccessibilityPostNotification 1
 fn:NSAccessibilityRaiseBadArgumentException 1
@@ -294,7 +294,7 @@ functions-defined-not-declared 0
 functions-missing 0
 functions-offered 86
 functions-present 86
-methods-declared 3353
+methods-declared 3369
 methods-declared-not-implemented 4
 proto:NSAlertDelegate 0
 proto:NSAnimatablePropertyContainer 0
@@ -324,9 +324,9 @@ proto:NSMenuDelegate 0
 proto:NSOpenSavePanelDelegate 0
 proto:NSOutlineViewDataSource 1
 proto:NSOutlineViewDelegate 1
-proto:NSPasteboardItemDataProvider 0
-proto:NSPasteboardReading 0
-proto:NSPasteboardWriting 0
+proto:NSPasteboardItemDataProvider 1
+proto:NSPasteboardReading 1
+proto:NSPasteboardWriting 1
 proto:NSPathCellDelegate 1
 proto:NSPathControlDelegate 1
 proto:NSPrintPanelAccessorizing 0
@@ -352,9 +352,9 @@ proto:NSUserInterfaceItemSearching 0
 proto:NSUserInterfaceValidations 1
 proto:NSValidatedUserInterfaceItem 1
 proto:NSWindowDelegate 1
-protocols-missing 33
+protocols-missing 30
 protocols-offered 56
-protocols-present 23
+protocols-present 26
 sel:NSActionCell 6
 sel:NSAlert 20
 sel:NSApplication 88
@@ -368,6 +368,7 @@ sel:NSCachedImageRep 4
 sel:NSCell 139
 sel:NSCIImageRep 3
 sel:NSClipView 17
+sel:NSCollectionViewItem 3
 sel:NSColor 97
 sel:NSColorSpace 19
 sel:NSComboBox 22
@@ -379,9 +380,11 @@ sel:NSEPSImageRep 5
 sel:NSEvent 65
 sel:NSFont 36
 sel:NSFontDescriptor 18
+sel:NSGlyphInfo 6
 sel:NSGradient 14
 sel:NSGraphicsContext 28
 sel:NSImage 68
+sel:NSImageCell 6
 sel:NSImageRep 33
 sel:NSLayoutManager 136
 sel:NSMenu 64
@@ -454,6 +457,6 @@ sel:NSWindow 243
 sel:NSWindowController 26
 sel:NSWorkspace 9
 selectors-missing 739
-selectors-offered 3669
-selectors-present 2930
+selectors-offered 3684
+selectors-present 2945
 selphantom:NSObject 4

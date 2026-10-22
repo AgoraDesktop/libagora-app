@@ -116,6 +116,7 @@ typedef enum {
 	NSPasteboardWritingPromised = 1 << 9
 } NSPasteboardWritingOptions;
 
+
 /* THE MODERN TYPE NAMES, WITH APPLE'S PUBLISHED UTI VALUES — see the note above for why these carry real
  * strings while the legacy block carries its own names. */
 extern NSString *NSPasteboardTypeString;      /* public.utf8-plain-text */
@@ -223,6 +224,47 @@ NSString * _Nullable NSCreateFilenamePboardType(NSString *fileType);
 NSString * _Nullable NSGetFileType(NSString *pboardType);
 NSArray * _Nullable NSGetFileTypes(NSArray *pboardTypes);
 
+@end
+/* ==================================================================================================================
+ * THE THREE PASTEBOARD PROTOCOLS, DECLARED — they were owed, and the object doors reach them informally because of it.
+ *
+ * **A WRITER NAMES ITS TYPES AND ANSWERS THEM.** `-writableTypesForPasteboard:` says what the object can put on a board, in
+ * order of preference, and `-pasteboardPropertyListForType:` answers one type as data or a property list. `NSPasteboard
+ * -writeObjects:` already sends these two by `-respondsToSelector:` — which is why `NSPasteboardItem` worked before this
+ * declaration existed — but a PROTOCOL is what lets a class say it conforms, and what a reader of the header looks for.
+ *
+ * **A READER NAMES ITS TYPES ON THE CLASS AND BUILDS ITSELF FROM ONE.** `+readableTypesForPasteboard:` is a class method
+ * because a board asks "could such an object be made" before making one; `+readingOptionsForType:pasteboard:` is the
+ * optional per-type options it wants back; and `-initWithPasteboardPropertyList:ofType:` is the initialiser that makes it.
+ *
+ * **AND THE PROVIDER IS THE THIRD**, which an item asks lazily: a type's data is wanted only if somebody reads that type.
+ * ================================================================================================================ */
+
+/* THE PROTOCOLS NAME THE CLASS, which is declared above them; the forward declaration is here anyway so the block can be
+ * moved without a second thought. */
+@class NSPasteboard;
+@class NSPasteboardItem;
+
+@protocol NSPasteboardWriting <NSObject>
+- (NSArray *)writableTypesForPasteboard:(NSPasteboard *)pasteboard;
+- (nullable id)pasteboardPropertyListForType:(NSString *)type;
+@optional
+- (NSPasteboardWritingOptions)writingOptionsForType:(NSString *)type pasteboard:(NSPasteboard *)pasteboard;
+@end
+
+@protocol NSPasteboardReading <NSObject>
+@required
++ (NSArray *)readableTypesForPasteboard:(NSPasteboard *)pasteboard;
+@optional
++ (NSPasteboardReadingOptions)readingOptionsForType:(NSString *)type pasteboard:(NSPasteboard *)pasteboard;
+- (nullable id)initWithPasteboardPropertyList:(id)propertyList ofType:(NSString *)type;
+@end
+
+@protocol NSPasteboardItemDataProvider <NSObject>
+@optional
+- (void)pasteboard:(nullable NSPasteboard *)pasteboard item:(NSPasteboardItem *)item
+	provideDataForType:(NSString *)type;
+- (void)pasteboardFinishedWithDataProvider:(nullable NSPasteboard *)pasteboard;
 @end
 
 

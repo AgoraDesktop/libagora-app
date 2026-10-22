@@ -26,10 +26,19 @@
 #import <Foundation/NSArray.h>
 #import <Foundation/NSData.h>
 #import <Foundation/NSString.h>
+/* FOR THE PROTOCOLS THE CLASS CONFORMS TO AND ITS PROVIDER ANSWERS. */
+#import <AppKit/NSPasteboard.h>
 
 NS_ASSUME_NONNULL_BEGIN
 
-@interface NSPasteboardItem : NSObject
+/* **AND NOW IT CAN SAY SO.** With the protocol declared, the item conforms to the writer contract it already implements and to
+ * the provider protocol its own provider answers — the two `@optional` provider methods are what `-setDataProvider:forTypes:`
+ * reaches by `-respondsToSelector:`.
+ *
+ * IT DOES NOT DECLARE `NSPasteboardReading`: an item is BUILT BY THE BOARD from its types, and this tier has no board that
+ * makes items, so the class's `+readableTypesForPasteboard:` answers an empty list and the conformance would promise a
+ * construction that does not happen. */
+@interface NSPasteboardItem : NSObject <NSPasteboardWriting>
 {
 	/* THE TYPES IN THE ORDER THEY WERE SET, and the value each one has: data as it was given, and a marker for a type whose
 	 * data is still the provider's. */

@@ -1190,3 +1190,14 @@ target_link_libraries(nib_connectors_and_items PRIVATE App)
 
 add_test(NAME appkit-nib-connectors-and-items COMMAND nib_connectors_and_items)
 set_tests_properties(appkit-nib-connectors-and-items PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
+
+# **NSGlyphInfo, NSImageCell, NSCollectionViewItem AND THE THREE PASTEBOARD PROTOCOLS.** The glyph info resolves a name
+# through the face (and refuses one it has not got); the image cell's alignment and scaling are read off the PIXELS, in
+# three renderings, because a stored fact the drawing ignores would pass every value check; the item's selection is checked
+# to redraw its tile; and the protocols are checked as CONFORMANCE plus one `protocol_getMethodDescription`, which is what a
+# declaration buys over the `-respondsToSelector:` spelling that worked before.
+add_executable(glyph_info_image_cell glyph_info_image_cell.m)
+target_link_libraries(glyph_info_image_cell PRIVATE App)
+
+add_test(NAME appkit-glyph-info-image-cell COMMAND glyph_info_image_cell)
+set_tests_properties(appkit-glyph-info-image-cell PROPERTIES ENVIRONMENT "${_agora_app_test_env}")

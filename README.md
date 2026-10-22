@@ -861,7 +861,20 @@ the compositor is really gone.
   after). It is a writer without declaring `NSPasteboardWriting` — the tier has not got that protocol — because
   `-writeObjects:` sends the writer contract by `-respondsToSelector:`, so a board accepts an item and carries its string.
 
-- **`ctest`: 127 of 127 passed** (the keyboard and the seam, the AppKit and its input path, the controls and their
+- **And `NSGlyphInfo`, `NSImageCell`, `NSCollectionViewItem`, and the THREE PASTEBOARD PROTOCOLS** (`ctest`, offscreen) —
+  three classes and three protocols, and the tier is at **103 of 168 classes with 26 of 56 protocols**. `NSGlyphInfo` names a
+  glyph by NAME (`CTFontGetGlyphWithName`, refusing both of the engine's "no" answers: `.notdef` and
+  `kCGFontIndexInvalid`), by INDEX (the one documented gap: no glyph-to-name lookup, so `-glyphName` is nil), or by a
+  character identifier in one of `NSCharacterCollection`'s six collections. `NSImageCell` draws the base cell's image through
+  three stored facts — alignment, scaling, frame style — and the probe reads them off the PIXELS in three renderings, because a
+  stored-and-ignored alignment passes every value check. `NSCollectionViewItem` is the recycled tile's view controller (its
+  collection view borrowed, its selection a redraw), and it exists before `NSCollectionView` does, which the header says.
+  **The three protocols are the ones the object doors had been reaching informally**: `NSPasteboardWriting`,
+  `NSPasteboardReading` and `NSPasteboardItemDataProvider` are now DECLARED, and `NSPasteboardItem` says it conforms to the
+  writer it already implemented — the test checks the conformance and one `protocol_getMethodDescription`, which is what the
+  declaration buys over `-respondsToSelector:`.
+
+- **`ctest`: 128 of 128 passed** (the keyboard and the seam, the AppKit and its input path, the controls and their
   metrics, the field control and its cell and its bezel and its placeholder and what it may hold, the text path and its
   word granularity and the multi-line view and its wrapping and its scrolling and its READING OF THE STORE, the STORE
   the rich-text slice is built on and the REGION it is laid out in and the WEB that ties the three together and the
