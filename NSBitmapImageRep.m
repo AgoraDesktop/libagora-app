@@ -6,6 +6,7 @@
  */
 #import <AppKit/NSBitmapImageRep.h>
 #import <AppKit/NSColor.h>
+#import <AppKit/NSColorSpace.h>
 #import <AppKit/NSPasteboard.h>
 #import <AppKit/NSGraphicsContext.h>
 #import <CoreGraphics/CGBitmapContext.h>
@@ -220,6 +221,73 @@ NSString *NSImageLoopCount = @"NSImageLoopCount";
 	return self;
 }
 
+/* **AND THE TWO INITIALISERS THE 10.5 SURFACE ADDED, EACH ASKING THE EXISTING DOOR TO DO ITS JOB.** `-initWithData:`
+ * decodes through `+imageRepWithData:` and ADOPTS the result, which is the same move `-incrementalLoadFromData:` makes
+ * at its completion — one decoder, two doors, no second copy of the format sniffing. The bytes' rep is autoreleased and
+ * this object takes a retain of its image, so the two lifetimes stay separate. */
+- (nullable instancetype)initWithData:(NSData *)data
+{
+	NSBitmapImageRep *decoded;
+
+	self = [super init];
+	if (self == nil) {
+		return nil;
+	}
+	decoded = [NSBitmapImageRep imageRepWithData:data];
+	if (decoded == nil) {
+		/* THE REFUSAL HAS ALREADY BEEN NAMED BY THE DECODER, which is the one place that knows the signature. */
+		[self release];
+		return nil;
+	}
+	[self cg_adoptRep:decoded];
+	[self cg_initEraState];
+	return self;
+}
+
+/* **AND THE FORMAT WORD IS CHECKED AGAINST WHAT THIS CLASS CAN HOLD.** Its own buffers are alpha-LAST and premultiplied
+ * (see `-bitmapFormat`, which derives the flags from the layout), and this tier's CoreGraphics has no floating-point
+ * bitmap layout — so three of the format's flags describe a rep this class cannot be. Accepting the word and ignoring it
+ * would leave a caller believing their layout was honoured; the refusal NAMES the flag, because "your alpha is
+ * somewhere else" and "your samples are floats" are different problems with different fixes. */
+- (nullable instancetype)initWithBitmapDataPlanes:(unsigned char **)planes
+				       pixelsWide:(NSInteger)pixelsWide
+				       pixelsHigh:(NSInteger)pixelsHigh
+				    bitsPerSample:(NSInteger)bitsPerSample
+				  samplesPerPixel:(NSInteger)samplesPerPixel
+					 hasAlpha:(BOOL)hasAlpha
+					 isPlanar:(BOOL)isPlanar
+				   colorSpaceName:(NSString *)colorSpaceName
+				    bitmapFormat:(NSBitmapFormat)bitmapFormat
+				      bytesPerRow:(NSInteger)bytesPerRow
+				     bitsPerPixel:(NSInteger)bitsPerPixel
+{
+	if ((bitmapFormat & NSAlphaFirstBitmapFormat) != 0) {
+		fprintf(stderr, "APPKIT-REFUSE: -initWithBitmapDataPlanes:...bitmapFormat: needs "
+				"NSAlphaFirstBitmapFormat, and this class's own buffers are alpha-LAST "
+				"(the image-backed layout reports its own, but an initialiser cannot promise one)\n");
+		[self release];
+		return nil;
+	}
+	if ((bitmapFormat & NSAlphaNonpremultipliedBitmapFormat) != 0) {
+		fprintf(stderr, "APPKIT-REFUSE: -initWithBitmapDataPlanes:...bitmapFormat: needs "
+				"NSAlphaNonpremultipliedBitmapFormat, and this class's own buffers are premultiplied\n");
+		[self release];
+		return nil;
+	}
+	if ((bitmapFormat & NSFloatingPointSamplesBitmapFormat) != 0) {
+		fprintf(stderr, "APPKIT-REFUSE: -initWithBitmapDataPlanes:...bitmapFormat: needs "
+				"NSFloatingPointSamplesBitmapFormat, and this tier's CoreGraphics has no "
+				"floating-point bitmap layout\n");
+		[self release];
+		return nil;
+	}
+	/* EVERYTHING ELSE IS THE 10.0 INITIALISER, whose layout this class already derives the same flags from. */
+	return [self initWithBitmapDataPlanes:planes pixelsWide:pixelsWide pixelsHigh:pixelsHigh
+				bitsPerSample:bitsPerSample samplesPerPixel:samplesPerPixel
+				     hasAlpha:hasAlpha isPlanar:isPlanar colorSpaceName:colorSpaceName
+				  bytesPerRow:bytesPerRow bitsPerPixel:bitsPerPixel];
+}
+
 + (nullable instancetype)imageRepWithCGImage:(CGImageRef)cgImage
 {
 	return [[[self alloc] initWithCGImage:cgImage] autorelease];
@@ -277,6 +345,15 @@ NSString *NSImageLoopCount = @"NSImageLoopCount";
 - (NSInteger)bitsPerSample
 {
 	return _bitsPerSample;
+}
+
+/* **THE SETTER WRITES THE DEPTH THE PIXELS ARE IN, WHICH IS THIS CLASS'S OWN FIELD** — see the header. The base's
+ * `_repBitsPerSample` is what a rep with no pixels of its own was told; here the depth is a fact about the bytes, and a
+ * caller who sets it is describing the buffer the rep already holds. Nothing re-lays-out the pixels: this is the era's
+ * door for "record what these bytes are", not a conversion. */
+- (void)setBitsPerSample:(NSInteger)bitsPerSample
+{
+	_bitsPerSample = bitsPerSample;
 }
 
 - (NSInteger)samplesPerPixel
@@ -664,6 +741,63 @@ NSString *NSImageLoopCount = @"NSImageLoopCount";
 	return [_properties objectForKey:property];
 }
 
+/* ---- THE SPACE AS AN OBJECT, AND THE TIFF PAIR THAT IS NOT A DOOR ------------------------------- */
+
+/* **FOUR NAMES, FOUR SPACES, AND NO GUESS FOR ANY OTHER.** The rep stores a colour-space NAME (that is the era's model
+ * here); `NSColorSpace` arrived two slices after this class did, which is why this door is new rather than late. The
+ * mapping is by name and covers the spaces a rep in this layer can actually be in — the two device ones this header
+ * exports, the calibrated pair a decoded picture is in, and CMYK — and an unrecognised name answers nil with the name
+ * printed, because picking a "close" space would be a colour conversion away from being wrong. `NSCustomColorSpace`,
+ * `NSNamedColorSpace` and `NSPatternColorSpace` are exactly the names with no space behind them, and they land in that
+ * refusal rather than pretending. */
+- (NSColorSpace *)colorSpace
+{
+	NSString *name = [self colorSpaceName];
+
+	if (name == nil) {
+		return nil;
+	}
+	if ([name isEqualToString:NSDeviceRGBColorSpace]) {
+		return [NSColorSpace deviceRGBColorSpace];
+	}
+	if ([name isEqualToString:NSDeviceGrayColorSpace] || [name isEqualToString:NSDeviceWhiteColorSpace]) {
+		return [NSColorSpace deviceGrayColorSpace];
+	}
+	if ([name isEqualToString:NSCalibratedRGBColorSpace]) {
+		return [NSColorSpace genericRGBColorSpace];
+	}
+	if ([name isEqualToString:NSCalibratedWhiteColorSpace]) {
+		return [NSColorSpace genericGrayColorSpace];
+	}
+	if ([name isEqualToString:NSDeviceCMYKColorSpace]) {
+		return [NSColorSpace deviceCMYKColorSpace];
+	}
+	fprintf(stderr, "APPKIT-REFUSE: -colorSpace needs a space behind the rep's colour-space NAME, and this "
+			"tier has none for \"%s\" (the names it can map are the device RGB/gray/CMYK ones and the "
+			"calibrated pair; a custom, named or pattern space has no object here)\n", [name UTF8String]);
+	return nil;
+}
+
+/* **AND THE TIFF PAIR IS THE CLASS'S ONE NAMED REFUSAL.** A TIFF is written by an encoder, and this tree's
+ * CoreGraphics has one — PNG. The compression and factor arguments would choose among TIFF's codecs; there are none to
+ * choose between, and writing an uncompressed TIFF from here would be a second encoder living in the wrong layer. So
+ * both answer nil and say what they would need, which is the honest shape of "not this build". */
++ (NSData *)TIFFRepresentation
+{
+	fprintf(stderr, "APPKIT-REFUSE: +TIFFRepresentation needs a TIFF ENCODER; this tree's CGImageDestination "
+			"writes PNG only, and a TIFF writer belongs there rather than here\n");
+	return nil;
+}
+
++ (NSData *)TIFFRepresentationUsingCompression:(NSTIFFCompression)compression factor:(float)factor
+{
+	(void)compression;
+	(void)factor;
+	fprintf(stderr, "APPKIT-REFUSE: +TIFFRepresentationUsingCompression:factor: needs a TIFF ENCODER with "
+			"codecs to choose between; this tree's CGImageDestination writes PNG only\n");
+	return nil;
+}
+
 - (void)getCompression:(NSTIFFCompression *)compression factor:(float *)factor
 {
 	if (compression != NULL) {
@@ -1021,28 +1155,46 @@ static NSData *fn_png_data_for_image(CGImageRef image)
 {
 	(void)targetSpace;
 	(void)renderingIntent;
-	/* TWO THINGS ARE MISSING AND THE MESSAGE NAMES BOTH, because either alone would be enough to stop a
-	 * correct implementation: the target arrives as an `NSColorSpace` (a class this tier does not ship, so
-	 * there is no way to read which space it names), AND nothing in this tree converts pixels between two
-	 * spaces — the drawing composites device numbers and the decoders produce the space they were told. */
-	fprintf(stderr, "APPKIT-REFUSE: -bitmapImageRepByConvertingToColorSpace:renderingIntent: needs "
-			"NSColorSpace (a class this tier does not ship) and a colour-converting path; this rep's "
-			"space is a NAME, and nothing here converts between two of them\n");
+	/* **ONE THING IS MISSING NOW, AND IT IS THE HARD ONE.** `NSColorSpace` ARRIVED (this class answers `-colorSpace`
+	 * with it), so the target's name is readable — but nothing in this tree converts PIXELS between two spaces: the
+	 * drawing composites device numbers and the decoders produce the space they were told. So the refusal is narrowed
+	 * to the conversion, which is the truth; the retagging door below, which changes no pixel, is real. */
+	fprintf(stderr, "APPKIT-REFUSE: -bitmapImageRepByConvertingToColorSpace:renderingIntent: needs a "
+			"COLOUR-CONVERTING path; this rep's space is a name and nothing here converts pixels between "
+			"two of them (retagging, which changes no pixel, is `-bitmapImageRepByRetaggingWithColorSpace:`)\n");
 	return nil;
 }
 
 - (nullable NSBitmapImageRep *)bitmapImageRepByRetaggingWithColorSpace:(id)newSpace
 {
-	(void)newSpace;
-	/* THE SAME MISSING CLASS STOPS A DOOR THAT WOULD OTHERWISE BE EASY. Retagging changes no pixel — it
-	 * says "these bytes are in a different space" — so all this door needs is the new space's NAME, and the
-	 * object it is handed cannot supply one: `NSColorSpace` is not in this tree, and guessing a space from a
-	 * description would be exactly the silent wrong answer this tier refuses to ship. THE SPACE THIS CLASS
-	 * CAN CHANGE IS THE ONE IT STORES, and `-colorSpaceName` answers it. */
-	fprintf(stderr, "APPKIT-REFUSE: -bitmapImageRepByRetaggingWithColorSpace: takes an NSColorSpace, which "
-			"this tier does not ship; the space this class stores is the NAME "
-			"-initWithBitmapDataPlanes:...colorSpaceName: was given\n");
-	return nil;
+	NSString *name;
+	NSBitmapImageRep *retagged;
+
+	/* **RETAGGING CHANGES NO PIXEL, WHICH IS WHY IT IS A REAL DOOR NOW.** It says "these bytes are in a different
+	 * space": the copy is the same pixels with a different NAME, so the only thing this needs is the new space's name —
+	 * and `NSColorSpace` ships now, so the object handed over can supply one. The refusal this replaces said the class
+	 * did not exist and was true when it was written; the header's note beside `-colorSpace` records the correction.
+	 *
+	 * A NAME THE NEW SPACE CANNOT SUPPLY IS A REFUSAL, not a silent no-op: `-localizedName` answers nil for a space the
+	 * engine has no name for, and a copy retagged to nothing would look like success. */
+	if (newSpace == nil || ![newSpace isKindOfClass:[NSColorSpace class]]) {
+		fprintf(stderr, "APPKIT-REFUSE: -bitmapImageRepByRetaggingWithColorSpace: takes an NSColorSpace; this "
+				"rep's space is a NAME and there is nothing to retag to\n");
+		return nil;
+	}
+	name = [(NSColorSpace *)newSpace localizedName];
+	if (name == nil) {
+		fprintf(stderr, "APPKIT-REFUSE: -bitmapImageRepByRetaggingWithColorSpace: needs a space with a NAME; "
+				"the one given has none (the engine has no name for a device space), so the copy would be "
+				"retagged to nothing\n");
+		return nil;
+	}
+	retagged = [[NSBitmapImageRep alloc] initWithCGImage:[self CGImage]];
+	if (retagged != nil) {
+		[retagged setColorSpaceName:name];
+		[retagged setSize:[self size]];
+	}
+	return [retagged autorelease];
 }
 
 - (nullable instancetype)initWithCIImage:(id)ciImage

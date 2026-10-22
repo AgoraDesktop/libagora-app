@@ -149,7 +149,8 @@ tests/
                                 and the recess `-isBezeled` decides
   panel_alert.m                 the PANEL and the ALERT: the click-to-key rule, the content and the two ways to run it
   search_field.m                the SEARCH FIELD: two ornaments, the sending rules, the timer and the recents menu
-  image_draw.m                  an image rep draws UP in a y-up and a y-down context alike
+  image_draw.m                  an image rep draws UP in a y-up and a y-down context alike — and the WIDE door:
+                                a crop, an operation and a fraction, a background, the delegate and the hints
   control_drag.m                and what a DRAG costs: forty motions, and how many frames the window committed
   run-*-headless.sh             ctest: a compositor with a virtual monitor (no desktop input involved)
   run-*-nested.sh, inspect.py   the PIXEL tests, and they are OPT-IN: `gnome-shell --nested` is a whole
@@ -1101,6 +1102,27 @@ because it had made the clicked subview the first responder.
 - **An NSTrackingArea's SCOPE is what a background window needed.** Before the option word, the window decided
   the crossing for the deepest view of whatever window the pointer was over, so a control in a window that was
   not key prelighted anyway. The area's own `Active…` bits are the fix, and the test pins both answers.
+- **The image family is COMPLETE, and a refusal had outlived its reason.** `NSImage` (77), `NSImageRep` (40) and
+  `NSBitmapImageRep` (41) now answer the whole 10.6 surface. The drawing seam is ONE door — `-drawInRect:fromRect:`
+  `operation:fraction:respectFlipped:hints:` — and the four simpler doors are it with their arguments filled in, so
+  `-drawInRect:` paints exactly what it painted before. `fromRect:` crops in the REP's points and converts to pixels in
+  one place; the operation and fraction go through the context (which is where the blend mapping and its refusal live);
+  `hints:` reads `NSImageHintInterpolation` for the length of the draw and puts the context's quality back. MEASURED
+  while writing it: this library's sampler has NEAREST and BILINEAR only, so `NSImageInterpolationHigh` is REFUSED by
+  `CGContextSetInterpolationQuality` and the measurable pair is None against Medium — 0 blended points against 64 on a
+  4x upscale. `NSImage` gained `-backgroundColor:` (the colour goes down BEFORE the picture, which is what a transparent
+  image's holes show), `-delegate:` (its `-imageDidNotDraw:inRect:` is asked when no rep can draw, and the rep it
+  answers is the picture — proved by pixels, not by a call count) and the `+imageTypes`/`+imageUnfilteredTypes` lists,
+  which are the REP REGISTRY's rather than a second table. THE STALE REFUSAL: `-bitmapImageRepByRetaggingWithColorSpace:`
+  refused because "`NSColorSpace` is not in this tree", which stopped being true two slices ago — it is real now (a copy
+  with the same pixels and a new name), while `-bitmapImageRepByConvertingToColorSpace:intent:` still refuses and finally
+  names the right reason: nothing here converts PIXELS between spaces. `-colorSpace` maps the rep's stored NAME to one of
+  the five spaces this layer can be in and refuses a custom/named/pattern name rather than guessing. TIFF writing stayed
+  a NAMED REFUSAL (no encoder beyond PNG). **AND THE SWEEP FOUND A REGISTRY BUG**: `fn_union_of` called every registered
+  class for `+imageUnfilteredTypes`, including the ones that only INHERIT that union — so the first ask for the UTI list
+  recursed until the stack died. The test is now "does this class answer it itself", compared through the METACLASS
+  (`class_getMethodImplementation` on the class alone searches instance methods and compared two NULLs, which answered an
+  empty union).
 - **`NSImageRep -drawInRect:` drew the same bytes mirrored in the two coordinate systems AppKit builds.** The
   Desktop is y-up and Workspace's flipped `WSIconView` is y-down; `CGContextDrawImage` follows the CTM, so
   Frost's folder art was upright in one and upside-down in the other. A positive CTM `d` now gets the rect's

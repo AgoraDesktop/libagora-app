@@ -16,6 +16,9 @@
  * the fix one buffer had red at the top and the other at the bottom.
  */
 #import <AppKit/NSBitmapImageRep.h>
+#import <AppKit/NSImage.h>
+#import <AppKit/NSImageRep.h>
+#import <AppKit/NSColor.h>
 #import <AppKit/NSGraphicsContext.h>
 #import <AppKit/NSGraphics.h>
 
@@ -28,6 +31,39 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+
+/* **A DELEGATE THAT ANSWERS WITH A REP, AND COUNTS THE QUESTION.** The protocol's answer is the rep to draw instead,
+ * so a probe can prove the substitute was USED (the picture) rather than only that a method ran (the count). */
+@interface AGRepDelegate : NSObject <NSImageDelegate>
+{
+@public
+	int calls;
+	NSImageRep *substitute;
+}
+- (id)initWithRep:(NSImageRep *)rep;
+@end
+
+@implementation AGRepDelegate
+- (id)initWithRep:(NSImageRep *)rep
+{
+	if ((self = [super init]) != nil) {
+		substitute = [rep retain];
+	}
+	return self;
+}
+- (void)dealloc
+{
+	[substitute release];
+	[super dealloc];
+}
+- (NSImageRep *)imageDidNotDraw:(id)sender inRect:(NSRect)aRect
+{
+	(void)sender;
+	(void)aRect;
+	calls++;
+	return substitute;
+}
+@end
 
 #define IMAGE_SIDE 8
 #define ROW_BYTES (IMAGE_SIDE * 4)
@@ -112,6 +148,43 @@ static CGContextRef drawInto(BOOL yDown, NSBitmapImageRep *rep)
 	return cg;
 }
 
+/* **AND A CONTEXT OF ANY SIZE, BECAUSE THE WIDE DOOR SCALES.** The helper above is pinned to the image's own size,
+ * which is right for the orientation claim; the compositing claims below need a destination that is BIGGER than the
+ * source so a hint has something to interpolate over. */
+static CGContextRef newContext(BOOL yDown, int side)
+{
+	CGColorSpaceRef space = CGColorSpaceCreateDeviceRGB();
+	CGContextRef cg = CGBitmapContextCreate(NULL, (size_t)side, (size_t)side, 8, (size_t)side * 4, space,
+					       kCGImageAlphaPremultipliedFirst | kCGBitmapByteOrder32Little);
+	NSGraphicsContext *g;
+
+	CGColorSpaceRelease(space);
+	if (cg == NULL) {
+		return NULL;
+	}
+	CGContextClearRect(cg, CGRectMake(0.0, 0.0, (CGFloat)side, (CGFloat)side));
+	if (yDown) {
+		CGContextTranslateCTM(cg, 0.0, (CGFloat)side);
+		CGContextScaleCTM(cg, 1.0, -1.0);
+	}
+	(void)g;
+	return cg;
+}
+
+/* AND ONE DOOR THAT PUTS THE CONTEXT IN PLACE, DRAWS, AND PUTS THE LAST ONE BACK — so a block cannot leave the probe
+ * drawing into somebody else's surface. */
+static void drawWith(CGContextRef cg, BOOL flipped, NSImage *image, NSRect dst, NSRect src,
+		     NSCompositingOperation op, CGFloat delta, BOOL respectFlipped, NSDictionary *hints)
+{
+	NSGraphicsContext *g = [NSGraphicsContext graphicsContextWithCGContext:cg flipped:flipped];
+	NSGraphicsContext *previous = [[NSGraphicsContext currentContext] retain];
+
+	[NSGraphicsContext setCurrentContext:g];
+	[image drawInRect:dst fromRect:src operation:op fraction:delta respectFlipped:respectFlipped hints:hints];
+	[NSGraphicsContext setCurrentContext:previous];
+	[previous release];
+}
+
 int main(void)
 {
 	setvbuf(stdout, NULL, _IONBF, 0);
@@ -146,6 +219,176 @@ int main(void)
 
 		CGContextRelease(up);
 		CGContextRelease(down);
+
+		/* ============================================================================================
+		 * AND THE WIDE DOOR: WHAT PART, HOW, HOW MUCH, WHICH WAY UP, AND WITH WHAT HINTS.
+		 * ============================================================================================ */
+		{
+			NSImage *pic = [[NSImage alloc] initWithSize:NSMakeSize(IMAGE_SIDE, IMAGE_SIDE)];
+			CGContextRef cg;
+			unsigned char *px;
+			NSRect whole = NSMakeRect(0.0, 0.0, IMAGE_SIDE, IMAGE_SIDE);
+
+			[rep setSize:NSMakeSize(IMAGE_SIDE, IMAGE_SIDE)];
+			[pic addRepresentation:rep];
+			check([pic backgroundColor] == nil && [pic delegate] == nil,
+			      "a fresh image has no background colour and no delegate");
+
+			/* 1. A CROP OF THE TOP HALF, STRETCHED OVER THE WHOLE DESTINATION, IS ALL RED. The source rect is in the
+			 * REP's own space and a CGImage's rows run DOWN from its top, so y 0..4 is the red half. */
+			cg = newContext(NO, IMAGE_SIDE);
+			drawWith(cg, NO, pic, whole, NSMakeRect(0.0, 0.0, IMAGE_SIDE, IMAGE_SIDE / 2.0),
+				 NSCompositingOperationCopy, 1.0, YES, nil);
+			px = CGBitmapContextGetData(cg);
+			printf("  (note: a top-half crop drew red at row 0: %d, at row 7: %d)\n",
+			       row_is_red(px), row_is_red(px + (IMAGE_SIDE - 1) * ROW_BYTES));
+			check(row_is_red(px) && row_is_red(px + (IMAGE_SIDE - 1) * ROW_BYTES),
+			      "`fromRect:` takes the source's own rows — a crop of the top half stretched is all red");
+			CGContextRelease(cg);
+
+			cg = newContext(NO, IMAGE_SIDE);
+			drawWith(cg, NO, pic, whole, NSMakeRect(0.0, IMAGE_SIDE / 2.0, IMAGE_SIDE, 4.0),
+				 NSCompositingOperationCopy, 1.0, YES, nil);
+			px = CGBitmapContextGetData(cg);
+			check(row_is_blue(px) && row_is_blue(px + (IMAGE_SIDE - 1) * ROW_BYTES),
+			      "and the BOTTOM half's crop is all blue — the rect selects which half, not which way up");
+			CGContextRelease(cg);
+
+			/* 2. THE FRACTION AND THE OPERATION. Over a GREEN ground: SourceOver at half strength blends, and Copy
+			 * at full strength does not. MEASURED with the green written FIRST, so the two draws see the same
+			 * destination. */
+			{
+				int i;
+
+				for (i = 0; i < 2; i++) {
+					cg = newContext(NO, IMAGE_SIDE);
+					px = CGBitmapContextGetData(cg);
+					CGContextSetRGBFillColor(cg, 0.0, 1.0, 0.0, 1.0);
+					CGContextFillRect(cg, CGRectMake(0.0, 0.0, IMAGE_SIDE, IMAGE_SIDE));
+					drawWith(cg, NO, pic, whole, NSZeroRect,
+						 i == 0 ? NSCompositingOperationCopy : NSCompositingOperationSourceOver,
+						 i == 0 ? 1.0 : 0.5, YES, nil);
+					if (i == 0) {
+						unsigned char *first = CGBitmapContextGetData(cg);
+
+						check(row_is_red(first) || row_is_blue(first),
+						      "Copy at full strength REPLACES the ground — the picture, not a blend");
+						CGContextRelease(cg);
+					} else {
+						unsigned char *half = CGBitmapContextGetData(cg);
+						int blended = !row_is_red(half) && !row_is_blue(half) && half[1] > 40;
+
+						printf("  (note: half-strength SourceOver over green gave B=%d G=%d R=%d)\n",
+						       half[0], half[1], half[2]);
+						check(blended, "and half-strength SourceOver BLENDS with the ground");
+						CGContextRelease(cg);
+					}
+				}
+			}
+
+			/* 3. THE BACKGROUND IS PUT DOWN FIRST. A rep whose bytes are all zero is fully TRANSPARENT, so a white
+			 * ground behind a red background must come out RED — which is what makes the door more than storage. */
+			{
+				NSImage *clear = [[NSImage alloc] initWithSize:NSMakeSize(IMAGE_SIDE, IMAGE_SIDE)];
+				NSBitmapImageRep *blank = [[NSBitmapImageRep alloc]
+					initWithBitmapDataPlanes:NULL pixelsWide:IMAGE_SIDE pixelsHigh:IMAGE_SIDE
+						   bitsPerSample:8 samplesPerPixel:4 hasAlpha:YES isPlanar:NO
+						 colorSpaceName:NSDeviceRGBColorSpace
+						    bytesPerRow:ROW_BYTES bitsPerPixel:32];
+
+				[clear addRepresentation:blank];
+				[clear setBackgroundColor:[NSColor redColor]];
+				check([[clear backgroundColor] isEqual:[NSColor redColor]],
+				      "`-setBackgroundColor:` round-trips through the image");
+				cg = newContext(NO, IMAGE_SIDE);
+				px = CGBitmapContextGetData(cg);
+				CGContextSetRGBFillColor(cg, 1.0, 1.0, 1.0, 1.0);
+				CGContextFillRect(cg, CGRectMake(0.0, 0.0, IMAGE_SIDE, IMAGE_SIDE));
+				drawWith(cg, NO, clear, whole, NSZeroRect, NSCompositingOperationSourceOver, 1.0, YES, nil);
+				printf("  (note: over a white ground, a transparent image with a red background gave R=%d)\n", px[2]);
+				check(px[2] > 200 && px[1] < 60 && px[0] < 60,
+				      "a transparent image over a RED background leaves red — the colour goes down first");
+				CGContextRelease(cg);
+				[blank release];
+				[clear release];
+			}
+
+			/* 4. THE HINT IS THE CONTEXT'S INTERPOLATION FOR ONE DRAW, AND THE QUALITY THIS TIER CANNOT FILTER IS
+			 * REFUSED RATHER THAN FAKED. MEASURED while writing this: `NSImageInterpolationHigh` maps to
+			 * `kCGInterpolationHigh`, and this library's sampler has NEAREST and BILINEAR only — so the quality is
+			 * REJECTED (with CoreGraphics' own refusal on stderr) and the context keeps what it had. The measurable
+			 * pair is therefore None against MEDIUM: None leaves hard blocks and Medium blends, which is counted across
+			 * a 4x upscale of a two-colour picture. */
+			{
+				NSMutableDictionary *none = [NSMutableDictionary dictionary];
+				NSMutableDictionary *high = [NSMutableDictionary dictionary];
+				int blendedNone = 0;
+				int blendedHigh = 0;
+				int x, y;
+
+				[none setObject:[NSNumber numberWithInteger:NSImageInterpolationNone]
+					 forKey:NSImageHintInterpolation];
+				[high setObject:[NSNumber numberWithInteger:NSImageInterpolationMedium]
+					 forKey:NSImageHintInterpolation];
+				cg = newContext(NO, IMAGE_SIDE * 4);
+				drawWith(cg, NO, pic, NSMakeRect(0.0, 0.0, IMAGE_SIDE * 4, IMAGE_SIDE * 4), NSZeroRect,
+					 NSCompositingOperationCopy, 1.0, YES, none);
+				px = CGBitmapContextGetData(cg);
+				for (y = 0; y < IMAGE_SIDE * 4; y++) {
+					for (x = 0; x < IMAGE_SIDE * 4; x++) {
+						unsigned char *p = px + y * IMAGE_SIDE * 16 + x * 4;
+
+						if (!row_is_red(p) && !row_is_blue(p) && p[3] > 0) {
+							blendedNone++;
+						}
+					}
+				}
+				CGContextRelease(cg);
+				cg = newContext(NO, IMAGE_SIDE * 4);
+				drawWith(cg, NO, pic, NSMakeRect(0.0, 0.0, IMAGE_SIDE * 4, IMAGE_SIDE * 4), NSZeroRect,
+					 NSCompositingOperationCopy, 1.0, YES, high);
+				px = CGBitmapContextGetData(cg);
+				for (y = 0; y < IMAGE_SIDE * 4; y++) {
+					for (x = 0; x < IMAGE_SIDE * 4; x++) {
+						unsigned char *p = px + y * IMAGE_SIDE * 16 + x * 4;
+
+						if (!row_is_red(p) && !row_is_blue(p) && p[3] > 0) {
+							blendedHigh++;
+						}
+					}
+				}
+				printf("  (note: a 4x upscale has %d blended points at interpolation None and %d at Medium)\n",
+				       blendedNone, blendedHigh);
+				check(blendedHigh > 0, "an `NSImageHintInterpolation` of Medium blends the upscale");
+				check(blendedNone < blendedHigh,
+				      "and None does not — so the hint reaches the context rather than being stored");
+				CGContextRelease(cg);
+			}
+
+			/* 5. THE DELEGATE, WHICH IS ASKED WHEN NOTHING CAN DRAW. An image with NO representations has no rep to
+			 * choose; the delegate answers with one, and the picture proves the substitute was used rather than
+			 * merely that a method ran. */
+			{
+				NSImage *empty = [[NSImage alloc] initWithSize:NSMakeSize(IMAGE_SIDE, IMAGE_SIDE)];
+				AGRepDelegate *watcher = [[AGRepDelegate alloc] initWithRep:rep];
+
+				[empty setDelegate:(id <NSImageDelegate>)watcher];
+				check([empty delegate] == (id)watcher, "`-setDelegate:` round-trips through the image");
+				cg = newContext(NO, IMAGE_SIDE);
+				drawWith(cg, NO, empty, whole, NSZeroRect, NSCompositingOperationCopy, 1.0, YES, nil);
+				px = CGBitmapContextGetData(cg);
+				printf("  (note: an image with no reps asked its delegate %d time(s))\n", watcher->calls);
+				check(watcher->calls == 1, "an image with NO representation asks its delegate once");
+				check(row_is_red(px) && row_is_blue(px + (IMAGE_SIDE - 1) * ROW_BYTES),
+				      "and the rep the delegate answered is the picture that was drawn");
+				CGContextRelease(cg);
+				[watcher release];
+				[empty release];
+			}
+
+			[pic release];
+		}
+
 		[rep release];
 		CGImageRelease(image);
 	}

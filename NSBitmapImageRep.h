@@ -140,6 +140,7 @@ extern NSString *NSImageLoopCount;                 /* GIF out — an int in an N
  * nothing — a `@class` is a forward declaration and not an `@interface`. */
 @class NSArray;
 @class NSColor;
+@class NSColorSpace;
 @class NSDictionary;
 
 @interface NSBitmapImageRep : NSImageRep
@@ -186,6 +187,25 @@ extern NSString *NSImageLoopCount;                 /* GIF out — an int in an N
  * and for a BITMAP-BACKED one an image built over the rep's own bytes, CACHED so that two calls do not
  * produce two images. */
 - (nullable instancetype)initWithCGImage:(CGImageRef)cgImage;
+
+/* **AND THE TWO INITIALISERS THE 10.5 SURFACE ADDED.** `-initWithData:` takes ENCODED bytes and decodes them — it is
+ * `+imageRepWithData:` as an initialiser, with the same two decoders and the same named refusal for anything else.
+ * `-initWithBitmapDataPlanes:...bitmapFormat:...` is the 10.0 initialiser plus the format word, and it VALIDATES that
+ * word: this class's own buffers are alpha-LAST and premultiplied, so a layout asking for alpha first, for
+ * non-premultiplied samples or for floating-point samples is refused by name rather than accepted and drawn as though
+ * it had been honoured — which is the silent wrong answer a format word exists to prevent. */
+- (nullable instancetype)initWithData:(nullable NSData *)data;
+- (nullable instancetype)initWithBitmapDataPlanes:(unsigned char * _Nullable * _Nullable)planes
+				       pixelsWide:(NSInteger)pixelsWide
+				       pixelsHigh:(NSInteger)pixelsHigh
+				    bitsPerSample:(NSInteger)bitsPerSample
+				  samplesPerPixel:(NSInteger)samplesPerPixel
+					 hasAlpha:(BOOL)hasAlpha
+					 isPlanar:(BOOL)isPlanar
+				   colorSpaceName:(nullable NSString *)colorSpaceName
+				    bitmapFormat:(NSBitmapFormat)bitmapFormat
+				      bytesPerRow:(NSInteger)bytesPerRow
+				     bitsPerPixel:(NSInteger)bitsPerPixel;
 + (nullable instancetype)imageRepWithCGImage:(CGImageRef)cgImage;
 
 /* THE DECODE. The format is taken from the data's own first bytes rather than from a parameter — a
@@ -195,7 +215,25 @@ extern NSString *NSImageLoopCount;                 /* GIF out — an int in an N
 
 /* THE LAYOUT, AS FACTS. `-bitmapData` is NULL for a CGIMAGE-BACKED rep (see the note above). */
 @property (nullable, readonly) unsigned char *bitmapData;
-@property (readonly) NSInteger bitsPerSample;
+/* **AND THE DEPTH IS THE BYTES' HERE, WHICH IS WHY THE PAIR IS SPELLED AS METHODS RATHER THAN A READONLY PROPERTY.**
+ * `NSImageRep` declares `bitsPerSample` read-write now; a readonly property here would both restrict it (the compiler
+ * measured exactly that mismatch) and leave a caller's `-setBitsPerSample:` writing the BASE's recorded value while
+ * `-bitsPerSample` read this class's. Two methods, one ivar, and the pair cannot disagree. */
+- (NSInteger)bitsPerSample;
+- (void)setBitsPerSample:(NSInteger)bitsPerSample;
+
+/* **AND THE REP'S SPACE AS AN OBJECT, WHICH THIS CLASS COULD NOT ANSWER UNTIL `NSColorSpace` EXISTED.** The name is what
+ * this class stores; the mapping to a space is by NAME, and only the names this layer can be in are mapped — the two
+ * device spaces this header exports and the calibrated pair the field decodes too. A rep carrying a name with no space
+ * behind it answers nil AND SAYS WHICH NAME, because a guess here would be a colour conversion away from being wrong. */
+- (nullable NSColorSpace *)colorSpace;
+
+/* **AND THE TIFF PAIR, WHICH IS THE ONE PART OF THIS CLASS THAT IS A NAMED REFUSAL RATHER THAN A DOOR.** Writing a TIFF
+ * needs an encoder, and this tree's CoreGraphics has exactly one: PNG (`CGImageDestination`, in libagora-drawing). The
+ * compression and factor arguments would select among TIFF's codecs, and there are none to select between — so both
+ * doors answer nil and say what they would need. A TIFF writer is a slice in libagora-drawing, not a stub here. */
++ (nullable NSData *)TIFFRepresentation;
++ (nullable NSData *)TIFFRepresentationUsingCompression:(NSTIFFCompression)compression factor:(float)factor;
 @property (readonly) NSInteger samplesPerPixel;
 @property (readonly) BOOL hasAlpha;
 @property (readonly) BOOL isPlanar;

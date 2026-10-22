@@ -23,6 +23,9 @@
 #import <AppKit/NSGraphicsContext.h>
 #import <AppKit/NSBezierPath.h>
 #import <AppKit/NSColor.h>
+#import <AppKit/NSColorSpace.h>
+#import <AppKit/NSImage.h>
+#import <AppKit/NSPasteboard.h>
 #import <AppKit/NSWindow.h>
 #import <AppKit/NSView.h>
 #import <Foundation/Foundation.h>
@@ -242,6 +245,128 @@ int main(void)
 			      "and an undecodable format has no class, which is what makes the two nil answers above meaningful");
 			check([NSImageRep imageRepClassForData:[NSData dataWithBytes:"\x89PNG\r\n\x1a\n" length:8]] != nil,
 			      "while a format this tier DOES decode still has one — so the registry is not empty");
+		}
+
+		/* ============================================================================================
+		 * THE IMAGE FAMILY'S SWEEP: the sample questions, the type lists, the pasteboard question, the
+		 * format word, the space as an object, and the one door that was refused for a reason that expired.
+		 * ============================================================================================ */
+		{
+			NSBitmapImageRep *bitmap = [[NSBitmapImageRep alloc]
+				initWithBitmapDataPlanes:NULL pixelsWide:4 pixelsHigh:2 bitsPerSample:8
+					  samplesPerPixel:4 hasAlpha:YES isPlanar:NO
+					   colorSpaceName:NSDeviceRGBColorSpace bytesPerRow:16 bitsPerPixel:32];
+			/* **THE ABSTRACT BASE IS THE HONEST "REP WITH NO PIXELS OF ITS OWN"**, and it is what the two sample
+			 * doors exist for: a concrete rep answers from its data, this one from what it was told. */
+			NSImageRep *base = [[NSImageRep alloc] init];
+			NSBitmapImageRep *retagged;
+			NSImageRep *rgb;
+
+			/* 1. THE TWO SAMPLE QUESTIONS. The base records what it is told and a rep whose pixels have a depth of
+			 * their own answers THAT; a base rep that was never told has no samples, so it says 0 rather than 8. */
+			check([bitmap bitsPerSample] == 8, "a bitmap rep's bit depth is the one its bytes are in");
+			check([base bitsPerSample] == 0,
+			      "and a rep with no pixels of its own answers 0 samples until it is told");
+			[base setBitsPerSample:12];
+			check([base bitsPerSample] == 12,
+			      "`-setBitsPerSample:` records the answer, which is the base's whole contract for it");
+			check([bitmap hasAlpha] && ![base hasAlpha],
+			      "`-hasAlpha` reads the alpha channel: the bitmap has one, the base rep was never told it has");
+
+			/* 2. THE TYPE LISTS. The filtered pair equals the unfiltered one here — no filters exist — and the IMAGE's
+			 * UTI list is the REGISTRY's, so there is one table rather than two. */
+			check([[NSImageRep imageFileTypes] containsObject:@"png"],
+			      "the rep registry's filtered FILE types include the one this tier decodes");
+			check([[NSImageRep imageFileTypes] isEqual:[NSImageRep imageUnfilteredFileTypes]] &&
+			      [[NSImageRep imagePasteboardTypes] isEqual:[NSImageRep imageUnfilteredPasteboardTypes]],
+			      "and the filtered pair IS the unfiltered pair, because this tier registers no filters");
+			check([[NSImage imageTypes] isEqual:[NSImageRep imageTypes]],
+			      "`+[NSImage imageTypes]` is the registry's list rather than a second table");
+			check([[NSImage imageUnfilteredTypes] containsObject:NSPasteboardTypePNG] ||
+			      [[NSImage imageTypes] count] > 0,
+			      "and the list is not empty, which is what makes the check above meaningful");
+
+			/* 3. THE LIVE PASTEBOARD QUESTION. A board carrying PNG bytes is a yes; an empty one is a no. */
+			{
+				NSPasteboard *board = [NSPasteboard generalPasteboard];
+				NSData *pngBits = [NSData dataWithBytes:"\x89PNG\r\n\x1a\n" length:8];
+
+				[board declareTypes:[NSArray arrayWithObject:NSPasteboardTypePNG] owner:nil];
+				[board setData:pngBits forType:NSPasteboardTypePNG];
+				check([NSImageRep canInitWithPasteboard:board],
+				      "a pasteboard carrying a type this registry reads is a YES");
+				check([NSImage canInitWithPasteboard:board],
+				      "and so is the image's own door, which is the one a caller usually asks");
+				[board declareTypes:[NSArray arrayWithObject:@"public.plain-text"] owner:nil];
+				check(![NSImageRep canInitWithPasteboard:board],
+				      "and a board carrying nothing this layer reads is a NO");
+				check(![NSImageRep canInitWithPasteboard:nil], "a nil pasteboard is a NO rather than a crash");
+			}
+
+			/* 4. THE FORMAT WORD. Zero is this class's own layout, so it is accepted; the three flags that describe a
+			 * layout it cannot hold are refused BY NAME. */
+			{
+				unsigned char *planes[1] = { NULL };
+				NSBitmapImageRep *plain = [[NSBitmapImageRep alloc]
+					initWithBitmapDataPlanes:planes pixelsWide:2 pixelsHigh:2 bitsPerSample:8
+						  samplesPerPixel:4 hasAlpha:YES isPlanar:NO
+						   colorSpaceName:NSDeviceRGBColorSpace
+						    bitmapFormat:(NSBitmapFormat)0
+						      bytesPerRow:8 bitsPerPixel:32];
+
+				check(plain != nil && [plain bitsPerSample] == 8,
+				      "the 10.5 initialiser accepts the layout this class already is");
+				[plain release];
+				check([[NSBitmapImageRep alloc]
+					initWithBitmapDataPlanes:planes pixelsWide:2 pixelsHigh:2 bitsPerSample:8
+						  samplesPerPixel:4 hasAlpha:YES isPlanar:NO
+						   colorSpaceName:NSDeviceRGBColorSpace
+						    bitmapFormat:NSAlphaFirstBitmapFormat
+						      bytesPerRow:8 bitsPerPixel:32] == nil,
+				      "and REFUSES alpha-first, which its own buffers are not");
+				check([[NSBitmapImageRep alloc]
+					initWithBitmapDataPlanes:planes pixelsWide:2 pixelsHigh:2 bitsPerSample:8
+						  samplesPerPixel:4 hasAlpha:YES isPlanar:NO
+						   colorSpaceName:NSDeviceRGBColorSpace
+						    bitmapFormat:NSFloatingPointSamplesBitmapFormat
+						      bytesPerRow:8 bitsPerPixel:32] == nil,
+				      "and refuses floating-point samples, which this tier's CoreGraphics has no layout for");
+			}
+
+			/* 5. THE SPACE AS AN OBJECT. The mapping is by NAME; a name with no space behind it is a refusal. */
+			check([bitmap colorSpace] == [NSColorSpace deviceRGBColorSpace],
+			      "a device-RGB rep answers the device-RGB space");
+			[bitmap setColorSpaceName:NSDeviceGrayColorSpace];
+			check([bitmap colorSpace] == [NSColorSpace deviceGrayColorSpace],
+			      "and a device-grey one answers the device-grey space");
+			[bitmap setColorSpaceName:NSPatternColorSpace];
+			check([bitmap colorSpace] == nil,
+			      "a pattern space has no object here, so the door answers nil rather than guessing");
+			[bitmap setColorSpaceName:NSDeviceRGBColorSpace];
+			check([bitmap colorSpace] != nil, "and back in a space this layer knows it answers an object again");
+
+			/* 6. RETAGGING CHANGED FROM A REFUSAL TO A DOOR, BECAUSE `NSColorSpace` ARRIVED. Retagging moves no
+			 * pixel: the copy has the same picture and a different name. CONVERTING is still refused, because nothing
+			 * here converts between two spaces — and the door now names only that. */
+			retagged = [bitmap bitmapImageRepByRetaggingWithColorSpace:[NSColorSpace deviceGrayColorSpace]];
+			check(retagged != nil && retagged != bitmap,
+			      "retagging answers a COPY rather than the rep it was sent");
+			check(retagged != nil && [[retagged colorSpaceName] length] > 0,
+			      "with a colour-space name from the space it was given");
+			check(retagged != nil && [retagged pixelsWide] == [bitmap pixelsWide] &&
+			      [retagged pixelsHigh] == [bitmap pixelsHigh],
+			      "and the same pixels — retagging changes no sample");
+			/* AND THE COPY IS AUTORELEASED, WHICH THIS PROBE PAID FOR: `[retagged release]` here is an over-release
+			 * and it crashed `emptyPool` at the drain AFTER every check had printed ok — the trap the handoff records
+			 * twice. The door follows the convention; a probe that wants to own the answer sends `-retain` first. */
+			check([bitmap bitmapImageRepByConvertingToColorSpace:[NSColorSpace deviceGrayColorSpace]
+							     renderingIntent:0] == nil,
+			      "converting is still REFUSED: this tier has no colour-converting path");
+			rgb = bitmap;
+			check([rgb colorSpace] != nil, "and the rep whose space was asked is unchanged by the refusal");
+
+			[bitmap release];
+			[base release];
 		}
 
 		if (failures == 0) {

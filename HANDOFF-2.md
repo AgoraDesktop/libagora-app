@@ -19,6 +19,10 @@ The refusal census is 267 — it was 141, and the difference is the needle learn
 `api-ledger: 361 metrics hold (117 classes, 3444 selectors of 4112, 33 protocols, 86 functions)`, 86 classes COMPLETE, refusal
 census 275.*
 
+*State after the session that picked THAT up (§15, the image family): **26 commits**, tree clean, **137 tests passing**,
+`api-ledger: 361 metrics hold (117 classes, 3465 selectors of 4112, 33 protocols, 86 functions)`, 89 classes COMPLETE, refusal
+census 282.*
+
 ---
 
 ## 1. What this session did
@@ -675,3 +679,67 @@ that, and the probe asserts the absence as well as the presence.
 5. **AND ONE SEAM WORTH MAKING, SMALL AND REAL**: a menu delegate's `-menu:willHighlightItem:` would give
    `-comboBoxSelectionIsChanging:` its source, and `NSMenu` already has a delegate property and an update walk to hang it
    on. Until then that one message is the tier's only declared-and-unsent delegate door for this control.
+
+---
+
+## 15. The image family: one drawing door, a background, a delegate, and a registry that recursed
+
+*Twenty-sixth commit of the pickup: `NSImage` 77/77, `NSImageRep` 40/40, `NSBitmapImageRep` 41/41 — 21 selectors, three
+classes COMPLETE. **3465 of 4112 selectors (84%), 89 of 117 classes complete, 647 missing.** 137 tests.*
+
+**THE DRAWING SEAM IS ONE DOOR NOW.** `-drawInRect:fromRect:operation:fraction:respectFlipped:hints:` is the wide door on
+`NSImageRep`, and `-drawInRect:`, `-drawAtPoint:`, `-draw` and the three `NSImage` forms are it with their arguments
+filled in — so the picture `-drawInRect:` paints is unchanged by construction rather than by a second implementation
+that happens to agree. Concretely:
+
+* `fromRect:` crops in the REP's POINTS and converts to pixels at one place (`pixelsWide / size.width`), because
+  resolution independence means those two are not the same number.
+* `operation:` and `fraction:` go through the CONTEXT (`-setCompositingOperation:` plus a `CGContextSetAlpha:`), which
+  is where this tier's enum-to-blend mapping and its refusal for the operations CoreGraphics cannot do already live.
+* `hints:` reads `NSImageHintInterpolation` for the length of the draw and restores the context's quality afterwards.
+* `respectFlipped:YES` is the rule these doors have always followed (upright in a y-up AND a y-down context);
+  `respectFlipped:NO` is the raw `CGContextDrawImage`.
+
+**MEASURED WHILE WRITING IT, AND IT CHANGED WHAT THE TEST CAN CLAIM:** this library's sampler supports NEAREST and
+BILINEAR only, so `CGContextSetInterpolationQuality(kCGInterpolationHigh)` is REFUSED (its own message says so) and the
+quality stays where it was. The measurable pair is therefore None against MEDIUM: a 4x upscale has **0** blended points
+at None and **64** at Medium. A test written against High would have failed for a reason that is not a defect.
+
+**`NSImage` GAINED THE THREE THINGS ITS DRAW NEEDED.** `-backgroundColor:` fills the destination BEFORE the picture, so
+a fully transparent rep over a white ground with a red background comes out red (MEASURED: R=255). `-delegate:` is sent
+`-imageDidNotDraw:inRect:` when no representation can draw, and the REP it answers is what gets drawn — the probe proves
+that with pixels, and the header says which four of the five `NSImageDelegate` messages are NOT sent and why. And
+`+imageTypes`/`+imageUnfilteredTypes` are the rep REGISTRY's lists rather than a second table; `+imagePasteboardTypes`
+went the same way, which CORRECTED a list that predated the decoders (it claimed `NSTIFFPboardType`, which has no
+decoder, and omitted PNG, which has one — so `+canInitWithPasteboard:` said NO for a PNG and YES for a TIFF it could not
+read).
+
+**AND A REFUSAL HAD OUTLIVED ITS REASON.** `-bitmapImageRepByRetaggingWithColorSpace:` refused because "`NSColorSpace` is
+not in this tree", and `NSColorSpace` landed two slices ago. Retagging moves no pixel, so it is now real: a copy with the
+same picture and a new name. `-bitmapImageRepByConvertingToColorSpace:renderingIntent:` still refuses and now says the
+true thing — nothing here converts PIXELS between two spaces. `-colorSpace` maps the rep's stored NAME to one of the five
+spaces this layer can be in (device RGB/gray/CMYK, generic RGB/gray) and REFUSES a custom, named or pattern name rather
+than picking a "close" space. TIFF writing stayed a named refusal: `CGImageDestination` writes PNG only.
+
+**THE SWEEP FOUND A REGISTRY BUG THAT HAD BEEN WAITING FOR ITS FIRST CALLER.** `fn_union_of` walked the registered
+classes and called each one's `+imageUnfilteredTypes` — INCLUDING the classes that only inherit the base's implementation,
+which IS that union. So the first ask for the UTI list recursed until the stack died (MEASURED: SIGSEGV the moment
+`+[NSImage imageTypes]` was added). `+imageUnfilteredFileTypes` had escaped it only because every registrant happens to
+override that one. The union now asks whether a class ANSWERS the selector itself — and the first version of THAT test
+compared `class_getMethodImplementation(c, sel)` with the base's, which searches INSTANCE methods and so compared two
+NULLs, called every class inherited, and answered an EMPTY list. The metaclass (`object_getClass`) is what has to be
+asked. Two attempts, two wrong answers, both caught by the probe rather than by reading.
+
+**AND THE PROBE PAID THE HANDOFF'S OWN TRAP AGAIN.** `-bitmapImageRepByRetaggingWithColorSpace:` answers an AUTORELEASED
+rep; the probe released it, every check printed ok, and the process segfaulted in `emptyPool` at the drain. §4 of this
+file records that exact failure from a previous session. The exit status is the witness.
+
+### Where the next hour goes, after the image family
+
+1. **`NSAlert` 7 + `NSStatusItem` 5 + `NSRunningApplication` 4 + `NSBrowserCell` 6 = 22**, with the standing warning that
+   `NSStatusItem`'s enabled/mask/toolTip doors have no click path to reach them.
+2. **`NSTextStorage` 12 + `NSTextBlock` 10 + `NSSpellChecker` 10 + `NSTextInputContext` 8 = 40**.
+3. **`NSCell` 9 + `NSApplication` 7 = 16**, the field-editor family being the design work.
+4. **AND A SLICE IN libagora-drawing, NOT HERE**: a TIFF encoder (uncompressed, IFD and strips) behind
+   `CGImageDestination`, which would turn the two `TIFFRepresentation` refusals into doors in one commit on that side and
+   one line on this one. It is the only refusal in this class that is a missing *layer* rather than a missing mechanism.

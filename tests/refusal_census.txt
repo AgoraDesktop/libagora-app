@@ -19,6 +19,10 @@
 # all, which is the drift this instrument exists to prevent. It now counts `APPKIT-REFUSE|fn_refuse_window`, and the
 # count went 141 -> 267 for that reason ALONE: no refusal was added or removed by the widening.
 #
+# AND IT ROSE BY SEVEN IN THE IMAGE SLICE: three format flags a bitmap rep cannot hold, the two TIFF doors, the name with
+# no space behind it in `-colorSpace`, and the narrowed reason `-bitmapImageRepByConvertingToColorSpace:` still refuses
+# (the reason changed; the site is the same one, counted again by the re-pin because the count is per file).
+#
 # AND IT ROSE BY EIGHT WHEN THE COMBO BOX'S ROWS BECAME A DATA SOURCE'S: seven refusals for the array doors a
 # source replaces and the three list doors the session has no mechanism for, plus one that was already in the file.
 #
@@ -31,7 +35,7 @@ NSApplication.m                  11
 NSAttributedStringRTF.m          4
 NSAttributedStringRTFD.m         6
 NSBezierPath.m                   5
-NSBitmapImageRep.m               15
+NSBitmapImageRep.m               22
 NSButtonCell.m                   1
 NSCIImageRep.m                   2
 NSCachedImageRep.m               1
@@ -82,4 +86,4 @@ NSWindow.m                       24
 # `fn_refuse_window` spelling was simply invisible to a census that counted the `APPKIT-REFUSE` literal, so every
 # refusal written the house way — which is the way the header asks for — moved no number.
 #
-# total: 275
+# total: 282

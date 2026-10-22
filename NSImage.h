@@ -75,7 +75,12 @@ typedef NSUInteger NSImageLoadStatus;
  * cares about. */
 @protocol NSImageDelegate <NSObject>
 @optional
-- (nullable NSImage *)imageDidNotDraw:(id)sender inRect:(NSRect)aRect;
+/* **THE ANSWER IS A REP, NOT AN IMAGE, WHICH THIS LINE HAD WRONG UNTIL THE DRAWING SLICE READ IT.** Apple's
+ * `-imageDidNotDraw:inRect:` returns the `NSImageRep` the image should draw INSTEAD of the one it could not find (nil
+ * means the delegate drew the picture itself). A return of `NSImage *` could not have been used by any caller: the door
+ * it feeds draws a REP, and there is no `-drawInRect:` on this class that takes another image. The ledger counts names,
+ * so no metric moved — which is exactly why a wrong type can sit here for slices. */
+- (nullable NSImageRep *)imageDidNotDraw:(id)sender inRect:(NSRect)aRect;
 - (void)image:(NSImage *)image willLoadRepresentation:(NSImageRep *)rep;
 - (void)image:(NSImage *)image didLoadRepresentationHeader:(NSImageRep *)rep;
 - (void)image:(NSImage *)image didLoadPartOfRepresentation:(NSImageRep *)rep withValidRows:(NSInteger)rows;
@@ -155,6 +160,13 @@ extern NSString *NSImageHintInterpolation;
 	 * native one. A slot with no stencil is a NULL and a zero. */
 	CGImageRef _templateMasks[3];
 	NSInteger _templateMaskSizes[3];
+	/* **AND THE TWO PIECES THE DRAWING SLICE ADDS.** `_backgroundColor` is what a composite fills the destination
+	 * with BEFORE the picture goes down — Apple's "background colour used when the image is composited" — and it is
+	 * RETAINED, because a colour handed inline has nothing else keeping it alive. `_delegate` is NOT retained, the
+	 * tree's rule for every delegate: an image that owned its delegate would keep it alive for as long as the image
+	 * does, and a delegate is the thing that outlives the things it watches. */
+	id _backgroundColor;		/* RETAINED */
+	id _delegate;			/* NOT RETAINED */
 }
 
 /* ============================================================================================ *
@@ -439,6 +451,12 @@ typedef enum {
  * lying to the caller that consults the list before calling it. */
 + (NSArray *)imageFileTypes;
 + (NSArray *)imageUnfilteredFileTypes;
+/* **AND THE UTI LISTS, WHICH ARE THE REP REGISTRY'S RATHER THAN A SECOND TABLE.** `-imageFileTypes` above is the
+ * EXTENSIONS this layer opens; these two are the types (`public.png`, `public.jpeg`) and they belong to the classes
+ * that decode, so they are asked of the registry instead of being written down twice. The filtered pair is one list
+ * here for the reason the rep header gives: no filter services exist. */
++ (NSArray *)imageTypes;
++ (NSArray *)imageUnfilteredTypes;
 + (NSArray *)imagePasteboardTypes;
 + (NSArray *)imageUnfilteredPasteboardTypes;
 + (BOOL)canInitWithPasteboard:(nullable NSPasteboard *)pasteboard;
@@ -461,6 +479,42 @@ typedef enum {
 
 - (BOOL)drawAtPoint:(NSPoint)point;
 - (BOOL)drawInRect:(NSRect)rect;
+
+/* **AND THE FOUR DOORS THAT SAY HOW THE DRAW LANDS RATHER THAN ONLY WHERE.** `-drawInRect:fromRect:operation:fraction:`
+ * is the era's door, and every one of these is the rep's own wide door (see `NSImageRep`) with the image choosing WHICH
+ * rep: the destination rect scales, the source rect crops, the operation and fraction are the context's, and the two
+ * 10.6 arguments are orientation and the hints a rep may read. THE OLDER DOORS ARE THESE WITH THE ARGUMENTS FILLED IN,
+ * so there is one drawing path and `-drawInRect:` paints what it always painted. */
+- (BOOL)drawAtPoint:(NSPoint)point
+	   fromRect:(NSRect)srcRect
+	  operation:(NSCompositingOperation)op
+	   fraction:(CGFloat)delta;
+- (BOOL)drawInRect:(NSRect)dstRect
+	  fromRect:(NSRect)srcRect
+	 operation:(NSCompositingOperation)op
+	  fraction:(CGFloat)delta;
+- (BOOL)drawInRect:(NSRect)dstRect
+	  fromRect:(NSRect)srcRect
+	 operation:(NSCompositingOperation)op
+	  fraction:(CGFloat)delta
+    respectFlipped:(BOOL)respectFlipped
+	     hints:(nullable NSDictionary *)hints;
+
+/* **AND THE BACKGROUND THE DRAW PUTS DOWN FIRST.** Nil — the default — leaves the destination untouched and is why
+ * every existing picture is unchanged; a colour fills the destination rect before the picture is composited over it,
+ * which is what makes a transparent image's holes show the caller's plate rather than whatever was there before. */
+- (nullable NSColor *)backgroundColor;
+- (void)setBackgroundColor:(nullable NSColor *)aColor;
+
+/* **AND THE DELEGATE, WHOSE ONE SENT MESSAGE IS `-imageDidNotDraw:inRect:`.** The five members of `NSImageDelegate`
+ * above are declared for the era's shape; ONE of them has a caller in this tier, because it is the one with a moment
+ * to interrupt: when `-drawInRect:` can find no representation that can draw, the delegate is asked, and an
+ * `NSImageRep` back from it is drawn in place of the missing one (a delegate that draws itself answers nil, which the
+ * door reads as "handled"). The four load notifications are NOT sent: nothing here loads in stages, and an image
+ * created from a file has no delegate yet at the moment its bytes arrive — the header says so rather than implying
+ * otherwise. */
+- (nullable id <NSImageDelegate>)delegate;
+- (void)setDelegate:(nullable id <NSImageDelegate>)anObject;
 
 @end
 

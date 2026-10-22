@@ -18,6 +18,7 @@
 #import <CoreGraphics/CGBitmapContext.h>
 #import <CoreGraphics/CGColorSpace.h>
 #import <AppKit/NSBezierPath.h>
+#import <AppKit/NSGraphics.h>	/* NSRectFill, the background a composite puts down first */
 #import <CoreGraphics/CGContext.h>
 #import "AGSystemImages.h"
 #import "NSImage_internal.h"
@@ -46,10 +47,15 @@ NSString *NSImageNameGoLeftTemplate = @"NSImageNameGoLeftTemplate";
  * what is written is the NAME and what is rebuilt is `+imageNamed:`'s answer. An image with no name is one nothing can
  * look up, and it decodes as the empty image this class's `-init` makes rather than as a failure of the whole nib. */
 static NSString * const AGCoderImageNameKey = @"name";
+/* **AND THE BACKGROUND, WHICH IS A DESIGN PROPERTY; THE DELEGATE IS NOT.** A colour is part of how an image is meant to
+ * look and a design file can carry it; a delegate is a live connection to an object in the running program, and every
+ * other class in this tree leaves those out of its archive for the same reason. */
+static NSString * const AGCoderImageBackgroundKey = @"backgroundColor";
 
 - (void)encodeWithCoder:(NSCoder *)aCoder
 {
 	[aCoder encodeObject:[self name] forKey:AGCoderImageNameKey];
+	[aCoder encodeObject:_backgroundColor forKey:AGCoderImageBackgroundKey];
 }
 
 - (instancetype)initWithCoder:(NSCoder *)aDecoder
@@ -64,8 +70,13 @@ static NSString * const AGCoderImageNameKey = @"name";
 		return [named retain];
 	}
 	self = [super init];
-	if (self != nil && [name isKindOfClass:[NSString class]]) {
-		[self setName:name];
+	if (self != nil) {
+		if ([name isKindOfClass:[NSString class]]) {
+			[self setName:name];
+		}
+		if ([aDecoder containsValueForKey:AGCoderImageBackgroundKey]) {
+			[self setBackgroundColor:[aDecoder decodeObjectForKey:AGCoderImageBackgroundKey]];
+		}
 	}
 	return self;
 }
@@ -570,14 +581,102 @@ NSString *NSImageNameUserGuest = @"NSImageNameUserGuest";
 	return YES;
 }
 
-- (BOOL)drawInRect:(NSRect)rect
+/* **THE COMPOSITE'S ONE WORKER, WHICH IS WHERE THE BACKGROUND, THE DELEGATE AND THE REP MEET.** The rep is chosen for
+ * the destination rect (the best one for the size that is wanted); if there is none, the DELEGATE is asked for one, and
+ * a delegate that answers nil has drawn the picture itself — which is Apple's contract and the reason this returns YES
+ * in that case. The background goes down FIRST and only when one was set, so nil leaves the destination exactly as it
+ * was and every picture this class drew before this door existed is unchanged. */
+- (BOOL)cg_drawInRect:(NSRect)dstRect
+	     fromRect:(NSRect)srcRect
+	    operation:(NSCompositingOperation)op
+	     fraction:(CGFloat)delta
+       respectFlipped:(BOOL)respectFlipped
+		hints:(NSDictionary *)hints
 {
-	NSImageRep *rep = [self bestRepresentationForRect:rect context:nil hints:nil];
+	NSImageRep *rep = [self bestRepresentationForRect:dstRect context:nil hints:hints];
 
+	if (rep == nil && _delegate != nil && [_delegate respondsToSelector:@selector(imageDidNotDraw:inRect:)]) {
+		NSImageRep *substitute = [(id <NSImageDelegate>)_delegate imageDidNotDraw:self inRect:dstRect];
+
+		if (substitute == nil) {
+			return YES;	/* it drew the picture itself, which is Apple's reading of a nil answer */
+		}
+		rep = substitute;
+	}
 	if (rep == nil) {
 		return NO;
 	}
-	return [rep drawInRect:rect];
+	if (_backgroundColor != nil) {
+		NSGraphicsContext *ctx = [NSGraphicsContext currentContext];
+
+		if (ctx != nil) {
+			[(NSColor *)_backgroundColor setFill];
+			NSRectFill(dstRect);
+		}
+	}
+	return [rep drawInRect:dstRect fromRect:srcRect operation:op fraction:delta
+	       respectFlipped:respectFlipped hints:hints];
+}
+
+- (BOOL)drawInRect:(NSRect)rect
+{
+	/* THE 10.0 DOOR IS THE WIDE ONE WITH ITS ARGUMENTS FILLED IN, so there is one drawing path rather than four. */
+	return [self drawInRect:rect fromRect:NSZeroRect operation:NSCompositingOperationSourceOver fraction:1.0
+		 respectFlipped:YES hints:nil];
+}
+
+- (BOOL)drawAtPoint:(NSPoint)point fromRect:(NSRect)srcRect operation:(NSCompositingOperation)op fraction:(CGFloat)delta
+{
+	NSSize extent = (srcRect.size.width > 0.0 && srcRect.size.height > 0.0) ? srcRect.size : [self size];
+
+	return [self drawInRect:NSMakeRect(point.x, point.y, extent.width, extent.height)
+		       fromRect:srcRect operation:op fraction:delta respectFlipped:YES hints:nil];
+}
+
+- (BOOL)drawInRect:(NSRect)dstRect
+	  fromRect:(NSRect)srcRect
+	 operation:(NSCompositingOperation)op
+	  fraction:(CGFloat)delta
+{
+	return [self drawInRect:dstRect fromRect:srcRect operation:op fraction:delta respectFlipped:YES hints:nil];
+}
+
+- (BOOL)drawInRect:(NSRect)dstRect
+	  fromRect:(NSRect)srcRect
+	 operation:(NSCompositingOperation)op
+	  fraction:(CGFloat)delta
+    respectFlipped:(BOOL)respectFlipped
+	     hints:(NSDictionary *)hints
+{
+	return [self cg_drawInRect:dstRect fromRect:srcRect operation:op fraction:delta
+		  respectFlipped:respectFlipped hints:hints];
+}
+
+/* ---- THE BACKGROUND AND THE DELEGATE ------------------------------------------------------------ */
+
+- (NSColor *)backgroundColor
+{
+	return (NSColor *)_backgroundColor;
+}
+
+- (void)setBackgroundColor:(NSColor *)aColor
+{
+	if (aColor != _backgroundColor) {
+		id held = [aColor retain];
+
+		[_backgroundColor release];
+		_backgroundColor = held;
+	}
+}
+
+- (id <NSImageDelegate>)delegate
+{
+	return (id <NSImageDelegate>)_delegate;
+}
+
+- (void)setDelegate:(id <NSImageDelegate>)anObject
+{
+	_delegate = anObject;	/* NOT RETAINED — see the ivar */
 }
 
 /* THE TYPE LISTS. The FILTERED ones are what this class can actually read — PNG and JPEG, which is what
@@ -592,14 +691,32 @@ NSString *NSImageNameUserGuest = @"NSImageNameUserGuest";
 	return [NSArray arrayWithObjects:@"png", @"jpg", @"jpeg", nil];
 }
 
+/* **AND THE UTI LISTS ARE THE REGISTRY'S.** A class that decodes a format declares its types where its decoder is
+ * (`NSBitmapImageRep` does, and would again for a second format), so writing a second table here would be the same fact
+ * in two places and a divergence waiting to happen. The filtered pair is one list for the reason the rep header gives. */
++ (NSArray *)imageTypes
+{
+	return [NSImageRep imageTypes];
+}
+
++ (NSArray *)imageUnfilteredTypes
+{
+	return [NSImageRep imageUnfilteredTypes];
+}
+
 + (NSArray *)imageUnfilteredFileTypes
 {
 	return [self imageFileTypes];
 }
 
+/* **AND THE PASTEBOARD LIST IS THE REGISTRY'S TOO, WHICH CORRECTS A LIST THAT PREDATED THE DECODERS.** It said
+ * `NSStringPboardType` and `NSTIFFPboardType`: neither is a format this layer decodes — TIFF has no decoder and a string
+ * is not an image — while PNG and JPEG, which it does decode, were absent. So `+canInitWithPasteboard:` answered NO for
+ * a board holding a PNG and YES for one holding a TIFF it would then fail to read. The list that belongs here is the
+ * one the classes that decode publish; see `+imageTypes` next door for the same reasoning. */
 + (NSArray *)imagePasteboardTypes
 {
-	return [NSArray arrayWithObjects:NSStringPboardType, NSTIFFPboardType, nil];
+	return [NSImageRep imagePasteboardTypes];
 }
 
 + (NSArray *)imageUnfilteredPasteboardTypes

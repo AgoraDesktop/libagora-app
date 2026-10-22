@@ -15,7 +15,13 @@
 #include <math.h>
 #include <stdio.h>
 #import <AppKit/NSPasteboard.h>
+/* **AND `NSImage.h` FOR THE TWO HINT KEYS, WHICH ARE NSImage'S VOCABULARY THAT A REP READS.** Apple declares
+ * `NSImageHintInterpolation` there and documents that a rep may interpret the hints it is handed; importing the header
+ * from this IMPLEMENTATION is a dependency in one direction only — `NSImage.h` imports this one, and its guard closes
+ * the loop. */
+#import <AppKit/NSImage.h>
 #import <Foundation/NSNotification.h>
+#include <objc/runtime.h>	/* class_getMethodImplementation: which classes ANSWER a registry list */
 #import <Foundation/NSURL.h>
 
 NSString *const NSDeviceRGBColorSpace = @"NSDeviceRGBColorSpace";
@@ -49,6 +55,20 @@ static Class fn_first_class_that_can_init(NSData *d)
 	return Nil;
 }
 
+/* **"DOES THIS CLASS ANSWER THIS LIST ITSELF, OR DOES IT ONLY INHERIT THE UNION?"** A plain
+ * `class_getMethodImplementation(c, sel)` searches the class's INSTANCE methods, and every selector in this registry is
+ * a CLASS method — so the first version of this test compared two NULLs, called every class "inherited", and answered
+ * an EMPTY union. MEASURED twice over: the list came back empty, and the union's own body still recursed. The
+ * metaclass is what has to be asked: `object_getClass` on a class gives it, and the two implementations are the two
+ * class methods. */
+static BOOL fn_class_answers_for_itself(Class c, SEL sel)
+{
+	IMP own = class_getMethodImplementation(object_getClass(c), sel);
+	IMP inherited = class_getMethodImplementation(object_getClass([NSImageRep class]), sel);
+
+	return own != NULL && own != inherited;
+}
+
 /* AND THE UNION OF A LIST EVERY REGISTERED CLASS CAN NAME. */
 static NSArray *fn_union_of(SEL sel)
 {
@@ -63,7 +83,17 @@ static NSArray *fn_union_of(SEL sel)
 			Class c = (Class)[s_repClasses objectAtIndex:i];
 			NSArray *list;
 
+			/* **AND A CLASS THAT ONLY INHERITS THE UNION'S OWN DOOR IS SKIPPED, WHICH IS THE ONE BUG THIS HELPER
+			 * HAD.** `+imageUnfilteredTypes` (and the two lists below it) IS this function; a registrant that does
+			 * not override it still `-respondsToSelector:`, so the first version called it, which called this
+			 * function, which called it — MEASURED as a segfault the first time anything asked for the UTI list.
+			 * `+imageUnfilteredFileTypes` escaped it only because every registrant happened to override that one. The
+			 * test is whether the class's implementation is the BASE's: equal means "inherited, not answered" and the
+			 * class contributes nothing. */
 			if (![c respondsToSelector:sel]) {
+				continue;
+			}
+			if (!fn_class_answers_for_itself(c, sel)) {
 				continue;
 			}
 			list = [c performSelector:sel];
@@ -131,6 +161,26 @@ static Class fn_class_for_list_member(SEL sel, NSString *want)
 - (BOOL)alpha
 {
 	return _alpha;
+}
+
+/* **AND THE TWO SAMPLE DOORS, WHICH ARE ONE PAIR OF IVARS UNDER TWO NAMES.** `-hasAlpha` is what Apple calls the
+ * question `-alpha` answers here, so it answers the SAME flag rather than a second one; `-bitsPerSample` is the value
+ * `-setBitsPerSample:` recorded, and a rep whose pixels have a depth of their own overrides both accessors (see
+ * `NSBitmapImageRep`, where the depth is a fact about the bytes). A rep that was told nothing answers 0 — "no samples"
+ * — rather than a plausible 8, because 8 would be a claim about pixels this base has not got. */
+- (BOOL)hasAlpha
+{
+	return _alpha;
+}
+
+- (NSInteger)bitsPerSample
+{
+	return _repBitsPerSample;
+}
+
+- (void)setBitsPerSample:(NSInteger)bitsPerSample
+{
+	_repBitsPerSample = bitsPerSample;
 }
 
 - (instancetype)init
@@ -231,12 +281,31 @@ static Class fn_class_for_list_member(SEL sel, NSString *want)
 	return image;
 }
 
+/* **THE FOUR SIMPLER DOORS ARE THIS ONE WITH ITS ARGUMENTS FILLED IN, WHICH IS WHY THE ORIENTATION RULE BELOW IS IN
+ * ONE PLACE.** `-drawInRect:` is the whole rep, SourceOver at full strength, respecting the context's flip and with no
+ * hints — the same picture these doors painted before the wide door existed, because the wide door's body IS the old
+ * body with the crop, the blend and the hints added around it. */
 - (BOOL)drawInRect:(NSRect)rect
+{
+	return [self drawInRect:rect fromRect:NSZeroRect operation:NSCompositingOperationSourceOver
+			fraction:1.0 respectFlipped:YES hints:nil];
+}
+
+- (BOOL)drawInRect:(NSRect)dstRect
+	  fromRect:(NSRect)srcRect
+	 operation:(NSCompositingOperation)op
+	  fraction:(CGFloat)delta
+    respectFlipped:(BOOL)respectFlipped
+	     hints:(NSDictionary *)hints
 {
 	NSGraphicsContext *ctx = [NSGraphicsContext currentContext];
 	CGImageRef img = [self CGImage];
+	CGImageRef crop = NULL;
 	CGContextRef cg;
 	CGAffineTransform ctm;
+	id quality = [hints objectForKey:NSImageHintInterpolation];
+	CGInterpolationQuality previousQuality = kCGInterpolationDefault;
+	BOOL hadQuality = NO;
 
 	/* NO CONTEXT OR NO PIXELS IS A NO, NOT A RAISE — the same rule the context's own members follow. */
 	if (ctx == nil || img == NULL) {
@@ -246,6 +315,31 @@ static Class fn_class_for_list_member(SEL sel, NSString *want)
 	if (cg == NULL) {
 		return NO;
 	}
+	/* **THE CROP IS IN PIXELS AND THE CALLER SPEAKS POINTS**, which are the same number until a rep is given a size
+	 * different from its pixel count — resolution independence, and the one place the conversion belongs. A source
+	 * rect with no area is NO CROP rather than an empty picture: that is what the three simple doors pass. */
+	if (srcRect.size.width > 0.0 && srcRect.size.height > 0.0) {
+		CGFloat sizeW = (_size.width > 0.0) ? _size.width : (CGFloat)_pixelsWide;
+		CGFloat sizeH = (_size.height > 0.0) ? _size.height : (CGFloat)_pixelsHigh;
+		CGFloat sx = (sizeW > 0.0) ? (CGFloat)_pixelsWide / sizeW : 1.0;
+		CGFloat sy = (sizeH > 0.0) ? (CGFloat)_pixelsHigh / sizeH : 1.0;
+
+		crop = CGImageCreateWithImageInRect(img, CGRectMake(srcRect.origin.x * sx, srcRect.origin.y * sy,
+								    srcRect.size.width * sx, srcRect.size.height * sy));
+		if (crop == NULL) {
+			return NO;
+		}
+		img = crop;
+	}
+	/* THE HINT IS THE CONTEXT'S QUALITY FOR THIS DRAW ONLY, and it is put back because a hint is a statement about
+	 * one call rather than a change to the caller's context. */
+	if (quality != nil) {
+		previousQuality = CGContextGetInterpolationQuality(cg);
+		hadQuality = YES;
+		[ctx setImageInterpolation:(NSImageInterpolation)[quality integerValue]];
+	}
+	[ctx setCompositingOperation:op];
+	CGContextSetAlpha(cg, delta);
 	/* **AN IMAGE IS DRAWN UP-RIGHT IN BOTH A FLIPPED VIEW AND AN UNFLIPPED ONE.** `CGContextDrawImage`
 	 * paints through the current CTM, so the SAME bytes arrive mirrored in the two cases; the Desktop
 	 * (an unflipped view in its own y-up space) and the file window's `WSIconView` (flipped, y-down) are
@@ -255,14 +349,21 @@ static Class fn_class_for_list_member(SEL sel, NSString *want)
 	 * it is the value the view walk actually puts there; `NSGraphicsContext -isFlipped` is the
 	 * WINDOW's statement and stays NO for both. */
 	ctm = CGContextGetCTM(cg);
-	if (ctm.d > 0.0) {
+	if (respectFlipped && ctm.d > 0.0) {
 		CGContextSaveGState(cg);
-		CGContextTranslateCTM(cg, rect.origin.x, rect.origin.y + rect.size.height);
+		CGContextTranslateCTM(cg, dstRect.origin.x, dstRect.origin.y + dstRect.size.height);
 		CGContextScaleCTM(cg, 1.0, -1.0);
-		CGContextDrawImage(cg, CGRectMake(0.0, 0.0, rect.size.width, rect.size.height), img);
+		CGContextDrawImage(cg, CGRectMake(0.0, 0.0, dstRect.size.width, dstRect.size.height), img);
 		CGContextRestoreGState(cg);
 	} else {
-		CGContextDrawImage(cg, NSRectToCGRect(rect), img);
+		CGContextDrawImage(cg, NSRectToCGRect(dstRect), img);
+	}
+	CGContextSetAlpha(cg, 1.0);
+	if (hadQuality) {
+		CGContextSetInterpolationQuality(cg, previousQuality);
+	}
+	if (crop != NULL) {
+		CGImageRelease(crop);
 	}
 	return YES;
 }
@@ -365,6 +466,32 @@ static Class fn_class_for_list_member(SEL sel, NSString *want)
 + (NSArray *)imageUnfilteredFileTypes
 {
 	return fn_union_of(@selector(imageUnfilteredFileTypes));
+}
+
+/* **AND THE FILTERED PAIR, WHICH IS THE UNFILTERED ONE IN THIS TIER.** Filtering is a pasteboard SERVICE (see
+ * `+typesFilterableTo:`, which refuses for the same reason) and this tree registers no filters — so the two lists are
+ * one list, and they are TWO DOORS because the day a filter exists only this pair changes. The same reasoning
+ * `+imageTypes` states one door up. */
++ (NSArray *)imageFileTypes
+{
+	return [self imageUnfilteredFileTypes];
+}
+
++ (NSArray *)imagePasteboardTypes
+{
+	return [self imageUnfilteredPasteboardTypes];
+}
+
+/* **AND THE LIVE QUESTION, WHICH IS THE SAME LIST ASKED OF A BOARD.** NSImage has had this door for its own list since
+ * the pasteboard slice; this is the registry's, and the difference is WHICH list is consulted: a rep class answers with
+ * the types its registrants claim, while `NSImage` answers with the two the whole image layer will hand a board. Both
+ * are real, and neither guesses: a board with no types answers NO. */
++ (BOOL)canInitWithPasteboard:(NSPasteboard *)pasteboard
+{
+	if (pasteboard == nil) {
+		return NO;
+	}
+	return [pasteboard availableTypeFromArray:[self imagePasteboardTypes]] != nil;
 }
 
 + (id)imageRepWithData:(NSData *)data

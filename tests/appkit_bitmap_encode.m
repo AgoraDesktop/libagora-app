@@ -108,6 +108,30 @@ int main(void)
 		      "two reps are refused, because a PNG carries one image");
 	}
 
+	/* **AND THE DECODE DOOR THE 10.5 SURFACE ADDED, WHICH IS THIS TEST'S OWN PNG COMING BACK.** `-initWithData:` is
+	 * `+imageRepWithData:` as an initialiser, so the round trip is the same bytes: the PNG written above decodes into a
+	 * rep of the same size, and bytes that are not a format this layer reads answer nil rather than a guess. */
+	{
+		NSData *png = [rep representationUsingType:NSPNGFileType properties:nil];
+		NSBitmapImageRep *decoded = [[NSBitmapImageRep alloc] initWithData:png];
+
+		check(decoded != nil, "`-initWithData:` decodes the PNG this test just wrote");
+		check(decoded != nil && [decoded pixelsWide] == [rep pixelsWide] &&
+		      [decoded pixelsHigh] == [rep pixelsHigh],
+		      "into a rep of the same size");
+		check([[NSBitmapImageRep alloc] initWithData:[NSData dataWithBytes:"not an image" length:12]] == nil,
+		      "and bytes no registered class reads answer nil");
+		[decoded release];
+	}
+
+	/* **AND THE TIFF PAIR IS A NAMED REFUSAL, WHICH IS THE ONE PLACE THIS CLASS SAYS NO.** This build's
+	 * CGImageDestination writes PNG only, so there is no TIFF encoder to call — and the compression arguments would
+	 * choose among codecs that do not exist here. Both doors answer nil and name what they would need. */
+	check([NSBitmapImageRep TIFFRepresentation] == nil,
+	      "+TIFFRepresentation refuses, because this tree has no TIFF encoder");
+	check([NSBitmapImageRep TIFFRepresentationUsingCompression:NSTIFFCompressionNone factor:1.0f] == nil,
+	      "and so does the compression form, for the same reason");
+
 	CGImageRelease(image);
 	printf("appkit_bitmap_encode: %d failure(s)\n", failures);
 	return failures == 0 ? 0 : 1;

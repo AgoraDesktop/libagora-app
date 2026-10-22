@@ -30,6 +30,12 @@
  */
 
 #import <CoreGraphics/CGImage.h>
+/* **AND THE CONTEXT'S HEADER, FOR ONE ENUM.** `-drawInRect:fromRect:operation:fraction:respectFlipped:hints:` takes an
+ * `NSCompositingOperation`, which `NSGraphicsContext.h` declares — and importing it here closes no cycle because that
+ * header's AppKit references are all `@class` forward declarations. Typing the parameter `NSInteger` instead (the
+ * over-crediting rule this tree uses where a type is not reachable) would make an OPERATION indistinguishable from any
+ * other number at the one door where a wrong operation is a wrong picture. */
+#import <AppKit/NSGraphicsContext.h>
 #import <Foundation/NSArray.h>
 #import <Foundation/NSData.h>
 #import <Foundation/NSGeometry.h>
@@ -75,6 +81,12 @@ extern NSString *NSImageRepRegistryDidChangeNotification;
 	NSString *_colorSpaceName;
 	BOOL _opaque;
 	BOOL _alpha;
+	/* **AND THE SAMPLE SIZE, WHICH IS A RECORDED VALUE ON THE BASE AND A FACT ON A BITMAP.** Apple stores
+	 * `-setBitsPerSample:` here and says a subclass may refuse to set it; this base therefore remembers what it was
+	 * told, and a rep whose pixels have a depth of their own OVERRIDES both accessors so the two can never disagree.
+	 * The name carries the distinction: `_repBitsPerSample` is what the base was TOLD, while `NSBitmapImageRep`'s own
+	 * `_bitsPerSample` is the depth its bytes are in. */
+	NSInteger _repBitsPerSample;
 }
 
 @property NSInteger pixelsWide;
@@ -118,6 +130,18 @@ extern NSString *NSImageRepRegistryDidChangeNotification;
 + (NSArray *)imageTypes;
 + (NSArray *)imageUnfilteredFileTypes;
 + (NSArray *)imageUnfilteredPasteboardTypes;
+/* **AND THE FILTERED PAIR, WHICH IS THE UNFILTERED ONE HERE FOR THE REASON THE LINES ABOVE GIVE** — no filter services
+ * exist in this tier — but is still a separate door, because a caller asking "what can I OPEN" and a caller asking
+ * "what can I DECODE" are different questions even on the day the answers match. A registrant that gains a filter
+ * overrides this pair alone. */
++ (NSArray *)imageFileTypes;
++ (NSArray *)imagePasteboardTypes;
+
+/* **AND WHETHER A LIVE PASTEBOARD HOLDS ANYTHING THIS REGISTRY CAN READ.** The same question as the lists above, asked
+ * of a board rather than of a table: the board's own `-types` are matched against `+imagePasteboardTypes`. NSImage has
+ * had this door for its own list since the pasteboard slice; this is the registry's answer, and it is the one a rep
+ * class can be asked for directly. */
++ (BOOL)canInitWithPasteboard:(nullable NSPasteboard *)pasteboard;
 
 /* AND THE TWO DOORS A REGISTRANT ANSWERS WITH, named by the same sentence. The base's own answers
  * are nil, because an abstract rep has no format — every registered class overrides them, which is
@@ -138,10 +162,36 @@ extern NSString *NSImageRepRegistryDidChangeNotification;
 /* THE DRAWING SEAM. `-drawInRect:` is implemented once here and every rep inherits it: it asks the
  * current context and `-CGImage`, which is the SUBCLASS's answer. `-draw` and `-drawAtPoint:` are the
  * two Apple calls that sit either side of it. All three answer NO when there is nothing to draw or no
- * context to draw into, rather than raising — the same choice `NSGraphicsContext` makes. */
+ * context to draw into, rather than raising — the same choice `NSGraphicsContext` makes.
+ *
+ * **AND THE ONE DOOR THAT SAYS EVERYTHING ABOUT A DRAW: WHERE, WHAT PART, HOW, HOW MUCH, WHICH WAY UP, WITH WHAT
+ * HINTS.** The four simpler doors are this one with its arguments filled in, so there is one drawing path rather than
+ * six; `-drawInRect:`, `-drawAtPoint:` and `-draw` are unchanged in WHAT THEY PAINT by being expressed through it.
+ *
+ * `fromRect:` IS IN THE REP'S OWN POINTS, like every rect a rep speaks in, and the crop is converted to pixels at the
+ * one place the two differ. `operation:` and `fraction:` go through the CONTEXT (`-setCompositingOperation:` and a
+ * CGContext alpha), which is where this tier keeps the enum-to-blend mapping and its own refusal for the operations
+ * CoreGraphics cannot do. `respectFlipped:` is the one argument that changes ORIENTATION: YES is the rule these doors
+ * have always followed — an image is drawn UP-RIGHT in a flipped view and in an unflipped one — and NO is the raw
+ * `CGContextDrawImage`, which is upright in a y-up context and upside down in a y-down one. `hints:` reads
+ * `NSImageHintInterpolation` and sets the context's interpolation quality for the draw, then puts it back. */
 - (BOOL)draw;
 - (BOOL)drawAtPoint:(NSPoint)point;
 - (BOOL)drawInRect:(NSRect)rect;
+- (BOOL)drawInRect:(NSRect)dstRect
+	  fromRect:(NSRect)srcRect
+	 operation:(NSCompositingOperation)op
+	  fraction:(CGFloat)delta
+    respectFlipped:(BOOL)respectFlipped
+	     hints:(nullable NSDictionary *)hints;
+
+/* **AND THE TWO SAMPLE QUESTIONS** — the bits each sample is, and whether there is an alpha channel. Both are the
+ * base's storage (see the ivars) and a rep with pixels of its own overrides them, which is the same contract
+ * `-setOpaque:` and `-setAlpha:` above carry. `-hasAlpha` is `-alpha` under Apple's name for the same fact, so the two
+ * doors answer one flag rather than two. */
+@property NSInteger bitsPerSample;
+- (void)setBitsPerSample:(NSInteger)bitsPerSample;
+- (BOOL)hasAlpha;
 
 /* THE QUESTION A SUBCLASS ANSWERS, and the only one. The base answers NULL because an abstract rep has
  * no pixels; every concrete rep here overrides it, so `-drawInRect:` works for all of them at once. */
