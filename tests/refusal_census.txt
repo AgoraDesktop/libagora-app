@@ -19,6 +19,9 @@
 # all, which is the drift this instrument exists to prevent. It now counts `APPKIT-REFUSE|fn_refuse_window`, and the
 # count went 141 -> 267 for that reason ALONE: no refusal was added or removed by the widening.
 #
+# AND IT ROSE BY ONE IN THE APPLICATION SLICE: `-application:printFiles:`, which needs the printing system and the Apple
+# Event that would deliver a print request.
+#
 # AND IT ROSE BY ONE IN THE INPUT-CONTEXT SLICE: selecting a keyboard layout this machine's XKB data cannot build.
 #
 # AND IT ROSE BY THREE IN THE TEXT-LAYER SLICE, ALL IN `NSSpellChecker`: the asynchronous check (its results would be
@@ -41,7 +44,7 @@
 
 NSAccessibility.m                1
 NSAlert.m                         1
-NSApplication.m                  11
+NSApplication.m                  12
 NSAttributedStringRTF.m          4
 NSAttributedStringRTFD.m         6
 NSBezierPath.m                   5
@@ -97,4 +100,4 @@ NSWindow.m                       24
 # `fn_refuse_window` spelling was simply invisible to a census that counted the `APPKIT-REFUSE` literal, so every
 # refusal written the house way — which is the way the header asks for — moved no number.
 #
-# total: 287
+# total: 288

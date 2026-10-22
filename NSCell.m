@@ -85,6 +85,7 @@ static NSString * const AGCoderCellStateKey = @"state";
 static NSString * const AGCoderCellTagKey = @"tag";
 static NSString * const AGCoderCellKeyEquivalentKey = @"keyEquivalent";
 static NSString * const AGCoderCellMnemonicKey = @"mnemonicLocation";
+static NSString * const AGCoderCellFloatingFormatKey = @"floatingPointFormat";
 static NSString * const AGCoderCellMenuKey = @"menu";
 static NSString * const AGCoderCellImageKey = @"image";
 static NSString * const AGCoderCellFormatterKey = @"formatter";
@@ -130,6 +131,11 @@ static NSString * const AGCoderCellActionKey = @"action";
 	[aCoder encodeInteger:_tag forKey:AGCoderCellTagKey];
 	[aCoder encodeObject:_keyEquivalent forKey:AGCoderCellKeyEquivalentKey];
 	[aCoder encodeInteger:(NSInteger)_mnemonicLocation forKey:AGCoderCellMnemonicKey];
+	if (_cgFloatingFormat) {
+		[aCoder encodeBool:_cgFloatingAutoRange forKey:@"floatingAutoRange"];
+		[aCoder encodeInteger:_cgFloatingLeft forKey:@"floatingLeft"];
+		[aCoder encodeInteger:_cgFloatingRight forKey:@"floatingRight"];
+	}
 	[aCoder encodeObject:_menu forKey:AGCoderCellMenuKey];
 	[aCoder encodeObject:_image forKey:AGCoderCellImageKey];
 	[aCoder encodeObject:_formatter forKey:AGCoderCellFormatterKey];
@@ -357,6 +363,12 @@ static NSString * const AGCoderCellActionKey = @"action";
 	if ((self = [self init]) != nil) {
 		_type = NSTextCellType;
 		[self setTitle:(aString != nil ? aString : @"Cell")];
+		/* **AND THE STRING VALUE TOO, WHICH IS APPLE'S OTHER HALF OF THIS INITIALISER.** This class keeps a TITLE (what a
+		 * button or a field DRAWS) and an OBJECT VALUE (what `-stringValue` answers), and `-initTextCell:` used to set
+		 * only the first — so a cell made with a string answered `-stringValue` of nil. MEASURED while writing the
+		 * field-editor session: the editor was handed an empty string for a cell created with one. A text cell has one
+		 * string, and both doors are views of it. */
+		[self setStringValue:(aString != nil ? aString : @"Cell")];
 	}
 	return self;
 }
@@ -622,6 +634,13 @@ static NSString * const AGCoderCellActionKey = @"action";
 		 * documented answer, and conflating them would make "declined" read as "empty cell". */
 		return (formatted != nil ? formatted : @"");
 	}
+	/* **AND THE 10.0 NUMBER FORMAT, WHEN ONE WAS SET AND NO FORMATTER SUPERSEDES IT.** Apple's precedence is the
+	 * formatter's: this branch is reached only when `_formatter` is nil, which is why it sits after that test. A value
+	 * that is not a number is untouched — the format is about numbers. */
+	if (_cgFloatingFormat && [_objectValue isKindOfClass:[NSNumber class]]) {
+		return fn_floating_string([(NSNumber *)_objectValue doubleValue], _cgFloatingAutoRange,
+					  _cgFloatingLeft, _cgFloatingRight);
+	}
 	return [_objectValue description];
 }
 
@@ -770,6 +789,232 @@ static NSString * const AGCoderCellActionKey = @"action";
 		return;
 	}
 	[self setObjectValue:[NSNumber numberWithDouble:aDouble]];
+}
+
+/* ============================================================================================ *
+ * THE FIELD-EDITOR FAMILY, AND THE THREE SMALL DOORS THE INK AND FORMAT FAMILIES LEFT OPEN.      *
+ * ============================================================================================ */
+
+/* **ONE EXPANSION DOOR, AND APPLE'S OWN SENTENCE IS THE WHOLE IMPLEMENTATION**: "the default implementation … simply
+ * calls -drawWithFrame:inView:". It was left open while `-drawWithFrame:` did not exist; now it does, so this is the
+ * published default rather than a stub. A cell that wants a different expansion (a Quick Look preview) overrides it. */
+- (void)drawWithExpansionFrame:(NSRect)cellFrame inView:(NSView *)view
+{
+	[self drawWithFrame:cellFrame inView:view];
+}
+
+/* **THE HIGHLIGHT COLOUR IS THE ONE THE CELL IS DRAWN WITH, ASKED AS A DOOR.** A table, a browser and a menu all draw a
+ * selected row differently, but they agree on WHICH COLOUR means selected — the platform's selection colour — and a cell
+ * that is not highlighted answers the text colour, because a "highlight" that is not one is not a fill. */
+- (NSColor *)highlightColorWithFrame:(NSRect)cellFrame inView:(NSView *)controlView
+{
+	(void)cellFrame;
+	(void)controlView;
+	return [self isHighlighted] ? [NSColor selectedControlColor] : [NSColor controlTextColor];
+}
+
+/* ---- THE SESSION ------------------------------------------------------------------------------- */
+
+/* **THE EDITOR IS CONFIGURED FROM THE CELL, WHICH IS THE ONE THING THIS DOOR IS.** A cell with no font of its own leaves
+ * the editor's; the base class cannot supply one (see the geometry family's note), and a subclass that has one
+ * (`NSTextFieldCell`) overrides this door to say more. THE EDITOR DRAWS NO BACKGROUND: the CELL has already drawn the
+ * face, and an editor that painted its own would be a second field inside the first. */
+- (NSText *)setUpFieldEditorAttributes:(NSText *)textObj
+{
+	if (textObj == nil) {
+		return nil;
+	}
+	[textObj setFieldEditor:YES];
+	[textObj setDrawsBackground:NO];
+	[textObj setEditable:[self isEditable]];
+	[textObj setSelectable:YES];
+	if ([self font] != nil) {
+		[textObj setFont:[self font]];
+	}
+	[textObj setAlignment:[self alignment]];
+	return textObj;
+}
+
+/* **A SESSION IS THE EDITOR IN THE VIEW, THE CELL'S STRING IN THE EDITOR, AND THE CELL AS ITS DELEGATE.** The delegate
+ * a CALLER passes is kept beside this one and told afterwards — a control that wants to know when its field was edited
+ * hears about it without owning the session. A refused first-responder answer UNDOES the whole thing, which is the
+ * lesson `NSTextFieldCell` records at its own copy of this method: a field nobody may edit must not keep a caret. */
+- (void)selectWithFrame:(NSRect)aRect inView:(NSView *)controlView editor:(NSText *)textObj
+	       delegate:(id)anObject start:(NSInteger)selStart length:(NSInteger)selLength
+{
+	NSRect room = [self drawingRectForBounds:aRect];
+	NSString *string = [self stringValue];
+
+	if (textObj == nil) {
+		return;
+	}
+	_cgFieldDelegate = anObject;
+	textObj = [self setUpFieldEditorAttributes:textObj];
+	_cgFieldEditor = textObj;
+	[textObj setFrame:room];
+	[textObj setString:(string != nil ? string : @"")];
+	[textObj setDelegate:self];
+	if (controlView != nil) {
+		[controlView addSubview:textObj];
+	}
+	/* **A VIEW WITH NO WINDOW HAS NO RESPONDER CHAIN TO JOIN**, so the refusal test is only asked when there is one.
+	 * MEASURED: treating a nil window's answer as a refusal undid a session that a caller with an offscreen cell — a
+	 * probe, a cell drawn into a bitmap — had every right to begin; the editor is placed and its string set, and there is
+	 * simply nobody to make first responder. */
+	if ([controlView window] != nil && ![[controlView window] makeFirstResponder:textObj]) {
+		[textObj setDelegate:nil];
+		[textObj removeFromSuperview];
+		_cgFieldEditor = nil;
+		_cgFieldDelegate = nil;
+		return;
+	}
+	[textObj setSelectedRange:NSMakeRange((NSUInteger)selStart, (NSUInteger)selLength)];
+}
+
+/* AND A POINTER'S EDIT SELECTS ALL OF IT, which is what a first click into a field does. */
+- (void)editWithFrame:(NSRect)aRect inView:(NSView *)controlView editor:(NSText *)textObj
+	     delegate:(id)anObject event:(NSEvent *)theEvent
+{
+	(void)theEvent;
+	[self selectWithFrame:aRect inView:controlView editor:textObj delegate:anObject
+			start:0 length:(NSInteger)[[self stringValue] length]];
+}
+
+/* **ENDING A SESSION IS THE CELL TAKING ITS STRING BACK.** A direct call takes the string — there is no key behind it and
+ * therefore nothing to cancel — and the caller's delegate is told afterwards, in that order, so a delegate that reads the
+ * cell finds the new value already in it. */
+- (void)endEditing:(NSText *)textObj
+{
+	id caller = _cgFieldDelegate;
+
+	if (textObj != nil) {
+		[self setStringValue:[textObj string]];
+		[textObj setDelegate:nil];
+		[textObj removeFromSuperview];
+	}
+	_cgFieldEditor = nil;
+	_cgFieldDelegate = nil;
+	if (caller != nil && [caller respondsToSelector:@selector(textDidEndEditing:)]) {
+		[caller textDidEndEditing:[NSNotification notificationWithName:NSTextDidEndEditingNotification
+								       object:textObj
+								     userInfo:nil]];
+	}
+}
+
+/* THE TWO NOTIFICATIONS THE SESSION NEEDS. The `Should` answer is YES — the base has no reason to refuse a session it was
+ * asked to begin — and the did-end takes the string back through `-endEditing:`, which is the whole of what a session
+ * ending on its own means. */
+- (BOOL)textShouldEndEditing:(NSText *)textObject
+{
+	(void)textObject;
+	return YES;
+}
+
+- (void)textDidEndEditing:(NSNotification *)notification
+{
+	[self endEditing:[notification object]];
+}
+
+/* **AND THE WINDOW'S EDITOR, WHICH IS THE OBJECT THE FOUR ABOVE ARE LENT.** A window keeps one and lends it to whichever
+ * field is being edited; asking it is why this door takes a view rather than a window. */
+- (NSText *)fieldEditorForView:(NSView *)aView
+{
+	return [[aView window] fieldEditor:YES forObject:self];
+}
+
+/* **THE TRACKING LOOP, WHICH IS `NSControl -mouseDown:` WITHOUT THE CONTROL.** The same three hooks, the same highlight,
+ * the same rule that the action goes out only if the button came up inside — and the same guard for a program with no
+ * event source, which is the one path a probe can drive. The frame is the caller's (a table's row, a browser's cell), not
+ * the view's bounds. */
+- (BOOL)trackMouse:(NSEvent *)theEvent inRect:(NSRect)cellFrame ofView:(NSView *)controlView untilMouseUp:(BOOL)flag
+{
+	NSApplication *app = [NSApplication sharedApplication];
+	NSWindow *window = [controlView window];
+	NSPoint where = [controlView convertPoint:[theEvent locationInWindow] fromView:nil];
+	BOOL inside = NSPointInRect(where, cellFrame);
+
+	(void)flag;
+	[self highlight:YES withFrame:cellFrame inView:controlView];
+	(void)[self startTrackingAt:where inView:controlView];
+	if ([controlView respondsToSelector:@selector(setNeedsDisplay:)]) {
+		[controlView setNeedsDisplay:YES];
+	}
+	if (![app isRunning]) {
+		/* NOTHING CAN BE TRACKED WITHOUT AN EVENT SOURCE: the press is the whole of what can be applied, and the answer
+		 * says whether the pointer was inside when it began — the same shape `NSControl`'s loop has. */
+		[self highlight:NO withFrame:cellFrame inView:controlView];
+		return inside;
+	}
+	for (;;) {
+		NSEvent *next = [app nextEventMatchingMask:(NSLeftMouseDraggedMask | NSLeftMouseUpMask)
+						untilDate:[NSDate dateWithTimeIntervalSinceNow:1.0 / 60.0]
+						   inMode:nil
+						  dequeue:YES];
+		NSPoint point;
+		BOOL over;
+
+		if (next == nil) {
+			if (window != nil) {
+				[window displayIfNeeded];
+			}
+			continue;
+		}
+		point = [controlView convertPoint:[next locationInWindow] fromView:nil];
+		over = NSPointInRect(point, cellFrame);
+		(void)[self continueTracking:where at:point inView:controlView];
+		where = point;
+		if (over != [self isHighlighted]) {
+			[self highlight:over withFrame:cellFrame inView:controlView];
+			[controlView setNeedsDisplay:YES];
+		}
+		if ([next type] == NSLeftMouseUp) {
+			inside = over;
+			break;
+		}
+		if (window != nil) {
+			[window displayIfNeeded];
+		}
+	}
+	[self stopTracking:where at:where inView:controlView mouseIsUp:inside];
+	[self highlight:NO withFrame:cellFrame inView:controlView];
+	return inside;
+}
+
+/* ---- THE NUMBER FORMAT ------------------------------------------------------------------------- */
+
+/* **THE TWO RULES APPLE PUBLISHES, ONE FORMAT EACH.** With `autoRange` NO the total width is the integer digits plus the
+ * point plus the fraction digits, ZERO-PADDED — and a value whose integer part is longer than `left` is NOT truncated
+ * (printf's own behaviour, which is what the era's sentence describes). With YES the two numbers are a maximum total width
+ * and the fraction digits are still the second one. A `left` or `right` below zero is clamped, because a negative width is
+ * not a format. */
+- (void)setFloatingPointFormat:(BOOL)autoRange left:(NSInteger)leftDigits right:(NSInteger)rightDigits
+{
+	_cgFloatingFormat = YES;
+	_cgFloatingAutoRange = autoRange ? YES : NO;
+	_cgFloatingLeft = (leftDigits > 0) ? leftDigits : 0;
+	_cgFloatingRight = (rightDigits > 0) ? rightDigits : 0;
+}
+
+/* AND THE READER IS `-stringValue`, one door down: a numeric value WITH a format set is rendered by these rules unless a
+ * formatter was set, which supersedes them. */
+static NSString *fn_floating_string(double value, BOOL autoRange, NSInteger left, NSInteger right)
+{
+	char format[64];
+	char buffer[256];
+	NSInteger width;
+
+	if (autoRange) {
+		width = left + right;
+		if (width < 0) {
+			width = 0;
+		}
+		snprintf(format, sizeof(format), "%%%ld.%ldf", (long)(width + 1), (long)right);
+	} else {
+		width = left + ((right > 0) ? right + 1 : 0);
+		snprintf(format, sizeof(format), "%%0%ld.%ldf", (long)width, (long)right);
+	}
+	snprintf(buffer, sizeof(buffer), format, value);
+	return [NSString stringWithUTF8String:buffer];
 }
 
 /* ---- AND THE HIT TEST, WHOSE CONTRACT IS THE ERA'S OWN COMMENT RATHER THAN A GUESS ---------------------------- */

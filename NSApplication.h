@@ -387,6 +387,21 @@ typedef NSUInteger NSApplicationPresentationOptions;
 - (BOOL)sendAction:(nullable SEL)anAction to:(nullable id)theTarget from:(nullable id)sender;
 - (nullable id)targetForAction:(nullable SEL)anAction;
 
+/* **AND THE THREE-ARGUMENT FORM, WHICH IS WHERE THE SENDER DECIDES WHERE THE SEARCH STARTS.** Apple's `-targetForAction:`
+ * is this door with no sender; with a sender that IS a responder, the walk starts at the SENDER (its own chain) rather
+ * than at the key window's first responder — which is what makes a menu item's action find the view the click came from.
+ * `-sendAction:to:from:` is what a caller usually does; this is the question behind it, asked aloud. */
+- (nullable id)targetForAction:(nullable SEL)anAction to:(nullable id)aTarget from:(nullable id)sender;
+
+/* **AND THE HELP SEARCH, WHICH IS A STRING SEARCH AND NOT A UI INDEX.** Apple's Help menu filters its items by what a
+ * person has typed; the door takes the typed string, the item's string, a range to search in, and answers the MATCHED
+ * SUBSTRING (and writes its range) or nil. A leading `&` in an item's title marks a keyboard mnemonic and is not part of
+ * what a person sees, so the search SKIPS it when comparing — see the implementation for the one-pass rule. */
+- (nullable NSString *)searchString:(nullable NSString *)searchString
+	  inUserInterfaceItemString:(nullable NSString *)stringToSearch
+		       searchRange:(NSRange)searchRange
+			foundRange:(nullable NSRangePointer)foundRange;
+
 /* ACTIVATION AND HIDING. With no window manager of this tree's own (Kestrel is parked) these are the
  * application's own state plus the window verbs they imply — stated rather than pretending to talk to one. */
 - (void)activateIgnoringOtherApps:(BOOL)flag;
@@ -480,6 +495,23 @@ typedef NSUInteger NSApplicationPresentationOptions;
 - (void)endSheet:(NSWindow *)sheet returnCode:(NSInteger)returnCode;
 
 - (NSInteger)runModalForWindow:(NSWindow *)theWindow;
+
+/* **AND THE TWO RELATIVES, WHICH RUN THE WINDOW AS A SHEET OF ANOTHER.** `-beginModalSessionForWindow:relativeToWindow:`
+ * attaches the window to `docWindow` as a sheet and then begins a session for it — the pair a document's "are you sure?"
+ * question uses — and the run form is the loop over that session. THE SESSION REMEMBERS ITS PARENT, so
+ * `-endModalSession:` takes the sheet back down; that is the one piece of state these two doors need beyond the session
+ * the class already keeps. */
+- (nullable NSModalSession)beginModalSessionForWindow:(nullable NSWindow *)theWindow
+				     relativeToWindow:(nullable NSWindow *)docWindow;
+- (NSInteger)runModalForWindow:(nullable NSWindow *)theWindow relativeToWindow:(nullable NSWindow *)docWindow;
+
+/* **AND THREE ONE-LINE DOORS THAT WERE SIMPLY ABSENT.** `-isHidden` is the flag `-hide:`/`-unhide:` already keep;
+ * `-context` is Apple's own "does nothing and returns nil" (its 10.6 page says so in as many words), kept because a
+ * ported caller sends it; and `-application:printFiles:` is a NAMED REFUSAL, because printing needs the print system
+ * this tier has not got — the delegate door above already tells a delegate to reply FAILURE to it. */
+- (BOOL)isHidden;
+- (nullable NSGraphicsContext *)context;
+- (void)application:(nullable id)sender printFiles:(nullable NSArray *)filenames;
 /* AND THE WINDOW ARGUMENT IS `nullable` HERE, WHILE APPLE'S HEADER SPELLS IT NONNULL: this tree annotates
  * from what the IMPLEMENTATION accepts (the standing practice), and the implementation below answers NULL for
  * a nil window rather than making one. */

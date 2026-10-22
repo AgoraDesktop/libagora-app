@@ -137,6 +137,50 @@ int main(void)
 		check(barWindow != nil && [barWindow isVisible],
 		      "so the menu bar stays — the desktop is never left without a key application");
 
+		/* **AND THE APPLICATION'S SEVEN SWEEP DOORS.** Three are questions about the responder chain and a string, two
+		 * are one-line answers, and one is a named refusal — none of them needs a compositor to be worth asserting. */
+		{
+			NSView *content = [window contentView];
+			id target;
+
+			/* 1. `-targetForAction:to:from:`: a named target wins when it can take the action, a RESPONDER SENDER
+			 * starts the walk from itself, and a nil action finds nobody. */
+			target = [app targetForAction:@selector(hide:) to:app from:nil];
+			check(target == app, "a named target that can take the action is the answer");
+			target = [app targetForAction:@selector(noSuchActionAnywhere:) to:app from:nil];
+			check(target == nil, "and a target that cannot is nil");
+			check([app targetForAction:@selector(setNeedsDisplay:) to:nil from:content] == content,
+			      "a responder sender answers from ITS OWN chain, which is how the view a click came from is found");
+			check([app targetForAction:NULL] == nil, "and a nil action has no target");
+
+			/* 2. THE HELP SEARCH: the match inside the range, case-insensitively, with the title's `&` SKIPPED. */
+			{
+				NSRange found = NSMakeRange(NSNotFound, 0);
+				NSString *matched;
+
+				matched = [app searchString:@"open" inUserInterfaceItemString:@"&Open Recent"
+						 searchRange:NSMakeRange(0, 12) foundRange:&found];
+				check(matched != nil && [[matched lowercaseString] isEqual:@"open"],
+				      "the search finds the typed string in an item's title, in the case it was typed");
+				check(found.location != NSNotFound,
+				      "and writes the range it found — the mnemonic mark is not part of the string searched");
+				check([app searchString:@"zzz" inUserInterfaceItemString:@"&Open Recent"
+					   searchRange:NSMakeRange(0, 12) foundRange:&found] == nil &&
+				      found.location == NSNotFound,
+				      "and a string that is not there answers nil with a not-found range");
+			}
+
+			/* 3. THE THREE ONE-LINERS. */
+			check(![app isHidden], "the application is not hidden to begin with");
+			[app hide:nil];
+			check([app isHidden], "and `-hide:` sets the flag `-isHidden` answers");
+			[app unhide:nil];
+			check(![app isHidden], "which `-unhide:` clears");
+			check([app context] == nil, "`-context` answers nil, which is Apple's own documented answer");
+			[app application:app printFiles:[NSArray arrayWithObject:@"/tmp/nothing"]];
+			check(1, "and `-application:printFiles:` is a refusal rather than a crash");
+		}
+
 		printf("appkit_activation: %d check(s) failed%s\n", g_failed,
 		       g_failed == 0 ? " -- all checks passed" : "");
 	}

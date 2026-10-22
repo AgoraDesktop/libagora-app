@@ -35,6 +35,10 @@ refusal census 286.*
 `api-ledger: 361 metrics hold (117 classes, 3527 selectors of 4112, 34 protocols, 86 functions)`, 97 classes COMPLETE, refusal
 census 287.*
 
+*State after the session that picked THAT up (§19, the cell's edit session and the application's last seven): **30 commits**,
+tree clean, **137 tests passing**, `api-ledger: 361 metrics hold (117 classes, 3543 selectors of 4112, 34 protocols, 86
+functions)`, 99 classes COMPLETE, refusal census 288.*
+
 ---
 
 ## 1. What this session did
@@ -908,3 +912,53 @@ expect it.
    view), `NSCollectionView` (10.11 only — ruled out by §9.3), the controller family, printing, and the colour/font
    panels. At 85% of selectors with 97 of 117 classes complete, what is left is mostly WHOLE CLASSES rather than loose
    doors.
+
+---
+
+## 19. The cell's own edit session, and the application's last seven
+
+*Thirtieth commit of the pickup: `NSCell` 148/148 and `NSApplication` 95/95 — 16 selectors, two classes COMPLETE.
+**3543 of 4112 selectors (86%), 99 of 117 classes complete, 569 missing.** 137 tests.*
+
+**THE FIELD-EDITOR FAMILY IS ON `NSCell` NOW, WHERE APPLE DECLARES IT.** The four doors —
+`-setUpFieldEditorAttributes:`, `-selectWithFrame:…`, `-editWithFrame:…`, `-endEditing:` — were `NSTextFieldCell`'s alone,
+which meant a caller with a plain cell could not edit it at all, and the ledger counted NS**Cell** short for a family that
+belongs to it. The base now runs the whole session with its own record (`_cgFieldEditor`, the caller's delegate, the two
+editor notifications it needs because the cell IS the editor's delegate), and `NSTextFieldCell`'s richer overrides are
+untouched. Two things the base learned:
+
+* **A VIEW WITH NO WINDOW IS NOT A REFUSAL.** The "a refused session leaves nothing standing" guard — borrowed from the
+  field cell — fired on a nil window, because `[nil makeFirstResponder:]` answers NO. An offscreen cell (a probe's, a cell
+  drawn into a bitmap) has every right to begin a session; there is simply nobody to make first responder.
+* **AND THE SESSION EXPOSED A LATENT BUG: `-initTextCell:` SET ONLY HALF THE STRING.** It set the cell's TITLE and left the
+  object value nil, so `[[NSCell alloc] initTextCell:@"hello"]` answered `-stringValue` of nil — and the session handed the
+  editor an empty string for a cell made with one. A text cell has ONE string and both doors are views of it, so the
+  initialiser sets both now; every button and field is unchanged because they draw the title.
+
+And three more doors found their ground: `-drawWithExpansionFrame:inView:` is Apple's published "simply calls
+`-drawWithFrame:`" (it could not be while the ink family was missing); `-highlightColorWithFrame:inView:` answers the
+selection colour or the text colour by state; and `-setFloatingPointFormat:left:right:` — the rendering rule the header had
+left open — is stored and applied by `-stringValue`, with a formatter still superseding it. MEASURED: `left:2 right:2`
+renders 3.14159 as `03.14`, an integer part longer than `left` is not truncated, and `autoRange` makes the pair a MAXIMUM
+width that pads with SPACES (` 1.50`) — the test's first draft asserted zero padding for that case and the DOOR was right.
+
+**AND THE APPLICATION'S SEVEN ARE THE LAST OF ITS SURFACE.** `-targetForAction:to:from:` is the question behind
+`-sendAction:to:from:` — a named target wins, a RESPONDER SENDER starts the walk at itself (how a menu item's action finds
+the view a click came from); `-searchString:inUserInterfaceItemString:searchRange:foundRange:` is the Help filter,
+case-insensitive with the `&` mnemonic mark skipped; `-isHidden` is the flag `-hide:` keeps; `-context` answers nil (Apple's
+own documented answer); `-application:printFiles:` is a named refusal; and the two RELATIVES attach the window to its parent
+through the existing sheet door and then begin the SAME session, with the parent in the session so `-endModalSession:` takes
+the attachment down. The run form is not called by any probe — unbounded, like `-runModal` — but the session form is driven
+end to end: attach, one pass, the stop's code, and the sheet gone.
+
+### Where the next hour goes, after the application
+
+1. **The shared menu-highlight seam** (§16's note, §18's #2): one door in `NSMenuView` and one delegate send would give
+   both `-comboBoxSelectionIsChanging:` and `-menu:willHighlightItem:` their sender. It is the last small piece of the
+   surface this tree has ALREADY implemented.
+2. **Then it is whole classes.** 51 remain, and the plan's own list names `NSMatrix`/`NSForm` (134 selectors — a real new
+   view, the largest single remaining one), the controller family, printing (which would turn several refusals into
+   doors), and the colour/font panels. `NSCollectionView` stays ruled out by §9.3 (10.11 only).
+3. **And the honest state of the surface**: 86% of selectors, 99 of 117 classes complete, and every remaining selector in
+   a class this tree HAS is either a periphery above, a door needing a subsystem (print, speech, Help), or the planning
+   that `-comboBoxSelectionIsChanging:`'s one send would close.

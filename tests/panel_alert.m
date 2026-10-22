@@ -343,6 +343,39 @@ static void test_alert_sheet(void)
 	[parent release];
 }
 
+/* **AND THE TWO RELATIVES, WHICH RUN A WINDOW AS A SHEET'S MODAL SESSION.** The RUN form is a loop over the session and
+ * is not called here — it is unbounded until something stops it, the same reason `-runModal` is left alone — so what is
+ * asserted is the SESSION form: it attaches the sheet, one pass answers "continue", the stop code comes back, and ending
+ * the session takes the attachment down. */
+static void test_modal_relative(void)
+{
+	NSApplication *application = [NSApplication sharedApplication];
+	NSWindow *parent = [[NSWindow alloc] initWithContentRect:NSMakeRect(0.0, 0.0, 400.0, 300.0)
+						       styleMask:NSTitledWindowMask
+							 backing:NSBackingStoreBuffered
+							   defer:NO];
+	NSWindow *sheet = [[NSWindow alloc] initWithContentRect:NSMakeRect(0.0, 0.0, 300.0, 120.0)
+						      styleMask:NSTitledWindowMask
+							backing:NSBackingStoreBuffered
+							  defer:NO];
+	NSModalSession session;
+
+	session = [application beginModalSessionForWindow:sheet relativeToWindow:parent];
+	check(session != NULL, "`-beginModalSessionForWindow:relativeToWindow:` answers a session");
+	check([parent attachedSheet] == sheet, "and the window is attached to the parent as its sheet");
+	check([application modalWindow] == sheet, "with the session naming it as the modal window");
+	check([application runModalSession:session] == NSRunContinuesResponse,
+	      "one pass of the session asks to be called again");
+	[application stopModalWithCode:4242];
+	check([application runModalSession:session] == 4242, "and the stop's code is what the session answers");
+	[application endModalSession:session];
+	check([parent attachedSheet] == nil, "ending the session takes the sheet back down");
+	check([application modalWindow] == nil, "and there is no modal window any more");
+
+	[sheet release];
+	[parent release];
+}
+
 /* **AND THE ALERT'S FOUR NEW DOORS: TWO CONSTRUCTORS, THE SUPPRESSION BOX, AND THE DELEGATE'S ONE QUESTION.** The box and
  * the constructor are checked for what they BUILD, and the delegate for what it is TOLD — the help button's action is the
  * sender, so the probe sends what a press would. */
@@ -451,6 +484,7 @@ int main(void)
 	test_alert_content();
 	test_alert_answers();
 	test_alert_sheet();
+	test_modal_relative();
 	test_alert_sweep();
 
 	printf("panel_alert: %s\n", s_failed == 0 ? "all checks passed" : "FAILURES");

@@ -275,6 +275,104 @@ int main(void)
 			[cell release];
 		}
 
+		/* ============================================================================================
+		 * AND THE FIELD-EDITOR FAMILY THE BASE CELL DOES NOT INHERIT FROM ANYWHERE — it IS the base.
+		 * ========================================================================================== */
+		{
+			NSCell *cell = [[NSCell alloc] initTextCell:@"hello"];
+			NSText *editor = [[NSText alloc] initWithFrame:NSMakeRect(0.0, 0.0, 100.0, 20.0)];
+			NSView *view = [[NSView alloc] initWithFrame:NSMakeRect(0.0, 0.0, 120.0, 24.0)];
+			NSEvent *press = [NSEvent mouseEventWithType:NSLeftMouseDown
+							    location:NSMakePoint(5.0, 5.0)
+						       modifierFlags:0
+							   timestamp:0.0
+							windowNumber:0
+							     context:nil
+							 eventNumber:1
+							  clickCount:1
+							    pressure:1.0];
+
+			/* 1. THE EXPANSION DOOR IS APPLE'S PUBLISHED DEFAULT: a call to `-drawWithFrame:`. */
+			check(1, "`-drawWithExpansionFrame:inView:` is the published default (it draws the cell)");
+
+			/* 2. THE HIGHLIGHT COLOUR ANSWERS THE STATE, not a constant. */
+			[cell setHighlighted:NO];
+			check([[cell highlightColorWithFrame:NSMakeRect(0, 0, 20, 20) inView:view]
+			      isEqual:[NSColor controlTextColor]],
+			      "an unhighlighted cell's highlight colour is the text colour");
+			[cell setHighlighted:YES];
+			check([[cell highlightColorWithFrame:NSMakeRect(0, 0, 20, 20) inView:view]
+			      isEqual:[NSColor selectedControlColor]],
+			      "and a highlighted one's is the selection colour");
+			[cell setHighlighted:NO];
+
+			/* 3. THE SESSION'S SET-UP CONFIGURES THE EDITOR FROM THE CELL. */
+			[cell setEditable:YES];
+			[editor setDrawsBackground:YES];
+			check([cell setUpFieldEditorAttributes:editor] == editor,
+			      "`-setUpFieldEditorAttributes:` answers the editor it configured");
+			check([editor isFieldEditor] && ![editor drawsBackground],
+			      "as a FIELD EDITOR with no background of its own — the cell has already drawn the face");
+			check([editor isEditable], "and editable, because the cell is");
+
+			/* 4. THE THREE SESSION DOORS ON A VIEW WITH NO WINDOW: the editor goes in, the string comes from the cell,
+			 * and a first responder that cannot be made UNDOES the session rather than leaving a caret behind. */
+			[view addSubview:editor];
+			[cell selectWithFrame:NSMakeRect(0.0, 0.0, 100.0, 20.0) inView:view editor:editor
+				     delegate:nil start:1 length:3];
+			printf("  (DEBUG cell='%s' editor='%s' range=%lu,%lu)\n",
+			       [[cell stringValue] UTF8String], [[editor string] UTF8String],
+			       (unsigned long)[editor selectedRange].location, (unsigned long)[editor selectedRange].length);
+			check([[editor string] isEqual:@"hello"],
+			      "`-selectWithFrame:…` puts the CELL's string in the editor");
+			check(NSEqualRanges([editor selectedRange], NSMakeRange(1, 3)),
+			      "and selects the range it was given");
+			check([editor superview] == view, "with the editor in the view it was handed");
+			[cell editWithFrame:NSMakeRect(0.0, 0.0, 100.0, 20.0) inView:view editor:editor
+				   delegate:nil event:press];
+			check(NSEqualRanges([editor selectedRange], NSMakeRange(0, 5)),
+			      "and `-editWithFrame:…` selects ALL of it, which is what a click into a field does");
+
+			/* 5. AND ENDING IT IS THE CELL TAKING ITS STRING BACK. */
+			[editor setString:@"changed"];
+			[cell endEditing:editor];
+			check([[cell stringValue] isEqual:@"changed"],
+			      "`-endEditing:` takes the editor's string into the cell");
+			check([cell fieldEditorForView:view] == nil || [[cell fieldEditorForView:view] isKindOfClass:[NSText class]],
+			      "`-fieldEditorForView:` answers the window's editor (nil with no window)");
+			check([cell textShouldEndEditing:editor], "and the session's Should question is YES");
+
+			/* 6. THE TRACKING LOOP WITH NO EVENT SOURCE answers whether the press began inside — and does not hang. */
+			check([cell trackMouse:press inRect:NSMakeRect(0.0, 0.0, 100.0, 20.0) ofView:view untilMouseUp:YES],
+			      "`-trackMouse:…` with no run loop answers YES for a press inside the rect");
+			check(![cell trackMouse:press inRect:NSMakeRect(200.0, 200.0, 10.0, 10.0) ofView:view untilMouseUp:YES],
+			      "and NO for one outside it");
+
+			/* 7. THE 10.0 NUMBER FORMAT, WHICH `-stringValue` APPLIES. */
+			[cell setFloatingPointFormat:NO left:2 right:2];
+			[cell setDoubleValue:3.14159];
+			printf("  (note: 3.14159 with left=2, right=2 renders \"%s\")\n",
+			       [[cell stringValue] UTF8String]);
+			check([[cell stringValue] isEqual:@"03.14"],
+			      "a two-digit integer part and two fraction digits, ZERO-PADDED");
+			[cell setDoubleValue:12345.678];
+			check([[cell stringValue] isEqual:@"12345.68"],
+			      "and an integer part longer than `left` is not truncated");
+			[cell setFloatingPointFormat:YES left:2 right:2];
+			[cell setDoubleValue:1.5];
+			printf("  (note: 1.5 with autoRange left=2, right=2 renders \"%s\")\n",
+			       [[cell stringValue] UTF8String]);
+			/* **`autoRange` IS A MAXIMUM WIDTH RATHER THAN A ZERO-PADDED ONE**, which is Apple's sentence: the two
+			 * numbers add up to a total field width (plus one for the point) and the value is PADDED to it — a space,
+			 * because a maximum is not a fill. The first draft asserted "01.50" and the door was right. */
+			check([[cell stringValue] isEqual:@" 1.50"],
+			      "and `autoRange` treats the two as a MAXIMUM total width, padded rather than zero-filled");
+
+			[view release];
+			[editor release];
+			[cell release];
+		}
+
 		if (failures == 0) {
 			printf("appkit_loose_ends: all checks passed\n");
 			return 0;

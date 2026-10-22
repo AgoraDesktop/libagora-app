@@ -442,8 +442,37 @@ BOOL NSApplicationLoad(void)
 
 - (id)targetForAction:(SEL)anAction
 {
+	return [self targetForAction:anAction to:nil from:nil];
+}
+
+/* **AND THE SENDER DECIDES WHERE THE WALK STARTS.** A sender that is a RESPONDER answers from its own chain — that is how
+ * a menu item's action finds the view the click came from — and anything else (nil, a window, a control that is not a
+ * responder) starts at the key window's first responder, which is what the one-argument door has always done. */
+- (id)targetForAction:(SEL)anAction to:(id)aTarget from:(id)sender
+{
 	NSResponder *r;
 
+	if (anAction == NULL) {
+		return nil;
+	}
+	if (aTarget != nil) {
+		/* A TARGET NAMED BY THE CALLER IS ANSWERED WHEN IT CAN TAKE THE ACTION, and nothing is walked: that is what
+		 * "to:" MEANS in this door's name. */
+		return ([aTarget respondsToSelector:anAction]) ? aTarget : nil;
+	}
+	if (sender != nil && [sender isKindOfClass:[NSResponder class]]) {
+		r = (NSResponder *)sender;
+		while (r != nil) {
+			if ([r respondsToSelector:anAction]) {
+				return r;
+			}
+			if (r == self) {
+				break;
+			}
+			r = [r nextResponder];
+		}
+		return [self respondsToSelector:anAction] ? self : nil;
+	}
 	if (anAction == NULL) {
 		return nil;
 	}
@@ -1740,6 +1769,9 @@ struct AGModalSession {
 	NSWindow *window;
 	NSInteger code;
 	BOOL ended;
+	/* **AND THE PARENT, WHICH IS WHAT MAKES A SESSION A SHEET'S.** Nil for a plain `-beginModalSessionForWindow:`, the
+	 * document window for the `…relativeToWindow:` form — and `-endModalSession:` reads it to take the sheet back down. */
+	NSWindow *sheetParent;
 };
 
 - (NSModalSession)beginModalSessionForWindow:(NSWindow *)theWindow
@@ -1763,6 +1795,50 @@ struct AGModalSession {
 	 * application's input goes to it. WITH NO SERVER that is the window's own refusal rather than a failure. */
 	[theWindow makeKeyAndOrderFront:nil];
 	return (NSModalSession)s;
+}
+
+/* **AND THE TWO RELATIVES ARE THE SHEET'S SESSION, NOT A SECOND KIND OF MODALITY.** `-beginModalSessionForWindow:relativeToWindow:`
+ * attaches the window to its parent through the sheet door the class already has, then begins the SAME session; the
+ * parent is remembered in the session so `-endModalSession:` can take the attachment back down. A nil parent is the plain
+ * form rather than a refusal, because Apple's own documentation treats the parent as advice about PLACEMENT — a window with
+ * no parent is still a modal session, just not a hanging one.
+ *
+ * ONE THING IS DELIBERATELY NOT DONE: the sheet is begun with NO modal delegate, because the session IS the caller's — the
+ * code comes back from `-runModalSession:`, not from a did-end selector, which is the difference between the two shapes
+ * Apple ships. */
+- (NSModalSession)beginModalSessionForWindow:(NSWindow *)theWindow relativeToWindow:(NSWindow *)docWindow
+{
+	NSModalSession session;
+	struct AGModalSession *s;
+
+	session = [self beginModalSessionForWindow:theWindow];
+	s = (struct AGModalSession *)(void *)session;
+	if (s == NULL) {
+		return NULL;
+	}
+	if (docWindow != nil) {
+		[self beginSheet:theWindow modalForWindow:docWindow modalDelegate:nil didEndSelector:NULL contextInfo:NULL];
+		s->sheetParent = docWindow;
+	}
+	return session;
+}
+
+- (NSInteger)runModalForWindow:(NSWindow *)theWindow relativeToWindow:(NSWindow *)docWindow
+{
+	NSModalSession session = [self beginModalSessionForWindow:theWindow relativeToWindow:docWindow];
+	NSInteger code;
+
+	if (session == NULL) {
+		return NSRunAbortedResponse;
+	}
+	for (;;) {
+		code = [self runModalSession:session];
+		if (code != NSRunContinuesResponse) {
+			break;
+		}
+	}
+	[self endModalSession:session];
+	return code;
 }
 
 - (NSInteger)runModalSession:(NSModalSession)session
@@ -1821,6 +1897,12 @@ struct AGModalSession {
 		_modalSession = NULL;
 		_modalWindow = nil;
 	}
+	/* **AND A SESSION THAT WAS A SHEET'S TAKES THE ATTACHMENT DOWN.** The code is the one the session ended with, so a
+	 * sheet ended by `-stopModalWithCode:` reports that code to its parent's own bookkeeping. The parent is not retained:
+	 * it outlives the sheet it is showing, which is the same rule every parent link in this class follows. */
+	if (s->sheetParent != nil) {
+		[self endSheet:s->window returnCode:s->code];
+	}
 	free(s);
 }
 
@@ -1844,6 +1926,59 @@ struct AGModalSession {
 	}
 	[self endModalSession:s];
 	return code;
+}
+
+/* **THE HELP SEARCH, IN ONE PASS OVER THE ITEM'S STRING.** Apple's Help menu filters items by what a person has typed.
+ * The comparison is CASE-INSENSITIVE and the item's `&` MNEMONIC MARK is skipped: a title of "Save &As…" is read as
+ * "Save As…" for someone typing, so an ampersand in the search string is not expected and one in the title must not shift
+ * the match. THE RANGE IS WHERE THE SEARCH IS LOOKED FOR, and the answer is the MATCHED SUBSTRING (not the whole title),
+ * which is what makes a menu highlight the letters it found. */
+- (NSString *)searchString:(NSString *)searchString
+  inUserInterfaceItemString:(NSString *)stringToSearch
+	       searchRange:(NSRange)searchRange
+		foundRange:(NSRangePointer)foundRange
+{
+	NSString *haystack;
+	NSRange found;
+
+	if (foundRange != NULL) {
+		*foundRange = NSMakeRange(NSNotFound, 0);
+	}
+	if ([searchString length] == 0 || stringToSearch == nil) {
+		return nil;
+	}
+	haystack = [stringToSearch stringByReplacingOccurrencesOfString:@"&" withString:@""];
+	if (searchRange.location == NSNotFound || NSMaxRange(searchRange) > [haystack length]) {
+		searchRange = NSMakeRange(0, [haystack length]);
+	}
+	found = [haystack rangeOfString:searchString options:NSCaseInsensitiveSearch range:searchRange];
+	if (found.location == NSNotFound) {
+		return nil;
+	}
+	if (foundRange != NULL) {
+		*foundRange = found;
+	}
+	return [haystack substringWithRange:found];
+}
+
+- (BOOL)isHidden
+{
+	return _hidden;
+}
+
+- (NSGraphicsContext *)context
+{
+	/* **APPLE'S OWN ANSWER IS nil, IN AS MANY WORDS**: "This method does nothing and returns nil." A ported caller sends
+	 * it and expects nothing back; answering the current context would be a different (and wrong) door. */
+	return nil;
+}
+
+- (void)application:(id)sender printFiles:(NSArray *)filenames
+{
+	(void)sender;
+	(void)filenames;
+	fn_refuse_window("-[NSApplication application:printFiles:]", "the printing system (NSPrintOperation, NSPrintInfo and "
+			 "the panel), and the Apple Event that would deliver a print request");
 }
 
 - (void)stopModal

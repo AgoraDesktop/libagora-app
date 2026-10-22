@@ -127,7 +127,8 @@ tests/
   view_offset.m                 and the ONE THING a scroll moves: a non-zero `bounds` origin, drawn and converted
   window_chrome.m               the DRAWN chrome, offscreen: Greybird's bar and its four marks, the centred title
   menu_validation.m             validation and state, which the view tests do not reach
-  appkit_activation.m           only the ACTIVE application's menu bar shows, and its sole window is key/main
+  appkit_activation.m           only the ACTIVE application's menu bar shows, and its sole window is key/main —
+                                plus the responder-chain target, the Help search and the hide flag
   appkit_controls_draw.m        a window full of controls (and the NEW-CONTROLS strip: stepper, level indicator,
                                 secure/search field, progress, date picker, box, tab view), a SCROLL PANEL, a TEXT
                                 PLAYGROUND and a TABLE & OUTLINE window
@@ -1577,6 +1578,45 @@ line scroll then clamped back to 0 instead of stepping. `-constrainScrollPoint:`
 alone, and a document that ARRIVES is measured against the origin the clip already has (CLAMPED, not centred: a clip
 view that recentred on every `-setDocumentView:` would move a caller's visible region whenever it swapped content).
 `tests/clip_view.m` holds both halves.
+
+### The cell's own edit session, and the application's last seven doors
+
+**THE FIELD-EDITOR FAMILY IS NOW ON `NSCell`, WHERE APPLE DECLARES IT.** `-setUpFieldEditorAttributes:`,
+`-selectWithFrame:inView:editor:delegate:start:length:`, `-editWithFrame:inView:editor:delegate:event:` and `-endEditing:`
+were `NSTextFieldCell`'s alone — a caller with a plain cell could not edit it at all. The base class now runs the whole
+session: the editor is configured FROM the cell (a field editor, no background of its own, the cell's font and alignment),
+placed over the cell's text, made the view's first responder, and the cell is its DELEGATE for the length of the session —
+which is the design, because the string belongs to the cell — with the caller's delegate relayed to afterwards.
+`-editWithFrame:…` selects ALL, which is what a first click into a field does. A session a window REFUSES is undone whole
+(no caret is left behind), and a view with NO window is not a refusal — there is simply nobody to make first responder,
+which is the one thing the base's version learned the hard way. `NSTextFieldCell` keeps its richer overrides and its own
+record untouched. `-fieldEditorForView:` asks the window for the editor it lends; `-trackMouse:inRect:ofView:untilMouseUp:`
+is `NSControl -mouseDown:`'s loop without the control (the cell's three hooks, the highlight, the answer "did the button
+come up inside"), which is what lets a cell in a TABLE ROW be tracked.
+
+**AND TWO SMALLER DOORS FOUND THEIR GROUND.** `-drawWithExpansionFrame:inView:`'s published default is "simply calls
+`-drawWithFrame:inView:`", which it could not be until the ink family landed — now it is. `-highlightColorWithFrame:inView:`
+answers the selection colour when the cell is highlighted and the text colour when it is not, so a table, a browser and a
+menu can agree about which colour means selected without each deriving it. `-setFloatingPointFormat:left:right:` was left
+open because its behaviour is a RENDERING rule; it is now stored and applied by `-stringValue` (a formatter still
+supersedes it): MEASURED, `left:2 right:2` renders 3.14159 as `03.14` (zero-padded, and an integer part longer than `left`
+is not truncated), while `autoRange` makes the two a MAXIMUM width and pads with spaces — ` 1.50`. The first draft of that
+test asserted zero padding for `autoRange` and the door was right.
+
+**AND A LATENT BUG THE SESSION EXPOSED: `-initTextCell:` STORED ONLY HALF THE STRING.** It set the cell's TITLE and left
+its object value nil, so `[[NSCell alloc] initTextCell:@"hello"]` answered `-stringValue` of nil — which the session handed
+to the editor as an empty string. A text cell has ONE string and both doors are views of it; the initialiser now sets both,
+and every button and field in the tier is unchanged because they draw the title.
+
+**THE APPLICATION'S SEVEN.** `-targetForAction:to:from:` is the question behind `-sendAction:to:from:`: a named target
+wins when it can take the action, and a RESPONDER SENDER starts the walk from ITS OWN chain — which is how a menu item's
+action finds the view the click came from. `-searchString:inUserInterfaceItemString:searchRange:foundRange:` is the Help
+menu's filter: case-insensitive, with the item's `&` mnemonic mark SKIPPED so it cannot shift the match, answering the
+matched substring and its range. `-isHidden` is the flag `-hide:` keeps; `-context` answers nil, which is Apple's own
+documented answer and not a gap; and `-application:printFiles:` is a NAMED REFUSAL, because printing needs the print system
+this tier has not got. The two RELATIVES — `-beginModalSessionForWindow:relativeToWindow:` and its run form — attach the
+window to its parent through the sheet door the class already has and then begin the SAME session, with the parent
+remembered so `-endModalSession:` takes the attachment back down.
 
 ### And the input sources are keyboard layouts the machine can actually build
 

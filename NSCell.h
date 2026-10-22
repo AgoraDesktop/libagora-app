@@ -277,6 +277,17 @@ typedef NSUInteger NSControlSize;
 	id _target;				/* NOT RETAINED: the tree's rule for a target */
 	SEL _action;
 	NSCellType _type;
+	/* **AND THE FIELD-EDITOR SESSION'S FIVE, WHICH THIS CLASS NOW RUNS ITSELF.** `_cgFieldEditor` is the editor a
+	 * `-selectWithFrame:…` call was lent and `_cgFieldDelegate` is the CALLER's delegate (neither retained — the window
+	 * owns the editor and the caller owns its delegate); the three floating-point fields are the 10.0 number format.
+	 * A SUBCLASS WITH A RICHER SESSION OVERRIDES THE SAME DOORS AND KEEPS ITS OWN RECORD — `NSTextFieldCell` does, and
+	 * its `-cg_textEditing` is why these five can be the BASE's without touching it. */
+	id _cgFieldEditor;		/* NOT RETAINED */
+	id _cgFieldDelegate;	/* NOT RETAINED */
+	BOOL _cgFloatingFormat;
+	BOOL _cgFloatingAutoRange;
+	NSInteger _cgFloatingLeft;
+	NSInteger _cgFloatingRight;
 	NSString *_title;			/* RETAINED (a copy of what was set) */
 	NSInteger _state;
 	NSInteger _tag;
@@ -391,6 +402,54 @@ typedef NSUInteger NSControlSize;
  * standing answer for a sender that is not there — see appkit-plan.md §A10bg for the fetched contract and the probe
  * that checks both halves. */
 - (void)resetCursorRect:(NSRect)cellFrame inView:(nullable NSView *)controlView;
+
+/* ============================================================================================ *
+ * AND THE FIELD-EDITOR FAMILY: THE SESSION A CELL RUNS WHEN IT IS LENT AN EDITOR.               *
+ * ============================================================================================ */
+/* **APPLE SPLITS AN EDIT INTO FOUR DOORS, AND THIS CLASS NOW RUNS THE WHOLE OF IT.** `-setUpFieldEditorAttributes:` is
+ * where a cell configures the editor it was lent; `-selectWithFrame:…` puts the editor over the cell's text and selects a
+ * range; `-editWithFrame:…` is the same with a pointer's event behind it (and selects ALL, which is what a first click
+ * into a field does); `-endEditing:` takes the editor's string back. THE CELL IS THE EDITOR'S DELEGATE for the length of
+ * the session — that is the design, because the string belongs to the cell — so the two editor notifications are here as
+ * well, and the CALLER's delegate (`delegate:anObject`) is relayed to afterwards.
+ *
+ * `NSTextFieldCell` OVERRIDES ALL FOUR and keeps its own session record; the implementations here are the BASE's, which
+ * is what a plain cell needs to be editable at all. */
+- (nullable NSText *)setUpFieldEditorAttributes:(nullable NSText *)textObj;
+- (void)selectWithFrame:(NSRect)aRect inView:(nullable NSView *)controlView editor:(nullable NSText *)textObj
+	       delegate:(nullable id)anObject start:(NSInteger)selStart length:(NSInteger)selLength;
+- (void)editWithFrame:(NSRect)aRect inView:(nullable NSView *)controlView editor:(nullable NSText *)textObj
+	     delegate:(nullable id)anObject event:(nullable NSEvent *)theEvent;
+- (void)endEditing:(nullable NSText *)textObj;
+/* THE TWO NOTIFICATIONS THE SESSION NEEDS, because the editor's delegate is the CELL: the `Should` answer is YES (the base
+ * has no reason to refuse a session it was told to begin) and the did-end takes the string back — which is the whole of
+ * what `-endEditing:` does when a session ends on its own. */
+- (BOOL)textShouldEndEditing:(nullable NSText *)textObject;
+- (void)textDidEndEditing:(nullable NSNotification *)notification;
+
+/* **AND THE WINDOW'S EDITOR, WHICH IS THE OBJECT THE FOUR ABOVE ARE LENT.** A window keeps one field editor and lends it
+ * to whichever field is being edited, which is why this door asks the window rather than making one. */
+- (nullable NSText *)fieldEditorForView:(nullable NSView *)aView;
+
+/* **AND THE TRACKING LOOP, WHICH IS THE ONE APPLE DECLARES HERE RATHER THAN ON THE CONTROL.** `-trackMouse:inRect:
+ * ofView:untilMouseUp:` runs the same loop `NSControl -mouseDown:` runs — the cell's three hooks, the highlight, the
+ * action only if the button came up inside — and answers YES when it did. It exists so a cell can be tracked WITHOUT a
+ * control (a cell drawn in a table's row, say), which is what Apple's header says it is for. */
+- (BOOL)trackMouse:(nullable NSEvent *)theEvent inRect:(NSRect)cellFrame ofView:(nullable NSView *)controlView
+      untilMouseUp:(BOOL)flag;
+
+/* **AND TWO THE INK FAMILY LEFT OPEN, EACH ONE LINE NOW THAT ITS GROUND EXISTS.** `-drawWithExpansionFrame:inView:`'s
+ * published default is "simply calls -drawWithFrame:inView:" — which it now can, because the ink family landed — and
+ * `-highlightColorWithFrame:inView:` is the colour a HIGHLIGHTED cell is drawn with, asked as a door so a subclass can
+ * change one without re-deriving the state. */
+- (void)drawWithExpansionFrame:(NSRect)cellFrame inView:(nullable NSView *)view;
+- (nullable id)highlightColorWithFrame:(NSRect)cellFrame inView:(nullable NSView *)controlView;
+
+/* **AND THE 10.0 NUMBER FORMAT, WHICH IS A RENDERING RULE AND NOW HAS A READER.** With `autoRange` NO, `leftDigits` is
+ * the maximum integer digits and `rightDigits` the fraction digits, zero-padded, and the integer part is never truncated;
+ * with YES the two add up to a maximum total width (plus one for the decimal point). `-stringValue` applies it to a
+ * numeric value when no formatter is set, which is Apple's precedence: a formatter supersedes this door. */
+- (void)setFloatingPointFormat:(BOOL)autoRange left:(NSInteger)leftDigits right:(NSInteger)rightDigits;
 
 /* THE FOUR DOORS. Each is a field with a question's name — `-isEnabled` and not `-enabled`, Apple's spelling, and
  * the property carries the `getter=` so both ends are named where the ledger can see them. */
