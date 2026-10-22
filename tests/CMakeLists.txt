@@ -1028,3 +1028,11 @@ target_link_libraries(text_glyph_store PRIVATE App)
 
 add_test(NAME appkit-text-glyph-store COMMAND text_glyph_store)
 set_tests_properties(appkit-text-glyph-store PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
+
+# **THE SPELL CHECKER — the first class whose backing is the machine's own data.** The dictionary-dependent assertions
+# are conditional on `availableLanguages`, so the test is honest on a machine with no word list as well as on this one.
+add_executable(spell_checker spell_checker.m)
+target_link_libraries(spell_checker PRIVATE App)
+
+add_test(NAME appkit-spell-checker COMMAND spell_checker)
+set_tests_properties(appkit-spell-checker PROPERTIES ENVIRONMENT "${_agora_app_test_env}")

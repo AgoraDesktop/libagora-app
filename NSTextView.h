@@ -97,7 +97,68 @@ NS_ASSUME_NONNULL_BEGIN
 	id _cg_trackingCell;		/* RETAINED while a session is in flight, else nil */
 	NSUInteger _cg_trackingIndex;
 	NSRect _cg_trackingFrame;
+	/* ============================================================================================
+	 * THE SPELLING FLAGS. Five bits and two pieces of per-document state, which is all the view owns: the CHECKING is
+	 * `NSSpellChecker`'s and the underlining is the layout manager's, so what lives here is what the user toggled.
+	 *
+	 * **ALL FIVE DEFAULT TO NO, WHICH IS A STATED DEVIATION FROM APPLE**, whose smart quotes and dashes start ON. This
+	 * tier sets them in no initialiser because the view has none to set them in yet, and a default that depends on
+	 * code that does not run is worse than one that is written down.
+	 * ========================================================================================== */
+	BOOL _continuousSpellChecking;
+	BOOL _grammarChecking;
+	BOOL _automaticSpellingCorrection;
+	BOOL _automaticQuoteSubstitution;
+	BOOL _automaticDashSubstitution;
+	/* THE DOCUMENT TAG, allocated once and reused: a second tag would make the checker forget what the user ignored. */
+	NSInteger _spellCheckerDocumentTag;
+	/* WHERE THE VIEW WAS TOLD A RANGE IS MISSPELLED. Apple draws a squiggle from this; this tier RECORDS it, and the
+	 * drawing is the layout manager's next slice — stated here rather than implied, because a setter that silently
+	 * drops its argument is the shape a stub takes. */
+	NSMutableDictionary *_spellingState;
+
+
 }
+
+/* ==================================================================================================================
+ * SPELLING AND SUBSTITUTION — the eighteen doors that reach `NSSpellChecker`.
+ *
+ * **THE FLAGS ARE THE VIEW'S; THE WORK IS NOT.** Each pair stores a bit and the toggle flips it, which is exactly what
+ * Apple's view does — the checking itself is the checker's and the underline is the layout manager's, so a view that
+ * owned the algorithm would be a second implementation of it.
+ *
+ * `-setSpellingState:range:` IS RECORDED AND NOT DRAWN. Apple's names a range and a state and the view underlines it
+ * in its own drawing pass; this tier records the pair in `_spellingState` so the call is not lost, and the drawing is
+ * the slice that makes the layout manager paint it. Saying so here is the difference between a documented gap and a
+ * stub that looks implemented.
+ * ================================================================================================================ */
+
+- (BOOL)isContinuousSpellCheckingEnabled;
+- (void)setContinuousSpellCheckingEnabled:(BOOL)flag;
+- (void)toggleContinuousSpellChecking:(nullable id)sender;
+
+- (BOOL)isGrammarCheckingEnabled;
+- (void)setGrammarCheckingEnabled:(BOOL)flag;
+- (void)toggleGrammarChecking:(nullable id)sender;
+
+- (BOOL)isAutomaticSpellingCorrectionEnabled;
+- (void)setAutomaticSpellingCorrectionEnabled:(BOOL)flag;
+- (void)toggleAutomaticSpellingCorrection:(nullable id)sender;
+
+- (BOOL)isAutomaticQuoteSubstitutionEnabled;
+- (void)setAutomaticQuoteSubstitutionEnabled:(BOOL)flag;
+- (void)toggleAutomaticQuoteSubstitution:(nullable id)sender;
+
+- (BOOL)isAutomaticDashSubstitutionEnabled;
+- (void)setAutomaticDashSubstitutionEnabled:(BOOL)flag;
+- (void)toggleAutomaticDashSubstitution:(nullable id)sender;
+
+/* The state a caller marks a range with, and the tag this view's spell document carries. */
+- (void)setSpellingState:(NSInteger)value range:(NSRange)charRange;
+- (NSInteger)spellCheckerDocumentTag;
+
+/* THE SUBSTITUTIONS PANEL IS A PANEL THIS TIER HAS NOT BUILT, so the door says so instead of doing nothing. */
+- (void)orderFrontSubstitutionsPanel:(nullable id)sender;
 
 /* ---- THE TRIO, WHICH A CALLER REACHES TO PUT RUNS IN ------------------------------------------------ */
 

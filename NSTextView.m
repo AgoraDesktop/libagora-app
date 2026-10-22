@@ -17,6 +17,8 @@
  * `NSText` arithmetic keep working unchanged.
  */
 #import <AppKit/NSTextView.h>
+#import <AppKit/NSSpellChecker.h>
+#import <AppKit/AppKitRefusal.h>
 #import <AppKit/NSTextStorage.h>
 #import <AppKit/NSLayoutManager.h>
 #import <AppKit/NSTextContainer.h>
@@ -1268,6 +1270,132 @@ static void cg_announce(NSText *text, NSString *name, SEL delegateSelector)
 {
 	(void)sender;
 	[self setSelectedRange:NSMakeRange(_selectedRange.location, [[self string] length] - _selectedRange.location)];
+}
+
+@end
+
+
+/* ==================================================================================================================
+ * SPELLING AND SUBSTITUTION.
+ *
+ * See the header: the flags are the view's, the checking is `NSSpellChecker`'s, and `-setSpellingState:range:` records
+ * what the drawing slice will underline. The toggles are here because Apple's are: a menu item sends one, and a caller
+ * that had to read the flag and set it back would be writing the same two lines in every application.
+ * ================================================================================================================ */
+
+@implementation NSTextView (AGSspelling)
+
+- (BOOL)isContinuousSpellCheckingEnabled
+{
+	return _continuousSpellChecking;
+}
+
+- (void)setContinuousSpellCheckingEnabled:(BOOL)flag
+{
+	_continuousSpellChecking = flag ? YES : NO;
+}
+
+- (void)toggleContinuousSpellChecking:(id)sender
+{
+	(void)sender;
+	[self setContinuousSpellCheckingEnabled:![self isContinuousSpellCheckingEnabled]];
+}
+
+- (BOOL)isGrammarCheckingEnabled
+{
+	return _grammarChecking;
+}
+
+- (void)setGrammarCheckingEnabled:(BOOL)flag
+{
+	_grammarChecking = flag ? YES : NO;
+}
+
+- (void)toggleGrammarChecking:(id)sender
+{
+	(void)sender;
+	[self setGrammarCheckingEnabled:![self isGrammarCheckingEnabled]];
+}
+
+- (BOOL)isAutomaticSpellingCorrectionEnabled
+{
+	return _automaticSpellingCorrection;
+}
+
+- (void)setAutomaticSpellingCorrectionEnabled:(BOOL)flag
+{
+	_automaticSpellingCorrection = flag ? YES : NO;
+}
+
+- (void)toggleAutomaticSpellingCorrection:(id)sender
+{
+	(void)sender;
+	[self setAutomaticSpellingCorrectionEnabled:![self isAutomaticSpellingCorrectionEnabled]];
+}
+
+- (BOOL)isAutomaticQuoteSubstitutionEnabled
+{
+	return _automaticQuoteSubstitution;
+}
+
+- (void)setAutomaticQuoteSubstitutionEnabled:(BOOL)flag
+{
+	_automaticQuoteSubstitution = flag ? YES : NO;
+}
+
+- (void)toggleAutomaticQuoteSubstitution:(id)sender
+{
+	(void)sender;
+	[self setAutomaticQuoteSubstitutionEnabled:![self isAutomaticQuoteSubstitutionEnabled]];
+}
+
+- (BOOL)isAutomaticDashSubstitutionEnabled
+{
+	return _automaticDashSubstitution;
+}
+
+- (void)setAutomaticDashSubstitutionEnabled:(BOOL)flag
+{
+	_automaticDashSubstitution = flag ? YES : NO;
+}
+
+- (void)toggleAutomaticDashSubstitution:(id)sender
+{
+	(void)sender;
+	[self setAutomaticDashSubstitutionEnabled:![self isAutomaticDashSubstitutionEnabled]];
+}
+
+/* **THE RANGE IS RECORDED UNDER ITS OWN COORDINATES**, including length, so two calls for the same start do not
+ * overwrite each other; the drawing slice walks the table and paints the ranges whose state is nonzero. */
+- (void)setSpellingState:(NSInteger)value range:(NSRange)charRange
+{
+	NSString *key = [NSString stringWithFormat:@"%lu:%lu", (unsigned long)charRange.location,
+			  (unsigned long)charRange.length];
+
+	if (_spellingState == nil) {
+		_spellingState = [[NSMutableDictionary alloc] init];
+	}
+	if (value == 0) {
+		[_spellingState removeObjectForKey:key];
+	} else {
+		[_spellingState setObject:[NSNumber numberWithInteger:value] forKey:key];
+	}
+}
+
+/* ONE TAG FOR THE VIEW'S LIFETIME, taken from the checker so it cannot collide with another document's. */
+- (NSInteger)spellCheckerDocumentTag
+{
+	if (_spellCheckerDocumentTag == 0) {
+		_spellCheckerDocumentTag = [NSSpellChecker uniqueSpellDocumentTag];
+	}
+	return _spellCheckerDocumentTag;
+}
+
+- (void)orderFrontSubstitutionsPanel:(id)sender
+{
+	(void)sender;
+	fn_refuse_window("-orderFrontSubstitutionsPanel:", "a substitutions panel (this tier has no panel with a "
+			 "substitution table)");
 }
 
 @end
