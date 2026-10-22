@@ -1265,3 +1265,15 @@ target_link_libraries(document PRIVATE App)
 
 add_test(NAME appkit-document COMMAND document)
 set_tests_properties(appkit-document PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
+
+# **THE SAVE AND OPEN PANELS.** A temp directory with files, a subdirectory, a hidden file and a file the delegate hides;
+# a save panel accepts a name (with the allowed type's extension and the deprecated required type), navigates into a
+# selected directory and back through ".."; the delegate vetoes a URL, renames one, and its filters remove entries from
+# the listing. The open panel answers one file, many files, or a directory, and the type filter keeps a .rtf out of a
+# text-only open panel while a save panel still shows it. The sheet and modeless forms call their blocks with the code, and
+# the deprecated begin reaches the caller's selector.
+add_executable(save_panel save_panel.m)
+target_link_libraries(save_panel PRIVATE App)
+
+add_test(NAME appkit-save-panel COMMAND save_panel)
+set_tests_properties(appkit-save-panel PROPERTIES ENVIRONMENT "${_agora_app_test_env}")

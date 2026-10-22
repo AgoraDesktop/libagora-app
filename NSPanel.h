@@ -34,6 +34,14 @@
 
 NS_ASSUME_NONNULL_BEGIN
 
+/* **THE TWO ANSWERS A PANEL'S MODAL RUN CAN GIVE, AND THEY LIVE HERE BECAUSE APPLE PUTS THEM HERE.** `NSAlert` uses
+ * its own thousand-series codes; a page layout, print or save panel answers this pair. The tree had neither before the
+ * save panel, and a caller comparing `-runModal`'s answer to a bare 1 is exactly the sort of thing a symbol is for. */
+enum {
+	NSOKButton = 1,
+	NSCancelButton = 0
+};
+
 @interface NSPanel : NSWindow
 {
 	/* **THE ONE FLAG THE CLASS ADDS.** It is stored as the value it was given rather than as a deviation, because

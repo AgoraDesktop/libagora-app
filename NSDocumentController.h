@@ -10,9 +10,9 @@
  * era's own format — and a subclass overrides `-documentClassForType:`, `-defaultType` and `-typeFromFileExtension:` when
  * it wants a table it owns (which is how `tests/document.m` keeps its types to itself).
  *
- * **OPENING IS A URL DOOR, NOT A PANEL DOOR.** `-openDocumentWithContentsOfURL:display:error:` reads a file, adds the
- * document and shows its windows; `-openDocument:` — the File menu's action — needs the open panel this tier has not got, so
- * it REFUSES BY NAME. The panel pair is the slice after this one; nothing here pretends to own a file browser.
+ * **OPENING IS A URL DOOR, WITH A PANEL ABOVE IT.** `-openDocumentWithContentsOfURL:display:error:` reads a file, adds the
+ * document and shows its windows; `-openDocument:` — the File menu's action — asks `-URLsFromRunningOpenPanel` (a real
+ * `NSOpenPanel`, filtered by the bundle's document types) and opens each URL it answers.
  *
  * **THE RECENT LIST IS IN MEMORY FOR NOW, AND THAT IS STATED RATHER THAN HIDDEN.** Apple persists it in
  * `NSUserDefaults` and builds an Open Recent menu from it; this tier keeps the URLs for the session and has no menu. The
@@ -32,7 +32,7 @@
 
 NS_ASSUME_NONNULL_BEGIN
 
-@class NSDocument, NSError, NSString, NSURL, NSWindow;
+@class NSDocument, NSError, NSOpenPanel, NSString, NSURL, NSWindow;
 
 @interface NSDocumentController : NSObject <NSUserInterfaceValidations>
 {
@@ -66,8 +66,11 @@ NS_ASSUME_NONNULL_BEGIN
 - (nullable id)makeUntitledDocumentOfType:(NSString *)typeName
 				    error:(NSError * _Nullable * _Nullable)outError;
 
-/* **THE OPEN PANEL'S ACTION, REFUSED BY NAME UNTIL THE PANEL EXISTS.** */
+/* **THE OPEN PANEL'S ACTION, AND THE TWO DOORS UNDER IT.** `-openDocument:` asks `-URLsFromRunningOpenPanel` and opens
+ * each answer; a caller that has a panel of its own can use `-runModalOpenPanel:forTypes:` and read `-URLs` itself. */
 - (void)openDocument:(nullable id)sender;
+- (NSArray *)URLsFromRunningOpenPanel;
+- (NSInteger)runModalOpenPanel:(NSOpenPanel *)openPanel forTypes:(nullable NSArray *)types;
 
 - (nullable id)openDocumentWithContentsOfURL:(NSURL *)absoluteURL
 				    display:(BOOL)displayDocument

@@ -15,6 +15,7 @@
  */
 #import "NSDocument.h"
 #import "NSDocumentController.h"
+#import "NSSavePanel.h"
 #import "NSWindowController.h"
 #import "NSWindow.h"
 #import "AppKitRefusal.h"
@@ -68,14 +69,6 @@ static NSDate *fn_modification_date(NSURL *url)
  * than through `-performSelector:` (which cannot carry a BOOL and a void *) or `NSInvocation` (which in this tier refuses
  * a 32-byte argument — `NSCustomImageRep`'s finding). */
 typedef void (*AGDocumentDidSaveIMP)(id, SEL, id, BOOL, void *);
-
-/* **THE ONE REFUSAL IN THIS CLASS, NAMED WHERE IT HAPPENS.** A document with no file URL can only be saved through a save
- * panel, and this tier has not got one yet; the empty value is "nothing was written". The panel pair is the next slice. */
-static void fn_refuse_save_panel(const char *which)
-{
-	fprintf(stderr, "APPKIT-REFUSE: %s needs a save panel to choose a file, and this tier has not got one yet; the "
-			"document is left unsaved rather than written somewhere nobody chose\n", which);
-}
 
 /* THE UNDO OBSERVERS, declared before the implementation that registers them. */
 @interface NSDocument (AGPrivate)
@@ -455,6 +448,12 @@ originalContentsURL:(NSURL *)absoluteOriginalContentsURL
 	if (![self writeSafelyToURL:absoluteURL ofType:typeName forSaveOperation:saveOperation error:outError]) {
 		return NO;
 	}
+	/* **AN EXPORT IS A COPY, NOT THE DOCUMENT'S FILE.** `NSSaveToOperation` writes where the panel said and stops: the
+	 * document keeps its URL and type, stays edited if it was, and is not noted as recent. Only a save or save-as makes
+	 * the written file the document's own. */
+	if (saveOperation == NSSaveToOperation) {
+		return YES;
+	}
 	[self setFileURL:absoluteURL];
 	[self setFileType:typeName];
 	[self setFileModificationDate:fn_modification_date(absoluteURL)];
@@ -509,31 +508,127 @@ originalContentsURL:(NSURL *)absoluteOriginalContentsURL
 		(void)[self saveToURL:_fileURL ofType:_fileType forSaveOperation:NSSaveOperation error:NULL];
 		return;
 	}
-	fn_refuse_save_panel("-[NSDocument saveDocument:] for a document with no file URL");
+	[self runModalSavePanelForSaveOperation:NSSaveOperation delegate:nil didSaveSelector:NULL contextInfo:NULL];
 }
 
 - (void)saveDocumentAs:(id)sender
 {
 	(void)sender;
-	fn_refuse_save_panel("-[NSDocument saveDocumentAs:]");
+	[self runModalSavePanelForSaveOperation:NSSaveAsOperation delegate:nil didSaveSelector:NULL contextInfo:NULL];
 }
 
 - (void)saveDocumentTo:(id)sender
 {
 	(void)sender;
-	fn_refuse_save_panel("-[NSDocument saveDocumentTo:]");
+	[self runModalSavePanelForSaveOperation:NSSaveToOperation delegate:nil didSaveSelector:NULL contextInfo:NULL];
+}
+
+/* **THE SAVE PANEL, CONFIGURED FROM THE DOCUMENT.** The name field starts at the document's file name (or "Untitled"), the
+ * directory at its file's (or the controller's), and the types are the writable types' extensions. A document with a
+ * window gets a SHEET; one without gets the application-modal panel, which is the only place this tier blocks on a panel.
+ * The delegate's did-save selector is called with the write's answer, and the panel is released by the session it runs. */
+- (NSArray *)cg_savePanelExtensionsForOperation:(NSSaveOperationType)saveOperation
+{
+	NSMutableArray *extensions = [NSMutableArray array];
+	NSArray *types = [self writableTypesForSaveOperation:saveOperation];
+	id controller = (_cg_documentController != nil) ? _cg_documentController
+						       : [NSDocumentController sharedDocumentController];
+	NSUInteger i;
+
+	for (i = 0; i < [types count]; i++) {
+		NSString *type = [types objectAtIndex:i];
+
+		if ([controller respondsToSelector:@selector(fileExtensionsFromType:)]) {
+			[extensions addObjectsFromArray:[controller fileExtensionsFromType:type]];
+		}
+	}
+	if ([extensions count] == 0 && _fileType != nil) {
+		NSString *extension = [self fileNameExtensionForType:_fileType saveOperation:saveOperation];
+
+		if ([extension length] > 0) {
+			[extensions addObject:extension];
+		}
+	}
+	return extensions;
 }
 
 - (void)runModalSavePanelForSaveOperation:(NSSaveOperationType)saveOperation delegate:(id)delegate
 			  didSaveSelector:(SEL)didSaveSelector contextInfo:(void *)contextInfo
 {
-	(void)saveOperation;
-	fn_refuse_save_panel("-[NSDocument runModalSavePanelForSaveOperation:…]");
-	if (delegate != nil && didSaveSelector != NULL
-	    && [delegate respondsToSelector:didSaveSelector]) {
-		AGDocumentDidSaveIMP imp = (AGDocumentDidSaveIMP)[delegate methodForSelector:didSaveSelector];
+	NSSavePanel *panel = [NSSavePanel savePanel];
+	NSArray *extensions = [self cg_savePanelExtensionsForOperation:saveOperation];
+	NSString *directory = nil;
+	NSString *name = nil;
+	NSWindow *sheetWindow = [self windowForSheet];
 
-		imp(delegate, didSaveSelector, self, NO, contextInfo);
+	if (_fileURL != nil) {
+		directory = [[_fileURL path] stringByDeletingLastPathComponent];
+		name = [[_fileURL path] lastPathComponent];
+	} else {
+		id controller = (_cg_documentController != nil) ? _cg_documentController
+							       : [NSDocumentController sharedDocumentController];
+
+		directory = [controller currentDirectory];
+		name = @"Untitled";
+	}
+	if (directory != nil) {
+		[panel setDirectory:directory];
+	}
+	if (name != nil) {
+		[panel setNameFieldStringValue:name];
+	}
+	if ([extensions count] > 0) {
+		[panel setAllowedFileTypes:extensions];
+	}
+	[panel setCanSelectHiddenExtension:YES];
+	if (saveOperation == NSSaveToOperation) {
+		[panel setTitle:@"Export"];
+		[panel setPrompt:@"Export"];
+	} else if (saveOperation == NSSaveAsOperation) {
+		[panel setTitle:@"Save As"];
+		[panel setPrompt:@"Save"];
+	} else {
+		[panel setTitle:@"Save"];
+		[panel setPrompt:@"Save"];
+	}
+	(void)[self prepareSavePanel:panel];
+
+	if (sheetWindow != nil) {
+		[panel beginSheetModalForWindow:sheetWindow completionHandler:^(NSInteger result) {
+			BOOL ok = NO;
+			NSError *error = nil;
+
+			if (result == NSOKButton) {
+				ok = [self saveToURL:[panel URL] ofType:[self fileType]
+				     forSaveOperation:saveOperation error:&error];
+			}
+			if (!ok && error != nil) {
+				fprintf(stderr, "document: could not save: %s\n", [[error localizedDescription] UTF8String]);
+			}
+			if (delegate != nil && didSaveSelector != NULL && [delegate respondsToSelector:didSaveSelector]) {
+				AGDocumentDidSaveIMP imp = (AGDocumentDidSaveIMP)[delegate methodForSelector:didSaveSelector];
+
+				imp(delegate, didSaveSelector, self, ok, contextInfo);
+			}
+		}];
+		return;
+	}
+	{
+		NSInteger result = [panel runModal];
+		BOOL ok = NO;
+		NSError *error = nil;
+
+		if (result == NSOKButton) {
+			ok = [self saveToURL:[panel URL] ofType:[self fileType] forSaveOperation:saveOperation error:&error];
+		}
+		if (!ok && error != nil) {
+			fprintf(stderr, "document: could not save: %s\n", [[error localizedDescription] UTF8String]);
+		}
+		if (delegate != nil && didSaveSelector != NULL && [delegate respondsToSelector:didSaveSelector]) {
+			AGDocumentDidSaveIMP imp = (AGDocumentDidSaveIMP)[delegate methodForSelector:didSaveSelector];
+
+			imp(delegate, didSaveSelector, self, ok, contextInfo);
+		}
 	}
 }
 

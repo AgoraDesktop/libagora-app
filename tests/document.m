@@ -346,6 +346,22 @@ int main(void)
 			      "the delegate form calls back with did-save YES");
 			check(![document isDocumentEdited], "and the save is real, not only announced");
 
+			/* **AN EXPORT IS A COPY, NOT THE DOCUMENT'S FILE.** A save-to writes where it is told and stops: the document
+			 * keeps its URL, its type and its edited state. That is what makes Save To/Export a different verb from Save
+			 * As, and the distinction is in the one write path's operation. */
+			{
+				NSString *copyPath = [directory stringByAppendingPathComponent:@"copy.agdoc"];
+				NSURL *copyURL = [NSURL fileURLWithPath:copyPath];
+
+				[document setText:@"a copy"];
+				[document updateChangeCount:NSChangeDone];
+				check([document saveToURL:copyURL ofType:@"AGTestText" forSaveOperation:NSSaveToOperation error:NULL],
+				      "a save-to writes the copy");
+				check([files fileExistsAtPath:copyPath], "the copy is on disk");
+				check([[document fileURL] isEqual:url], "and the document keeps its own file URL");
+				check([document isDocumentEdited], "and stays edited, because the copy is not the document");
+			}
+
 			/* ============================================================================================
 			 * 4. OPEN IT WITH THE CONTROLLER: A NEW DOCUMENT, READ THROUGH THE WRAPPER PATH.
 			 * ========================================================================================== */

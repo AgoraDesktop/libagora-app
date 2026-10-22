@@ -33,8 +33,7 @@ NSMenuItem.m                         0
 NSMenuItemCell.m                     2
 NSNib.m                              0
 NSPasteboard.m                       5
-NSDocument.m                         2
-NSDocumentController.m               1
+NSDocument.m                         1
 NSPopUpButtonCell.m                  1
 NSSliderCell.m                       1
 NSText.m                             3
@@ -43,10 +42,12 @@ NSView.m                             3
 NSViewController.m                   1
 NSWindow.m                          13
 
+# AND IT FELL BY TWO WHEN THE PANEL PAIR MADE THE DOCUMENT'S SAVE-AS, EXPORT AND OPEN DOORS REAL.
+#
 # AND IT FELL BY ONE WHEN THE FOUR FILE-TYPE PHRASES BECAME REAL. `NSPasteboard.m` held a single helper,
 # `fn_refuseFileType`, carrying the one APPKIT-REFUSE literal for all four doors; the four are now implemented as the
 # documented spelling convention and their round trip is checked in `tests/functions_target2.m`, so the helper and its
 # literal are gone. THE OTHER FOUR CALL SITES NEVER CARRIED AN `APPKIT-REFUSE` LITERAL AT ALL, so the census could only
 # ever see the one — a limitation this change makes visible rather than hides.
 #
-# total: 143
+# total: 141

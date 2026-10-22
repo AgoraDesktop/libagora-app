@@ -137,6 +137,7 @@ tests/
   split_view.m                  the SPLIT VIEW: panes, divider positions, the drag, the collapse and the ink
   browser.m                     the BROWSER: columns, the delegate's cells, the selection, the path and the width
   document.m                    the DOCUMENT family: a file, its change count, its undo and its windows, around a temp file
+  save_panel.m                  the SAVE and OPEN PANELS: the listing, the filters, the accept, sheets and modeless runs
   progress_indicator.m          the PROGRESS INDICATOR: range, clamp, spinner state and the bar's ink
   panel_alert.m                 the PANEL and the ALERT: the click-to-key rule, the content and the two ways to run it
   search_field.m                the SEARCH FIELD: two ornaments, the sending rules, the timer and the recents menu
@@ -947,10 +948,29 @@ the compositor is really gone.
   base's type→class→make/open chain is the same one a bundle's `CFBundleDocumentTypes` feeds. Opening a URL that is
   already open answers the SAME document rather than a second, save-all saves the edited ones, and close-all REFUSES while
   any document is edited — there is no unsaved-changes alert yet, and silently discarding edits is the one thing a close
-  must not do. **The panels are the next slice**: save-as and export refuse by name because there is no `NSSavePanel`, and
-  `-openDocument:` refuses because there is no `NSOpenPanel`; a direct `-saveToURL:…` is real.
+  must not do. **And the panel pair is wired in**: `-saveDocumentAs:`, `-saveDocumentTo:` (Export, a COPY that does not
+  become the document's file) and a `-saveDocument:` with no URL run an `NSSavePanel` — a sheet when the document has a
+  window, application-modal otherwise — and `-[NSDocumentController openDocument:]` runs an `NSOpenPanel` filtered by the
+  bundle's document types. The panel's name, directory and extension come from the document; the type comes back from the
+  panel's answer and the document is saved through the same `-saveToURL:…` the probe exercises directly.
 
-- **`ctest`: 134 of 134 passed** (the keyboard and the seam, the AppKit and its input path, the controls and their
+- **And the SAVE and OPEN PANELS** (`ctest`, offscreen) — `NSSavePanel` (44 of 47) and `NSOpenPanel` (15 of 15, COMPLETE),
+  plus the `NSOpenSavePanelDelegate` protocol. **A PANEL IS A FILE BROWSER THAT RETURNS A URL**, and the probe builds a
+  temp directory to prove it: the listing shows files and directories with `..` for the way up, hides dotfiles until
+  `-showsHiddenFiles`, reads a selected file into the name field, walks into a selected directory and back out, and
+  accepts names that gain the allowed type's extension or the deprecated `-requiredFileType`'s. **The delegate filters the
+  listing**: `-panel:shouldShowFilename:` and `-panel:shouldEnableURL:` remove entries (this tier's table has no disabled
+  row, so "do not enable" is "do not show" — stated in the header), a text-only open panel keeps `.rtf` out while a save
+  panel still shows it, `-panel:validateURL:error:` vetoes an accept, `-panel:userEnteredFilename:confirmed:` renames
+  one, the deprecated comparator's reversed order is the listing's order, and selection/directory changes are announced.
+  **The open panel's flags are the four answers from one accept path**: one file, many files, a directory, or files
+  disabled; and a directory is navigated rather than chosen when `-canChooseDirectories` is NO. The sheet form attaches to
+  a parent and calls its block with `NSOKButton`/`NSCancelButton`, the modeless form calls its block on dismissal, and the
+  deprecated `-beginSheetForDirectory:…` reaches a caller's selector. **What is not declared is named**: the expanded save
+  panel and file packages have no doors here, and an existing file is accepted without a replacement alert (the caller's
+  save overwrites it) — both said in `NSSavePanel.h` rather than half-built.
+
+- **`ctest`: 135 of 135 passed** (the keyboard and the seam, the AppKit and its input path, the controls and their
   metrics, the field control and its cell and its bezel and its placeholder and what it may hold, the text path and its
   word granularity and the multi-line view and its wrapping and its scrolling and its READING OF THE STORE, the STORE
   the rich-text slice is built on and the REGION it is laid out in and the WEB that ties the three together and the
@@ -962,7 +982,7 @@ the compositor is really gone.
   what a drag costs, the resize by edge, the tracking engine, the clip view and the scroller and the scroll view and the
   drawn offset and the ruler it can wear and the TEXT RULER whose markers are tab stops and the block rects and
   attachment sizes the layout answers and the temporary-attribute table and the rect arrays, the chrome and what its
-  buttons do, the chrome theme, the menus and activation, and the manager's own ensure/invalidate doors, and the document family's file round trip and change count).
+  buttons do, the chrome theme, the menus and activation, and the manager's own ensure/invalidate doors, the document family's file round trip and change count, and the save and open panels).
 - **And the desktop's own text is SUB-PIXEL ANTIALIASED**, which is the AppKit's half of a renderer change in
   CoreGraphics: a window's surface is OPAQUE (`kCGImageAlphaNoneSkipFirst`), and the destination's opacity is
   exactly what decides whether a glyph is rasterised in colour. MEASURED on the live session: the window title's

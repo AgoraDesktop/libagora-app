@@ -13,6 +13,7 @@
 #import "NSDocument.h"
 #import "NSWindow.h"
 #import "NSWindowController.h"
+#import "NSOpenPanel.h"
 
 #import <Foundation/NSBundle.h>
 #import <Foundation/NSDictionary.h>
@@ -494,11 +495,52 @@ static NSDocumentController *s_sharedDocumentController = nil;
 	(void)[self openUntitledDocumentAndDisplay:YES error:NULL];
 }
 
+/* **THE FILE MENU'S OPEN ITEM, NOW THAT THE PANEL EXISTS.** The URLs the panel answers are opened in turn; the first
+ * failure stops the walk and is printed, because there is no error panel in this controller yet. */
 - (void)openDocument:(id)sender
 {
+	NSArray *urls = [self URLsFromRunningOpenPanel];
+	NSUInteger i;
+
 	(void)sender;
-	fprintf(stderr, "APPKIT-REFUSE: -[NSDocumentController openDocument:] needs an open panel, and this tier has not "
-			"got one yet; no document is opened\n");
+	for (i = 0; i < [urls count]; i++) {
+		NSError *error = nil;
+
+		if ([self openDocumentWithContentsOfURL:[urls objectAtIndex:i] display:YES error:&error] == nil) {
+			fprintf(stderr, "document controller: could not open %s: %s\n",
+				[[[urls objectAtIndex:i] path] UTF8String],
+				(error != nil) ? [[error localizedDescription] UTF8String] : "no reason given");
+			break;
+		}
+	}
+}
+
+/* **THE PANEL IS FILTERED BY THE TYPES THE BUNDLE DECLARES.** Every CFBundleDocumentTypes entry contributes its
+ * extensions; a bundle that declares none gets no filter rather than a filter that matches nothing. */
+- (NSArray *)URLsFromRunningOpenPanel
+{
+	NSOpenPanel *panel = [NSOpenPanel openPanel];
+	NSMutableArray *extensions = [NSMutableArray array];
+	NSArray *entries = [self cg_documentTypes];
+	NSUInteger i;
+
+	for (i = 0; i < [entries count]; i++) {
+		NSArray *types = fn_entry_extensions([entries objectAtIndex:i]);
+
+		[extensions addObjectsFromArray:types];
+	}
+	if ([self runModalOpenPanel:panel forTypes:([extensions count] > 0) ? extensions : nil] == NSOKButton) {
+		return [panel URLs];
+	}
+	return [NSArray array];
+}
+
+- (NSInteger)runModalOpenPanel:(NSOpenPanel *)openPanel forTypes:(NSArray *)types
+{
+	if (types != nil) {
+		[openPanel setAllowedFileTypes:types];
+	}
+	return [openPanel runModal];
 }
 
 /* THE 10.3 SPELLINGS. */
