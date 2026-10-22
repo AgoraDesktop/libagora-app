@@ -353,6 +353,38 @@ NS_ASSUME_NONNULL_BEGIN
  * asserts, and a caller that mutated the fragments by hand needs a way to say so. */
 - (void)cg_rebuildGlyphStore;
 
+
+/* ==================================================================================================================
+ * THE UNDERLINE DOORS — and the spell-check squiggle they exist for.
+ *
+ * **TWO DOORS BECAUSE APPLE HAS TWO, AND THE SPLIT IS THE INTERESTING PART.** `-underlineGlyphRange:…` decides WHICH
+ * glyphs get ink — it trims the leading and trailing whitespace off a range, because underlining the space after a
+ * misspelled word looks like a bug — and `-drawUnderlineForGlyphRange:…` puts the ink down. A caller that only wants a
+ * line under exactly what it named calls the second; a caller underlining a run that may include spaces calls the first.
+ *
+ * **THE INK IS THE CALLER'S STROKE COLOUR.** Apple reads it from the temporary-attribute table, which this tier has not
+ * got; a colour parameter that the caller sets is the honest stand-in, and it is stated here rather than left for a
+ * reader to discover when their underline comes out black.
+ *
+ * `underlineType` IS `NSUnderlineStyle`: the low bits choose the SHAPE (single, thick, double) and the high byte the
+ * PATTERN (solid, dot, dash). This tier draws single, thick and double, and solid or dotted — the shapes a spell checker
+ * and a link need. Any other pattern falls back to solid rather than to nothing, because a line at the wrong pattern is
+ * still a line and a missing one reads as "not underlined".
+ * ================================================================================================================ */
+
+- (void)drawUnderlineForGlyphRange:(NSRange)glyphRange
+		     underlineType:(NSInteger)underlineVal
+		    baselineOffset:(CGFloat)baselineOffset
+		  lineFragmentRect:(NSRect)lineRect
+	   lineFragmentGlyphRange:(NSRange)lineGlyphRange
+		   containerOrigin:(NSPoint)containerOrigin;
+
+- (void)underlineGlyphRange:(NSRange)glyphRange
+	      underlineType:(NSInteger)underlineVal
+	   lineFragmentRect:(NSRect)lineRect
+    lineFragmentGlyphRange:(NSRange)lineGlyphRange
+	    containerOrigin:(NSPoint)containerOrigin;
+
 @end
 
 

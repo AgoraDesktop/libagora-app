@@ -3495,3 +3495,134 @@ static CGFloat fn_fraction_between(FNFragment *fragment, CGFloat localX, NSUInte
 }
 
 @end
+
+
+/* ==================================================================================================================
+ * THE UNDERLINE DOORS.
+ *
+ * See the header for the split between deciding and drawing, and for why the ink is the caller's stroke colour. What is
+ * NOT obvious from Apple's signatures is where the line goes vertically: `lineFragmentRect` and `containerOrigin` are
+ * both in container coordinates and neither carries a baseline, so the baseline is read from the FRAGMENT that holds the
+ * glyphs. That is exact rather than approximate — the fragment's `CTLine` already knows where it sits.
+ * ================================================================================================================ */
+
+@implementation NSLayoutManager (AGUnderline)
+
+/* The x at which a glyph's character ink starts and ends, in container coordinates. */
+- (CGFloat)ag_xForGlyph:(NSUInteger)glyphIndex inFragment:(FNFragment *)fragment
+{
+	NSUInteger character = [self characterIndexForGlyphAtIndex:glyphIndex];
+
+	if (character == NSNotFound) {
+		return fragment->used.origin.x;
+	}
+	return [self cg_xInFragment:fragment forCharacterIndex:character];
+}
+
+- (void)drawUnderlineForGlyphRange:(NSRange)glyphRange
+		     underlineType:(NSInteger)underlineVal
+		    baselineOffset:(CGFloat)baselineOffset
+		  lineFragmentRect:(NSRect)lineRect
+	   lineFragmentGlyphRange:(NSRange)lineGlyphRange
+		   containerOrigin:(NSPoint)containerOrigin
+{
+	FNFragment *fragment;
+	CGContextRef cg;
+	NSGraphicsContext *context;
+	CGFloat x0, x1, y, width;
+	BOOL dotted, thick, doubled;
+
+	(void)lineRect;
+	(void)lineGlyphRange;
+	context = [NSGraphicsContext currentContext];
+	cg = (context != nil) ? (CGContextRef)[context graphicsPort] : NULL;
+	if (cg == NULL || glyphRange.length == 0) {
+		return;
+	}
+	fragment = [self cg_fragmentForGlyphAtIndex:glyphRange.location effectiveRange:NULL];
+	if (fragment == NULL) {
+		return;
+	}
+	x0 = [self ag_xForGlyph:glyphRange.location inFragment:fragment];
+	x1 = [self ag_xForGlyph:glyphRange.location + glyphRange.length inFragment:fragment];
+	if (x1 <= x0) {
+		return;
+	}
+	/* **THE LINE SITS BELOW THE BASELINE**, by the requested offset (callers pass a small negative number) and one
+	 * point further so it does not touch the descenders. The fragment's baseline is in container coordinates already. */
+	y = containerOrigin.y + fragment->baseline + baselineOffset - 1.0;
+	width = x1 - x0;
+
+	/* NSUnderlineStyle: 0x01 single, 0x02 thick, 0x09 double, and the pattern in the high byte. */
+	thick = (underlineVal & 0x02) ? YES : NO;
+	doubled = ((underlineVal & 0x09) == 0x09) ? YES : NO;
+	dotted = (underlineVal & 0x0100) ? YES : NO;
+
+	CGContextSaveGState(cg);
+	if (dotted) {
+		CGFloat dash[2] = {1.0, 2.0};
+
+		CGContextSetLineDash(cg, 0.0, dash, 2);
+	}
+	CGContextSetLineWidth(cg, thick ? 2.0 : 1.0);
+	CGContextBeginPath(cg);
+	CGContextMoveToPoint(cg, x0, y);
+	CGContextAddLineToPoint(cg, x0 + width, y);
+	CGContextStrokePath(cg);
+	if (doubled) {
+		CGContextBeginPath(cg);
+		CGContextMoveToPoint(cg, x0, y - 2.0);
+		CGContextAddLineToPoint(cg, x0 + width, y - 2.0);
+		CGContextStrokePath(cg);
+	}
+	CGContextRestoreGState(cg);
+}
+
+- (void)underlineGlyphRange:(NSRange)glyphRange
+	      underlineType:(NSInteger)underlineVal
+	   lineFragmentRect:(NSRect)lineRect
+    lineFragmentGlyphRange:(NSRange)lineGlyphRange
+	    containerOrigin:(NSPoint)containerOrigin
+{
+	FNFragment *fragment;
+	NSRange trimmed = glyphRange;
+	NSUInteger first, last;
+	NSString *string;
+
+	if (glyphRange.length == 0) {
+		return;
+	}
+	fragment = [self cg_fragmentForGlyphAtIndex:glyphRange.location effectiveRange:NULL];
+	if (fragment == NULL) {
+		return;
+	}
+	/* **THE WHITESPACE IS TRIMMED HERE, WHICH IS THE WHOLE REASON THIS DOOR EXISTS.** A run of underlined text usually
+	 * carries the space after it; underlining that space is the "looks like a bug" Apple's own note describes. The trim
+	 * is done on CHARACTERS, because that is what whitespace is. */
+	string = [[self textStorage] string];
+	first = [self characterIndexForGlyphAtIndex:glyphRange.location];
+	last = [self characterIndexForGlyphAtIndex:glyphRange.location + glyphRange.length - 1];
+	if (first == NSNotFound || last == NSNotFound) {
+		return;
+	}
+	while (first <= last && first < [string length]
+	       && [[NSCharacterSet whitespaceAndNewlineCharacterSet] characterIsMember:[string characterAtIndex:first]]) {
+		first++;
+	}
+	while (last >= first && last < [string length]
+	       && [[NSCharacterSet whitespaceAndNewlineCharacterSet] characterIsMember:[string characterAtIndex:last]]) {
+		if (last == 0) {
+			break;
+		}
+		last--;
+	}
+	if (first > last) {
+		return;
+	}
+	trimmed = [self glyphRangeForCharacterRange:NSMakeRange(first, last - first + 1) actualCharacterRange:NULL];
+	[self drawUnderlineForGlyphRange:trimmed underlineType:underlineVal baselineOffset:-1.0
+		   lineFragmentRect:lineRect lineFragmentGlyphRange:lineGlyphRange
+		   containerOrigin:containerOrigin];
+}
+
+@end

@@ -644,6 +644,10 @@ static void cg_announce(NSText *text, NSString *name, SEL delegateSelector)
 	/* AND THE STORE'S OWN INK, WHICH IS THE MANAGER'S TO LAY DOWN — backgrounds first, then the glyphs and the rules. */
 	[_cg_layoutManager drawBackgroundForGlyphRange:NSMakeRange(0, n) atPoint:NSMakePoint(0.0, NS_TEXT_INSET)];
 	[_cg_layoutManager drawGlyphsForGlyphRange:NSMakeRange(0, n) atPoint:NSMakePoint(0.0, NS_TEXT_INSET)];
+	/* **AND THE SPELLING MARKS, WHICH THE VIEW OWNS BECAUSE THE MANAGER DOES NOT DECIDE WHAT IS MISSPELLED.** Each range
+	 * a caller marked through `-setSpellingState:range:` is drawn as the era's red dotted rule, through the manager's
+	 * own underline door — so the geometry comes from the layout and only the DECISION is the view's. */
+	[self cg_drawSpellingUnderlines];
 	/* **AND THE MARKED TEXT'S COMPOSITION MARK, WHICH IS THE VIEW'S BECAUSE THE STORE CANNOT CARRY IT.** A one-point rule
 	 * below the baseline of every visual line the marked range covers, clipped to the range the way the selection band is
 	 * — so a composition split across a wrap is underlined on both lines and a trailing space carries nothing. */
@@ -1396,6 +1400,69 @@ static void cg_announce(NSText *text, NSString *name, SEL delegateSelector)
 	(void)sender;
 	fn_refuse_window("-orderFrontSubstitutionsPanel:", "a substitutions panel (this tier has no panel with a "
 			 "substitution table)");
+}
+
+@end
+
+
+/* A PRIVATE CATEGORY, because this door is the view's own drawing detail and no caller outside this file should see
+ * it: the interface is here so the call in `-drawRect:` is declared, and the implementation follows immediately. */
+@interface NSTextView (AGSpellingDraw)
+- (void)cg_drawSpellingUnderlines;
+@end
+
+@implementation NSTextView (AGSpellingDraw)
+/* ==================================================================================================================
+ * THE SPELLING UNDERLINES.
+ *
+ * **THIS IS THE SLICE THAT MAKES `-setSpellingState:range:` A VISIBLE THING RATHER THAN A RECORDED ONE.** The view keeps
+ * the ranges; the manager knows where the glyphs are; so each marked range is converted once — characters to glyphs,
+ * glyph to line fragment — and the manager's own `-underlineGlyphRange:…` puts the red down, which also means the leading
+ * and trailing spaces of a marked range are NOT underlined, because that is the door's job.
+ *
+ * The ink is set here because this tier's underline door reads the caller's stroke colour (see its header): Apple would
+ * read it from the temporary-attribute table, which is a slice this tier has not got.
+ * ================================================================================================================ */
+- (void)cg_drawSpellingUnderlines
+{
+	NSEnumerator *keys;
+	NSString *key;
+
+	if (_spellingState == nil || [_spellingState count] == 0 || _cg_layoutManager == nil) {
+		return;
+	}
+	[[NSColor redColor] setStroke];
+	keys = [_spellingState keyEnumerator];
+	while ((key = [keys nextObject]) != nil) {
+		NSArray *parts = [key componentsSeparatedByString:@":"];
+		NSRange range;
+		NSRange glyphRange;
+		NSRange lineRange = NSMakeRange(NSNotFound, 0);
+		NSRect lineRect;
+
+		if ([parts count] != 2) {
+			continue;
+		}
+		range = NSMakeRange((NSUInteger)[[parts objectAtIndex:0] integerValue],
+				    (NSUInteger)[[parts objectAtIndex:1] integerValue]);
+		if (range.length == 0 || range.location + range.length > [_cg_textStorage length]) {
+			continue;
+		}
+		glyphRange = [_cg_layoutManager glyphRangeForCharacterRange:range actualCharacterRange:NULL];
+		if (glyphRange.length == 0) {
+			continue;
+		}
+		lineRect = [_cg_layoutManager lineFragmentRectForGlyphAtIndex:glyphRange.location
+								  effectiveRange:&lineRange];
+		/* **THE ORIGIN IS THE ONE THE GLYPHS WERE DRAWN AT**, or the rule lands above the words it belongs to: the
+		 * text is drawn at `(0, NS_TEXT_INSET)` a few lines up, and the underline door is told the same origin so the
+		 * two agree. Getting this wrong is invisible in isolation and obvious on screen. */
+		[_cg_layoutManager underlineGlyphRange:glyphRange
+					 underlineType:NSUnderlinePatternDot | NSUnderlineStyleSingle
+				      lineFragmentRect:lineRect
+			       lineFragmentGlyphRange:lineRange
+				       containerOrigin:NSMakePoint(0.0, NS_TEXT_INSET)];
+	}
 }
 
 @end

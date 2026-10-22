@@ -1036,3 +1036,12 @@ target_link_libraries(spell_checker PRIVATE App)
 
 add_test(NAME appkit-spell-checker COMMAND spell_checker)
 set_tests_properties(appkit-spell-checker PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
+
+# **THE SQUIGGLE.** The previous slice recorded spelling state and said nothing drew it; this one draws it, so the
+# assertion has to be about pixels: a marked view shows red under the text, an unmarked one does not, and clearing the
+# state clears the ink.
+add_executable(spelling_underline spelling_underline.m)
+target_link_libraries(spelling_underline PRIVATE App)
+
+add_test(NAME appkit-spelling-underline COMMAND spelling_underline)
+set_tests_properties(appkit-spelling-underline PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
