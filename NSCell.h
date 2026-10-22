@@ -255,6 +255,10 @@ typedef NSUInteger NSControlSize;
 	NSControlTint _controlTint;
 	NSBackgroundStyle _backgroundStyle;
 	id _objectValue;			/* RETAINED */
+	/* AND THE OBJECT WHOSE MEANING BELONGS TO THE CALLER. It was DECLARED as a property and never stored — the one
+	 * phantom on this class that was a real defect rather than an informal protocol. RETAINED for the same reason
+	 * `_objectValue` is: a cell owns what it carries, and `-dealloc` releases it. */
+	id _representedObject;		/* RETAINED */
 	/* AND THE FLAGS THE THIRD SLICE ADDS, all plain bits, none needing an initialiser for the reason the enums
 	 * did not: OFF is the quiet answer for every one of them, and Objective-C zeroes storage. */
 	BOOL _selectable;
@@ -1110,6 +1114,16 @@ enum {
 - (void)drawInteriorWithFrame:(NSRect)cellFrame inView:(nullable id)controlView;
 
 @end
+
+/* **THE TWO ERA IMAGE COMPOSERS, DECLARED WHERE APPLE DECLARES THEM.** A themed button drew its face as nine slices
+ * so the corners kept their shape while the middle stretched; three slices was the same idea for a cap at each end.
+ * `op` and `alphaFraction` are applied to every slice, and `flipped` names the frame's orientation. */
+void NSDrawNinePartImage(NSRect frame, NSImage *topLeftCorner, NSImage *topEdgeFill, NSImage *topRightCorner,
+			 NSImage *leftEdgeFill, NSImage *centerFill, NSImage *rightEdgeFill,
+			 NSImage *bottomLeftCorner, NSImage *bottomEdgeFill, NSImage *bottomRightCorner,
+			 NSCompositingOperation op, CGFloat alphaFraction, BOOL flipped);
+void NSDrawThreePartImage(NSRect frame, NSImage *startCap, NSImage *centerFill, NSImage *endCap, BOOL vertical,
+			  NSCompositingOperation op, CGFloat alphaFraction, BOOL flipped);
 
 NS_ASSUME_NONNULL_END
 

@@ -29,6 +29,9 @@
  * doors, which need an OSA this tree does not have. Each is a later stage's.
  */
 
+#ifndef APPKIT_NSAPPLICATION_H
+#define APPKIT_NSAPPLICATION_H
+
 #import <AppKit/NSResponder.h>
 #import <Foundation/NSDate.h>
 #import <Foundation/NSGeometry.h>
@@ -622,4 +625,33 @@ extern NSString *NSApplicationWillTerminateNotification;
 
 
 
+
+/* ==================================================================================================================
+ * THE ENTRY POINT AND THE SERVICES DOORS.
+ *
+ * **`NSApplicationMain` IS THE FUNCTION EVERY COCOA `main()` CALLS, AND ITS ABSENCE WAS VISIBLE IN THIS TREE'S OWN
+ * SOURCE**: `workspace/src/main.m` hand-rolls "shared application, finish launching, run" because there was nothing to
+ * call. That workaround is now optional rather than necessary.
+ *
+ * **THE APPLICATION-DEFINED MAIN NIB IS NOT LOADED HERE, AND THAT IS A DOCUMENTED DEVIATION.** Apple's
+ * `NSApplicationMain` reads `NSMainNibFile` out of the main bundle's Info.plist and loads it before launching. This
+ * tier's applications load their own interface, so the function does the three things it can do honestly and says so
+ * at the definition rather than appearing to read a key it does not.
+ *
+ * THE SERVICES DOORS REACH THE STATE `-servicesProvider` AND `-servicesMenu` ALREADY KEEP, which is why they are
+ * wrappers: a second registry inside AppKit would be the "second source of truth" the plan forbids.
+ * ================================================================================================================ */
+
+@class NSPasteboard;
+
+int NSApplicationMain(int argc, const char *argv[]);
+BOOL NSPerformService(NSString *itemName, NSPasteboard *pboard);
+void NSRegisterServicesProvider(id provider, NSString *name);
+void NSUnregisterServicesProvider(NSString *name);
+NSInteger NSSetShowsServicesMenuItem(NSString *itemName, BOOL enabled);
+BOOL NSShowsServicesMenuItem(NSString *itemName);
+void NSUpdateDynamicServices(void);
+
 NS_ASSUME_NONNULL_END
+
+#endif /* APPKIT_NSAPPLICATION_H */

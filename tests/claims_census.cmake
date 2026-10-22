@@ -39,7 +39,14 @@ endif()
 # THE CENSUS, parsed: "file count" lines, blank lines and `#` comments skipped.
 set(expected_names "")
 set(expected_total 0)
-string(REPLACE "\n" ";" census_lines "${census_text}")
+# **AND THE COMMENT LINES COME OUT BEFORE THE NEWLINES TURN INTO LIST SEPARATORS, WHICH IS A TRAP THIS FILE HAD.**
+# `string(REPLACE "\n" ";" ...)` splits on SEMICOLONS as well as newlines, and a comment line is prose — so the moment
+# a reader puts one `;` in a sentence above the counts, that line fragments and its second half is read as a census line
+# that is not `file count`, with an error naming prose rather than the cause. Both censuses happened to be
+# semicolon-free, so nothing had failed yet; the instrument should not depend on that. ONLY THE BODY IS FILTERED:
+# `census_text` keeps its comments, because the recorded total is read out of one.
+string(REGEX REPLACE "(^|\n)[ \t]*#[^\n]*" "\\1" census_body "${census_text}")
+string(REPLACE "\n" ";" census_lines "${census_body}")
 foreach(line IN LISTS census_lines)
   string(STRIP "${line}" line)
   if(line STREQUAL "" OR line MATCHES "^#")

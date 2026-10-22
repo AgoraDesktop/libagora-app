@@ -1,0 +1,435 @@
+# THE 10.6 API CENSUS — how much of the Mac OS X 10.6 AppKit this tree answers, pinned.
+#
+# Copyright © 2026 Kyle J. Cardoza. MIT licensed — see LICENSE.
+# SPDX-License-Identifier: MIT
+#
+# The third census in this suite, and the one that measures the OTHER direction. `refusal_census.txt` holds what the
+# implementation says it cannot do; `owed_census.txt` holds what the headers say they do not do yet; both are claims
+# written in this tree's own voice. THIS ONE IS THE MEASUREMENT THOSE CLAIMS ARE ABOUT — the fraction of Apple's
+# 10.6 AppKit surface that a caller can actually reach — and it exists because that number was, until now, produced
+# by hand and never the same twice: three separate counts of "what is missing in libagora-app" gave 4%, 44% and 54%,
+# each measuring a different thing (progress on the 10.11 gap list, header filenames, `@implementation` blocks).
+# A number nobody can recompute is not a measurement.
+#
+# **THE REFERENCE IS 10.6 RATHER THAN 10.11, AND THAT IS THE TREE'S OWN CHOICE RATHER THAN A CONCESSION.**
+# `COCOA-10.11-SURFACE-PLAN.md` §2.1 records it: "The tree's own reference today is 10.6 … `libagora-app`'s era pins
+# are 10.2/10.5/10.6. The 10.11 SDK is therefore a NEW reference, not a replacement." Measuring against 10.11 charges
+# this tier for 47 classes that only exist in 10.7–10.11 and that no slice has promised yet; measuring against 10.6
+# asks the question the tree is actually answering. The plan's own §0 verdict is the same finding this census
+# produces: the gap is not the 10.7–10.11 delta, it is the 10.6 surface this tree never finished.
+#
+# **THE SDK IS NOT IN THIS REPOSITORY AND MUST NOT BE.** Apple's headers are not redistributable. What the plan
+# commits, and what is committed here, is the RECIPE plus the generated NAME MANIFEST: `tools/api-ledger manifest`
+# reads an SDK checkout and emits facts — class names, superclasses, protocol names, selector names, function
+# names — and `api/10.6/appkit-manifest.txt` holds them. No declaration, comment, annotation or line of Apple's
+# expression is copied; a manifest of names is the same kind of fact as a symbol table, which is why it can be
+# committed at all. Regenerating it needs the SDK and is documented in `api/10.6/README.md`.
+#
+# **INHERITANCE IS RESOLVED, WHICH IS WHAT MAKES THIS A MEASUREMENT RATHER THAN A DIFF.** The plan requires it in as
+# many words (§2.4: the probe must answer for inherited methods, because that is what `respondsToSelector:` does). So
+# an Apple selector counts as present when this tree declares it on the class, inherits it from a local superclass, or
+# implements it in a `.m` body anywhere along that chain — and `@property` is expanded to getter and setter, because
+# an accessor is a door a caller sends. Without this the ledger reported `NSTextView 0 of 130` for a class that
+# inherits most of its surface from `NSText`, which is the single most instructive false negative this instrument has
+# produced.
+#
+# **A FUNCTION COUNTS WHEN IT IS A SYMBOL, NOT WHEN A HEADER MENTIONS IT.** `functions-present` is answered by
+# `nm -D --defined-only` on the built library, which is the question a caller's link line asks; `functions-declared`
+# is the header count kept beside it, and the two disagreement counts are pinned at zero because neither is drift.
+# `NSEventMaskFromType` is exempt from being a symbol because Apple's `NS_INLINE` makes it a bodied door.
+#
+# **THE FORMAT IS `name count`, one per line, and it is compared in BOTH DIRECTIONS** — a measured metric the census
+# does not name fails, a census line the tree no longer measures fails, and a count that has moved fails. There are
+# three kinds of name:
+#
+#   <kind>-present / -offered / -missing   the four aggregates, and the arithmetic between them is checked
+#   sel:<Class>                            how many 10.6 selectors that class answers (one line per shared class)
+#   proto:<Name> / fn:<Name>               1 or 0, presence, for every protocol and function 10.6 declares
+#   fndecl:<Name>                         1 or 0, whether a header DECLARES it (fn: says whether the library DEFINES it)
+#   methods-declared / methods-declared-not-implemented   this tree's OWN declarations, and how many have no body
+#   selphantom:<Class>                     how many of that class's own declarations have no body on its chain
+#
+# **THE PER-CLASS LINES ARE WHAT MAKE MEMBERSHIP PINNED RATHER THAN JUST THE TOTALS.** A census of aggregates alone
+# could keep `classes-present 81` while swapping `NSBox` for `NSMatrix`; with a line per shared class, any change to
+# which classes are present moves a line name. The missing set is then fully determined — 10.6's offering from the
+# manifest, minus the present set the `sel:` lines name — so the 87 absent classes need no lines of their own.
+#
+# **AND THE MEASURED NUMBERS THE DAY THIS FILE WAS WRITTEN, so a reader can see the shape without running anything:**
+#
+#     classes    81 of 168   (48%)    87 missing
+#     selectors 2570 of 3478  (74%)  908 missing    31 of 80 classes at COMPLETE coverage
+#     protocols  23 of  56   (41%)    33 missing
+#     functions  86 of  86 (100%)     0 missing    10 of them REFUSE BY NAME, which this count does not distinguish
+#                80 declared, 0 declared-not-defined, 0 defined-not-declared
+#     methods   2989 declared on this tree's own classes, 4 with NO body on the chain (0.1%)
+#
+# Three things those four lines say together. The 74% on selectors is the strongest part of the tree and the reason
+# a hand count that looked only at filenames undersold it by a factor of two. The 12% on C FUNCTIONS is the weakest
+# part by a wide margin and the one an application meets first: `NSRectFill`, `NSFrameRect`, `NSEraseRect`, `NSBeep`
+# and `NSApplicationMain` are all absent, so the tree does not yet fill a rectangle. And the 48% on classes is the
+# honest version of the headline — the desktop CORE is deep, the periphery is empty.
+#
+# **AND THE SAME QUESTION TURNED ON THIS TREE RATHER THAN ON APPLE: `methods-declared-not-implemented`.** Everything above
+# asks what APPLE declares and this tier answers. That metric asks what THIS TIER declares and never implemented — a
+# selector named in a header with no body anywhere on the class or its ancestors. It is the method-level twin of the
+# function gap, and it is a contradiction rather than a debt: `-respondsToSelector:` would answer NO for a door the
+# header promises.
+#
+# **THE FIRST THREE MEASUREMENTS OF IT WERE ALL WRONG, IN THE SAME DIRECTION, AND THE COLLAPSE IS THE RECORD THAT MAKES
+# THIS ONE TRUSTWORTHY: 1,138, then 118, then 47, now 7.** Each error was a blind spot in the reader, not a change in the
+# tree, and each is worth naming because each one looked exactly like a finding:
+#
+#   1,138 -> 118   each declaration was counted on EVERY SUBCLASS as well as where it is written, so one absent body on
+#                  `NSResponder` reappeared in twenty descendants. A declaration lives where it is written.
+#   118   -> 47    `NSEvent.m` carries forty `@synthesize` lines and the tree writes most of its booleans as MACRO PAIRS
+#                  (`FN_FLAG_PAIR(setOneShot, isOneShot, _oneShot)`), so the accessors are compiler-generated and appear in
+#                  no method list at all. A declaration the compiler satisfies is satisfied, and the macro's own
+#                  definition names the two selectors it expands to.
+#   47    -> 7     `@property (getter=isHidden) BOOL hidden` DECLARES `isHidden`, NOT `hidden`. Ignoring the `getter=`
+#                  attribute manufactured phantoms on almost every class with a boolean — sixteen on `NSView` alone.
+#
+# What survives is a number small enough to AUDIT BY HAND, and it has now been audited: the four that remain are ALL
+# INFORMAL-PROTOCOL HOOKS declared on `NSObject` so that a subclass may adopt them (`controlTextDidBeginEditing:`,
+# `controlTextDidChange:`, `controlTextDidEndEditing:`, `validateToolbarItem:` — the era's protocol-by-category idiom,
+# not a promise that `NSObject` implements a page). THE THREE GENUINE GAPS THE PIN EXPOSED ARE FIXED, and they are worth
+# naming because the metric is what found them: `NSCell`'s `representedObject` was DECLARED as a property with no
+# accessors and no storage behind it (`-setRepresentedObject:` was an unrecognized selector — a crash, not a gap), and
+# `NSDraggingItem` had a `setDraggingFrame:` with a getter and no setter. Both are now real, and the count fell from 7 to
+# 4 as a deliberate act rather than by drift.
+#
+# **EACH DECLARATION IS COUNTED ONCE, AT THE CLASS THAT MAKES IT, AGAINST THAT CLASS'S IMPLEMENTED CHAIN.** The first
+# one-off measurement of this summed it over every subclass and read 1,138 across 103 classes — an order of magnitude
+# too high, because one absence on `NSResponder` becomes twenty in its descendants. A declaration lives where it is
+# written, so the census counts it there; the per-class lines (`selphantom:<Class>`) name which fourteen classes carry
+# the 118, and the largest are `NSEvent` 39, `NSWindow` 27, `NSView` 16 and `NSCell` 11.
+#
+# NOTE THE ONE DELIBERATE EXCLUSION. `NSFileWrapper` is declared by 10.6's AppKit (`AppKit/NSFileWrapper.h`) but is
+# Foundation's in this tree, so it is attributed to Foundation to avoid charging one class to two ledgers. The
+# manifest applies that rule at generation time via its second framework argument; the census never sees it.
+
+classes-missing 87
+classes-offered 168
+classes-present 81
+fn:NSAccessibilityActionDescription 1
+fn:NSAccessibilityPostNotification 1
+fn:NSAccessibilityRaiseBadArgumentException 1
+fn:NSAccessibilityRoleDescription 1
+fn:NSAccessibilityRoleDescriptionForUIElement 1
+fn:NSAccessibilityUnignoredAncestor 1
+fn:NSAccessibilityUnignoredChildren 1
+fn:NSAccessibilityUnignoredChildrenForOnlyChild 1
+fn:NSAccessibilityUnignoredDescendant 1
+fn:NSApplicationLoad 1
+fn:NSApplicationMain 1
+fn:NSAvailableWindowDepths 1
+fn:NSBeep 1
+fn:NSBeginAlertSheet 1
+fn:NSBeginCriticalAlertSheet 1
+fn:NSBeginInformationalAlertSheet 1
+fn:NSBestDepth 1
+fn:NSBitsPerPixelFromDepth 1
+fn:NSBitsPerSampleFromDepth 1
+fn:NSColorSpaceFromDepth 1
+fn:NSConvertGlyphsToPackedGlyphs 1
+fn:NSCopyBits 1
+fn:NSCountWindows 1
+fn:NSCountWindowsForContext 1
+fn:NSCreateFileContentsPboardType 1
+fn:NSCreateFilenamePboardType 1
+fn:NSDisableScreenUpdates 1
+fn:NSDottedFrameRect 1
+fn:NSDrawBitmap 1
+fn:NSDrawButton 1
+fn:NSDrawColorTiledRects 1
+fn:NSDrawDarkBezel 1
+fn:NSDrawGrayBezel 1
+fn:NSDrawGroove 1
+fn:NSDrawLightBezel 1
+fn:NSDrawNinePartImage 1
+fn:NSDrawThreePartImage 1
+fn:NSDrawTiledRects 1
+fn:NSDrawWhiteBezel 1
+fn:NSDrawWindowBackground 1
+fn:NSEnableScreenUpdates 1
+fn:NSEraseRect 1
+fn:NSFrameRect 1
+fn:NSFrameRectWithWidth 1
+fn:NSFrameRectWithWidthUsingOperation 1
+fn:NSGetAlertPanel 1
+fn:NSGetCriticalAlertPanel 1
+fn:NSGetFileType 1
+fn:NSGetFileTypes 1
+fn:NSGetInformationalAlertPanel 1
+fn:NSGetWindowServerMemory 1
+fn:NSHighlightRect 1
+fn:NSInterfaceStyleForKey 1
+fn:NSIsControllerMarker 1
+fn:NSNumberOfColorComponents 1
+fn:NSOpenGLGetOption 1
+fn:NSOpenGLGetVersion 1
+fn:NSOpenGLSetOption 1
+fn:NSPerformService 1
+fn:NSPlanarFromDepth 1
+fn:NSReadPixel 1
+fn:NSRectClip 1
+fn:NSRectClipList 1
+fn:NSRectFill 1
+fn:NSRectFillList 1
+fn:NSRectFillListUsingOperation 1
+fn:NSRectFillListWithColors 1
+fn:NSRectFillListWithColorsUsingOperation 1
+fn:NSRectFillListWithGrays 1
+fn:NSRectFillUsingOperation 1
+fn:NSRegisterServicesProvider 1
+fn:NSReleaseAlertPanel 1
+fn:NSRunAlertPanel 1
+fn:NSRunAlertPanelRelativeToWindow 1
+fn:NSRunCriticalAlertPanel 1
+fn:NSRunCriticalAlertPanelRelativeToWindow 1
+fn:NSRunInformationalAlertPanel 1
+fn:NSRunInformationalAlertPanelRelativeToWindow 1
+fn:NSSetFocusRingStyle 1
+fn:NSSetShowsServicesMenuItem 1
+fn:NSShowAnimationEffect 1
+fn:NSShowsServicesMenuItem 1
+fn:NSUnregisterServicesProvider 1
+fn:NSUpdateDynamicServices 1
+fn:NSWindowList 1
+fn:NSWindowListForContext 1
+fndecl:NSAccessibilityActionDescription 1
+fndecl:NSAccessibilityPostNotification 1
+fndecl:NSAccessibilityRaiseBadArgumentException 1
+fndecl:NSAccessibilityRoleDescription 1
+fndecl:NSAccessibilityRoleDescriptionForUIElement 1
+fndecl:NSAccessibilityUnignoredAncestor 1
+fndecl:NSAccessibilityUnignoredChildren 1
+fndecl:NSAccessibilityUnignoredChildrenForOnlyChild 1
+fndecl:NSAccessibilityUnignoredDescendant 1
+fndecl:NSApplicationLoad 1
+fndecl:NSApplicationMain 1
+fndecl:NSAvailableWindowDepths 1
+fndecl:NSBeep 1
+fndecl:NSBeginAlertSheet 1
+fndecl:NSBeginCriticalAlertSheet 1
+fndecl:NSBeginInformationalAlertSheet 1
+fndecl:NSBestDepth 1
+fndecl:NSBitsPerPixelFromDepth 1
+fndecl:NSBitsPerSampleFromDepth 1
+fndecl:NSColorSpaceFromDepth 1
+fndecl:NSConvertGlyphsToPackedGlyphs 1
+fndecl:NSCopyBits 1
+fndecl:NSCountWindows 1
+fndecl:NSCountWindowsForContext 1
+fndecl:NSCreateFileContentsPboardType 1
+fndecl:NSCreateFilenamePboardType 1
+fndecl:NSDisableScreenUpdates 1
+fndecl:NSDottedFrameRect 1
+fndecl:NSDrawBitmap 1
+fndecl:NSDrawButton 1
+fndecl:NSDrawColorTiledRects 1
+fndecl:NSDrawDarkBezel 1
+fndecl:NSDrawGrayBezel 1
+fndecl:NSDrawGroove 1
+fndecl:NSDrawLightBezel 1
+fndecl:NSDrawNinePartImage 1
+fndecl:NSDrawThreePartImage 1
+fndecl:NSDrawTiledRects 1
+fndecl:NSDrawWhiteBezel 1
+fndecl:NSDrawWindowBackground 1
+fndecl:NSEnableScreenUpdates 1
+fndecl:NSEraseRect 1
+fndecl:NSFrameRect 1
+fndecl:NSFrameRectWithWidth 1
+fndecl:NSFrameRectWithWidthUsingOperation 1
+fndecl:NSGetAlertPanel 1
+fndecl:NSGetCriticalAlertPanel 1
+fndecl:NSGetFileType 1
+fndecl:NSGetFileTypes 1
+fndecl:NSGetInformationalAlertPanel 1
+fndecl:NSGetWindowServerMemory 1
+fndecl:NSHighlightRect 1
+fndecl:NSInterfaceStyleForKey 1
+fndecl:NSIsControllerMarker 1
+fndecl:NSNumberOfColorComponents 1
+fndecl:NSOpenGLGetOption 1
+fndecl:NSOpenGLGetVersion 1
+fndecl:NSOpenGLSetOption 1
+fndecl:NSPerformService 1
+fndecl:NSPlanarFromDepth 1
+fndecl:NSReadPixel 1
+fndecl:NSRectClip 1
+fndecl:NSRectClipList 1
+fndecl:NSRectFill 1
+fndecl:NSRectFillList 1
+fndecl:NSRectFillListUsingOperation 1
+fndecl:NSRectFillListWithColors 1
+fndecl:NSRectFillListWithColorsUsingOperation 1
+fndecl:NSRectFillListWithGrays 1
+fndecl:NSRectFillUsingOperation 1
+fndecl:NSRegisterServicesProvider 1
+fndecl:NSReleaseAlertPanel 1
+fndecl:NSRunAlertPanel 1
+fndecl:NSRunAlertPanelRelativeToWindow 1
+fndecl:NSRunCriticalAlertPanel 1
+fndecl:NSRunCriticalAlertPanelRelativeToWindow 1
+fndecl:NSRunInformationalAlertPanel 1
+fndecl:NSRunInformationalAlertPanelRelativeToWindow 1
+fndecl:NSSetFocusRingStyle 1
+fndecl:NSSetShowsServicesMenuItem 1
+fndecl:NSShowAnimationEffect 1
+fndecl:NSShowsServicesMenuItem 1
+fndecl:NSUnregisterServicesProvider 1
+fndecl:NSUpdateDynamicServices 1
+fndecl:NSWindowList 1
+fndecl:NSWindowListForContext 1
+functions-declared 86
+functions-declared-not-defined 0
+functions-defined-not-declared 0
+functions-missing 0
+functions-offered 86
+functions-present 86
+methods-declared 2989
+methods-declared-not-implemented 4
+proto:NSAlertDelegate 0
+proto:NSAnimatablePropertyContainer 0
+proto:NSAnimationDelegate 0
+proto:NSApplicationDelegate 1
+proto:NSBrowserDelegate 1
+proto:NSChangeSpelling 0
+proto:NSCollectionViewDelegate 0
+proto:NSColorPickingCustom 0
+proto:NSColorPickingDefault 0
+proto:NSComboBoxCellDataSource 0
+proto:NSComboBoxDataSource 0
+proto:NSComboBoxDelegate 0
+proto:NSControlTextEditingDelegate 1
+proto:NSDatePickerCellDelegate 0
+proto:NSDockTilePlugIn 0
+proto:NSDraggingInfo 1
+proto:NSDrawerDelegate 0
+proto:NSGlyphStorage 0
+proto:NSIgnoreMisspelledWords 0
+proto:NSImageDelegate 1
+proto:NSInputServerMouseTracker 0
+proto:NSInputServiceProvider 0
+proto:NSLayoutManagerDelegate 1
+proto:NSMatrixDelegate 0
+proto:NSMenuDelegate 0
+proto:NSOpenSavePanelDelegate 0
+proto:NSOutlineViewDataSource 1
+proto:NSOutlineViewDelegate 1
+proto:NSPasteboardItemDataProvider 0
+proto:NSPasteboardReading 0
+proto:NSPasteboardWriting 0
+proto:NSPathCellDelegate 1
+proto:NSPathControlDelegate 1
+proto:NSPrintPanelAccessorizing 0
+proto:NSRuleEditorDelegate 0
+proto:NSSoundDelegate 0
+proto:NSSpeechRecognizerDelegate 0
+proto:NSSpeechSynthesizerDelegate 0
+proto:NSSplitViewDelegate 1
+proto:NSTabViewDelegate 0
+proto:NSTableViewDataSource 1
+proto:NSTableViewDelegate 1
+proto:NSTextAttachmentCell 1
+proto:NSTextDelegate 1
+proto:NSTextFieldDelegate 1
+proto:NSTextInput 1
+proto:NSTextInputClient 1
+proto:NSTextStorageDelegate 1
+proto:NSTextViewDelegate 0
+proto:NSTokenFieldCellDelegate 0
+proto:NSTokenFieldDelegate 0
+proto:NSToolbarDelegate 1
+proto:NSUserInterfaceItemSearching 0
+proto:NSUserInterfaceValidations 1
+proto:NSValidatedUserInterfaceItem 1
+proto:NSWindowDelegate 1
+protocols-missing 33
+protocols-offered 56
+protocols-present 23
+sel:NSActionCell 6
+sel:NSAlert 20
+sel:NSApplication 88
+sel:NSBezierPath 71
+sel:NSBitmapImageRep 36
+sel:NSBrowser 56
+sel:NSBrowserCell 7
+sel:NSButton 31
+sel:NSButtonCell 43
+sel:NSCell 139
+sel:NSClipView 17
+sel:NSColor 97
+sel:NSComboBox 22
+sel:NSComboBoxCell 20
+sel:NSControl 37
+sel:NSCursor 35
+sel:NSEvent 64
+sel:NSFont 36
+sel:NSFontDescriptor 17
+sel:NSGraphicsContext 28
+sel:NSImage 68
+sel:NSImageRep 33
+sel:NSLayoutManager 26
+sel:NSMenu 64
+sel:NSMenuItem 56
+sel:NSMenuItemCell 21
+sel:NSMenuView 5
+sel:NSMutableParagraphStyle 20
+sel:NSNib 4
+sel:NSOutlineView 28
+sel:NSPDFImageRep 6
+sel:NSPanel 6
+sel:NSParagraphStyle 20
+sel:NSPasteboard 31
+sel:NSPathCell 26
+sel:NSPathComponentCell 4
+sel:NSPathControl 16
+sel:NSPopUpButton 27
+sel:NSPopUpButtonCell 33
+sel:NSProgressIndicator 16
+sel:NSResponder 88
+sel:NSRunningApplication 17
+sel:NSScreen 9
+sel:NSScrollView 31
+sel:NSScroller 15
+sel:NSSearchField 4
+sel:NSSearchFieldCell 21
+sel:NSSegmentedCell 31
+sel:NSSegmentedControl 21
+sel:NSSlider 12
+sel:NSSliderCell 18
+sel:NSSplitView 18
+sel:NSStatusBar 5
+sel:NSStatusItem 25
+sel:NSTableColumn 27
+sel:NSTableHeaderCell 2
+sel:NSTableHeaderView 7
+sel:NSTableView 103
+sel:NSText 35
+sel:NSTextAttachment 5
+sel:NSTextBlock 11
+sel:NSTextContainer 17
+sel:NSTextField 29
+sel:NSTextFieldCell 14
+sel:NSTextInputContext 8
+sel:NSTextList 6
+sel:NSTextStorage 13
+sel:NSTextTab 6
+sel:NSTextTable 11
+sel:NSTextTableBlock 6
+sel:NSTextView 24
+sel:NSToolbar 27
+sel:NSToolbarItem 33
+sel:NSToolbarItemGroup 2
+sel:NSTrackingArea 5
+sel:NSView 193
+sel:NSViewController 13
+sel:NSWindow 243
+sel:NSWindowController 26
+sel:NSWorkspace 9
+selectors-missing 908
+selectors-offered 3478
+selectors-present 2570
+selphantom:NSObject 4

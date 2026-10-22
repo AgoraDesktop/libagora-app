@@ -333,6 +333,7 @@ static NSString * const AGCoderCellActionKey = @"action";
 	[_image release];
 	[_formatter release];
 	[_font release];
+		[_representedObject release];
 	[super dealloc];
 }
 
@@ -1992,6 +1993,28 @@ static const NSSize FN_CELL_NO_OPINION = { 10000.0, 10000.0 };
 
 			[_title drawInRect:NSMakeRect(x, baseline - descent, ceil(text.width), band) withAttributes:attributes];
 		}
+	}
+}
+
+@end
+
+/* THE OBJECT A CELL CARRIES FOR ITS CALLER, which the header has declared since the cell family landed and never
+ * stored. It is a plain retained association: this tier has no binding controllers, so nothing reads it — but a caller
+ * that SETS it must be able to read it back, and before this pair `-setRepresentedObject:` was an unrecognized
+ * selector, which is a crash rather than a gap. */
+@implementation NSCell (AGRepresentedObject)
+
+- (id)representedObject
+{
+	return _representedObject;
+}
+
+- (void)setRepresentedObject:(id)object
+{
+	if (_representedObject != object) {
+		[object retain];
+		[_representedObject release];
+		_representedObject = object;
 	}
 }
 

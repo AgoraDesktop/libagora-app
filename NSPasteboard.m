@@ -611,48 +611,6 @@ static void fn_refuseFiltering(const char *which)
 	return nil;
 }
 
-/* ---- THE FILE-TYPE HELPERS, WHICH REFUSE BY NAME ------------------------------------------- */
-
-/* ONE REFUSAL FOR FOUR DOORS BECAUSE IT IS ONE MECHANISM: each maps between a file type name and a
- * pasteboard type built from it, and the CONVENTION that builds it ("Apple TIFF pasteboard type") is not
- * in Apple's header, where this tier's ground lives. A string built to a remembered pattern that is one
- * word wrong is a pasteboard type matching nothing — the silent failure this tier refuses — so the doors
- * answer nil with the reason instead. */
-static void fn_refuseFileType(const char *which)
-{
-	fprintf(stderr, "APPKIT-REFUSE: %s maps a file type name to a pasteboard type by a CONVENTION that "
-			"Apple's header does not carry (it is documented prose), and a pasteboard type built to a "
-			"remembered pattern would match nothing rather than fail loudly\n", which);
-}
-
-NSString *NSCreateFileContentsPboardType(NSString *fileType)
-{
-	(void)fileType;
-	fn_refuseFileType("NSCreateFileContentsPboardType");
-	return nil;
-}
-
-NSString *NSCreateFilenamePboardType(NSString *fileType)
-{
-	(void)fileType;
-	fn_refuseFileType("NSCreateFilenamePboardType");
-	return nil;
-}
-
-NSString *NSGetFileType(NSString *pboardType)
-{
-	(void)pboardType;
-	fn_refuseFileType("NSGetFileType");
-	return nil;
-}
-
-NSArray *NSGetFileTypes(NSArray *pboardTypes)
-{
-	(void)pboardTypes;
-	fn_refuseFileType("NSGetFileTypes");
-	return nil;
-}
-
 /* ---- THE TWO OBJECT DOORS, WHOSE ANSWERS ARE EXACT RATHER THAN A REFUSAL ----------------------- *
  * BOTH ARE ABOUT `NSPasteboardItem`, a class this tier does not ship, and the fact that makes a refusal
  * unnecessary is about the BOARD: `-writeObjects:` puts TYPES and a value per type on it (see that door) and
@@ -671,3 +629,69 @@ NSArray *NSGetFileTypes(NSArray *pboardTypes)
 }
 
 @end
+
+
+/* ==================================================================================================================
+ * THE FOUR FILE-TYPE PHRASES.
+ *
+ * **THE SPELLINGS ARE STATED HERE BECAUSE THEY ARE THE WHOLE CONTRACT.** A "file contents" pboard type wraps the file
+ * type in words — `Apple <type> pasteboard type` — and a "filename" type appends one: `<type> filename`. The creators
+ * and the parsers below are exact inverses, and `tests/functions_target2.m` round-trips each one, because a pair that
+ * disagrees would publish a file under a type nobody can read back.
+ */
+
+NSString *NSCreateFileContentsPboardType(NSString *fileType)
+{
+	if (fileType == nil) {
+		return nil;
+	}
+	return [NSString stringWithFormat:@"Apple %@ pasteboard type", fileType];
+}
+
+NSString *NSCreateFilenamePboardType(NSString *fileType)
+{
+	if (fileType == nil) {
+		return nil;
+	}
+	return [NSString stringWithFormat:@"%@ filename", fileType];
+}
+
+static NSString *const kFileContentsPrefix = @"Apple ";
+static NSString *const kFileContentsSuffix = @" pasteboard type";
+static NSString *const kFilenameSuffix = @" filename";
+
+NSString *NSGetFileType(NSString *pboardType)
+{
+	NSUInteger prefixLength, suffixLength, total;
+
+	if (pboardType == nil) {
+		return nil;
+	}
+	total = [pboardType length];
+	prefixLength = [kFileContentsPrefix length];
+	suffixLength = [kFileContentsSuffix length];
+	if (total > prefixLength + suffixLength
+	    && [pboardType hasPrefix:kFileContentsPrefix] && [pboardType hasSuffix:kFileContentsSuffix]) {
+		return [pboardType substringWithRange:NSMakeRange(prefixLength, total - prefixLength - suffixLength)];
+	}
+	suffixLength = [kFilenameSuffix length];
+	if (total > suffixLength && [pboardType hasSuffix:kFilenameSuffix]) {
+		return [pboardType substringToIndex:total - suffixLength];
+	}
+	return nil;
+}
+
+NSArray *NSGetFileTypes(NSArray *pboardTypes)
+{
+	NSMutableArray *out = [NSMutableArray array];
+	NSUInteger i, count = [pboardTypes count];
+
+	for (i = 0; i < count; i++) {
+		NSString *fileType = NSGetFileType([pboardTypes objectAtIndex:i]);
+
+		if (fileType != nil) {
+			[out addObject:fileType];
+		}
+	}
+	return out;
+}

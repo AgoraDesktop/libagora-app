@@ -225,6 +225,21 @@ NSArray * _Nullable NSGetFileTypes(NSArray *pboardTypes);
 
 @end
 
+
+/* ==================================================================================================================
+ * THE FOUR FILE-TYPE PHRASES.
+ *
+ * **A "PBOARD TYPE" IS A SPELLING CONVENTION RATHER THAN A MECHANISM**: the era encoded a file type into a pasteboard
+ * type name by wrapping it in words, and these four functions are that convention and its inverse. The spellings this
+ * tier uses are stated at the definitions, and each is checked by a round trip in `tests/functions_target2.m` — because
+ * a creator and a parser that disagree would put a file on the pasteboard under a type nobody can read back.
+ * ================================================================================================================ */
+
+NSString *NSCreateFileContentsPboardType(NSString *fileType);
+NSString *NSCreateFilenamePboardType(NSString *fileType);
+NSString *NSGetFileType(NSString *pboardType);
+NSArray *NSGetFileTypes(NSArray *pboardTypes);
+
 NS_ASSUME_NONNULL_END
 
 #endif /* APPKIT_NSPASTEBOARD_H */

@@ -9,7 +9,7 @@
 # build, in BOTH directions — a file with a refusal it does not list fails, and a listed count that has moved fails.
 # Changing this file is therefore the deliberate act of adding or removing a refusal, and the diff says which.
 #
-# THE FORMAT IS `file count`, one per line, and the total is the sum: 142.
+# THE FORMAT IS `file count`, one per line, and the total is the sum: 141.
 
 NSApplication.m                      3
 NSAttributedStringRTF.m              4
@@ -32,7 +32,7 @@ NSMenu.m                            18
 NSMenuItem.m                         0
 NSMenuItemCell.m                     2
 NSNib.m                              0
-NSPasteboard.m                       6
+NSPasteboard.m                       5
 NSPopUpButtonCell.m                  1
 NSSliderCell.m                       1
 NSText.m                             3
@@ -41,4 +41,10 @@ NSView.m                             3
 NSViewController.m                   1
 NSWindow.m                          13
 
-# total: 142
+# AND IT FELL BY ONE WHEN THE FOUR FILE-TYPE PHRASES BECAME REAL. `NSPasteboard.m` held a single helper,
+# `fn_refuseFileType`, carrying the one APPKIT-REFUSE literal for all four doors; the four are now implemented as the
+# documented spelling convention and their round trip is checked in `tests/functions_target2.m`, so the helper and its
+# literal are gone. THE OTHER FOUR CALL SITES NEVER CARRIED AN `APPKIT-REFUSE` LITERAL AT ALL, so the census could only
+# ever see the one — a limitation this change makes visible rather than hides.
+#
+# total: 141

@@ -1,0 +1,695 @@
+#!/usr/bin/env python3
+#
+# api-ledger — the AppKit surface ledger: what Apple's SDK declares, and what this tree answers.
+#
+# Copyright © 2026 Kyle J. Cardoza. MIT licensed — see LICENSE.
+# SPDX-License-Identifier: MIT
+#
+# **WHY THIS EXISTS.** `COCOA-10.11-SURFACE-PLAN.md` §2 calls for a ledger and says what it is for: every name in
+# the surface gets exactly one disposition, and an OMITTED name is a bug rather than a disposition. Until this file
+# the tree had no such instrument, and the consequence was measured rather than argued: three separate hand counts
+# of "what is missing in libagora-app" produced three different answers — 4%, 44% and 54% — because each counted a
+# different thing (progress on the gap list, header filenames, `@implementation` blocks). A number that nobody can
+# recompute is not a measurement. This is the recomputation.
+#
+# **AND THE NUMBER IS NOT THE PRODUCT — THE RECIPE IS.** Apple's SDK is not redistributable and is not in this
+# repository, which is why the plan commits "the recipe and the generated name manifest, which is a list of facts
+# (names, versions, selectors), not Apple's expression of them". So `manifest` reads an SDK checkout and emits facts;
+# the facts are committed at `api/10.6/appkit-manifest.txt`; and `census` compares those facts against this tree
+# using nothing but the repository. `check` holds the result against `tests/api-10.6-census.txt`.
+#
+# **THE FIVE PARSER BUGS THIS FILE WAS BORN WITH, RECORDED BECAUSE EACH ONE PRODUCED A PLAUSIBLE WRONG ANSWER.**
+# They are the reason the numbers below are trusted and the earlier hand counts were not:
+#
+#   1. A pattern that consumed the delimiter after a name (`@protocol X\s*([;:(<])?`) put `m.end()` past the
+#      `;`, so the forward-declaration test then inspected the wrong text.
+#   2. The forward-declaration test itself was anchored with `^`, which never matches at a non-zero offset, so
+#      `@protocol NSTableViewDelegate, NSTableViewDataSource;` was taken for a DEFINITION and swallowed the class
+#      block after it — 113 selectors were attributed to the wrong name, and `NSTableView` was left holding only
+#      the ten methods of its `NSDeprecated` category. The symptom was `NSTableView 0 present of 10`.
+#   3. `@implementation` was not in the block pattern at all, so every selector count reported `impl 0`.
+#   4. The first attempt filed `@implementation` blocks into the protocol bucket (the `else` branch), for the same
+#      reason: a third block kind was needed and only two were provided for.
+#   5. The superclass was read with `\s*(\w+)` against text that begins with `:`, so it never matched, every class
+#      had `super = None`, and INHERITANCE WAS SILENTLY DISABLED — which is the bug that mattered most, because it
+#      reported `NSTextView 0 of 130` for a class that inherits most of its surface from `NSText`.
+#
+# The lesson each one teaches is the same: a count is only worth keeping if it is recomputable, and a parser that
+# fails silently toward "missing" will always look like progress.
+#
+# **INHERITANCE IS RESOLVED, WHICH IS THE PLAN'S OWN REQUIREMENT (§2.4).** An Apple selector counts as present if
+# this tree's class declares it, inherits it from a local superclass, or implements it in a `.m` body along that
+# chain — because that is what `respondsToSelector:` answers, and a header-only diff would score a class by its
+# documentation rather than its behaviour. `@property` is expanded to getter and setter for the same reason: an
+# accessor is a door a caller sends.
+#
+# **FACTS ONLY, NO EXPRESSION.** Nothing here copies Apple's declarations, comments, annotations or prose. The
+# manifest is a list of names and relationships — the same kind of fact as a symbol table — which is what makes it
+# committable at all.
+#
+# **A DECLARATION IS NOT A DOOR, AND THIS FILE MEASURED AS IF IT WERE.** The first version counted a C function as
+# present when a header DECLARED it, which is the plan's S1 tier rather than S3 ("every non-inline C function is an
+# exported symbol"). Both directions of that mistake showed up in this tree within one afternoon:
+#
+#   * FIVE functions declared in `NSGraphics.h` and called by `NSScreen` had NO DEFINITION AT ALL — `libagora-app.so`
+#     carried unresolved references to `NSBestDepth` and the depth extractors, and the census called them present;
+#   * FOUR pasteboard functions were DEFINED in `NSPasteboard.m` (as refusals) with no declaration in the header, so no
+#     caller could reach them, and the census called them missing.
+#
+# So `census` now asks the LIBRARY, not the headers: a function is present when `nm -D --defined-only` reports it, which
+# is the question a caller's link line asks. Declarations are still counted, separately, and both disagreement counts are
+# pinned — `functions-declared-not-defined` and `functions-defined-not-declared` — because a census that can only see one
+# side of that disagreement is the instrument that produced the two errors above.
+#
+# Usage:
+#   api-ledger manifest <framework-dir> [<other-framework-dir> ...]   -> facts on stdout
+#   api-ledger census   <manifest> <source-dir> [--library <path>]    -> "name count" metrics on stdout
+#   api-ledger check    <manifest> <source-dir> <census> [--library <path>]
+#   api-ledger missing  <manifest> <source-dir> [--library <path>]    -> human report of what is absent
+
+import os
+import re
+import subprocess
+import sys
+import glob
+
+# ------------------------------------------------------------------------------------------------------------------
+# Lexing: comments out, blocks in. Comments are replaced by a space plus their own newlines, so line-oriented
+# patterns keep working over a header whose prose is four hundred lines long.
+# ------------------------------------------------------------------------------------------------------------------
+
+def strip_comments(text):
+    text = re.sub(r'/\*.*?\*/', lambda m: ' ' + '\n' * m.group(0).count('\n'), text, flags=re.S)
+    text = re.sub(r'//[^\n]*', ' ', text)
+    return text
+
+
+def selector_of(head):
+    """`(void)setFrame:(NSRect)r display:(BOOL)d` -> `setFrame:display:`. Argument TYPES are dropped first, so a
+    type's own colons (a block type, a protocol list) cannot invent keywords."""
+    bare = re.sub(r'\([^()]*\)', ' ', head)
+    while bare != re.sub(r'\([^()]*\)', ' ', bare):          # nested type parens
+        bare = re.sub(r'\([^()]*\)', ' ', bare)
+    words = re.findall(r'(\w+)\s*:', bare)
+    if words:
+        return ':'.join(words) + ':'
+    m = re.search(r'\b([A-Za-z_]\w*)', bare)
+    return m.group(1) if m else None
+
+
+def read_method_head(text, i):
+    """`text[i]` is the `(` of the return type. Read to the depth-0 `{` or `;` and return the selector."""
+    depth = 0
+    j = i
+    n = len(text)
+    while j < n:
+        c = text[j]
+        if c == '(':
+            depth += 1
+        elif c == ')':
+            depth -= 1
+        elif depth == 0 and c in '{;':
+            return selector_of(text[i:j])
+        j += 1
+    return None
+
+
+def next_token(text, i):
+    """Skip spaces and tabs only — a newline means the declaration continues on the next line, which is a
+    definition, not a forward declaration."""
+    n = len(text)
+    while i < n and text[i] in ' \t':
+        i += 1
+    return (text[i] if i < n else ''), i
+
+
+def block_properties(body):
+    """A property's accessors — honouring `getter=`, which the first version ignored.
+
+    **`@property (getter=isHidden) BOOL hidden` DOES NOT DECLARE `hidden`.** It declares `isHidden` and `setHidden:`, and
+    the second version of `methods-declared-not-implemented` counted sixteen such properties on `NSView` alone as
+    declared-and-never-implemented because it looked for the property's NAME as the getter. Apple's headers use
+    `getter=` for most of the `is…` spellings — `isHidden`, `isEnabled`, `isFlipped`, `isEditable`, `isActive` — so
+    ignoring the attribute manufactured phantoms on almost every class with a boolean.
+
+    THE SETTER IS DERIVED FROM THE PROPERTY NAME, NOT FROM THE GETTER, which is what the compiler does: a property
+    called `hidden` with `getter=isHidden` still sets through `setHidden:`.
+    """
+    out = set()
+    for m in re.finditer(r'@property\s*([^;{]*);', body, re.S):
+        decl = m.group(1)
+        name = re.search(r'(\w+)\s*$', decl.strip())
+        if not name:
+            continue
+        prop = name.group(1)
+        attributes = decl[:name.start()]
+        getter = re.search(r'getter\s*=\s*(\w+)', attributes)
+        out.add(getter.group(1) if getter else prop)
+        if 'readonly' not in attributes:
+            out.add('set' + prop[0].upper() + prop[1:] + ':')
+    return out
+
+
+def logical_lines(text):
+    """Source lines with the backslash continuations joined, which is how a macro definition reads."""
+    out = []
+    buffer = ''
+    for line in text.splitlines():
+        stripped = line.rstrip()
+        if stripped.endswith('\\'):
+            buffer += stripped[:-1] + ' '
+        else:
+            out.append(buffer + line)
+            buffer = ''
+    if buffer:
+        out.append(buffer)
+    return out
+
+
+def macro_accessors(text):
+    """The accessors an X-macro call generates, by inverting the macro's own definition.
+
+    **THE TREE WRITES ITS BOOLEAN ACCESSORS AS MACRO PAIRS**, so a static method scan cannot see them:
+
+        #define FN_FLAG_PAIR(setter, getter, ivar)  \
+            - (void)setter:(BOOL)flag { ivar = flag; } \
+            - (BOOL)getter { return ivar; }
+        FN_FLAG_PAIR(setOneShot, isOneShot, _oneShot)
+
+    Twenty-two such call sites across `NSWindow.m` and `NSView.m` account for forty of the forty-seven phantom
+    selectors the third measurement reported — every one of them a door that answers perfectly well at runtime.
+
+    **THIS IS THE TARGETED INVERSE, NOT A PREPROCESSOR.** Running `clang -E` over the tree would be the general answer
+    and is what the plan suggests for the eventual ledger; it also drags in the whole include graph. What is done here
+    is narrower and exact for this shape: a macro whose BODY declares methods names its selectors through its
+    PARAMETERS, so the parameters that appear as a method name (`setter:` with a colon, `getter` without) are read off
+    the definition and then substituted at each call site.
+
+    IT CAN ONLY ADD IMPLEMENTATIONS, NEVER PHANTOMS, so the direction of any error is the safe one for a pinned count.
+    """
+    shapes = {}
+    for line in logical_lines(text):
+        m = re.match(r'\s*#define\s+(\w+)\(([^)]*)\)(.*)$', line)
+        if not m:
+            continue
+        name, params, body = m.group(1), [q.strip() for q in m.group(2).split(',')], m.group(3)
+        if '- (' not in body and '+ (' not in body:
+            continue
+        setters = set(k for k in re.findall(r'\([^)]*\)\s*(\w+)\s*:', body))
+        getters = set(re.findall(r'\([^)]*\)\s*(\w+)', body)) - setters
+        if not setters and not getters:
+            continue
+        shapes[name] = (params, setters, getters)
+    if not shapes:
+        return set()
+
+    out = set()
+    for line in logical_lines(text):
+        for name, (params, setters, getters) in shapes.items():
+            for m in re.finditer(r'\b' + name + r'\s*\(([^)]*)\)', line):
+                if re.match(r'\s*#define', line):
+                    continue
+                args = [a.strip() for a in m.group(1).split(',')]
+                for position, param in enumerate(params):
+                    if position >= len(args):
+                        break
+                    if param in setters:
+                        out.add(args[position] + ':')
+                    elif param in getters:
+                        out.add(args[position])
+    return out
+
+
+def synthesised(body):
+    """The accessors an `@implementation` gets from `@synthesize`, which have no body to find.
+
+    **THIS IS THE FALSE POSITIVE THAT MADE `methods-declared-not-implemented` READ 118.** `NSEvent.m` carries forty
+    `@synthesize` lines, so its accessors are compiler-generated: they answer at runtime and appear in no method list,
+    which the first version of this metric read as "declared and never implemented" thirty-nine times over. A
+    declaration the compiler satisfies is satisfied.
+
+    THE SETTER IS ADDED FOR EVERY SYNTHESISED PROPERTY WITHOUT CONSULTING `readonly` in the header, because this pass
+    only sees the `.m`. That errs toward CREDITING an implementation, so the metric can under-report a phantom setter
+    but never invents one — the safe direction for a count that is pinned.
+    """
+    out = set()
+    for m in re.finditer(r'@synthesize\s+([^;]+);', body):
+        for part in m.group(1).split(','):
+            prop = part.split('=')[0].strip()
+            if re.match(r'^[A-Za-z_]\w*$', prop):
+                out.add(prop)
+                out.add('set' + prop[0].upper() + prop[1:] + ':')
+    return out
+
+
+def parse_objc(text):
+    """Walk every `@interface` / `@protocol` / `@implementation` block.
+
+    Returns (classes, protocols, impls) where classes maps a name to
+    {'primary': bool, 'super': str|None, 'selectors': set()} and impls maps a name to its implemented selectors.
+    A category (`@interface X (Cat)`) contributes its selectors to X but does not make X this framework's class:
+    that distinction is what keeps `NSObject` and `NSURL` out of the AppKit ledger, where Apple's AppKit only
+    reaches them through categories.
+    """
+    classes, protocols, impls = {}, {}, {}
+    pattern = re.compile(r'@(interface|protocol|implementation)\s+(\w+)')
+    i = 0
+    while True:
+        m = pattern.search(text, i)
+        if not m:
+            break
+        kind, name = m.group(1), m.group(2)
+        token, after = next_token(text, m.end())
+        if token in ';,':
+            semi = text.find(';', after)
+            i = semi + 1 if semi != -1 else after
+            continue
+        end = text.find('@end', m.end())
+        if end == -1:
+            break
+        body = text[m.end():end]
+
+        selectors = set()
+        for decl in re.finditer(r'(?m)^\s*[-+]\s*\(', body):
+            selector = read_method_head(body, decl.end() - 1)
+            if selector:
+                selectors.add(selector)
+        selectors |= block_properties(body)
+
+        if kind == 'implementation':
+            selectors |= synthesised(body)
+            selectors |= macro_accessors(body)
+            impls.setdefault(name, set()).update(selectors)
+        elif kind == 'protocol':
+            protocols.setdefault(name, set()).update(selectors)
+        else:
+            entry = classes.setdefault(name, {'primary': False, 'super': None, 'selectors': set()})
+            entry['primary'] = entry['primary'] or (token != '(')
+            entry['selectors'] |= selectors
+            if token == ':':
+                sup = re.match(r'\s*:\s*(\w+)', text[m.end():end])
+                if sup:
+                    entry['super'] = sup.group(1)
+        i = end + 4
+    return classes, protocols, impls
+
+
+def parse_tree(directory):
+    classes, protocols, impls = {}, set(), {}
+    headers = sorted(glob.glob(os.path.join(directory, '*.h')))
+    if not headers:
+        raise SystemExit('api-ledger: no headers in %s' % directory)
+    for path in headers:
+        cls, prt, _ = parse_objc(strip_comments(open(path, errors='ignore').read()))
+        for name, entry in cls.items():
+            into = classes.setdefault(name, {'primary': False, 'super': None, 'selectors': set()})
+            into['primary'] = into['primary'] or entry['primary']
+            into['selectors'] |= entry['selectors']
+            if entry['super']:
+                into['super'] = entry['super']
+        protocols |= set(prt)
+    for path in sorted(glob.glob(os.path.join(directory, '*.m'))):
+        _, _, got = parse_objc(strip_comments(open(path, errors='ignore').read()))
+        for name, selectors in got.items():
+            impls.setdefault(name, set()).update(selectors)
+    return classes, protocols, impls
+
+
+def c_functions(directory):
+    """Objective-C is neither C nor not-C: the functions are the declarations that survive outside every block.
+
+    Returns name -> {'inline': bool}, because whether a declaration must also be a symbol depends on that flag."""
+    out = {}
+    for path in sorted(glob.glob(os.path.join(directory, '*.h'))):
+        text = strip_comments(open(path, errors='ignore').read())
+        text = re.sub(r'@(interface|protocol)\b.*?@end', lambda m: ' ' * len(m.group(0)), text, flags=re.S)
+        for m in re.finditer(
+                r'(?m)^[ \t]*(?:APPKIT_EXTERN|FOUNDATION_EXPORT|extern)?[ \t]*'
+                r'[A-Za-z_][\w \t\*]*?\b(NS[A-Z]\w*)\s*\(', text):
+            # **A NAME FOLLOWED BY `(*` IS A DECLARATOR, NOT A FUNCTION.** 10.6's
+            # NSSimpleHorizontalTypesetter.h carries `typedef NSPoint (*_NSPositionOfGlyphMethod)(...)`, where the last
+            # NS-prefixed token before the paren is the RETURN TYPE — so the naive pattern filed the type name
+            # `NSPoint` as a C function, and the census counted it as one more door the tree had failed to answer.
+            # A function-pointer declaration and a typedef are not functions and are skipped here.
+            if re.match(r'\s*\*', text[m.end():m.end() + 8]):
+                continue
+            # **THE PREFIX RUNS TO THE NAME, NOT TO `m.start()`.** `m.start()` is the START OF THE MATCH, which for a
+            # line-anchored pattern is the beginning of the line itself — so the prefix was the empty string every time,
+            # and BOTH tests that read it were dead: the `typedef` guard and, later, the inline exemption. The
+            # function-pointer guard caught the `typedef` case by luck (through its own `(*` test), which is why the bug
+            # hid until a metric started reading the same prefix for a second purpose.
+            line_start = text.rfind('\n', 0, m.start()) + 1
+            prefix = text[line_start:m.start(1)]
+            if 'typedef' in prefix:
+                continue
+            # **AN INLINE DEFINITION IS NOT A SYMBOL AND DOES NOT HAVE TO BE ONE.** The plan's S3 tier says
+            # "every NON-INLINE C function is an exported symbol", so an inline door is recorded and then exempted
+            # from the definition requirement rather than reported as a permanent false negative.
+            # `NS_INLINE` IS THE SPELLING THAT CAUGHT THE FIRST VERSION OUT. Apple's macro expands to `static inline`
+            # (NSObjCRuntime.h), so `NSEventMaskFromType` is a bodied door in the header and never a symbol — but the
+            # macro name carries no lowercase `inline`, so a keyword test reported it as a declaration with no
+            # definition and made this metric cry wolf on its first run.
+            out[m.group(1)] = {'inline': ('static' in prefix or 'inline' in prefix or 'NS_INLINE' in prefix)}
+    return out
+
+
+def exported_symbols(library):
+    """The definitions a caller's link line can actually reach, asked of the library rather than its headers."""
+    if library is None:
+        return None
+    result = subprocess.run(['nm', '-D', '--defined-only', library],
+                            capture_output=True, text=True)
+    if result.returncode != 0:
+        raise SystemExit('api-ledger: nm failed on %s:\n%s' % (library, result.stderr.strip()))
+    symbols = set()
+    for line in result.stdout.splitlines():
+        parts = line.split()
+        if len(parts) < 3:
+            continue
+        kind, name = parts[-2], parts[-1]
+        if kind in ('T', 'W', 'D', 'B', 'R', 'V', 'i'):
+            symbols.add(name.split('@')[0])   # drop any symbol versioning
+    return symbols
+
+# ------------------------------------------------------------------------------------------------------------------
+# The manifest: a framework's offered surface, as facts.
+# ------------------------------------------------------------------------------------------------------------------
+# Format, one fact per line, sorted:
+#     class <Name> : <Superclass>        (empty superclass when the class is a root class)
+#     protocol <Name>
+#     selector <Class> <selector>
+#     function <Name>
+# A protocol's selectors are not listed separately: every protocol carries them into a conforming class, and a class
+# that adopts one declares its own doors.
+
+def emit_manifest(directories):
+    classes, protocols, functions = {}, set(), set()
+    owned_elsewhere = set()
+    for index, directory in enumerate(directories):
+        cls, prt, _ = parse_tree(directory)
+        if index == 0:
+            classes = cls
+            protocols = set(prt)
+            functions = c_functions(directory)
+        else:
+            test = lambda t: t[0]
+            owned_elsewhere |= set(n for n, e in cls.items() if e['primary'])
+
+    lines = []
+    for name, entry in sorted(classes.items()):
+        if not entry['primary'] or name in owned_elsewhere:
+            continue
+        lines.append('class %s : %s' % (name, entry['super'] or '-'))
+        for selector in sorted(entry['selectors']):
+            lines.append('selector %s %s' % (name, selector))
+    for name in sorted(protocols):
+        lines.append('protocol %s' % name)
+    for name in sorted(functions):
+        lines.append('function %s' % name)
+    lines.sort()
+    return lines
+
+
+def load_manifest(path):
+    classes, protocols, selectors, functions = {}, set(), {}, set()
+    for line in open(path, errors='ignore'):
+        line = line.strip()
+        if not line or line.startswith('#'):
+            continue
+        kind, _, rest = line.partition(' ')
+        if kind == 'class':
+            name, _, superclass = rest.partition(' : ')
+            classes[name] = superclass if superclass not in ('-', '') else None
+        elif kind == 'selector':
+            name, _, selector = rest.partition(' ')
+            selectors.setdefault(name, set()).add(selector)
+        elif kind == 'protocol':
+            protocols.add(rest)
+        elif kind == 'function':
+            functions.add(rest)
+        else:
+            raise SystemExit('api-ledger: unknown manifest fact `%s`' % kind)
+    return classes, protocols, selectors, functions
+
+# ------------------------------------------------------------------------------------------------------------------
+# The census: what this tree answers, with inheritance resolved.
+# ------------------------------------------------------------------------------------------------------------------
+
+def closure(tree, name, seen=None):
+    seen = set() if seen is None else seen
+    if name in seen or name not in tree:
+        return set()
+    seen.add(name)
+    entry = tree[name]
+    out = set(entry['selectors'])
+    if entry.get('super'):
+        out |= closure(tree, entry['super'], seen)
+    return out
+
+
+def computed(local_dir, manifest_path, library=None):
+    sdk_classes, sdk_protocols, sdk_selectors, sdk_functions = load_manifest(manifest_path)
+    classes, protocols, impls = parse_tree(local_dir)
+    declared = c_functions(local_dir)
+    defined = exported_symbols(library)
+
+    # the implemented set shares the superclass graph, so inherited bodies count
+    impl_tree = dict((name, {'selectors': impls.get(name, set()),
+                             'super': classes.get(name, {}).get('super')}) for name in classes)
+    for name in impls:
+        impl_tree.setdefault(name, {'selectors': impls[name], 'super': classes.get(name, {}).get('super')})
+
+    metrics = {}
+    present_classes = sorted(n for n in sdk_classes if n in classes)
+    metrics['classes-present'] = len(present_classes)
+    metrics['classes-offered'] = len(sdk_classes)
+    metrics['classes-missing'] = len(sdk_classes) - len(present_classes)
+
+    metrics['protocols-present'] = len([p for p in sdk_protocols if p in protocols])
+    metrics['protocols-offered'] = len(sdk_protocols)
+    metrics['protocols-missing'] = len(sdk_protocols) - metrics['protocols-present']
+
+    # A FUNCTION COUNTS WHEN IT IS DEFINED. An inline door is exempt from being a symbol, and only those are exempt.
+    required = sorted(f for f in sdk_functions if not declared.get(f, {}).get('inline'))
+    have_definition = [f for f in required if defined is not None and f in defined]
+    metrics['functions-present'] = len(have_definition)
+    metrics['functions-offered'] = len(required)
+    metrics['functions-missing'] = len(required) - len(have_definition)
+    metrics['functions-declared'] = len([f for f in required if f in declared])
+    # **THE TWO DIRECTIONS THE FIRST VERSION COULD NOT SEE.** A declaration with no definition is a link error waiting
+    # for a caller; a definition with no declaration is a door nobody can open. Both are pinned, and both must be zero.
+    metrics['functions-declared-not-defined'] = len([f for f in required
+                                                     if f in declared and f not in (defined or set())])
+    metrics['functions-defined-not-declared'] = len([f for f in required
+                                                     if f in (defined or set()) and f not in declared])
+
+    total = answered = 0
+    for name in present_classes:
+        offered = sdk_selectors.get(name, set())
+        if not offered:
+            continue
+        have = closure(classes, name) | closure(impl_tree, name)
+        total += len(offered)
+        answered += len(offered & have)
+        metrics['sel:' + name] = len(offered & have)
+    metrics['selectors-present'] = answered
+    metrics['selectors-offered'] = total
+    metrics['selectors-missing'] = total - answered
+
+    # **THE SAME MEASUREMENT AS THE FUNCTIONS, TURNED ON THIS TREE INSTEAD OF ON APPLE.** Everything above asks what
+    # APPLE declares and this tree answers. This asks what THIS TREE declares and never implemented — a door named in a
+    # header with no body anywhere on the class or its ancestors. It is the method-level twin of the declaration-versus-
+    # definition gap the function metrics closed, and it is a contradiction rather than a debt: the header promises a
+    # page, and `-respondsToSelector:` would answer NO for it.
+    #
+    # **EACH DECLARATION IS COUNTED ONCE, AT THE CLASS THAT MAKES IT**, then tested against that class's IMPLEMENTED
+    # chain. Counting it on every descendant instead would multiply one missing `NSResponder` body by every subclass
+    # under it — the earlier one-off measurement of this did exactly that and read 1,138 across 103 classes, most of it
+    # the same twenty selectors repeated. A declaration lives where it is written.
+    methods_declared = 0
+    methods_phantom = 0
+    for name in classes:
+        own = classes[name]['selectors']
+        if not own:
+            continue
+        implemented = closure(impl_tree, name)
+        phantom = own - implemented
+        methods_declared += len(own)
+        methods_phantom += len(phantom)
+        if phantom:
+            metrics['selphantom:' + name] = len(phantom)
+    metrics['methods-declared'] = methods_declared
+    metrics['methods-declared-not-implemented'] = methods_phantom
+
+    for proto in sdk_protocols:
+        metrics['proto:' + proto] = 1 if proto in protocols else 0
+    for function in required:
+        metrics['fn:' + function] = 1 if function in (defined or set()) else 0
+        metrics['fndecl:' + function] = 1 if function in declared else 0
+
+    return metrics, (sdk_classes, sdk_protocols, sdk_selectors, sdk_functions, classes, protocols,
+                     declared, defined, impl_tree, present_classes)
+
+# ------------------------------------------------------------------------------------------------------------------
+# Commands
+# ------------------------------------------------------------------------------------------------------------------
+
+def parse_census(path):
+    expected = {}
+    for number, line in enumerate(open(path, errors='ignore'), 1):
+        line = line.strip()
+        if not line or line.startswith('#'):
+            continue
+        m = re.match(r'^(\S+)\s+(\d+)$', line)
+        if not m:
+            raise SystemExit('api-ledger: %s:%d is not `name count`: `%s`' % (path, number, line))
+        if m.group(1) in expected:
+            raise SystemExit('api-ledger: %s names `%s` twice' % (path, m.group(1)))
+        expected[m.group(1)] = int(m.group(2))
+    return expected
+
+
+def command_manifest(argv):
+    if not argv:
+        raise SystemExit('api-ledger manifest <framework-dir> [<other-framework-dir> ...]')
+    for directory in argv:
+        if not os.path.isdir(directory):
+            raise SystemExit('api-ledger: not a directory: %s' % directory)
+    sys.stdout.write('\n'.join(emit_manifest(argv)) + '\n')
+    return 0
+
+
+def command_census(argv):
+    argv, library = split_library(argv)
+    if len(argv) != 2:
+        raise SystemExit('api-ledger census <manifest> <source-dir> [--library <path>]')
+    metrics, _ = computed(argv[1], argv[0], library)
+    for name in sorted(metrics):
+        sys.stdout.write('%s %d\n' % (name, metrics[name]))
+    return 0
+
+
+def command_check(argv):
+    argv, library = split_library(argv)
+    if len(argv) != 3:
+        raise SystemExit('api-ledger check <manifest> <source-dir> <census-file> [--library <path>]')
+    expected = parse_census(argv[2])
+    got, _ = computed(argv[1], argv[0], library)
+
+    problems = []
+    for name in sorted(set(expected) | set(got)):
+        if name not in got:
+            problems.append('  %-34s the census names it; the tree does not measure it any more' % name)
+        elif name not in expected:
+            problems.append('  %-34s measured %d; the census does not name it' % (name, got[name]))
+        elif expected[name] != got[name]:
+            problems.append('  %-34s census %d, measured %d' % (name, expected[name], got[name]))
+
+    if problems:
+        sys.stderr.write('api-ledger: the API census has drifted, in %d place(s).\n' % len(problems))
+        sys.stderr.write('\n'.join(problems) + '\n')
+        sys.stderr.write(
+            '\nThis census is a CLAIM about how much of the 10.6 AppKit this tree answers, so changing the\n'
+            'number is a deliberate act, not a side effect: if the movement is intended, edit\n'
+            'tests/api-10.6-census.txt in the same commit and say why in the message.\n')
+        return 1
+    sys.stdout.write('api-ledger: %d metrics hold (%d classes, %d selectors of %d, %d protocols, %d functions).\n'
+                     % (len(got), got['classes-present'], got['selectors-present'], got['selectors-offered'],
+                        got['protocols-present'], got['functions-present']))
+    return 0
+
+
+def command_missing(argv):
+    argv, library = split_library(argv)
+    if len(argv) != 2:
+        raise SystemExit('api-ledger missing <manifest> <source-dir> [--library <path>]')
+    metrics, (sdk_classes, sdk_protocols, sdk_selectors, sdk_functions,
+              classes, protocols, declared, defined, impl_tree, present) = computed(argv[1], argv[0], library)
+    functions = declared or {}
+
+    def wrap(items, per=3, width=44):
+        items = sorted(items)
+        return '\n'.join('  ' + '  '.join('%-*s' % (width, x) for x in items[i:i + per])
+                         for i in range(0, len(items), per))
+
+    absent_classes = [n for n in sdk_classes if n not in classes]
+    absent_protocols = [p for p in sdk_protocols if p not in protocols]
+    reachable = defined if defined is not None else set()
+    # **THE SAME INLINE EXEMPTION THE CENSUS APPLIES**, or this report and the pinned numbers disagree about a door
+    # that is a bodied inline function in a header (`NSEventMaskFromType`) and therefore never a symbol.
+    required = [f for f in sdk_functions if not functions.get(f, {}).get('inline')]
+    absent_functions = [f for f in required if f not in reachable]
+    phantom = [f for f in required if f in functions and f not in reachable]
+    print('classes   %3d of %3d   missing %d' % (metrics['classes-present'], metrics['classes-offered'],
+                                                 metrics['classes-missing']))
+    print('selectors %3d of %3d   missing %d' % (metrics['selectors-present'], metrics['selectors-offered'],
+                                                 metrics['selectors-missing']))
+    print('protocols %3d of %3d   missing %d' % (metrics['protocols-present'], metrics['protocols-offered'],
+                                                 metrics['protocols-missing']))
+    print('functions %3d of %3d   missing %d' % (metrics['functions-present'], metrics['functions-offered'],
+                                                 metrics['functions-missing']))
+    print('\nMISSING CLASSES (%d)\n%s' % (len(absent_classes), wrap(absent_classes)))
+    print('\nMISSING PROTOCOLS (%d)\n%s' % (len(absent_protocols), wrap(absent_protocols)))
+    print('\nMISSING FUNCTIONS (%d)\n%s' % (len(absent_functions), wrap(absent_functions)))
+    if phantom and defined is not None:
+        print('\nDECLARED BUT NOT DEFINED (%d) — every one of these is a link error waiting for a caller\n%s'
+              % (len(phantom), wrap(phantom)))
+
+    debts = []
+    for name in present:
+        offered = sdk_selectors.get(name, set())
+        if not offered:
+            continue
+        have = closure(classes, name) | closure(impl_tree, name)
+        if offered - have:
+            debts.append((len(offered - have), name, len(offered), len(offered & have)))
+    debts.sort(reverse=True)
+    print('\nLARGEST SELECTOR DEBTS\n')
+    for missing, name, total, have in debts[:20]:
+        print('  %-24s %3d of %3d missing (%3d present)' % (name, missing, total, have))
+    return 0
+
+
+def split_library(argv):
+    """`--library <path>` anywhere on a command line; the rest keeps its positional order."""
+    library = None
+    rest = []
+    i = 0
+    while i < len(argv):
+        if argv[i] == '--library':
+            if i + 1 >= len(argv):
+                raise SystemExit('api-ledger: --library needs a path')
+            library = argv[i + 1]
+            i += 2
+        elif argv[i].startswith('--library='):
+            library = argv[i].split('=', 1)[1]
+            i += 1
+        else:
+            rest.append(argv[i])
+            i += 1
+    return rest, library
+
+
+COMMANDS = {'manifest': command_manifest, 'census': command_census,
+            'check': command_check, 'missing': command_missing}
+
+
+def main(argv):
+    if len(argv) < 2 or argv[1] in ('-h', '--help'):
+        sys.stderr.write(__doc__ or 'usage: api-ledger <manifest|census|check|missing> ...\n')
+        return 2
+    handler = COMMANDS.get(argv[1])
+    if handler is None:
+        sys.stderr.write('api-ledger: unknown command `%s` (try manifest, census, check, missing)\n' % argv[1])
+        return 2
+    return handler(argv[2:])
+
+
+if __name__ == '__main__':
+    try:
+        sys.exit(main(sys.argv))
+    except BrokenPipeError:
+        # `api-ledger missing` is long enough to be paged through, so `| head` is the expected use and not an error:
+        # point the descriptor at /dev/null so the interpreter's own final flush does not raise again on exit.
+        os.dup2(os.open(os.devnull, os.O_WRONLY), sys.stdout.fileno())
+        sys.exit(0)

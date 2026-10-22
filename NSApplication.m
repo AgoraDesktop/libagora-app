@@ -1967,3 +1967,115 @@ struct AGModalSession {
  * refuses an incomplete implementation (a method declared in the class and defined in a category is exactly that)
  * and warns about a category that re-implements its primary class. The slice still reads as one thing: the doors
  * sit beside the modal sessions they are built on. */
+
+
+/* ==================================================================================================================
+ * THE ENTRY POINT AND THE SERVICES DOORS.
+ *
+ * **`NSApplicationMain` IS DELIBERATELY THE SMALLEST THING THAT IS HONEST.** Apple's also reads `NSMainNibFile` from the
+ * main bundle and loads it before launching; this tier's applications load their own interface (the Workspace builds
+ * its menu and windows in code), so the function launches and runs and says here that it does not read that key —
+ * rather than shipping a lookup for a plist convention nothing in this tree uses.
+ *
+ * THE SERVICES DOORS WRITE AND READ THE STATE `-servicesProvider` AND `-servicesMenu` ALREADY HOLD. A second registry
+ * inside AppKit would be the second source of truth the plan forbids, so `NSRegisterServicesProvider` is the C form of
+ * the setter that already exists.
+ */
+
+#import <AppKit/NSMenu.h>
+#import <AppKit/NSMenuItem.h>
+
+int NSApplicationMain(int argc, const char *argv[])
+{
+	NSApplication *application = [NSApplication sharedApplication];
+
+	(void)argc;
+	(void)argv;
+	[application finishLaunching];
+	[application run];
+	return 0;
+}
+
+void NSRegisterServicesProvider(id provider, NSString *name)
+{
+	/* THE NAME IS THE ERA'S PROVIDER IDENTITY and there is no registry of them here, so the APPLICATION's single
+	 * provider slot is what a registration fills. */
+	(void)name;
+	[[NSApplication sharedApplication] setServicesProvider:provider];
+}
+
+void NSUnregisterServicesProvider(NSString *name)
+{
+	(void)name;
+	[[NSApplication sharedApplication] setServicesProvider:nil];
+}
+
+/* THE ERA'S "SHOULD THIS SERVICE APPEAR IN THE MENU" BIT, held as the set of names that are HIDDEN so the default for
+ * an unmentioned service stays visible — which is the direction the era's callers depended on. */
+static NSMutableSet *fn_hiddenServiceItems(void)
+{
+	static NSMutableSet *hidden = nil;
+
+	if (hidden == nil) {
+		hidden = [[NSMutableSet alloc] init];
+	}
+	return hidden;
+}
+
+NSInteger NSSetShowsServicesMenuItem(NSString *itemName, BOOL enabled)
+{
+	if (itemName == nil) {
+		return 0;
+	}
+	if (enabled) {
+		[fn_hiddenServiceItems() removeObject:itemName];
+	} else {
+		[fn_hiddenServiceItems() addObject:itemName];
+	}
+	return 1;
+}
+
+BOOL NSShowsServicesMenuItem(NSString *itemName)
+{
+	if (itemName == nil) {
+		return NO;
+	}
+	return [fn_hiddenServiceItems() containsObject:itemName] ? NO : YES;
+}
+
+/* **A SERVICE IS FOUND BY ITS MENU TITLE, WHICH IS WHAT THE ERA'S `itemName` WAS.** The search is over the application's
+ * services menu, top level only: a submenu is a group heading rather than a service, and descending into one would run
+ * something the caller did not name. Not finding it is `NO` — the documented answer for "this service is not offered",
+ * and the reason the return value exists at all.
+ */
+BOOL NSPerformService(NSString *itemName, NSPasteboard *pboard)
+{
+	NSApplication *application = [NSApplication sharedApplication];
+	NSMenu *services = (NSMenu *)[application servicesMenu];
+	NSInteger i, count;
+
+	if (itemName == nil || services == nil) {
+		return NO;
+	}
+	count = [services numberOfItems];
+	for (i = 0; i < count; i++) {
+		NSMenuItem *item = [services itemAtIndex:i];
+
+		if (item == nil || ![itemName isEqualToString:[item title]]) {
+			continue;
+		}
+		if ([item action] == NULL) {
+			continue;
+		}
+		(void)pboard;	/* the pasteboard is the selection the application already published */
+		return [application sendAction:[item action] to:[item target] from:item] ? YES : NO;
+	}
+	return NO;
+}
+
+void NSUpdateDynamicServices(void)
+{
+	/* **THERE IS NO DYNAMIC PROVIDER REGISTRY TO REFRESH.** Apple's collects services advertised by other applications;
+	 * this tier's services come from the application's own menu, which needs no re-scan. A no-op with a reason is the
+	 * honest shape; a refusal would be louder and less true, because nothing is missing — there is nothing to do. */
+}

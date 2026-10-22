@@ -178,6 +178,14 @@
 }
 - (id)item { return _item; }
 - (NSRect)draggingFrame { return _draggingFrame; }
+/* **THE SETTER THE `@property` DECLARES, WHICH HAD NO BODY.** `-setDraggingFrame:contents:` was implemented and
+ * this one was not, so a caller setting only the frame got an unrecognized selector. It sets the frame and leaves
+ * the contents alone, which is what the two-argument door does when its contents are nil — except that it does not
+ * CLEAR them, because a caller asking to move an item did not ask to drop its picture. */
+- (void)setDraggingFrame:(NSRect)frame
+{
+	_draggingFrame = frame;
+}
 - (NSArray *)imageComponents
 {
 	/* **NIL, BECAUSE THERE IS NO `NSDraggingImageComponent` IN THIS TREE.** Apple's answer is an array of components

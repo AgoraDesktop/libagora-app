@@ -22,6 +22,8 @@
 
 #import <Foundation/NSObject.h>
 #import <Foundation/NSGeometry.h>
+/* THE COMPOSITING VOCABULARY LIVES IN `NSGraphicsContext.h` IN THIS TIER, so the declarations below can name it. */
+#import <AppKit/NSGraphicsContext.h>
 
 NS_ASSUME_NONNULL_BEGIN
 
@@ -83,6 +85,90 @@ const NSWindowDepth *NSAvailableWindowDepths(void);
 NSWindowDepth NSBestDepth(NSString * _Nullable colorSpace, NSInteger bps, NSInteger bpp, BOOL isPlanar,
 			  BOOL * _Nullable exactMatch);
 
+/* AND THE TWO VOCABULARIES THE DRAWING FUNCTIONS TAKE, WHICH ARE APPLE'S OWN AND LIVE HERE FOR APPLE'S REASON: this
+ * is the header that declares the doors that read them. `NSFocusRingPlacement` is a DIFFERENT TYPE from the
+ * `NSFocusRingType` above — one says where a ring goes, the other says whether a view has one — and conflating them
+ * would make `NSSetFocusRingStyle` accept a value it does not mean. */
+enum {
+	NSFocusRingOnly  = 0,
+	NSFocusRingBelow = 1,
+	NSFocusRingAbove = 2
+};
+typedef NSUInteger NSFocusRingPlacement;
+
+/* The era's animation effects, of which this tier has a renderer for none — see `NSShowAnimationEffect`. The values are
+ * the artefact's, including the gap: only the disappearing-item default and the puff were ever defined. */
+enum {
+	NSAnimationEffectDisappearingItemDefault = 0,
+	NSAnimationEffectPoof = 10
+};
+typedef NSUInteger NSAnimationEffect;
+
+@class NSColor;
+
+/* ==================================================================================================================
+ * THE DRAWING FUNCTIONS — the 10.6 `NSGraphics.h` surface.
+ *
+ * **THIRTY OF THE THIRTY-SIX ARE REAL AND SIX REFUSE BY NAME**, and the split is stated here rather than discovered at
+ * a link error: the fills, frames, clips, bezels and window list are implemented over the same context and ink the
+ * rest of the tier draws with, while a beep, a screen read-back, memory accounting, a focus-ring renderer and the
+ * window server's animation effects have no backing in this tier at all. See `NSGraphics.m` for each refusal and why.
+ *
+ * **THE LIST VARIANTS ARE HERE BECAUSE THEY ARE THE FAST PATH THE ERA'S CALLERS USED**, not because they are extra
+ * surface: a table drawing its selection used `NSRectFillListWithColors`, and a caller ported from the era calls it.
+ * ================================================================================================================ */
+
+void NSRectFill(NSRect aRect);
+void NSRectFillUsingOperation(NSRect aRect, NSCompositingOperation op);
+void NSRectFillList(const NSRect *rects, NSInteger count);
+void NSRectFillListUsingOperation(const NSRect *rects, NSInteger count, NSCompositingOperation op);
+void NSRectFillListWithGrays(const NSRect *rects, const CGFloat *grays, NSInteger num);
+void NSRectFillListWithColors(const NSRect *rects, NSColor **colors, NSInteger num);
+void NSRectFillListWithColorsUsingOperation(const NSRect *rects, NSColor **colors, NSInteger num,
+					    NSCompositingOperation op);
+void NSHighlightRect(NSRect aRect);
+void NSEraseRect(NSRect aRect);
+
+void NSFrameRect(NSRect aRect);
+void NSFrameRectWithWidth(NSRect aRect, CGFloat frameWidth);
+void NSFrameRectWithWidthUsingOperation(NSRect aRect, CGFloat frameWidth, NSCompositingOperation op);
+void NSDottedFrameRect(NSRect aRect);
+
+void NSRectClip(NSRect aRect);
+void NSRectClipList(const NSRect *rects, NSInteger count);
+
+void NSDrawButton(NSRect aRect, NSRect clipRect);
+void NSDrawWhiteBezel(NSRect aRect, NSRect clipRect);
+void NSDrawGrayBezel(NSRect aRect, NSRect clipRect);
+void NSDrawLightBezel(NSRect aRect, NSRect clipRect);
+void NSDrawDarkBezel(NSRect aRect, NSRect clipRect);
+void NSDrawGroove(NSRect aRect, NSRect clipRect);
+void NSDrawWindowBackground(NSRect aRect);
+NSRect NSDrawTiledRects(NSRect boundsRect, NSRect clipRect, const NSRectEdge *sides, const CGFloat *grays,
+			NSInteger count);
+NSRect NSDrawColorTiledRects(NSRect boundsRect, NSRect clipRect, const NSRectEdge *sides, NSColor **colors,
+			     NSInteger count);
+
+void NSDisableScreenUpdates(void);
+void NSEnableScreenUpdates(void);
+
+void NSCountWindows(NSInteger *count);
+void NSCountWindowsForContext(NSInteger context, NSInteger *count);
+void NSWindowList(NSInteger size, NSInteger list[]);
+void NSWindowListForContext(NSInteger context, NSInteger size, NSInteger list[]);
+
+/* THE SIX WITH NO BACKING. Each answers its type's empty value and names what is missing, so a ported caller gets a
+ * named refusal instead of a link error or a silent nothing. */
+void NSBeep(void);
+void NSCopyBits(NSInteger srcGState, NSRect srcRect, NSPoint destPoint);
+NSColor *NSReadPixel(NSPoint passedPoint);
+NSInteger NSGetWindowServerMemory(NSInteger context, NSInteger *virtualMemory, NSInteger *windowBackingMemory,
+				  NSString **windowDumpString);
+void NSSetFocusRingStyle(NSFocusRingPlacement placement);
+void NSShowAnimationEffect(NSAnimationEffect animationEffect, NSPoint centerLocation, NSSize size,
+			   id animationDelegate, SEL didEndSelector, void *contextInfo);
+
 NS_ASSUME_NONNULL_END
+
 
 #endif /* APPKIT_NSGRAPHICS_H */

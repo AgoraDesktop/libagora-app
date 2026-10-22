@@ -114,6 +114,31 @@ extern NSFontTextStyle NSFontTextStyleTitle3;
  * too, because they come from the engine and the engine can have nothing to say. */
 NS_ASSUME_NONNULL_BEGIN
 
+/* ==================================================================================================================
+ * THE LEGACY GLYPH VOCABULARY, WHICH THIS TIER DECLARES FOR THE ONE FUNCTION THAT TAKES IT.
+ *
+ * **`NSGlyph` IS NOT THE GLYPH TYPE THIS TIER DRAWS WITH.** Text here is laid out with Core Text's `CGGlyph`; the
+ * era's `NSGlyph` is a 16-bit index into a font's own encoding, and `NSConvertGlyphsToPackedGlyphs` is the door that
+ * turns a run of them into the byte form a byte-oriented consumer reads. Declaring the types is what makes that
+ * function callable at all; they are not aliased onto `CGGlyph` because they are not the same thing, and pretending
+ * otherwise would make a ported caller's buffer the wrong width.
+ * ================================================================================================================ */
+typedef unsigned short NSGlyph;
+
+/* THE PACKINGS. The first, third and fourth are the integer-width cases this tier can write byte for byte; the two
+ * EUC packings are variable-length encodings and are refused by the function rather than approximated. */
+typedef enum {
+	NSOneByteGlyphPacking = 0,
+	NSJapaneseEUCGlyphPacking = 1,
+	NSAsciiWithDoubleByteEUCGlyphPacking = 2,
+	NSTwoByteGlyphPacking = 3,
+	NSFourByteGlyphPacking = 4
+} NSMultibyteGlyphPacking;
+
+/* Answers the number of bytes written, or the number the buffer would need when `packedGlyphs` is nil. */
+NSInteger NSConvertGlyphsToPackedGlyphs(NSGlyph *glBuf, NSInteger count, NSMultibyteGlyphPacking packing,
+					char *packedGlyphs);
+
 @interface NSFont : NSObject <NSSecureCoding>
 {
 	@public

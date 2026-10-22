@@ -730,6 +730,40 @@ add_test(NAME appkit-owed-census
             "-DNEEDLE=(^|[^A-Za-z_])OWED"
             -P "${CMAKE_CURRENT_SOURCE_DIR}/claims_census.cmake")
 
+# **AND THE MEASUREMENT THOSE TWO CLAIMS ARE ABOUT.** The censuses above count what this tree SAYS it cannot do; this
+# one counts what a caller would actually GET from it, against the committed facts of the Mac OS X 10.6 AppKit
+# (`api/10.6/appkit-manifest.txt` — names and relationships only, because Apple's SDK is not redistributable). The
+# parser is `tools/api-ledger`, because deciding whether a selector is answered needs a superclass chain rather than a
+# regex; the gate is `api_census.cmake`, which does the same two-directional comparison as the other two.
+#
+# **AND THE BUILT LIBRARY IS PART OF THE INPUT, BECAUSE A DECLARATION IS NOT A DOOR.** `-DLIBRARY=$<TARGET_FILE:App>`
+# lets `nm -D --defined-only` answer which functions a caller can actually link against; the gate fails outright if the
+# headers and the symbols disagree in either direction, rather than moving a number.
+#
+# A PYTHON INTERPRETER IS A NEW REQUIREMENT, AND IT IS HERE RATHER THAN IN THE BUILD. Every other test in this suite is
+# a compiled executable, so the tree needs no interpreter to BUILD; only this gate needs one to RUN. It is therefore
+# registered unconditionally and fails loudly at run time if the interpreter is missing, instead of disappearing from
+# the suite — a gate that quietly unregisters itself is the drift these censuses exist to stop.
+find_package(Python3 COMPONENTS Interpreter QUIET)
+if(Python3_Interpreter_FOUND)
+  set(_agora_api_python "${Python3_EXECUTABLE}")
+else()
+  message(STATUS
+    "appkit-api-census: no Python 3 found. The test is still registered and will FAIL at run time — install "
+    "python3, or the 10.6 API census goes unmeasured.")
+  set(_agora_api_python python3)
+endif()
+
+add_test(NAME appkit-api-census
+    COMMAND "${CMAKE_COMMAND}"
+            "-DPYTHON=${_agora_api_python}"
+            "-DLEDGER=${CMAKE_CURRENT_SOURCE_DIR}/../tools/api-ledger"
+            "-DMANIFEST=${CMAKE_CURRENT_SOURCE_DIR}/../api/10.6/appkit-manifest.txt"
+            "-DLIBRARY=$<TARGET_FILE:App>"
+            "-DSOURCE_DIR=${CMAKE_CURRENT_SOURCE_DIR}/.."
+            "-DCENSUS=${CMAKE_CURRENT_SOURCE_DIR}/api-10.6-census.txt"
+            -P "${CMAKE_CURRENT_SOURCE_DIR}/api_census.cmake")
+
 # NSTextList: the marker arithmetic, and the paragraph style that carries lists.
 add_executable(text_list text_list.m)
 target_link_libraries(text_list PRIVATE App)
@@ -939,3 +973,31 @@ add_test(NAME appkit-dock-menu-wire
 	  "$<TARGET_FILE:dock_menu>" "${AGORA_WINDOW_SERVER_BINARY}")
 set_tests_properties(appkit-dock-menu-wire PROPERTIES SKIP_RETURN_CODE 77
   ENVIRONMENT "${_agora_app_test_env}")
+
+# **THE 10.6 `NSGraphics.h` DOORS, PINNED BY PIXELS.** The API census can only see that these functions EXIST; this test
+# is what separates existing from drawing. Each door is checked for the failure that would go wrong quietly — a fill
+# that leaks outside its rectangle, a frame that straddles its edge, a clip that replaces instead of intersecting —
+# because those are the errors a screenshot does not show and a scroll view does.
+add_executable(graphics_functions graphics_functions.m)
+target_link_libraries(graphics_functions PRIVATE App)
+
+add_test(NAME appkit-graphics-functions COMMAND graphics_functions)
+set_tests_properties(appkit-graphics-functions PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
+
+# **THE SECOND FUNCTION SLICE, PINNED.** The alert panels, the accessibility utilities, the services doors and the
+# file-type phrases — see the file's header for why the modal half is checked through its panel rather than by running
+# it, and why NSApplicationMain is checked for linkage rather than called.
+add_executable(functions_target2 functions_target2.m)
+target_link_libraries(functions_target2 PRIVATE App)
+
+add_test(NAME appkit-functions-target2 COMMAND functions_target2)
+set_tests_properties(appkit-functions-target2 PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
+
+# **THE PHANTOM FIXES AND THE LAST SIX FUNCTION DOORS.** The three phantoms were FOUND by `methods-declared-not-
+# implemented`, so they are pinned by the behaviour a caller would have crashed without; the image composers are checked
+# by COVERAGE rather than by slice colour, because the claim a nine-slice makes is geometric.
+add_executable(functions_target3 functions_target3.m)
+target_link_libraries(functions_target3 PRIVATE App)
+
+add_test(NAME appkit-functions-target3 COMMAND functions_target3)
+set_tests_properties(appkit-functions-target3 PROPERTIES ENVIRONMENT "${_agora_app_test_env}")

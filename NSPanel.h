@@ -66,4 +66,52 @@ NS_ASSUME_NONNULL_BEGIN
 
 NS_ASSUME_NONNULL_END
 
+
+/* ==================================================================================================================
+ * THE ERA'S ALERT PANEL FUNCTIONS — thirteen doors, all of them `NSAlert` wearing the old signatures.
+ *
+ * **THEY ARE HERE BECAUSE `NSAlert.h` SAYS THE CLASS IS THE MODERN FORM OF THE SAME THING**, and an application written
+ * against the 10.6 headers calls `NSRunAlertPanel`, not `NSAlert`. The destination is a real page, not a link error.
+ *
+ * **THE GET FAMILY RETURNS THE ALERT RATHER THAN ITS WINDOW, WHICH IS A STATED DEVIATION.** Apple hands back the
+ * `NSPanel`; here the object that OWNS the panel is the alert, and `NSReleaseAlertPanel` has to release the thing the
+ * caller was handed or the panel leaks. So the pair is consistent with itself — `+1` out of `NSGet…`, release in
+ * `NSReleaseAlertPanel` — and the deviation is one a caller cannot observe through the documented use.
+ *
+ * THE `…RelativeToWindow` VARIANTS TAKE THE DOCUMENT WINDOW AND IGNORE IT for a MODAL run, which is what Apple
+ * documents: the window is the sheet's parent only when the sheet form is used.
+ * ================================================================================================================ */
+
+id NSGetAlertPanel(NSString *title, NSString *msgFormat, NSString *defaultButton, NSString *alternateButton,
+		   NSString *otherButton, ...);
+id NSGetCriticalAlertPanel(NSString *title, NSString *msgFormat, NSString *defaultButton, NSString *alternateButton,
+			   NSString *otherButton, ...);
+id NSGetInformationalAlertPanel(NSString *title, NSString *msgFormat, NSString *defaultButton,
+				NSString *alternateButton, NSString *otherButton, ...);
+void NSReleaseAlertPanel(id panel);
+
+NSInteger NSRunAlertPanel(NSString *title, NSString *msgFormat, NSString *defaultButton, NSString *alternateButton,
+			  NSString *otherButton, ...);
+NSInteger NSRunAlertPanelRelativeToWindow(NSString *title, NSString *msgFormat, NSString *defaultButton,
+					  NSString *alternateButton, NSString *otherButton, NSWindow *docWindow, ...);
+NSInteger NSRunCriticalAlertPanel(NSString *title, NSString *msgFormat, NSString *defaultButton,
+				  NSString *alternateButton, NSString *otherButton, ...);
+NSInteger NSRunCriticalAlertPanelRelativeToWindow(NSString *title, NSString *msgFormat, NSString *defaultButton,
+						  NSString *alternateButton, NSString *otherButton, NSWindow *docWindow, ...);
+NSInteger NSRunInformationalAlertPanel(NSString *title, NSString *msgFormat, NSString *defaultButton,
+				       NSString *alternateButton, NSString *otherButton, ...);
+NSInteger NSRunInformationalAlertPanelRelativeToWindow(NSString *title, NSString *msgFormat,
+						       NSString *defaultButton, NSString *alternateButton,
+						       NSString *otherButton, NSWindow *docWindow, ...);
+
+void NSBeginAlertSheet(NSString *title, NSString *defaultButton, NSString *alternateButton, NSString *otherButton,
+		       NSWindow *docWindow, id modalDelegate, SEL didEndSelector, SEL didDismissSelector,
+		       void *contextInfo, NSString *msgFormat, ...);
+void NSBeginCriticalAlertSheet(NSString *title, NSString *defaultButton, NSString *alternateButton,
+			       NSString *otherButton, NSWindow *docWindow, id modalDelegate, SEL didEndSelector,
+			       SEL didDismissSelector, void *contextInfo, NSString *msgFormat, ...);
+void NSBeginInformationalAlertSheet(NSString *title, NSString *defaultButton, NSString *alternateButton,
+				    NSString *otherButton, NSWindow *docWindow, id modalDelegate, SEL didEndSelector,
+				    SEL didDismissSelector, void *contextInfo, NSString *msgFormat, ...);
+
 #endif /* APPKIT_NSPANEL_H */

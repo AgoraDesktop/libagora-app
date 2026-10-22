@@ -213,12 +213,19 @@ int main(void)
 		int x, y;
 		int lightInk = 0;
 		int darkInk = 0;
+		int platePixels = 0;
+		int eraBluePixels = 0;
 
 		[control cacheDisplayInRect:NSMakeRect(0.0, 0.0, (CGFloat)w, (CGFloat)h) toBitmapImageRep:rep];
 		check(same_colour([rep colorAtX:25 y:12], [NSColor controlColor], 0.04),
 		      "an unselected segment is the control face");
-		check(same_colour([rep colorAtX:75 y:12], [NSColor cg_accentColor], 0.04),
-		      "the selected segment's plate is the platform's ACCENT, not the era's other blue");
+		/* **AND THE PLATE IS MEASURED OVER THE SEGMENT RATHER THAN SAMPLED AT ITS CENTRE, WHICH IS WHERE THE LABEL
+		 * IS.** This assertion used to read the single pixel at (75, 12) — the middle of the selected segment — and
+		 * that pixel lies INSIDE the `B` glyph, on its crossbar, so the test was asking the LABEL whether the PLATE
+		 * was the accent and could only pass for as long as the label happened to miss it. It stopped missing it: the
+		 * reading was dark ink on a correct plate, and the failure named the accent while the accent was never in
+		 * question. MEASURED: the crossbar sits on y = 12 and covers x = 73..77, and of the 768 pixels in the
+		 * segment's interior 693 are the accent and 32 are ink. Counting asks what the prose asks. */
 		check(same_colour([rep colorAtX:50 y:12], [NSColor controlDarkShadowColor], 0.08)
 		      || same_colour([rep colorAtX:49 y:12], [NSColor controlDarkShadowColor], 0.08),
 		      "the separator between segments is the border grey");
@@ -235,9 +242,21 @@ int main(void)
 				    && [pixel blueComponent] > 0.90) {
 					lightInk++;
 				}
+				if (same_colour(pixel, [NSColor cg_accentColor], 0.04)) {
+					platePixels++;
+				}
+				/* **AND THE ERA'S BLUE IS COUNTED SO ITS ABSENCE IS A MEASUREMENT RATHER THAN AN IMPLICATION.**
+				 * The claim in the assertion's name is "not the era's other blue", and a count of ZERO says that
+				 * directly instead of leaving it to be inferred from the accent being present. */
+				if (same_colour(pixel, [NSColor selectedControlColor], 0.04)) {
+					eraBluePixels++;
+				}
 			}
 		}
 		check(darkInk > 0, "the ordinary segment draws its label in dark ink");
+		check(platePixels > (48 * 16) / 2,
+		      "the selected segment's plate is the platform's ACCENT, not the era's other blue");
+		check(eraBluePixels == 0, "and none of the plate is the era's +selectedControlColor");
 		/* **AND SO DOES THE SELECTED ONE, WHICH IS THE CHANGE THE ACCENT BROUGHT.** The plate used to be the era's
 		 * blue with white ink on it; the platform's accent is a LIGHT periwinkle, and white on that is a wash. A
 		 * selected segment is a chip that stays selected rather than a button caught mid-press, so it takes the
