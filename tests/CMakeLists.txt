@@ -999,6 +999,16 @@ set_tests_properties(appkit-workspace-services PROPERTIES ENVIRONMENT "${_agora_
 # "open with" family (no launch specification in the seam).
 add_executable(workspace_launch workspace_launch.m)
 target_link_libraries(workspace_launch PRIVATE App AgoraLaunchServices::LaunchServices)
+# **THE FILE-OPERATION VERBS, MEASURED ON DISK.** Every operation is checked by what exists afterwards — a file that moved, a
+# copy beside its original, a link that resolves, an item in the trash directory — because "the door answered YES" is not the
+# claim. The two modern doors' HANDLERS are checked too (called once, with the failures), and the thirteen refusals answer
+# their types' empty values.
+add_executable(workspace_fileops workspace_fileops.m)
+target_link_libraries(workspace_fileops PRIVATE App)
+
+add_test(NAME appkit-workspace-fileops COMMAND workspace_fileops)
+set_tests_properties(appkit-workspace-fileops PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
+
 add_test(NAME appkit-workspace-launch COMMAND workspace_launch)
 set_tests_properties(appkit-workspace-launch PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
 

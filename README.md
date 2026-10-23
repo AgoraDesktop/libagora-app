@@ -2594,6 +2594,39 @@ would pass whatever the face said: a longer string is wider, glyph 0 is the notd
 line height is its three metrics, the packing is an integer width, the variants are the receiver, the parser reads
 "Name Size", and all seven refusals answer their types' empty values.
 
+### `NSWorkspace`'s file operations: the verbs, the trash rule, and what needs DiskArbitration
+
+**THE FILE-OPERATION VERBS ARE FILESYSTEM WORK, SO THEY ARE REAL.** `-performFileOperation:source:destination:files:tag:`
+moves, copies, links, destroys and recycles (compress, decompress, encrypt and decrypt refuse — they need a tool);
+`-recycleURLs:completionHandler:` and `-duplicateURLs:completionHandler:` take URLs, call the handler **once** with the
+failures, and answer the new URLs; `-openTempFile` answers a file that exists. `NSWorkspace` is at 57 of 58 selectors now —
+one door from complete (`-openFile:fromImage:at:inView:`, which is the plain open with the animation ignored).
+
+**THE TRASH RULE IS THE WORKSPACE'S, IMPLEMENTED HERE.** Apple's own rule, which the Workspace's `WSTrash` documents: the
+home volume gets `~/.Trash`, another volume gets `.Trash-<uid>` at its root — and **MEASURED, a rename cannot cross a
+device** (`EXDEV`), which is what the per-volume rule is for. When even that is refused, the item is copied and then
+removed, so the door's promise holds either way. The Workspace additionally keeps the Put Back record; this class only
+moves the item, and the header says which.
+
+**AND TWO ENVIRONMENT FACTS THE SLICE PAID FOR.** This tree's `NSTemporaryDirectory()` answers `/System/Temporary Files/`,
+which need not exist — `-openTempFile` tries `$TMPDIR`, then the platform path, then `/tmp`. And `/proc/mounts` **reads as
+zero bytes through the string door** (it is a symlink to a file whose `stat` size is 0), so `-mountedLocalVolumePaths`
+reads it with stdio and filters only the kernel's synthetic filesystems — `overlay` and `squashfs` are KEPT, because a live
+system's root can be one.
+
+**THE REST REFUSES BY NAME**: the mount/media family (DiskArbitration), the Finder-service family (`-selectFile:…`,
+`-activateFileViewerSelectingURLs:`, `-showSearchResultsForQueryString:`, `-slideImage:from:to:` — a file manager to TELL
+across processes, which this tier has no transport for), `-setIcon:forFile:options:` (Icon Services only reads),
+`-findApplications` (the registry is seeded at start) and `-extendPowerOffBy:` (no power manager). What IS real: the
+**labels** (a fixed seven-colour set, which is data rather than a platform service), the **desktop picture doors** (stored
+per screen in the defaults domain — nothing here paints them, and the header says the Workspace's wallpaper is the
+painter), the **change notifications** (five doors, announcing through the one centre), and `-isFilePackageAtPath:`.
+
+`tests/workspace_fileops.m` asserts it in 39 checks, measured ON DISK: a copy beside its original, a move that empties
+its source, a destroy that removes the file, a recycle that lands in the per-volume trash and is gone from where it was,
+a duplicate under a name of its own, the handler called exactly once, a temporary file that is there, the volume list
+containing `/`, the label pair, four announcements — and the thirteen refusals.
+
 ### Still absent, and why
 
 **NINE THINGS THAT USED TO BE ON THIS LIST ARE NOT ANY MORE, AND THE LIST IS CORRECTED RATHER THAN QUIETLY SHRUNK:**

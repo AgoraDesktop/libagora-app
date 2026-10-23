@@ -22,7 +22,14 @@
 #import "NSRunningApplication.h"
 
 #import "AGWindowServer.h"
-#import "AppKitRefusal.h"	/* the shared refusal helper — the refused doors say what they need. */
+#import "AppKitRefusal.h"
+#import "NSColor.h"
+#import <Foundation/NSFileManager.h>
+#import <Foundation/NSUserDefaults.h>
+#import <Foundation/NSNotification.h>
+#include <unistd.h>
+#include <stdlib.h>
+#include <string.h>	/* the shared refusal helper — the refused doors say what they need. */
 
 #import <Foundation/NSBundle.h>
 #import <Foundation/NSDictionary.h>
@@ -814,6 +821,646 @@ static NSDictionary *fn_dictionaryForApplication(NSRunningApplication *applicati
 - (void)hideOtherApplications
 {
 	fn_refuse_workspace("NSWorkspace -hideOtherApplications:", "a hide verb in the window server (activation is per-surface)");
+}
+
+/* ============================================================================================ *
+ * THE FILE OPERATIONS, THE VOLUMES, THE LABELS AND THE CHANGE NOTIFICATIONS                     *
+ * ============================================================================================ */
+
+NSString *NSWorkspaceDidPerformFileOperationNotification = @"NSWorkspaceDidPerformFileOperationNotification";
+
+/* THE TRASH DIRECTORY, WHICH THE WORKSPACE'S `WSTrash` USES TOO: the home trash. The Workspace additionally keeps a Put
+ * Back record beside the item; this class only moves it, which is the difference stated in the header. */
+static NSString *fn_workspace_trash_directory(void)
+{
+	return [NSHomeDirectory() stringByAppendingPathComponent:@".Trash"];
+}
+
+/* **AND THE PER-VOLUME RULE, BECAUSE A RENAME CANNOT CROSS A DEVICE.** MEASURED: recycling from `/tmp` to a home trash on
+ * another filesystem failed with `EXDEV`, which is the same fact the Workspace's `WSTrash` documents ("the home volume gets
+ * `~/.Trash`; another volume gets `.Trash-<uid>` at its root"). So the item's device picks the trash, and when even that
+ * rename fails the item is COPIED and then removed — the same outcome by two syscalls. */
+static NSString *fn_trash_directory_for_path(NSString *path)
+{
+	NSString *home = fn_workspace_trash_directory();
+	struct stat item;
+	struct stat homeStat;
+
+	if (path == nil || stat([path fileSystemRepresentation], &item) != 0) {
+		return home;
+	}
+	if (stat([NSHomeDirectory() fileSystemRepresentation], &homeStat) == 0 && item.st_dev == homeStat.st_dev) {
+		return home;
+	}
+	{
+		/* WALK UP TO THE MOUNT POINT: the first ancestor whose device differs is the root of this one. */
+		NSString *directory = [path stringByDeletingLastPathComponent];
+
+		while ([directory length] > 1) {
+			NSString *parent = [directory stringByDeletingLastPathComponent];
+			struct stat directoryStat;
+			struct stat parentStat;
+
+			if (stat([directory fileSystemRepresentation], &directoryStat) != 0
+			    || stat([parent fileSystemRepresentation], &parentStat) != 0
+			    || directoryStat.st_dev != parentStat.st_dev) {
+				return [directory stringByAppendingPathComponent:
+					[NSString stringWithFormat:@".Trash-%d", (int)getuid()]];
+			}
+			directory = parent;
+		}
+		return [directory stringByAppendingPathComponent:
+			[NSString stringWithFormat:@".Trash-%d", (int)getuid()]];
+	}
+}
+
+/* A NAME THAT IS NOT TAKEN, by appending " copy", " copy 2", … — the rule the file managers here use. */
+static NSString *fn_unique_destination(NSString *directory, NSString *name, NSFileManager *manager, BOOL copies)
+{
+	NSString *candidate;
+	NSString *base = [name stringByDeletingPathExtension];
+	NSString *extension = [name pathExtension];
+	NSUInteger index = 1;
+
+	if (!copies) {
+		candidate = [directory stringByAppendingPathComponent:name];
+		while ([manager fileExistsAtPath:candidate]) {
+			candidate = [directory stringByAppendingPathComponent:
+				[NSString stringWithFormat:@"%@ %lu.%@", base, (unsigned long)++index, extension]];
+		}
+		return candidate;
+	}
+	candidate = [directory stringByAppendingPathComponent:name];
+	while ([manager fileExistsAtPath:candidate]) {
+		NSString *suffixed = [NSString stringWithFormat:@"%@ copy", base];
+
+		if (index > 1) {
+			suffixed = [NSString stringWithFormat:@"%@ copy %lu", base, (unsigned long)index];
+		}
+		if ([extension length] > 0) {
+			suffixed = [suffixed stringByAppendingPathExtension:extension];
+		}
+		candidate = [directory stringByAppendingPathComponent:suffixed];
+		index++;
+	}
+	return candidate;
+}
+
+- (NSString *)cg_trashDirectory
+{
+	NSFileManager *manager = [NSFileManager defaultManager];
+	NSString *trash = fn_workspace_trash_directory();
+
+	(void)manager;
+	return trash;
+}
+
+/* ONE FILE, ONE OPERATION — the primitive the array doors and the era's verb both go through. */
+- (BOOL)cg_performOperation:(NSWorkspaceFileOperation)operation
+		      onPath:(NSString *)path
+	       destination:(NSString *)destination
+		     result:(NSString **)outPath
+{
+	NSFileManager *manager = [NSFileManager defaultManager];
+	NSString *target = nil;
+
+	if (path == nil) {
+		return NO;
+	}
+	switch (operation) {
+	case NSWorkspaceMoveOperation:
+	case NSWorkspaceRecycleOperation:
+		{
+			NSString *trash = [self cg_trashDirectory];
+
+			if (operation == NSWorkspaceRecycleOperation) {
+				trash = fn_trash_directory_for_path(path);
+				target = fn_unique_destination(trash, [path lastPathComponent], manager, NO);
+				if (![manager fileExistsAtPath:trash]) {
+					(void)[manager createDirectoryAtPath:trash withIntermediateDirectories:YES
+								 attributes:nil error:NULL];
+				}
+			} else {
+				target = [destination stringByAppendingPathComponent:[path lastPathComponent]];
+			}
+		}
+		if (![manager moveItemAtPath:path toPath:target error:NULL]) {
+			/* **A MOVE THAT THE FILE SYSTEM REFUSES IS A COPY AND A REMOVAL** — the one fallback that keeps the door's
+			 * promise (the item ends up at the target and is gone from where it was) when a rename cannot cross a
+			 * device. */
+			if (![manager copyItemAtPath:path toPath:target error:NULL]
+			    || ![manager removeItemAtPath:path error:NULL]) {
+				return NO;
+			}
+		}
+		break;
+	case NSWorkspaceCopyOperation:
+	case NSWorkspaceDuplicateOperation:
+		target = (operation == NSWorkspaceDuplicateOperation)
+			? fn_unique_destination([path stringByDeletingLastPathComponent], [path lastPathComponent],
+						manager, YES)
+			: [destination stringByAppendingPathComponent:[path lastPathComponent]];
+		if (![manager copyItemAtPath:path toPath:target error:NULL]) {
+			return NO;
+		}
+		break;
+	case NSWorkspaceLinkOperation:
+		target = [destination stringByAppendingPathComponent:[path lastPathComponent]];
+		if (symlink([path fileSystemRepresentation], [target fileSystemRepresentation]) != 0) {
+			return NO;
+		}
+		break;
+	case NSWorkspaceDestroyOperation:
+		if (![manager removeItemAtPath:path error:NULL]) {
+			return NO;
+		}
+		target = path;
+		break;
+	default:
+		fn_refuse_workspace("NSWorkspace -performFileOperation:source:destination:files:tag:",
+				    "a compressor, an archiver or an encryptor - compress, decompress, encrypt and decrypt "
+				    "need a tool this tier has not got");
+		return NO;
+	}
+	if (outPath != NULL) {
+		*outPath = target;
+	}
+	return YES;
+}
+
+/* **THE ERA'S VERB.** `files` are names relative to `source` (or absolute paths); the tag is written for a completion
+ * target this tier has not got. The announcement is posted whatever the outcome, because that is what the era's door
+ * does — a caller that registered for it learns that an operation happened. */
+- (BOOL)performFileOperation:(NSWorkspaceFileOperation)operation
+		      source:(NSString *)source
+		 destination:(NSString *)destination
+		       files:(NSArray *)files
+			 tag:(NSInteger *)outTag
+{
+	BOOL allSucceeded = YES;
+	NSUInteger i;
+
+	if (outTag != NULL) {
+		*outTag = 0;
+	}
+	for (i = 0; i < [files count]; i++) {
+		NSString *name = [files objectAtIndex:i];
+		NSString *path = [name isAbsolutePath] ? name
+			: [source stringByAppendingPathComponent:name];
+
+		if (![self cg_performOperation:operation onPath:path destination:destination result:NULL]) {
+			allSucceeded = NO;
+		}
+	}
+	[[NSNotificationCenter defaultCenter] postNotificationName:NSWorkspaceDidPerformFileOperationNotification
+							    object:self];
+	return allSucceeded;
+}
+
+/* **THE MODERN PAIR: URLS IN, ONE HANDLER CALL WITH WHAT FAILED.** The handler's dictionary is keyed by the URL that
+ * failed and carries its error — Apple's shape — and the answer is the new URLs, in order. A nil handler is legal. */
+- (NSArray *)recycleURLs:(NSArray *)URLs completionHandler:(void (^)(NSDictionary *))handler
+{
+	NSMutableArray *results = [NSMutableArray array];
+	NSMutableDictionary *failures = [NSMutableDictionary dictionary];
+	NSUInteger i;
+
+	for (i = 0; i < [URLs count]; i++) {
+		NSURL *url = [URLs objectAtIndex:i];
+		NSString *resultPath = nil;
+
+		if ([self cg_performOperation:NSWorkspaceRecycleOperation onPath:[url path] destination:nil
+				       result:&resultPath]) {
+			[results addObject:[NSURL fileURLWithPath:resultPath]];
+		} else {
+			[failures setObject:[NSError errorWithDomain:@"NSWorkspaceErrorDomain" code:1
+							   userInfo:[NSDictionary dictionaryWithObject:
+									@"the item could not be recycled"
+												    forKey:NSLocalizedDescriptionKey]]
+				     forKey:url];
+		}
+	}
+	if (handler != nil) {
+		handler(failures);
+	}
+	return results;
+}
+
+- (NSArray *)duplicateURLs:(NSArray *)URLs completionHandler:(void (^)(NSDictionary *))handler
+{
+	NSMutableArray *results = [NSMutableArray array];
+	NSMutableDictionary *failures = [NSMutableDictionary dictionary];
+	NSUInteger i;
+
+	for (i = 0; i < [URLs count]; i++) {
+		NSURL *url = [URLs objectAtIndex:i];
+		NSString *resultPath = nil;
+
+		if ([self cg_performOperation:NSWorkspaceDuplicateOperation onPath:[url path] destination:nil
+				       result:&resultPath]) {
+			[results addObject:[NSURL fileURLWithPath:resultPath]];
+		} else {
+			[failures setObject:[NSError errorWithDomain:@"NSWorkspaceErrorDomain" code:2
+							   userInfo:[NSDictionary dictionaryWithObject:
+									@"the item could not be duplicated"
+												    forKey:NSLocalizedDescriptionKey]]
+				     forKey:url];
+		}
+	}
+	if (handler != nil) {
+		handler(failures);
+	}
+	return results;
+}
+
+/* **A TEMPORARY FILE THAT IS REALLY THERE**, with a unique name in the system's temporary directory — what a caller that
+ * says "open a scratch file" needs to be able to write into. */
+- (NSString *)openTempFile
+{
+	/* **THE TEMPORARY DIRECTORY MAY NOT EXIST, SO THE DOOR TRIES THE STANDARD ONES IN ORDER.** `NSTemporaryDirectory()`
+	 * answers a platform path this tree chooses (`/System/Temporary Files/`, which need not be mounted), so `$TMPDIR`
+	 * comes first and `/tmp` last — the first candidate that `mkstemp` accepts is the answer, and the loop is what makes
+	 * a missing directory a fallback rather than a nil. */
+	NSString *candidates[3];
+	NSFileManager *manager = [NSFileManager defaultManager];
+	NSUInteger i;
+	const char *environment = getenv("TMPDIR");
+
+	candidates[0] = (environment != NULL && environment[0] != '\0')
+		? [NSString stringWithUTF8String:environment] : nil;
+	candidates[1] = NSTemporaryDirectory();
+	candidates[2] = @"/tmp";
+	for (i = 0; i < 3; i++) {
+		BOOL isDirectory = NO;
+		NSString *candidate = candidates[i];
+		NSString *template;
+		char *buffer;
+		int descriptor;
+
+		if ([candidate length] == 0
+		    || ![manager fileExistsAtPath:candidate isDirectory:&isDirectory] || !isDirectory) {
+			continue;
+		}
+		template = [candidate stringByAppendingPathComponent:@"agora-XXXXXX"];
+		buffer = strdup([template fileSystemRepresentation]);
+		if (buffer == NULL) {
+			continue;
+		}
+		descriptor = mkstemp(buffer);
+		if (descriptor >= 0) {
+			NSString *path;
+
+			close(descriptor);
+			path = [NSString stringWithUTF8String:buffer];
+			free(buffer);
+			return path;
+		}
+		free(buffer);
+	}
+	return nil;
+}
+
+/* ---- THE VOLUMES, FROM THE ONLY MOUNT TABLE THIS TIER CAN READ --------------------------------- */
+
+/* **`/proc/mounts`, FILTERED TO THE MOUNTS THAT ARE NOT PSEUDO-FILESYSTEMS.** The local volume paths are the mount points
+ * whose filesystem is not one of the kernel's synthetic ones, which is what a caller listing "disks" means. */
+- (NSArray *)mountedLocalVolumePaths
+{
+	NSMutableArray *paths = [NSMutableArray array];
+	/* **READ WITH STDIO, NOT WITH THE STRING DOOR.** MEASURED: `/proc/mounts` is a symlink to a file whose `stat` size is
+	 * zero, so a reader that sizes its buffer from the stat answers an EMPTY string — the door returns 0 bytes and the
+	 * volume list comes back empty. A plain read loop has no such assumption, which is what a `/proc` file needs. */
+	NSString *table = nil;
+	NSArray *lines;
+	NSUInteger i;
+	{
+		FILE *file = fopen("/proc/mounts", "r");
+		NSMutableData *data;
+
+		if (file == NULL) {
+			return paths;
+		}
+		data = [NSMutableData data];
+		{
+			char buffer[4096];
+			size_t got;
+
+			while ((got = fread(buffer, 1, sizeof buffer, file)) > 0) {
+				[data appendBytes:buffer length:got];
+			}
+		}
+		fclose(file);
+		table = [[[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding] autorelease];
+	}
+	if (table == nil) {
+		return paths;
+	}
+	lines = [table componentsSeparatedByString:@"\n"];
+	for (i = 0; i < [lines count]; i++) {
+		NSArray *fields = [[lines objectAtIndex:i] componentsSeparatedByString:@" "];
+		NSString *type;
+
+		if ([fields count] < 3) {
+			continue;
+		}
+		type = [fields objectAtIndex:2];
+		if ([type isEqualToString:@"proc"] || [type isEqualToString:@"sysfs"] ||
+		    [type isEqualToString:@"devtmpfs"] || [type isEqualToString:@"devpts"] ||
+		    [type isEqualToString:@"tmpfs"] || [type isEqualToString:@"cgroup"] ||
+		    [type isEqualToString:@"cgroup2"] || [type isEqualToString:@"debugfs"] ||
+		    [type isEqualToString:@"tracefs"] || [type isEqualToString:@"securityfs"] ||
+		    [type isEqualToString:@"pstore"] || [type isEqualToString:@"bpf"] ||
+		    [type isEqualToString:@"autofs"] || [type isEqualToString:@"mqueue"] ||
+		    [type isEqualToString:@"hugetlbfs"] || [type isEqualToString:@"configfs"] ||
+		    [type isEqualToString:@"fusectl"] || [type isEqualToString:@"ramfs"]) {
+			continue;
+		}
+		[paths addObject:[fields objectAtIndex:1]];
+	}
+	return paths;
+}
+
+/* **THE SEVEN LABELS ARE A FIXED, DOCUMENTED SET** — Apple's own colours and names, which are data rather than platform
+ * services, so the two doors are real: the ask is "what are the labels", not "what does the Finder show". */
+- (NSArray *)fileLabels
+{
+	return [NSArray arrayWithObjects:@"None", @"Gray", @"Green", @"Purple", @"Blue", @"Yellow", @"Red", @"Orange",
+					 nil];
+}
+
+- (NSArray *)fileLabelColors
+{
+	return [NSArray arrayWithObjects:
+		[NSColor clearColor],
+		[NSColor colorWithCalibratedWhite:0.5 alpha:1.0],
+		[NSColor colorWithCalibratedRed:0.0 green:0.7 blue:0.2 alpha:1.0],
+		[NSColor colorWithCalibratedRed:0.5 green:0.2 blue:0.7 alpha:1.0],
+		[NSColor colorWithCalibratedRed:0.2 green:0.4 blue:0.9 alpha:1.0],
+		[NSColor colorWithCalibratedRed:0.95 green:0.85 blue:0.1 alpha:1.0],
+		[NSColor colorWithCalibratedRed:0.9 green:0.2 blue:0.2 alpha:1.0],
+		[NSColor colorWithCalibratedRed:0.95 green:0.55 blue:0.1 alpha:1.0],
+		nil];
+}
+
+/* ---- THE DESKTOP PICTURE: STORED, AND SAID SO --------------------------------------------------- */
+
+- (NSString *)cg_desktopKeyForScreen:(id)screen suffix:(NSString *)suffix
+{
+	NSInteger number = (screen != nil && [screen respondsToSelector:@selector(cg_screenNumber)])
+		? (NSInteger)[screen performSelector:@selector(cg_screenNumber)] : 0;
+
+	return [NSString stringWithFormat:@"NSWorkspaceDesktop%ld%@", (long)number, suffix];
+}
+
+- (NSURL *)desktopImageURLForScreen:(id)screen
+{
+	NSString *path = [[NSUserDefaults standardUserDefaults]
+			  objectForKey:[self cg_desktopKeyForScreen:screen suffix:@"URL"]];
+
+	return ([path length] > 0) ? [NSURL fileURLWithPath:path] : nil;
+}
+
+- (BOOL)setDesktopImageURL:(NSURL *)url forScreen:(id)screen options:(NSDictionary *)options error:(NSError **)outError
+{
+	NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
+
+	if (outError != NULL) {
+		*outError = nil;
+	}
+	if (url == nil || ![[url path] length]) {
+		return NO;
+	}
+	[defaults setObject:[url path] forKey:[self cg_desktopKeyForScreen:screen suffix:@"URL"]];
+	if (options != nil) {
+		[defaults setObject:options forKey:[self cg_desktopKeyForScreen:screen suffix:@"Options"]];
+	}
+	return YES;
+}
+
+- (NSDictionary *)desktopImageOptionsForScreen:(id)screen
+{
+	return [[NSUserDefaults standardUserDefaults]
+		objectForKey:[self cg_desktopKeyForScreen:screen suffix:@"Options"]];
+}
+
+/* ---- THE CHANGE NOTIFICATIONS ------------------------------------------------------------------ */
+
+- (NSNotificationCenter *)notificationCenter
+{
+	return [NSNotificationCenter defaultCenter];
+}
+
+/* **A CHANGE IS ANNOUNCED, WHICH IS THE WHOLE OF THE FIVE DOORS.** Apple's pair are the file-operation announcement (with
+ * and without a path) and the defaults one is Foundation's own name; the two without the `note` prefix are the older
+ * spellings of the same two sends. */
+- (void)noteFileSystemChanged
+{
+	[[NSNotificationCenter defaultCenter] postNotificationName:NSWorkspaceDidPerformFileOperationNotification
+							    object:self];
+}
+
+- (void)noteFileSystemChanged:(NSString *)path
+{
+	NSDictionary *userInfo = ([path length] > 0)
+		? [NSDictionary dictionaryWithObject:path forKey:@"NSWorkspaceFileOperationPath"] : nil;
+
+	[[NSNotificationCenter defaultCenter] postNotificationName:NSWorkspaceDidPerformFileOperationNotification
+							    object:self userInfo:userInfo];
+}
+
+- (void)fileSystemChanged
+{
+	[self noteFileSystemChanged];
+}
+
+- (void)noteUserDefaultsChanged
+{
+	[[NSNotificationCenter defaultCenter] postNotificationName:NSUserDefaultsDidChangeNotification object:nil];
+}
+
+- (void)userDefaultsChanged
+{
+	[self noteUserDefaultsChanged];
+}
+
+/* ---- THE LAUNCH BY IDENTIFIER, AND THE PACKAGE QUESTION ----------------------------------------- */
+
+/* **THE IDENTIFIER BECOMES A BUNDLE, AND THE BUNDLE IS OPENED** — the same path `-launchApplication:` takes once it has
+ * resolved a name. There is no launch IDENTIFIER to report (that is a session's handle, and this tier has no session), so
+ * the out-parameter is written as 0 and the header says so. */
+- (BOOL)launchAppWithBundleIdentifier:(NSString *)bundleIdentifier
+			      options:(NSWorkspaceLaunchOptions)options
+       additionalEventParamDescriptor:(id)descriptor
+		   launchIdentifier:(NSInteger *)launchIdentifier
+{
+	NSString *path = [self fullPathForApplication:bundleIdentifier];
+	NSURL *url;
+
+	(void)options;
+	(void)descriptor;
+	if (launchIdentifier != NULL) {
+		*launchIdentifier = 0;
+	}
+	if (path == nil) {
+		return NO;
+	}
+	url = [NSURL fileURLWithPath:path];
+	return (url != nil) ? [self openURL:url] : NO;
+}
+
+/* **A PACKAGE IS A DIRECTORY WITH A `.app`-shaped NAME**, which is this tier's whole notion of one: the extension is what
+ * a person sees and what `-getInfoForFile:` reports, so a bundle with a `Contents` directory inside is a package and a
+ * plain directory is not. */
+- (BOOL)isFilePackageAtPath:(NSString *)fullPath
+{
+	BOOL isDirectory = NO;
+	NSString *extension;
+
+	if (fullPath == nil || ![[NSFileManager defaultManager] fileExistsAtPath:fullPath isDirectory:&isDirectory]) {
+		return NO;
+	}
+	if (!isDirectory) {
+		return NO;
+	}
+	extension = [fullPath pathExtension];
+	if (![extension isEqualToString:@"app"] && ![extension isEqualToString:@"bundle"] &&
+	    ![extension isEqualToString:@"framework"] && ![extension isEqualToString:@"plugin"] &&
+	    ![extension isEqualToString:@"kext"]) {
+		return NO;
+	}
+	return [[NSFileManager defaultManager] fileExistsAtPath:
+		[fullPath stringByAppendingPathComponent:@"Contents"]];
+}
+
+/* ---- AND THE THIRTEEN THAT REFUSE ------------------------------------------------------------------ */
+
+- (BOOL)getFileSystemInfoForPath:(NSString *)fullPath
+		     isRemovable:(BOOL *)removableFlag
+		      isWritable:(BOOL *)writableFlag
+		    isUnmountable:(BOOL *)unmountableFlag
+		      description:(NSString **)description
+			     type:(NSString **)fileType
+{
+	(void)fullPath;
+	if (removableFlag != NULL) {
+		*removableFlag = NO;
+	}
+	if (writableFlag != NULL) {
+		*writableFlag = NO;
+	}
+	if (unmountableFlag != NULL) {
+		*unmountableFlag = NO;
+	}
+	if (description != NULL) {
+		*description = nil;
+	}
+	if (fileType != NULL) {
+		*fileType = nil;
+	}
+	fn_refuse_workspace("NSWorkspace -getFileSystemInfoForPath:isRemovable:isWritable:isUnmountable:description:type:",
+			    "a mount table with device attributes - DiskArbitration");
+	return NO;
+}
+
+- (NSArray *)mountedRemovableMedia
+{
+	fn_refuse_workspace("NSWorkspace -mountedRemovableMedia", "a mount table with device attributes - DiskArbitration");
+	return [NSArray array];
+}
+
+- (BOOL)checkForRemovableMedia
+{
+	fn_refuse_workspace("NSWorkspace -checkForRemovableMedia", "device discovery - DiskArbitration");
+	return NO;
+}
+
+- (BOOL)mountNewRemovableMedia
+{
+	fn_refuse_workspace("NSWorkspace -mountNewRemovableMedia", "device discovery and mounting - DiskArbitration");
+	return NO;
+}
+
+- (BOOL)unmountAndEjectDeviceAtPath:(NSString *)path
+{
+	(void)path;
+	fn_refuse_workspace("NSWorkspace -unmountAndEjectDeviceAtPath:", "unmounting a device - DiskArbitration");
+	return NO;
+}
+
+- (BOOL)unmountAndEjectDeviceAtURL:(NSURL *)url error:(NSError **)outError
+{
+	(void)url;
+	if (outError != NULL) {
+		*outError = nil;
+	}
+	fn_refuse_workspace("NSWorkspace -unmountAndEjectDeviceAtURL:error:", "unmounting a device - DiskArbitration");
+	return NO;
+}
+
+- (BOOL)setIcon:(NSImage *)image forFile:(NSString *)fullPath options:(NSDictionary *)options
+{
+	(void)image;
+	(void)fullPath;
+	(void)options;
+	fn_refuse_workspace("NSWorkspace -setIcon:forFile:options:", "an icon WRITER - Icon Services here only reads");
+	return NO;
+}
+
+- (void)findApplications
+{
+	fn_refuse_workspace("NSWorkspace -findApplications",
+			    "an incremental registry rescan - the seam seeds its registry at start (AGLaunchServicesReset "
+			    "is the whole of it)");
+}
+
+- (void)extendPowerOffBy:(NSInteger)requested
+{
+	(void)requested;
+	fn_refuse_workspace("NSWorkspace -extendPowerOffBy:", "a power manager");
+}
+
+- (BOOL)selectFile:(NSString *)fullPath inFileViewerRootedAtPath:(NSString *)rootFullpath
+{
+	(void)fullPath;
+	(void)rootFullpath;
+	fn_refuse_workspace("NSWorkspace -selectFile:inFileViewerRootedAtPath:",
+			    "a file manager to TELL across processes - the Workspace is this stack's, and there is no "
+			    "transport from AppKit to another process yet");
+	return NO;
+}
+
+- (BOOL)activateFileViewerSelectingURLs:(NSArray *)urls
+{
+	(void)urls;
+	fn_refuse_workspace("NSWorkspace -activateFileViewerSelectingURLs:",
+			    "a file manager to TELL across processes - the Workspace is this stack's, and there is no "
+			    "transport from AppKit to another process yet");
+	return NO;
+}
+
+- (BOOL)showSearchResultsForQueryString:(NSString *)queryString
+{
+	(void)queryString;
+	fn_refuse_workspace("NSWorkspace -showSearchResultsForQueryString:",
+			    "a file manager's search window, which another process owns");
+	return NO;
+}
+
+- (BOOL)slideImage:(NSImage *)image from:(NSPoint)fromPoint to:(NSPoint)toPoint
+{
+	(void)image;
+	(void)fromPoint;
+	(void)toPoint;
+	fn_refuse_workspace("NSWorkspace -slideImage:from:to:", "a compositor animation the window server has not got");
+	return NO;
+}
+
+- (BOOL)openFile:(NSString *)fullPath fromImage:(NSImage *)anImage at:(NSPoint)point inView:(NSView *)aView
+{
+	(void)anImage;
+	(void)point;
+	(void)aView;
+	return [self openFile:fullPath];
 }
 
 @end

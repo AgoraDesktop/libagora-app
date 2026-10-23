@@ -125,11 +125,11 @@ NSToolbar.m                      1
 NSTrackingArea.m                 1
 NSView.m                         16
 NSViewController.m               1
-NSWorkspace.m                       9
+NSWorkspace.m                       23
 NSWindow.m                       23
 
 # AND IT ROSE BY 126 WHEN THE NEEDLE LEARNED THE SHARED HELPER'S NAME. Not one refusal was added by that change: the
 # `fn_refuse_window` spelling was simply invisible to a census that counted the `APPKIT-REFUSE` literal, so every
 # refusal written the house way — which is the way the header asks for — moved no number.
 #
-# total: 338
+# total: 352

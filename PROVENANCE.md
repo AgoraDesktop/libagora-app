@@ -1239,6 +1239,34 @@ omission survivable.
 
 `tests/font_surface.m` measures it in **37 checks**, all relations rather than literals.
 
+## 46. `NSWorkspace`'s file operations: the verbs, the per-volume trash, and three environment facts
+
+**THE VERBS ARE FILESYSTEM WORK, SO THEY ARE MEASURED ON DISK.** Move, copy, link, destroy and recycle are `NSFileManager`
+calls; compress, decompress, encrypt and decrypt need a TOOL and refuse by name. The modern pair —
+`-recycleURLs:completionHandler:` and `-duplicateURLs:completionHandler:` — take URLs, call the handler ONCE with a
+dictionary keyed by the URLs that failed, and answer the new URLs, which is Apple's shape.
+
+**THE TRASH IS APPLE'S PER-VOLUME RULE, AND THE SLICE FOUND OUT WHY IT EXISTS.** MEASURED: recycling an item from `/tmp`
+into a home trash on another filesystem failed with `EXDEV`, because a rename cannot cross a device. The rule the
+Workspace's `WSTrash` documents is the answer — the home volume gets `~/.Trash`, another volume gets `.Trash-<uid>` at its
+root — and this class implements the same rule, with a copy-and-remove fallback when even the volume's own rename is
+refused. The Workspace additionally keeps the Put Back RECORD; this class only moves the item, and both headers say so.
+
+**THREE ENVIRONMENT FACTS, EACH FOUND BY A FAILING ASSERTION.** `NSTemporaryDirectory()` answers
+`/System/Temporary Files/`, which need not exist — so `-openTempFile` tries `$TMPDIR`, then the platform path, then `/tmp`.
+`/proc/mounts` READS AS ZERO BYTES through the string door, because it is a symlink to a file whose `stat` size is 0 — so
+`-mountedLocalVolumePaths` reads with stdio. And a mount filter that dropped `overlay`/`squashfs` emptied the list on a
+container's root, so those two are KEPT: a live system's root can be either.
+
+**AND THE REST OF THE CLASS SORTED INTO REFUSALS AND DATA.** The mount/media family needs DiskArbitration; the Finder-service
+family needs a file manager to TELL across processes, which this tier has no transport for; the icon write needs Icon
+Services to have a writer; the registry rescan is the seam's own `AGLaunchServicesReset`; the power door needs a power
+manager. What is real is what is data or storage: the seven LABELS, the desktop-picture doors (stored per screen in the
+defaults domain, painted by the Workspace), the five change-notification doors, `-isFilePackageAtPath:`, and
+`-mountedLocalVolumePaths`.
+
+`tests/workspace_fileops.m` measures it in **39 checks**, every operation checked by what exists on disk afterwards.
+
 ## Keeping in sync
 
 The Fiwix AppKit is the origin and this repository has now diverged from it in the seam. A fix made there

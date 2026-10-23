@@ -24,9 +24,12 @@
 #import <Foundation/NSObject.h>
 #import <Foundation/NSArray.h>
 #import <Foundation/NSString.h>
+#import <Foundation/NSGeometry.h>
 #import <Foundation/NSURL.h>
 
 @class NSImage;
+@class NSNotificationCenter;
+@class NSView;
 @class NSRunningApplication;
 
 /* THE ONE KEY IN EVERY NOTIFICATION'S USERINFO: the application the notification is about. */
@@ -37,6 +40,33 @@ extern NSString *NSWorkspaceApplicationKey;
 extern NSString *NSWorkspaceDidLaunchApplicationNotification;
 extern NSString *NSWorkspaceDidTerminateApplicationNotification;
 extern NSString *NSWorkspaceDidActivateApplicationNotification;
+
+/* ==================================================================================================================
+ * THE FILE OPERATIONS — the era's `-performFileOperation:…` verbs, and the notification they announce.
+ *
+ * **THE SIX ARE FILESYSTEM VERBS, NOT FINDER ONES.** Move, copy, link, compress, destroy and recycle are what the file
+ * system does; only COMPRESS has no tool here (it would need `tar`), and only RECYCLE has a rule this tier states: an
+ * item goes into the user's TRASH DIRECTORY, and the Workspace's `WSTrash` — which owns the Put Back records and the
+ * empty — uses the same directory, so the two agree about WHERE even though only the Workspace keeps the record of where
+ * an item came from.
+ * ================================================================================================================ */
+typedef NSInteger NSWorkspaceFileOperation;
+
+enum {
+	NSWorkspaceMoveOperation = 0,
+	NSWorkspaceCopyOperation = 1,
+	NSWorkspaceLinkOperation = 2,
+	NSWorkspaceCompressOperation = 3,
+	NSWorkspaceDecompressOperation = 4,
+	NSWorkspaceEncryptOperation = 5,
+	NSWorkspaceDecryptOperation = 6,
+	NSWorkspaceDestroyOperation = 7,
+	NSWorkspaceRecycleOperation = 8,
+	NSWorkspaceDuplicateOperation = 9
+};
+
+/* Posted after a file operation the workspace performed, and by `-noteFileSystemChanged`. */
+extern NSString *NSWorkspaceDidPerformFileOperationNotification;
 
 /* ==================================================================================================================
  * THE LAUNCH OPTIONS — Apple's bits, with Apple's values, and only the ones this tier can act on.
@@ -183,6 +213,86 @@ enum {
  additionalEventParamDescriptor:(nullable id)descriptor
 	  launchIdentifiers:(NSArray * _Nullable * _Nullable)identifiers;
 - (void)hideOtherApplications;
+
+/* ==================================================================================================================
+ * THE FILE OPERATIONS, THE TEMPORARY FILE, THE VOLUMES, THE LABELS AND THE CHANGE NOTIFICATIONS.
+ *
+ * **THE VERBS ARE FILESYSTEM WORK, WHICH THIS TIER HAS.** `-performFileOperation:source:destination:files:tag:` takes a
+ * source PATH (or nil), a destination PATH, and file NAMES relative to the source; the tag is stored for a completion
+ * target this tier has not got, so it is written and answered nowhere. Compress, decompress, encrypt and decrypt need a
+ * TOOL (`tar`, `gpg`) and refuse by name. The modern pair take URLs and call the caller's handler ONCE with the URLs
+ * that FAILED — Apple's shape, and the reason the handler is a block.
+ *
+ * **THE VOLUMES ARE `/proc/mounts`**, which is the only mount table this tier can read: the local paths are the ones
+ * whose device is a real block device or a known filesystem, and the REMOVABLE question needs DiskArbitration, so the
+ * doors that ask it refuse.
+ *
+ * **AND THE DESKTOP PICTURE IS STORED, NOT PAINTED.** This tier's wallpaper is the Workspace's (it takes
+ * `AGORA_WALLPAPER`), so the three desktop doors store a URL and options per screen in the defaults domain and say that
+ * nothing here draws them.
+ * ================================================================================================================ */
+- (BOOL)performFileOperation:(NSWorkspaceFileOperation)operation
+		      source:(nullable NSString *)source
+		 destination:(nullable NSString *)destination
+		       files:(NSArray *)files
+			 tag:(nullable NSInteger *)outTag;
+- (nullable NSArray *)recycleURLs:(NSArray *)URLs
+		completionHandler:(void (^ _Nullable)(NSDictionary *newURLs))handler;
+- (nullable NSArray *)duplicateURLs:(NSArray *)URLs
+		  completionHandler:(void (^ _Nullable)(NSDictionary *newURLs))handler;
+- (nullable NSString *)openTempFile;
+
+- (nullable NSArray *)mountedLocalVolumePaths;
+- (nullable NSArray *)fileLabels;
+- (nullable NSArray *)fileLabelColors;
+
+- (nullable NSURL *)desktopImageURLForScreen:(nullable id)screen;
+- (BOOL)setDesktopImageURL:(NSURL *)url
+		 forScreen:(nullable id)screen
+		   options:(nullable NSDictionary *)options
+		     error:(NSError * _Nullable * _Nullable)outError;
+- (nullable NSDictionary *)desktopImageOptionsForScreen:(nullable id)screen;
+
+- (NSNotificationCenter *)notificationCenter;
+- (void)noteFileSystemChanged;
+- (void)noteFileSystemChanged:(nullable NSString *)path;
+- (void)fileSystemChanged;
+- (void)noteUserDefaultsChanged;
+- (void)userDefaultsChanged;
+
+- (BOOL)launchAppWithBundleIdentifier:(NSString *)bundleIdentifier
+			      options:(NSWorkspaceLaunchOptions)options
+       additionalEventParamDescriptor:(nullable id)descriptor
+		   launchIdentifier:(NSInteger *)launchIdentifier;
+- (BOOL)isFilePackageAtPath:(NSString *)fullPath;
+
+/* ---- AND THE ONES THAT REFUSE, WITH THE PIECE EACH NEEDS -------------------------------------- */
+
+/* The mount and media family needs DiskArbitration; the Finder-service family needs a file manager to TELL across
+ * processes; the icon write needs Icon Services to have a writer; the registry rescan is the seam's own; and the power
+ * door needs a power manager. Each names what is missing rather than approximating it. */
+- (BOOL)getFileSystemInfoForPath:(NSString *)fullPath
+		     isRemovable:(BOOL *)removableFlag
+		      isWritable:(BOOL *)writableFlag
+		    isUnmountable:(BOOL *)unmountableFlag
+		      description:(NSString * _Nullable * _Nullable)description
+			     type:(NSString * _Nullable * _Nullable)fileType;
+- (nullable NSArray *)mountedRemovableMedia;
+- (BOOL)checkForRemovableMedia;
+- (BOOL)mountNewRemovableMedia;
+- (BOOL)unmountAndEjectDeviceAtPath:(NSString *)path;
+- (BOOL)unmountAndEjectDeviceAtURL:(NSURL *)url error:(NSError * _Nullable * _Nullable)outError;
+- (BOOL)setIcon:(nullable NSImage *)image forFile:(NSString *)fullPath options:(NSDictionary *)options;
+- (void)findApplications;
+- (void)extendPowerOffBy:(NSInteger)requested;
+- (BOOL)selectFile:(nullable NSString *)fullPath inFileViewerRootedAtPath:(NSString *)rootFullpath;
+- (BOOL)activateFileViewerSelectingURLs:(NSArray *)urls;
+- (BOOL)showSearchResultsForQueryString:(NSString *)queryString;
+- (BOOL)slideImage:(NSImage *)image from:(NSPoint)fromPoint to:(NSPoint)toPoint;
+- (BOOL)openFile:(NSString *)fullPath
+       fromImage:(nullable NSImage *)anImage
+	      at:(NSPoint)point
+	  inView:(nullable NSView *)aView;
 
 @end
 
