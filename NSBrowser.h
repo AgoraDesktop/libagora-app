@@ -110,6 +110,19 @@ enum {
 	BOOL _acceptsArrowKeys;
 	BOOL _sendsActionOnArrowKeys;
 	BOOL _inProgrammaticSelection;
+	/* **THE TITLE STRIP AND THE LAST CLICK.** `_titled` is whether each column reserves a strip above its list (Apple's
+	 * default is YES, and this class drew no strip until §11 of `HANDOFF-4.md`), and the two clicked fields are the row
+	 * and column of the most recent click — -1 before the first one, which is Apple's own "no click" value. */
+	BOOL _titled;
+	NSInteger _clickedRow;
+	NSInteger _clickedColumn;
+	/* **AND THE TARGET/ACTION PAIR IS THE BROWSER'S OWN, WHICH IS A DEVIATION WITH A REASON.** `NSControl` keeps that pair
+	 * on its CELL in this tree — a button's action lives in the button cell — and a browser has NO cell, so `-action` would
+	 * answer NULL for ever and every click would send nothing. Apple's `NSControl` keeps the pair on the control, which is
+	 * why an `NSBrowser` has one there; these four doors are that answer, and they are the only place this class does not
+	 * take what its superclass says. */
+	id _browserTarget;		/* NOT RETAINED, Apple's contract for a target */
+	SEL _browserAction;
 	NSColor *_backgroundColor;		/* RETAINED */
 }
 
@@ -187,10 +200,61 @@ enum {
 - (nullable NSCell *)cellPrototype;
 - (void)setCellPrototype:(nullable NSCell *)cell;
 
-/* TITLES ARE STORED AND ANSWERED; this slice's columns do not draw a title strip. */
+/* TITLES ARE STORED, ANSWERED **AND DRAWN**. A titled browser reserves its `-titleHeight` above each column's list and
+ * draws the column's title there; `-isTitled` is what decides, and the three geometry doors below answer the strip's
+ * frame as well as the column's. */
 - (void)setTitle:(nullable NSString *)title ofColumn:(NSInteger)column;
 - (nullable NSString *)titleOfColumn:(NSInteger)column;
 - (nullable NSString *)browser:(NSBrowser *)sender titleOfColumn:(NSInteger)column;
+- (BOOL)isTitled;
+- (void)setTitled:(BOOL)flag;
+- (void)drawTitleOfColumn:(NSInteger)column inRect:(NSRect)rect;
+
+/* ---- WHERE A COLUMN AND A ROW ARE, AND THE INVERSE --------------------------------------------------------- */
+
+/* **ALL THREE FRAMES ARE IN THE BROWSER'S OWN COORDINATES** (unflipped, y=0 at the bottom, Apple's for a control),
+ * converted out of the scrolling document so a caller gets the place on screen rather than a place in a scrolled
+ * view: `-frameOfColumn:` is the whole column INCLUDING its title strip, `-frameOfInsideOfColumn:` is the list part
+ * under the strip, and `-titleFrameOfColumn:` is the strip itself (empty when the browser is not titled).
+ * `-frameOfRow:inColumn:` is the row's rect there — which can be outside the column's visible part, because a row
+ * scrolled out of view still has a place. */
+- (NSRect)frameOfColumn:(NSInteger)column;
+- (NSRect)frameOfInsideOfColumn:(NSInteger)column;
+- (NSRect)titleFrameOfColumn:(NSInteger)column;
+- (NSRect)frameOfRow:(NSInteger)row inColumn:(NSInteger)column;
+
+/* **AND THE INVERSE, WHICH IS WHAT A CLICK OR A MENU ASKS.** Answers YES when the point fell in a column, and writes -1
+ * to the row for a point above the list (in the title strip) or below the last row. */
+- (BOOL)getRow:(nullable NSInteger *)row column:(nullable NSInteger *)column forPoint:(NSPoint)point;
+
+/* THE TWO WIDTH CONVERSIONS: a column's frame width against the width its table actually gets, which is the frame
+ * less the column's own vertical scroller when that bar is showing. `-defaultColumnWidth` is the width a NEW column
+ * gets; `-setDefaultColumnWidth:` leaves the columns that exist alone, which is the one difference from
+ * `-setColumnWidth:` (that one re-widths every column). */
+- (CGFloat)columnContentWidthForColumnWidth:(CGFloat)columnWidth;
+- (CGFloat)columnWidthForColumnContentWidth:(CGFloat)contentWidth;
+- (CGFloat)defaultColumnWidth;
+- (void)setDefaultColumnWidth:(CGFloat)width;
+
+/* THE CLICK AND ITS TWO ACTIONS. `-doClick:` records the clicked row and column from the selection and sends the
+ * action; `-doDoubleClick:` sends the double action. Both are what the table's own paths call, and both are public
+ * because Apple publishes them: a caller with a synthetic click has nowhere else to put it.
+ *
+ * **AND THE PAIR ITSELF IS HERE, BECAUSE A BROWSER HAS NO CELL.** `NSControl`'s target/action live in the cell in this
+ * tree, so a cell-less control answers NULL and sends nothing; these four doors keep the pair on the control, which is
+ * where Apple has it. */
+- (nullable id)target;
+- (void)setTarget:(nullable id)target;
+- (nullable SEL)action;
+- (void)setAction:(nullable SEL)action;
+- (NSInteger)clickedRow;
+- (NSInteger)clickedColumn;
+- (void)doClick:(nullable id)sender;
+- (void)doDoubleClick:(nullable id)sender;
+
+/* **THE OUTER SCROLLER IS RE-TILED, WHICH IS WHAT UPDATING IT MEANS HERE** — the column count and the document width
+ * are what it reads, and `-tile` is the one door that recomputes both. */
+- (void)updateScroller;
 
 /* DOUBLE-CLICK AND THE ACTION. A selection sends the control's target/action; a double-click sends -doubleAction. */
 - (nullable SEL)doubleAction;

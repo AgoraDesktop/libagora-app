@@ -850,6 +850,16 @@ target_link_libraries(browser PRIVATE App m)
 add_test(NAME appkit-browser COMMAND browser)
 set_tests_properties(appkit-browser PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
 
+# **WHERE THE BROWSER'S COLUMNS ARE, AND WHAT ITS TITLE STRIP HOLDS.** The browser had a `-titleHeight` its layout
+# ignored and no `-isTitled` at all; this checks the slice that reserved the strip and drew the title in it — three frames
+# that are one rect cut three ways, a row's place, `-getRow:column:forPoint:` as the exact inverse, the title's INK on a
+# surface with an untitled column as the negative control, the click that records `-clickedRow`/`-clickedColumn`, and the
+# one width conversion with the two width defaults behind it.
+add_executable(browser_geometry browser_geometry.m)
+target_link_libraries(browser_geometry PRIVATE App m)
+add_test(NAME appkit-browser-geometry COMMAND browser_geometry)
+set_tests_properties(appkit-browser-geometry PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
+
 # **THE PROGRESS INDICATOR: A VALUE AS A BAR.** Offscreen, with a bitmap for the fill.
 add_executable(progress_indicator progress_indicator.m)
 target_link_libraries(progress_indicator PRIVATE App m)

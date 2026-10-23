@@ -20,10 +20,13 @@
 #import <AppKit/NSBrowserCell.h>
 
 #import <AppKit/NSApplication.h>
+#import <AppKit/NSAttributedString.h>
 #import <AppKit/NSBezierPath.h>
 #import <AppKit/NSClipView.h>
 #import <AppKit/NSColor.h>
 #import <AppKit/NSCursor.h>
+#import <AppKit/NSFont.h>
+#import <AppKit/NSStringDrawing.h>
 #import <AppKit/NSScroller.h>
 #import <Foundation/NSIndexSet.h>
 #import <AppKit/NSScrollView.h>
@@ -76,9 +79,24 @@
 
 @interface NSBrowser () <NSTableViewDataSource, NSTableViewDelegate>
 - (void)cg_scrollToLastColumn;
+/* THE DOCUMENT-COORDINATE HALVES THE DOCUMENT VIEW NEEDS: the strip's rect where it draws, and the title itself. */
+- (NSRect)cg_titleStripFrameForColumnInDocument:(NSInteger)column;
+- (NSRect)cg_columnFrameInDocument:(NSInteger)column;
+- (CGFloat)fn_xOriginForColumn:(NSInteger)column;
+- (CGFloat)fn_frameWidthForColumn:(NSInteger)column;
 @end
 
 @implementation NSBrowserDocumentView
+
+/* **THE DOCUMENT IS FLIPPED, WHICH IT WAS NOT, AND THE TITLE STRIP IS WHY.** A column's title belongs ABOVE its list, and
+ * a flipped document says that with y = 0 at the top; the alternative was arithmetic against the bounds height at every
+ * site and a text draw in an unflipped context, which is the mirror this tree has paid for before (`HANDOFF-2.md` §4).
+ * The table inside each column is flipped too, so a row's rect converts to the document without a mirror, and the
+ * gutters — which span the whole height — are unaffected. */
+- (BOOL)isFlipped
+{
+	return YES;
+}
 
 - (void)setBrowser:(NSBrowser *)browser
 {
@@ -90,7 +108,24 @@
 	NSInteger count, i;
 
 	(void)dirtyRect;
-	if (_browser == nil || ![_browser separatesColumns]) {
+	if (_browser == nil) {
+		return;
+	}
+	/* **THE TITLES ARE DRAWN BY THE DOCUMENT, ONE PER COLUMN, IN THE STRIP THE BROWSER LAID OUT.** The columns are
+	 * subviews and draw themselves; the strip is above where they start, so nothing but this view could own it — and
+	 * the browser's `-drawTitleOfColumn:inRect:` is the door so a subclass can change how a title looks. */
+	if ([_browser isTitled]) {
+		count = [_browser cg_columnCount];
+		for (i = 0; i < count; i++) {
+			NSRect strip = [_browser cg_titleStripFrameForColumnInDocument:i];
+
+			if (NSIsEmptyRect(strip) || NSMinX(strip) >= NSMaxX([self bounds])) {
+				continue;
+			}
+			[_browser drawTitleOfColumn:i inRect:strip];
+		}
+	}
+	if (![_browser separatesColumns]) {
 		return;
 	}
 	count = [_browser cg_columnCount];
@@ -467,6 +502,11 @@ static NSString * const AGCoderBrowserCellPrototypeKey = @"cellPrototype";
 	_allowsEmptySelection = YES;
 	_hasHorizontalScroller = YES;
 	_acceptsArrowKeys = YES;
+	/* **APPLE'S DEFAULTS, INCLUDING THE ONE THIS CLASS DID NOT HAVE.** A browser's columns are TITLED unless a caller says
+	 * otherwise, and no click has happened yet — which `-clickedRow`/`-clickedColumn` answer as -1. */
+	_titled = YES;
+	_clickedRow = -1;
+	_clickedColumn = -1;
 	_backgroundColor = [[NSColor whiteColor] retain];
 
 	_documentView = [[NSBrowserDocumentView alloc] initWithFrame:documentFrame];
@@ -905,6 +945,12 @@ static NSString * const AGCoderBrowserCellPrototypeKey = @"cellPrototype";
 	if (column < 0) {
 		return NO;
 	}
+	/* **THE CLICK IS RECORDED WHERE IT HAPPENS, NOT WHERE THE ACTION IS SENT.** This is the table's proposal path — the one
+	 * a press goes through — so a target that reads `-clickedRow`/`-clickedColumn` sees the row under the pointer even
+	 * when the browser has no action at all. `-doClick:` records them again from the SELECTION when it sends, which is
+	 * the same pair for a real click and the only answer for a synthetic one. */
+	_clickedColumn = column;
+	_clickedRow = row;
 	if (_delegate != nil && [_delegate respondsToSelector:@selector(browser:selectRow:inColumn:)]) {
 		BOOL answer = [_delegate browser:self selectRow:row inColumn:column];
 		return answer;
@@ -959,16 +1005,13 @@ static NSString * const AGCoderBrowserCellPrototypeKey = @"cellPrototype";
 		[self scrollColumnToVisible:_selectedColumn];
 	}
 	if (!_inProgrammaticSelection && [self action] != NULL) {
-		[[NSApplication sharedApplication] sendAction:[self action] to:[self target] from:self];
+		[self doClick:self];
 	}
 }
 
 - (void)cg_tableDoubleClicked:(id)sender
 {
-	(void)sender;
-	if (_doubleAction != NULL) {
-		[[NSApplication sharedApplication] sendAction:_doubleAction to:[self target] from:self];
-	}
+	[self doDoubleClick:sender];
 }
 
 - (SEL)doubleAction { return _doubleAction; }
@@ -992,6 +1035,335 @@ static NSString * const AGCoderBrowserCellPrototypeKey = @"cellPrototype";
 - (NSColor *)backgroundColor { return _backgroundColor; }
 
 /* ---- THE PER-COLUMN GEOMETRY ---------------------------------------------------------------- */
+
+/* **A COLUMN'S FRAME IN THE DOCUMENT IS THE SAME RECT THE STRIP AND THE LIST ARE CUT FROM.** Three frames, one sum: the
+ * whole column is (x, 0, width, height), the list is the bottom part, and the title strip is the top `-titleHeight`.
+ * The document is flipped, so y = 0 IS the top and the strip needs no arithmetic against the height. */
+- (NSRect)cg_columnFrameInDocument:(NSInteger)column
+{
+	return NSMakeRect([self fn_xOriginForColumn:column], 0.0, [self fn_frameWidthForColumn:column],
+			  NSHeight([_documentView bounds]));
+}
+
+- (NSRect)cg_titleStripFrameInDocument:(NSInteger)column
+{
+	NSRect columnFrame;
+
+	if (!_titled) {
+		return NSZeroRect;
+	}
+	columnFrame = [self cg_columnFrameInDocument:column];
+	if (NSIsEmptyRect(columnFrame)) {
+		return NSZeroRect;
+	}
+	return NSMakeRect(NSMinX(columnFrame), NSMinY(columnFrame), NSWidth(columnFrame), _titleHeight);
+}
+
+/* THE SAME RECT AS THE DOCUMENT VIEW DRAWS IT, answered by name because the drawing is that view's and the arithmetic is
+ * this one's — one place, so a title cannot be drawn a strip away from the frame the door publishes. */
+- (NSRect)cg_titleStripFrameForColumnInDocument:(NSInteger)column
+{
+	return [self cg_titleStripFrameInDocument:column];
+}
+
+/* **AND THE THREE PUBLIC FRAMES CONVERT OUT OF THE DOCUMENT**, because a caller asking where a column is wants the place
+ * in the browser it can see — not the place in a document that has been scrolled sideways. The conversion is the scroll
+ * view's own, so a scrolled browser answers a NEGATIVE x for a column scrolled off the left, which is the truth. */
+- (NSRect)frameOfColumn:(NSInteger)column
+{
+	if (column < 0 || column >= (NSInteger)[_tables count] || NSIsEmptyRect([_documentView bounds])) {
+		return NSZeroRect;
+	}
+	return [self convertRect:[self cg_columnFrameInDocument:column] fromView:_documentView];
+}
+
+- (NSRect)frameOfInsideOfColumn:(NSInteger)column
+{
+	NSRect frame = [self frameOfColumn:column];
+	CGFloat strip = _titled ? _titleHeight : 0.0;
+
+	if (NSIsEmptyRect(frame)) {
+		return NSZeroRect;
+	}
+	if (NSHeight(frame) <= strip) {
+		return NSZeroRect;
+	}
+	/* THE STRIP IS AT THE TOP OF THE BROWSER'S FRAME, which is the frame's LARGER y (the browser is unflipped): so the
+	 * list is the same rect with its height reduced, keeping its origin at the bottom. */
+	return NSMakeRect(NSMinX(frame), NSMinY(frame), NSWidth(frame), NSHeight(frame) - strip);
+}
+
+- (NSRect)titleFrameOfColumn:(NSInteger)column
+{
+	NSRect strip;
+	NSRect frame;
+	CGFloat height;
+
+	if (!_titled || column < 0 || column >= (NSInteger)[_tables count]) {
+		return NSZeroRect;
+	}
+	strip = [self convertRect:[self cg_titleStripFrameInDocument:column] fromView:_documentView];
+	frame = [self frameOfColumn:column];
+	height = NSHeight(frame);
+	if (NSIsEmptyRect(strip) || NSHeight(strip) > height) {
+		return NSZeroRect;
+	}
+	/* IN THE BROWSER'S COORDINATES THE STRIP IS THE TOP OF THE COLUMN, which is the frame's upper edge. */
+	return NSMakeRect(NSMinX(frame), NSMaxY(frame) - NSHeight(strip), NSWidth(frame), NSHeight(strip));
+}
+
+/* **A ROW'S RECT, WHICH IS THE TABLE'S OWN ROW RECT CONVERTED THROUGH TWO SCROLL VIEWS.** `convertRect:fromView:` walks
+ * the whole chain (the table's vertical scroll offset, the document's horizontal one, the flip between them), so this is
+ * one call rather than four subtractions that would have to be kept in step with `-tile`. A row scrolled out of its
+ * column still answers its place, which is Apple's contract and what a drag's image origin needs. */
+- (NSRect)frameOfRow:(NSInteger)row inColumn:(NSInteger)column
+{
+	NSTableView *table;
+
+	if (column < 0 || column >= (NSInteger)[_tables count]) {
+		return NSZeroRect;
+	}
+	table = [_tables objectAtIndex:(NSUInteger)column];
+	if (row < 0 || row >= [table numberOfRows]) {
+		return NSZeroRect;
+	}
+	return [self convertRect:[table rectOfRow:row] fromView:table];
+}
+
+/* **THE INVERSE, BY WALKING THE COLUMNS' x BANDS.** The point goes into the document first (one conversion), then the
+ * bands are walked exactly the way `-tile` laid them out — same widths, same gap — and the column's own table answers the
+ * row. A point in the title strip belongs to a COLUMN and to no row, which is why the two out-parameters are set
+ * independently rather than the door refusing the whole answer. */
+- (BOOL)getRow:(NSInteger *)row column:(NSInteger *)column forPoint:(NSPoint)point
+{
+	NSPoint inDocument;
+	CGFloat gap = _separatesColumns ? AG_BROWSER_GAP : 0.0;
+	CGFloat x = 0.0;
+	NSInteger found = -1;
+	NSInteger i;
+
+	if (row != NULL) {
+		*row = -1;
+	}
+	if (column != NULL) {
+		*column = -1;
+	}
+	if (_documentView == nil) {
+		return NO;
+	}
+	inDocument = [self convertPoint:point toView:_documentView];
+	/* **A POINT OUTSIDE THE DOCUMENT IS OUTSIDE EVERY COLUMN**, which the band walk below cannot answer for itself: the
+	 * pool has 256 slots laid out end to end, so without this a point beyond the browser's right edge would land in slot
+	 * 3 or 4 — a column that is not on screen and that the caller never asked about. */
+	if (inDocument.x < 0.0 || inDocument.x >= NSWidth([_documentView bounds])) {
+		return NO;
+	}
+	for (i = 0; i < (NSInteger)[_tables count]; i++) {
+		CGFloat width = [self fn_frameWidthForColumn:i];
+
+		if (inDocument.x >= x && inDocument.x < x + width) {
+			found = i;
+			break;
+		}
+		x += width + gap;
+	}
+	if (found < 0) {
+		return NO;
+	}
+	if (column != NULL) {
+		*column = found;
+	}
+	if (row != NULL) {
+		NSRect strip = [self cg_titleStripFrameInDocument:found];
+		NSTableView *table = [_tables objectAtIndex:(NSUInteger)found];
+
+		if (!NSIsEmptyRect(strip) && inDocument.y < NSMaxY(strip)) {
+			*row = -1;	/* the title strip: a column but no row */
+		} else {
+			*row = [table rowAtPoint:[self convertPoint:point toView:table]];
+		}
+	}
+	return YES;
+}
+
+/* ============================================================================================ *
+ * THE TITLE STRIP: WHAT DECIDES IT, WHAT IS DRAWN IN IT, AND HOW WIDE A COLUMN'S CONTENT IS       *
+ * ============================================================================================ */
+
+- (BOOL)isTitled
+{
+	return _titled;
+}
+
+/* **TURNING THE STRIP ON OR OFF IS A RELAYOUT**, because it is the list's height that changes: with the strip the column's
+ * scroll view starts `-titleHeight` down and is that much shorter, so `-tile` is what makes the flag true of the pixels
+ * as well as of the answer. */
+- (void)setTitled:(BOOL)flag
+{
+	BOOL wanted = flag ? YES : NO;
+
+	if (wanted == _titled) {
+		return;
+	}
+	_titled = wanted;
+	[self tile];
+	[_documentView setNeedsDisplay:YES];
+}
+
+/* **THE TITLE'S LOOK, IN THE RECT IT IS GIVEN.** A band in the control's background colour, a one-point rule along the
+ * strip's BOTTOM edge (the edge the list is under), and the title itself inset and vertically centred — the era's
+ * column header, drawn by the browser rather than by a cell because the strip is the browser's and not a control's.
+ *
+ * THE RECT'S COORDINATE SPACE IS WHATEVER CONTEXT IS CURRENT, which is the document view's (flipped) when the view draws
+ * it and any caller's own when it is called directly; the drawing above is written in the rect's terms and needs no
+ * flip of its own. A title nobody set draws the band and the rule and no text, which is what an empty column's header
+ * looks like. */
+- (void)drawTitleOfColumn:(NSInteger)column inRect:(NSRect)rect
+{
+	NSString *title;
+	NSFont *font;
+	CGFloat textHeight;
+	NSPoint textOrigin;
+
+	if (NSIsEmptyRect(rect)) {
+		return;
+	}
+	[[NSColor colorWithCalibratedWhite:0.92 alpha:1.0] setFill];
+	[[NSBezierPath bezierPathWithRect:rect] fill];
+	[[NSColor controlDarkShadowColor] setFill];
+	[[NSBezierPath bezierPathWithRect:NSMakeRect(NSMinX(rect), NSMinY(rect), NSWidth(rect), 1.0)] fill];
+
+	title = [self titleOfColumn:column];
+	if (title == nil || [title length] == 0) {
+		return;
+	}
+	font = [NSFont systemFontOfSize:[NSFont smallSystemFontSize]];
+	textHeight = [font ascender] - [font descender];
+	textOrigin = NSMakePoint(NSMinX(rect) + 6.0, NSMidY(rect) - textHeight / 2.0);
+	[title drawAtPoint:textOrigin withAttributes:[NSDictionary dictionaryWithObjectsAndKeys:
+									font, NSFontAttributeName,
+									[NSColor controlTextColor], NSForegroundColorAttributeName, nil]];
+}
+
+/* **THE TWO WIDTH CONVERSIONS ARE ONE NUMBER APART, AND IT IS THE COLUMN'S OWN BAR.** A column's frame width includes the
+ * vertical scroller that lives INSIDE it (that is what `-widthOfColumn:` answers and what `-tile` gives the scroll
+ * view), so the content width is the frame less the bar when the bar is showing. The overhead is measured from the
+ * browser's own first column rather than assumed, because this tier's scroller width is the theme's — and a browser with
+ * no columns yet answers the width unchanged, which says "nothing known to subtract" rather than inventing a number. */
+- (CGFloat)fn_columnChromeWidth
+{
+	NSUInteger i;
+
+	for (i = 0; i < [_columnScrollViews count]; i++) {
+		NSScrollView *columnScroll = [_columnScrollViews objectAtIndex:i];
+		CGFloat overhead = NSWidth([columnScroll frame]) - [columnScroll contentSize].width;
+
+		if (overhead > 0.0) {
+			return overhead;
+		}
+	}
+	return 0.0;
+}
+
+- (CGFloat)columnContentWidthForColumnWidth:(CGFloat)columnWidth
+{
+	CGFloat content = columnWidth - [self fn_columnChromeWidth];
+
+	return (content < 0.0) ? 0.0 : content;
+}
+
+- (CGFloat)columnWidthForColumnContentWidth:(CGFloat)contentWidth
+{
+	return contentWidth + [self fn_columnChromeWidth];
+}
+
+/* **THE DEFAULT WIDTH IS THE WIDTH NEW COLUMNS GET**, and `-setDefaultColumnWidth:` is the door that changes it WITHOUT
+ * touching the columns that exist — the distinction from `-setColumnWidth:`, which re-widths every one of them. */
+- (CGFloat)defaultColumnWidth
+{
+	return _columnWidth;
+}
+
+- (void)setDefaultColumnWidth:(CGFloat)width
+{
+	_columnWidth = width;
+}
+
+/* ============================================================================================ *
+ * THE CLICK: WHO WAS CLICKED, AND THE TWO ACTIONS                                              *
+ * ============================================================================================ */
+
+- (NSInteger)clickedRow
+{
+	return _clickedRow;
+}
+
+- (NSInteger)clickedColumn
+{
+	return _clickedColumn;
+}
+
+/* **THE PAIR, ON THE CONTROL RATHER THAN IN A CELL** — `NSControl`'s own comment says the pair is "the cell's" in this
+ * tree, and a browser has no cell, so its `-action` would be NULL and its `-target` nil for ever. A click that recorded
+ * where it landed and then sent nothing is worse than no door at all, so the four below are the browser's own. */
+- (id)target
+{
+	return _browserTarget;
+}
+
+- (void)setTarget:(id)target
+{
+	_browserTarget = target;
+}
+
+- (SEL)action
+{
+	return _browserAction;
+}
+
+- (void)setAction:(SEL)action
+{
+	_browserAction = action;
+}
+
+/* **A CLICK RECORDS WHERE IT LANDED AND THEN SENDS THE ACTION.** The selection is the click's result, so the row and
+ * column are read from it rather than passed in: a caller with a synthetic click selects first and sends this, which is
+ * what the table's own selection path does. `sender` is handed on when there is one, because `-sendAction:to:from:`
+ * passes it to the target and Apple's own callers pass the control. */
+- (void)doClick:(id)sender
+{
+	if (_selectedColumn >= 0) {
+		_clickedColumn = _selectedColumn;
+		_clickedRow = [self selectedRowInColumn:_selectedColumn];
+	} else {
+		_clickedColumn = -1;
+		_clickedRow = -1;
+	}
+	if ([self action] != NULL) {
+		[[NSApplication sharedApplication] sendAction:[self action] to:[self target]
+							  from:((sender != nil) ? sender : self)];
+	}
+}
+
+- (void)doDoubleClick:(id)sender
+{
+	if (_selectedColumn >= 0) {
+		_clickedColumn = _selectedColumn;
+		_clickedRow = [self selectedRowInColumn:_selectedColumn];
+	}
+	if (_doubleAction != NULL) {
+		[[NSApplication sharedApplication] sendAction:_doubleAction to:[self target]
+							  from:((sender != nil) ? sender : self)];
+	}
+}
+
+/* **UPDATING THE SCROLLER HERE IS RE-TILING**, because the outer bar's presence and range are exactly what `-tile`
+ * computes from the column count and the document's width. Apple's door exists because its browser keeps a scroller of
+ * its own to poke; this one has the scroll view do that, so the poke is the re-tiling. */
+- (void)updateScroller
+{
+	[self tile];
+}
 
 - (CGFloat)widthOfColumn:(NSInteger)column
 {
@@ -1110,7 +1482,19 @@ static NSString * const AGCoderBrowserCellPrototypeKey = @"cellPrototype";
 
 			/* **THE COLUMN'S OWN SETTINGS ARE ALREADY MADE.** Re-setting the scroller, the autohide
 			 * policy and the background here re-tiled the scroll view three more times per column per pass. */
-			[columnScroll setFrame:NSMakeRect(x, 0.0, frameWidth, available.height)];
+			/* **THE COLUMN'S LIST STARTS BELOW THE TITLE STRIP, and the strip is reserved from the same height the column
+			 * had before it existed — so a browser that is not titled tiles exactly as it always did, and a titled one gives
+			 * up `-titleHeight` at the top rather than growing. A column shorter than the strip keeps no list at all rather
+			 * than a negative frame. */
+			{
+				CGFloat strip = _titled ? _titleHeight : 0.0;
+				CGFloat listHeight = available.height - strip;
+
+				if (listHeight < 0.0) {
+					listHeight = 0.0;
+				}
+				[columnScroll setFrame:NSMakeRect(x, strip, frameWidth, listHeight)];
+			}
 			content = [columnScroll contentSize];
 			tableHeight = (CGFloat)[[_columnCounts objectAtIndex:i] integerValue] * _rowHeight;
 			if (tableHeight < content.height) {
@@ -1445,6 +1829,9 @@ static NSString * const AGCoderBrowserCellPrototypeKey = @"cellPrototype";
 	}
 	[_titles replaceObjectAtIndex:(NSUInteger)column
 			     withObject:(title != nil) ? (id)title : (id)[NSNull null]];
+	/* **A NEW TITLE IS NEW INK IN THE STRIP.** Nothing else marks the document dirty for it: the title is not a subview
+	 * and does not change a frame, so the drawing has to be asked for. */
+	[_documentView setNeedsDisplay:YES];
 }
 
 - (NSString *)titleOfColumn:(NSInteger)column

@@ -2342,6 +2342,40 @@ delegate — the negative control (flag off, nothing recorded), one undo for a t
 door, a break starting a new group, a non-adjacent edit starting its own, three backspaces as one undo, and a smart
 delete's undo restoring the space it took.
 
+### The browser's columns: a title strip, three frames and the point that maps back
+
+**THE BROWSER HAD A `-titleHeight` ITS LAYOUT IGNORED AND A HEADER THAT SAID SO.** `-isTitled` did not exist, no column
+reserved a strip, and a delegate's `-browser:titleOfColumn:` was stored and never drawn. That is the slice: **a titled
+browser now reserves `-titleHeight` above each column and draws the column's title there**, through
+`-drawTitleOfColumn:inRect:` — a band in the control's background, a one-point rule along the edge the list is under, and
+the title in the small system font. Apple's default is titled, so the default here is too, and a browser made untitled
+tiles exactly as it did before.
+
+**AND THE THREE FRAMES ARE ONE RECT CUT THREE WAYS.** `-frameOfColumn:` is the whole column including the strip,
+`-frameOfInsideOfColumn:` is the list under it, and `-titleFrameOfColumn:` is the strip — all in the BROWSER's
+coordinates (unflipped, y = 0 at the bottom), converted out of the scrolling document so a caller gets a place on screen.
+`-frameOfRow:inColumn:` is a row's rect there, and `-getRow:column:forPoint:` is its exact inverse: a point in the strip
+answers the column and no row, a point past the loaded columns answers an EMPTY slot with no row (this class's slots are
+laid out to fill the visible width), and a point outside the document answers nothing.
+
+**THE DOCUMENT VIEW IS FLIPPED NOW**, which it was not: a title belongs above its list, a flipped document says that
+with y = 0 at the top, the table inside each column is flipped too so a row's rect converts without a mirror, and a text
+draw in an unflipped context is the mirror this tree has already paid for. `-columnContentWidthForColumnWidth:` and its
+inverse are the frame against the width the table gets — the difference being the column's own vertical scroller, which
+lives INSIDE the column — and `-defaultColumnWidth`/`-setDefaultColumnWidth:` are the width new columns get, as distinct
+from `-setColumnWidth:`, which re-widths the ones that exist.
+
+**TWO FINDINGS, BOTH AT THE DOORS.** `-clickedRow`/`-clickedColumn` are recorded where a press arrives (the table's
+selection proposal) and again by `-doClick:`, which also sends the action; `-doDoubleClick:` sends the double one. And a
+browser is an `NSControl` with **no cell**, so `NSControl`'s cell-forwarding target/action answered nil/NULL for ever and a
+click sent nothing — the browser keeps its own pair now, which is where Apple's `NSControl` keeps it.
+
+`tests/browser_geometry.m` asserts it in 40 checks: the defaults, the three frames adding up (strip at the top, list
+under it, heights summing to the column's), the second column's place past the gutter, a row's place inside the list, the
+`-getRow:column:forPoint:` round trip with all three edges, the title's INK on a bitmap with an untitled column as the
+negative control, the click through the table's own selection path, and the width conversion — equal for a column that
+fits its rows, narrower once it scrolls.
+
 ### Still absent, and why
 
 **NINE THINGS THAT USED TO BE ON THIS LIST ARE NOT ANY MORE, AND THE LIST IS CORRECTED RATHER THAN QUIETLY SHRUNK:**

@@ -957,6 +957,47 @@ flag: the typed space in the store, the fused words with the flag off, the four 
 one space, and a real `NSUndoManager` through a window delegate — the flag-off negative control, one undo for a typed
 word, a redo, a break, a non-adjacent edit, three backspaces as one undo, and the smart delete's space restored.
 
+## 38. The browser's titles and geometry: a strip the layout ignored, and a control with no cell
+
+**THE TITLE HEIGHT WAS A NUMBER NOTHING READ.** `-titleHeight` was stored, `-browser:titleOfColumn:` was asked and
+remembered, and the header said in as many words that the columns "do not draw a title strip". The slice reserved the
+strip (`-isTitled`, Apple's default YES), drew the title in it through `-drawTitleOfColumn:inRect:`, and cut the three
+published frames out of one rect: the column includes its strip, `-frameOfInsideOfColumn:` is the list under it, and
+`-titleFrameOfColumn:` is the strip. All three convert OUT of the scrolling document into the browser's own unflipped
+coordinates, so a scrolled browser answers a negative x for a column scrolled off the left — which is the truth rather
+than a clamp.
+
+**AND THE DOCUMENT VIEW IS FLIPPED NOW.** A title belongs above its list; a flipped document says that with y = 0 at the
+top; the table inside each column is flipped too, so a row's rect converts to the document without a mirror; and text
+drawn into an unflipped context is the upside-down mirror this tree has paid for before (`HANDOFF-2.md` §4). The gutter
+drawing and the resize-cursor rects are full-height and x-only, so they were unaffected.
+
+**`-getRow:column:forPoint:` IS THE INVERSE, AND ITS EDGES ARE THE CLASS'S SHAPE.** The point goes into the document once
+and the column bands are walked exactly the way `-tile` laid them out. A point in the title strip names a COLUMN and no
+row; a point past the loaded columns names an EMPTY slot and no row, because this class lays its 256 slots out to fill the
+visible width (the header says so); and a point outside the document names nothing, which needs an explicit guard — the
+band walk would otherwise land in slot 3 of a browser that is 620 points wide.
+
+**A CELL-LESS `NSControl` HAS NOWHERE TO PUT AN ACTION, WHICH WAS A SILENT DEAD END.** `NSControl`'s target/action pair
+lives in the control's CELL in this tree, so an `NSBrowser` — which has no cell — answered nil for `-target` and NULL for
+`-action`. `-doClick:` therefore recorded where the click landed and then sent nothing, and no test could have noticed,
+because the row was only ever *checked* by asking the menu what it thought. The four doors are the browser's own now, and
+the note in the header says why: Apple's `NSControl` keeps the pair on the control.
+
+**AND THE WORKSPACE'S MENU TEST WAS FAILING FOR THE SAME KIND OF REASON**, which this slice found while verifying that the
+workspace still passed: its "File > Print… is the file window's row, through the chain" case installed a stand-in target
+and asked the menu to update, WITH NO KEY WINDOW AND NO FIRST RESPONDER for the walk to start at, so the row was disabled
+and — the second half of the same error — it asserted the ITEM's target was the stand-in, which a chain-routed row never
+has (its target stays nil and resolves when the action is sent). The test now makes the stand-in a key window's first
+responder (`NSResponder` + `-acceptsFirstResponder` — both opt-ins in this tier), checks the row is disabled with no key
+window and enabled with one, and says why the item keeps a nil target. That is a test fix in the workspace repository, not
+in this one, and it is recorded here because the AppKit's `-makeKeyWindow` and `-acceptsFirstResponder` contracts are what
+it had to satisfy.
+
+`tests/browser_geometry.m` measures it in **40 checks**: the defaults, three frames that add up, the second column past
+the gutter, a row's place, the inverse with all three edges, the title's ink against an untitled column, the click through
+the table's selection path with both actions, and the width conversion in both the fitting and the scrolling case.
+
 ## Keeping in sync
 
 The Fiwix AppKit is the origin and this repository has now diverged from it in the seam. A fix made there
