@@ -7,19 +7,19 @@ THIRTEENTH SLICE HAS LANDED SINCE, and §9 is its record.**
 file's §2 instrument rules and §4 traps are still the ones these sessions used most. **THIS FILE'S §2 NUMBERS SUPERSEDE
 `HANDOFF-4.md`'s**, which are twelve slices old.*
 
-*State at this handover: **nineteen slice commits** since the fourth handoff, tree clean, **160 tests passing in about
-87 s**, `api-ledger check` holding **375 metrics** — **131 of 168 classes (78%), 4505 of 4505 selectors (100%), 39 of 56
-protocols (70%), 86 of 86 functions**, 5032 methods declared with 8 having no body, **ALL 129 classes with a surface at
+*State at this handover: **twenty slice commits** since the fourth handoff, tree clean, **161 tests passing in about
+87 s**, `api-ledger check` holding **375 metrics** — **132 of 168 classes (79%), 4519 of 4519 selectors (100%), 39 of 56
+protocols (70%), 86 of 86 functions**, 5051 methods declared with 8 having no body, **ALL 130 classes with a surface at
 COMPLETE coverage** — refusal census **387**, owed census **19**. **The "120 of 129" this paragraph first carried was a
-recount error; §9 records it and the corrected movement, and §10–§15 take it to 129 of 129.***
+recount error; §9 records it and the corrected movement, and §10–§16 take it to 130 of 130.***
 
 ---
 
 ## 1. What these sessions did
 
 Twelve slices, in the order they landed. Each is a commit (plus, twice, a commit in the **workspace** repository and a
-gitlink advance in `$AGORA_ROOT`), and each ended green. **The thirteenth through nineteenth are `182bcd4`, `b0bd73c`,
-`1c4be0a`, `db418e3`, `1d1d7f4`, `47b090e` and `e199a54`, listed below and recorded in §9–§15.**
+gitlink advance in `$AGORA_ROOT`), and each ended green. **The thirteenth through twentieth are `182bcd4`, `b0bd73c`,
+`1c4be0a`, `db418e3`, `1d1d7f4`, `47b090e`, `e199a54` and `99baeca`, listed below and recorded in §9–§16.**
 
 | Commit | What it landed |
 |---|---|
@@ -42,6 +42,7 @@ gitlink advance in `$AGORA_ROOT`), and each ended green. **The thirteenth throug
 | `1d1d7f4` | **`NSWindow` — COMPLETE** (261/261): the mutable style mask, the three `is` aliases, the represented-filename setter, the default button/backing/order/colour state, the spaces flag, the screen initialiser, the direct animated frame set, and the local event queue's post/discard pair — plus a deferred window that can now drain its queue (§13). |
 | `47b090e` | **`NSDocument` and `NSDocumentController` — COMPLETE** (104/104 and 51/51): a separate autosave file with a `~/Library/Autosave` registry and timer, the asynchronous close review wired into `-performClose:`, the filename/save-panel state, page-layout hooks, the document→controller→application error chain (with `NSResponder`'s stale alert refusals replaced), and three named scripting refusals (§14). |
 | `e199a54` | **`NSSavePanel` and `NSWorkspace` — COMPLETE** (47/47 and 58/58): the package flag became a real listing/accept rule, and the deprecated `-openTempFile:` is `-openFile:`'s spelling — closing the last four selector rows over the 129 classes with a surface (§15). |
+| `99baeca` | **`NSImageView` — the first ABSENT class to arrive** (14/14): a thin `NSControl` over `NSImageCell`, with the three placement forwards measured in ink, the two edit gates and the animation flag, and real paste/delete beside the encoder-owned copy/cut refusal (§16). |
 
 Plus, in the **workspace** repository: `e31e44f` (the main-menu test's Print… case was asking a chain-routed row to resolve
 with no key window, and expecting the item's target to be the stand-in) and `47d9a0c` (the file window opens a document
@@ -58,14 +59,14 @@ claim; the recount is the measurement.**
 ## 2. The surface, measured
 
 ```
-classes   131 of 168   (78%)    37 missing
-selectors 4505 of 4505 (100%)    0 missing   129 of 129 classes at COMPLETE coverage
+classes   132 of 168   (79%)    36 missing
+selectors 4519 of 4519 (100%)    0 missing   130 of 130 classes at COMPLETE coverage
 protocols  39 of  56   (70%)    17 missing
 functions  86 of  86  (100%)     0 missing    10 refuse by name
-methods   5032 declared on this tree's own classes, 8 with NO body on the chain (0.2%)
+methods   5051 declared on this tree's own classes, 8 with NO body on the chain (0.2%)
 ```
 
-**SIXTEEN CLASSES ARE COMPLETE FOR THE ERA, and every one of them finished with NAMED REFUSALS rather than a stub:**
+**SEVENTEEN CLASSES ARE COMPLETE FOR THE ERA, and every one of them finished with NAMED REFUSALS rather than a stub:**
 
 | Class | Selectors | Refusing by name |
 |---|---|---|
@@ -85,9 +86,10 @@ methods   5032 declared on this tree's own classes, 8 with NO body on the chain 
 | `NSDocumentController` | 51 of 51 | 0 (the error chain forwards to the application) |
 | `NSSavePanel` | 47 of 47 | 0 (the expanded layout is answered NO, not refused) |
 | `NSWorkspace` | 58 of 58 | 23 sites (the platform services and the missing device/session pieces) |
+| `NSImageView` | 14 of 14 | 0 (copy/cut reach the image class's own encoder refusal) |
 
 **AND NO CLASS WITH A SURFACE HAS ANY DEBT.** Every one of the 129 classes the manifest shares is at COMPLETE coverage.
-The 37 ABSENT classes remain absent for the reasons in the grouping above; the class count is 131 of 168, and their
+The 36 ABSENT classes remain absent for the reasons in the grouping above; the class count is 132 of 168, and their
 selectors are not in the offered total.
 
 `*` `NSWorkspace`'s one is an INSTRUMENT quirk, not a door: the manifest's row is `selector NSWorkspace openTempFile:`
@@ -95,15 +97,15 @@ selectors are not in the offered total.
 can answer it. It is the second row in this file's census that is off BY CONSTRUCTION rather than by omission — the first
 is `NSFileWrapper`, which is Foundation's (see §3).
 
-**THE 37 ABSENT CLASSES GROUP CLEANLY, and the grouping has not changed in thirteen slices:**
+**THE 36 ABSENT CLASSES GROUP CLEANLY, and the grouping has not changed in thirteen slices:**
 
 | Group | Classes | What it needs |
 |---|---|---|
-| Editors and containers | `NSImageView`, `NSDrawer`, `NSTokenField`, `NSTokenFieldCell` | real views over machinery that exists (the image family, the split view's collapse, the field editor). `NSCollectionView`/`NSCollectionViewItem` is 10.11-only and stays refused (the plan's §9.3). |
+| Editors and containers | `NSDrawer`, `NSTokenField`, `NSTokenFieldCell` | real views over machinery that exists (the image family, the split view's collapse, the field editor). `NSCollectionView`/`NSCollectionViewItem` is 10.11-only and stays refused (the plan's §9.3). |
 | Controllers / bindings | `NSController`, `NSObjectController`, `NSArrayController`, `NSDictionaryController`, `NSUserDefaultsController`, `NSTreeController`, `NSTreeNode` | KVO/KVC substrate — a design question before it is a slice. |
 | Rules and tokens | `NSRuleEditor`, `NSPredicateEditor`, `NSPredicateEditorRowTemplate` | a predicate editor over the rule editor; both are views over controls that exist. |
 | Still refused, per the plan's §A11 | `NSOpenGL*` (5), `NSMovie`, `NSMovieView`, `NSQuickDrawView`, the four typesetters, `NSSpeechSynthesizer`, `NSSpeechRecognizer`, `NSSound`, `NSInputManager`, `NSInputServer`, `NSDockTile`, `NSHelpManager`, `NSPersistentDocument` | GL, QuickDraw, movies, a PostScript/typesetting engine, platform services, an input-manager era that is gone, a Dock contract, a Help Viewer, and a document subclass that needs autosave. Each is named at the door that would have to refuse. |
-| Not this component's | `NSFileWrapper` | Foundation's (`libagora-base/NSFileWrapper.h`). The real AppKit gap is 36. |
+| Not this component's | `NSFileWrapper` | Foundation's (`libagora-base/NSFileWrapper.h`). The real AppKit gap is 35. |
 
 **THE 17 MISSING PROTOCOLS ARE ALMOST ALL CONTRACTS FOR CLASSES IN THAT TABLE**: `NSDrawerDelegate`,
 `NSSpeechSynthesizerDelegate`, `NSSpeechRecognizerDelegate`, `NSSoundDelegate`, `NSInputServiceProvider`,
@@ -296,7 +298,8 @@ than four big slices — so the next session should pick a CLASS, not a subsyste
    autosave family is the one that needs a design decision before code.
 6. **DONE in §15: `NSSavePanel` 47/47 and `NSWorkspace` 58/58.** The package flag is a real listing rule and the
    deprecated temp-file verb is `-openFile:`'s spelling. **There is no class tail left.**
-7. **Then the absent classes in §2's order**: the editors (`NSImageView` is the most useful — the image family is complete),
+7. **Then the absent classes in §2's order**: `NSImageView` is DONE in §16; the remaining editors are `NSDrawer`,
+   `NSTokenField` and `NSTokenFieldCell`,
    the rules pair, and the controllers/bindings — **which are a DESIGN QUESTION before they are a slice**, because this tier
    has no KVO.
 8. **And leave refused** (§A11 and this tree's record): OpenGL, QuickDraw, movies, the four typesetters, `NSCollectionView`
@@ -307,7 +310,7 @@ than four big slices — so the next session should pick a CLASS, not a subsyste
 
 ## 7. Things a reader should not have to rediscover
 
-* **THE SIXTEEN COMPLETE CLASSES ARE COMPLETE IN A SPECIFIC SENSE**: every selector Apple's 10.6 header declares for them is
+* **THE SEVENTEEN COMPLETE CLASSES ARE COMPLETE IN A SPECIFIC SENSE**: every selector Apple's 10.6 header declares for them is
   DECLARED and ANSWERED, and a refused door is an ANSWERED door (it prints its reason and returns its type's empty value).
   `-respondsToSelector:` is YES for a refusal. That is the plan's own disposition rule, and it is why the ledger and the
   refusal census have to be read TOGETHER.
@@ -333,7 +336,7 @@ than four big slices — so the next session should pick a CLASS, not a subsyste
 * **THE BROWSER ADVERTISES THE 10.6 ITEM CONTRACT AND FALLS BACK TO THE NEXXT CELL ONE.** `-browser:numberOfChildrenOfItem:`
   is the test for which model a delegate speaks; the item walk starts at `nil`, retains nothing, and a delegate implements
   ONE contract (the one allowed overlap is a styling `-browser:willDisplayCell:atRow:column:`).
-* **THE SUITE IS 160 TESTS IN ABOUT 87 SECONDS, AND `ctest --test-dir build -j4` IS THE GATE.** The exit status is the
+* **THE SUITE IS 161 TESTS IN ABOUT 87 SECONDS, AND `ctest --test-dir build -j4` IS THE GATE.** The exit status is the
   witness, not the tail of the output. The workspace's suite is 14 tests and belongs in the same gate run.
 
 ---
@@ -736,3 +739,50 @@ which are the two an offscreen harness can measure without launching a handler.
 `NSImageView` is the most useful, the rules pair is a view over existing controls, and the controllers/bindings are a
 KVO design question before they are a slice — plus the plan's §A11 refusals, which stay refused. The instruments are
 green: 160 tests, 4505/4505 selectors over 129 classes, 387 refusal sites, 19 owed notes.
+
+---
+
+## 16. `NSImageView` arrives: the cell's face, two edit gates, and an encoder the image class owns
+
+**Commit `99baeca`.** `NSImageView` is present and COMPLETE at 14 of 14 — the first class from the absent list to arrive,
+and the seventeenth complete class. The change takes the class count 131 -> 132 (79% of 168), the offered selectors
+4505 -> 4519, and the complete-coverage count 129 -> 130; the missing count is still 0. The suite is 161 tests, the
+refusal census stayed 387, the owed census stayed 19, and `tests/image_view.m` is the new probe (22 checks). The
+workspace's 14 tests were run too.
+
+**THE VIEW IS THE CELL'S FACE AND THE TWO EDIT FLAGS.** The image, `-imageAlignment`, `-imageScaling` and
+`-imageFrameStyle` are `NSImageCell`'s and the view forwards each with a redisplay; `-isEditable` is the cell's flag;
+`-allowsCutCopyPaste` and `-animates` are the view's own storage. `+cellClass` answers `NSImageCell`, and the designated
+initialiser makes one.
+
+**THE ALIGNMENT FORWARD IS MEASURED IN INK.** The probe renders a 20-point red image at `NSImageAlignLeft` and
+`NSImageAlignRight` and reads the red box's x-range; a value check alone would pass a setting that never reached the
+drawing.
+
+**THE COMMANDS ARE GATED BY BOTH FLAGS, AND THE ENCODER DECIDES THE REST.** `-paste:` with `-allowsCutCopyPaste` and
+`-isEditable` on reads the pasteboard's PNG through `NSImage -initWithPasteboard:` and sets the image; `-delete:` clears
+it. `-copy:`/`-cut:` reach `NSImage -TIFFRepresentation`, which refuses by name because this tree's CoreGraphics has no
+`CGImageDestination`, so cut leaves the image in place rather than clearing a field it could not copy. `-animates` is
+stored and answered, and the header says outright that no timer is made: this tier's `NSImage` has no animation clock.
+
+**AND THE TYPE NAME IS APPLE'S NOW.** `NSImageCell.h` carries `typedef NSCellImageAlignment NSImageAlignment;` so an
+`NSImageView` caller can spell the SDK's type while the cell keeps its older name; the values are the same.
+
+**TRAPS THIS SLICE PAID FOR.**
+
+* **A FLAG'S READER SHOULD BE AN EFFECT.** `-allowsCutCopyPaste` gates the four commands, and both `-paste:` and
+  `-delete:` change the image only when it and `-isEditable` are on. `-animates` has no effect because `NSImage` has no
+  animation clock, and that is SAID at the door rather than implied.
+* **COPY/CUT CANNOT FINISH WITHOUT AN ENCODER, AND THE IMAGE CLASS ALREADY SAYS SO.** `NSImage -TIFFRepresentation`
+  prints the refusal; the view does not add a second message. Cut tests the write's answer, so it does not clear the
+  field when the copy failed.
+* **THE INK IS THE ONLY WITNESS TO ALIGNMENT.** The `NSImageCell` stores the value and draws it; a new view that
+  forwarded the setter but forgot the redisplay would pass a value check. The probe draws both alignments.
+* **A NEW CLASS CHANGES THE DENOMINATOR.** The offered selector count rose with the class (4505 -> 4519) while the
+  missing count stayed 0; the class count is 132 of 168, and the absent list is 36. **100% of the surface still means
+  100% of the classes this tree HAS.**
+
+**WHERE THE NEXT HOUR GOES.** The absent list is 36. The remaining editors are `NSDrawer`, `NSTokenField` and
+`NSTokenFieldCell`; the rules pair is a view over controls that exist; the controllers/bindings are a KVO design
+question. `NSDrawer` needs a parent/edge layout and a collapse animation (or a stated no-animation door), and
+`NSTokenField` needs the field editor's token model — both are real slices, not one-liners.
