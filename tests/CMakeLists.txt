@@ -1304,6 +1304,16 @@ set_tests_properties(appkit-text-view-pasteboard PROPERTIES ENVIRONMENT "${_agor
 add_executable(text_view_container text_view_container.m)
 target_link_libraries(text_view_container PRIVATE App m)
 
+# **NSText'S OWN ERA SURFACE.** A field has ONE RUN, and most of this slice is about saying so honestly: the two range
+# doors set that run, the RTF pair carries it out and takes only the characters back, the resizability flags are read by the
+# edit path (a resizable field re-fits after every edit) and the limits clamp it, the spelling check selects the first
+# misspelling, and the panel plus the four run commands refuse by name.
+add_executable(text_surface text_surface.m)
+target_link_libraries(text_surface PRIVATE App m)
+
+add_test(NAME appkit-text-surface COMMAND text_surface)
+set_tests_properties(appkit-text-surface PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
+
 add_test(NAME appkit-text-view-container COMMAND text_view_container)
 set_tests_properties(appkit-text-view-container PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
 

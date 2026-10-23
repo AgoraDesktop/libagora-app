@@ -33,6 +33,12 @@
 #import <AppKit/NSBezierPath.h>
 #import <AppKit/NSGraphicsContext.h>
 #import <AppKit/NSWindow.h>
+#import <AppKit/NSFontManager.h>
+#import <AppKit/NSFontPanel.h>
+#import <AppKit/NSSpellChecker.h>
+#import <AppKit/NSPasteboard.h>
+#import <Foundation/NSFileWrapper.h>
+#import "AppKitRefusal.h"
 #import <AppKit/NSApplication.h>
 #import <AppKit/NSScrollView.h>
 #import <AppKit/NSRulerView.h>
@@ -97,6 +103,10 @@ static void fn_announce(NSText *text, NSString *name, SEL delegateSelector)
 		_font = [[NSFont systemFontOfSize:[NSFont systemFontSize]] retain];
 		_backgroundColor = nil;
 		_alignment = NSLeftTextAlignment;
+		/* **AND THE DIRECTION'S DEFAULT IS `NSWritingDirectionNatural`, WHICH IS -1** — not zero, which is
+		 * `NSWritingDirectionLeftToRight`. A zero-filled ivar would have claimed left-to-right for every field before a
+		 * caller said anything, which is the same shape of error `NSCell.h` records having paid for. */
+		_baseWritingDirection = NSWritingDirectionNatural;
 		_delegate = nil;
 		_editable = YES;
 		_selectable = YES;
@@ -318,6 +328,11 @@ static void fn_announce(NSText *text, NSString *name, SEL delegateSelector)
 	[self scrollRangeToVisible:_selectedRange];
 	fn_announce(self, NSTextDidChangeNotification, @selector(textDidChange:));
 	[self setNeedsDisplay:YES];
+	/* AND A RESIZABLE FIELD MEASURES AGAIN — the same reader the edit path has, because a caller setting a whole string
+	 * is asking the same question as a caller typing one. */
+	if (_horizontallyResizable || _verticallyResizable) {
+		[self sizeToFit];
+	}
 }
 
 - (void)replaceCharactersInRange:(NSRange)range withString:(NSString *)string
@@ -343,6 +358,12 @@ static void fn_announce(NSText *text, NSString *name, SEL delegateSelector)
 	[self setSelectedRange:NSMakeRange(range.location + [(string != nil) ? string : @"" length], 0)];
 	fn_announce(self, NSTextDidChangeNotification, @selector(textDidChange:));
 	[self setNeedsDisplay:YES];
+	/* **A RESIZABLE FIELD RE-FITS AFTER EVERY EDIT**, which is the half the flags are FOR: a field told it grows with
+	 * its text has to measure again when the text arrives, or the flag is a stored bit nobody reads. A fixed field keeps
+	 * the frame it was given, which is what a label wants. */
+	if (_horizontallyResizable || _verticallyResizable) {
+		[self sizeToFit];
+	}
 }
 
 /* ============================================================================================ *
@@ -531,13 +552,28 @@ static void fn_announce(NSText *text, NSString *name, SEL delegateSelector)
 
 - (void)sizeToFit
 {
-	NSFont *font = [self fn_font];
-	CGFloat width = [self fn_textWidth];
+	/* **`-sizeToFit` MEASURES BOTH DIMENSIONS, WHICH IS WHAT A FIELD HAS ALWAYS DONE HERE.** The resizability flags are
+	 * not what this door consults — Apple's own `-sizeToFit` fits the text either way — they are what makes the fitting
+	 * AUTOMATIC (see `-replaceCharactersInRange:withString:`, which re-fits a resizable field after an edit). The two
+	 * limits are honoured here: a zero in a dimension means "no limit there", which is what an unset size is. */
+	NSSize size;
+	CGFloat width = [self fn_textWidth] + 2.0 * NS_TEXT_INSET;
+	CGFloat height = [[self fn_font] ascender] - [[self fn_font] descender] + 2.0 * NS_TEXT_INSET;
 
-	/* THE HEIGHT IS THE FONT'S BAND AND NOT THE TEXT'S, so an empty field is the same size as a full one and a form
-	 * does not jump when its first character arrives. */
-	[self setFrameSize:NSMakeSize(width + 2.0 * NS_TEXT_INSET,
-				      [font ascender] - [font descender] + 2.0 * NS_TEXT_INSET)];
+	size = NSMakeSize(width, height);
+	if (_minSize.width > 0.0 && size.width < _minSize.width) {
+		size.width = _minSize.width;
+	}
+	if (_minSize.height > 0.0 && size.height < _minSize.height) {
+		size.height = _minSize.height;
+	}
+	if (_maxSize.width > 0.0 && size.width > _maxSize.width) {
+		size.width = _maxSize.width;
+	}
+	if (_maxSize.height > 0.0 && size.height > _maxSize.height) {
+		size.height = _maxSize.height;
+	}
+	[self setFrameSize:size];
 }
 
 /* ============================================================================================ *
@@ -1254,6 +1290,345 @@ static void fn_announce(NSText *text, NSString *name, SEL delegateSelector)
 	fn_refuse_window("NSText -pasteRuler:",
 			 "an attributed storage to put a ruler into; a plain NSText holds one run with no tab stops, so the door "
 			 "is NSTextView's");
+}
+
+/* ============================================================================================ *
+ * THE ERA'S REST: THE RUN, THE RESIZABILITY, THE RTF PAIR, THE PANEL AND THE SPELLING CHECK    *
+ * ============================================================================================ */
+
+/* ---- THE RUN'S TWO ATTRIBUTES ---------------------------------------------------------------- */
+
+- (NSColor *)textColor
+{
+	return _textColor;
+}
+
+/* **READ WHERE THE STRING IS DRAWN**, which is the whole point of a colour: `-drawRect:` sets the fill from it, so a
+ * caller that sets it sees the ink change. */
+- (void)setTextColor:(NSColor *)color
+{
+	[color retain];
+	[_textColor release];
+	_textColor = color;
+	[self setNeedsDisplay:YES];
+}
+
+/* **A RANGE ON A ONE-RUN FIELD IS THE WHOLE RUN.** The base has no attribute store — that is `NSTextView`'s — so a range
+ * that is not the whole string still sets the only colour this class has, and the header says so at the door. */
+- (void)setTextColor:(NSColor *)color range:(NSRange)range
+{
+	(void)range;
+	[self setTextColor:color];
+}
+
+- (void)setFont:(id)font range:(NSRange)range
+{
+	(void)range;
+	[self setFont:font];
+}
+
+- (NSWritingDirection)baseWritingDirection
+{
+	return _baseWritingDirection;
+}
+
+/* **AND IT IS READ BY THE DRAWING**: a right-to-left paragraph draws its string from the RIGHT edge, which is the one
+ * visible consequence a single-line field can have. */
+- (void)setBaseWritingDirection:(NSWritingDirection)direction
+{
+	_baseWritingDirection = direction;
+	[self setNeedsDisplay:YES];
+}
+
+/* ---- THE RESIZABILITY, HONOURED BY `-sizeToFit` ------------------------------------------------ */
+
+- (BOOL)isVerticallyResizable
+{
+	return _verticallyResizable;
+}
+
+- (void)setVerticallyResizable:(BOOL)flag
+{
+	_verticallyResizable = flag ? YES : NO;
+}
+
+- (BOOL)isHorizontallyResizable
+{
+	return _horizontallyResizable;
+}
+
+- (void)setHorizontallyResizable:(BOOL)flag
+{
+	_horizontallyResizable = flag ? YES : NO;
+}
+
+- (NSSize)minSize
+{
+	return _minSize;
+}
+
+- (void)setMinSize:(NSSize)size
+{
+	_minSize = size;
+}
+
+- (NSSize)maxSize
+{
+	return _maxSize;
+}
+
+- (void)setMaxSize:(NSSize)size
+{
+	_maxSize = size;
+}
+
+/* ---- THE RTF PAIR, AND THE ONE RUN THEY CARRY ------------------------------------------------- */
+
+/* THE RANGE AS AN ATTRIBUTED STRING WITH THIS CLASS'S ONE RUN IN IT. That is what the writer is for: it encodes runs, and
+ * a field has exactly one. An out-of-range request is clamped the way every other range door here clamps. */
+- (NSAttributedString *)cg_attributedSubstringForRange:(NSRange)range
+{
+	NSUInteger length = [_string length];
+	NSMutableDictionary *attributes = [NSMutableDictionary dictionary];
+
+	if (range.location > length) {
+		range.location = length;
+	}
+	if (range.location + range.length > length) {
+		range.length = length - range.location;
+	}
+	if ([self font] != nil) {
+		[attributes setObject:[self font] forKey:NSFontAttributeName];
+	}
+	if (_textColor != nil) {
+		[attributes setObject:_textColor forKey:NSForegroundColorAttributeName];
+	}
+	return [[[NSAttributedString alloc] initWithString:[_string substringWithRange:range]
+						attributes:attributes] autorelease];
+}
+
+- (NSData *)RTFFromRange:(NSRange)range
+{
+	return [[self cg_attributedSubstringForRange:range] RTFRepresentation];
+}
+
+/* **THE RTFD FORM IS THE PACKAGE, SERIALIZED.** Foundation owns the writer (`-RTFDFileWrapperFromRange:…`, filled in by
+ * this library's constructor) and `NSFileWrapper -serializedRepresentation` is the bytes a document file carries — which is
+ * what `-initWithRTFD:` reads back. The RTF door above is the text-only form. */
+- (NSData *)RTFDFromRange:(NSRange)range
+{
+	NSAttributedString *piece = [self cg_attributedSubstringForRange:range];
+	NSFileWrapper *package = [piece RTFDFileWrapperFromRange:NSMakeRange(0, [piece length])
+					       documentAttributes:nil];
+
+	return (package != nil) ? [package serializedRepresentation] : nil;
+}
+
+/* **THE CHARACTERS COME IN AND THE RUNS DO NOT**, which is the honest half for a one-run field: a bold word pasted into a
+ * plain field would be bold on screen and plain on the next keystroke. The view applies the runs over its store. */
+- (void)replaceCharactersInRange:(NSRange)range withRTF:(NSData *)rtfData
+{
+	NSAttributedString *attributed;
+
+	if (rtfData == nil) {
+		return;
+	}
+	attributed = [[[NSAttributedString alloc] initWithRTF:rtfData documentAttributes:NULL] autorelease];
+	if (attributed != nil) {
+		[self replaceCharactersInRange:range withString:[attributed string]];
+	}
+}
+
+- (void)replaceCharactersInRange:(NSRange)range withRTFD:(NSData *)rtfdData
+{
+	NSAttributedString *attributed;
+
+	if (rtfdData == nil) {
+		return;
+	}
+	attributed = [[[NSAttributedString alloc] initWithRTFD:rtfdData documentAttributes:NULL] autorelease];
+	if (attributed != nil) {
+		[self replaceCharactersInRange:range withString:[attributed string]];
+	}
+}
+
+/* THE DOCUMENT FORM: RTFD is the package the writer produces, read and written through the file system. */
+- (void)readRTFDFromFile:(NSString *)path
+{
+	NSData *data;
+
+	if (path == nil) {
+		return;
+	}
+	/* **THE PACKAGE IS A DIRECTORY ON DISK**, so it is opened as one and handed to the wrapper reader — the same door
+	 * `-RTFDFromRange:`'s product goes back through. */
+	{
+		NSFileWrapper *package = [[NSFileWrapper alloc] initWithPath:path];
+		NSAttributedString *attributed;
+
+		if (package == nil) {
+			return;
+		}
+		attributed = [[[NSAttributedString alloc] initWithRTFDFileWrapper:package
+								documentAttributes:NULL] autorelease];
+		[package release];
+		if (attributed != nil) {
+			[self setString:[attributed string]];
+		}
+	}
+	(void)data;
+}
+
+- (BOOL)writeRTFDToFile:(NSString *)path atomically:(BOOL)flag
+{
+	NSData *data;
+
+	(void)flag;
+	if (path == nil) {
+		return NO;
+	}
+	{
+		NSAttributedString *whole = [self cg_attributedSubstringForRange:NSMakeRange(0, [_string length])];
+		NSFileWrapper *package = [whole RTFDFileWrapperFromRange:NSMakeRange(0, [whole length])
+						       documentAttributes:nil];
+
+		if (package == nil) {
+			return NO;
+		}
+		return [package writeToFile:path atomically:flag updateFilenames:YES];
+	}
+	(void)data;
+}
+
+/* ---- THE FONT PANEL AND THE FONT PASTEBOARD ---------------------------------------------------- */
+
+- (BOOL)usesFontPanel
+{
+	return _usesFontPanel;
+}
+
+- (void)setUsesFontPanel:(BOOL)flag
+{
+	_usesFontPanel = flag ? YES : NO;
+}
+
+/* **`-changeFont:` IS THE FONT PANEL'S TARGET/ACTION AND NOTHING ELSE**, which is why `-usesFontPanel` is consulted first:
+ * a field that does not use the panel is not made its target. The manager's own `-modifyFont:` path does the setting. */
+- (void)changeFont:(id)sender
+{
+	NSFontManager *manager = [NSFontManager sharedFontManager];
+
+	if (!_usesFontPanel) {
+		return;
+	}
+	[manager setTarget:self];
+	[manager setAction:@selector(cg_takeFontFromManager:)];
+	[sender orderFrontFontPanel:sender];
+}
+
+- (void)cg_takeFontFromManager:(id)sender
+{
+	NSFont *converted = [[NSFontManager sharedFontManager] convertFont:[self font]];
+
+	if (converted != nil) {
+		[self setFont:converted];
+	}
+	(void)sender;
+}
+
+/* **A FONT ON A PASTEBOARD IS ITS NAME AND SIZE**, which is Apple's font pasteboard type here: the two facts that
+ * re-create it. A field that pastes one sets it; a field that copies an empty string copies nothing. */
+- (void)copyFont:(id)sender
+{
+	NSPasteboard *board = [NSPasteboard generalPasteboard];
+	NSFont *font = [self font];
+	NSString *description;
+
+	(void)sender;
+	if (font == nil) {
+		return;
+	}
+	description = [NSString stringWithFormat:@"%@ %g", [font fontName], (double)[font pointSize]];
+	[board declareTypes:[NSArray arrayWithObject:NSFontPboardType] owner:nil];
+	[board setString:description forType:NSFontPboardType];
+}
+
+- (void)pasteFont:(id)sender
+{
+	NSPasteboard *board = [NSPasteboard generalPasteboard];
+	NSString *description = [board stringForType:NSFontPboardType];
+	NSMutableArray *parts;
+
+	(void)sender;
+	if (description == nil) {
+		return;
+	}
+	parts = [[[description componentsSeparatedByString:@" "] mutableCopy] autorelease];
+	if ([parts count] < 2) {
+		return;
+	}
+	{
+		CGFloat size = (CGFloat)[[parts lastObject] doubleValue];
+		NSString *name;
+		NSFont *font;
+
+		[parts removeLastObject];
+		name = [parts componentsJoinedByString:@" "];
+		font = [NSFont fontWithName:name size:size];
+		if (font != nil) {
+			[self setFont:font];
+		}
+	}
+}
+
+/* ---- THE SPELLING CHECK, AND THE PANEL THAT IS NOT HERE ---------------------------------------- */
+
+/* **THE CHECK IS REAL AND THE PANEL IS NOT.** `NSSpellChecker` answers the first misspelled range; this door SELECTS it, so
+ * a caller sees where the doubt is — the panel Apple would show is the piece this tier has not got, which
+ * `-showGuessPanel:` says by name. */
+- (void)checkSpelling:(id)sender
+{
+	NSRange misspelled;
+
+	(void)sender;
+	misspelled = [[NSSpellChecker sharedSpellChecker] checkSpellingOfString:_string startingAt:0];
+	if (misspelled.location == NSNotFound) {
+		return;
+	}
+	[self setSelectedRange:misspelled];
+	[self scrollRangeToVisible:misspelled];
+}
+
+- (void)showGuessPanel:(id)sender
+{
+	(void)sender;
+	fn_refuse_workspace("NSText -showGuessPanel:", "the spelling panel this tier has not built");
+}
+
+/* ---- AND THE FOUR THAT NEED RUNS ----------------------------------------------------------------- */
+
+- (void)subscript:(id)sender
+{
+	(void)sender;
+	fn_refuse_workspace("NSText -subscript:", "runs - a one-run field has no attribute to raise (NSTextView has them)");
+}
+
+- (void)superscript:(id)sender
+{
+	(void)sender;
+	fn_refuse_workspace("NSText -superscript:", "runs - a one-run field has no attribute to raise (NSTextView has them)");
+}
+
+- (void)unscript:(id)sender
+{
+	(void)sender;
+	fn_refuse_workspace("NSText -unscript:", "runs - a one-run field has no attribute to clear (NSTextView has them)");
+}
+
+- (void)underline:(id)sender
+{
+	(void)sender;
+	fn_refuse_workspace("NSText -underline:", "runs - a one-run field has no attribute to set (NSTextView has them)");
 }
 
 @end

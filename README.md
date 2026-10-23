@@ -2536,6 +2536,34 @@ differ so a "widest" that answered the first row would fail, the key column anch
 lifecycle through `NSMenu`'s notifications, the highlight by index, the flash sending an action to its target exactly once
 (and not for a disabled or nonexistent row), the face, the bar height — and all ten refusals.
 
+### `NSText`'s own surface: one run, and the doors that say so
+
+**`NSText` ANSWERS ALL 70 OF THE ERA'S SELECTORS NOW** — the fourth complete class. What landed is the base's own surface,
+and the theme is that **a field has ONE RUN**: `-setTextColor:range:` and `-setFont:range:` set that single run and say so
+at the door, while `NSTextView` overrides both over its store, where the range means what it says. `-textColor` is the ink
+`-drawRect:` fills with; `-baseWritingDirection` is read by the drawing, because a right-to-left field draws from the
+right edge (and its default is `NSWritingDirectionNatural`, which is **-1** — a zero-filled ivar would have claimed
+left-to-right for every field).
+
+**THE RESIZABILITY IS READ BY THE EDIT PATH.** `-sizeToFit` measures both dimensions, as a field always has here; the
+flags make that fitting **automatic** — a horizontally or vertically resizable field re-fits after `-setString:` and after
+every edit — and `-minSize`/`-maxSize` clamp it (a zero in a dimension means "no limit there").
+
+**AND THE RTF PAIR NOW CARRIES A REAL DOCUMENT.** `-RTFFromRange:` builds an attributed string from the range's one run and
+hands it to the AppKit-aware writer; `-replaceCharactersInRange:withRTF:` takes the **characters** back (a bold word pasted
+into a plain field would be bold on screen and plain on the next keystroke); the RTFD doors use Foundation's
+`-RTFDFileWrapperFromRange:` package, serialized for `-RTFDFromRange:` and written to disk for
+`-writeRTFDToFile:atomically:` — a real round trip. `-copyFont:`/`-pasteFont:` round-trip a face through the font
+pasteboard, `-changeFont:` targets the font manager when `-usesFontPanel` says it may, and `-checkSpelling:` asks
+`NSSpellChecker` and **selects the first misspelling**, which is the half this tier can show.
+
+**FIVE DOORS REFUSE BY NAME**: `-showGuessPanel:` (no spelling panel) and the four script/underline commands, which need
+runs a one-run field has not got — `NSTextView`'s versions are the ones that can.
+
+`tests/text_surface.m` asserts it in 26 checks: the ink and the two range doors, the direction, the resizability (fixed
+width after an edit, wider after the same edit when the flag is on, the max clamp and the min floor), the RTF round trip,
+the RTFD file round trip, the font pasteboard, the spelling selection — and the five refusals.
+
 ### Still absent, and why
 
 **NINE THINGS THAT USED TO BE ON THIS LIST ARE NOT ANY MORE, AND THE LIST IS CORRECTED RATHER THAN QUIETLY SHRUNK:**

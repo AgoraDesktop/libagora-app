@@ -163,6 +163,22 @@ typedef NSInteger NSTextMovement;
 	 * clip view is a later slice: the drawing layer renders a bounds offset now, but this view is a FIELD rather than
 	 * a document, and where a single line's origin lives is a change worth making on its own.) */
 	CGFloat _originX;
+	/* ============================================================================================
+	 * AND THE REST OF THE ERA'S SURFACE HAS ITS OWN STATE, ONE IVAR PER DOOR THAT NEEDS ONE.
+	 *
+	 * **`_textColor` IS THE INK THE STRING IS DRAWN IN** (the background is a separate fact and already had its ivar);
+	 * the two RESIZABILITY flags and the min/max sizes are what `-sizeToFit` honours, which is why a one-line field can
+	 * be told to grow horizontally with its text and never taller than a limit. `_baseWritingDirection` is the
+	 * paragraph's direction — the drawing answers it for a right-to-left run — and `_usesFontPanel` is what
+	 * `-changeFont:` consults before it opens one.
+	 * ========================================================================================== */
+	NSColor *_textColor;		/* RETAINED, or nil for the control text colour */
+	NSWritingDirection _baseWritingDirection;
+	BOOL _verticallyResizable;
+	BOOL _horizontallyResizable;
+	NSSize _minSize;
+	NSSize _maxSize;
+	BOOL _usesFontPanel;
 }
 
 /* THE STRING, WHICH IS WHAT THIS CLASS IS FOR. `-setString:` REPLACES the whole of it and puts the insertion point at
@@ -218,6 +234,65 @@ typedef NSInteger NSTextMovement;
 - (void)setEditable:(BOOL)flag;
 - (BOOL)isSelectable;
 - (void)setSelectable:(BOOL)flag;
+/* ==================================================================================================================
+ * THE ERA'S REST: THE RUN'S TWO ATTRIBUTES, THE RESIZABILITY, THE RTF PAIR, THE FONT PANEL AND THE SPELLING CHECK.
+ *
+ * **THIS CLASS KEEPS ONE RUN, AND THE TWO RANGE DOORS SAY SO.** `-setTextColor:range:` and `-setFont:range:` exist
+ * because a field editor is a `NSText` and a caller sets a range on it; a one-run field has no runs to split, so the
+ * whole string takes the attribute and the header says it rather than growing a store this class was never built around.
+ * `NSTextView` overrides both over its own store, where the range means what it says.
+ *
+ * **THE RTF PAIR CARRIES THE RUN THIS CLASS HAS.** `-RTFFromRange:` builds an attributed string from the range and the
+ * one run, and hands it to the AppKit-aware writer; `-replaceCharactersInRange:withRTF:` reads an RTF document and takes
+ * its CHARACTERS — the runs are the view's to apply, and a field that pretended otherwise would show a bold word in a
+ * plain field. The RTFD pair is the package form of the same two, read and written through a file.
+ *
+ * **THE RESIZABILITY IS READ BY `-sizeToFit`**: a vertically resizable field takes the height its text needs; a
+ * horizontally resizable one takes the WIDTH its text needs; and both are clamped to the min and max sizes. A field with
+ * neither flag keeps the frame it was given, which is what a label wants.
+ *
+ * **AND TWO DOORS REFUSE**: `-showGuessPanel:` needs the spelling panel this tier has not got, and the four script and
+ * underline commands need RUNS — a one-run field cannot carry them, and the view's own versions are the ones that can.
+ * `-checkSpelling:` is real and does the honest half: it asks `NSSpellChecker` and SELECTS the first misspelling, since
+ * there is no panel to show it in.
+ * ================================================================================================================ */
+- (nullable NSColor *)textColor;
+- (void)setTextColor:(nullable NSColor *)color;
+- (void)setTextColor:(nullable NSColor *)color range:(NSRange)range;
+- (void)setFont:(nullable id)font range:(NSRange)range;
+
+- (NSWritingDirection)baseWritingDirection;
+- (void)setBaseWritingDirection:(NSWritingDirection)direction;
+
+- (BOOL)isVerticallyResizable;
+- (void)setVerticallyResizable:(BOOL)flag;
+- (BOOL)isHorizontallyResizable;
+- (void)setHorizontallyResizable:(BOOL)flag;
+- (NSSize)minSize;
+- (void)setMinSize:(NSSize)size;
+- (NSSize)maxSize;
+- (void)setMaxSize:(NSSize)size;
+
+- (nullable NSData *)RTFFromRange:(NSRange)range;
+- (nullable NSData *)RTFDFromRange:(NSRange)range;
+- (void)replaceCharactersInRange:(NSRange)range withRTF:(NSData *)rtfData;
+- (void)replaceCharactersInRange:(NSRange)range withRTFD:(NSData *)rtfdData;
+- (void)readRTFDFromFile:(NSString *)path;
+- (BOOL)writeRTFDToFile:(NSString *)path atomically:(BOOL)flag;
+
+- (BOOL)usesFontPanel;
+- (void)setUsesFontPanel:(BOOL)flag;
+- (void)changeFont:(nullable id)sender;
+- (void)copyFont:(nullable id)sender;
+- (void)pasteFont:(nullable id)sender;
+- (void)checkSpelling:(nullable id)sender;
+- (void)showGuessPanel:(nullable id)sender;
+
+- (void)subscript:(nullable id)sender;
+- (void)superscript:(nullable id)sender;
+- (void)unscript:(nullable id)sender;
+- (void)underline:(nullable id)sender;
+
 - (BOOL)isRichText;
 - (void)setRichText:(BOOL)flag;
 - (BOOL)importsGraphics;

@@ -1185,6 +1185,31 @@ and answer their type's empty value.
 `tests/menu_view_surface.m` measures it in **38 checks**, including the refusals — a refusal that crashes or invents an
 answer would be worse than the absent door it replaced.
 
+## 44. `NSText`'s own surface: one run, the automatic fit, and the RTF package
+
+**THE BASE HAD 39 OF ITS 70 SELECTORS AND THE MISSING 31 WERE ITS OWN, NOT THE VIEW'S.** The theme that decided every
+door: a field has ONE RUN. `-setTextColor:range:` and `-setFont:range:` therefore set that run and say so in the header
+(the view overrides both over its store, where a range means what it says); `-textColor` is the ink the drawing fills
+with; and the four script/underline commands REFUSE, because a one-run field has no attribute to carry them.
+
+**THE RESIZABILITY NEEDED A READER, AND THE READER IS THE EDIT PATH.** `-sizeToFit` measures both dimensions — that is
+what a field has always done here and what `text_input.m` pins — so the flags cannot be what `-sizeToFit` consults. They
+make the fitting AUTOMATIC: `-setString:` and `-replaceCharactersInRange:withString:` re-fit a resizable field, and
+`-minSize`/`-maxSize` clamp the result (zero meaning no limit). A zero-filled `_baseWritingDirection` would have claimed
+left-to-right for every field, because `NSWritingDirectionNatural` is **-1** — the same shape of error `NSCell.h` records.
+
+**AND THE RTF PAIR BECAME A REAL DOCUMENT.** The RTF half is the AppKit-aware writer over the range's one run, and the
+read takes only the CHARACTERS (a bold word in a plain field would be bold for one keystroke). The RTFD half is
+Foundation's `-RTFDFileWrapperFromRange:` package: `-RTFDFromRange:` answers its `-serializedRepresentation`,
+`-writeRTFDToFile:atomically:` writes the directory through `-writeToFile:atomically:updateFilenames:`, and
+`-readRTFDFromFile:` opens the directory with `NSFileWrapper -initWithPath:` and hands it to the wrapper reader. That is a
+round trip through a real file, which is what the probe checks.
+
+**AND THE SPELLING CHECK IS HONEST ABOUT WHAT IT HAS.** `NSSpellChecker` exists, so `-checkSpelling:` asks it and SELECTS
+the first misspelling — there is no panel to show it in, which `-showGuessPanel:` says by name.
+
+`tests/text_surface.m` measures it in **26 checks**, the five refusals among them.
+
 ## Keeping in sync
 
 The Fiwix AppKit is the origin and this repository has now diverged from it in the seam. A fix made there
