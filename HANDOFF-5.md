@@ -7,19 +7,19 @@ THIRTEENTH SLICE HAS LANDED SINCE, and §9 is its record.**
 file's §2 instrument rules and §4 traps are still the ones these sessions used most. **THIS FILE'S §2 NUMBERS SUPERSEDE
 `HANDOFF-4.md`'s**, which are twelve slices old.*
 
-*State at this handover: **eighteen slice commits** since the fourth handoff, tree clean, **160 tests passing in about
-90 s**, `api-ledger check` holding **375 metrics** — **131 of 168 classes (78%), 4501 of 4505 selectors (99%), 39 of 56
-protocols (70%), 86 of 86 functions**, 5028 methods declared with 8 having no body, **127 of the 129 classes with a surface
-at COMPLETE coverage** — refusal census **387**, owed census **19**. **The "120 of 129" this paragraph first carried was a
-recount error; §9 records it and the corrected 119 -> 121 movement, and §10–§14 take it to 127.***
+*State at this handover: **nineteen slice commits** since the fourth handoff, tree clean, **160 tests passing in about
+87 s**, `api-ledger check` holding **375 metrics** — **131 of 168 classes (78%), 4505 of 4505 selectors (100%), 39 of 56
+protocols (70%), 86 of 86 functions**, 5032 methods declared with 8 having no body, **ALL 129 classes with a surface at
+COMPLETE coverage** — refusal census **387**, owed census **19**. **The "120 of 129" this paragraph first carried was a
+recount error; §9 records it and the corrected movement, and §10–§15 take it to 129 of 129.***
 
 ---
 
 ## 1. What these sessions did
 
 Twelve slices, in the order they landed. Each is a commit (plus, twice, a commit in the **workspace** repository and a
-gitlink advance in `$AGORA_ROOT`), and each ended green. **The thirteenth through eighteenth are `182bcd4`, `b0bd73c`,
-`1c4be0a`, `db418e3`, `1d1d7f4` and `47b090e`, listed below and recorded in §9–§14.**
+gitlink advance in `$AGORA_ROOT`), and each ended green. **The thirteenth through nineteenth are `182bcd4`, `b0bd73c`,
+`1c4be0a`, `db418e3`, `1d1d7f4`, `47b090e` and `e199a54`, listed below and recorded in §9–§15.**
 
 | Commit | What it landed |
 |---|---|
@@ -41,6 +41,7 @@ gitlink advance in `$AGORA_ROOT`), and each ended green. **The thirteenth throug
 | `db418e3` | **`NSView` — COMPLETE** (221/221): the forced display family, the frame/rotation setters, the subview list, autoscroll, the four named refusals (focus lock, layer, definition range) and the nine ruler client defaults — with `…inContext:` corrected to Apple's spelling (§12). |
 | `1d1d7f4` | **`NSWindow` — COMPLETE** (261/261): the mutable style mask, the three `is` aliases, the represented-filename setter, the default button/backing/order/colour state, the spaces flag, the screen initialiser, the direct animated frame set, and the local event queue's post/discard pair — plus a deferred window that can now drain its queue (§13). |
 | `47b090e` | **`NSDocument` and `NSDocumentController` — COMPLETE** (104/104 and 51/51): a separate autosave file with a `~/Library/Autosave` registry and timer, the asynchronous close review wired into `-performClose:`, the filename/save-panel state, page-layout hooks, the document→controller→application error chain (with `NSResponder`'s stale alert refusals replaced), and three named scripting refusals (§14). |
+| `e199a54` | **`NSSavePanel` and `NSWorkspace` — COMPLETE** (47/47 and 58/58): the package flag became a real listing/accept rule, and the deprecated `-openTempFile:` is `-openFile:`'s spelling — closing the last four selector rows over the 129 classes with a surface (§15). |
 
 Plus, in the **workspace** repository: `e31e44f` (the main-menu test's Print… case was asking a chain-routed row to resolve
 with no key window, and expecting the item's target to be the stand-in) and `47d9a0c` (the file window opens a document
@@ -58,13 +59,13 @@ claim; the recount is the measurement.**
 
 ```
 classes   131 of 168   (78%)    37 missing
-selectors 4501 of 4505 (99%)     4 missing   127 of 129 classes at COMPLETE coverage
+selectors 4505 of 4505 (100%)    0 missing   129 of 129 classes at COMPLETE coverage
 protocols  39 of  56   (70%)    17 missing
 functions  86 of  86  (100%)     0 missing    10 refuse by name
-methods   5028 declared on this tree's own classes, 8 with NO body on the chain (0.2%)
+methods   5032 declared on this tree's own classes, 8 with NO body on the chain (0.2%)
 ```
 
-**FOURTEEN CLASSES ARE COMPLETE FOR THE ERA, and every one of them finished with NAMED REFUSALS rather than a stub:**
+**SIXTEEN CLASSES ARE COMPLETE FOR THE ERA, and every one of them finished with NAMED REFUSALS rather than a stub:**
 
 | Class | Selectors | Refusing by name |
 |---|---|---|
@@ -82,12 +83,12 @@ methods   5028 declared on this tree's own classes, 8 with NO body on the chain 
 | `NSWindow` | 261 of 261 | 23 sites (server placement, DRM-less backings, the missing device/session pieces) |
 | `NSDocument` | 104 of 104 | 5 sites (the scripting suite and the print script command) |
 | `NSDocumentController` | 51 of 51 | 0 (the error chain forwards to the application) |
+| `NSSavePanel` | 47 of 47 | 0 (the expanded layout is answered NO, not refused) |
+| `NSWorkspace` | 58 of 58 | 23 sites (the platform services and the missing device/session pieces) |
 
-**AND ONLY TWO CLASSES STILL HAVE ANY DEBT** — the tail:
-
-```
-NSSavePanel 3    NSWorkspace 1    NSFont 0*
-```
+**AND NO CLASS WITH A SURFACE HAS ANY DEBT.** Every one of the 129 classes the manifest shares is at COMPLETE coverage.
+The 37 ABSENT classes remain absent for the reasons in the grouping above; the class count is 131 of 168, and their
+selectors are not in the offered total.
 
 `*` `NSWorkspace`'s one is an INSTRUMENT quirk, not a door: the manifest's row is `selector NSWorkspace openTempFile:`
 **with a colon Apple's declaration does not have** (every other zero-argument door in the manifest has none), so no header
@@ -293,8 +294,8 @@ than four big slices — so the next session should pick a CLASS, not a subsyste
    found a flipped vertical scale drawn upside down; the table slice made the deprecated spellings and the three
    feedback drawings real. **The two deepest tails above are what is left of the big classes**; `NSDocument`'s
    autosave family is the one that needs a design decision before code.
-6. **`NSWorkspace`'s ONE**, which is not a door (see §2) — and `NSSavePanel`'s three
-   (`-isExpanded`, `-treatsFilePackagesAsDirectories:`), which are two lines and a flag.
+6. **DONE in §15: `NSSavePanel` 47/47 and `NSWorkspace` 58/58.** The package flag is a real listing rule and the
+   deprecated temp-file verb is `-openFile:`'s spelling. **There is no class tail left.**
 7. **Then the absent classes in §2's order**: the editors (`NSImageView` is the most useful — the image family is complete),
    the rules pair, and the controllers/bindings — **which are a DESIGN QUESTION before they are a slice**, because this tier
    has no KVO.
@@ -306,7 +307,7 @@ than four big slices — so the next session should pick a CLASS, not a subsyste
 
 ## 7. Things a reader should not have to rediscover
 
-* **THE FOURTEEN COMPLETE CLASSES ARE COMPLETE IN A SPECIFIC SENSE**: every selector Apple's 10.6 header declares for them is
+* **THE SIXTEEN COMPLETE CLASSES ARE COMPLETE IN A SPECIFIC SENSE**: every selector Apple's 10.6 header declares for them is
   DECLARED and ANSWERED, and a refused door is an ANSWERED door (it prints its reason and returns its type's empty value).
   `-respondsToSelector:` is YES for a refusal. That is the plan's own disposition rule, and it is why the ledger and the
   refusal census have to be read TOGETHER.
@@ -332,7 +333,7 @@ than four big slices — so the next session should pick a CLASS, not a subsyste
 * **THE BROWSER ADVERTISES THE 10.6 ITEM CONTRACT AND FALLS BACK TO THE NEXXT CELL ONE.** `-browser:numberOfChildrenOfItem:`
   is the test for which model a delegate speaks; the item walk starts at `nil`, retains nothing, and a delegate implements
   ONE contract (the one allowed overlap is a styling `-browser:willDisplayCell:atRow:column:`).
-* **THE SUITE IS 160 TESTS IN ABOUT 90 SECONDS, AND `ctest --test-dir build -j4` IS THE GATE.** The exit status is the
+* **THE SUITE IS 160 TESTS IN ABOUT 87 SECONDS, AND `ctest --test-dir build -j4` IS THE GATE.** The exit status is the
   witness, not the tail of the output. The workspace's suite is 14 tests and belongs in the same gate run.
 
 ---
@@ -690,3 +691,48 @@ answers are recorded only after a panel runs; and the scripting trio refuses by 
 are a flag and two lines, and `NSWorkspace`'s one is the `openTempFile:` manifest quirk that is off by construction.
 After those, the debt list is empty and the next work is the absent classes: `NSImageView` is the most useful, the
 controllers are a KVO design question, and the plan's §A11 refusals stay refused.
+
+---
+
+## 15. The last two classes: a package is a directory only when told so, and the temp-file verb
+
+**Commit `e199a54`.** `NSSavePanel` and `NSWorkspace` are COMPLETE for the era — 47 of 47 and 58 of 58, the fifteenth and
+sixteenth classes to finish — and the change is 4 selector rows (4501 -> 4505 present, 4 -> 0 missing) and 4
+declarations (5028 -> 5032). The suite is 160 tests (about 87 s), the refusal census stayed 387 (no refusal was added),
+the owed census stayed 19, and the existing `save_panel` and `workspace_fileops` probes were extended rather than
+duplicated. The workspace's 14 tests were run too.
+
+**AND THAT CLOSES THE SURFACE THIS TREE CARRIES: 4505 of 4505 selectors over all 129 classes with a surface, every one
+at COMPLETE coverage.** The 37 ABSENT classes are still absent for the reasons §2 groups them under; the class count is
+131 of 168, and their selectors are not in the offered total. This is 100% of the manifest's surface OVER THIS TREE'S
+CLASSES, not 100% of the 10.6 AppKit.
+
+**THE SAVE PANEL'S PACKAGE FLAG IS A REAL LISTING RULE.** `-isExpanded` answers NO because this tier has no expanded
+layout. `-treatsFilePackagesAsDirectories` now decides how a package is listed: with NO (the default) a directory whose
+extension is `.app`, `.bundle`, `.framework`, `.plugin` or `.kext` AND which has a `Contents` inside is listed with the
+files and cannot be entered; with YES it gains the directory slash and is navigable like any other directory, including
+through the typed-path accept. The probe creates `Bundle.app/Contents` and checks both list positions.
+
+**THE WORKSPACE'S DEPRECATED VERB IS A SPELLING OF `-openFile:`.** The hyphen-less `-openTempFile` CREATES a temporary
+file and answers its path (the door this tree used); the 10.6 header's `-openTempFile:` takes an existing path and
+OPENS it, and that is `-openFile:` through the Launch Services seam. The probe checks the nil and missing-file answers,
+which are the two an offscreen harness can measure without launching a handler.
+
+**TRAPS THIS SLICE PAID FOR.**
+
+* **`-isFilePackageAtPath:` IS STRICTER THAN THE EXTENSION.** The first probe used `Bundle.agpackage` and the panel kept
+  listing it as a directory; the workspace's own rule requires a KNOWN extension (`.app`, `.bundle`, `.framework`,
+  `.plugin`, `.kext`) **and** a `Contents` child. The probe now builds `Bundle.app/Contents`, which is what the door's
+  own comment says a package is.
+* **"100% OF SELECTORS" IS 100% OF THE MANIFEST'S SURFACE OVER PRESENT CLASSES.** The four absent classes' selectors are
+  not offered; the 37 absent classes are a separate number and stay in §2. A future reader should not read this as
+  "the 10.6 AppKit is finished".
+* **`-isExpanded` IS A GETTER WITH NO SETTER IN THIS ERA'S MANIFEST.** The truthful answer is NO; there is no expanded
+  layout to set, and inventing a stored flag would be a bit nothing reads.
+* **A FLAG'S READER SHOULD BE A LISTING, NOT A GETTER.** The package flag changes which column an entry lands in and
+  whether it can be entered; the probe checks the slash, not just the bit.
+
+**WHERE THE NEXT HOUR GOES.** There is no class tail left. The remaining work is the 37 absent classes in §2's order —
+`NSImageView` is the most useful, the rules pair is a view over existing controls, and the controllers/bindings are a
+KVO design question before they are a slice — plus the plan's §A11 refusals, which stay refused. The instruments are
+green: 160 tests, 4505/4505 selectors over 129 classes, 387 refusal sites, 19 owed notes.
