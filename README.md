@@ -1138,7 +1138,20 @@ the compositor is really gone.
   advancing — and also mixed byte offsets with UTF-16 ranges. `libagora-base` fixes both and its own `string_split`
   probe is the caller the door never had.
 
-- **`ctest`: 162 of 162 passed** (the keyboard and the seam, the AppKit and its input path, the controls and their
+- **And the FIRST ABSENT CONTAINER HAS ARRIVED: `NSDrawer` — 27 of 27** (`ctest`, offscreen). It is an `NSResponder`
+  whose content is a CHILD WINDOW, which is Apple's model: the drawer's own borderless window is attached to the parent
+  and sits immediately beyond the edge it opens on, and `-contentView` is that window's content view. The four states
+  are real but SYNCHRONOUS — `-open` sets OPENING, announces WillOpen, lays out, sets OPEN and announces DidOpen, so a
+  handler sees the middle from inside — and the one stated deviation is that no slide is animated. The size has two
+  axes: the content size is the thickness in the motion direction, the transverse extent is the parent's minus the
+  leading and trailing offsets, and both clamp to the parent. `-setContentSize:` is programmatic and therefore NOT
+  limited by the min/max (Apple's rule); the user path is `-cg_resizeContentByUserToSize:`, which clamps first and then
+  asks `-drawerWillResizeContents:toSize:`. The parent RETAINS the drawer through `-drawers` (an associated list on the
+  window), a parent swap moves the child, and a parent's deallocation clears the back-pointers — which also fixed two
+  leaks in `NSWindow`'s child-window teardown. **135 of 168 classes (80%), 133 of 133 with a surface COMPLETE, 42 of 56
+  protocols, 33 absent classes.** `tests/drawer.m` measures it in 57 checks.
+
+- **`ctest`: 163 of 163 passed** (the keyboard and the seam, the AppKit and its input path, the controls and their
   metrics, the field control and its cell and its bezel and its placeholder and what it may hold, the text path and its
   word granularity and the multi-line view and its wrapping and its scrolling and its READING OF THE STORE, the STORE
   the rich-text slice is built on and the REGION it is laid out in and the WEB that ties the three together and the
@@ -1153,8 +1166,9 @@ the compositor is really gone.
   buttons do, the chrome theme, the menus and activation, and the manager's own ensure/invalidate doors, the document family's file round trip and change count, the save and open panels, and the pop-up's items, a colour's space and the menu's flags, the slider's tick values, its title band and its two
   no-argument ink doors, the table's deprecated spellings, enumerators, drag images, focus ring and destination
   feedback, the control's cell factory, one-cell selection, sender values and validate-editing, the view's
-  forced display, frame and rotation setters, subview list, autoscroll, refusals and ruler client defaults, and the token
-  field's list, its three strings, its chips, its session, its completion and its pasteboard).
+  forced display, frame and rotation setters, subview list, autoscroll, refusals and ruler client defaults, the token
+  field's list, its three strings, its chips, its session, its completion and its pasteboard, and the drawer's child
+  window, four states, five edge geometries and reviewed user resize).
 - **And the desktop's own text is SUB-PIXEL ANTIALIASED**, which is the AppKit's half of a renderer change in
   CoreGraphics: a window's surface is OPAQUE (`kCGImageAlphaNoneSkipFirst`), and the destination's opacity is
   exactly what decides whether a glyph is rasterised in colour. MEASURED on the live session: the window title's

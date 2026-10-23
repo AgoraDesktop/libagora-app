@@ -53,6 +53,8 @@
 #import "NSMenu.h"
 #import <CoreGraphics/CGBitmapContext.h>
 
+#include <objc/runtime.h>	/* the drawer list's association */
+
 #import <AppKit/NSWindow.h>
 #import <AppKit/NSPrintOperation.h>
 #import <AppKit/NSTrackingArea.h>
@@ -1129,6 +1131,28 @@ static NSString * const AGCoderWindowContentViewKey = @"contentView";
 
 - (void)dealloc
 {
+	/* **THE RELATIONSHIPS END BEFORE THE WINDOW DOES, AND TWO OF THEM WERE LEAKING.** `_cg_childWindows` was never
+	 * released at all, and a child that survived its parent kept a pointer to a window that no longer existed — the
+	 * next `-orderOut:` on it would reach freed memory. The drawers come first because detaching one takes its child
+	 * window out of `_cg_childWindows`, so the list is stable by the time the remaining children are walked. */
+	{
+		/* A COPY: `-setParentWindow:nil` removes the drawer from this window's list as it goes. */
+		NSArray *drawers = [self drawers];
+		NSUInteger i;
+
+		for (i = 0; i < [drawers count]; i++) {
+			[[drawers objectAtIndex:i] setParentWindow:nil];
+		}
+	}
+	{
+		NSUInteger i;
+
+		for (i = 0; i < [_cg_childWindows count]; i++) {
+			[[_cg_childWindows objectAtIndex:i] cg_setParentWindow:nil];
+		}
+		[_cg_childWindows release];
+		_cg_childWindows = nil;
+	}
 	/* THE WINDOW GOES, THE QUEUE GOES, AND THE CONNECTION DOES NOT: the connection is the process's (see
 	 * `fn_server`), and a window that dropped it would take every other window's events with it. */
 	if (_agwindow != NULL) {
@@ -5443,10 +5467,62 @@ static NSUInteger fn_edge_index(NSRectEdge edge)
 	[previous release];
 }
 
+/* ============================================================================================
+ * THE DRAWERS THIS WINDOW OWNS.
+ * ============================================================================================ */
+/* **THE LIST LIVES ON THE WINDOW AS AN ASSOCIATED OBJECT, WHICH IS THE ONLY WAY A CLASS CAN ADD STATE WITHOUT AN
+ * IVAR.** `NSDrawer` is a separate class and this file must not grow a drawer-shaped ivar for it; the association
+ * retains the array, and the array retains the drawers, which is Apple's ownership rule ("the parent window retains
+ * its drawers") and the reason a drawer's `-parentWindow` is a borrowed pointer. The key is the address of a file-static
+ * char, unique for the process's lifetime. */
+static char AGWindowDrawerListKey;
+
+static NSMutableArray *fn_window_drawers(NSWindow *window, BOOL create)
+{
+	NSMutableArray *list;
+
+	if (window == nil) {
+		return nil;
+	}
+	list = objc_getAssociatedObject(window, &AGWindowDrawerListKey);
+	if (list == nil && create) {
+		list = [[NSMutableArray alloc] init];
+		objc_setAssociatedObject(window, &AGWindowDrawerListKey, list, OBJC_ASSOCIATION_RETAIN);
+		[list release];		/* the association owns it now */
+	}
+	return list;
+}
+
 - (nullable NSArray *)drawers
 {
-	/* AN EMPTY ARRAY IS APPLE'S OWN CONTRACT for a window that has no drawers, so this is an answer. */
-	return [NSArray array];
+	NSMutableArray *list = fn_window_drawers(self, NO);
+
+	/* **A COPY, AND AN EMPTY ARRAY RATHER THAN nil** — Apple's own contract for a window with no drawers, and a caller
+	 * may enumerate without a test. The copy keeps a caller from reordering this window's drawers by mutating the
+	 * answer. */
+	return (list != nil) ? [NSArray arrayWithArray:list] : [NSArray array];
+}
+
+- (void)cg_addDrawer:(NSDrawer *)drawer
+{
+	NSMutableArray *list;
+
+	if (drawer == nil) {
+		return;
+	}
+	list = fn_window_drawers(self, YES);
+	if (![list containsObject:drawer]) {
+		[list addObject:drawer];
+	}
+}
+
+- (void)cg_removeDrawer:(NSDrawer *)drawer
+{
+	NSMutableArray *list = fn_window_drawers(self, NO);
+
+	if (list != nil) {
+		[list removeObjectIdenticalTo:drawer];
+	}
 }
 
 - (nullable id)defaultButtonCell

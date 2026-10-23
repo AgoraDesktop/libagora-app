@@ -1557,3 +1557,13 @@ add_executable(token_field token_field.m)
 target_link_libraries(token_field PRIVATE App m)
 add_test(NAME appkit-token-field COMMAND token_field)
 set_tests_properties(appkit-token-field PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
+
+# **THE FIRST ABSENT EDITOR'S NEIGHBOUR: THE DRAWER, AND THE CHILD WINDOW IT IS.** The probe measures the CHILD
+# WINDOW's frame for every edge, because a drawer is a window rather than a stored size; the four states are read from
+# inside the two Will/Did announcements, which is where the synchronous transition makes them observable. The parent
+# relationship is checked from both sides (registration, the parent's retention, a swap, and the parent's death), and the
+# user's resize is the one door where the minimum/maximum clamp and the delegate's review have an order.
+add_executable(drawer drawer.m)
+target_link_libraries(drawer PRIVATE App m)
+add_test(NAME appkit-drawer COMMAND drawer)
+set_tests_properties(appkit-drawer PROPERTIES ENVIRONMENT "${_agora_app_test_env}")

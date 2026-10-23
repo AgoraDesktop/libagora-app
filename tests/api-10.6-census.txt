@@ -61,12 +61,12 @@
 #
 # **AND THE MEASURED NUMBERS, RECOMPUTED RATHER THAN EDITED**, so a reader can see the shape without running anything:
 #
-#     classes   134 of 168   (80%)    34 missing
-#     selectors 4539 of 4539 (100%)    0 missing   132 of 132 classes at COMPLETE coverage
-#     protocols  41 of  56   (73%)    15 missing
+#     classes   135 of 168   (80%)    33 missing
+#     selectors 4566 of 4566 (100%)    0 missing   133 of 133 classes at COMPLETE coverage
+#     protocols  42 of  56   (75%)    14 missing
 #     functions  86 of  86 (100%)     0 missing    10 of them REFUSE BY NAME, which this count does not distinguish
 #                86 declared, 0 declared-not-defined, 0 defined-not-declared
-#     methods   5083 declared on this tree's own classes, 8 with NO body on the chain (0.2%)
+#     methods   5113 declared on this tree's own classes, 8 with NO body on the chain (0.2%)
 #
 # **THE 121 IS A RECOUNT AND IT FOUND THE OLD PROSE ONE HIGH.** The previous block said "120 of 129"; recomputing
 # complete coverage from the OLD pin's own `sel:` lines gives 119, because `NSSlider` and `NSSliderCell` were both
@@ -101,6 +101,14 @@
 # present count did: a new class adds its rows to BOTH sides.** A base-class bug was found by the slice rather than
 # measured here (Foundation's `-componentsSeparatedByCharactersInSet:` hung on its first caller); it is recorded in that
 # component's own census of traps, not in this one.
+#
+# **AND THE FIRST ABSENT CONTAINER ARRIVED: `NSDrawer` at 27 of 27, so 135 present and 133 complete, with the absent
+# list 33 and the protocol count 42 of 56.** The class is an `NSResponder` whose content is a CHILD WINDOW (Apple's
+# model), so its 27 rows are the window relationship, the four-state transition, the edge and the two-axis size. The
+# `-drawers` row on `NSWindow` was already answered (with an empty array) and now answers the window's real list. **THE
+# OFFERED DENOMINATOR MOVED 4539 -> 4566 FOR THE SAME REASON EVERY CLASS DOES: a new class adds its rows to both
+# sides.** The three new `cg_` declarations — the drawer's user-resize door and `NSWindow`'s two registration
+# doors — move the method count and are NOT surface.
 #
 # **AND THE LAST FOUR CLOSED THE SURFACE OF EVERY CLASS THIS TREE HAD.** `NSSavePanel` is COMPLETE at 47 of 47
 # (`-isExpanded` answers NO for the unbuilt expanded layout, and `-treatsFilePackagesAsDirectories` now splits packages
@@ -200,9 +208,9 @@
 # NOTE THE ONE DELIBERATE EXCLUSION. `NSFileWrapper` is declared by 10.6's AppKit (`AppKit/NSFileWrapper.h`) but is
 # Foundation's in this tree, so it is attributed to Foundation to avoid charging one class to two ledgers. The
 # manifest applies that rule at generation time via its second framework argument; the census never sees it.
-classes-missing 34
+classes-missing 33
 classes-offered 168
-classes-present 134
+classes-present 135
 fn:NSAccessibilityActionDescription 1
 fn:NSAccessibilityPostNotification 1
 fn:NSAccessibilityRaiseBadArgumentException 1
@@ -381,7 +389,7 @@ functions-defined-not-declared 0
 functions-missing 0
 functions-offered 86
 functions-present 86
-methods-declared 5083
+methods-declared 5113
 methods-declared-not-implemented 8
 proto:NSAlertDelegate 1
 proto:NSAnimatablePropertyContainer 0
@@ -399,7 +407,7 @@ proto:NSControlTextEditingDelegate 1
 proto:NSDatePickerCellDelegate 1
 proto:NSDockTilePlugIn 0
 proto:NSDraggingInfo 1
-proto:NSDrawerDelegate 0
+proto:NSDrawerDelegate 1
 proto:NSGlyphStorage 0
 proto:NSIgnoreMisspelledWords 0
 proto:NSImageDelegate 1
@@ -439,9 +447,9 @@ proto:NSUserInterfaceItemSearching 0
 proto:NSUserInterfaceValidations 1
 proto:NSValidatedUserInterfaceItem 1
 proto:NSWindowDelegate 1
-protocols-missing 15
+protocols-missing 14
 protocols-offered 56
-protocols-present 41
+protocols-present 42
 sel:NSActionCell 6
 sel:NSAlert 27
 sel:NSAnimation 26
@@ -474,6 +482,7 @@ sel:NSDatePicker 32
 sel:NSDatePickerCell 28
 sel:NSDocument 104
 sel:NSDocumentController 51
+sel:NSDrawer 27
 sel:NSEPSImageRep 5
 sel:NSEvent 65
 sel:NSFont 71
@@ -575,6 +584,6 @@ sel:NSWindow 261
 sel:NSWindowController 26
 sel:NSWorkspace 58
 selectors-missing 0
-selectors-offered 4539
-selectors-present 4539
+selectors-offered 4566
+selectors-present 4566
 selphantom:NSObject 8

@@ -32,9 +32,9 @@
  * IMPLEMENTED; so is the screen measurement, which is `NSScreen`'s own row and is used (`+mainScreen`). THE TOOLBAR
  * IS HERE TOO: `-setToolbar:` attaches an `NSToolbar`, `-contentRectForFrameRect:` reserves the band it needs, and
  * the chrome's pill toggles it — the pill being laid out only when a toolbar is attached (`-showsToolbarButton:`
- * can suppress it on a window that has one, and a window with none has no such mark at all). WHAT REMAINS ABSENT: the DRAWER (the CLASS — this class answers `-drawers` with an
- * empty array, which is Apple's own contract for a window without one) and the SCRIPT-COMMAND DOORS, which are
- * declared and REFUSE by name because the scripting suite is not here. The window's BUTTONS are a window manager's
+ * can suppress it on a window that has one, and a window with none has no such mark at all). THE DRAWER IS HERE NOW, as its own class (`NSDrawer`), and this class owns the list that
+ * retains it: `-drawers` answers the drawers attached to this window. WHAT REMAINS ABSENT: the SCRIPT-COMMAND DOORS,
+ * which are declared and REFUSE by name because the scripting suite is not here. The window's BUTTONS are a window manager's
  * business (Kestrel, which will draw them, is parked). Each of those is absent rather than stubbed.
  */
 
@@ -53,6 +53,7 @@ NS_ASSUME_NONNULL_BEGIN
  * and cannot describe about a screen. */
 @class NSCursor;
 @class NSColorSpace;
+@class NSDrawer;
 @class NSGraphicsContext;
 @class NSScreen;
 @class NSUndoManager;
@@ -1070,13 +1071,20 @@ typedef NSUInteger NSWindowSharingType;
 
 /* AND THE ONES THAT ANSWER RATHER THAN STORE, EACH BECAUSE THE ANSWER IS THE TRUTH HERE: a window is never in a
  * live resize (nothing resizes it live), the single-space model means the one space IS the active one, and this
- * tier has no Carbon ref, no drawers, no cells, no Dock tile, and no graphics context of its own — it draws through
- * a `CGContext`. `-drawers` answering an EMPTY ARRAY is not a refusal: Apple's own contract for a window without
- * drawers is exactly that. */
+ * tier has no Carbon ref, no cells, no Dock tile, and no graphics context of its own — it draws through a
+ * `CGContext`. **`-drawers` IS NOT ONE OF THOSE ANY MORE: it answers the list this window OWNS** — the attached
+ * `NSDrawer`s, retained by the list and released with the window. Apple's own contract for a window without drawers
+ * is an EMPTY ARRAY, which is what a window with none answers. */
 - (BOOL)inLiveResize;
 - (BOOL)isOnActiveSpace;
 - (void *)windowRef;
 - (nullable NSArray *)drawers;
+/* **AND THE REGISTRATION THE DRAWER CLASS USES, WHICH IS NOT APPLE'S SURFACE.** A drawer's `-setParentWindow:` has to
+ * put itself in this list and take itself out of it; the list is this class's storage, so the two writes are doors here
+ * rather than a second association owned by another class. `cg_` because they are the tree's own spelling, like the
+ * other `cg_` doors on this class. */
+- (void)cg_addDrawer:(NSDrawer *)drawer;
+- (void)cg_removeDrawer:(NSDrawer *)drawer;
 - (nullable id)defaultButtonCell;
 - (void)setDefaultButtonCell:(nullable id)aCell;
 - (nullable id)dockTile;

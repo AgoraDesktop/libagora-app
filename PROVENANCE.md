@@ -1612,6 +1612,42 @@ three conversions, the chip INK against a plain run and one per-token style, the
 completion's four cases, the pasteboard pair on both sides of its gates, and the hit test with the delegate's two menu
 answers.
 
+## 57. `NSDrawer` arrives: a child window at the edge, four states, and two axes of size
+
+**THE FIRST ABSENT CONTAINER IS PRESENT: `NSDrawer` at 27 of 27, the twentieth complete class.** The class count is 135
+of 168 and the absent list is 33; `NSDrawerDelegate` arrived with it, so the protocol count is 42 of 56. The class is an
+`NSResponder`, not a view — Apple's shape — and its content is a CHILD WINDOW: the drawer's own borderless window is
+attached to the parent with `-addChildWindow:ordered:` and sits immediately beyond the edge it opened on, with
+`-contentView` as that window's content view. The parent OWNS the drawer through `-drawers`, an associated list on
+`NSWindow`; `-parentWindow` is the borrowed half, and a parent swap moves the child and recomputes its frame.
+
+**THE FOUR STATES ARE REAL BUT SYNCHRONOUS.** `-open` sets `NSDrawerOpeningState`, announces `WillOpen`, lays the window
+out and attaches it, sets `NSDrawerOpenState`, and announces `DidOpen`; `-close` does the reverse. The middle states are
+therefore observable from inside a notification handler or delegate method, but never from a caller waiting for `-open`
+to return. **That is the slice's one stated deviation: no slide is animated**, because this tier has no drawer animation
+clock; a later slice replaces two state assignments and nothing else. The transition owns itself: a `-close` from inside
+a `WillOpen` handler is ignored by a re-entrancy flag rather than allowed to nest.
+
+**THE SIZE HAS TWO AXES AND THE PARENT IS THE LIMIT ON BOTH.** The content size is the thickness in the motion direction;
+the transverse extent is the parent's minus `-leadingOffset` and `-trailingOffset`; and both clamp to the parent, because
+Apple's one absolute restriction is that a drawer can never be larger than its window. `-setContentSize:` is plain
+storage — Apple says programmatic changes are not limited by the minimum and maximum — while
+`-cg_resizeContentByUserToSize:` is the USER path: it clamps the proposal to `-minContentSize`/`-maxContentSize` first and
+then asks `-drawerWillResizeContents:toSize:`, whose answer is the size that lands. **NO DRAWER-EDGE GESTURE IS WIRED**:
+the door is the user path, and a caller that tracks a pointer can drive it; nothing pretends a mouse is tracking an edge
+nobody drew.
+
+**AND THE SLICE FIXED TWO LEAKS IN `NSWindow`'S TEARDOWN.** `_cg_childWindows` was never released, and a child that
+outlived its parent kept a pointer to a freed window — the next `-orderOut:` on it would reach freed memory. Dealloc now
+tells the window's drawers that their parent is gone (which detaches their children first), then clears the remaining
+children's back-pointers and releases the list. The probe's "a parent's deallocation clears its drawers' back-pointers"
+case is the measurement.
+
+`tests/drawer.m` measures it in **57 checks**: the defaults, the child window, the parent's list and retention, the two
+announcements' states from both the notification center and the delegate, the five edge geometries and the clamps,
+the permission doors, toggle and the action spellings, the preference-versus-position rule, the user resize's order of
+clamp-then-review, the orphan refusal, the parent swap, and the parent's death.
+
 ## Keeping in sync
 
 The Fiwix AppKit is the origin and this repository has now diverged from it in the seam. A fix made there
