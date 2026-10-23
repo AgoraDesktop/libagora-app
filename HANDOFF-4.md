@@ -204,28 +204,40 @@ comments to `.cmake`, `.sh` or Python files breaks the gates — that happened, 
 Ranked by reachable surface per unit of work, and the ranking now starts with the class this tree has and has not
 finished:
 
-1. **`NSWorkspace` 49 — now the component's largest debt.** The shell verbs: open/reveal, file operations, the
-   running-application list. `libagora-launchservices` and `libagora-iconservices` are the seams, and the Workspace
-   component would be the caller — **BUT §11 MEASURED THAT NOTHING IN THE WORKSPACE REPOSITORY CALLS `NSWorkspace` YET**,
-   so this is real API without a consumer. It is the biggest gap and not the highest value per hour; a slice here should
-   probably take the verbs the FILE WINDOW actually needs (open, reveal, move to trash) and wire ONE of them to the
-   Workspace, so the door has a caller as well as a body.
-2. **`NSBrowser` 47.** What is left is the ITEM-BASED half (`-itemAtIndexPath:`, `-itemAtRow:inColumn:`,
-   `-parentForItemsInColumn:`, `-isLeafItem:`, `-pathToColumn:`, `-indexPathForColumn:`), the selection index paths, the
-   drag doors (`-canDragRowsWithIndexes:inColumn:withEvent:`, `-draggingImageForRowsWithIndexes:…`) and the autosave/column
-   furniture. **The item-based family is a DESIGN QUESTION before it is a slice**: it needs the item-based delegate doors
-   (`-browser:child:ofItem:`, `-browser:isLeafItem:`, `-browser:objectValueForItem:`, `-rootItemForBrowser:`) which the
-   protocol does not declare yet, and a browser can be cell-based or item-based but this class is built as the former.
-4. **`NSTextView`'s remaining 40**, which are now almost all BLOCKED or REFUSED rather than absent: the TEXT-CHECKING
+1. **`NSBrowser` 47 — now the component's largest debt.** What is left is the ITEM-BASED half (`-itemAtIndexPath:`,
+   `-itemAtRow:inColumn:`, `-parentForItemsInColumn:`, `-isLeafItem:`, `-pathToColumn:`, `-indexPathForColumn:`), the
+   selection index paths, the drag doors (`-canDragRowsWithIndexes:inColumn:withEvent:`,
+   `-draggingImageForRowsWithIndexes:…`) and the autosave/column furniture. **The item-based family is a DESIGN QUESTION
+   before it is a slice**: it needs the item-based delegate doors (`-browser:child:ofItem:`, `-browser:isLeafItem:`,
+   `-browser:objectValueForItem:`, `-rootItemForBrowser:`) which the protocol does not declare yet, and a browser can be
+   cell-based or item-based but this class is built as the former. Note that the first slice made a file manager's browser
+   DRAW — titles, frames, hit tests — which is the part the Workspace uses; what is left is the API a different caller
+   would use.
+2. **`NSTextView`'s remaining 39**, which are now almost all BLOCKED or REFUSED rather than absent: the TEXT-CHECKING
    family (`-checkTextIn…`, `-enabledTextCheckingTypes`, `-handleTextCheckingResults:…`, the three automatic-detection
    toggles) is blocked on `NSTextCheckingResult`/`NSOrthography`, which Foundation here has not got; the LINK/SERVICES
    pair needs a link attribute constant and a services transport; `-startSpeaking:`/`-stopSpeaking:` are speech, refused
    by name; the five `-orderFront…Panel:` doors are panels this tier has not built; and `-complete:`/`-insertCompletion:`
    are the WORD-COMPLETION family, which is the one cluster there that is genuinely a slice. **Do not open the checking
    family before Foundation has the classes** — name them absent and keep the flags refusing.
-5. **`NSText` 31 and `NSFont` 35**, which are siblings rather than subsystems: `NSText`'s remaining doors are the RTF
-   write/read pair, `-changeFont:`/`-copyFont:`/`-pasteFont:`, the resizability and size limits, and `-showGuessPanel:`;
-   `NSFont`'s are the descriptor and traits surface.
+3. **`NSWorkspace` 32 — the largest remaining class-shaped gap, and now WITH A CALLER** (§13): the file window opens a
+   document through `-openFile:` instead of calling Launch Services itself. What is left is the file-operation family
+   (`-performFileOperation:source:destination:files:tag:`, `-recycleURLs:completionHandler:`,
+   `-duplicateURLs:completionHandler:`, `-openTempFile:`), the Finder-service doors
+   (`-selectFile:inFileViewerRootedAtPath:`, `-activateFileViewerSelectingURLs:` — which need the Workspace to be
+   TELLABLE across processes, i.e. a session), the volume and media doors (`-mountedRemovableMedia`,
+   `-unmountAndEjectDeviceAtURL:error:`, `-getFileSystemInfoForPath:…` — DiskArbitration), the desktop-picture pair, the
+   labels, and the change-notification family. **The file operations are the honest next slice** — plain filesystem
+   verbs — but the TRASH MUST NOT BE DUPLICATED: the Workspace's `WSTrash` owns the directories, the Put Back records and
+   the empty, so an AppKit `-recycleURLs:completionHandler:` either agrees with that rule or states why it is a
+   different one.
+4. **`NSMenuView` 37 and `NSFont` 35**, which are thin classes rather than subsystems: the menu view is the popup's own
+   drawing surface (37 doors, most of them `NSMenuView.NSDeprecated`'s), and `NSFont`'s 35 are the descriptor and traits
+   surface — **with the recorded caveat that this tree's FONT DESCRIPTORS CARRY NO TRAITS** (§4), so the traits family
+   must read the FACE (`CTFontGetSymbolicTraits`, `CTFontCopyTraits`) rather than the descriptor.
+5. **`NSText` 31**, which are siblings of the text-view work: the RTF write/read pair (`-RTFFromRange:`,
+   `-replaceCharactersInRange:withRTF:`, …), `-changeFont:`/`-copyFont:`/`-pasteFont:`, the resizability and size limits
+   (`-minSize`, `-maxSize`, the two flags), and `-showGuessPanel:`.
 6. **The absent-class groups in §2**, in this order: the editors (`NSImageView`, `NSDrawer`, `NSTokenField`), the rules
    pair, and the controllers/bindings — which are a DESIGN QUESTION before they are a slice, because this tier has no KVO.
 7. **Leave refused** (§A11 and this tree's record): OpenGL, QuickDraw, movies, the four typesetters, `NSCollectionView`
@@ -261,8 +273,14 @@ finished:
   than one range, so the single-selection shape stays the cheap one and every inherited door keeps working.
 * **THIS TREE'S STRINGS ARE BYTE SEQUENCES, NOT CHARACTER SEQUENCES** for non-ASCII (`HANDOFF-2.md` §4): the word and
   paragraph granularities use ASCII `isalnum` and `_`, and say so.
-* **THE SUITE IS 147 TESTS IN ABOUT 84 SECONDS, AND `ctest --test-dir build -j4` IS THE GATE.** The exit status is the
+* **THE SUITE IS 148 TESTS IN ABOUT 84 SECONDS, AND `ctest --test-dir build -j4` IS THE GATE.** The exit status is the
   witness, not the tail of the output.
+* **A HEADER EDIT THAT REPLACES A BLOCK CAN DELETE DECLARATIONS SILENTLY.** §13 replaced the icon block in
+  `NSWorkspace.h` and took `-iconForFile:` and `-iconForFileType:` with it: the compiler only warns at a call site, the
+  bodies were still in the `.m`, and the probe passed because it called `-iconForFiles:`. The only witness was the
+  census — seventeen declarations added and `methods-declared` moved by fifteen. **A per-class declaration count against
+  the previous parse names the class and the selectors in one diff**; do it whenever a header block is rewritten rather
+  than appended to.
 * **AN UNDECLARED COMMAND IS UNREACHABLE, NOT MERELY UNIMPLEMENTED.** A key binding names a SELECTOR; if no header declares
   it, no binding can name it and no chain can deliver it — so a command family "left to the class that will implement it"
   is a family that does not exist. §12 declared the era's whole set on `NSResponder` and forwarded every one; that is
@@ -572,3 +590,64 @@ class-sized one left, but §11 measured that nothing in the workspace repository
 the verbs the FILE WINDOW needs (open, reveal, move to trash) AND wire one of them to the Workspace, or the doors will be
 bodies without callers. `NSBrowser`'s 47 are its item-based half (a design decision first). `NSTextView`'s 39 are almost
 all blocked on Foundation or on panels this tier has not built.
+
+## 13. `NSWorkspace`'s launch verbs, the refusals beside them, and the caller they gained
+
+*Session of the eleventh slice, taking §6's first item as it then stood (`NSWorkspace` 49, with the instruction to wire a
+verb to the Workspace). Its commit is "AppKit: the launch verbs, the deprecated dictionaries and the refusals beside
+them"; tree clean; `ctest --test-dir build -j4` green at **148 tests in 84 s** with `appkit-api-census` re-pinned in the
+same commit.*
+
+**THE FIRST THING THIS SLICE DID WAS NOTICE THAT §11'S OWN NOTE WAS STILL TRUE**: nothing in the workspace repository
+called `NSWorkspace`, and it had a copy of the launch decision instead — `-openItem:` built a `CFURL` and called
+`LSOpenCFURLRef` itself. **THE CALLER CAME FIRST**: the file window opens a document through
+`[[NSWorkspace sharedWorkspace] openFile:]` now, which is the Workspace repository's commit, and it is what makes the
+doors below worth having.
+
+**SEVENTEEN DOORS, IN THREE KINDS.** The LAUNCH VERBS are real, because Launch Services answers them:
+`-URLForApplicationWithBundleIdentifier:` (the modern spelling of the deprecated path door),
+`-fullPathForApplication:` (an absolute path, a bundle identifier, or a plain name searched in four written-down
+directories), `-launchApplication:showIcon:autolaunch:` (the 10.6 spelling; its two flags are named and not read),
+`-launchApplicationAtURL:options:configuration:error:` (Apple's funnel: options are the launch flags passed to the seam,
+the configuration dictionary has no counterpart and is not read, and a Launch Services refusal becomes an `NSError`),
+and the two DEPRECATED DICTIONARIES derived from the live list with Apple's own keys and a process identifier of zero.
+The FILE AND ICON QUESTIONS beside them: `-iconForFiles:` (the first path's picture — a stack is a drawing this tier has
+no composition for) and `-getInfoForFile:application:type:` (the handler's path and the path's extension).
+
+**NINE DOORS REFUSE BY NAME, IN TWO FAMILIES, AND EACH NAMES THE PIECE THAT IS MISSING.** The five TYPE QUESTIONS need a
+UTI DATABASE, which Launch Services here has not got (it maps bundles to the types they claim and offers a kind string);
+dressing an extension up as a UTI would be a wrong answer that looks right. The two `-openFile:withApplication:` doors
+and `-openURLs:withAppBundleIdentifier:…` need a LAUNCH SPECIFICATION in the seam — `LSOpenCFURLRef` launches an
+application or opens an item in its DEFAULT handler, and there is no argument for "this application, this file"; spawning
+a process from AppKit to fake one would put a second launcher in the tree. `-hideOtherApplications:` needs a HIDE VERB in
+the window server, where activation is per-surface.
+
+**THE TRAP IS THE ONE THAT MATTERS, AND THE CENSUS IS WHAT CAUGHT IT.** Replacing the icon block in `NSWorkspace.h` to
+insert the new doors DELETED `-iconForFile:` and `-iconForFileType:` — they were not in the replacement text. It
+compiled (Object-C only warns at a call site), the bodies were still in the `.m`, and the probe passed because it calls
+`-iconForFiles:`. What caught it was the arithmetic: seventeen declarations added, `methods-declared` up by FIFTEEN. A
+per-class declaration count against the previous parse — `parse_tree` twice, one `diff` — named `NSWorkspace 12 → 27`
+and the two selectors in one line. §7 carries it as a general rule now: **a header block REPLACED rather than appended to
+is the one edit the compiler is silent about.**
+
+**THE NUMBERS MOVED** (§8's rule 4, applied to §1, §2, §6 and §7):
+
+```
+selectors       4108 -> 4125 of 4505   (missing 397 -> 380)
+methods-declared 4636 -> 4653
+NSWorkspace      9 -> 26 of 58         (debt 49 -> 32 — FIRST to FIFTH largest)
+refusal census   292 -> 311            (nine new named refusals in NSWorkspace.m, and the needle
+                                       widened: ten pre-existing helper refusals it had missed)
+tests            147 -> 148            (the new suite: 39 checks)
+```
+
+`classes`, `protocols` and `functions` did NOT move. The refusal census DID move this time and upward, which is the
+documented behaviour of a census rather than a ratchet (§3): nine doors that used to be absent are now NAMED refusals, so
+a caller gets a reason instead of a link error. `tests/api-10.6-census.txt` is re-pinned from
+`./tools/api-ledger census` (4125/380/4653) and its answered-history line extended.
+
+**WHERE THE NEXT HOUR GOES.** §6's ranking is rewritten above: `NSBrowser` 47 is the largest debt and its remaining half
+is a design question; `NSTextView` 39 is almost all blocked or refused; and `NSWorkspace`'s remaining 32 are mostly the
+FILE-OPERATION family, which is the honest next slice — plain filesystem verbs, **except that the TRASH MUST NOT BE
+DUPLICATED**: the Workspace's `WSTrash` owns the directories, the Put Back records and the empty, so an AppKit
+`-recycleURLs:completionHandler:` has to agree with that rule or say why it is a different one.

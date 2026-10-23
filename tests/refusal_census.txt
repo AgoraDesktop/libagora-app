@@ -19,6 +19,14 @@
 # all, which is the drift this instrument exists to prevent. It now counts `APPKIT-REFUSE|fn_refuse_window`, and the
 # count went 141 -> 267 for that reason ALONE: no refusal was added or removed by the widening.
 #
+# **AND THE SAME HOLE WAS STILL OPEN FOR EVERY OTHER HELPER, WHICH IS WHY IT WAS WIDENED AGAIN.** The first widening named
+# `fn_refuse_window` literally, so a third helper — `fn_refuse_workspace`, added with `NSWorkspace`'s refused doors — and
+# the two files that keep LOCAL helpers of the same shape (`fn_refuse_glyph` in `NSBezierPath.m`, and `NSColor.m`'s) were
+# invisible again. The needle is `(APPKIT-REFUSE|fn_refuse_[a-z]+)` now, and the count went 292 -> 311: NINE of those are
+# the workspace slice's own refusals, and TEN are the two files whose helpers the narrow needle never counted. A HELPER'S
+# DEFINITION AND EACH OF ITS CALLS BOTH MATCH, which over-counts by one per helper — a convention rather than an
+# accident, because the definition IS where the reason is written.
+#
 # AND IT ROSE BY ONE IN THE APPLICATION SLICE: `-application:printFiles:`, which needs the printing system and the Apple
 # Event that would deliver a print request.
 #
@@ -63,13 +71,13 @@ NSAlert.m                        1
 NSApplication.m                  10
 NSAttributedStringRTF.m          4
 NSAttributedStringRTFD.m         6
-NSBezierPath.m                   5
+NSBezierPath.m                   10
 NSBitmapImageRep.m               22
 NSButtonCell.m                   1
 NSCIImageRep.m                   2
 NSCachedImageRep.m               1
 NSCell.m                         6
-NSColor.m                        17
+NSColor.m                        22
 NSColorList.m                    4
 NSColorSpace.m                   4
 NSComboBoxCell.m                 9
@@ -114,10 +122,11 @@ NSToolbar.m                      1
 NSTrackingArea.m                 1
 NSView.m                         16
 NSViewController.m               1
+NSWorkspace.m                       9
 NSWindow.m                       23
 
 # AND IT ROSE BY 126 WHEN THE NEEDLE LEARNED THE SHARED HELPER'S NAME. Not one refusal was added by that change: the
 # `fn_refuse_window` spelling was simply invisible to a census that counted the `APPKIT-REFUSE` literal, so every
 # refusal written the house way — which is the way the header asks for — moved no number.
 #
-# total: 292
+# total: 311

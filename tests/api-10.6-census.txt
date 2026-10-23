@@ -62,11 +62,11 @@
 # **AND THE MEASURED NUMBERS, RECOMPUTED RATHER THAN EDITED**, so a reader can see the shape without running anything:
 #
 #     classes   131 of 168   (78%)    37 missing
-#     selectors 4108 of 4505  (91%)  397 missing   114 of 129 classes at COMPLETE coverage
+#     selectors 4125 of 4505  (91%)  380 missing   114 of 129 classes at COMPLETE coverage
 #     protocols  39 of  56   (70%)    17 missing
 #     functions  86 of  86 (100%)     0 missing    10 of them REFUSE BY NAME, which this count does not distinguish
 #                86 declared, 0 declared-not-defined, 0 defined-not-declared
-#     methods   4636 declared on this tree's own classes, 8 with NO body on the chain (0.2%)
+#     methods   4653 declared on this tree's own classes, 8 with NO body on the chain (0.2%)
 #
 # Three things those five lines say together. The 87% on selectors is still the strongest part of the tree and the reason a
 # hand count that looked only at filenames undersold it by a factor of two. THE FUNCTIONS ARE FINISHED — 86 of 86, and
@@ -79,10 +79,11 @@
 # PRINT SYSTEM 146 selectors over 5 classes, 1 protocol and 11 `NSDocument` doors that were not declared before. The
 # selectors' OFFERED count rises with them — `selectors-offered` is the manifest's surface over the classes this tree
 # HAS, so a class appearing adds its rows to both sides of the fraction (4112 -> 4246 -> 4298 -> 4359 -> 4505 offered,
-# 3543 -> 3677 -> 3729 -> 3790 -> 3947 -> 3988 -> 4021 -> 4033 -> 4050 -> 4108 answered). The printing slice is also the first that MOVED THE MISSING
+# 3543 -> 3677 -> 3729 -> 3790 -> 3947 -> 3988 -> 4021 -> 4033 -> 4050 -> 4108 -> 4125 answered). The printing slice is also the first that MOVED THE MISSING
 # COUNT DOWN — 569 -> 558 — because it declared eleven selectors in `NSDocument` that had been absent rather than refused;
 # the text-view attribute slice took it to 517, the clipboard slice to 500, the container slice to 484, the smart-insert
-# and undo slice to 472, the browser-geometry slice to 455, and the responder-command slice to 397, by filling in
+# and undo slice to 472, the browser-geometry slice to 455, the responder-command slice to 397, and the workspace-launch
+# slice to 380, by filling in
 # `NSTextView`'s — which is the deepest class here, and the one whose remaining debt has now moved INWARD from its
 # editing surface to its text checking and link halves.
 # `classes-present` has risen by 14 across the last four slices; `NSFileWrapper` stays in the gap for the reason the
@@ -317,7 +318,7 @@ functions-defined-not-declared 0
 functions-missing 0
 functions-offered 86
 functions-present 86
-methods-declared 4636
+methods-declared 4653
 methods-declared-not-implemented 8
 proto:NSAlertDelegate 1
 proto:NSAnimatablePropertyContainer 0
@@ -506,8 +507,8 @@ sel:NSViewAnimation 3
 sel:NSViewController 13
 sel:NSWindow 243
 sel:NSWindowController 26
-sel:NSWorkspace 9
-selectors-missing 397
+sel:NSWorkspace 26
+selectors-missing 380
 selectors-offered 4505
-selectors-present 4108
+selectors-present 4125
 selphantom:NSObject 8

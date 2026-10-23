@@ -735,7 +735,7 @@ add_test(NAME appkit-refusal-census
             "-DSOURCE_DIR=${CMAKE_CURRENT_SOURCE_DIR}/.."
             "-DCENSUS=${CMAKE_CURRENT_SOURCE_DIR}/refusal_census.txt"
             "-DEXTENSION=.m"
-            "-DNEEDLE=(APPKIT-REFUSE|fn_refuse_window)"
+            "-DNEEDLE=(APPKIT-REFUSE|fn_refuse_[a-z]+)"
             -P "${CMAKE_CURRENT_SOURCE_DIR}/claims_census.cmake")
 
 # And the same instrument over the HEADERS, counting the OWED claims — as a WORD, so `ALLOWED` does not count.
@@ -970,6 +970,16 @@ add_executable(workspace_services workspace_services.m)
 target_link_libraries(workspace_services PRIVATE App AgoraLaunchServices::LaunchServices)
 add_test(NAME appkit-workspace-services COMMAND workspace_services)
 set_tests_properties(appkit-workspace-services PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
+
+# **AND THE LAUNCH VERBS THE FILE MANAGER WALKS**: a fixture bundle registered with Launch Services, so an identifier
+# resolves to a URL and to a path and the two doors are held to the same answer; the deprecated dictionary pair measured
+# against a window list the probe feeds in; the icon and file questions; a launch that cannot happen answering nil AND
+# an error; and every refused door answering its type's empty value — the type questions (no UTI database) and the
+# "open with" family (no launch specification in the seam).
+add_executable(workspace_launch workspace_launch.m)
+target_link_libraries(workspace_launch PRIVATE App AgoraLaunchServices::LaunchServices)
+add_test(NAME appkit-workspace-launch COMMAND workspace_launch)
+set_tests_properties(appkit-workspace-launch PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
 
 # **AND WHERE A POPPED-UP MENU'S PANEL ACTUALLY GOES**, which is the one arithmetic a Dock at a screen edge exposed:
 # the point is in the VIEW's coordinates and the frame is on the SCREEN, and taking the first as the second put the

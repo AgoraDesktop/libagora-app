@@ -1035,6 +1035,62 @@ chain — a claim no list of `-respondsToSelector:` answers could make — with 
 declares. The behaviour half drives the commands in a real scroll view and then drives the KEYS through the input
 context, because a binding that names a selector nobody answers is exactly the shape this file exists to catch.
 
+## 40. The launch verbs: where a name becomes a path, and where the tier must refuse
+
+**`NSWorkspace` IS ADAPTED, NOT REIMPLEMENTED**, and this slice is the first that had to decide, door by door, which
+Apple questions the SEAM can answer. Three kinds came out of it.
+
+**THE LAUNCH VERBS ARE REAL**, because Launch Services already answers them: bundle identifier → `NSURL` (the modern
+spelling of the deprecated path door), name → full path (an absolute path, a bundle identifier, or a plain name searched
+in a written-down list of four directories — the list IS the answer, so it is in the header), the 10.6
+`-launchApplication:showIcon:autolaunch:` spelling whose two flags are named and not read, and Apple's funnel
+`-launchApplicationAtURL:options:configuration:error:` whose options are the launch flags passed to the seam, whose
+configuration dictionary has no counterpart (accepted, not read, stated), and whose failure becomes an `NSError` rather
+than an invented application. The two deprecated dictionary doors are derived from the live list with Apple's keys, and
+the **process identifier is zero** because the window list carries no pid — the same deviation the class header already
+records about what "running" means here.
+
+**THE TYPE QUESTIONS ARE REFUSED, AND THE REASON IS A DATABASE.** `-typeOfFile:error:`, `-type:conformsToType:`,
+`-localizedDescriptionForType:`, `-preferredFilenameExtensionForType:` and `-filenameExtension:isValidForType:` all ask
+for a UNIFORM TYPE IDENTIFIER database. Launch Services in this tree maps bundles to the types they claim and offers a
+kind string; nothing here knows that `public.png` conforms to `public.image`. Dressing an extension up as a UTI would be
+a wrong answer that looks right — the failure mode this file is a record of — so all five refuse by name and answer their
+types' empty values.
+
+**AND THE "OPEN WITH" FAMILY IS REFUSED FOR THE SAME KIND OF HONESTY.** `-openFile:withApplication:`,
+`-openFile:withApplication:andDeactivate:` and `-openURLs:withAppBundleIdentifier:…` need a LAUNCH SPECIFICATION, and
+the seam's `LSOpenCFURLRef`/`LSOpenURLsWithRole` take none: they launch an application, or open an item in its DEFAULT
+handler. Spawning a process from AppKit to fake "this application, this file" would put a second launcher in the tree,
+which is the seam decision this repository exists to keep. `-hideOtherApplications:` is the same shape for the window
+server: activation is per-surface there and there is no hide verb, which `NSRunningApplication -hide` already answers NO
+for.
+
+**THE ONE THAT GOT AWAY, AND WHY THE NUMBERS CAUGHT IT.** Replacing the icon block in `NSWorkspace.h` to insert the new
+doors DELETED `-iconForFile:` and `-iconForFileType:` — two declarations that were not in the replacement text. It
+compiled, because Objective-C treats an unknown selector as a warning at the call site and the bodies were still in the
+`.m`; the probe even passed, because it called `-iconForFiles:`. What caught it was the census arithmetic: seventeen
+declarations added and `methods-declared` moved by FIFTEEN. A per-class declaration count against the previous parse
+named the class and the two selectors in one diff. **A header edit that replaces a block is the one edit where the
+compiler is silent and the ledger is not.**
+
+**AND THE REFUSAL CENSUS HAD A HOLE, WHICH THE NINE NEW REFUSALS FELL STRAIGHT THROUGH.** The instrument's needle named
+`fn_refuse_window` literally; the new shared helper is `fn_refuse_workspace`, so nine refusals were invisible to it. The
+needle is `(APPKIT-REFUSE|fn_refuse_[a-z]+)` now, and the count went **292 -> 311**: nine are this slice's, and ten are
+the two files (`NSBezierPath.m`, `NSColor.m`) whose LOCAL helpers of the same shape the narrow needle never counted —
+which is the same hole the census's own header already records closing once, reopened by a second helper. A census whose
+needle enumerates helper NAMES will always lag the helpers; that sentence is now in the file next to the pattern.
+
+`tests/workspace_launch.m` measures it in **39 checks**. A fixture bundle is written and registered with Launch Services
+(the `CFURL` built from the NSURL's `absoluteString`, not cast — the trap `workspace_services.m` records), so the
+identifier → URL → path chain has something real to resolve; the plain-name search answers nil for a name outside its
+list; the window list is fed in so the deprecated dictionaries are measured with rows and without; the icon and file
+questions are checked including their empty cases; a launch that cannot happen answers nil AND an error; and every
+refused door is checked both ways.
+
+And the caller this slice added: the Workspace's file window now opens a document through
+`[[NSWorkspace sharedWorkspace] openFile:]` instead of building a `CFURL` and calling `LSOpenCFURLRef` itself. The
+AppKit owns the launch decision, and the file manager asks it.
+
 ## Keeping in sync
 
 The Fiwix AppKit is the origin and this repository has now diverged from it in the seam. A fix made there

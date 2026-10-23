@@ -2406,6 +2406,43 @@ control), then the paging behaviour in a real scroll view — the caret moving a
 extension, the scroll family leaving the caret alone, centring by arithmetic — the paragraph pair crossing a wrap, the
 unit selections, the two deletions, the direction commands, and the keys themselves through the input context.
 
+### The launch verbs, the deprecated dictionaries, and the refusals beside them
+
+**`NSWorkspace` IS THE APPKIT'S FACE OVER LAUNCH SERVICES, AND THE FILE WINDOW NOW ASKS IT INSTEAD OF THE SEAM.** The
+Workspace's `-openItem:` built a `CFURL` and called `LSOpenCFURLRef` itself — a second copy of the launch decision — and
+it calls `[[NSWorkspace sharedWorkspace] openFile:]` now, so the policy stays in the one place that owns it.
+
+Seventeen doors, in three kinds. **THE LAUNCH VERBS**: `-URLForApplicationWithBundleIdentifier:` (the modern spelling of
+the deprecated path door, so a caller that wants to launch a bundle gets its `NSURL`), `-fullPathForApplication:` (an
+absolute path, a bundle identifier, or a plain name searched for in `~/Applications`, `/Applications`,
+`/Applications/Utilities` and the install prefix's `share/agora/applications` — the list is written down because it is
+the answer), `-launchApplication:showIcon:autolaunch:` (the 10.6 spelling, its two flags named and not read),
+`-launchApplicationAtURL:options:configuration:error:` (Apple's funnel: the options are the launch flags and go to the
+seam, the configuration dictionary has no counterpart and is not read, and a refusal from Launch Services becomes an
+`NSError`), and the two deprecated dictionaries — `-launchedApplications` and `-activeApplication` — derived from the
+live list with Apple's own keys, including a process identifier of **zero**, which is what the window list can honestly
+say.
+
+**AND THE FILE AND ICON QUESTIONS BESIDE THEM**: `-iconForFiles:` (the FIRST path's picture — a stack is a drawing this
+tier has no composition for, stated at the door) and `-getInfoForFile:application:type:` (the default handler's path and
+the path's extension, because there is no UTI database behind the type).
+
+**NINE DOORS REFUSE BY NAME, AND EACH NAMES THE PIECE THAT IS MISSING.** The five type questions
+(`-typeOfFile:error:`, `-type:conformsToType:`, `-localizedDescriptionForType:`, `-preferredFilenameExtensionForType:`,
+`-filenameExtension:isValidForType:`) need a **uniform type identifier database**, which this tier has not got — a
+Launch Services here maps bundles to the types they claim and offers a kind string, and dressing an extension up as a
+UTI would be a wrong answer that looks right. The two `-openFile:withApplication:` doors and
+`-openURLs:withAppBundleIdentifier:…` need a **launch specification in the seam**: `LSOpenCFURLRef` opens an application,
+or an item in its DEFAULT handler, and there is no argument that says "this application, this file" — spawning a process
+from AppKit to fake one would put a second launcher in the tree. And `-hideOtherApplications:` needs a **hide verb in the
+window server**, where activation is per-surface.
+
+`tests/workspace_launch.m` asserts it in 39 checks: a fixture bundle registered with Launch Services so the identifier →
+URL → path chain has something real to resolve (and the nil cases beside it), the plain-name search answering nil for a
+name outside the search list, the deprecated dictionaries against a fed-in window list including the empty cases, the
+icon and file questions, a launch that cannot happen answering nil AND an error, and every refused door checked both
+ways — the empty answer and that it neither crashed nor invented something.
+
 ### Still absent, and why
 
 **NINE THINGS THAT USED TO BE ON THIS LIST ARE NOT ANY MORE, AND THE LIST IS CORRECTED RATHER THAN QUIETLY SHRUNK:**

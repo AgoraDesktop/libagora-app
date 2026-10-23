@@ -24,4 +24,13 @@ static inline void fn_refuse_window(const char *which, const char *needs)
 			"empty value rather than approximating the work\n", which, needs);
 }
 
+/* THE WORKSPACE'S REFUSAL, FOR THE DOORS APPLE DEFINES OVER A DATABASE OR A SESSION THIS TIER HAS NOT GOT — the type
+ * questions (no UTI database) and the "open with" family (no launch specification in the seam). Same wording, same
+ * contract: the door answers its type's empty value and says which piece is missing. */
+static inline void fn_refuse_workspace(const char *which, const char *needs)
+{
+	fprintf(stderr, "APPKIT-REFUSE: %s needs %s; this tier has not got it, so the door answers its type's "
+			"empty value rather than approximating the work\n", which, needs);
+}
+
 #endif
