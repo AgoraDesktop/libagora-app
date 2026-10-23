@@ -1259,6 +1259,15 @@ set_tests_properties(appkit-colour-panels PROPERTIES ENVIRONMENT "${_agora_app_t
 add_executable(font_manager font_manager.m)
 target_link_libraries(font_manager PRIVATE App)
 
+# **NSFont'S OWN SURFACE, METRICS FROM THE FACE.** Every metric door asks Core Text (the class is a view of a CTFontRef), so
+# the probe measures RELATIONS — a longer string is wider, a missing glyph advances nothing, the line height is its own three
+# metrics added — and the seven refusals are checked to answer their types' empty values.
+add_executable(font_surface font_surface.m)
+target_link_libraries(font_surface PRIVATE App m)
+
+add_test(NAME appkit-font-surface COMMAND font_surface)
+set_tests_properties(appkit-font-surface PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
+
 add_test(NAME appkit-font-manager COMMAND font_manager)
 set_tests_properties(appkit-font-manager PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
 

@@ -126,6 +126,23 @@ NS_ASSUME_NONNULL_BEGIN
  * ================================================================================================================ */
 typedef unsigned short NSGlyph;
 
+/* **THE TWO ENUMS THE POSITION AND RENDERING DOORS TAKE.** `NSGlyphRelation` says which side of a base glyph an overlay
+ * sits on — BELOW is -1, which is why the constant is not a bit — and `NSFontRenderingMode` is the era's four-way choice
+ * for how a face is rasterised. This tier has ONE rendering (Core Text's antialiased path through the context), so every
+ * font answers the default mode and the door that takes a mode answers the receiver; the enum exists because a caller
+ * names a value. */
+typedef enum {
+	NSGlyphBelow = -1,
+	NSGlyphAbove = 1
+} NSGlyphRelation;
+
+typedef enum {
+	NSFontDefaultRenderingMode = 0,
+	NSFontAntialiasedRenderingMode = 1,
+	NSFontIntegerAdvancementsRenderingMode = 2,
+	NSFontAntialiasedIntegerAdvancementsRenderingMode = 3
+} NSFontRenderingMode;
+
 /* THE PACKINGS. The first, third and fourth are the integer-width cases this tier can write byte for byte; the two
  * EUC packings are variable-length encodings and are refused by the function rather than approximated. */
 typedef enum {
@@ -139,6 +156,15 @@ typedef enum {
 /* Answers the number of bytes written, or the number the buffer would need when `packedGlyphs` is nil. */
 NSInteger NSConvertGlyphsToPackedGlyphs(NSGlyph *glBuf, NSInteger count, NSMultibyteGlyphPacking packing,
 					char *packedGlyphs);
+
+/* `NSControlSize` is `NSCell.h`'s, and this header cannot import it without a cycle: the same declaration here would be
+ * a REDEFINITION to a file that includes both, which is the trap `NSCell.h` records about `NSBackgroundStyle`. So the
+ * SIZE door takes an `NSInteger`-sized value and the header says what it is; the implementation casts to the enum. */
+typedef NSUInteger NSFontControlSize;
+
+@class NSGlyphInfo;
+@class NSGraphicsContext;
+@class NSAffineTransform;
 
 @interface NSFont : NSObject <NSSecureCoding>
 {
@@ -241,6 +267,98 @@ NSInteger NSConvertGlyphsToPackedGlyphs(NSGlyph *glBuf, NSInteger count, NSMulti
 
 /* THE FONT'S OWN DESCRIPTION, which is the door `NSCell`'s font pair and `NSWindow`'s title were waiting on. */
 - (nullable NSFontDescriptor *)fontDescriptor;
+
+/* ==================================================================================================================
+ * THE ERA'S REST: GLYPH METRICS FROM THE FACE, THE PACKINGS, THE USER-FONT DEFAULTS — AND FIVE THAT REFUSE.
+ *
+ * **EVERY METRIC DOOR HERE ASKS THE FACE.** `NSFont` is a VIEW of a `CTFontRef` in this tier, so an advancement, a glyph
+ * bounding rect, a glyph by name, a line height and a string's width all come out of Core Text rather than out of a
+ * second table. THAT IS ALSO §4's RECORDED TRAP GENERALISED: the FONT DESCRIPTOR carries no traits here, so anything
+ * that could be answered from a descriptor is answered from the FACE instead — the same rule, one level up.
+ *
+ * **THE SCREEN AND PRINTER VARIANTS ARE THIS FONT.** Apple's `NSFont` models an era where a font had a screen face and a
+ * printer face with different metrics; this tier draws both a window and a PDF through one Core Text face, so
+ * `-screenFont`, `-screenFontWithRenderingMode:` and `-printerFont` answer the receiver and say why. `-renderingMode` is
+ * the default mode and `-textTransform` is nil, for the same reason: there is one rendering of one face.
+ *
+ * **AND FIVE REFUSE BY NAME**: `-afmDictionary` (no AFM metrics anywhere in this tier) and the four typographic
+ * ATTACHMENT doors (`-positionOfGlyph:struckOverGlyph:metricsExist:`, `…struckOverRect:metricsExist:`,
+ * `…withRelation:toBaseGlyph:totalAdvancement:metricsExist:` and `-positionsForCompositeSequence:numberOfGlyphs:pointArray:`) —
+ * each needs a shaping context's attachment metrics, which Core Text exposes only through a laid-out line, not through a
+ * font. The one POSITION door that is answerable is, and is answered.
+ * ================================================================================================================ */
+
+/* ---- GLYPH METRICS, FROM THE FACE -------------------------------------------------------------- */
+
+- (NSSize)advancementForGlyph:(NSGlyph)glyph;
+- (void)getAdvancements:(NSSizeArray)advancements forGlyphs:(const NSGlyph *)glyphs count:(NSUInteger)count;
+- (void)getAdvancements:(NSSizeArray)advancements
+       forPackedGlyphs:(const void *)packedGlyphs
+		 length:(NSUInteger)length;
+
+- (NSRect)boundingRectForGlyph:(NSGlyph)glyph;
+- (void)getBoundingRects:(NSRectArray)bounds forGlyphs:(const NSGlyph *)glyphs count:(NSUInteger)count;
+
+- (CGFloat)widthOfString:(NSString *)string;
+- (CGFloat)defaultLineHeightForFont;
+- (nullable NSGlyphInfo *)glyphWithName:(NSString *)glyphName;
+- (BOOL)glyphIsEncoded:(NSGlyph)glyph;
+- (NSMultibyteGlyphPacking)glyphPacking;
+- (BOOL)isBaseFont;
+- (NSStringEncoding)mostCompatibleStringEncoding;
+- (nullable NSString *)encodingScheme;
+
+/* THE POSITION OF ONE GLYPH AFTER ANOTHER, which is the one typographic-position door a font can answer: it is the
+ * preceding glyph's advancement. */
+- (NSPoint)positionOfGlyph:(NSGlyph)glyph
+	     precededByGlyph:(NSGlyph)previousGlyph
+		 isNominal:(nullable BOOL *)isNominal;
+
+/* ---- THE CONSTRUCTORS THAT TAKE A TRANSFORM, AND THE TWO VARIANTS THAT ARE THIS FONT ------------ */
+
++ (nullable NSFont *)fontWithName:(NSString *)fontName matrix:(const CGFloat *)matrix;
++ (nullable NSFont *)fontWithDescriptor:(NSFontDescriptor *)descriptor textTransform:(nullable NSAffineTransform *)transform;
+- (NSFont *)screenFont;
+- (NSFont *)screenFontWithRenderingMode:(NSFontRenderingMode)mode;
+- (NSFont *)printerFont;
+- (NSFontRenderingMode)renderingMode;
+- (nullable NSAffineTransform *)textTransform;
+
+/* ---- THE DRAWING FONT, WHICH IS THE CONTEXT'S ----------------------------------------------- */
+
+- (void)set;
+- (void)setInContext:(NSGraphicsContext *)graphicsContext;
+
+/* ---- THE USER-FONT DEFAULTS, IN THE DEFAULTS DOMAIN ------------------------------------------- */
+
++ (nullable NSArray *)preferredFontNames;
++ (void)setPreferredFontNames:(NSArray *)names;
++ (void)setUserFont:(nullable NSFont *)font;
++ (void)setUserFixedPitchFont:(nullable NSFont *)font;
++ (CGFloat)systemFontSizeForControlSize:(NSFontControlSize)controlSize;
+
+/* ---- AND THE ONE PARSER THE ERA KEPT ----------------------------------------------------------- */
+
+/* Apple's `+useFont:` reads a "Name Size" specification; this tier's answer is the font it names, or nil. */
++ (nullable NSFont *)useFont:(NSString *)fontDescription;
+
+/* ---- AND THE FIVE THAT REFUSE ------------------------------------------------------------------ */
+
+- (nullable NSDictionary *)afmDictionary;
+- (BOOL)positionOfGlyph:(NSGlyph)glyph
+     struckOverGlyph:(NSGlyph)overlayGlyph
+	 metricsExist:(nullable BOOL *)exists;
+- (BOOL)positionOfGlyph:(NSGlyph)glyph
+      struckOverRect:(NSRect)overlayRect
+	 metricsExist:(nullable BOOL *)exists;
+- (NSInteger)positionOfGlyph:(NSGlyph)glyph
+	 withRelation:(NSGlyphRelation)relation
+	 toBaseGlyph:(NSGlyph)baseGlyph
+    totalAdvancement:(nullable NSSizePointer)advancement
+	metricsExist:(nullable BOOL *)exists;
+- (void)positionsForCompositeSequence:(const NSGlyph *)someGlyphs
+		       numberOfGlyphs:(NSInteger)count
+			    pointArray:(NSPointArray)points;
 
 @end
 

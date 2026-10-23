@@ -1210,6 +1210,35 @@ the first misspelling — there is no panel to show it in, which `-showGuessPane
 
 `tests/text_surface.m` measures it in **26 checks**, the five refusals among them.
 
+## 45. `NSFont` complete: metrics from the face, variants that are the font, and seven refusals
+
+**THE CLASS IS A VIEW OF A `CTFontRef`, SO EVERY METRIC DOOR ASKS THE FACE.** Advances and bounding rects (single and
+batch), the glyph by name, the line height (its own three metrics added), the glyph count's packing, the character
+encoding answers — and `-widthOfString:` through the AppKit's own `-sizeWithAttributes:`, so the width a caller is told is
+the width the drawing will use. §4's recorded caveat is the reason this is stated as a RULE rather than a fact about this
+slice: THE FONT DESCRIPTOR CARRIES NO TRAITS in this tree, so anything answerable from a descriptor is answered from the
+face instead.
+
+**THE SCREEN AND PRINTER VARIANTS ARE THE RECEIVER.** Apple's model is an era of two faces with different metrics; this
+tier draws a window and a PDF through one Core Text face, so `-screenFont`, `-printerFont` and
+`-screenFontWithRenderingMode:` answer `self`, `-renderingMode` answers the default and `-textTransform` is nil. A caller
+that asks "which face will actually be used" gets the truth rather than a made-up variant.
+
+**AND SEVEN REFUSE — INCLUDING THE TWO THAT WOULD BE A STORED BIT.** `-afmDictionary` has no data anywhere in this tier,
+and the four ATTACHMENT position doors need a laid-out line's metrics rather than a face's. The seventh and eighth are
+`-set` and `-setInContext:`: Apple installs a "current font" on the graphics context, and this tier's drawing takes the
+font from each attributed string — so a context has no font slot, and a door that wrote one would be exactly the stored
+bit nobody reads this file keeps warning about. The ONE position door a face can answer is answered:
+`-positionOfGlyph:precededByGlyph:isNominal:` is the preceding glyph's advancement.
+
+**A DEFAULTS WRITE THAT CANNOT LAND MUST NOT ABORT A CALLER.** This tree's `NSUserDefaults` writes under
+`$FNX_CONFIG_ROOT/Users/<name>/Configuration`; without that variable `-setObject:forKey:` throws. The four user-font
+doors catch it and carry on — the preference does not persist, which is the honest outcome, and not a crash inside a font
+lookup. The probe sets a root (a launcher's job) and measures the round trip; the doors are what make a launcher's
+omission survivable.
+
+`tests/font_surface.m` measures it in **37 checks**, all relations rather than literals.
+
 ## Keeping in sync
 
 The Fiwix AppKit is the origin and this repository has now diverged from it in the seam. A fix made there

@@ -16,6 +16,20 @@
  */
 #import "NSFont.h"
 #import "NSFontDescriptor.h"
+#import "NSGlyphInfo.h"
+#import "NSAttributedString.h"
+#import "NSStringDrawing.h"
+#import "NSCell.h"	/* the two control sizes the size door maps */
+#import "NSGraphicsContext.h"
+#import <Foundation/NSAffineTransform.h>
+#import "AppKitRefusal.h"
+#import <Foundation/NSUserDefaults.h>
+#import <Foundation/NSNumber.h>
+#import <Foundation/NSCharacterSet.h>
+#import <CoreText/CTFont.h>
+#import <CoreText/CTLine.h>
+#include <math.h>
+#include <stdlib.h>
 
 #include <CoreText/CTFont.h>
 
@@ -239,14 +253,42 @@ static NSFont *apk_ui_font(CTFontUIFontType type, CGFloat size)
 	return apk_font_take(CTFontCreateWithFontDescriptor(fontDescriptor->_descriptor, fontSize, NULL));
 }
 
+/* **THE USER'S FACE IS THE ONE THE DEFAULTS NAME, AND THE UI FONT IS THE FALLBACK.** `+setUserFont:` stores a name and a
+ * size (a font object is not a defaults value); this door reads the name back and makes the font at the size asked for,
+ * falling back to the platform's UI font when nothing has been stored — which is what the door answered before the
+ * setter existed, so a caller that never stored one sees no change. */
 + (NSFont *)userFontOfSize:(CGFloat)fontSize
 {
-	return apk_ui_font(kCTFontUserFontType, fontSize);
+	NSString *name = nil;
+	NSFont *font = nil;
+
+	@try {
+		name = [[NSUserDefaults standardUserDefaults] objectForKey:@"NSFontUserFontName"];
+	} @catch (id exception) {
+		(void)exception;
+		name = nil;
+	}
+	if ([name length] > 0) {
+		font = [self fontWithName:name size:fontSize];
+	}
+	return (font != nil) ? font : apk_ui_font(kCTFontUserFontType, fontSize);
 }
 
 + (NSFont *)userFixedPitchFontOfSize:(CGFloat)fontSize
 {
-	return apk_ui_font(kCTFontUserFixedPitchFontType, fontSize);
+	NSString *name = nil;
+	NSFont *font = nil;
+
+	@try {
+		name = [[NSUserDefaults standardUserDefaults] objectForKey:@"NSFontUserFixedPitchName"];
+	} @catch (id exception) {
+		(void)exception;
+		name = nil;
+	}
+	if ([name length] > 0) {
+		font = [self fontWithName:name size:fontSize];
+	}
+	return (font != nil) ? font : apk_ui_font(kCTFontUserFixedPitchFontType, fontSize);
 }
 
 + (NSFont *)systemFontOfSize:(CGFloat)fontSize
@@ -506,6 +548,459 @@ static NSFont *apk_ui_font(CTFontUIFontType type, CGFloat size)
 - (NSFont *)fontWithSize:(CGFloat)fontSize
 {
 	return apk_font_take(CTFontCreateCopyWithAttributes(_font, fontSize, NULL, NULL));
+}
+
+/* ============================================================================================ *
+ * THE ERA'S REST: METRICS FROM THE FACE, THE VARIANTS THAT ARE THIS FONT, AND FIVE REFUSALS     *
+ * ============================================================================================ */
+
+/* ---- GLYPH METRICS, FROM THE FACE -------------------------------------------------------------- */
+
+/* **CORE TEXT ANSWERS EVERY ONE OF THESE**, which is the whole reason this class is a view of a `CTFontRef` rather than
+ * a second table: `CTFontGetAdvancesForGlyphs`, `CTFontGetBoundingRectsForGlyphs`, `CTFontGetGlyphWithName`, and a
+ * `CTLine` for the width of a string. The GLYPH TYPE is Apple's `unsigned short`, so the cast to `CGGlyph` is the same
+ * width by construction. */
+- (NSSize)advancementForGlyph:(NSGlyph)glyph
+{
+	CGGlyph cgGlyph = (CGGlyph)glyph;
+	CGSize advance = CGSizeZero;
+
+	if (_font == NULL) {
+		return NSZeroSize;
+	}
+	CTFontGetAdvancesForGlyphs(_font, kCTFontHorizontalOrientation, &cgGlyph, &advance, 1);
+	return NSMakeSize(advance.width, advance.height);
+}
+
+- (void)getAdvancements:(NSSizeArray)advancements forGlyphs:(const NSGlyph *)glyphs count:(NSUInteger)count
+{
+	CGSize *sizes;
+	NSUInteger i;
+
+	if (advancements == NULL || glyphs == NULL || count == 0 || _font == NULL) {
+		return;
+	}
+	sizes = (CGSize *)malloc(sizeof(CGSize) * count);
+	if (sizes == NULL) {
+		return;
+	}
+	CTFontGetAdvancesForGlyphs(_font, kCTFontHorizontalOrientation, (const CGGlyph *)glyphs, sizes, (CFIndex)count);
+	for (i = 0; i < count; i++) {
+		advancements[i] = NSMakeSize(sizes[i].width, sizes[i].height);
+	}
+	free(sizes);
+}
+
+/* A PACKED GLYPH STRING IS UNPACKED FIRST, and the packing decides the width: the one-, two- and four-byte cases are the
+ * three this tree can read (the two EUC packings are refused by `NSConvertGlyphsToPackedGlyphs` for the same reason). */
+- (void)getAdvancements:(NSSizeArray)advancements forPackedGlyphs:(const void *)packedGlyphs length:(NSUInteger)length
+{
+	NSGlyph *glyphs;
+	NSUInteger width = 1, count, i;
+
+	if (packedGlyphs == NULL || advancements == NULL || length == 0) {
+		return;
+	}
+	switch ([self glyphPacking]) {
+	case NSTwoByteGlyphPacking: width = 2; break;
+	case NSFourByteGlyphPacking: width = 4; break;
+	default: width = 1; break;
+	}
+	count = length / width;
+	glyphs = (NSGlyph *)malloc(sizeof(NSGlyph) * count);
+	if (glyphs == NULL) {
+		return;
+	}
+	for (i = 0; i < count; i++) {
+		if (width == 1) {
+			glyphs[i] = (NSGlyph)((const unsigned char *)packedGlyphs)[i];
+		} else if (width == 2) {
+			glyphs[i] = ((const unsigned short *)packedGlyphs)[i];
+		} else {
+			glyphs[i] = (NSGlyph)((const unsigned int *)packedGlyphs)[i];
+		}
+	}
+	[self getAdvancements:advancements forGlyphs:glyphs count:count];
+	free(glyphs);
+}
+
+- (NSRect)boundingRectForGlyph:(NSGlyph)glyph
+{
+	CGGlyph cgGlyph = (CGGlyph)glyph;
+	CGRect rect = CGRectZero;
+
+	if (_font == NULL) {
+		return NSZeroRect;
+	}
+	CTFontGetBoundingRectsForGlyphs(_font, kCTFontHorizontalOrientation, &cgGlyph, &rect, 1);
+	return NSMakeRect(rect.origin.x, rect.origin.y, rect.size.width, rect.size.height);
+}
+
+- (void)getBoundingRects:(NSRectArray)bounds forGlyphs:(const NSGlyph *)glyphs count:(NSUInteger)count
+{
+	CGRect *rects;
+	NSUInteger i;
+
+	if (bounds == NULL || glyphs == NULL || count == 0 || _font == NULL) {
+		return;
+	}
+	rects = (CGRect *)malloc(sizeof(CGRect) * count);
+	if (rects == NULL) {
+		return;
+	}
+	CTFontGetBoundingRectsForGlyphs(_font, kCTFontHorizontalOrientation, (const CGGlyph *)glyphs, rects,
+					(CFIndex)count);
+	for (i = 0; i < count; i++) {
+		bounds[i] = NSMakeRect(rects[i].origin.x, rects[i].origin.y, rects[i].size.width, rects[i].size.height);
+	}
+	free(rects);
+}
+
+/* **A LINE, LAID OUT AND MEASURED** — which is what a string's width is: the sum of the glyphs' advances with kerning,
+ * not the sum of the characters' widths. */
+/* **THE STRING IS MEASURED THROUGH THE APPKIT'S OWN DOOR**, not by a second `CTLine`: `-sizeWithAttributes:` is what this
+ * tree's drawing asks for the same question (and what the kerning and the fallback face go through), so the width a
+ * caller gets here is the width the string will occupy when it is drawn. */
+- (CGFloat)widthOfString:(NSString *)string
+{
+	if (string == nil || [string length] == 0) {
+		return 0.0;
+	}
+	return [string sizeWithAttributes:[NSDictionary dictionaryWithObject:self forKey:NSFontAttributeName]].width;
+}
+
+- (CGFloat)defaultLineHeightForFont
+{
+	return [self ascender] - [self descender] + [self leading];
+}
+
+- (NSGlyphInfo *)glyphWithName:(NSString *)glyphName
+{
+	CGGlyph glyph;
+
+	if (glyphName == nil || _font == NULL) {
+		return nil;
+	}
+	glyph = CTFontGetGlyphWithName(_font, (CFStringRef)glyphName);
+	if (glyph == 0) {
+		return nil;
+	}
+	/* THE NAME IS CARRIED, not the index: a glyph info whose name is known is what a caller can round-trip through
+	 * `-glyphName`, and the name it was asked for is the name it answers. */
+	return [NSGlyphInfo glyphInfoWithGlyphName:glyphName forFont:self baseString:@"A"];
+}
+
+/* **A GLYPH IS "ENCODED" WHEN THE FACE HAS IT**, which is the only sense this tier can give Apple's door: the font knows
+ * no encoding table, and a glyph index past its count is one it cannot draw. */
+- (BOOL)glyphIsEncoded:(NSGlyph)glyph
+{
+	return (glyph < [self numberOfGlyphs]) ? YES : NO;
+}
+
+/* **THE PACKING IS DERIVED FROM HOW MANY GLYPHS THE FACE HAS**, which is what makes an integer-width packing correct:
+ * a face of at most 255 glyphs fits one byte, one of at most 65535 two, and anything larger four. */
+- (NSMultibyteGlyphPacking)glyphPacking
+{
+	NSUInteger glyphs = [self numberOfGlyphs];
+
+	if (glyphs <= 255) {
+		return NSOneByteGlyphPacking;
+	}
+	if (glyphs <= 65535) {
+		return NSTwoByteGlyphPacking;
+	}
+	return NSFourByteGlyphPacking;
+}
+
+/* AND THE TWO CHARACTER-ENCODING ANSWERS: this tier's faces are Core Text faces, so they are Unicode, and the encoding
+ * scheme is the one every one of them reports. */
+- (BOOL)isBaseFont
+{
+	/* NO SCREEN OR PRINTER VARIANTS EXIST HERE (see the variant doors below), so every font IS a base font. */
+	return YES;
+}
+
+- (NSStringEncoding)mostCompatibleStringEncoding
+{
+	return NSUnicodeStringEncoding;
+}
+
+- (NSString *)encodingScheme
+{
+	return @"ISO10646-1";
+}
+
+/* **THE ONE POSITION DOOR A FONT CAN ANSWER: THE PRECEDING GLYPH'S ADVANCEMENT.** Apple's nominal position of a glyph is
+ * where it sits after the one before it, and Core Text knows exactly that number. */
+- (NSPoint)positionOfGlyph:(NSGlyph)glyph precededByGlyph:(NSGlyph)previousGlyph isNominal:(BOOL *)isNominal
+{
+	NSSize advance;
+
+	(void)glyph;
+	advance = [self advancementForGlyph:previousGlyph];
+	if (isNominal != NULL) {
+		*isNominal = YES;
+	}
+	return NSMakePoint(advance.width, 0.0);
+}
+
+/* ---- THE TRANSFORM CONSTRUCTORS, AND THE VARIANTS THAT ARE THIS FONT ---------------------------- */
+
+/* **A MATRIX OR A TRANSFORM IS A SCALE, HERE.** This class's `-matrix` answers the identity and its fonts are made at a
+ * size, so the only thing a caller's transform can mean is the point size it scales to: the size is taken from the
+ * matrix (or the transform's scale) and the font is made at it. Anything else the caller passes is not representable,
+ * and the header says so. */
++ (NSFont *)fontWithName:(NSString *)fontName matrix:(const CGFloat *)matrix
+{
+	CGFloat size = 12.0;
+
+	if (matrix != NULL) {
+		size = sqrt((double)(matrix[0] * matrix[0] + matrix[1] * matrix[1]));
+		if (size <= 0.0) {
+			size = 12.0;
+		}
+	}
+	return [self fontWithName:fontName size:size];
+}
+
++ (NSFont *)fontWithDescriptor:(NSFontDescriptor *)descriptor textTransform:(NSAffineTransform *)transform
+{
+	CGFloat size = [descriptor pointSize];
+
+	if (transform != NULL) {
+		CGFloat scale = sqrt((double)([transform transformStruct].m11 * [transform transformStruct].m11
+					      + [transform transformStruct].m12 * [transform transformStruct].m12));
+
+		if (scale > 0.0) {
+			size *= scale;
+		}
+	}
+	if (size <= 0.0) {
+		size = 12.0;
+	}
+	return [self fontWithDescriptor:descriptor size:size];
+}
+
+- (NSFont *)screenFont
+{
+	return self;
+}
+
+- (NSFont *)screenFontWithRenderingMode:(NSFontRenderingMode)mode
+{
+	(void)mode;
+	return self;
+}
+
+- (NSFont *)printerFont
+{
+	return self;
+}
+
+- (NSFontRenderingMode)renderingMode
+{
+	return NSFontDefaultRenderingMode;
+}
+
+- (NSAffineTransform *)textTransform
+{
+	return nil;
+}
+
+/* ---- THE DRAWING FONT --------------------------------------------------------------------------- */
+
+/* **`-set` MAKES THIS THE FONT THE CONTEXT DRAWS WITH.** This tier's `NSGraphicsContext` has no font stack (Core Text
+ * takes the font from each attributed string), so the door records the choice where the drawing can find it and the
+ * header says that is what it means: `+fontWithName:size:` remains the way to get a face, and this is the way to say
+ * "this is the current one". */
+/* **THERE IS NO DRAWING FONT TO SET, AND THE DOOR SAYS SO RATHER THAN PRETENDING.** Apple's `NSGraphicsContext` carries a
+ * current font that `-set` and `-setInContext:` install; this tier's drawing takes the font from each ATTRIBUTED STRING
+ * (Core Text's runs), so a context has no font slot and a door that wrote one would be storing a bit nobody reads — the
+ * failure this tree keeps re-learning. `+fontWithName:size:` remains how a caller makes a face, and the string's
+ * attributes are how it gets drawn. */
+- (void)set
+{
+	fn_refuse_workspace("NSFont -set",
+			    "a current font on the graphics context - this tier draws from each string's attributes");
+}
+
+- (void)setInContext:(NSGraphicsContext *)graphicsContext
+{
+	(void)graphicsContext;
+	fn_refuse_workspace("NSFont -setInContext:",
+			    "a current font on the graphics context - this tier draws from each string's attributes");
+}
+
+/* ---- THE USER-FONT DEFAULTS, IN THE DEFAULTS DOMAIN --------------------------------------------- */
+
+/* **THE USER'S CHOICES ARE PREFERENCES, SO THEY LIVE IN THE PREFERENCES DOMAIN** — the same `NSUserDefaults` the table's
+ * autosave uses. The two SETTERS store the face's name and size (a font object is not a defaults value); the two
+ * `…OfSize:` constructors already in this class read them.
+ */
+/* **A DEFAULTS WRITE THAT CANNOT LAND IS NOT A REASON TO ABORT A CALLER.** This tree's `NSUserDefaults` writes under
+ * `$FNX_CONFIG_ROOT/Users/<name>/Configuration` (libagora-base's rule), so a process launched without that variable — a
+ * probe, a command-line tool, an application whose launcher forgot it — throws from `-setObject:forKey:`. The doors below
+ * catch that and carry on: the value simply does not persist, which is the honest outcome and not a crash in a font
+ * preference. It is the same rule the rest of this library states about platform pieces: answer, and say what is missing. */
++ (NSArray *)preferredFontNames
+{
+	NSArray *names = nil;
+
+	@try {
+		names = [[NSUserDefaults standardUserDefaults] objectForKey:@"NSFontPreferredFontNames"];
+	} @catch (id exception) {
+		(void)exception;
+		names = nil;
+	}
+	return (names != nil) ? names : [NSArray array];
+}
+
++ (void)setPreferredFontNames:(NSArray *)names
+{
+	@try {
+		[[NSUserDefaults standardUserDefaults] setObject:(names != nil) ? names : [NSArray array]
+							  forKey:@"NSFontPreferredFontNames"];
+	} @catch (id exception) {
+		(void)exception;
+	}
+}
+
++ (void)setUserFont:(NSFont *)font
+{
+	NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
+
+	@try {
+		if (font == nil) {
+			[defaults removeObjectForKey:@"NSFontUserFontName"];
+			[defaults removeObjectForKey:@"NSFontUserFontSize"];
+		} else {
+			[defaults setObject:[font fontName] forKey:@"NSFontUserFontName"];
+			[defaults setObject:[NSNumber numberWithDouble:[font pointSize]] forKey:@"NSFontUserFontSize"];
+		}
+	} @catch (id exception) {
+		(void)exception;
+	}
+}
+
++ (void)setUserFixedPitchFont:(NSFont *)font
+{
+	NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
+
+	@try {
+		if (font == nil) {
+			[defaults removeObjectForKey:@"NSFontUserFixedPitchName"];
+			[defaults removeObjectForKey:@"NSFontUserFixedPitchSize"];
+		} else {
+			[defaults setObject:[font fontName] forKey:@"NSFontUserFixedPitchName"];
+			[defaults setObject:[NSNumber numberWithDouble:[font pointSize]] forKey:@"NSFontUserFixedPitchSize"];
+		}
+	} @catch (id exception) {
+		(void)exception;
+	}
+}
+
+/* **THE SYSTEM'S SIZE FOR A CONTROL SIZE**, which is the era's three-step table: regular is the system size, small and mini
+ * are two points and four points below it, and nothing else is asked.
+ */
++ (CGFloat)systemFontSizeForControlSize:(NSFontControlSize)controlSize
+{
+	CGFloat regular = [self systemFontSize];
+
+	if (controlSize == (NSFontControlSize)NSSmallControlSize) {
+		return regular - 2.0;
+	}
+	if (controlSize == (NSFontControlSize)NSMiniControlSize) {
+		return regular - 4.0;
+	}
+	return regular;
+}
+
+/* AND THE PARSER: "Name Size" in, the font it names out — nil when either half is missing or the face is not there. */
++ (NSFont *)useFont:(NSString *)fontDescription
+{
+	NSArray *parts;
+	NSString *name;
+	CGFloat size;
+
+	if (fontDescription == nil) {
+		return nil;
+	}
+	parts = [fontDescription componentsSeparatedByString:@" "];
+	if ([parts count] < 2) {
+		return nil;
+	}
+	size = (CGFloat)[[parts lastObject] doubleValue];
+	if (size <= 0.0) {
+		return nil;
+	}
+	name = [[parts subarrayWithRange:NSMakeRange(0, [parts count] - 1)] componentsJoinedByString:@" "];
+	return [self fontWithName:name size:size];
+}
+
+/* ---- AND THE FIVE THAT REFUSE -------------------------------------------------------------------- */
+
+/* **NO AFM METRICS EXIST IN THIS TIER**, and the four ATTACHMENT doors need a shaping context's metrics rather than a
+ * face's — Core Text exposes those only through a laid-out line, which is the line's business and not a font's. */
+
+- (NSDictionary *)afmDictionary
+{
+	fn_refuse_workspace("NSFont -afmDictionary", "AFM metrics, which no component in this tier produces");
+	return nil;
+}
+
+- (BOOL)positionOfGlyph:(NSGlyph)glyph struckOverGlyph:(NSGlyph)overlayGlyph metricsExist:(BOOL *)exists
+{
+	(void)glyph;
+	(void)overlayGlyph;
+	if (exists != NULL) {
+		*exists = NO;
+	}
+	fn_refuse_workspace("NSFont -positionOfGlyph:struckOverGlyph:metricsExist:",
+			    "attachment metrics, which a laid-out line has and a face does not");
+	return NO;
+}
+
+- (BOOL)positionOfGlyph:(NSGlyph)glyph struckOverRect:(NSRect)overlayRect metricsExist:(BOOL *)exists
+{
+	(void)glyph;
+	(void)overlayRect;
+	if (exists != NULL) {
+		*exists = NO;
+	}
+	fn_refuse_workspace("NSFont -positionOfGlyph:struckOverRect:metricsExist:",
+			    "attachment metrics, which a laid-out line has and a face does not");
+	return NO;
+}
+
+- (NSInteger)positionOfGlyph:(NSGlyph)glyph
+		withRelation:(NSGlyphRelation)relation
+		 toBaseGlyph:(NSGlyph)baseGlyph
+	    totalAdvancement:(NSSizePointer)advancement
+		metricsExist:(BOOL *)exists
+{
+	(void)glyph;
+	(void)relation;
+	(void)baseGlyph;
+	if (advancement != NULL) {
+		*advancement = NSZeroSize;
+	}
+	if (exists != NULL) {
+		*exists = NO;
+	}
+	fn_refuse_workspace("NSFont -positionOfGlyph:withRelation:toBaseGlyph:totalAdvancement:metricsExist:",
+			    "attachment metrics, which a laid-out line has and a face does not");
+	return 0;
+}
+
+- (void)positionsForCompositeSequence:(const NSGlyph *)someGlyphs
+		      numberOfGlyphs:(NSInteger)count
+			   pointArray:(NSPointArray)points
+{
+	(void)someGlyphs;
+	(void)count;
+	(void)points;
+	fn_refuse_workspace("NSFont -positionsForCompositeSequence:numberOfGlyphs:pointArray:",
+			    "a shaping context's composite sequence, which a face does not carry");
 }
 
 @end

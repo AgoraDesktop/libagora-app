@@ -2564,6 +2564,36 @@ runs a one-run field has not got — `NSTextView`'s versions are the ones that c
 width after an edit, wider after the same edit when the flag is on, the max clamp and the min floor), the RTF round trip,
 the RTFD file round trip, the font pasteboard, the spelling selection — and the five refusals.
 
+### `NSFont` complete: metrics from the face, and the variants that are the font
+
+**`NSFont` ANSWERS ALL 70 OF THE ERA'S SELECTORS NOW** — the fifth complete class. Every metric door asks the FACE, which is
+what this class is (a view of a `CTFontRef`): `-advancementForGlyph:` and its batch forms, `-boundingRectForGlyph:` and
+its batch, `-defaultLineHeightForFont` (its own three metrics added), `-glyphWithName:`, `-glyphIsEncoded:` (a glyph past
+the face's count is one it cannot draw), `-glyphPacking` (derived from the glyph count, so it is always an integer width),
+and `-widthOfString:` through the AppKit's own `-sizeWithAttributes:` door — the width a caller gets is the width the
+string will occupy when drawn.
+
+**AND §4's TRAP IS GENERALISED HERE**: this tree's font *descriptors* carry no traits, so anything that could be answered
+from a descriptor is answered from the face instead — the same rule, one level up. `-screenFont`, `-printerFont` and
+`-screenFontWithRenderingMode:` **are the receiver** (one Core Text face draws both a window and a PDF), `-renderingMode`
+is the default and `-textTransform` is nil for the same reason; `+fontWithName:matrix:` takes its size from the matrix,
+because that is the only thing a matrix can mean to a font made at a size.
+
+**SEVEN DOORS REFUSE BY NAME**: `-afmDictionary` (no AFM metrics anywhere in this tier), the four typographic
+**attachment** doors (those need a laid-out line's metrics, not a face's), and `-set`/`-setInContext:` — there is no
+"current font" on a graphics context here, because this tier draws from each string's attributes. The one *position* door a
+face CAN answer is answered: `-positionOfGlyph:precededByGlyph:isNominal:` is the preceding glyph's advancement.
+
+**AND THE USER-FONT DEFAULTS ROUND-TRIP**: `+setUserFont:`/`+setUserFixedPitchFont:` store the face's name and size in
+`NSUserDefaults`, and `+userFontOfSize:`/`+userFixedPitchFontOfSize:` read them back (falling back to the platform's UI
+face). A defaults write that cannot land — this tree's defaults need `$FNX_CONFIG_ROOT` — **does not abort a caller**: the
+doors catch it and the value simply does not persist.
+
+`tests/font_surface.m` asserts it in 37 checks — relations rather than literals, because a number copied from the face
+would pass whatever the face said: a longer string is wider, glyph 0 is the notdef glyph with an advance of its own, the
+line height is its three metrics, the packing is an integer width, the variants are the receiver, the parser reads
+"Name Size", and all seven refusals answer their types' empty values.
+
 ### Still absent, and why
 
 **NINE THINGS THAT USED TO BE ON THIS LIST ARE NOT ANY MORE, AND THE LIST IS CORRECTED RATHER THAN QUIETLY SHRUNK:**
