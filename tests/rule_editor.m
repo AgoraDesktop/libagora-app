@@ -225,8 +225,6 @@ static int dark_pixels(NSBitmapImageRep *rep, NSInteger y0, NSInteger y1)
 	return count;
 }
 
-NSBitmapImageRep *gProbeRep = nil;
-
 static NSBitmapImageRep *render_view(NSView *view)
 {
 	NSBitmapImageRep *rep = [[NSBitmapImageRep alloc] initWithBitmapDataPlanes:NULL
