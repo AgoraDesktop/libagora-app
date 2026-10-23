@@ -275,5 +275,7 @@ install(FILES
 # THE CHROME THEME IS DELIBERATELY NOT INSTALLED. A theme is external work under
 # its own licence -- the one this was built against is GPL -- and this tree
 # excludes GPL, so `themes/` is gitignored and never ships. libagora-app reads a
-# theme from $AGORA_CHROME_THEME or the user's XDG data directory, and falls back
-# to the marks NSWindow draws when there is none.
+# theme from $AGORA_CHROME_THEME or from Application Support --
+# `~/Library/Application Support/agora/chrome`, then `/Library/Application Support/agora/chrome`
+# (README, "The installation") -- and falls back to the marks NSWindow draws when
+# there is none.
