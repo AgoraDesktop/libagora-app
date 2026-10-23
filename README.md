@@ -1076,7 +1076,19 @@ the compositor is really gone.
   nine ruler client doors are declared on `NSView` in `NSRulerView.h` and implement the permissive defaults, and
   `-setClientView:` tells the OLD client before it stops being one. `tests/view_tail.m` measures it in 33 checks.
 
-- **`ctest`: 158 of 158 passed** (the keyboard and the seam, the AppKit and its input path, the controls and their
+- **And `NSWindow` is COMPLETE — 261 of 261** (`ctest`, offscreen) — the last eighteen doors are spellings, stores and
+  two geometry writers. **The style mask is mutable now**: `-setStyleMask:` preserves the content rectangle and grows or
+  shrinks the frame by the chrome, and the three `is` aliases answer the same style bits as the older spellings. The
+  represented filename has its non-title-changing setter beside the title-changing one; the default button cell, the
+  preferred backing location, the ordered index and the colour space round-trip; `-deviceDescription` is the screen's
+  and `-userSpaceScaleFactor` is 1.0; and the spaces flag is stored with the one-space truth stated. The screen
+  initialiser makes the designated frame, and `-setFrame:display:animate:` lands the frame directly with no frames in
+  between. **The local event queue's two writers are real**: `-postEvent:atStart:` orders head/tail and
+  `-discardEventsMatchingMask:beforeEvent:` removes only the matching events before the named one — and a deferred
+  window with no server window can still drain its queue, which it could not before. `tests/window_tail.m` measures it
+  in 33 checks.
+
+- **`ctest`: 159 of 159 passed** (the keyboard and the seam, the AppKit and its input path, the controls and their
   metrics, the field control and its cell and its bezel and its placeholder and what it may hold, the text path and its
   word granularity and the multi-line view and its wrapping and its scrolling and its READING OF THE STORE, the STORE
   the rich-text slice is built on and the REGION it is laid out in and the WEB that ties the three together and the

@@ -52,6 +52,7 @@ NS_ASSUME_NONNULL_BEGIN
 /* FORWARDED: it appears only as a pointer parameter here. See the note above the class for what this tree can
  * and cannot describe about a screen. */
 @class NSCursor;
+@class NSColorSpace;
 @class NSGraphicsContext;
 @class NSScreen;
 @class NSUndoManager;
@@ -409,6 +410,18 @@ typedef NSUInteger NSWindowSharingType;
 	BOOL _documentEdited;	BOOL _cursorRectsEnabled;
 	BOOL _cursorRectsDirty;
 	NSUInteger _styleMask;
+	/* THE DEFAULT BUTTON CELL, RETAINED; the Return key's target on a platform whose responder chain would
+	 * otherwise have to find it. Stored and answered here. */
+	id _defaultButtonCell;		/* RETAINED */
+	/* THE WINDOW'S COLOUR SPACE, RETAINED when a caller names one; nil means the screen's own. */
+	NSColorSpace *_colorSpace;	/* RETAINED */
+	NSWindowBackingLocation _preferredBackingLocation;
+	/* THE ORDERED INDEX A CALLER ASKED FOR, or 0 for "the front" — this tier's application does not keep the
+	 * ordered list the manager does, so the store is the answer. */
+	NSInteger _orderedIndex;
+	/* WHETHER THE WINDOW MAY APPEAR ON ALL SPACES. This tier has ONE space, so the flag is stored and answered
+	 * and changes no behaviour; the header says so at the door. */
+	BOOL _canBeVisibleOnAllSpaces;
 	NSString *_title;
 	id _delegate;           /* NOT retained, which is Apple's contract for a delegate */
 	BOOL _deferred;
@@ -469,9 +482,20 @@ typedef NSUInteger NSWindowSharingType;
 			  styleMask:(NSUInteger)styleMask
 			    backing:(NSBackingStoreType)bufferingType
 			      defer:(BOOL)flag;
+/* **THE SCREEN FORM.** This tier has one screen, so the rect is already in the space the screen lives in; the
+ * initialiser accepts the screen, answers the same window, and states that the placement is the rect's. */
+- (instancetype)initWithContentRect:(NSRect)contentRect
+			  styleMask:(NSUInteger)styleMask
+			    backing:(NSBackingStoreType)bufferingType
+			      defer:(BOOL)flag
+			     screen:(nullable NSScreen *)screen;
 
 @property (readonly) NSRect frame;
 - (void)setFrame:(NSRect)frameRect display:(BOOL)flag;
+/* **THE ANIMATED FORM HAS NO ANIMATION HERE.** The frame lands now and the window is redrawn when `display` is
+ * YES; a caller asking for the animated spelling gets the same geometry without the frames in between, which is a
+ * stated simplification rather than a second placement path. */
+- (void)setFrame:(NSRect)frameRect display:(BOOL)flag animate:(BOOL)animate;
 
 /* ============================================================================================ *
  * THE SIZE CONSTRAINTS.                                                                         *
@@ -510,6 +534,9 @@ typedef NSUInteger NSWindowSharingType;
 - (void)setFrameOrigin:(NSPoint)aPoint;
 - (void)setContentSize:(NSSize)aSize;
 @property (readonly) NSUInteger styleMask;
+/* **CHANGING THE MASK CHANGES THE CHROME.** The content size is preserved: the old content rectangle is measured
+ * before the mask changes and the frame that holds it under the new mask is set afterwards. */
+- (void)setStyleMask:(NSUInteger)styleMask;
 
 @property (nullable, copy) NSString *title;
 
@@ -566,6 +593,11 @@ typedef NSUInteger NSWindowSharingType;
  * kind, and to the CONTENT VIEW otherwise — Apple's own routing, and the reason a window with a content
  * view and no first responder still delivers a click. */
 - (void)sendEvent:(NSEvent *)theEvent;
+/* **THE LOCAL EVENT QUEUE'S TWO WRITERS.** `-postEvent:atStart:` adds to the head or the tail and
+ * `-discardEventsMatchingMask:beforeEvent:` removes the matching events before a named one (or all of them when the
+ * event is nil), which is the pair a caller uses to drop a click that has gone stale. */
+- (void)postEvent:(nullable NSEvent *)event atStart:(BOOL)flag;
+- (void)discardEventsMatchingMask:(NSUInteger)mask beforeEvent:(nullable NSEvent *)lastEvent;
 
 /* WHETHER A MOVE WITH NO BUTTON HELD IS DELIVERED. Default NO, and it is Apple's default: a window that
  * wants `mouseMoved:` has to ask, which is what keeps the pump from generating an event for every pixel of
@@ -761,6 +793,10 @@ typedef NSUInteger NSWindowSharingType;
 - (BOOL)resizable;
 - (BOOL)miniaturizable;
 - (BOOL)zoomable;
+/* **THE ERA'S `is`-PREFIXED SPELLINGS**, aliases of the three questions above. */
+- (BOOL)isResizable;
+- (BOOL)isMiniaturizable;
+- (BOOL)isZoomable;
 
 /* AND THE TWO DRAGGING FLAGS, whose ground is Apple's own header prose — WHICH NAMES THE SERVER, and is therefore
  * exactly the relationship this tier has with its window manager (D5):
@@ -997,12 +1033,27 @@ typedef NSUInteger NSWindowSharingType;
 - (NSBackingStoreType)backingType;
 - (NSWindowBackingLocation)backingLocation;
 - (NSWindowBackingLocation)preferredBackingLocation;
+- (void)setPreferredBackingLocation:(NSWindowBackingLocation)location;
 
 /* AND TWO THAT ARE THE TRUTH ABOUT THIS TIER RATHER THAN STORES: `-orderedIndex` is a place in the application's
  * ORDERED WINDOW LIST, which this tier does not keep (the manager does), so it answers 0 — the position of a window
  * in a list of one — and `-resizeFlags` is only meaningful DURING a live resize, of which there is none. */
 - (NSInteger)orderedIndex;
+- (void)setOrderedIndex:(NSInteger)index;
 - (NSUInteger)resizeFlags;
+
+/* **THE WINDOW'S DEVICE AND COLOUR FACTS.** `-deviceDescription` is the SCREEN's description (the keys live in
+ * `NSScreen.h`); `-colorSpace` is the caller's choice, or the screen's when none was made; and the deprecated
+ * `-userSpaceScaleFactor` is 1.0 because this tier has no backing scale. */
+- (nullable NSDictionary *)deviceDescription;
+- (nullable NSColorSpace *)colorSpace;
+- (void)setColorSpace:(nullable NSColorSpace *)colorSpace;
+- (CGFloat)userSpaceScaleFactor;
+
+/* **THE SPACES FLAG, STORED AND ANSWERED.** This tier has one space, so a window is always on the active one and
+ * the flag changes nothing it can observe; the doors exist so a caller's setting round-trips rather than crashing. */
+- (BOOL)canBeVisibleOnAllSpaces;
+- (void)setCanBeVisibleOnAllSpaces:(BOOL)flag;
 
 - (void)setShowsToolbarButton:(BOOL)show;
 - (BOOL)showsToolbarButton;
@@ -1025,6 +1076,7 @@ typedef NSUInteger NSWindowSharingType;
 - (void *)windowRef;
 - (nullable NSArray *)drawers;
 - (nullable id)defaultButtonCell;
+- (void)setDefaultButtonCell:(nullable id)aCell;
 - (nullable id)dockTile;
 - (nullable NSGraphicsContext *)graphicsContext;
 - (nullable NSEvent *)currentEvent;
@@ -1316,6 +1368,7 @@ typedef NSUInteger NSWindowButton;
  * what the title bar's proxy icon is for. */
 - (void)setTitleWithRepresentedFilename:(NSString *)aString;
 - (nullable NSString *)representedFilename;
+- (void)setRepresentedFilename:(nullable NSString *)aString;
 
 /* THE FOUR NOTIFICATIONS A KEY OR MAIN CHANGE POSTS. */
 extern NSString *NSWindowDidBecomeKeyNotification;

@@ -56,6 +56,7 @@
 #import <AppKit/NSPrintOperation.h>
 #import <AppKit/NSTrackingArea.h>
 #import <AppKit/NSColor.h>
+#import <AppKit/NSColorSpace.h>
 #import <AppKit/NSCursor.h>
 #import <AppKit/NSScreen.h>
 #import <Foundation/NSUserDefaults.h>
@@ -1052,6 +1053,11 @@ static NSString * const AGCoderWindowContentViewKey = @"contentView";
 	 * CONTENT and the chrome is added by the style mask. */
 	_frame = [[self class] frameRectForContentRect:contentRect styleMask:styleMask];
 	_styleMask = styleMask;
+	_defaultButtonCell = nil;
+	_colorSpace = nil;
+	_preferredBackingLocation = NSWindowBackingLocationMainMemory;
+	_orderedIndex = 0;
+	_canBeVisibleOnAllSpaces = NO;
 	_title = nil;
 	_cursorRectsEnabled = YES;
 	_cursorRectsDirty = YES;
@@ -1066,6 +1072,17 @@ static NSString * const AGCoderWindowContentViewKey = @"contentView";
 	return self;
 }
 
+/* **THE SCREEN FORM.** This tier has one screen, so the content rect is already in the space that screen lives in;
+ * the initialiser accepts the screen (a caller porting a multi-screen layout gets a real signature), places the
+ * window where the rect says, and does not invent a second placement rule for a screen it cannot choose between. */
+- (instancetype)initWithContentRect:(NSRect)contentRect styleMask:(NSUInteger)styleMask
+			    backing:(NSBackingStoreType)bufferingType defer:(BOOL)flag
+			     screen:(NSScreen *)screen
+{
+	(void)screen;
+	return [self initWithContentRect:contentRect styleMask:styleMask backing:bufferingType defer:flag];
+}
+
 - (void)dealloc
 {
 	/* THE WINDOW GOES, THE QUEUE GOES, AND THE CONNECTION DOES NOT: the connection is the process's (see
@@ -1078,6 +1095,8 @@ static NSString * const AGCoderWindowContentViewKey = @"contentView";
 	[_title release];
 	[_frameAutosaveName release];
 	[_representedFilename release];
+	[_defaultButtonCell release];
+	[_colorSpace release];
 	[_representedURL release];
 	[_miniwindowTitle release];
 	[_miniwindowImage release];
@@ -2094,6 +2113,15 @@ static CGFloat fn_clamp_axis(CGFloat v, CGFloat lo, CGFloat hi)
 	(void)flag;
 }
 
+/* **THE ANIMATED SPELLING HAS NO FRAMES IN BETWEEN.** The geometry is the direct set's and the redraw is the direct
+ * set's; `animate:` is accepted and does not schedule an animation, which is stated here rather than pretended by a
+ * second placement path that would drift from the one every other door uses. */
+- (void)setFrame:(NSRect)frameRect display:(BOOL)flag animate:(BOOL)animate
+{
+	(void)animate;
+	[self setFrame:frameRect display:flag];
+}
+
 - (void)setFrameOrigin:(NSPoint)aPoint
 {
 	[self setFrame:NSMakeRect(aPoint.x, aPoint.y, _frame.size.width, _frame.size.height) display:YES];
@@ -2114,6 +2142,24 @@ static CGFloat fn_clamp_axis(CGFloat v, CGFloat lo, CGFloat hi)
 - (NSUInteger)styleMask
 {
 	return _styleMask;
+}
+
+/* **CHANGING THE MASK PRESERVES THE CONTENT RECT.** The old content geometry is measured under the old mask, the
+ * mask changes, and the frame that holds that content under the new one is set — so a caller that adds a title bar
+ * grows the frame rather than shrinking its document. The redraw is what makes the chrome follow the new bits. */
+- (void)setStyleMask:(NSUInteger)styleMask
+{
+	NSRect content;
+	NSRect frame;
+
+	if (styleMask == _styleMask) {
+		return;
+	}
+	content = [self contentRectForFrameRect:_frame];
+	_styleMask = styleMask;
+	frame = [self frameRectForContentRect:content];
+	[self setFrame:frame display:YES];
+	[self setNeedsDisplay:YES];
 }
 
 - (NSString *)title
@@ -2753,8 +2799,13 @@ static CGFloat fn_clamp_axis(CGFloat v, CGFloat lo, CGFloat hi)
 {
 	AGWindowServer *server = fn_server();
 	NSTimeInterval deadline = -1.0;
+	BOOL noServer = (server == NULL || _agwindow == NULL);
 
-	if (server == NULL || _agwindow == NULL) {
+	/* **A WINDOW WITH NO SERVER WINDOW CAN STILL HAVE A LOCAL QUEUE.** `-postEvent:atStart:` is a public door and
+	 * works before a window is ordered in; the drain below is the same queue, so it serves those events first and
+	 * returns nil only when there is nothing queued and nothing to wait on. Before this, a deferred window's
+	 * posted events were unreachable. */
+	if (noServer && [_cg_events count] == 0) {
 		return nil;
 	}
 	/* A CLOSE THE COMPOSITOR ASKED FOR IS ACTED ON HERE rather than inside the dispatch that heard it, and this
@@ -2788,7 +2839,7 @@ static CGFloat fn_clamp_axis(CGFloat v, CGFloat lo, CGFloat hi)
 			s_queued_events--;
 			return [ev autorelease];
 		}
-		if (!wait) {
+		if (!wait || noServer) {
 			return nil;
 		}
 		{
@@ -2843,6 +2894,57 @@ static CGFloat fn_clamp_axis(CGFloat v, CGFloat lo, CGFloat hi)
  * responder handles this kind of event, and to the CONTENT VIEW otherwise. The selector is chosen by TYPE
  * because that is what a responder implements — `mouseDown:`, `keyDown:`, `flagsChanged:` — and a responder
  * that does not implement one is skipped rather than sent a message it cannot answer. */
+/* **THE LOCAL QUEUE'S TWO WRITERS.** `-postEvent:atStart:` is the seam a caller uses to feed an event into this
+ * window ahead of or behind the ones already there; the queue is the same one `-nextEventMatchingMask:` drains, so
+ * the static count is adjusted with it. `-discardEventsMatchingMask:beforeEvent:` removes the matching events that
+ * are EARLIER than a named event (identity, not equality), or all matching events when the event is nil; a named
+ * event that is not in this queue has no effect, which is Apple's reading of "before an event it does not have". */
+- (void)postEvent:(NSEvent *)event atStart:(BOOL)flag
+{
+	if (event == nil) {
+		return;
+	}
+	if (flag) {
+		[_cg_events insertObject:event atIndex:0];
+	} else {
+		[_cg_events addObject:event];
+	}
+	s_queued_events++;
+}
+
+- (void)discardEventsMatchingMask:(NSUInteger)mask beforeEvent:(NSEvent *)lastEvent
+{
+	NSMutableIndexSet *doomed;
+	NSUInteger limit;
+	NSUInteger i;
+
+	if ([_cg_events count] == 0) {
+		return;
+	}
+	if (lastEvent == nil) {
+		limit = [_cg_events count];
+	} else {
+		limit = [_cg_events indexOfObjectIdenticalTo:lastEvent];
+		if (limit == NSNotFound) {
+			return;
+		}
+	}
+	doomed = [NSMutableIndexSet indexSet];
+	for (i = 0; i < limit; i++) {
+		NSEvent *event = [_cg_events objectAtIndex:i];
+		NSUInteger type = (NSUInteger)1 << [event type];
+
+		if (mask == NSAnyEventMask || (mask & type) != 0) {
+			[doomed addIndex:i];
+		}
+	}
+	if ([doomed count] == 0) {
+		return;
+	}
+	[_cg_events removeObjectsAtIndexes:doomed];
+	s_queued_events -= (NSInteger)[doomed count];
+}
+
 - (void)sendEvent:(NSEvent *)theEvent
 {
 	SEL sel = NULL;
@@ -4595,6 +4697,18 @@ static NSWindow *fn_main_window(NSWindow *except)
 	return _representedFilename;
 }
 
+/* **THE REPRESENTED FILE WITHOUT THE TITLE CHANGE.** Apple's two doors differ: `-setTitleWithRepresentedFilename:`
+ * makes the file's name the title, and this one only remembers the path. The proxy icon those titles stand for is
+ * not drawn in this tier's chrome, so the store is the whole effect — and it is a separate store from
+ * `-representedURL`, as Apple's header says. */
+- (void)setRepresentedFilename:(NSString *)aString
+{
+	NSString *copy = [aString copy];
+
+	[_representedFilename release];
+	_representedFilename = copy;
+}
+
 
 /* ============================================================================================ *
  * THE KEY-VIEW LOOP.                                                                            *
@@ -4773,6 +4887,11 @@ static NSUInteger fn_edge_index(NSRectEdge edge)
 	/* THE ZOOM BUTTON IS THE RESIZABLE BIT — see the header. */
 	return (_styleMask & NSResizableWindowMask) != 0;
 }
+
+/* THE ERA'S `is`-PREFIXED SPELLINGS, aliases of the three questions above. */
+- (BOOL)isResizable { return [self resizable]; }
+- (BOOL)isMiniaturizable { return [self miniaturizable]; }
+- (BOOL)isZoomable { return [self zoomable]; }
 
 - (BOOL)isMovable
 {
@@ -5288,7 +5407,15 @@ static NSUInteger fn_edge_index(NSRectEdge edge)
 
 - (nullable id)defaultButtonCell
 {
-	return nil;
+	return _defaultButtonCell;
+}
+
+- (void)setDefaultButtonCell:(id)aCell
+{
+	[aCell retain];
+	[_defaultButtonCell release];
+	_defaultButtonCell = aCell;
+	[self setNeedsDisplay:YES];
 }
 
 - (nullable id)dockTile
@@ -5372,14 +5499,25 @@ FN_FLAG_PAIR(setPreservesContentDuringLiveResize, preservesContentDuringLiveResi
 
 - (NSWindowBackingLocation)preferredBackingLocation
 {
-	return NSWindowBackingLocationMainMemory;	/* what it would use, for the same reason */
+	return _preferredBackingLocation;
+}
+
+- (void)setPreferredBackingLocation:(NSWindowBackingLocation)location
+{
+	_preferredBackingLocation = location;
 }
 
 - (NSInteger)orderedIndex
 {
-	/* A PLACE IN A LIST THIS TIER DOES NOT KEEP: the manager owns the ordering (D5), so the honest answer is the
-	 * position of a window in a list of one. */
-	return 0;
+	return _orderedIndex;
+}
+
+- (void)setOrderedIndex:(NSInteger)index
+{
+	/* **RECORDED, NOT REORDERED.** The application's ordered list is the manager's (D5); a window that stored an
+	 * index it could not apply would be lying about a place it does not have, so the store is the answer and
+	 * `-orderedIndex` reports what was asked for. */
+	_orderedIndex = index;
 }
 
 - (NSUInteger)resizeFlags
@@ -5922,6 +6060,58 @@ static void fn_announce(NSWindow *w, NSString *name, SEL delegateSelector)
 - (NSScreen *)screen
 {
 	return [self cg_dominantScreenForArea:YES];
+}
+
+/* **THE DEVICE AND COLOUR FACTS ARE THE SCREEN'S, WITH THE WINDOW'S OWN COLOUR SPACE IN FRONT.** The description's
+ * keys live in `NSScreen.h`; the colour space is a caller's choice when one was made and the screen's otherwise; and
+ * the deprecated scale factor is 1.0 because this tier has no backing scale. */
+- (NSDictionary *)deviceDescription
+{
+	NSScreen *s = [self screen];
+
+	if (s == nil) {
+		s = [NSScreen mainScreen];
+	}
+	return [s deviceDescription];
+}
+
+- (NSColorSpace *)colorSpace
+{
+	NSScreen *s;
+
+	if (_colorSpace != nil) {
+		return _colorSpace;
+	}
+	s = [self screen];
+	if (s != nil && [s colorSpace] != nil) {
+		return [s colorSpace];
+	}
+	return [NSColorSpace genericRGBColorSpace];
+}
+
+- (void)setColorSpace:(NSColorSpace *)colorSpace
+{
+	[colorSpace retain];
+	[_colorSpace release];
+	_colorSpace = colorSpace;
+	[self setNeedsDisplay:YES];
+}
+
+- (CGFloat)userSpaceScaleFactor
+{
+	return 1.0;	/* one point is one pixel in this tier; a backing scale is a screen fact it has not got */
+}
+
+/* **THE SPACES FLAG IS STORED AND ANSWERED.** This tier has one space, so a window is always on the active one and
+ * the flag cannot change what a caller observes; the doors exist so a setting round-trips instead of crashing. */
+- (BOOL)canBeVisibleOnAllSpaces
+{
+	return _canBeVisibleOnAllSpaces;
+}
+
+- (void)setCanBeVisibleOnAllSpaces:(BOOL)flag
+{
+	_canBeVisibleOnAllSpaces = flag;
 }
 
 - (NSScreen *)deepestScreen

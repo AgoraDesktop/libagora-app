@@ -1436,6 +1436,37 @@ tells the OLD client through `-rulerView:willSetClientView:` before the link cha
 frame announcement, a real scroll view for autoscroll, a full subview-order case, and an old ruler client that records
 its own farewell.
 
+## 52. `NSWindow` complete: a mutable style mask, the screen form, and a queue a deferred window can drain
+
+**THE CLASS IS COMPLETE FOR THE ERA: 261 of 261, the twelfth class to finish.** The tail was spellings and stores around
+the style mask, the represented filename, the default button, the backing/order/colour facts, and the local event queue.
+
+**THE STYLE MASK IS MUTABLE AND PRESERVES THE CONTENT RECT.** `-setStyleMask:` measures the old content rectangle under
+the old mask, changes the mask, and sets the frame that holds that content under the new one — so adding a title bar
+grows the frame instead of shrinking the document. The three `isResizable`/`isMiniaturizable`/`isZoomable` spellings are
+aliases of the older getters and answer the same style bits.
+
+**THE REPRESENTED FILENAME HAS ITS TWO SETTERS, AND THEY DIFFER.** `-setRepresentedFilename:` stores the path and leaves
+the title alone; `-setTitleWithRepresentedFilename:` makes the file's name the title. The default button cell, the
+preferred backing location (the actual location stays main memory), the ordered index and the colour space round-trip;
+`-deviceDescription` is the screen's description, `-userSpaceScaleFactor` is 1.0, and the spaces flag is stored with the
+one-space truth stated at the door.
+
+**THE SCREEN INITIALISER AND THE ANIMATED FRAME SET ARE THE DIRECT DOORS.** The screen form makes the designated frame
+(this tier has one screen, so the rect is already in that screen's space), and `-setFrame:display:animate:` lands the
+geometry directly — accepted, stated, with no second placement path.
+
+**THE EVENT QUEUE'S TWO WRITERS, AND A DEFERRED WINDOW'S QUEUE.** `-postEvent:atStart:` orders head/tail and adjusts the
+process-wide queued count; `-discardEventsMatchingMask:beforeEvent:` removes the matching events before the named one
+(identity) or all matching when the event is nil, and a named event that is not in the queue has no effect.
+**AND THE DRAIN NOW SERVES A WINDOW WITH NO SERVER WINDOW**: `-nextEventMatchingMask:` used to return nil before looking
+at the local queue when `_agwindow` was NULL, so a deferred window's posted events were unreachable. It looks at the
+queue first now and returns nil only when there is nothing queued and nothing to wait on.
+
+`tests/window_tail.m` measures it in **33 checks**: the style/chrome arithmetic, the two represented-filename setters,
+the state set, the screen form, the direct animated set, and the queue's ordering and discarding through the same drain
+the run loop uses.
+
 ## Keeping in sync
 
 The Fiwix AppKit is the origin and this repository has now diverged from it in the seam. A fix made there

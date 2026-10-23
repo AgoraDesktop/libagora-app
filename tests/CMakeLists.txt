@@ -718,6 +718,14 @@ target_link_libraries(window_chrome PRIVATE App m)
 add_test(NAME appkit-window-chrome COMMAND window_chrome)
 set_tests_properties(appkit-window-chrome PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
 
+# **THE WINDOW'S LAST EIGHTEEN DOORS.** The `is` aliases, the mutable style mask, the represented filename, the
+# default button/backing/order/colour state, the screen initialiser, the animated frame set and the local event queue's
+# post/discard pair — measured by the style/chrome arithmetic and by dequeuing the queue itself.
+add_executable(window_tail window_tail.m)
+target_link_libraries(window_tail PRIVATE App m)
+add_test(NAME appkit-window-tail COMMAND window_tail)
+set_tests_properties(appkit-window-tail PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
+
 # **AND THE THEME'S OWN READER AND GEOMETRY.** The chrome's buttons can come from an XFWM theme's `.xpm` files
 # instead of the drawn marks, and this runs against `tests/fixtures/chrome` — Agora's OWN MIT fixture, sixteen
 # hand-written XPMs — so the test never depends on the GPL theme that prompted the work. `AGORA_CHROME_THEME` is
