@@ -222,12 +222,71 @@ static void fn_announce_window(NSWindow *w, NSString *name, SEL delegateSelector
 
 @implementation NSApplication
 
+/* **WHICH CLASS THE APPLICATION IS, AND WHO DECIDES.** The single instance used to be `[[NSApplication alloc]
+ * init]`, hard-coded, so an application that subclassed this class to customize dispatch, own background work or
+ * extend the lifecycle had no supported way to have ITS class be the one `NSApp` names — and `NSApplicationMain`
+ * had no principal-class selection at all. Three doors, in the order Apple's model implies:
+ *
+ *   1. `+setSharedApplicationClass:` — an explicit choice, for a program that has no bundle to read;
+ *   2. `NSPrincipalClass` in the main bundle's Info.plist — Apple's own key, and the reason a Carbon-era bundle
+ *      could name its application class without a line of code;
+ *   3. the RECEIVING class, so `[MyApplication sharedApplication]` answers a `MyApplication` rather than quietly
+ *      substituting this class for it.
+ *
+ * A named class that is not a subclass of this one is REFUSED and the default is used, because `NSApp` is typed
+ * `NSApplication *` throughout this tree and an object that is not one would fail at the first message rather than
+ * here, a long way from the mistake. */
+static Class s_sharedApplicationClass = Nil;
+
++ (void)setSharedApplicationClass:(Class)aClass
+{
+	if (aClass != Nil && ![aClass isSubclassOfClass:[NSApplication class]]) {
+		fprintf(stderr, "APPKIT-REFUSE: +setSharedApplicationClass: needs a subclass of NSApplication; %s is "
+				"not one, so the default is kept\n", class_getName(aClass));
+		return;
+	}
+	/* THE INSTANCE IS ONE, so the class is chosen once: changing it after the application exists would leave
+	 * `NSApp` naming an object of a class nobody asked for. */
+	if (NSApp != nil) {
+		fprintf(stderr, "APPKIT-REFUSE: +setSharedApplicationClass: the application already exists, so the "
+				"class cannot change now\n");
+		return;
+	}
+	s_sharedApplicationClass = aClass;
+}
+
+/* THE BUNDLE'S ANSWER, ASKED ONCE AND ONLY WHEN NOBODY HAS SAID OTHERWISE. `NSPrincipalClass` is a string, and a
+ * name that does not resolve to a class is not an error worth stopping for — a bundle that ships a stale plist
+ * should get the default application rather than no application at all. */
++ (Class)cg_principalApplicationClass
+{
+	Class named;
+
+	if (s_sharedApplicationClass != Nil) {
+		return s_sharedApplicationClass;
+	}
+	if (self != [NSApplication class]) {
+		return self;	/* `[MyApplication sharedApplication]` means MyApplication */
+	}
+	{
+		NSString *name = [[NSBundle mainBundle] objectForInfoDictionaryKey:@"NSPrincipalClass"];
+
+		named = (name != nil) ? NSClassFromString(name) : Nil;
+	}
+	if (named != Nil && [named isSubclassOfClass:[NSApplication class]]) {
+		return named;
+	}
+	return [NSApplication class];
+}
+
 + (NSApplication *)sharedApplication
 {
 	static NSApplication *s_shared;
 
 	if (s_shared == nil) {
-		s_shared = [[NSApplication alloc] init];
+		Class applicationClass = [self cg_principalApplicationClass];
+
+		s_shared = [[applicationClass alloc] init];
 		/* **AND THE GLOBAL BECOMES THAT OBJECT**, which is the whole of what `NSApp` is: this class makes one
 		 * application, so a name for it is a name and not a second variable somebody has to keep in step. */
 		NSApp = s_shared;
@@ -2214,6 +2273,10 @@ struct AGModalSession {
 
 int NSApplicationMain(int argc, const char *argv[])
 {
+	/* **THE PRINCIPAL CLASS IS SELECTED BEFORE THE INSTANCE EXISTS**, which is the only order that can work: the
+	 * class decides what the instance is. `+sharedApplication` performs the selection, so this door needs to say
+	 * nothing — but it is worth stating here, because "NSApplicationMain has no principal-class selection" was
+	 * a reported limitation and the answer is that the selection moved to the door both callers share. */
 	NSApplication *application = [NSApplication sharedApplication];
 
 	(void)argc;

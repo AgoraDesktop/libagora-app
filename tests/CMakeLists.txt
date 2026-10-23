@@ -701,6 +701,18 @@ add_test(NAME appkit-resize
 set_tests_properties(appkit-resize PROPERTIES SKIP_RETURN_CODE 77
   ENVIRONMENT "${_agora_app_test_env}")
 
+# **AND WHICH CLASS THE ONE APPLICATION IS.** `+sharedApplication` hard-coded `[[NSApplication alloc] init]`, so a
+# subclass could never be the object `NSApp` names. The receiving class is now honoured, `NSPrincipalClass` is read
+# from the bundle when nobody says otherwise, and the two refusals are checked rather than hoped for.
+add_executable(appkit_principal_class appkit_principal_class.m)
+target_link_libraries(appkit_principal_class PRIVATE App)
+
+add_test(NAME appkit-principal-class
+  COMMAND "${CMAKE_CURRENT_SOURCE_DIR}/run-appkit-headless.sh" "$<TARGET_FILE:appkit_principal_class>" 2
+	  "all checks passed" )
+set_tests_properties(appkit-principal-class PROPERTIES SKIP_RETURN_CODE 77
+  ENVIRONMENT "${_agora_app_test_env}")
+
 add_executable(chrome_buttons chrome_buttons.m)
 target_link_libraries(chrome_buttons PRIVATE App)
 

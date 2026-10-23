@@ -344,6 +344,19 @@ typedef NSUInteger NSApplicationPresentationOptions;
 
 + (NSApplication *)sharedApplication;
 
+/* **WHICH CLASS THE ONE APPLICATION IS.** `+sharedApplication` used to construct `[[NSApplication alloc] init]`
+ * whatever the receiving class was, so an application that subclassed this class to customize event dispatch, own
+ * background work or extend the lifecycle had no supported way to be the object `NSApp` names. It now chooses, in
+ * this order: the class set here; `NSPrincipalClass` from the main bundle's `Info.plist`, which is Apple's own key;
+ * and otherwise the receiving class, so `[MyApplication sharedApplication]` answers a `MyApplication`.
+ *
+ * The class must be a subclass of `NSApplication`, and it must be chosen BEFORE the application exists — the
+ * instance is one, so changing it afterwards would leave `NSApp` naming an object of a class nobody asked for.
+ * Both refusals are printed rather than raised, for the reason this tree's other refusals are: a bootstrap
+ * mistake should say what it was and let the program continue with the default. This is an Agora extension; it is
+ * not in Apple's 10.6 surface. */
++ (void)setSharedApplicationClass:(Class)aClass;
+
 - (nullable id)delegate;
 - (void)setDelegate:(nullable id)anObject;
 
