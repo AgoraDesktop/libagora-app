@@ -7,19 +7,19 @@ THIRTEENTH SLICE HAS LANDED SINCE, and §9 is its record.**
 file's §2 instrument rules and §4 traps are still the ones these sessions used most. **THIS FILE'S §2 NUMBERS SUPERSEDE
 `HANDOFF-4.md`'s**, which are twelve slices old.*
 
-*State at this handover: **thirteen slice commits** since the fourth handoff, tree clean, **155 tests passing in about
-88 s**, `api-ledger check` holding **375 metrics** — **131 of 168 classes (78%), 4380 of 4505 selectors (97%), 39 of 56
-protocols (70%), 86 of 86 functions**, 4909 methods declared with 8 having no body, **121 of the 129 classes with a surface
+*State at this handover: **fourteen slice commits** since the fourth handoff, tree clean, **156 tests passing in about
+88 s**, `api-ledger check` holding **375 metrics** — **131 of 168 classes (78%), 4400 of 4505 selectors (98%), 39 of 56
+protocols (70%), 86 of 86 functions**, 4929 methods declared with 8 having no body, **122 of the 129 classes with a surface
 at COMPLETE coverage** — refusal census **382**, owed census **19**. **The "120 of 129" this paragraph first carried was a
-recount error; §9 records it and the corrected 119 -> 121 movement.***
+recount error; §9 records it and the corrected 119 -> 121 movement, and §10 takes it to 122.***
 
 ---
 
 ## 1. What these sessions did
 
 Twelve slices, in the order they landed. Each is a commit (plus, twice, a commit in the **workspace** repository and a
-gitlink advance in `$AGORA_ROOT`), and each ended green. **The thirteenth is `182bcd4`, listed below and recorded in
-§9.**
+gitlink advance in `$AGORA_ROOT`), and each ended green. **The thirteenth and fourteenth are `182bcd4` and `b0bd73c`,
+listed below and recorded in §9 and §10.**
 
 | Commit | What it landed |
 |---|---|
@@ -36,6 +36,7 @@ gitlink advance in `$AGORA_ROOT`), and each ended green. **The thirteenth is `18
 | `e25be8e` | **`NSWorkspace`'s file operations** (57/58): the five verbs, the modern recycle/duplicate pair, `-openTempFile`, the volumes, the labels, the desktop-picture store, the change notifications — and thirteen refusals. **The per-volume trash rule, found by `EXDEV`.** |
 | `7a447cb` | **`NSTextView` — COMPLETE** (186/186): document background, links (delegate first, URL second), word completion — and thirty refusals, four of them because their bit would have no reader. |
 | `182bcd4` | **The slider pair — COMPLETE** (`NSSlider` 30/30, `NSSliderCell` 35/35): the tick marks as VALUES with a snap, the title as a CELL in a band taken off the top, the two no-argument ink doors answered from the control view, the background image drawn, and **a flipped vertical scale that was upside down** (§9). |
+| `b0bd73c` | **`NSTableView` — COMPLETE** (123/123): the deprecated spellings mapped to the modern state, the autoresizing styles actually applied by `-tile`, the selection enumerators, both drag-image doors, the focused column's ring, the header indicator image, the three destination-feedback drawings, the cell-click door, and the vertical-motion gate (§10). |
 
 Plus, in the **workspace** repository: `e31e44f` (the main-menu test's Print… case was asking a chain-routed row to resolve
 with no key window, and expecting the item's target to be the stand-in) and `47d9a0c` (the file window opens a document
@@ -53,13 +54,13 @@ claim; the recount is the measurement.**
 
 ```
 classes   131 of 168   (78%)    37 missing
-selectors 4380 of 4505 (97%)   125 missing   121 of 129 classes at COMPLETE coverage
+selectors 4400 of 4505 (98%)   105 missing   122 of 129 classes at COMPLETE coverage
 protocols  39 of  56   (70%)    17 missing
 functions  86 of  86  (100%)     0 missing    10 refuse by name
-methods   4909 declared on this tree's own classes, 8 with NO body on the chain (0.2%)
+methods   4929 declared on this tree's own classes, 8 with NO body on the chain (0.2%)
 ```
 
-**EIGHT CLASSES ARE COMPLETE FOR THE ERA, and every one of them finished with NAMED REFUSALS rather than a stub:**
+**NINE CLASSES ARE COMPLETE FOR THE ERA, and every one of them finished with NAMED REFUSALS rather than a stub:**
 
 | Class | Selectors | Refusing by name |
 |---|---|---|
@@ -71,11 +72,12 @@ methods   4909 declared on this tree's own classes, 8 with NO body on the chain 
 | `NSMenuView` | 42 of 42 | 10 |
 | `NSSlider` | 30 of 30 | 0 (the image is drawn as a background) |
 | `NSSliderCell` | 35 of 35 | 6 (five need a control view; one is the circular face) |
+| `NSTableView` | 123 of 123 | 0 (the deprecated doors are answered; the drag session is the tier's) |
 
-**AND ONLY NINE CLASSES STILL HAVE ANY DEBT** — the tail, not a subsystem:
+**AND ONLY SEVEN CLASSES STILL HAVE ANY DEBT** — the tail, not a subsystem:
 
 ```
-NSView 28        NSControl 28     NSTableView 20   NSDocument 19    NSWindow 18
+NSView 28        NSControl 28     NSDocument 19    NSWindow 18
 NSDocumentController 8   NSSavePanel 3   NSWorkspace 1    NSFont 0*
 ```
 
@@ -280,9 +282,10 @@ than four big slices — so the next session should pick a CLASS, not a subsyste
    `-deviceDescription`, `-discardEventsMatchingMask:beforeEvent:`, `-postEvent:atStart:`, the style queries
    (`-isMiniaturizable`/`-isResizable`/`-isZoomable`), `-setDefaultButtonCell:`, `-setFrame:display:animate:`,
    `-setRepresentedFilename:` and the rest — several are one-liners over the style mask.
-5. **DONE in §9: `NSSlider` 30/30 and `NSSliderCell` 35/35.** The tick-mark and title families were the last "ink"
-   doors, and the slice also found a flipped vertical scale drawn upside down. **The next "ink" class is `NSTableView`
-   20** — its grid is arithmetic over machinery that exists — and then the two deepest tails above.
+5. **DONE in §9 and §10: `NSSlider`/`NSSliderCell` 30/30 and 35/35, and `NSTableView` 123/123.** The slider slice
+   found a flipped vertical scale drawn upside down; the table slice made the deprecated spellings and the three
+   feedback drawings real. **The two deepest tails above are what is left of the big classes**; `NSDocument`'s
+   autosave family is the one that needs a design decision before code.
 6. **`NSWorkspace`'s ONE**, which is not a door (see §2) — and `NSSavePanel`'s three
    (`-isExpanded`, `-treatsFilePackagesAsDirectories:`), which are two lines and a flag.
 7. **Then the absent classes in §2's order**: the editors (`NSImageView` is the most useful — the image family is complete),
@@ -296,7 +299,7 @@ than four big slices — so the next session should pick a CLASS, not a subsyste
 
 ## 7. Things a reader should not have to rediscover
 
-* **THE EIGHT COMPLETE CLASSES ARE COMPLETE IN A SPECIFIC SENSE**: every selector Apple's 10.6 header declares for them is
+* **THE NINE COMPLETE CLASSES ARE COMPLETE IN A SPECIFIC SENSE**: every selector Apple's 10.6 header declares for them is
   DECLARED and ANSWERED, and a refused door is an ANSWERED door (it prints its reason and returns its type's empty value).
   `-respondsToSelector:` is YES for a refusal. That is the plan's own disposition rule, and it is why the ledger and the
   refusal census have to be read TOGETHER.
@@ -322,7 +325,7 @@ than four big slices — so the next session should pick a CLASS, not a subsyste
 * **THE BROWSER ADVERTISES THE 10.6 ITEM CONTRACT AND FALLS BACK TO THE NEXXT CELL ONE.** `-browser:numberOfChildrenOfItem:`
   is the test for which model a delegate speaks; the item walk starts at `nil`, retains nothing, and a delegate implements
   ONE contract (the one allowed overlap is a styling `-browser:willDisplayCell:atRow:column:`).
-* **THE SUITE IS 155 TESTS IN ABOUT 88 SECONDS, AND `ctest --test-dir build -j4` IS THE GATE.** The exit status is the
+* **THE SUITE IS 156 TESTS IN ABOUT 88 SECONDS, AND `ctest --test-dir build -j4` IS THE GATE.** The exit status is the
   witness, not the tail of the output. The workspace's suite is 14 tests and belongs in the same gate run.
 
 ---
@@ -407,3 +410,61 @@ after it is removed. `-setImage:` on the CELL also marks the control for redispl
 next class whose doors are mostly arithmetic over machinery that exists (its grid, the drag image, the column/row
 enumerators). `NSDocument` 19 needs the decision about where autosave state lives. `NSSavePanel`'s three are a flag and
 two lines. §6's ordering is otherwise unchanged.
+
+---
+
+## 10. `NSTableView` complete: deprecated spellings, a drag image, and a focus ring around the selected cell
+
+**Commit `b0bd73c`.** `NSTableView` is COMPLETE for the era — 123 of 123, the ninth class to finish — and the change is
+20 selector rows (4380 -> 4400 present, 125 -> 105 missing), 20 declarations (4909 -> 4929), and one more class at
+complete coverage (121 -> 122). The suite is 156 tests (about 88 s), the refusal census stayed 382 (this slice added no
+refusal), the owed census stayed 19, and `tests/table_tail.m` is the new probe (34 checks). The workspace's 14 tests
+were run too.
+
+**THE DEPRECATED DOORS ARE SPELLINGS OF STATE THE TABLE ALREADY HAD, WHICH IS WHY THE MOVEMENT IS LARGE AND THE CODE IS
+SMALL.** `-drawsGrid` reads and writes the grid style mask. `-autoresizesAllColumnsToFit` maps YES to Uniform and NO to
+LastColumnOnly, exactly as the SDK's compatibility note says — and that mapping made the autoresizing styles worth
+IMPLEMENTING, so `-tile` now applies all five: Uniform shares the difference proportionally with a clamp-and-re-share
+loop, LastColumnOnly gives it all to the last column, and the sequential pair walks from one end. `_cgAutoresizingColumns`
+is the re-entry guard, because `NSTableColumn -setWidth:` calls `-tile`. `-columnsInRect:` is the contiguous range
+spelling of `-columnIndexesInRect:`; the single-index selection pair goes through the index-set doors; the two
+enumerators answer an array of `NSNumber`s taken from the set.
+
+**THE DRAWINGS ARE THE READERS, AND EACH ONE IS MEASURED.** `-focusedColumn` draws `keyboardFocusIndicatorColor` around
+the SELECTED row's cell in that column (the SDK's own description, not a whole-column ring). The header draws
+`-indicatorImageInTableColumn:` at its right edge, in the same zone as the sort mark. The destination feedback style
+draws Regular's line, SourceList's inset line or DropOn plate, or None's nothing; a source-list selection style chooses
+SourceList for the caller. `-verticalMotionCanBeginDrag` is a gate in the mouse-drag threshold, measured through a table
+subclass whose drag entry point is a counter: with NO a vertical motion does not begin a drag, a horizontal one does, and
+with YES either does.
+
+**THE TWO DRAG-IMAGE DOORS ARE ONE SNAPSHOT.** The union of the named rows' cells over the named columns (or every
+column when none is named) is captured through `-cacheDisplayInRect:toBitmapImageRep:`, so the image carries the
+selection plate and the grid. The deprecated array spelling converts its `NSNumber`s and forwards. The offset is in/out
+and stays at Apple's zero (centred under the mouse). The table's own mouse loop now calls the same helper, so the drag
+image and the cursor cannot disagree.
+
+**`-performClickOnCellAtColumn:row:` IS THE CELL'S CLICK, NOT THE TABLE'S ACTION.** The prepared cell is copied, clicked
+through `-performClick:` (or `-performClickWithFrame:inView:` for a pop-up cell), and its object value written back to
+the data source when the click changed it. Apple's door does no enabled-check; neither does this one.
+
+**TRAPS THIS SLICE PAID FOR.**
+
+* **THE SIGNATURES WERE IN THE SDK, AND TWO WERE GUESSED WRONG.** `-columnsInRect:` returns an `NSRange`, not an
+  `NSIndexSet`, and `-dragImageForRows:` takes an `NSArray` of row numbers, not an index set. Both are deprecated, which
+  is exactly why the newer spelling is the one a reader remembers. **Open the header before designing the door.**
+* **`union` IS A C KEYWORD.** The drag-image helper's local rectangle was named `union`; the compiler's "declaration of
+  anonymous union must be a definition" is the whole diagnosis. It is `unionBox` now.
+* **A PROBE'S NEGATIVE CASE CAN PASS FOR THE WRONG REASON, AGAIN.** The grid-off rendering still had 185 pixels of the
+  grid's grey, because antialiased glyphs pass through it; the first check wanted zero. The claim is now a structural
+  ratio (2313 against 185), the same shape as §9's red-title trap. **"No ink" is rarely the right negative; "much less
+  ink" is.**
+* **`NSCell -copy` DOES NOT CARRY A NON-RETAINED TARGET.** This tree's copy archives the cell, and the archive has the
+  action but not the target, so a click on the copy would send nothing. `-performClickOnCellAtColumn:row:` re-attaches
+  the prepared cell's target/action to the copy, and the probe's `NSButtonCell` proves the action arrives.
+* **`-setWidth:` CALLS `-tile`, AND `-tile` AUTORESIZES.** Without a re-entry guard the first style-driven resize
+  recurses through itself. The nested `tile` still recomputes the frame; it simply does not resize again.
+
+**WHERE THE NEXT HOUR GOES.** `NSView` 28 and `NSControl` 28 are the two longest tails, then `NSDocument` 19 (whose
+autosave family needs a decision about where document state lives), `NSWindow` 18, `NSDocumentController` 8,
+`NSSavePanel` 3 and `NSWorkspace` 1 (the instrument quirk). §6's ordering is otherwise unchanged.
