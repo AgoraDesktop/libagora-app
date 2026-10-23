@@ -16,6 +16,7 @@
 #import "NSColor.h"
 #import "NSBezierPath.h"
 #import "NSGraphicsContext.h"
+#import "AppKitRefusal.h"	/* the refused doors say what they need. */
 
 #import <Foundation/NSArray.h>
 
@@ -120,6 +121,14 @@ static void apk_fill_vertical_gradient(NSRect rect, CGFloat radius,
 - (void)dealloc
 {
 	[_cells release];
+	{
+		NSNotificationCenter *centre = [NSNotificationCenter defaultCenter];
+
+		[centre removeObserver:self name:NSMenuDidAddItemNotification object:nil];
+		[centre removeObserver:self name:NSMenuDidChangeItemNotification object:nil];
+		[centre removeObserver:self name:NSMenuDidRemoveItemNotification object:nil];
+	}
+	[_font release];
 	[super dealloc];
 }
 
@@ -130,6 +139,25 @@ static void apk_fill_vertical_gradient(NSRect rect, CGFloat radius,
 	_shownMenu = menu;
 	[_cells removeAllObjects];
 	[self setNeedsDisplay:YES];
+
+	/* **THE VIEW LISTENS TO THE MENU IT SHOWS**, which is what makes `-itemAdded:`/`-itemChanged:`/`-itemRemoved:` the ONE
+	 * path into the cell cache: the menu announces every change and this is the listener, so nothing can edit a menu and
+	 * leave a stale cell behind it. */
+	{
+		NSNotificationCenter *centre = [NSNotificationCenter defaultCenter];
+
+		[centre removeObserver:self name:NSMenuDidAddItemNotification object:nil];
+		[centre removeObserver:self name:NSMenuDidChangeItemNotification object:nil];
+		[centre removeObserver:self name:NSMenuDidRemoveItemNotification object:nil];
+		if (menu != nil) {
+			[centre addObserver:self selector:@selector(cg_menuItemsChanged:)
+				       name:NSMenuDidAddItemNotification object:menu];
+			[centre addObserver:self selector:@selector(cg_menuItemsChanged:)
+				       name:NSMenuDidChangeItemNotification object:menu];
+			[centre addObserver:self selector:@selector(cg_menuItemsChanged:)
+				       name:NSMenuDidRemoveItemNotification object:menu];
+		}
+	}
 }
 
 - (NSMenu *)menu
@@ -623,6 +651,442 @@ static void apk_fill_vertical_gradient(NSRect rect, CGFloat radius,
 			[cell drawKeyEquivalentWithFrame:row inView:self];
 		}
 	}
+}
+
+/* ============================================================================================ *
+ * THE ERA'S SURFACE: GEOMETRY, METRICS, THE LIFECYCLE AND THE ACTION                           *
+ * ============================================================================================ */
+
+/* THE PUBLIC NAMES OF THE VIEW'S OWN ARITHMETIC. `-rectForItemAtIndex:` and `-cellForItemAtIndex:` are what the drawing
+ * and the hit test use; these are the era's spellings of the same two answers, plus the padding the item's rect keeps. */
+- (NSRect)rectOfItemAtIndex:(NSInteger)index
+{
+	NSRect rect = [self rectForItemAtIndex:index];
+
+	if (_horizontal || NSEqualRects(rect, NSZeroRect)) {
+		return rect;
+	}
+	{
+		CGFloat width = NSWidth(rect) - 2.0 * _horizontalEdgePadding;
+
+		if (width < 0.0) {
+			width = 0.0;
+		}
+		return NSMakeRect(NSMinX(rect) + _horizontalEdgePadding, NSMinY(rect), width, NSHeight(rect));
+	}
+}
+
+- (NSMenuItemCell *)menuItemCellForItemAtIndex:(NSInteger)index
+{
+	if (_shownMenu == nil || index < 0 || index >= [_shownMenu numberOfItems]) {
+		return nil;
+	}
+	return [self cellForItemAtIndex:index];
+}
+
+/* **A CALLER'S CELL REPLACES THE ONE THE VIEW MADE**, and the view keeps the replacement rather than copying it: the
+ * cache is per row and a caller that supplies a cell has said it wants that one drawn. */
+- (void)setMenuItemCell:(NSMenuItemCell *)cell forItemAtIndex:(NSInteger)index
+{
+	if (_shownMenu == nil || index < 0 || index >= [_shownMenu numberOfItems]) {
+		return;
+	}
+	while ((NSInteger)[_cells count] <= index) {
+		[_cells addObject:[NSNull null]];
+	}
+	[_cells replaceObjectAtIndex:(NSUInteger)index
+			  withObject:(cell != nil) ? (id)cell : (id)[NSNull null]];
+	if (cell != nil) {
+		[cell setMenuView:self];
+		[cell setMenuItem:[_shownMenu itemAtIndex:index]];
+		[cell setNeedsSizing:YES];
+	}
+	[self setNeedsDisplayForItemAtIndex:index];
+}
+
+- (NSInteger)indexOfItemAtPoint:(NSPoint)point
+{
+	return [self cg_indexOfItemAtPoint:point];
+}
+
+/* **THE PANEL LESS ITS PADDING**, which is the rect a row lives inside. A bar has no padding — its height is the
+ * server's strip — so a horizontal view answers its bounds. */
+- (NSRect)innerRect
+{
+	return _horizontal ? [self bounds] : NSInsetRect([self bounds], 0.0, NSMenuPanelPadding);
+}
+
+- (void)sizeToFit
+{
+	[self setFrameSize:NSMakeSize([self requiredWidth], [self requiredHeight])];
+	_needsSizing = NO;
+	[self setNeedsDisplay:YES];
+}
+
+- (BOOL)needsSizing
+{
+	return _needsSizing;
+}
+
+- (void)setNeedsSizing:(BOOL)flag
+{
+	_needsSizing = flag ? YES : NO;
+	if (_needsSizing) {
+		[self setNeedsDisplay:YES];
+	}
+}
+
+/* **THE SEVEN METRICS, EACH THE WIDEST ACROSS THE ROWS.** A menu's gutters are ONE set of columns for every row — that is
+ * what makes the titles line up — so the width any of them gets is the widest any row needs. The two offsets are then
+ * where those columns START: the state image at the content inset, the image-and-title after it, and the key equivalent
+ * at the far end, measured from the right edge because that is the edge its width is subtracted from. */
+- (CGFloat)cg_widestStateImage
+{
+	CGFloat widest = 0.0;
+	NSInteger i, count = (_shownMenu != nil) ? [_shownMenu numberOfItems] : 0;
+
+	for (i = 0; i < count; i++) {
+		NSMenuItemCell *cell = [self cellForItemAtIndex:i];
+
+		if ([cell stateImageWidth] > widest) {
+			widest = [cell stateImageWidth];
+		}
+	}
+	return widest;
+}
+
+- (CGFloat)cg_widestImageAndTitle
+{
+	CGFloat widest = 0.0;
+	NSInteger i, count = (_shownMenu != nil) ? [_shownMenu numberOfItems] : 0;
+
+	for (i = 0; i < count; i++) {
+		NSMenuItemCell *cell = [self cellForItemAtIndex:i];
+		CGFloat width = [cell imageWidth] + [cell titleWidth];
+
+		if (width > widest) {
+			widest = width;
+		}
+	}
+	return widest;
+}
+
+- (CGFloat)cg_widestKeyEquivalent
+{
+	CGFloat widest = 0.0;
+	NSInteger i, count = (_shownMenu != nil) ? [_shownMenu numberOfItems] : 0;
+
+	for (i = 0; i < count; i++) {
+		NSMenuItemCell *cell = [self cellForItemAtIndex:i];
+
+		if ([cell keyEquivalentWidth] > widest) {
+			widest = [cell keyEquivalentWidth];
+		}
+	}
+	return widest;
+}
+
+- (CGFloat)stateImageOffset
+{
+	return APPKIT_MENU_LEFT_GUTTER;
+}
+
+- (CGFloat)stateImageWidth
+{
+	return [self cg_widestStateImage];
+}
+
+- (CGFloat)imageAndTitleOffset
+{
+	return [self stateImageOffset] + [self stateImageWidth];
+}
+
+- (CGFloat)imageAndTitleWidth
+{
+	return [self cg_widestImageAndTitle];
+}
+
+/* THE SHORTCUT COLUMN IS MEASURED FROM ITS OWN WIDTH AND THE ROW'S RIGHT EDGE, because that is how a menu draws it: the
+ * key equivalents share one right-aligned column. */
+- (CGFloat)keyEquivalentOffset
+{
+	CGFloat width = [self cg_widestKeyEquivalent];
+
+	if (width <= 0.0) {
+		return NSWidth([self bounds]);
+	}
+	return NSWidth([self bounds]) - APPKIT_MENU_RIGHT_PADDING - width;
+}
+
+- (CGFloat)keyEquivalentWidth
+{
+	return [self cg_widestKeyEquivalent];
+}
+
+- (CGFloat)horizontalEdgePadding
+{
+	return _horizontalEdgePadding;
+}
+
+/* **READ WHERE THE ROWS ARE PLACED**: `-rectOfItemAtIndex:` insets every row by it, so a caller that wants a menu's rows
+ * away from the panel's sides sets it and the rects (and the highlight, which is drawn from them) follow. */
+- (void)setHorizontalEdgePadding:(CGFloat)padding
+{
+	_horizontalEdgePadding = (padding > 0.0) ? padding : 0.0;
+	[self setNeedsDisplay:YES];
+}
+
+/* ---- THE HIGHLIGHT BY INDEX -------------------------------------------------------------------- */
+
+- (NSInteger)highlightedItemIndex
+{
+	if (_highlightedItem == nil || _shownMenu == nil) {
+		return -1;
+	}
+	return [_shownMenu indexOfItem:_highlightedItem];
+}
+
+- (void)setHighlightedItemIndex:(NSInteger)index
+{
+	if (_shownMenu == nil || index < 0 || index >= [_shownMenu numberOfItems]) {
+		[self setHighlightedItem:nil];
+		return;
+	}
+	[self setHighlightedItem:[_shownMenu itemAtIndex:index]];
+}
+
+/* ---- THE ITEM LIFECYCLE -------------------------------------------------------------------------- */
+
+/* **A CHANGED MENU DROPS THE CELL THE VIEW CACHED FOR THAT ROW.** The cells are made on demand and hold a measured copy of
+ * the item's widths; an item whose title or key equivalent changed would otherwise be drawn at the old size, which is the
+ * kind of stale cache that looks like a layout bug. The three doors are the public hooks; the view calls them from the
+ * menu's own notifications, so there is one path into the cache. */
+- (void)cg_dropCachedCellForItem:(NSMenuItem *)item
+{
+	NSInteger index;
+
+	if (_shownMenu == nil || item == nil) {
+		return;
+	}
+	index = [_shownMenu indexOfItem:item];
+	if (index < 0 || index >= (NSInteger)[_cells count]) {
+		return;
+	}
+	[_cells replaceObjectAtIndex:(NSUInteger)index withObject:[NSNull null]];
+	[self setNeedsSizing:YES];
+}
+
+- (void)itemAdded:(NSMenuItem *)item
+{
+	(void)item;
+	[self setNeedsSizing:YES];
+	[self setNeedsDisplay:YES];
+}
+
+- (void)itemChanged:(NSMenuItem *)item
+{
+	/* **A CHANGE WITH NO ITEM NAMED DROPS EVERYTHING**, which is what the menu's notification actually carries: it does not
+	 * name the item, so the honest answer is "the cache is stale" rather than "nothing changed". A caller that knows which
+	 * item changed passes it and only that row is dropped. */
+	if (item == nil) {
+		[_cells removeAllObjects];
+		[self setNeedsSizing:YES];
+	} else {
+		[self cg_dropCachedCellForItem:item];
+	}
+	[self setNeedsDisplay:YES];
+}
+
+- (void)itemRemoved:(NSMenuItem *)item
+{
+	(void)item;
+	/* THE ROWS AFTER THE REMOVED ONE SHIFT, so the whole cell cache is stale rather than one entry. */
+	[_cells removeAllObjects];
+	[self setNeedsSizing:YES];
+	[self setNeedsDisplay:YES];
+}
+
+/* AND THE THREE OBSERVERS THAT REACH THOSE DOORS. The menu announces each change; the view is a listener on the menu it
+ * shows, which is why `-setMenu:` re-subscribes. */
+- (void)cg_menuItemsChanged:(NSNotification *)note
+{
+	NSString *name = [note name];
+
+	if ([name isEqualToString:NSMenuDidAddItemNotification]) {
+		[self itemAdded:nil];
+	} else if ([name isEqualToString:NSMenuDidChangeItemNotification]) {
+		[self itemChanged:nil];
+	} else {
+		[self itemRemoved:nil];
+	}
+}
+
+/* **THE MENU'S OWN VALIDATION, THEN THE REPAINT** — `-update` is Apple's door for "re-read the menu", and the validity of
+ * every item is the menu's to decide (`-update` walks the items and asks their targets). */
+- (void)update
+{
+	if (_shownMenu != nil) {
+		[_shownMenu update];
+	}
+	[self setNeedsSizing:YES];
+	[self setNeedsDisplay:YES];
+}
+
+- (void)setNeedsDisplayForItemAtIndex:(NSInteger)index
+{
+	if (_shownMenu == nil || index < 0 || index >= [_shownMenu numberOfItems]) {
+		return;
+	}
+	[self setNeedsDisplayInRect:[self rectOfItemAtIndex:index]];
+}
+
+/* **THE FLASH AND THE SEND.** The row is highlighted, the view is drawn once so the highlight is visible, the item's
+ * action is sent exactly as a click sends it, and the highlight comes back off — which is what "highlighting" means for a
+ * caller that is performing a row without a pointer. */
+- (void)performActionWithHighlightingForItemAtIndex:(NSInteger)index
+{
+	NSMenuItem *item;
+
+	if (_shownMenu == nil || index < 0 || index >= [_shownMenu numberOfItems]) {
+		return;
+	}
+	item = [_shownMenu itemAtIndex:index];
+	if (![item isEnabled]) {
+		return;
+	}
+	[self setHighlightedItem:item];
+	/* **THE FLASH IS A DIRTY RECT, NOT `-display`.** `-display` and `-displayIfNeeded` are absent in this tier on purpose
+	 * (they mean "draw me where I live", NSView.h says so); the highlighted row is marked and the action sent, which is the
+	 * half a caller can observe without a window. */
+	[self setNeedsDisplayForItemAtIndex:index];
+	/* **THE SHARED APPLICATION, NOT THE `NSApp` GLOBAL.** `NSApp` is set by `-sharedApplication` and is NULL in a process
+	 * that never made one — which a probe, a test and a command-line tool all are. The rest of this tree asks the class for
+	 * the instance, and this door does the same. */
+	[[NSApplication sharedApplication] sendAction:[item action] to:[item target] from:item];
+	[self setHighlightedItem:nil];
+	[self setNeedsDisplay:YES];
+}
+
+/* ---- THE FACE AND THE BAR'S HEIGHT ---------------------------------------------------------------- */
+
+- (NSFont *)font
+{
+	if (_font != nil) {
+		return _font;
+	}
+	if (_shownMenu != nil && [_shownMenu numberOfItems] > 0) {
+		return [[self cellForItemAtIndex:0] font];
+	}
+	return nil;
+}
+
+/* **A FACE FOR EVERY ROW.** A caller that sets one gets it on the cells the view made; a row whose cell the CALLER
+ * supplied is left alone, because its face is the caller's. */
+- (void)setFont:(NSFont *)font
+{
+	[font retain];
+	[_font release];
+	_font = font;
+	if (_font != nil && _shownMenu != nil) {
+		NSInteger i, count = [_shownMenu numberOfItems];
+
+		for (i = 0; i < count; i++) {
+			[[self cellForItemAtIndex:i] setFont:_font];
+		}
+	}
+	[self setNeedsSizing:YES];
+	[self setNeedsDisplay:YES];
+}
+
+/* THE STRIP'S HEIGHT WHEN THIS VIEW IS A BAR, and zero for a dropdown — a dropdown has no bar to be tall. */
+- (CGFloat)menuBarHeight
+{
+	return _horizontal ? NSHeight([self bounds]) : 0.0;
+}
+
+/* ---- AND THE ONES THAT REFUSE ---------------------------------------------------------------------- */
+
+/* **THE POPUP ATTACHMENT IS `NSMenu`'S IN THIS TIER.** Apple's view owned it; here `NSMenu` owns the tracking window, the
+ * open submenu and the event loop, and two owners of one window is the arrangement that cannot work. Each door says so
+ * rather than pretending. */
+
+- (void)attachSubmenuForItemAtIndex:(NSInteger)index
+{
+	(void)index;
+	fn_refuse_workspace("NSMenuView -attachSubmenuForItemAtIndex:",
+			    "an attachment owned by the view - NSMenu owns the tracking window and the open submenu "
+			    "in this tier (see -cg_trackOneEvent:)");
+}
+
+- (NSMenu *)attachedMenu
+{
+	fn_refuse_workspace("NSMenuView -attachedMenu",
+			    "an attachment owned by the view - NSMenu owns the tracking window and the open submenu");
+	return nil;
+}
+
+- (NSMenuView *)attachedMenuView
+{
+	fn_refuse_workspace("NSMenuView -attachedMenuView",
+			    "an attachment owned by the view - NSMenu owns the tracking window and the open submenu");
+	return nil;
+}
+
+- (void)detachSubmenu
+{
+	fn_refuse_workspace("NSMenuView -detachSubmenu",
+			    "an attachment owned by the view - NSMenu owns the tracking window and the open submenu");
+}
+
+- (NSPoint)locationForSubmenu:(NSMenu *)submenu
+{
+	(void)submenu;
+	fn_refuse_workspace("NSMenuView -locationForSubmenu:",
+			    "an attachment owned by the view - NSMenu computes where a submenu's window goes");
+	return NSZeroPoint;
+}
+
+- (BOOL)isAttached
+{
+	fn_refuse_workspace("NSMenuView -isAttached",
+			    "an attachment owned by the view - NSMenu owns the tracking window and the open submenu");
+	return NO;
+}
+
+- (void)setWindowFrameForAttachingToRect:(NSRect)cellFrame
+			       onScreen:(NSScreen *)screen
+			  preferredEdge:(NSRectEdge)preferredEdge
+			 popUpSelectedItem:(NSInteger)selectedItemIndex
+{
+	(void)cellFrame;
+	(void)screen;
+	(void)preferredEdge;
+	(void)selectedItemIndex;
+	fn_refuse_workspace("NSMenuView -setWindowFrameForAttachingToRect:onScreen:preferredEdge:popUpSelectedItem:",
+			    "an attachment owned by the view - NSMenu sizes and places the tracking window");
+}
+
+- (void)trackWithEvent:(NSEvent *)event
+{
+	(void)event;
+	fn_refuse_workspace("NSMenuView -trackWithEvent:",
+			    "a tracking loop owned by the view - NSMenu runs it, one event at a time "
+			    "(-cg_trackOneEvent:)");
+}
+
+/* AND THE TEAR-OFF PAIR, which is a 10.0-era feature Apple deprecated. */
+- (id)initAsTearOff
+{
+	fn_refuse_workspace("NSMenuView -initAsTearOff",
+			    "tear-off menus, a 10.0-era feature this tier has not got");
+	return [self initWithFrame:NSZeroRect];
+}
+
+- (BOOL)isTornOff
+{
+	fn_refuse_workspace("NSMenuView -isTornOff",
+			    "tear-off menus, a 10.0-era feature this tier has not got");
+	return NO;
 }
 
 @end

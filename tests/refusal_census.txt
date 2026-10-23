@@ -98,6 +98,7 @@ NSImageRep.m                     3
 NSLayoutConstraint.m             8
 NSLayoutManager.m                5
 NSLayoutSolver.m                 1
+NSMenuView.m                      10
 NSMenu.m                         18
 NSMenuItemCell.m                 2
 NSNibConnector.m                 2
@@ -130,4 +131,4 @@ NSWindow.m                       23
 # `fn_refuse_window` spelling was simply invisible to a census that counted the `APPKIT-REFUSE` literal, so every
 # refusal written the house way — which is the way the header asks for — moved no number.
 #
-# total: 316
+# total: 326

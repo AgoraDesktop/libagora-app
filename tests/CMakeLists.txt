@@ -63,6 +63,17 @@ set_tests_properties(seam-menubar-area PROPERTIES SKIP_RETURN_CODE 77
 
 add_executable(menu_cell_ink menu_cell_ink.m)
 target_link_libraries(menu_cell_ink PRIVATE App)
+# **THE MENU VIEW'S ERA SURFACE.** The view had five of its forty-two selectors; this checks the rest — where a row is
+# (`-rectOfItemAtIndex:`, `-indexOfItemAtPoint:`), where the columns inside a row start (the offsets and widths, measured
+# from a menu whose rows differ so a "widest" that answered the first row would fail), the view's answer to the menu
+# changing under it (through NSMenu's own notifications, so there is one path into the cell cache), the highlight by index,
+# the action-with-a-flash, the face and the bar's height — and the ten doors that refuse by name, with the reason.
+add_executable(menu_view_surface menu_view_surface.m)
+target_link_libraries(menu_view_surface PRIVATE App)
+
+add_test(NAME appkit-menu-view-surface COMMAND menu_view_surface)
+set_tests_properties(appkit-menu-view-surface PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
+
 add_test(NAME appkit-menu-cell-ink COMMAND menu_cell_ink)
 # The seam's libraries live in the install prefix and RUNPATH does NOT apply to a transitive dependency, so a
 # test that links only the AppKit still has to be told where the prefix's lib directory is — the same reason

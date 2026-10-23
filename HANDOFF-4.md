@@ -6,11 +6,11 @@ and two slices of `NSTextView`. `HANDOFF.md`, `HANDOFF-2.md` and `HANDOFF-3.md` 
 of them was wrong, and the second file's §2 instrument rules and §4 traps are the ones these sessions used most. **THIS
 FILE'S §2 NUMBERS SUPERSEDE `HANDOFF-3.md`'s**, which are six slices old.*
 
-*State at this handover: **thirteen slice commits** since the eighth handoff (and the relicense sweep that touched every
-file in the meantime), tree clean, **149 tests passing in about 84 s**, `api-ledger check` holding **375 metrics** —
-**131 of 168 classes (78%), 4172 of 4505 selectors (93%), 39 of 56 protocols (70%), 86 of 86 functions**, 4700 methods
-declared with 8 having no body, **115 of the 129 classes with a surface at COMPLETE coverage** — refusal census **316**.*
-*(`HANDOFF-3.md`'s §2 numbers are nine slices older than these; the numbers in this file's §2 are current as of §15.)*
+*State at this handover: **fourteen slice commits** since the eighth handoff (and the relicense sweep that touched every
+file in the meantime), tree clean, **150 tests passing in about 85 s**, `api-ledger check` holding **375 metrics** —
+**131 of 168 classes (78%), 4209 of 4505 selectors (93%), 39 of 56 protocols (70%), 86 of 86 functions**, 4737 methods
+declared with 8 having no body, **116 of the 129 classes with a surface at COMPLETE coverage** — refusal census **326**.*
+*(`HANDOFF-3.md`'s §2 numbers are ten slices older than these; the numbers in this file's §2 are current as of §16.)*
 
 ---
 
@@ -38,27 +38,26 @@ and a different commit line; it is recorded here because the AppKit slice is wha
 
 ```
 classes   131 of 168   (78%)    37 missing
-selectors 4172 of 4505 (93%)   333 missing   115 of 129 classes at COMPLETE coverage
+selectors 4209 of 4505 (93%)   296 missing   116 of 129 classes at COMPLETE coverage
 protocols  39 of  56   (70%)    17 missing
 functions  86 of  86  (100%)     0 missing    10 refuse by name
-methods   4700 declared on this tree's own classes, 8 with NO body on the chain (0.2%)
+methods   4737 declared on this tree's own classes, 8 with NO body on the chain (0.2%)
 ```
 
-**THE 333 MISSING SELECTORS ARE STILL CONCENTRATED, AND `NSBrowser` HAS LEFT THE LIST ENTIRELY** — 120 of 120, the second
-class and the first class-sized one to reach COMPLETE coverage, with five doors refusing by name. The ledger's debt list,
-largest first:
+**THE 296 MISSING SELECTORS ARE STILL CONCENTRATED, AND `NSMenuView` HAS LEFT THE LIST ENTIRELY** (42 of 42, ten of them
+refusing by name). The ledger's debt list, largest first:
 
 ```
-NSTextView 39    NSMenuView 37    NSFont 35        NSWorkspace 32   NSText 31
-NSView 28        NSControl 28     NSTableView 20   NSDocument 19    NSWindow 18
-NSSlider 18      NSSliderCell 17  NSDocumentController 8   NSSavePanel 3
+NSTextView 39    NSFont 35        NSWorkspace 32   NSText 31       NSView 28
+NSControl 28     NSTableView 20   NSDocument 19    NSWindow 18     NSSlider 18
+NSSliderCell 17  NSDocumentController 8   NSSavePanel 3
 ```
 
-Everything below `NSSliderCell` is five doors or fewer in a class that is otherwise complete. **SIX CLASSES HAVE LEFT
-THE DEEPEST-DEBT LIST IN SIX SLICES**: `NSTextView` 68 → 39, `NSBrowser` 64 → **0** (§11, §14, §15 — the largest debt in
-the component, finished), `NSResponder` 57 → **0** (§12), `NSWorkspace` 49 → 32 (§13). What is left of `NSTextView` is
-mostly blocked or refused; the next-largest usable classes are `NSMenuView` (37, most of them deprecated doors) and
-`NSFont` (35, the descriptor and traits surface).
+Everything below `NSSliderCell` is five doors or fewer in a class that is otherwise complete. **SEVEN CLASSES HAVE LEFT
+THE DEEPEST-DEBT LIST IN SEVEN SLICES**: `NSTextView` 68 → 39, `NSBrowser` 64 → **0**, `NSResponder` 57 → **0**,
+`NSWorkspace` 49 → 32, `NSMenuView` 37 → **0**. Three classes are COMPLETE for the era. What is left is mostly the
+long tail — `NSFont`'s descriptor/traits surface, `NSView`/`NSControl`'s spread-out doors, and `NSTextView`'s blocked or
+refused clusters.
 
 **THE 37 ABSENT CLASSES GROUP CLEANLY:**
 
@@ -202,21 +201,18 @@ comments to `.cmake`, `.sh` or Python files breaks the gates — that happened, 
 Ranked by reachable surface per unit of work, and the ranking now starts with the class this tree has and has not
 finished:
 
-1. **`NSMenuView` 37 — and most of them are `NSMenuView.NSDeprecated`'s.** The menu's own drawing surface: the row
-   geometry, the tracking-session doors and the deprecated spellings a ported caller still sends. It is a THIN class
-   (42 selectors offered, 5 answered), so a pass over it is cheap per door — but read the header first: several of the
-   five that are implemented are the ones a dropdown actually uses, and the rest may be refusals rather than work.
-2. **`NSFont` 35** — the descriptor and traits surface, **with §4's recorded caveat: this tree's FONT DESCRIPTORS CARRY NO
-   TRAITS**, so the traits family must read the FACE (`CTFontGetSymbolicTraits`, `CTFontCopyTraits`) rather than the
-   descriptor, and a slice that forgets it will answer "regular" for every face on the machine.
-3. **`NSTextView`'s remaining 39**, which are now almost all BLOCKED or REFUSED rather than absent: the TEXT-CHECKING
+1. **`NSFont` 35 — the descriptor and traits surface, with §4's recorded caveat.** This tree's FONT DESCRIPTORS CARRY
+   NO TRAITS, so the traits family must read the FACE (`CTFontGetSymbolicTraits`, `CTFontCopyTraits`) rather than the
+   descriptor; a slice that forgets it will answer "regular" for every face on the machine. The rest is the descriptor's
+   own attributes and the font-panel-ish conversions.
+2. **`NSTextView`'s remaining 39**, which are now almost all BLOCKED or REFUSED rather than absent: the TEXT-CHECKING
    family (`-checkTextIn…`, `-enabledTextCheckingTypes`, `-handleTextCheckingResults:…`, the three automatic-detection
    toggles) is blocked on `NSTextCheckingResult`/`NSOrthography`, which Foundation here has not got; the LINK/SERVICES
    pair needs a link attribute constant and a services transport; `-startSpeaking:`/`-stopSpeaking:` are speech, refused
    by name; the five `-orderFront…Panel:` doors are panels this tier has not built; and `-complete:`/`-insertCompletion:`
    are the WORD-COMPLETION family, which is the one cluster there that is genuinely a slice. **Do not open the checking
    family before Foundation has the classes** — name them absent and keep the flags refusing.
-4. **`NSWorkspace` 32 — the largest remaining class-shaped gap, and now WITH A CALLER** (§13): the file window opens a
+3. **`NSWorkspace` 32 — the largest remaining class-shaped gap, and now WITH A CALLER** (§13): the file window opens a
    document through `-openFile:` instead of calling Launch Services itself. What is left is the file-operation family
    (`-performFileOperation:source:destination:files:tag:`, `-recycleURLs:completionHandler:`,
    `-duplicateURLs:completionHandler:`, `-openTempFile:`), the Finder-service doors
@@ -227,7 +223,7 @@ finished:
    verbs — but the TRASH MUST NOT BE DUPLICATED: the Workspace's `WSTrash` owns the directories, the Put Back records and
    the empty, so an AppKit `-recycleURLs:completionHandler:` either agrees with that rule or states why it is a
    different one.
-5. **`NSText` 31**, which are siblings of the text-view work: the RTF write/read pair (`-RTFFromRange:`,
+4. **`NSText` 31**, which are siblings of the text-view work: the RTF write/read pair (`-RTFFromRange:`,
    `-replaceCharactersInRange:withRTF:`, …), `-changeFont:`/`-copyFont:`/`-pasteFont:`, the resizability and size limits
    (`-minSize`, `-maxSize`, the two flags), and `-showGuessPanel:`.
 6. **The absent-class groups in §2**, in this order: the editors (`NSImageView`, `NSDrawer`, `NSTokenField`), the rules
@@ -265,8 +261,14 @@ finished:
   than one range, so the single-selection shape stays the cheap one and every inherited door keeps working.
 * **THIS TREE'S STRINGS ARE BYTE SEQUENCES, NOT CHARACTER SEQUENCES** for non-ASCII (`HANDOFF-2.md` §4): the word and
   paragraph granularities use ASCII `isalnum` and `_`, and say so.
-* **THE SUITE IS 149 TESTS IN ABOUT 84 SECONDS, AND `ctest --test-dir build -j4` IS THE GATE.** The exit status is the
+* **THE SUITE IS 150 TESTS IN ABOUT 85 SECONDS, AND `ctest --test-dir build -j4` IS THE GATE.** The exit status is the
   witness, not the tail of the output.
+* **`NSApp` IS NULL UNTIL `-sharedApplication` RUNS.** A door that sends an action asks the CLASS for the instance
+  (`[NSApplication sharedApplication]`), not the global — a probe, a test and a command-line tool are all processes that
+  never made an application any other way, and `[NSApp sendAction:...]` on a NULL global returns NO without a message.
+  §16 cost a debugging round to this.
+* **`-display` AND `-displayIfNeeded` ARE ABSENT ON PURPOSE** (`NSView.h` says why: they mean "draw me where I live").
+  A flash, a highlight or any "show this now" door marks a RECT dirty and lets the window draw it.
 * **`NSBrowser` HAS TWO DELEGATE CONTRACTS AND A DELEGATE IMPLEMENTS ONE.** `-browser:numberOfChildrenOfItem:` decides
   which: with it the browser is ITEM-based (model objects, browser-made cells); without it CELL-based (rows and cells the
   delegate fills). The one allowed overlap is a styling `-browser:willDisplayCell:atRow:column:` on top of the browser's
@@ -763,3 +765,52 @@ tests            149 (browser_items grew 40 -> 45 checks)
 read the header before assuming the doors are work), `NSFont` 35 (the descriptor and traits surface, **with §4's caveat
 that this tree's descriptors carry no traits, so the traits family must read the FACE**), then `NSTextView` 39 (blocked or
 refused in the main) and `NSWorkspace` 32 (the file-operation family, with the trash constraint §13 recorded).
+
+## 16. The menu view's surface — and the third complete class
+
+*Session of the fourteenth slice, taking §6's first item (`NSMenuView` 37). Its commit is "AppKit: the menu view is
+complete — geometry, metrics, the lifecycle, and ten refusals"; tree clean; `ctest --test-dir build -j4` green at **150
+tests in 85 s** with `appkit-api-census` and `appkit-refusal-census` re-pinned in the same commit.*
+
+**THE RESULT: `sel:NSMenuView` 42 of 42 — COMPLETE**, with ten of them refusing by name. Three classes are now complete
+for the era (`NSResponder` 145/145, `NSBrowser` 120/120, `NSMenuView` 42/42), and this was the smallest and the last of
+the "thin class with a big percentage".
+
+**THE THIRTY-SEVEN DOORS SORTED THEMSELVES INTO FOUR KINDS, AND EACH WAS ANSWERED WITH WHAT THE VIEW ALREADY HAD.** The
+GEOMETRY doors are the era's names for the row arithmetic and hit test the drawing already used (`-rectForItemAtIndex:`,
+`-cellForItemAtIndex:`, `-cg_indexOfItemAtPoint:`), plus `-innerRect`, `-sizeToFit`/`-needsSizing` and
+`-horizontalEdgePadding` — which is READ where the rows are placed, so setting it moves every row and the highlight with
+them. The SEVEN METRIC doors are the WIDEST measure across the rows, because a menu's gutters are one set of columns for
+every row; the key equivalent's column is measured from the row's RIGHT edge, which is why the probe holds it by comparing
+two views of different widths rather than by knowing the padding constant. The LIFECYCLE doors (`-itemAdded:`,
+`-itemChanged:`, `-itemRemoved:`) are public, but the view SUBSCRIBES to `NSMenuDidAddItemNotification`/`DidChangeItem`/
+`DidRemoveItem` on its menu, so the menu announcing a change is the ONE path into the cell cache — and because the
+notification names no item, a change with no item drops the WHOLE cache rather than pretending nothing happened. And the
+HIGHLIGHT/FACE pair (`-highlightedItemIndex`, `-font`, `-menuBarHeight`) fills the last of it.
+
+**TEN DOORS REFUSE, IN TWO FAMILIES.** The popup attachment (eight doors) is `NSMenu`'s in this tier: it owns the tracking
+window, the open submenu and the event loop, and a view with its own attachment mechanism would be a second thing opening
+windows. Tear-off menus (two doors) are a 10.0-era feature Apple deprecated.
+
+**TWO TRAPS, ONE OF THEM A REAL BUG IN THE SLICE.** `NSApp` IS NULL UNTIL `-sharedApplication` RUNS — the flash-and-send
+used the global and silently sent nothing (the send returned NO with no message), and the fix is the same one the rest of
+the tree uses: ask the class for the instance. And `-display`/`-displayIfNeeded` are absent in this tier on purpose
+(`NSView.h` says they mean "draw me where I live"), so a flash marks the row's rect dirty instead of drawing it. §7
+carries both.
+
+**THE NUMBERS MOVED** (§8's rule 4):
+
+```
+selectors       4172 -> 4209 of 4505   (missing 333 -> 296)
+methods-declared 4700 -> 4737
+NSMenuView       5 -> 42 of 42         (COMPLETE — off the debt list)
+classes-complete 115 -> 116 of 129
+refusal census    316 -> 326           (ten new named refusals, all in NSMenuView.m)
+tests            149 -> 150            (the new suite: 38 checks)
+```
+
+**WHERE THE NEXT HOUR GOES.** §6 is rewritten above: `NSFont` 35 (with §4's caveat — THE DESCRIPTORS CARRY NO TRAITS, so
+the traits family must read the FACE), `NSTextView` 39 (blocked or refused in the main), `NSWorkspace` 32 (the
+file-operation family, with §13's trash constraint) and `NSText` 31 (the RTF write/read pair and the resizability limits).
+The three biggest single-class debts are now 39, 35 and 32 — there is no class-sized subsystem left except `NSTextView`'s
+blocked clusters.

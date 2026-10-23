@@ -2500,6 +2500,42 @@ columns are tables; a caller that wants a column's view asks `-cg_tableForColumn
 `-setReusesColumns:` refuses for a different kind of honesty: this browser's columns are a fixed 256-slot pool, reused by
 construction, so `-reusesColumns` is always YES and there is nothing to ask for.
 
+### The menu view is complete: where a row is, where its columns start, and the ten that refuse
+
+**`NSMenuView` ANSWERS ALL 42 OF THE ERA'S SELECTORS NOW** — the third class in the component to finish, and the second
+this session. The tail was four kinds of door:
+
+- **Geometry, published rather than private.** `-rectOfItemAtIndex:`, `-menuItemCellForItemAtIndex:` and
+  `-indexOfItemAtPoint:` are the era's names for the row arithmetic and hit test the drawing already used;
+  `-innerRect` is the panel less its padding; `-sizeToFit` sets the frame from the measured size and clears
+  `-needsSizing`; and `-horizontalEdgePadding` is read where the rows are placed, so a caller that sets it moves every row
+  and the highlight with them.
+- **The seven metrics, each the WIDEST measure across the rows** — a menu's gutters are one set of columns for every row,
+  which is what makes the titles line up: `-stateImageOffset`/`-stateImageWidth`, `-imageAndTitleOffset`/`-imageAndTitleWidth`
+  and `-keyEquivalentOffset`/`-keyEquivalentWidth` (measured from the row's right edge, so the shortcut column is anchored
+  however wide the menu is).
+- **The item lifecycle, reached through the menu's own notifications.** `-itemAdded:`, `-itemChanged:` and
+  `-itemRemoved:` drop the view's cached cell for that row and mark the size stale; the view is a listener on its menu, so
+  **there is one path into the cell cache** and nothing can edit a menu and leave a stale cell behind it. `-update` runs
+  the menu's validation and redraws, `-setNeedsDisplayForItemAtIndex:` invalidates one row, and
+  `-performActionWithHighlightingForItemAtIndex:` is the flash-then-send.
+- **The highlight by index** (`-highlightedItemIndex`/`-setHighlightedItemIndex:`, with -1 for nothing) and the face
+  (`-font`/`-setFont:`, which reaches the cells the view made) plus `-menuBarHeight` — the strip's height for a bar, zero
+  for a dropdown.
+
+**AND TEN DOORS REFUSE BY NAME, IN TWO FAMILIES.** The popup attachment (`-attachSubmenuForItemAtIndex:`,
+`-attachedMenu`, `-attachedMenuView`, `-detachSubmenu`, `-locationForSubmenu:`, `-isAttached`,
+`-setWindowFrameForAttachingToRect:onScreen:preferredEdge:popUpSelectedItem:`, `-trackWithEvent:`) is **`NSMenu`'s in this
+tier**: it owns the tracking window, the open submenu and the event loop, and one window with one owner is the only
+arrangement that works — a view that grew a second attachment mechanism would be a second thing opening windows. And
+`-initAsTearOff`/`-isTornOff` are a 10.0-era feature Apple deprecated and this tier has not got.
+
+`tests/menu_view_surface.m` asserts it in 38 checks: the row rects and the hit test (including -1 below the last row), the
+padding moving a row, `-innerRect`, `-sizeToFit` clearing `-needsSizing`, the metrics measured from a menu whose rows
+differ so a "widest" that answered the first row would fail, the key column anchored at two different widths, the
+lifecycle through `NSMenu`'s notifications, the highlight by index, the flash sending an action to its target exactly once
+(and not for a disabled or nonexistent row), the face, the bar height — and all ten refusals.
+
 ### Still absent, and why
 
 **NINE THINGS THAT USED TO BE ON THIS LIST ARE NOT ANY MORE, AND THE LIST IS CORRECTED RATHER THAN QUIETLY SHRUNK:**

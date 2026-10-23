@@ -1153,6 +1153,38 @@ name what is missing.
 programmatic selection) on a branch leaves the row unselected while still opening the next column, and the same click
 with the flag ON selects it.
 
+## 43. The menu view's surface: published geometry, one path into the cell cache, and ten refusals
+
+**THE VIEW HAD FIVE OF ITS ERA'S FORTY-TWO SELECTORS.** The missing thirty-seven were not one kind of thing, and the
+honest way to finish them was to sort them by what they are.
+
+**THE GEOMETRY AND METRICS ARE THE VIEW'S OWN ARITHMETIC, PUBLISHED.** The row rect, the cell and the hit test already
+existed under private names (`-rectForItemAtIndex:`, `-cellForItemAtIndex:`, `-cg_indexOfItemAtPoint:`); the era's names
+delegate to them. The seven metric doors are the WIDEST measure across the rows — a menu's gutters are one set of columns
+for every row, which is what makes titles line up, so "the width" is never one row's — and the key equivalent's column is
+measured from the row's RIGHT edge, which a probe can only hold by comparing two views of different widths, not by knowing
+the padding constant.
+
+**THE LIFECYCLE HAS EXACTLY ONE PATH IN.** `-itemAdded:`, `-itemChanged:` and `-itemRemoved:` are public, but the view
+subscribes to `NSMenuDidAddItemNotification`/`DidChangeItem`/`DidRemoveItem` on the menu it shows, so the only way a menu
+change reaches the cell cache is the menu announcing it. A menu that changes and leaves a stale measured cell behind is
+the layout bug this prevents. And because the notification carries no item, a change with no item named drops the WHOLE
+cache — the truthful answer, rather than "nothing changed".
+
+**TWO TRAPS THE PROBE PAID FOR.** `NSApp` IS NULL UNTIL `-sharedApplication` RUNS, so the flash-and-send asks the CLASS
+for the instance (`[NSApplication sharedApplication]`) — a probe, a test and a command-line tool are all processes that
+never made an application any other way. And `-display`/`-displayIfNeeded` ARE ABSENT IN THIS TIER ON PURPOSE (they mean
+"draw me where I live", `NSView.h` says so), so the flash marks the row's rect dirty instead of trying to draw it — which
+is the half a caller can observe without a window.
+
+**AND TEN DOORS REFUSE, IN TWO FAMILIES.** The popup attachment is `NSMenu`'s in this tier: it owns the tracking window,
+the open submenu and the event loop (`-cg_trackOneEvent:`), and a view that grew its own attachment mechanism would be a
+second thing opening windows. Tear-off menus are a 10.0-era feature Apple deprecated. Both families name what is missing
+and answer their type's empty value.
+
+`tests/menu_view_surface.m` measures it in **38 checks**, including the refusals — a refusal that crashes or invents an
+answer would be worse than the absent door it replaced.
+
 ## Keeping in sync
 
 The Fiwix AppKit is the origin and this repository has now diverged from it in the seam. A fix made there

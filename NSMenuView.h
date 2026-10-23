@@ -28,7 +28,9 @@
 
 @class NSMenu;
 @class NSMenuItem;
+@class NSFont;
 @class NSMenuItemCell;
+@class NSScreen;
 @class NSMutableArray;
 
 /* **THE ROW HEIGHT, DECLARED ONCE.** `NSMenu` measures its own tracking window with it and this view lays its rows
@@ -51,10 +53,99 @@ extern const CGFloat NSMenuPanelPadding;
 	NSMutableArray *_cells;		/* one NSMenuItemCell per row, made on demand */
 	NSMenuItem *_highlightedItem;
 	BOOL _horizontal;
+	/* **AND THE ERA'S LAYOUT STATE.** `_horizontalEdgePadding` is the air a row keeps from the panel's sides;
+	 * `_needsSizing` is the cached-size flag `-sizeToFit` clears; and `_font` is the face the cells are set in when a
+	 * caller supplies one (`nil` means "the cells keep their own"). */
+	CGFloat _horizontalEdgePadding;
+	BOOL _needsSizing;
+	NSFont *_font;			/* RETAINED, or nil for "the cells' own" */
 }
 
 - (void)setMenu:(NSMenu *)menu;
 - (NSMenu *)menu;
+
+/* ==================================================================================================================
+ * THE ERA'S SURFACE, IN FOUR KINDS — AND THE ONE KIND THAT REFUSES.
+ *
+ * **THE GEOMETRY DOORS PUBLISH WHAT THE VIEW ALREADY COMPUTES.** `-rectOfItemAtIndex:`, `-menuItemCellForItemAtIndex:`
+ * and `-indexOfItemAtPoint:` are the public names of the view's own row arithmetic and hit test, and the seven metric
+ * doors (`-stateImageWidth`, `-imageAndTitleWidth`, `-keyEquivalentWidth` and the three offsets beside them, plus
+ * `-horizontalEdgePadding`) are the widest of those measures across the rows — which is what a caller drawing its own
+ * column beside a menu needs and what the cells were measured for. `-innerRect` is the panel less its padding.
+ *
+ * **THE ITEM LIFECYCLE DOORS ARE THE VIEW'S ANSWER TO THE MENU'S OWN NOTIFICATIONS.** `-itemAdded:`, `-itemChanged:` and
+ * `-itemRemoved:` drop whatever the view cached for that item and invalidate it; the view observes
+ * `NSMenuDidAddItemNotification`, `NSMenuDidChangeItemNotification` and `NSMenuDidRemoveItemNotification` on the menu it
+ * shows, so the doors are public without being a second way to change a menu. `-update` runs the menu's validation and
+ * redraws, `-sizeToFit` sets the frame from the measured size (and clears `-needsSizing`), and
+ * `-performActionWithHighlightingForItemAtIndex:` is the flash-then-send a click performs.
+ *
+ * **THE HIGHLIGHT IS AN INDEX HERE AS WELL AS AN ITEM** — `-highlightedItemIndex` and `-setHighlightedItemIndex:` are the
+ * era's spelling, and they answer -1 / accept -1 for "nothing", which is the same state `-highlightedItem`'s nil names.
+ *
+ * **AND THE ATTACHMENT FAMILY REFUSES BY NAME, TOGETHER WITH THE TEAR-OFF PAIR.** Apple's `NSMenuView` owned the popup
+ * attachment — it put a submenu's view in a window, tracked it and detached it. In this tier that is `NSMenu`'s: it
+ * owns the tracking window, the open submenu and the event loop (`-cg_trackOneEvent:`), and one window with one owner is
+ * the only arrangement that can work. A view that grew a second attachment mechanism would be a second thing opening
+ * windows. Tear-off menus are a 10.0-era feature Apple deprecated and this tier has not got, so those two refuse for
+ * their own reason.
+ * ================================================================================================================ */
+
+/* THE GEOMETRY. */
+- (nullable NSMenuItemCell *)menuItemCellForItemAtIndex:(NSInteger)index;
+- (void)setMenuItemCell:(nullable NSMenuItemCell *)cell forItemAtIndex:(NSInteger)index;
+- (NSRect)rectOfItemAtIndex:(NSInteger)index;
+- (NSInteger)indexOfItemAtPoint:(NSPoint)point;
+- (NSRect)innerRect;
+- (void)sizeToFit;
+- (BOOL)needsSizing;
+- (void)setNeedsSizing:(BOOL)flag;
+
+/* THE METRICS, EACH THE WIDEST OF ITS MEASURE ACROSS THE ROWS. */
+- (CGFloat)stateImageOffset;
+- (CGFloat)stateImageWidth;
+- (CGFloat)imageAndTitleOffset;
+- (CGFloat)imageAndTitleWidth;
+- (CGFloat)keyEquivalentOffset;
+- (CGFloat)keyEquivalentWidth;
+- (CGFloat)horizontalEdgePadding;
+- (void)setHorizontalEdgePadding:(CGFloat)padding;
+
+/* THE HIGHLIGHT, BY INDEX. */
+- (NSInteger)highlightedItemIndex;
+- (void)setHighlightedItemIndex:(NSInteger)index;
+
+/* THE ITEM LIFECYCLE AND THE ACTION. */
+- (void)itemAdded:(nullable NSMenuItem *)item;
+- (void)itemChanged:(nullable NSMenuItem *)item;
+- (void)itemRemoved:(nullable NSMenuItem *)item;
+- (void)update;
+- (void)setNeedsDisplayForItemAtIndex:(NSInteger)index;
+- (void)performActionWithHighlightingForItemAtIndex:(NSInteger)index;
+
+/* THE FACE THE CELLS ARE SET IN (nil leaves them their own), and the BAR's height. */
+- (nullable NSFont *)font;
+- (void)setFont:(nullable NSFont *)font;
+- (CGFloat)menuBarHeight;
+
+/* ---- AND THE ONES THAT REFUSE ------------------------------------------------------------------------------- */
+
+/* The popup attachment, which is `NSMenu`'s in this tier (see the block note above). */
+- (void)attachSubmenuForItemAtIndex:(NSInteger)index;
+- (nullable NSMenu *)attachedMenu;
+- (nullable NSMenuView *)attachedMenuView;
+- (void)detachSubmenu;
+- (NSPoint)locationForSubmenu:(nullable NSMenu *)submenu;
+- (BOOL)isAttached;
+- (void)setWindowFrameForAttachingToRect:(NSRect)cellFrame
+			       onScreen:(nullable NSScreen *)screen
+			  preferredEdge:(NSRectEdge)preferredEdge
+			 popUpSelectedItem:(NSInteger)selectedItemIndex;
+- (void)trackWithEvent:(nullable NSEvent *)event;
+
+/* And the tear-off pair, which is a 10.0-era feature this tier has not got. */
+- (nullable id)initAsTearOff;
+- (BOOL)isTornOff;
 
 /* **AND WHETHER A ROW WEARS THE MARK WITHOUT THE POINTER BEING ON IT — THE ONE THING A LIST INSIDE A MENU'S SESSION
  * NEEDS THAT A MENU DOES NOT.** A menu marks the row under the pointer and nothing else; a LIST also shows the row its
