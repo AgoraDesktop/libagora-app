@@ -74,6 +74,7 @@ static void check(int ok, const char *what)
 	int mouseMoveds;
 	NSString *lastCharacters;
 	NSUInteger lastModifiers;
+	BOOL lastWasRepeat;
 	NSPoint lastPoint;
 }
 @end
@@ -91,6 +92,7 @@ static void check(int ok, const char *what)
 	[lastCharacters release];
 	lastCharacters = [[event characters] copy];
 	lastModifiers = [event modifierFlags];
+	lastWasRepeat = [event isARepeat];
 }
 
 - (void)keyUp:(NSEvent *)event
@@ -286,6 +288,21 @@ int main(void)
 		check(content->flagsChangeds == 1, "a MODIFIER arrives as -flagsChanged:");
 		check(content->keyDowns == before, "and NOT as a key down");
 		check((content->lastModifiers & NSShiftKeyMask) != 0, "and the flag it carries is the shift bit");
+
+		/* **2b. AND A REPEAT IS MARKED AS ONE.** A held key produces presses the hardware did not send: the seam's
+		 * platform generates them, at the compositor's `repeat_info` rate, and marks them. The AppKit's whole
+		 * vocabulary for that is `-isARepeat`, which this conversion used to hard-code to NO — so a held arrow key
+		 * was indistinguishable from someone pressing it again, and a control that nudges with arrows would nudge
+		 * twice per repeat. `event.repeat` is the seam's answer and it is carried straight through. */
+		before = content->keyDowns;
+		event = evdev_key(30 /* KEY_A */, "a", 1, 0, 0);
+		event.repeat = 1;
+		deliver(application, window, &event);
+		check(content->keyDowns == before + 1, "a generated repeat is delivered as a key down");
+		check(content->lastWasRepeat, "and says so: -isARepeat is YES");
+		event = evdev_key(30, "a", 1, 0, 0);
+		deliver(application, window, &event);
+		check(!content->lastWasRepeat, "while an ordinary press still answers NO");
 
 		/* **3. A CLICK IS ALSO WINDOW MANAGEMENT: it activates the application, makes the clicked window key and
 		 * main, and asks for it to be frontmost.** Deactivating first makes the activation half observable even in

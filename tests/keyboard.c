@@ -137,6 +137,17 @@ int main(void)
 	check(AGKeyboardKeyIsModifier(keyboard, KEY_A) == 0, "evdev 30 (A) is NOT a modifier");
 	check(AGKeyboardKeyIsModifier(keyboard, KEY_SPACE) == 0, "evdev 57 (Space) is NOT a modifier");
 
+	/* **AND WHICH KEYS MAY REPEAT WHEN HELD** — the keymap's half of the repeat contract. The compositor owns the
+	 * RATE and the DELAY (`wl_keyboard.repeat_info`); what a repeat is allowed to be at all is this, and getting it
+	 * wrong types characters nobody pressed: a modifier repeating turns one Shift press into a stream of them, and a
+	 * code the layout does not define has no character to repeat. */
+	check(AGKeyboardKeyIsRepeatable(keyboard, KEY_A) != 0, "evdev 30 (A) DOES repeat when held");
+	check(AGKeyboardKeyIsRepeatable(keyboard, KEY_SPACE) != 0, "and so does Space");
+	check(AGKeyboardKeyIsRepeatable(keyboard, KEY_LEFTSHIFT) == 0, "a modifier does NOT repeat");
+	check(AGKeyboardKeyIsRepeatable(keyboard, KEY_CAPSLOCK) == 0, "nor does Caps Lock");
+	check(AGKeyboardKeyIsRepeatable(keyboard, 0x2ff) == 0,
+	      "nor does a code the keymap does not define — repeating it would type nothing, over and over");
+
 	/* AND A KEYMAP THAT IS GARBAGE IS REFUSED RATHER THAN CRASHING. */
 	check(AGKeyboardUseKeymapText(keyboard, "this is not a keymap", 21) != 0,
 	      "a keymap that does not compile is refused");

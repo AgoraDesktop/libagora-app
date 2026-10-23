@@ -75,7 +75,29 @@ typedef enum {
 	AGEventPointerButton,
 	/* The pointer entered or left the window. `pressed` is 1 for entered. */
 	AGEventPointerEnter,
+	/* **THE WHEEL, OR A FINGER, OR A CONTINUOUS DEVICE — one axis of one gesture.** `axis`, `delta`, `source` and
+	 * the two discrete numbers describe it; see `AGEvent`'s own fields and `AGAxisSource` below. A gesture with both
+	 * axes arrives as TWO of these, in the same native frame, because a client's scroll handler is per axis and a
+	 * single event carrying both would have to choose which one `-scrollingDeltaY` means. */
+	AGEventPointerAxis,
 } AGEventType;
+
+/* **WHERE A SCROLL CAME FROM, WHICH IS ALSO WHAT ITS UNITS MEAN.** A wheel moves in STEPS: one notch is 120
+ * hundred-and-twentieths, and a client that wants lines divides. A finger on a trackpad moves CONTINUOUSLY, in
+ * fractions of a notch and with no steps at all — so a client that turned its `discrete` count into clicks would be
+ * turning a smooth gesture into a rattle. These are `wl_pointer.axis_source`'s values, named rather than renumbered. */
+enum {
+	AGAxisSourceWheel      = 0,
+	AGAxisSourceFinger     = 1,
+	AGAxisSourceContinuous = 2,
+	AGAxisSourceWheelTilt  = 3
+};
+
+/* AND WHICH AXIS. These are `wl_pointer.axis`'s values. */
+enum {
+	AGAxisVertical   = 0,
+	AGAxisHorizontal = 1
+};
 
 enum {
 	AGModifierShift    = 1u << 0,
@@ -105,6 +127,22 @@ typedef struct AGEvent {
 	int modifier;			/* nonzero when `keycode` is a MODIFIER key rather than one that types */
 	uint32_t modifiers;		/* AGModifier... */
 	char text[8];			/* UTF-8; empty when the key produces no text */
+	/* **AND THE SCROLL'S OWN FOUR NUMBERS**, meaningful only for `AGEventPointerAxis`. `delta` is the precise
+	 * distance along `axis` in the compositor's unit — where one wheel notch is 15.0 — and it is the ONLY distance:
+	 * a client must not add `discrete` to it, because they are the same motion said twice, once continuously and
+	 * once in whole steps. `value120` is that same motion in hundred-and-twentieths of a notch, `0` for a device
+	 * that has no steps at all (a finger), and `has_discrete` says whether the two discrete fields mean anything.
+	 * `source` is an `AGAxisSource`. */
+	double delta;
+	uint32_t axis;			/* AGAxisVertical or AGAxisHorizontal */
+	uint32_t source;		/* an AGAxisSource */
+	int32_t discrete;		/* whole notches, when the device has them */
+	int32_t value120;		/* the same, in 120ths */
+	int has_discrete;
+	/* **A REPEAT THE CLIENT GENERATED, NOT ONE THAT ARRIVED.** A held key produces more key events than the
+	 * hardware sent; a client that could not tell them apart would let a repeat pass for a fresh press — which is
+	 * what `NSEvent -isARepeat` exists to prevent, and what a double-typed keystroke would mean. */
+	int repeat;
 } AGEvent;
 
 typedef void (*AGEventFunction)(void *context, const AGEvent *event);

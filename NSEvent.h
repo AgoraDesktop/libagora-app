@@ -449,6 +449,21 @@ NS_ASSUME_NONNULL_BEGIN
 			     eventNumber:(NSInteger)eventNum
 			      clickCount:(NSInteger)clickNum
 				pressure:(float)pressureValue;
+/* **A WHEEL EVENT, WHICH APPLE'S OWN CONSTRUCTORS DO NOT BUILD.** Every `+mouseEventWithType:` in Cocoa makes an
+ * event with no deltas, and a scroll with no delta is a scroll that does nothing. This is an Agora extension, not part
+ * of the 10.6 surface, and it exists so the seam can hand the AppKit a wheel it can actually deliver.
+ *
+ * `dx`/`dy` ARE IN WHEEL LINES, the unit `-deltaY` has answered in since this era: one notch is 1.0, a trackpad's
+ * fraction of a notch is a fraction of a line, and the SIGN is Cocoa's — positive is a scroll UP and to the LEFT.
+ * Normalizing the protocol's opposite sense is the caller's job and happens once, at the seam, so nothing above it
+ * has to know which direction the compositor counted in. */
++ (nullable NSEvent *)cg_scrollEventWithDeltaX:(CGFloat)dx
+				  deltaY:(CGFloat)dy
+				location:(NSPoint)location
+			   modifierFlags:(NSUInteger)flags
+			       timestamp:(NSTimeInterval)time
+			    windowNumber:(NSInteger)windowNum;
+
 + (nullable NSEvent *)keyEventWithType:(NSEventType)type
 			      location:(NSPoint)location
 			 modifierFlags:(NSUInteger)flags

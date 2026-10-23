@@ -229,3 +229,21 @@ int AGKeyboardTranslate(AGKeyboard *keyboard, uint32_t evdev_keycode, char *utf8
 	written = xkb_state_key_get_utf8(keyboard->state, AG_EVDEV_TO_XKB(evdev_keycode), utf8, size);
 	return written > 0 ? written : 0;
 }
+
+int AGKeyboardKeyIsRepeatable(AGKeyboard *keyboard, uint32_t evdev_keycode)
+{
+	xkb_keysym_t sym;
+
+	if (keyboard == NULL || keyboard->state == NULL) {
+		return 0;
+	}
+	/* A MODIFIER FIRST, and by the same test the AppKit's `-flagsChanged:` uses: one definition of "this key is a
+	 * modifier" is what keeps the two answers from disagreeing. */
+	if (AGKeyboardKeyIsModifier(keyboard, evdev_keycode)) {
+		return 0;
+	}
+	/* AND A KEY WITH NO SYMBOL DOES NOT REPEAT.** `XKB_KEY_NoSymbol` is the map's answer for a code it does not
+	 * define, and repeating it would deliver a keystroke that stands for nothing. */
+	sym = xkb_state_key_get_one_sym(keyboard->state, (xkb_keycode_t)(evdev_keycode + 8));
+	return sym != XKB_KEY_NoSymbol;
+}

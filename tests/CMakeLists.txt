@@ -713,6 +713,20 @@ add_test(NAME appkit-principal-class
 set_tests_properties(appkit-principal-class PROPERTIES SKIP_RETURN_CODE 77
   ENVIRONMENT "${_agora_app_test_env}")
 
+# **AND THE WHEEL, WHICH HAD NOWHERE TO GO.** The seam had no scroll event at all, so `wl_pointer.axis` stopped at the
+# platform and `-scrollWheel:` was never called by anything. This delivers the seam's own axis events and checks the two
+# things that are conventions rather than plumbing: the units (one notch is one line, a finger's fraction is a fraction)
+# and the signs (the protocol's down/right is Cocoa's negative), plus routing by hit test and that a wheel is not a
+# press.
+add_executable(appkit_scroll appkit_scroll.m)
+target_link_libraries(appkit_scroll PRIVATE App)
+
+add_test(NAME appkit-scroll
+  COMMAND "${CMAKE_CURRENT_SOURCE_DIR}/run-appkit-headless.sh" "$<TARGET_FILE:appkit_scroll>" 3
+	  "all checks passed" )
+set_tests_properties(appkit-scroll PROPERTIES SKIP_RETURN_CODE 77
+  ENVIRONMENT "${_agora_app_test_env}")
+
 add_executable(chrome_buttons chrome_buttons.m)
 target_link_libraries(chrome_buttons PRIVATE App)
 

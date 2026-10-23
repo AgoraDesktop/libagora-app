@@ -285,6 +285,28 @@ static NSMutableArray *s_monitors;
 	return [e autorelease];
 }
 
++ (nullable NSEvent *)cg_scrollEventWithDeltaX:(CGFloat)dx
+				  deltaY:(CGFloat)dy
+				location:(NSPoint)location
+			   modifierFlags:(NSUInteger)flags
+			       timestamp:(NSTimeInterval)time
+			    windowNumber:(NSInteger)windowNum
+{
+	NSEvent *e = [[self alloc] cg_initWithType:NSScrollWheel
+					  location:location
+				     modifierFlags:flags
+					 timestamp:time
+				      windowNumber:windowNum
+					   context:nil];
+
+	if (e == nil) {
+		return nil;
+	}
+	e->_deltaX = dx;
+	e->_deltaY = dy;
+	return [e autorelease];
+}
+
 + (nullable NSEvent *)keyEventWithType:(NSEventType)type
 			      location:(NSPoint)location
 			 modifierFlags:(NSUInteger)flags

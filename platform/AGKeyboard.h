@@ -60,6 +60,13 @@ uint32_t AGKeyboardModifiers(AGKeyboard *keyboard);
  * every key press as a key down would leave `-flagsChanged:` unreachable. */
 int AGKeyboardKeyIsModifier(AGKeyboard *keyboard, uint32_t evdev_keycode);
 
+/* **DOES THIS KEY REPEAT WHEN HELD?** The keyboard's own answer, and the one a repeat generator has to ask: a
+ * MODIFIER does not (holding Shift does not type Shift over and over), and neither does a key the map gives no symbol
+ * to at all — a media key on a map that does not cover it, or a code the layout leaves undefined. Repeating those
+ * would type characters nobody pressed. This is the xkb half of "honour repeat_info and xkb repeatability": the
+ * rate and delay are the compositor's, the list of which keys may repeat is the keymap's. */
+int AGKeyboardKeyIsRepeatable(AGKeyboard *keyboard, uint32_t evdev_keycode);
+
 #ifdef __cplusplus
 }
 #endif

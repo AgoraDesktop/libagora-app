@@ -231,6 +231,17 @@ struct AGWindowServer {
 
 	AGKeyboard *keyboard_state;
 	int keymap_seen;
+	/* **THE REPEAT POLICY, WHICH THE COMPOSITOR SETS AND THIS CLIENT OWNS.** `wl_keyboard.repeat_info` names a rate
+	 * in keys per second and a delay in milliseconds; a rate of ZERO means "do not repeat at all", which is a policy
+	 * a client must honour rather than override. The held key is remembered with the event it produced, because a
+	 * repeat is that same keystroke again — same characters, same modifiers — marked so the application can tell it
+	 * apart. `repeat_active` is what every one of the cancel paths below clears. */
+	int repeat_rate;		/* keys per second; 0 disables repeats entirely */
+	int repeat_delay;		/* milliseconds before the first repeat */
+	int repeat_active;
+	uint32_t repeat_key;		/* the evdev code being held */
+	uint32_t repeat_due_ms;		/* when the next repeat is due, on the monotonic clock */
+	AGEvent repeat_event;		/* the press this repeats: text, modifiers, window */
 
 	/* **THE WINDOW LIST, FOR A SHELL COMPONENT.** Asked for lazily (`AGWindowListSetHandler`) because the snapshot is
 	 * re-sent on every window change and an ordinary application must not pay for a Dock's bookkeeping. The rows
@@ -254,6 +265,22 @@ struct AGWindowServer {
 	AGWindow *pointer_focus;
 	int pointer_x;
 	int pointer_y;
+	/* **ONE GESTURE'S AXES, ACCUMULATED UNTIL THE FRAME CLOSES.** `wl_pointer` sends `axis` per axis and then ONE
+	 * `frame`, and this is the only moment the compositor says "those belong together". They are accumulated rather
+	 * than delivered one at a time so that a two-axis gesture arrives as two events from ONE gesture — and so that
+	 * the units are decided once, here, rather than by every reader of the seam. */
+	struct {
+		double vertical;
+		double horizontal;
+		int32_t vertical120;
+		int32_t horizontal120;
+		int32_t vertical_discrete;
+		int32_t horizontal_discrete;
+		int have_vertical;
+		int have_horizontal;
+		int have_discrete;
+		uint32_t source;
+	} axis;
 
 	/* **WHETHER THIS APPLICATION HAS THE KEYBOARD, and who to tell when that changes.** It is derived from
 	 * `keyboard_focus` and not stored twice: the handler fires on the transition and nothing else reads a
@@ -321,6 +348,10 @@ static void ag_window_maybe_frame(AGWindow *window)
 	}
 }
 
+/* DEFINED WITH THE KEYBOARD HANDLERS, DECLARED HERE BECAUSE THE WINDOW TEARDOWN NEEDS IT TOO — a window going away
+ * is one of the six ways a held key stops being held. */
+static void ag_repeat_cancel(AGWindowServer *server);
+
 static void ag_window_unlink(AGWindow *window)
 {
 	AGWindowServer *server = window->server;
@@ -334,6 +365,9 @@ static void ag_window_unlink(AGWindow *window)
 		link = &(*link)->next;
 	}
 	if (server->keyboard_focus == window) {
+		/* **A DESTROYED WINDOW TAKES THE HELD KEY WITH IT.** The key event would be delivered to this window and
+		 * there is no longer one; leaving the repeat armed would fire it at whatever the focus became. */
+		ag_repeat_cancel(server);
 		server->keyboard_focus = NULL;
 	}
 	if (server->pointer_focus == window) {
@@ -989,12 +1023,27 @@ static const struct xdg_surface_listener xdg_surface_listener = {
  * input
  * --------------------------------------------------------------------------------------------------- */
 
+/* **CANCELLING A REPEAT IS ONE ACT WITH SIX CALLERS, WHICH IS WHY IT IS ONE FUNCTION.** A held key must stop
+ * repeating when it is released, when the keyboard focus moves away or the window is destroyed, when the keymap or
+ * the seat's capabilities change, and when the connection goes away. Every one of those is a case where the key that
+ * was repeating is no longer the key the user is holding — and a repeat that survives any of them types into
+ * whatever came next. */
+static void ag_repeat_cancel(AGWindowServer *server)
+{
+	server->repeat_active = 0;
+	server->repeat_key = 0;
+	server->repeat_due_ms = 0;
+}
+
 static void keyboard_keymap(void *data, struct wl_keyboard *keyboard, uint32_t format, int32_t fd,
 			    uint32_t size)
 {
 	AGWindowServer *server = data;
 
 	(void)keyboard;
+	/* A NEW KEYMAP CHANGES WHAT EVERY HELD KEY MEANS, so the repeat stops rather than typing the new meaning of the
+	 * old key code. */
+	ag_repeat_cancel(server);
 	if (format == WL_KEYBOARD_KEYMAP_FORMAT_XKB_V1 && size > 0 && server->keyboard_state != NULL) {
 		void *map = mmap(NULL, size, PROT_READ, MAP_PRIVATE, fd, 0);
 
@@ -1022,6 +1071,9 @@ static void keyboard_enter(void *data, struct wl_keyboard *keyboard, uint32_t se
 			break;
 		}
 	}
+	/* **AND A FOCUS CHANGE ENDS THE HELD KEY**, because the keys the compositor had down were released for us the
+	 * moment it looked away — a repeat that continued would type into the window that now has the keyboard. */
+	ag_repeat_cancel(server);
 	/* **THE KEYBOARD IS THE ACTIVE STATE: the client that has it is the application in front**, which is what an
 	 * application shows its menu bar for. */
 	ag_server_set_active(server, server->keyboard_focus != NULL);
@@ -1033,6 +1085,7 @@ static void keyboard_leave(void *data, struct wl_keyboard *keyboard, uint32_t se
 	AGWindowServer *server = data;
 
 	(void)keyboard; (void)serial; (void)surface;
+	ag_repeat_cancel(server);
 	server->keyboard_focus = NULL;
 	ag_server_set_active(server, 0);
 }
@@ -1058,6 +1111,29 @@ static void keyboard_key(void *data, struct wl_keyboard *keyboard, uint32_t seri
 		event.modifier = AGKeyboardKeyIsModifier(server->keyboard_state, key);
 	}
 	ag_window_deliver(window, &event);
+	/* **ARMING AND DISARMING, AFTER THE EVENT HAS GONE OUT.** A press arms the repeat with the event it produced —
+	 * a repeat is that same keystroke again, so the characters and the modifiers are the ones the press had, not
+	 * whatever the state is by the time it fires. A release cancels, and only for ITS OWN key: letting go of `a`
+	 * while holding `shift` must not stop shift's own repeat (which its being a modifier prevents anyway) and, more
+	 * to the point, releasing a key that is not the repeating one must not cancel it.
+	 *
+	 * THE KEYMAP GETS THE LAST WORD ON WHETHER A KEY REPEATS AT ALL: a modifier does not, and neither does a key the
+	 * map gives no symbol to. */
+	if (event.pressed) {
+		if (server->repeat_rate > 0 && server->keyboard_state != NULL
+		    && AGKeyboardKeyIsRepeatable(server->keyboard_state, key)) {
+			server->repeat_active = 1;
+			server->repeat_key = key;
+			server->repeat_event = event;
+			server->repeat_event.pressed = 1;
+			server->repeat_event.repeat = 1;
+			server->repeat_due_ms = ag_now_ms() + (uint32_t)server->repeat_delay;
+		} else {
+			ag_repeat_cancel(server);
+		}
+	} else if (server->repeat_active && server->repeat_key == key) {
+		ag_repeat_cancel(server);
+	}
 }
 
 static void keyboard_modifiers(void *data, struct wl_keyboard *keyboard, uint32_t serial,
@@ -1071,9 +1147,21 @@ static void keyboard_modifiers(void *data, struct wl_keyboard *keyboard, uint32_
 	}
 }
 
+/* **THE COMPOSITOR'S REPEAT POLICY, WHICH USED TO BE DROPPED ON THE FLOOR.** The event said nothing was listening:
+ * `repeat_info` was an empty function, so a held key never repeated and no application could tell you why. A rate of
+ * zero is a POLICY and not a missing value — it means "this seat does not repeat", and honouring it is what stops a
+ * client from repeating where the session has said not to (an accessibility setting, or a compositor that synthesizes
+ * repeats itself and would otherwise double them). */
 static void keyboard_repeat_info(void *data, struct wl_keyboard *keyboard, int32_t rate, int32_t delay)
 {
-	(void)data; (void)keyboard; (void)rate; (void)delay;
+	AGWindowServer *server = data;
+
+	(void)keyboard;
+	server->repeat_rate = (rate > 0) ? rate : 0;
+	server->repeat_delay = (delay > 0) ? delay : 0;
+	if (server->repeat_rate == 0) {
+		ag_repeat_cancel(server);
+	}
 }
 
 static const struct wl_keyboard_listener keyboard_listener = {
@@ -1184,19 +1272,73 @@ static void pointer_button(void *data, struct wl_pointer *pointer, uint32_t seri
 	}
 }
 
+/* **THE WHEEL ARRIVES IN PIECES AND IS DELIVERED AS A GESTURE.** `axis` is one axis of the motion, `axis_source`
+ * says where it came from (once per frame, before the axes), and `frame` closes the batch. Nothing is delivered until
+ * the frame, which is what makes a two-axis trackpad gesture one delivery instead of two unrelated ones — and what
+ * keeps a client from acting on half a gesture. */
 static void pointer_axis(void *data, struct wl_pointer *pointer, uint32_t time, uint32_t axis, wl_fixed_t value)
 {
-	(void)data; (void)pointer; (void)time; (void)axis; (void)value;
+	AGWindowServer *server = data;
+
+	(void)pointer; (void)time;
+	if (axis == 0) {	/* WL_POINTER_AXIS_VERTICAL_SCROLL */
+		server->axis.vertical += wl_fixed_to_double(value);
+		server->axis.have_vertical = 1;
+	} else {
+		server->axis.horizontal += wl_fixed_to_double(value);
+		server->axis.have_horizontal = 1;
+	}
 }
 
 static void pointer_frame(void *data, struct wl_pointer *pointer)
 {
-	(void)data; (void)pointer;
+	AGWindowServer *server = data;
+	AGEvent event;
+
+	(void)pointer;
+	if (!server->axis.have_vertical && !server->axis.have_horizontal) {
+		return;		/* a frame around motion or a button: nothing of the wheel's to deliver */
+	}
+	/* **THE TWO AXES ARE TWO EVENTS AND THEY CARRY THE SAME GESTURE'S NUMBERS.** A client's scroll handler takes one
+	 * axis at a time — that is what `-deltaX` and `-deltaY` are — so a single event carrying both would have to pick
+	 * a meaning for each accessor. */
+	if (server->axis.have_vertical) {
+		memset(&event, 0, sizeof event);
+		event.type = AGEventPointerAxis;
+		event.axis = AGAxisVertical;
+		event.delta = server->axis.vertical;
+		event.source = server->axis.source;
+		event.discrete = server->axis.vertical_discrete;
+		event.value120 = server->axis.vertical120;
+		event.has_discrete = server->axis.have_discrete;
+		event.x = server->pointer_x;
+		event.y = server->pointer_y;
+		ag_window_deliver(server->pointer_focus, &event);
+	}
+	if (server->axis.have_horizontal) {
+		memset(&event, 0, sizeof event);
+		event.type = AGEventPointerAxis;
+		event.axis = AGAxisHorizontal;
+		event.delta = server->axis.horizontal;
+		event.source = server->axis.source;
+		event.discrete = server->axis.horizontal_discrete;
+		event.value120 = server->axis.horizontal120;
+		event.has_discrete = server->axis.have_discrete;
+		event.x = server->pointer_x;
+		event.y = server->pointer_y;
+		ag_window_deliver(server->pointer_focus, &event);
+	}
+	memset(&server->axis, 0, sizeof server->axis);
 }
 
 static void pointer_axis_source(void *data, struct wl_pointer *pointer, uint32_t source)
 {
-	(void)data; (void)pointer; (void)source;
+	AGWindowServer *server = data;
+
+	(void)pointer;
+	/* **ONCE PER FRAME, BEFORE THE AXES IT DESCRIBES** — which is the order the protocol states and the order the
+	 * server sends. It is remembered rather than passed on immediately because the axes have not arrived yet. */
+	server->axis.source = source;
 }
 
 static void pointer_axis_stop(void *data, struct wl_pointer *pointer, uint32_t time, uint32_t axis)
@@ -1204,14 +1346,39 @@ static void pointer_axis_stop(void *data, struct wl_pointer *pointer, uint32_t t
 	(void)data; (void)pointer; (void)time; (void)axis;
 }
 
+/* **THE STEPS, WHICH ARE THE SAME MOTION SAID IN WHOLE NOTCHES.** A client bound at version 5-7 is sent
+ * `axis_discrete`; at 8 and later, `axis_value120`. Only one of the two ever arrives, which is the server's job (see
+ * `aws_seat_pointer_axis`), and this side simply records whichever came. The COUNT is kept apart from the distance
+ * because they are not to be added together — the distance is the motion and the count is how many clicks it looked
+ * like. */
 static void pointer_axis_discrete(void *data, struct wl_pointer *pointer, uint32_t axis, int32_t discrete)
 {
-	(void)data; (void)pointer; (void)axis; (void)discrete;
+	AGWindowServer *server = data;
+
+	(void)pointer;
+	if (axis == 0) {
+		server->axis.vertical_discrete += discrete;
+	} else {
+		server->axis.horizontal_discrete += discrete;
+	}
+	server->axis.have_discrete = 1;
 }
 
 static void pointer_axis_value120(void *data, struct wl_pointer *pointer, uint32_t axis, int32_t value120)
 {
-	(void)data; (void)pointer; (void)axis; (void)value120;
+	AGWindowServer *server = data;
+
+	(void)pointer;
+	if (axis == 0) {
+		server->axis.vertical120 += value120;
+		/* A HIGH-RESOLUTION WHEEL MOVES IN FRACTIONS OF A NOTCH, so the whole-step count is derived and only
+		 * when a whole one has been completed — 120ths below that are motion without a click. */
+		server->axis.vertical_discrete = value120 / 120;
+	} else {
+		server->axis.horizontal120 += value120;
+		server->axis.horizontal_discrete = value120 / 120;
+	}
+	server->axis.have_discrete = 1;
 }
 
 static void pointer_axis_relative_direction(void *data, struct wl_pointer *pointer, uint32_t axis,
@@ -1246,6 +1413,9 @@ static void seat_capabilities(void *data, struct wl_seat *seat, uint32_t capabil
 		server->keyboard = wl_seat_get_keyboard(seat);
 		wl_keyboard_add_listener(server->keyboard, &keyboard_listener, server);
 	} else if (!(capabilities & WL_SEAT_CAPABILITY_KEYBOARD) && server->keyboard != NULL) {
+		/* **A SEAT THAT STOPS ADVERTISING A KEYBOARD ENDS THE HELD KEY**, for the same reason losing the focus
+		 * does: the object that would have carried the release is being destroyed, so no release is coming. */
+		ag_repeat_cancel(server);
 		wl_keyboard_release(server->keyboard);
 		server->keyboard = NULL;
 	}
@@ -1889,6 +2059,33 @@ int AGWindowServerDispatch(AGWindowServer *server)
 	return 1;
 }
 
+/* **ONE DUE REPEAT, AND ONLY AFTER THE NATIVE INPUT HAS BEEN TAKEN.** The order is the whole of the contract's last
+ * clause: a repeat is generated only once everything the compositor has already sent has been dispatched, so a real
+ * key release that arrived while the repeat was pending is seen FIRST and cancels it — instead of the repeat being
+ * synthesized into a window whose key is already up. And no burst: a machine that was asleep, or a loop that was busy
+ * for a second, reschedules from NOW rather than replaying every interval that has passed, because a held key means
+ * "keep typing", not "type the last second all at once". */
+static void ag_repeat_fire_if_due(AGWindowServer *server)
+{
+	uint32_t now;
+
+	if (!server->repeat_active || server->repeat_rate <= 0) {
+		return;
+	}
+	now = ag_now_ms();
+	if ((int32_t)(now - server->repeat_due_ms) < 0) {
+		return;		/* not yet */
+	}
+	if (server->keyboard_focus == NULL) {
+		ag_repeat_cancel(server);
+		return;
+	}
+	server->repeat_event.time_ms = now;
+	ag_window_deliver(server->keyboard_focus, &server->repeat_event);
+	/* FROM NOW, NOT FROM THE DEADLINE THAT WAS MISSED — see above. */
+	server->repeat_due_ms = now + (uint32_t)(1000 / server->repeat_rate);
+}
+
 int AGWindowServerDispatchTimeout(AGWindowServer *server, int timeout_ms)
 {
 	struct pollfd pfd;
@@ -1896,6 +2093,21 @@ int AGWindowServerDispatchTimeout(AGWindowServer *server, int timeout_ms)
 
 	if (server == NULL) {
 		return -1;
+	}
+	/* **THE WAIT IS CLAMPED TO THE NEXT REPEAT.** A caller waiting a full slice for input would otherwise hold a
+	 * repeat back for the whole slice, and a held key would stutter at the loop's cadence rather than at the rate the
+	 * compositor asked for. Waiting no longer than the repeat means the repeat decides when this returns, and a
+	 * zero-timeout poll stays a poll. */
+	if (server->repeat_active && server->repeat_rate > 0) {
+		uint32_t now = ag_now_ms();
+		int32_t until = (int32_t)(server->repeat_due_ms - now);
+
+		if (until < 0) {
+			until = 0;
+		}
+		if (timeout_ms < 0 || until < timeout_ms) {
+			timeout_ms = (int)until;
+		}
 	}
 	/* DRAIN WHAT IS ALREADY QUEUED FIRST: a caller asking for a poll must not block on a socket that has
 	 * nothing to say while events are sitting in the queue behind it. */
@@ -1906,7 +2118,11 @@ int AGWindowServerDispatchTimeout(AGWindowServer *server, int timeout_ms)
 	if (wl_display_prepare_read(server->display) != 0) {
 		/* Events arrived in between, or another reader holds the display: take what is there rather than
 		 * blocking, because a timeout of zero must not. */
-		return wl_display_dispatch_pending(server->display) < 0 ? -1 : 1;
+		if (wl_display_dispatch_pending(server->display) < 0) {
+			return -1;
+		}
+		ag_repeat_fire_if_due(server);
+		return 1;
 	}
 	wl_display_flush(server->display);
 	pfd.fd = wl_display_get_fd(server->display);
@@ -1924,6 +2140,7 @@ int AGWindowServerDispatchTimeout(AGWindowServer *server, int timeout_ms)
 		ag_server_error(server, "wl_display_dispatch_pending");
 		return -1;
 	}
+	ag_repeat_fire_if_due(server);
 	return 1;
 }
 

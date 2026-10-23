@@ -591,6 +591,25 @@ static NSEvent *fn_translate(NSWindow *w, const AGEvent *e, NSTimeInterval now)
 					 eventNumber:(NSInteger)e->time_ms
 					  clickCount:0 pressure:1.0f], e);
 	}
+	case AGEventPointerAxis: {
+		/* **ONE NOTCH IS FIFTEEN UNITS IN THE COMPOSITOR'S SCALE, AND ONE LINE HERE.** The seam hands over the
+		 * compositor's distance — where a wheel notch is 15.0 and a finger's movement is a fraction of one — and
+		 * Cocoa's `-deltaX`/`-deltaY` count in wheel LINES, one per notch. Dividing by the same constant the server
+		 * multiplies by is what makes the two ends agree; doing it anywhere else would be a second answer to "how
+		 * big is a notch".
+		 *
+		 * **AND THE SIGNS ARE OPPOSITE, SO THEY ARE TURNED ROUND ONCE, HERE.** The protocol's positive vertical
+		 * distance is DOWN and its positive horizontal is RIGHT; Cocoa's positive `-deltaY` is UP and its positive
+		 * `-deltaX` is LEFT. A client that had to know this would have it wrong in half its handlers. */
+		CGFloat lines = (CGFloat)(e->delta / 15.0);
+
+		return [NSEvent cg_scrollEventWithDeltaX:(e->axis == AGAxisHorizontal ? -lines : 0.0)
+						  deltaY:(e->axis == AGAxisVertical ? -lines : 0.0)
+						location:where
+				   modifierFlags:flags
+				       timestamp:now
+				    windowNumber:win];
+	}
 	case AGEventKey: {
 		/* **THE TEXT ARRIVES ALREADY TRANSLATED**, which is the seam's job and xkbcommon's: `AGKeyboard` turned
 		 * the evdev code into UTF-8 through the keymap the COMPOSITOR sent, so there is no keymap in this file
@@ -604,12 +623,17 @@ static NSEvent *fn_translate(NSWindow *w, const AGEvent *e, NSTimeInterval now)
 		/* **A MODIFIER IS NOT A KEYSTROKE**, and this is where that shows: AppKit delivers one as
 		 * `-flagsChanged:` and everything else as `-keyDown:`/`-keyUp:`, so the type is chosen from the seam's
 		 * own answer rather than guessed here. The characters travel either way — a modifier's are empty. */
+		/* **AND WHETHER THIS IS A REPEAT IS THE SEAM'S ANSWER, NOT A CONSTANT.** A held key produces more presses
+		 * than the hardware sent — the client generates them, honouring the compositor's `repeat_info` — and this
+		 * line used to hard-code NO, which made every generated repeat look like a fresh press: `-isARepeat` would
+		 * answer NO for all of them, which is the difference between a key being held and a key being typed twice,
+		 * and is what a find panel or a nudge-with-arrows control checks. */
 		return [NSEvent keyEventWithType:(e->modifier ? NSFlagsChanged : (e->pressed ? NSKeyDown : NSKeyUp))
 					location:where modifierFlags:flags
 				       timestamp:now windowNumber:win context:nil
 				      characters:chars
 			 charactersIgnoringModifiers:chars
-				     isARepeat:NO
+				     isARepeat:(e->repeat ? YES : NO)
 				       keyCode:(unsigned short)e->keycode];
 	}
 	default:
@@ -3121,6 +3145,11 @@ static CGFloat fn_clamp_axis(CGFloat v, CGFloat lo, CGFloat hi)
 	case NSOtherMouseUp:       sel = @selector(otherMouseUp:); mouse = YES; break;
 	case NSOtherMouseDragged:  sel = @selector(otherMouseDragged:); mouse = YES; break;
 	case NSMouseMoved:         sel = @selector(mouseMoved:); mouse = YES; break;
+	/* **A WHEEL GOES WHERE THE POINTER IS, LIKE A CLICK AND UNLIKE A KEY.** It is a mouse-family event for the hit
+	 * test's purposes — the view under the pointer is the one that scrolls, which is what makes scrolling a list
+	 * work without the list being key — but `mouse` here only decides the HIT TEST: the activation and
+	 * become-key block below is gated on the mouse-DOWN types, so a wheel never makes a window key or raises it. */
+	case NSScrollWheel:        sel = @selector(scrollWheel:); mouse = YES; break;
 	case NSKeyDown:            sel = @selector(keyDown:); break;
 	case NSKeyUp:              sel = @selector(keyUp:); break;
 	case NSFlagsChanged:       sel = @selector(flagsChanged:); break;
@@ -3778,10 +3807,14 @@ static CGFloat fn_clamp_axis(CGFloat v, CGFloat lo, CGFloat hi)
 	case AGEventKey:
 	case AGEventPointerButton:
 	case AGEventPointerMotion:
-	case AGEventPointerEnter: {
+	case AGEventPointerEnter:
+	case AGEventPointerAxis: {
 		NSEvent *ev;
 		NSPoint p = fn_window_point(self, event->x, event->y);
 
+		/* A SCROLL IS A POINTER EVENT FOR THE SAME REASON A CLICK IS: it goes to whatever is under the pointer, so
+		 * the pointer's remembered position is where the wheel happened. It does NOT change the button state and it
+		 * does not make the window key — a wheel is not a press. */
 		if (event->type != AGEventKey) {
 			_cg_pointer = p;
 			_cg_hasPointer = YES;
