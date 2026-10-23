@@ -224,11 +224,13 @@ Each cost time; each is the same shape as a trap in `HANDOFF-2.md` §4. The long
 
 **ENVIRONMENT FACTS THAT LOOK LIKE BUGS IN YOUR CODE.**
 
-* **`NSTemporaryDirectory()` ANSWERS `/System/Temporary Files/`, WHICH NEED NOT EXIST OR BE WRITABLE.** The document
-  probe's first autosave directory was created under it and every write failed; the test now uses `/tmp`, and the
-  production autosave path falls back `~/Library/Autosave` -> `NSTemporaryDirectory()` -> `/tmp`.
-* **`NSSearchPathForDirectoriesInDomains` IS A NAMED REFUSAL IN THIS FOUNDATION.** `~/Library` is built from
-  `NSHomeDirectory()` and created; `NSColorList` already established that path for user state.
+* **`NSTemporaryDirectory()` ANSWERS `/System/Temporary Files/`, AND A COMPLETE INSTALLATION CREATES IT.** The document
+  probe's first autosave directory was created under it and every write failed, because nothing made the directory;
+  the installation now does (README, "The installation"), and the production autosave path still falls back
+  `~/Library/Autosave` -> `NSTemporaryDirectory()` -> `/tmp` for a machine that has no complete installation.
+* **`NSSearchPathForDirectoriesInDomains` ANSWERS THE INSTALLATION'S DIRECTORY SET** (`libagora-base`): by directory
+  type and domain, with `expandTilde` changing only the spelling, and `-URLForDirectory:...create:` creating the
+  directory. It used to be a named refusal, which is why `~/Library` was built from `NSHomeDirectory()` here.
 * **`-fileNameExtensionForType:saveOperation:` WAS DECLARED AND RETURNED NIL.** The base class never asked the
   controller's type table, so the autosave name had no extension and the save-panel extension list fell back. It now uses
   the controller's `-fileExtensionsFromType:`.

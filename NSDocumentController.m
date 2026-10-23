@@ -842,9 +842,19 @@ static NSString *fn_autosave_process_name(void)
 static NSString *fn_autosave_default_directory(void)
 {
 	NSFileManager *manager = [NSFileManager defaultManager];
-	NSString *path = [NSHomeDirectory() stringByAppendingPathComponent:@"Library/Autosave"];
+	NSError *error = nil;
+	NSURL *url = [manager URLForDirectory:NSAutosavedInformationDirectory
+				     inDomain:NSUserDomainMask
+			    appropriateForURL:nil
+				       create:YES
+					error:&error];
+	NSString *path = (url != nil) ? [url path] : nil;
 
-	if (![manager createDirectoryAtPath:path withIntermediateDirectories:YES attributes:nil error:NULL]) {
+	/* **THE SEARCH PATH ANSWERS THIS DIRECTORY AND CREATES IT**, which is what the installation and the login
+	 * already made true: `~/Library/Autosave` is the autosaved-information directory. A machine where that
+	 * cannot be made (no writable home) falls back the way it did before, with a temporary name no document's
+	 * URL can collide with. */
+	if (path == nil) {
 		path = [NSTemporaryDirectory() stringByAppendingPathComponent:@"Agora-Autosave"];
 		if (![manager createDirectoryAtPath:path withIntermediateDirectories:YES attributes:nil error:NULL]) {
 			path = @"/tmp/Agora-Autosave";

@@ -1481,9 +1481,11 @@ or a close deletes the obsolete file. `-hasUnautosavedChanges` is a history flag
 `-autosavingDelay` timer (0 disables it) sends autosave only to documents with that flag and a non-nil
 `-autosavingFileType`.
 
-**THE LOCATION IS `~/Library/Autosave` WITH A TEMP FALLBACK, AND THE REGISTRY IS A PLIST.** `NSSearchPathForDirectoriesInDomains`
-is a named refusal in this Foundation, so the path is built from `NSHomeDirectory()` and created; `NSColorList` already
-uses `~/Library` for user state. Files are named `Agora-<process>-<index>.<ext>`; the controller's registry records
+**THE LOCATION IS `~/Library/Autosave` WITH A TEMP FALLBACK, AND THE REGISTRY IS A PLIST.** The path is
+`NSAutosavedInformationDirectory`'s, asked through `-URLForDirectory:inDomain:appropriateForURL:create:error:` so the
+directory is created by the same door that names it — a complete installation carries `~/Library` and the login creates
+the rest (README, "The installation"). A machine where that cannot be made falls back to a temporary directory. Files are
+named `Agora-<process>-<index>.<ext>`; the controller's registry records
 `documentURL` and `contentsURL`, and `NSApplication -finishLaunching` asks a fresh controller to reopen the entries
 before the launch delegate runs. A stale record (missing contents or a failed reopen) is dropped.
 
