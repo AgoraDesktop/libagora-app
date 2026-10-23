@@ -1,22 +1,25 @@
 # libagora-app — a fifth handoff
 
 *Written at the end of **twelve slices** that picked `HANDOFF-4.md` up where its §8 stopped — §9–§20 of that file are their
-running record, one numbered section per slice, and they are still the long form of everything summarised here.
+running record, one numbered section per slice, and they are still the long form of everything summarised here. **A
+THIRTEENTH SLICE HAS LANDED SINCE, and §9 is its record.**
 `HANDOFF.md`, `HANDOFF-2.md` and `HANDOFF-3.md` remain worth reading: nothing in any of them was wrong, and the second
 file's §2 instrument rules and §4 traps are still the ones these sessions used most. **THIS FILE'S §2 NUMBERS SUPERSEDE
 `HANDOFF-4.md`'s**, which are twelve slices old.*
 
-*State at this handover: **twelve slice commits** since the fourth handoff, tree clean, **154 tests passing in about 84 s**,
-`api-ledger check` holding **375 metrics** — **131 of 168 classes (78%), 4345 of 4505 selectors (96%), 39 of 56 protocols
-(70%), 86 of 86 functions**, 4874 methods declared with 8 having no body, **120 of the 129 classes with a surface at
-COMPLETE coverage** — refusal census **376**, owed census **19**.*
+*State at this handover: **thirteen slice commits** since the fourth handoff, tree clean, **155 tests passing in about
+88 s**, `api-ledger check` holding **375 metrics** — **131 of 168 classes (78%), 4380 of 4505 selectors (97%), 39 of 56
+protocols (70%), 86 of 86 functions**, 4909 methods declared with 8 having no body, **121 of the 129 classes with a surface
+at COMPLETE coverage** — refusal census **382**, owed census **19**. **The "120 of 129" this paragraph first carried was a
+recount error; §9 records it and the corrected 119 -> 121 movement.***
 
 ---
 
 ## 1. What these sessions did
 
 Twelve slices, in the order they landed. Each is a commit (plus, twice, a commit in the **workspace** repository and a
-gitlink advance in `$AGORA_ROOT`), and each ended green.
+gitlink advance in `$AGORA_ROOT`), and each ended green. **The thirteenth is `182bcd4`, listed below and recorded in
+§9.**
 
 | Commit | What it landed |
 |---|---|
@@ -32,6 +35,7 @@ gitlink advance in `$AGORA_ROOT`), and each ended green.
 | `bad047b` | **`NSFont` — COMPLETE** (71/71): every metric from the FACE, the screen/printer variants that ARE the receiver, the user-font defaults that survive a missing `$FNX_CONFIG_ROOT`, and eight refusals. |
 | `e25be8e` | **`NSWorkspace`'s file operations** (57/58): the five verbs, the modern recycle/duplicate pair, `-openTempFile`, the volumes, the labels, the desktop-picture store, the change notifications — and thirteen refusals. **The per-volume trash rule, found by `EXDEV`.** |
 | `7a447cb` | **`NSTextView` — COMPLETE** (186/186): document background, links (delegate first, URL second), word completion — and thirty refusals, four of them because their bit would have no reader. |
+| `182bcd4` | **The slider pair — COMPLETE** (`NSSlider` 30/30, `NSSliderCell` 35/35): the tick marks as VALUES with a snap, the title as a CELL in a band taken off the top, the two no-argument ink doors answered from the control view, the background image drawn, and **a flipped vertical scale that was upside down** (§9). |
 
 Plus, in the **workspace** repository: `e31e44f` (the main-menu test's Print… case was asking a chain-routed row to resolve
 with no key window, and expecting the item's target to be the stand-in) and `47d9a0c` (the file window opens a document
@@ -49,13 +53,13 @@ claim; the recount is the measurement.**
 
 ```
 classes   131 of 168   (78%)    37 missing
-selectors 4345 of 4505 (96%)   160 missing   120 of 129 classes at COMPLETE coverage
+selectors 4380 of 4505 (97%)   125 missing   121 of 129 classes at COMPLETE coverage
 protocols  39 of  56   (70%)    17 missing
 functions  86 of  86  (100%)     0 missing    10 refuse by name
-methods   4874 declared on this tree's own classes, 8 with NO body on the chain (0.2%)
+methods   4909 declared on this tree's own classes, 8 with NO body on the chain (0.2%)
 ```
 
-**SIX CLASSES ARE COMPLETE FOR THE ERA, and every one of them finished with NAMED REFUSALS rather than a stub:**
+**EIGHT CLASSES ARE COMPLETE FOR THE ERA, and every one of them finished with NAMED REFUSALS rather than a stub:**
 
 | Class | Selectors | Refusing by name |
 |---|---|---|
@@ -65,13 +69,14 @@ methods   4874 declared on this tree's own classes, 8 with NO body on the chain 
 | `NSText` | 70 of 70 | 5 |
 | `NSFont` | 71 of 71 | 8 |
 | `NSMenuView` | 42 of 42 | 10 |
+| `NSSlider` | 30 of 30 | 0 (the image is drawn as a background) |
+| `NSSliderCell` | 35 of 35 | 6 (five need a control view; one is the circular face) |
 
-**AND ONLY ELEVEN CLASSES STILL HAVE ANY DEBT** — the tail, not a subsystem:
+**AND ONLY NINE CLASSES STILL HAVE ANY DEBT** — the tail, not a subsystem:
 
 ```
 NSView 28        NSControl 28     NSTableView 20   NSDocument 19    NSWindow 18
-NSSlider 18      NSSliderCell 17  NSDocumentController 8   NSSavePanel 3
-NSWorkspace 1    NSFont 0*
+NSDocumentController 8   NSSavePanel 3   NSWorkspace 1    NSFont 0*
 ```
 
 `*` `NSWorkspace`'s one is an INSTRUMENT quirk, not a door: the manifest's row is `selector NSWorkspace openTempFile:`
@@ -79,7 +84,7 @@ NSWorkspace 1    NSFont 0*
 can answer it. It is the second row in this file's census that is off BY CONSTRUCTION rather than by omission — the first
 is `NSFileWrapper`, which is Foundation's (see §3).
 
-**THE 37 ABSENT CLASSES GROUP CLEANLY, and the grouping has not changed in twelve slices:**
+**THE 37 ABSENT CLASSES GROUP CLEANLY, and the grouping has not changed in thirteen slices:**
 
 | Group | Classes | What it needs |
 |---|---|---|
@@ -108,7 +113,7 @@ Four censuses and one ledger, all committed and all gated by `ctest`:
 | `api/10.6/appkit-manifest.txt` | The SDK's facts: 168 classes + superclasses, 56 protocols, 87 functions, 5208 selectors. |
 | `tests/api-10.6-census.txt` | **375** pinned metrics — eight aggregates, one `sel:` line per class (129 of them), one `proto:` line per protocol, `fn:`/`fndecl:` per function, `selphantom:` per class. |
 | `tests/api_census.cmake` | The gate: two-directional comparison, arithmetic check, two fault checks. |
-| `tests/refusal_census.txt` | **376** refusal sites, per FILE. |
+| `tests/refusal_census.txt` | **382** refusal sites, per FILE. |
 | `tests/owed_census.txt` | **19** headers' OWED notes, per file. |
 | `tools/api-ledger` | The parser: `manifest`, `census`, `check`, `missing`. |
 
@@ -121,7 +126,7 @@ Four censuses and one ledger, all committed and all gated by `ctest`:
 * **EVERY SLICE RE-PINS DELIBERATELY.** Let `ctest -R appkit-api-census` fail, recompute with `./tools/api-ledger census
   …`, write it in the same commit, and recompute the four hand-written summary lines from the numbers rather than editing
   them by eye.
-* **A REFUSAL CENSUS IS A CENSUS, NOT A RATCHET.** It went 292 → 376 across these twelve slices, and almost every move was
+* **A REFUSAL CENSUS IS A CENSUS, NOT A RATCHET.** It went 292 → 382 across these thirteen slices, and almost every move was
   UP: a door that used to be absent is now a NAMED refusal, so a caller gets a reason instead of a link error. Downward
   moves happened too (the browser's matrix form, the print doors). The diff says why, every time.
 * **THE NEEDLE IS `(APPKIT-REFUSE|fn_refuse_[a-z]+)` NOW**, widened twice — the second time because a third helper
@@ -133,7 +138,9 @@ Four censuses and one ledger, all committed and all gated by `ctest`:
   protocol bodies is a real gap, named here rather than discovered later.
 * **TWO ROWS ARE OFF BY CONSTRUCTION AND THE CENSUS SAYS SO IN ITS OWN PROSE**: `NSFileWrapper` (Foundation's, counted
   because the 10.6 umbrella imports Foundation) and `NSWorkspace -openTempFile:` (the manifest's row has a colon).
-* **`classes-present` counts two classes with no surface**, so "120 of 129" is 120 of the 129 with selectors, not 131.
+* **`classes-present` counts two classes with no surface**, so "121 of 129" is 121 of the 129 with selectors, not 131.
+  **AND THE OLDER "120" WAS WRONG BY ONE**: the previous pin's own `sel:` lines give 119 complete, because `NSSlider`
+  and `NSSliderCell` were both incomplete. The slider pair makes 121. Recompute this number, do not inherit it.
 
 ---
 
@@ -273,8 +280,9 @@ than four big slices — so the next session should pick a CLASS, not a subsyste
    `-deviceDescription`, `-discardEventsMatchingMask:beforeEvent:`, `-postEvent:atStart:`, the style queries
    (`-isMiniaturizable`/`-isResizable`/`-isZoomable`), `-setDefaultButtonCell:`, `-setFrame:display:animate:`,
    `-setRepresentedFilename:` and the rest — several are one-liners over the style mask.
-5. **`NSSlider` 18 / `NSSliderCell` 17** — the tick-mark family and the title family. Both are drawing arithmetic over
-   machinery that exists (the cell already draws the track and knob), and they are the last "ink" doors in the tree.
+5. **DONE in §9: `NSSlider` 30/30 and `NSSliderCell` 35/35.** The tick-mark and title families were the last "ink"
+   doors, and the slice also found a flipped vertical scale drawn upside down. **The next "ink" class is `NSTableView`
+   20** — its grid is arithmetic over machinery that exists — and then the two deepest tails above.
 6. **`NSWorkspace`'s ONE**, which is not a door (see §2) — and `NSSavePanel`'s three
    (`-isExpanded`, `-treatsFilePackagesAsDirectories:`), which are two lines and a flag.
 7. **Then the absent classes in §2's order**: the editors (`NSImageView` is the most useful — the image family is complete),
@@ -288,7 +296,7 @@ than four big slices — so the next session should pick a CLASS, not a subsyste
 
 ## 7. Things a reader should not have to rediscover
 
-* **THE SIX COMPLETE CLASSES ARE COMPLETE IN A SPECIFIC SENSE**: every selector Apple's 10.6 header declares for them is
+* **THE EIGHT COMPLETE CLASSES ARE COMPLETE IN A SPECIFIC SENSE**: every selector Apple's 10.6 header declares for them is
   DECLARED and ANSWERED, and a refused door is an ANSWERED door (it prints its reason and returns its type's empty value).
   `-respondsToSelector:` is YES for a refusal. That is the plan's own disposition rule, and it is why the ledger and the
   refusal census have to be read TOGETHER.
@@ -314,7 +322,7 @@ than four big slices — so the next session should pick a CLASS, not a subsyste
 * **THE BROWSER ADVERTISES THE 10.6 ITEM CONTRACT AND FALLS BACK TO THE NEXXT CELL ONE.** `-browser:numberOfChildrenOfItem:`
   is the test for which model a delegate speaks; the item walk starts at `nil`, retains nothing, and a delegate implements
   ONE contract (the one allowed overlap is a styling `-browser:willDisplayCell:atRow:column:`).
-* **THE SUITE IS 154 TESTS IN ABOUT 84 SECONDS, AND `ctest --test-dir build -j4` IS THE GATE.** The exit status is the
+* **THE SUITE IS 155 TESTS IN ABOUT 88 SECONDS, AND `ctest --test-dir build -j4` IS THE GATE.** The exit status is the
   witness, not the tail of the output. The workspace's suite is 14 tests and belongs in the same gate run.
 
 ---
@@ -334,3 +342,68 @@ went. A session that lands a slice should:
    both are read by people who will never open this file.
 4. Leave §1–§7 above ALONE unless a slice changes a number in them; when it does, change that number and say in the new
    section that it moved. A handoff that quietly drifts is the thing these files exist to prevent.
+
+---
+
+## 9. The slider pair complete: ticks as values, a title as a cell, and a flipped scale that was upside down
+
+**Commit `182bcd4`.** `NSSlider` and `NSSliderCell` are COMPLETE for the era — 30 of 30 and 35 of 35 — the seventh and
+eighth classes to finish, and the change is 35 selector rows (4345 -> 4380 present, 160 -> 125 missing), 35 declarations
+(4874 -> 4909), and two more classes at complete coverage (the recount below says 119 -> 121). The suite is 155 tests
+(about 88 s), the refusal census went 376 -> 382, the owed census stayed 19, and `tests/slider_title_ticks.m` is the new
+probe (52 checks). The workspace's 14 tests were run too.
+
+**THE TICKS ARE A VALUE FAMILY NOW, NOT ONLY INK.** The marks were drawn three slices ago and a caller could not ask
+what they were: `-tickMarkValueAtIndex:` is `min + (max-min)·n/(n-1)` with both ends included, `-closestTickMarkValueToValue:`
+is the nearest mark, `-rectOfTickMarkAtIndex:` and `-indexOfTickMarkAtPoint:` place and hit-test them, and
+`-allowsTickMarkValuesOnly` reads the nearest-mark arithmetic in `-setDoubleValue:` — the ONE door every value goes
+through — so the standing value snaps when the flag is turned on, every later value snaps, and moving an end re-clamps and
+re-snaps. With no marks, `-closestTickMarkValueToValue:` answers the value itself; with one mark, every value is the
+minimum. Apple documents an `NSRangeException` for an out-of-range index; this tree has none in use, so the door answers
+the minimum (the type's empty value) and says so at the door.
+
+**THE PUBLIC MARK RECTANGLE FOUND AN OLD INK BUG.** The vertical mark's along-track position used the unflipped formula
+for both y directions, so a FLIPPED vertical slider drew its scale upside down — the min mark at the top while its knob's
+minimum was at the bottom. The probe matches every mark's centre to the knob's centre at that mark's value in both
+orientations and both flips, and the one helper `-cg_tickRectAtIndex:inFrame:flipped:` is now what the public door and the
+ink both call, so they cannot disagree again. `-trackRect` is the wider rectangle the knob TRAVELS in (the cell frame
+with the title's band removed), not the four-point bar the ink fills; the SDK's own comment says its storage is "only
+valid while tracking the mouse", and this tier can answer it from the control view at any time.
+
+**THE TITLE IS A CELL, AND THE BAND IS TAKEN OFF THE TOP.** The default is a private `NSCell` subclass with a text colour
+(the base cell has a font and an alignment but no colour); `-titleFont`/`-titleColor` are the conveniences over it, and
+`-setTitle:` mirrors the label into it. `-drawWithFrame:inView:` removes the band before the track and knob are placed —
+so a titled knob sits lower and an UNTITLED slider's geometry is exactly what it was — then draws the words last. A frame
+too short for both keeps four points for the track rather than letting the label eat it. The probe counts the title's
+pixels in the band and checks the knob's centre moved down by the band.
+
+**THE TWO NO-ARGUMENT INK DOORS HAVE A FRAME NOW.** `-drawKnob` and the deprecated `-knobRectFlipped:` take theirs from
+`-controlView` and REFUSE BY NAME when there is none, as does `-trackRect`; `-rectOfTickMarkAtIndex:` and
+`-indexOfTickMarkAtPoint:` do the same, because a point or a mark has no coordinate space without a view. `-image` is
+Apple's BACKGROUND image — the SDK's own parameter name is `backgroundImage` — so it is not a refused face: the cell draws
+it under the track, the knob and the title, and the probe checks a corner pixel that is red while it is set and white
+after it is removed. `-setImage:` on the CELL also marks the control for redisplay, which the base cell's storage does not.
+
+**TRAPS THIS SLICE PAID FOR.**
+
+* **A PROBE THAT COUNTS "DARK" PIXELS CALLS A RED TITLE INVISIBLE.** The title's colour is a caller's choice and the probe
+  sets it red to prove `-setTitleColor:` has a reader; the first `ink_in` asked `redComponent < 0.72`, so every red glyph
+  was "background". The check is now "not the white the probe filled with", which is what it always meant. The debugging
+  detour also produced a false lead — `[NSFont systemFontOfSize:]` was suspected of answering nil — which a printed
+  pointer and a measured `sizeWithAttributes:` dismissed. **Print the value before blaming the subsystem.**
+* **A REFUSAL CAN COST TWO CENSUS SITES.** `-trackRect` has both the `APPKIT-REFUSE:` comment and the `fn_refuse_window`
+  call, and the needle counts both (the helper's definition and each call are the same convention). Five new doors moved
+  the census by six; the diff says why, which is the rule.
+* **A PUBLIC GEOMETRY DOOR IS A SECOND READER FOR ARITHMETIC THAT HAD ONE.** The flipped vertical tick formula was
+  unreachable and wrong; the moment a caller could ask for the rectangle, it became a test that could fail. The same
+  shape is waiting wherever ink has arithmetic no door exposes.
+* **THE HANDOFF'S "120 of 129 COMPLETE" WAS ONE HIGH.** Recomputing complete coverage from the OLD pin's `sel:` lines gives
+  119 — `NSSlider` and `NSSliderCell` were both incomplete and the other ten are `NSControl`, `NSDocument`,
+  `NSDocumentController`, `NSSavePanel`, `NSTableView`, `NSView`, `NSWindow` and `NSWorkspace`. The pair makes 121. The
+  census file's prose now carries the correction at the number, and this file's §2 does too. **A number in a handoff is a
+  claim; the recount is the measurement.**
+
+**WHERE THE NEXT HOUR GOES.** The two longest tails are still `NSView` 28 and `NSControl` 28, and `NSTableView` 20 is the
+next class whose doors are mostly arithmetic over machinery that exists (its grid, the drag image, the column/row
+enumerators). `NSDocument` 19 needs the decision about where autosave state lives. `NSSavePanel`'s three are a flag and
+two lines. §6's ordering is otherwise unchanged.
