@@ -1,23 +1,23 @@
 # libagora-app — a sixth handoff
 
-*Written at the end of **eight slices** that picked `HANDOFF-5.md` up where its §8 stopped — §9–§16 of that file are
+*Written at the end of **nine slices** that picked `HANDOFF-5.md` up where its §8 stopped — §9–§16 of that file are
 their running record, one numbered section per slice, and they are still the long form of everything summarised here.
 `HANDOFF.md`, `HANDOFF-2.md`, `HANDOFF-3.md` and `HANDOFF-4.md` remain worth reading: nothing in any of them was wrong,
 and the second file's §2 instrument rules and §4 traps are still the ones these sessions used most. **THIS FILE'S §2
 NUMBERS SUPERSEDE EVERY EARLIER HANDOFF'S.***
 
-*State at this handover: **eight slice commits** since the fifth handoff, tree clean, **161 tests passing in about 87 s**,
-`api-ledger check` holding **376 metrics** — **132 of 168 classes (79%), 4519 of 4519 selectors (100%), 39 of 56
-protocols (70%), 86 of 86 functions**, 5051 methods declared with 8 having no body, **all 130 classes with a surface at
-COMPLETE coverage** — refusal census **387**, owed census **19**. **The 36 absent classes and the 17 absent protocols are
+*State at this handover: **nine slice commits** since the fifth handoff, tree clean, **162 tests passing in about 89 s**,
+`api-ledger check` holding **378 metrics** — **134 of 168 classes (80%), 4539 of 4539 selectors (100%), 41 of 56
+protocols (73%), 86 of 86 functions**, 5083 methods declared with 8 having no body, **all 132 classes with a surface at
+COMPLETE coverage** — refusal census **387**, owed census **19**. **The 34 absent classes and the 15 absent protocols are
 the remaining surface; the 100% on selectors is 100% of the classes this tree HAS, not of the 10.6 AppKit.***
 
 ---
 
 ## 1. What these sessions did
 
-Eight slices, in the order they landed. Each is a commit in this repository and each ended green. There were no
-workspace commits in this arc.
+Nine slices, in the order they landed. Each is a commit in this repository and each ended green. There were no
+workspace commits in this arc, and the ninth also needed a Foundation fix, which is its own commit in `libagora-base`.
 
 | Commit | What it landed |
 |---|---|
@@ -29,34 +29,37 @@ workspace commits in this arc.
 | `47b090e` | **The document pair — COMPLETE** (`NSDocument` 104/104, `NSDocumentController` 51/51). Autosave as a separate file with a `~/Library/Autosave` registry and timer, the asynchronous close review wired into `-performClose:`, the filename/save-panel state, page-layout hooks, the document→controller→application error chain (with `NSResponder`'s stale alert refusals replaced), and three named scripting refusals (§14). |
 | `e199a54` | **`NSSavePanel` and `NSWorkspace` — COMPLETE** (47/47 and 58/58). The package flag became a real listing and accept rule; the deprecated `-openTempFile:` became `-openFile:`'s spelling — closing the last selector rows over the classes already present (§15). |
 | `99baeca` | **`NSImageView` — the first ABSENT class to arrive** (14/14). A thin `NSControl` over `NSImageCell`: the image and its three placement facts forwarded with redisplay, the two edit gates and the animation flag, real paste/delete, and copy/cut reaching the image class's encoder refusal (§16). |
+| `929bba3` | **`NSTokenField` and `NSTokenFieldCell` — the first ABSENT EDITOR to arrive** (10/10 and 10/10) and the two protocols that came with them. The list is the base cell's one value, the three conversions (display/editing/represented) fall back to the object, the chips are one layout shared by drawing/measurement/hit test, a session opens on EDITING strings and commits through `-shouldAddObjects:atIndex:`, the completion delay's sign is the switch, and the field is the ten forwards plus a relay. **It also found a Foundation hang with no caller**, fixed in `libagora-base` `a72b102` (§9). |
 
 **AND THE LAST FOUR ROWS OF THE FIFTH HANDOFF WERE NOT A CLASS TAIL AT ALL; THEY WERE THE END OF THE PRESENT SET.**
 `e199a54` closed every class this tree already had. `99baeca` began the other list: the classes the 10.6 manifest names
-that this tree has never had. **The next slices are that list, and they are bigger than the tail was.**
+that this tree has never had. **The next slices are that list, and they are bigger than the tail was.** The ninth row is
+the first of them to be an EDITOR — the token pair, twenty selector rows and two protocols — and it is the shape the
+remaining editors will take: a cell that owns the model and a view that forwards and relays.
 
 ---
 
 ## 2. The surface, measured
 
 ```
-classes   132 of 168   (79%)    36 missing
-selectors 4519 of 4519 (100%)    0 missing   130 of 130 classes at COMPLETE coverage
-protocols  39 of  56   (70%)    17 missing
+classes   134 of 168   (80%)    34 missing
+selectors 4539 of 4539 (100%)    0 missing   132 of 132 classes at COMPLETE coverage
+protocols  41 of  56   (73%)    15 missing
 functions  86 of  86  (100%)     0 missing    10 refuse by name
-methods   5051 declared on this tree's own classes, 8 with NO body on the chain (0.2%)
+methods   5083 declared on this tree's own classes, 8 with NO body on the chain (0.2%)
 ```
 
-**THE SELECTOR FRACTION IS NOW 100% OF THE CLASSES THIS TREE HAS, AND THE CLASS FRACTION IS STILL 79%.** The manifest
-offers selectors only for the classes that are present; the 36 absent classes contribute no rows to either side. So
-`4519 of 4519` says "every selector 10.6 declares for the 132 classes that exist here is answered", not "the 10.6
-AppKit is finished". The class number, 132 of 168, is the honest headline.
+**THE SELECTOR FRACTION IS NOW 100% OF THE CLASSES THIS TREE HAS, AND THE CLASS FRACTION IS 80%.** The manifest
+offers selectors only for the classes that are present; the 34 absent classes contribute no rows to either side. So
+`4539 of 4539` says "every selector 10.6 declares for the 134 classes that exist here is answered", not "the 10.6
+AppKit is finished". The class number, 134 of 168, is the honest headline.
 
-**TWO OF THE 132 PRESENT CLASSES HAVE NO SELECTORS:** `NSSecureTextField` and `NSTextAttachmentCell`. The complete
-coverage denominator is therefore 130, not 132. (`NSSecureTextField` inherits everything from `NSTextField`;
+**TWO OF THE 134 PRESENT CLASSES HAVE NO SELECTORS:** `NSSecureTextField` and `NSTextAttachmentCell`. The complete
+coverage denominator is therefore 132, not 134. (`NSSecureTextField` inherits everything from `NSTextField`;
 `NSTextAttachmentCell` inherits everything from `NSCell`.) The earlier handoffs said "two classes with no surface" and
 did not name them; these are the two.
 
-**THE SEVENTEEN CLASSES THESE EIGHT SLICES FINISHED**, in the order they landed. Every one of them finished with named
+**THE NINETEEN CLASSES THESE NINE SLICES FINISHED**, in the order they landed. Every one of them finished with named
 refusals or a stated effect rather than a stub:
 
 | Class | Selectors | Refusing by name |
@@ -78,23 +81,25 @@ refusals or a stated effect rather than a stub:
 | `NSSavePanel` | 47 of 47 | 0 (the expanded layout is answered NO, not refused) |
 | `NSWorkspace` | 58 of 58 | 23 sites (the platform services and the missing device/session pieces) |
 | `NSImageView` | 14 of 14 | 0 (copy/cut reach the image class's own encoder refusal) |
+| `NSTokenFieldCell` | 10 of 10 | 0 (the list, the three conversions and the chips are all real) |
+| `NSTokenField` | 10 of 10 | 0 (ten forwards and a relay; every delegate door has a sender) |
 
-(The table lists the seventeen completions since `HANDOFF-4`; the other 113 classes with a surface were already
+(The table lists the nineteen completions since `HANDOFF-4`; the other 113 classes with a surface were already
 complete before that arc. `NSFont`'s fifth attachment door was found by `HANDOFF-5`'s own recount and is refused now.)
 
-**AND THE 36 ABSENT CLASSES GROUP CLEANLY. THIS IS THE LIST THE NEXT SLICES PICK FROM:**
+**AND THE 34 ABSENT CLASSES GROUP CLEANLY. THIS IS THE LIST THE NEXT SLICES PICK FROM:**
 
 | Group | Classes | What it needs |
 |---|---|---|
-| Editors and containers | `NSDrawer`, `NSTokenField`, `NSTokenFieldCell` | A parent/edge layout for the drawer, and the field editor's token model for the token field. `NSImageView` is DONE now; these three are the remaining editors. |
+| Editors and containers | `NSDrawer` | A parent/edge layout and the collapse/expand state. `NSImageView` and the token pair are DONE; this is the remaining editor. |
 | Controllers / bindings | `NSController`, `NSObjectController`, `NSArrayController`, `NSDictionaryController`, `NSUserDefaultsController`, `NSTreeController`, `NSTreeNode` | KVO/KVC substrate — a design question before it is a slice, because this tier has no KVO. |
 | Rules and tokens | `NSRuleEditor`, `NSPredicateEditor`, `NSPredicateEditorRowTemplate` | A predicate editor over the rule editor; both are views over controls that exist, but the predicate model is substantial. |
 | Collection view | `NSCollectionView` | The ITEM exists (`NSCollectionViewItem`); the view is the missing half. |
 | Still refused, per the plan's §A11 | `NSOpenGL*` (5), `NSMovie`, `NSMovieView`, `NSQuickDrawView`, the four typesetters (`NSATSTypesetter`, `NSGlyphGenerator`, `NSSimpleHorizontalTypesetter`, `NSTypesetter`), `NSSpeechSynthesizer`, `NSSpeechRecognizer`, `NSSound`, `NSInputManager`, `NSInputServer`, `NSDockTile`, `NSHelpManager`, `NSPersistentDocument`, `NSTouch` | GL, QuickDraw, movies, a PostScript/typesetting engine, speech, sound, the input-manager era, a Dock contract, a Help Viewer, a document subclass that needs autosave, and touch input with no hardware. Each is named at the door that would have to refuse. |
-| Not this component's | `NSFileWrapper` | Foundation's (`libagora-base/NSFileWrapper.h`). The real AppKit gap is 35. |
+| Not this component's | `NSFileWrapper` | Foundation's (`libagora-base/NSFileWrapper.h`). The real AppKit gap is 33. |
 
-**THE 17 MISSING PROTOCOLS ARE ALMOST ALL CONTRACTS FOR CLASSES IN THAT TABLE:** `NSDrawerDelegate`,
-`NSTokenFieldDelegate`, `NSTokenFieldCellDelegate`, `NSRuleEditorDelegate`, `NSCollectionViewDelegate`,
+**THE 15 MISSING PROTOCOLS ARE ALMOST ALL CONTRACTS FOR CLASSES IN THAT TABLE:** `NSDrawerDelegate`,
+`NSRuleEditorDelegate`, `NSCollectionViewDelegate`,
 `NSSpeechSynthesizerDelegate`, `NSSpeechRecognizerDelegate`, `NSSoundDelegate`, `NSInputServiceProvider`,
 `NSInputServerMouseTracker`, `NSDockTilePlugIn`, `NSGlyphStorage`, `NSAnimatablePropertyContainer`. Four exceptions
 have their classes and are small slices on their own: **`NSTextViewDelegate`** (the view has a delegate and calls
@@ -111,26 +116,27 @@ Four censuses and one ledger, all committed and all gated by `ctest`:
 | Artifact | What it is |
 |---|---|
 | `api/10.6/appkit-manifest.txt` | The SDK's facts: 168 classes + superclasses, 56 protocols, 87 functions, 5208 selectors. |
-| `tests/api-10.6-census.txt` | **376** pinned metrics — the aggregates, one `sel:` line per present class (130 of them), one `proto:` line per protocol, `fn:`/`fndecl:` per function, `selphantom:` per class with a phantom. |
+| `tests/api-10.6-census.txt` | **378** pinned metrics — the aggregates, one `sel:` line per present class (132 of them), one `proto:` line per protocol, `fn:`/`fndecl:` per function, `selphantom:` per class with a phantom. |
 | `tests/api_census.cmake` | The gate: two-directional comparison, arithmetic check, two fault checks. |
 | `tests/refusal_census.txt` | **387** refusal sites, per FILE. |
 | `tests/owed_census.txt` | **19** headers' OWED notes, per file. |
 | `tools/api-ledger` | The parser: `manifest`, `census`, `check`, `missing`. |
 
-* **THE METRIC COUNT ROSE BY ONE IN THE LAST SLICE, AND THAT IS NOT DRIFT.** `NSImageView` added one `sel:` line, so
-  the census holds **376** metrics now, not 375. A new class adds a metric; a new test does not.
+* **THE METRIC COUNT RISES BY ONE PER NEW CLASS, AND THAT IS NOT DRIFT.** `NSImageView` added one `sel:` line (375 ->
+  376); the token pair added two more (376 -> **378**). A new class adds a metric; a new test does not.
 * **`missing` IS NOW THE ABSENT-CLASS DOOR, NOT THE SLICE-PICKING DOOR.** `./tools/api-ledger missing
-  api/10.6/appkit-manifest.txt . --library build/libagora-app.so` prints **36 classes, 17 protocols, 0 functions, and
+  api/10.6/appkit-manifest.txt . --library build/libagora-app.so` prints **34 classes, 15 protocols, 0 functions, and
   no selector debt at all**. The "largest selector debt" section is gone because every present class is complete. A
   slice now starts by picking a class from that list or a protocol from the list beside it.
 * **THE PER-CLASS RECOUNT IS STILL THE MEASUREMENT THAT CATCHES A SILENT DELETION.** `parse_tree` twice and a `diff`
   of the per-class declaration counts is how `NSFont`'s fifth attachment door and the header block that swallowed two
   declarations were found. Do not skip it because the aggregate says 0 missing: an aggregate can be right while a class
   is one short and another is one long.
-* **ADDING A CLASS CHANGES THE DENOMINATORS, NOT ONLY THE NUMERATORS.** `NSImageView` took `classes-present` 131 -> 132,
-  `classes-offered` stayed 168, `selectors-offered` 4505 -> 4519, `selectors-present` 4505 -> 4519, and complete
-  coverage 129 -> 130. The four hand-written summary lines had to be recomputed: 132 of 168 (79%), 4519 of 4519 (100%),
-  130 of 130. **A class that arrives is a new denominator on both sides.**
+* **ADDING A CLASS CHANGES THE DENOMINATORS, NOT ONLY THE NUMERATORS.** `NSImageView` took `classes-present` 131 -> 132
+  and `selectors-offered`/`present` 4505 -> 4519; the token pair took them 132 -> 134 and 4519 -> 4539, complete coverage
+  130 -> 132, and protocols 39 -> 41. The four hand-written summary lines had to be recomputed: 134 of 168 (80%), 4539 of
+  4539 (100%), 132 of 132. **A class that arrives is a new denominator on both sides, and a protocol that arrives is a
+  `proto:` line moving 0 -> 1.**
 * **EVERY SLICE RE-PINS DELIBERATELY.** Let `ctest -R appkit-api-census` fail, recompute with `./tools/api-ledger census
   …`, write it in the same commit, and recompute the four hand-written summary lines from `api-ledger census` rather
   than editing them by eye.
@@ -291,13 +297,12 @@ of a library path rather than for want of the code.
 
 ## 6. Where to spend the next hour
 
-**THERE IS NO CLASS TAIL LEFT. THE NEXT WORK IS THE 36 ABSENT CLASSES, AND THEY ARE NOT ONE-LINERS.** The order below
+**THERE IS NO CLASS TAIL LEFT. THE NEXT WORK IS THE 34 ABSENT CLASSES, AND THEY ARE NOT ONE-LINERS.** The order below
 is by reachable surface and by what the tree already has to build on.
 
-1. **`NSTokenField` and `NSTokenFieldCell`** — the most natural next editor. The field editor, the cell's string, the
-   completion table and the delegate machinery all exist; the missing model is the TOKEN: a represented object, a
-   display string, a separator/completion rule, and the two delegate protocols (`NSTokenFieldDelegate`,
-   `NSTokenFieldCellDelegate`). That is a real slice, not a forward.
+1. **DONE: `NSTokenField` and `NSTokenFieldCell`** — the first absent editor, landed as `929bba3` with both protocols
+   (§9). The remaining editors are the same shape: a cell that owns a model the tree does not have yet, and a control
+   that forwards and relays.
 2. **`NSDrawer`** — the parent/edge layout and the collapse/expand state. The split view's collapse is the nearest
    machinery; `NSDrawerDelegate` is the contract. Decide up front whether the collapse animates (the animation family
    exists) or is a stated no-animation door.
@@ -325,8 +330,8 @@ not by looking for a selector debt; the ledger's `missing` output is the map.
 
 ## 7. Things a reader should not have to rediscover
 
-* **THE 100% IS OVER PRESENT CLASSES.** 4519 of 4519 selectors over 132 present classes; 130 of those have a surface and
-  all 130 are complete. The 36 absent classes contribute no offered selectors. The class number is 132 of 168 (79%).
+* **THE 100% IS OVER PRESENT CLASSES.** 4539 of 4539 selectors over 134 present classes; 132 of those have a surface and
+  all 132 are complete. The 34 absent classes contribute no offered selectors. The class number is 134 of 168 (80%).
 * **THE `openTempFile:` ROW WAS REAL, NOT AN INSTRUMENT QUIRK.** The tree had a hyphen-less `-openTempFile` that CREATES
   a temp file and answers its path; Apple's deprecated `-openTempFile:` takes a path and OPENS it, and it is
   `-openFile:` by another name. The previous handoff's "off by construction" note was wrong; the row is implemented now.
@@ -358,9 +363,9 @@ not by looking for a selector debt; the ledger's `missing` output is the map.
   cell-less subclass answers nil and sends nothing. `NSBrowser` paid for it.
 * **THE PLAN'S PRINTING DECISION WAS AMENDED, AND THE RECORD IS THE PLAN.** `COCOA-10.11-SURFACE-PLAN.md` §4.4/§4.5
   said "physical printers refused"; both now say implemented, with the transport as a seam.
-* **THE SUITE IS 161 TESTS IN ABOUT 87 SECONDS, AND `ctest --test-dir build -j4` IS THE GATE.** The exit status is the
+* **THE SUITE IS 162 TESTS IN ABOUT 89 SECONDS, AND `ctest --test-dir build -j4` IS THE GATE.** The exit status is the
   witness, not the tail of the output. The workspace's suite is 14 tests and belongs in the same gate run.
-* **THE CENSUS IS 376 METRICS, 387 REFUSAL SITES, 19 OWED NOTES.** A new class adds a `sel:` metric; a new refusal
+* **THE CENSUS IS 378 METRICS, 387 REFUSAL SITES, 19 OWED NOTES.** A new class adds a `sel:` metric; a new refusal
   moves the refusal total; a new OWED note moves the owed total. Re-pin all three in the same commit when they move.
 
 ---
@@ -380,3 +385,88 @@ for, and where the next hour went. A session that lands a slice should:
    both are read by people who will never open this file.
 4. Leave §1–§7 above ALONE unless a slice changes a number in them; when it does, change that number and say in the new
    section that it moved. A handoff that quietly drifts is the thing these files exist to prevent.
+
+## 9. The first absent editor arrives: one list, four spellings, and a Foundation door that hung
+
+**Commit `929bba3`, with the Foundation fix in `libagora-base` `a72b102`.** `NSTokenField` and `NSTokenFieldCell` are
+present and COMPLETE at 10 of 10 each — the eighteenth and nineteenth complete classes, and the first classes off the
+absent list since `NSImageView`. The change takes the class count 132 -> 134 (80% of 168), the offered and present
+selectors 4519 -> 4539, complete coverage 130 -> 132, the protocols 39 -> 41, and the declaration count 5051 -> 5083;
+the missing count is still 0. The census holds 378 metrics, the suite is 162 tests (about 89 s), the refusal census
+stayed 387, the owed census stayed 19, and `tests/token_field.m` is the new probe (62 checks). The workspace's 14 tests
+were run too.
+
+**THE MODEL IS THE BASE CELL'S ONE VALUE, SEEN FOUR WAYS.** A token cell's `-objectValue` IS the ordered list of
+represented objects (NSCell's own `-_objectValue`), so there is no second array. `-stringValue` is the DISPLAY strings
+joined by ", "; `-cg_editingText` is the EDITING strings joined the same way; the drawing is the same list as chips. A
+string handed to `-setObjectValue:` is tokenized into the list, an array IS the list, a single object becomes a
+one-token list, and nil is an empty list rather than a nil value. Every mutation — a typed string, a committed session, a
+pasteboard read, a cut — goes through one store, so there is one place the list changes and one place an open editor is
+told about it.
+
+**THE THREE CONVERSIONS FALL BACK TO THE OBJECT, AND THE FIELD IS A RELAY.** Display, editing and represented-object each
+ask the delegate and fall back to the object's own text, which is Apple's "editing string = display string = represented
+object" made literal and what makes the class usable over `NSString`s without a delegate. The FIELD installs itself as
+the cell's delegate and turns each `tokenFieldCell:` question into the caller's `tokenField:` one — the `NSComboBox`
+arrangement one class over — and where the caller has no opinion the FIELD answers the protocol's default (accept the
+addition, no menu, the identity conversion, the cell's own style). The default is not the same at every door: nil means
+"no opinion" for the conversions and the menu, but the INPUT for `-shouldAddObjects:atIndex:`, because nil is Apple's
+error case there and a field that returned it would refuse every typed token.
+
+**ONE LAYOUT SERVES THE DRAWING, THE MEASUREMENT AND THE HIT TEST.** `-cg_tokenFramesInFrame:` is the only place a
+token's rectangle is computed: the drawing paints those rects, `-cellSizeForBounds:` takes the last one's right edge,
+and `-cg_tokenIndexAtPoint:inFrame:` contains a point in them, so a chip cannot be painted in one place and clicked in
+another. A rounded token is a pill with the control-grey fill and the shadow-grey border; a plain token is its words
+with the ", " separator, so two plain tokens read as the string `-stringValue` answers. The baseline comes from
+`NSTextFieldCell`'s one centring door, so a flipped context moves a chip's words exactly as it moves a field's.
+
+**A SESSION OPENS ON THE EDITING STRINGS, AND ITS END IS A REVIEWED LIST.** The base session seeds its editor from
+`-stringValue:` (the display text); this cell replaces that seed with the editing text and selects the whole run,
+because a token's range is not a string's range. `-fn_finishEditing:keep:movement:` then tokenizes the editor's string
+and passes it through `-shouldAddObjects:atIndex:` before storing it, and asks the base to tear down WITHOUT a second
+write-back — the movement travels unchanged, so Return and Tab still send the control's action and Escape still does not.
+
+**THE COMPLETION DELAY'S SIGN IS THE SWITCH, AND THE PASTEBOARD MOVES THE WHOLE LIST.** A negative delay asks nothing;
+zero or positive asks the delegate on every change to the partial token after the last separator, flattens nested offer
+arrays, and inserts a UNIQUE offer longer than the substring with the appended letters selected. Several offers insert
+nothing, because this tier has no pop-up list; no timer is made, and the question is asked at the change. Copy/cut/paste
+write and read every token through the delegate's pasteboard pair (the default write is the editing-string join, and a
+NO from the delegate clears the board), because this tier has no token selection. A right-click finds the chip through
+the same layout and asks the delegate's `has` door before its menu door.
+
+### The traps this slice paid for
+
+**A FOUNDATION DOOR WITH NO CALLER HAD TWO BUGS.** The first tokenize HUNG, and the stack named
+`-[NSString componentsSeparatedByCharactersInSet:]` in `libagora-base`. Reading it found the end case setting the break
+flag without advancing, so `offset == size` re-entered the loop forever; the same loop also walked BYTES while indexing
+CHARACTERS and then handed byte offsets to `-substringWithRange:`, which reads UTF-16 code units. **NOTHING IN THE TREE
+HAD EVER CALLED THE DOOR**, which is why both survived; the fix is a UTF-16 loop with a `break`, and
+`libagora-base/tests/string_split.m` is the caller it never had. A dependency's untested door is this slice's problem the
+moment it is used.
+
+**`NSCharacterSet -copy` ANSWERS `[self retain]`, AND THAT IS WRONG FOR A MUTABLE RECEIVER.** The cell copies a caller's
+separator so later mutation cannot change its parsing; the probe set a mutable set, mutated it after handing it over, and
+the cell's parsing followed. `-mutableCopy` is the only door in this class family that allocates and replays the ranges,
+so the stored set is built with it and the door says why. A "copy" that is an identity is an optimisation for an
+immutable object and a leak of the caller's state for a mutable one.
+
+**A PROBE THAT SET THE CELL'S STYLE WHILE THE DELEGATE ANSWERED PER TOKEN MEASURED THE DELEGATE.** The rounded-vs-plain
+ink check rendered the same 1154 grey pixels twice: `-setTokenStyle:` was correct, but the probe's delegate implemented
+`-tokenFieldCell:styleForRepresentedObject:` and returned `NSRoundedTokenStyle` for every token, which correctly wins.
+The check had to remove the caller's delegate and let the field's own style be the only opinion — the difference between
+testing a setting and testing the answer that supersedes it.
+
+**AN ALL-REJECTED COMMIT EMPTIES THE LIST; IT DOES NOT RESTORE THE OLD ONE.** The first expectation was that refusing
+every addition would leave the previous tokens standing. It cannot: the session edited the WHOLE string, the old tokens
+were replaced on screen by the typed text, and keeping them would resurrect a value the person deleted. The probe now
+asserts the empty list, and the door's comment says why rather than leaving the next reader to re-derive it.
+
+**THE README GATE READS A CITATION TO ANOTHER COMPONENT'S TEST AS A MISSING FILE.** `appkit-readme-refs` matches every
+`tests/<name>.m` in the README against THIS component's tests directory, so naming the Foundation probe the way the
+AppKit probes are named failed the gate. The sentence now names the probe without the path pattern; the gate is right,
+and the citation was the thing that had to change.
+
+**Where the next hour goes:** §6 item 2, `NSDrawer` — the parent/edge layout and the collapse/expand state, with
+`NSDrawerDelegate`. The token pair's shape is the model to follow: a cell (or a view that owns one) carrying the state
+the tree has not had, every deviation named at the door, and a probe that measures the INK and the round trip rather than
+the getters.
