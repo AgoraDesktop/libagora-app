@@ -6,11 +6,11 @@ and two slices of `NSTextView`. `HANDOFF.md`, `HANDOFF-2.md` and `HANDOFF-3.md` 
 of them was wrong, and the second file's §2 instrument rules and §4 traps are the ones these sessions used most. **THIS
 FILE'S §2 NUMBERS SUPERSEDE `HANDOFF-3.md`'s**, which are six slices old.*
 
-*State at this handover: **fourteen slice commits** since the eighth handoff (and the relicense sweep that touched every
-file in the meantime), tree clean, **150 tests passing in about 85 s**, `api-ledger check` holding **375 metrics** —
-**131 of 168 classes (78%), 4209 of 4505 selectors (93%), 39 of 56 protocols (70%), 86 of 86 functions**, 4737 methods
-declared with 8 having no body, **116 of the 129 classes with a surface at COMPLETE coverage** — refusal census **326**.*
-*(`HANDOFF-3.md`'s §2 numbers are ten slices older than these; the numbers in this file's §2 are current as of §16.)*
+*State at this handover: **eighteen slice commits** since the eighth handoff (and the relicense sweep that touched every
+file in the meantime), tree clean, **154 tests passing in about 85 s**, `api-ledger check` holding **375 metrics** —
+**131 of 168 classes (78%), 4344 of 4505 selectors (96%), 39 of 56 protocols (70%), 86 of 86 functions**, 4873 methods
+declared with 8 having no body, **119 of the 129 classes with a surface at COMPLETE coverage** — refusal census **375**.*
+*(`HANDOFF-3.md`'s §2 numbers are fourteen slices older than these; the numbers in this file's §2 are current as of §20.)*
 
 ---
 
@@ -38,26 +38,25 @@ and a different commit line; it is recorded here because the AppKit slice is wha
 
 ```
 classes   131 of 168   (78%)    37 missing
-selectors 4209 of 4505 (93%)   296 missing   116 of 129 classes at COMPLETE coverage
+selectors 4344 of 4505 (96%)   161 missing   119 of 129 classes at COMPLETE coverage
 protocols  39 of  56   (70%)    17 missing
 functions  86 of  86  (100%)     0 missing    10 refuse by name
-methods   4737 declared on this tree's own classes, 8 with NO body on the chain (0.2%)
+methods   4873 declared on this tree's own classes, 8 with NO body on the chain (0.2%)
 ```
 
-**THE 296 MISSING SELECTORS ARE STILL CONCENTRATED, AND `NSMenuView` HAS LEFT THE LIST ENTIRELY** (42 of 42, ten of them
-refusing by name). The ledger's debt list, largest first:
+**SIX CLASSES ARE COMPLETE FOR THE ERA** — `NSResponder` 145/145, `NSBrowser` 120/120, `NSMenuView` 42/42,
+`NSText` 70/70, `NSFont` 70/70, `NSTextView` 186/186 — and every one of them finished with NAMED REFUSALS rather than with a
+stub. The ledger's remaining debt, largest first:
 
 ```
-NSTextView 39    NSFont 35        NSWorkspace 32   NSText 31       NSView 28
-NSControl 28     NSTableView 20   NSDocument 19    NSWindow 18     NSSlider 18
-NSSliderCell 17  NSDocumentController 8   NSSavePanel 3
+NSView 28        NSControl 28     NSTableView 20   NSDocument 19    NSWindow 18
+NSSlider 18      NSSliderCell 17  NSWorkspace 1    NSDocumentController 8   NSSavePanel 3
 ```
 
-Everything below `NSSliderCell` is five doors or fewer in a class that is otherwise complete. **SEVEN CLASSES HAVE LEFT
-THE DEEPEST-DEBT LIST IN SEVEN SLICES**: `NSTextView` 68 → 39, `NSBrowser` 64 → **0**, `NSResponder` 57 → **0**,
-`NSWorkspace` 49 → 32, `NSMenuView` 37 → **0**. Three classes are COMPLETE for the era. What is left is mostly the
-long tail — `NSFont`'s descriptor/traits surface, `NSView`/`NSControl`'s spread-out doors, and `NSTextView`'s blocked or
-refused clusters.
+**THE DEEPEST-CLASS WORK OF THIS FILE IS DONE.** The classes the earlier handoffs ranked first — the text system, the
+browser, the menu view, the font and the responder — are all complete, and what is left is the LONG TAIL: `NSView`'s and
+`NSControl`'s spread-out doors, the table's twenty and the document's nineteen.
+
 
 **THE 37 ABSENT CLASSES GROUP CLEANLY:**
 
@@ -201,31 +200,19 @@ comments to `.cmake`, `.sh` or Python files breaks the gates — that happened, 
 Ranked by reachable surface per unit of work, and the ranking now starts with the class this tree has and has not
 finished:
 
-1. **`NSFont` 35 — the descriptor and traits surface, with §4's recorded caveat.** This tree's FONT DESCRIPTORS CARRY
-   NO TRAITS, so the traits family must read the FACE (`CTFontGetSymbolicTraits`, `CTFontCopyTraits`) rather than the
-   descriptor; a slice that forgets it will answer "regular" for every face on the machine. The rest is the descriptor's
-   own attributes and the font-panel-ish conversions.
-2. **`NSTextView`'s remaining 39**, which are now almost all BLOCKED or REFUSED rather than absent: the TEXT-CHECKING
-   family (`-checkTextIn…`, `-enabledTextCheckingTypes`, `-handleTextCheckingResults:…`, the three automatic-detection
-   toggles) is blocked on `NSTextCheckingResult`/`NSOrthography`, which Foundation here has not got; the LINK/SERVICES
-   pair needs a link attribute constant and a services transport; `-startSpeaking:`/`-stopSpeaking:` are speech, refused
-   by name; the five `-orderFront…Panel:` doors are panels this tier has not built; and `-complete:`/`-insertCompletion:`
-   are the WORD-COMPLETION family, which is the one cluster there that is genuinely a slice. **Do not open the checking
-   family before Foundation has the classes** — name them absent and keep the flags refusing.
-3. **`NSWorkspace` 32 — the largest remaining class-shaped gap, and now WITH A CALLER** (§13): the file window opens a
-   document through `-openFile:` instead of calling Launch Services itself. What is left is the file-operation family
-   (`-performFileOperation:source:destination:files:tag:`, `-recycleURLs:completionHandler:`,
-   `-duplicateURLs:completionHandler:`, `-openTempFile:`), the Finder-service doors
-   (`-selectFile:inFileViewerRootedAtPath:`, `-activateFileViewerSelectingURLs:` — which need the Workspace to be
-   TELLABLE across processes, i.e. a session), the volume and media doors (`-mountedRemovableMedia`,
-   `-unmountAndEjectDeviceAtURL:error:`, `-getFileSystemInfoForPath:…` — DiskArbitration), the desktop-picture pair, the
-   labels, and the change-notification family. **The file operations are the honest next slice** — plain filesystem
-   verbs — but the TRASH MUST NOT BE DUPLICATED: the Workspace's `WSTrash` owns the directories, the Put Back records and
-   the empty, so an AppKit `-recycleURLs:completionHandler:` either agrees with that rule or states why it is a
-   different one.
-4. **`NSText` 31**, which are siblings of the text-view work: the RTF write/read pair (`-RTFFromRange:`,
-   `-replaceCharactersInRange:withRTF:`, …), `-changeFont:`/`-copyFont:`/`-pasteFont:`, the resizability and size limits
-   (`-minSize`, `-maxSize`, the two flags), and `-showGuessPanel:`.
+1. **`NSView` 28 and `NSControl` 28 — the two long tails, and both are SPREAD OUT.** Nothing here is a subsystem: the
+   view's remaining doors are the layer and display-link half, the cursor and tool-tip pair, the accessibility setters and
+   a handful of geometry spellings; the control's are the cell-passing doors, the target/action variants and the
+   formatting/validate pair. Read `./tools/api-ledger missing` for the names, and expect several to be REFUSALS (a layer,
+   a display link, the tool-tip machinery) rather than work.
+2. **`NSTableView` 20** — the grid's own tail: the column furniture beyond autosave, the row/frame queries and the
+   drag-destination doors the local drag does not need yet.
+3. **`NSDocument` 19** — the document's remaining doors are mostly the async-saving and file-type half, both of which
+   need the printing slice's seam again (a save path and a type).
+4. **`NSWindow` 18 and `NSSlider` 18 / `NSSliderCell` 17** — the window's are the appearance and tab-ordering furniture;
+   the slider pair are the tick-mark and stop-value doors, which are drawing arithmetic over machinery that exists.
+5. **`NSWorkspace` 1** — `-openFile:fromImage:at:inView:`, which is the plain open with an animation this tier has no
+   compositor verb for. One line, and the class is complete.
 6. **The absent-class groups in §2**, in this order: the editors (`NSImageView`, `NSDrawer`, `NSTokenField`), the rules
    pair, and the controllers/bindings — which are a DESIGN QUESTION before they are a slice, because this tier has no KVO.
 7. **Leave refused** (§A11 and this tree's record): OpenGL, QuickDraw, movies, the four typesetters, `NSCollectionView`
@@ -814,3 +801,105 @@ the traits family must read the FACE), `NSTextView` 39 (blocked or refused in th
 file-operation family, with §13's trash constraint) and `NSText` 31 (the RTF write/read pair and the resizability limits).
 The three biggest single-class debts are now 39, 35 and 32 — there is no class-sized subsystem left except `NSTextView`'s
 blocked clusters.
+
+## 17. `NSText`'s own surface — the fourth complete class
+
+*Session of the fifteenth slice, taking §6's ranking from the top. Its commit is "AppKit: `NSText`'s own surface — one run,
+the automatic fit, and the RTF package".*
+
+**`NSText` IS COMPLETE: 70 of 70.** The theme that decided every door is that **a field has ONE RUN**:
+`-setTextColor:range:`/`-setFont:range:` set that run (the view overrides both over its store), `-textColor` is the ink the
+drawing fills with, and the four script/underline commands refuse because a one-run field has no attribute to carry them.
+
+**THE RESIZABILITY NEEDED A READER AND THE READER IS THE EDIT PATH.** `-sizeToFit` measures both dimensions (as it always
+has, and as `text_input.m` pins), so the flags make that fitting AUTOMATIC — `-setString:` and
+`-replaceCharactersInRange:withString:` re-fit a resizable field — with `-minSize`/`-maxSize` clamping it. And a
+zero-filled `_baseWritingDirection` would have claimed left-to-right for every field, because `NSWritingDirectionNatural`
+is **-1**: the same shape of error `NSCell.h` records having paid for.
+
+**AND THE RTF PAIR BECAME A REAL DOCUMENT** — the AppKit writer over the range's one run, a read that takes only the
+CHARACTERS, and the RTFD half through Foundation's `-RTFDFileWrapperFromRange:` package: serialized for `-RTFDFromRange:`,
+written to disk for `-writeRTFDToFile:atomically:`, reopened through `NSFileWrapper -initWithPath:`.
+
+**NUMBERS**: selectors 4209 → 4240, methods 4768 → 4802 (+34 with the changes below), refusal census 326 → 331, tests 150 → 151.
+
+## 18. `NSFont` complete — metrics from the face, and the variants that are the font
+
+*Session of the sixteenth slice. Its commit is "AppKit: NSFont complete — metrics from the face, and the variants that are
+the font".*
+
+**`NSFont` IS COMPLETE: 70 of 70.** Every metric door asks the FACE, which is what this class is (a view of a
+`CTFontRef`): advances and bounding rects in single and batch form, the glyph by name, the line height as its own three
+metrics, the packing derived from the glyph count, and `-widthOfString:` through the AppKit's own `-sizeWithAttributes:`
+so the width told is the width drawn. **§4's caveat is GENERALISED here**: the descriptors carry no traits in this tree, so
+anything answerable from a descriptor is answered from the face instead.
+
+**THE SCREEN AND PRINTER VARIANTS ARE THE RECEIVER** — one Core Text face draws both a window and a PDF — and `-set`/
+`-setInContext:` REFUSE: there is no current font on a context here, because the drawing takes it from each string's
+attributes, and a door that wrote one would be the stored bit nobody reads.
+
+**AND A DEFAULTS WRITE THAT CANNOT LAND MUST NOT ABORT A CALLER.** This tree's `NSUserDefaults` writes under
+`$FNX_CONFIG_ROOT/…`; without it `-setObject:forKey:` THROWS (measured — the probe aborted inside a font lookup). The four
+user-font doors catch it: the preference does not persist, which is the honest outcome, and the probe sets a root (a
+launcher's job) to measure the round trip.
+
+**NUMBERS**: selectors 4240 → 4274, NSFont 36 → 70, refusal census 331 → 338, tests 151 → 152.
+
+## 19. `NSWorkspace`'s file operations — the verbs, the per-volume trash, three environment facts
+
+*Session of the seventeenth slice. Its commit is "AppKit: NSWorkspace's file operations — the verbs, the per-volume trash,
+and three environment facts".*
+
+**THE VERBS ARE FILESYSTEM WORK, SO THEY ARE MEASURED ON DISK.** Move, copy, link, destroy and recycle; the modern
+`-recycleURLs:completionHandler:`/`-duplicateURLs:completionHandler:` pair (handler called ONCE with the failures);
+`-openTempFile`. The class is at **57 of 58** — one door left.
+
+**THE PER-VOLUME TRASH IS APPLE'S RULE AND THE SLICE FOUND OUT WHY IT EXISTS**: MEASURED, recycling from `/tmp` into a
+home trash on another filesystem failed with `EXDEV`, because a rename cannot cross a device. The home volume gets
+`~/.Trash`, another volume `.Trash-<uid>` at its root — the rule the Workspace's `WSTrash` documents — with a
+copy-and-remove fallback. The Workspace keeps the Put Back record; this class only moves.
+
+**THREE ENVIRONMENT FACTS, each found by a failing assertion**: `NSTemporaryDirectory()` answers `/System/Temporary Files/`
+(which need not exist) so `-openTempFile` tries `$TMPDIR`, the platform path and `/tmp`; `/proc/mounts` READS AS ZERO BYTES
+through the string door (a symlink to a `stat`-size-0 file) so the volume list is read with stdio; and a mount filter
+that dropped `overlay`/`squashfs` emptied the list on a container root, so both are kept.
+
+**NUMBERS**: selectors 4274 → 4305, methods 4802 → 4834, NSWorkspace 26 → 57 of 58, refusal census 338 → 352, tests
+152 → 153.
+
+## 20. `NSTextView`'s last thirty-nine — and the sixth complete class
+
+*Session of the eighteenth slice. Its commit is "AppKit: the text view's last thirty-nine — background, links, completion,
+and thirty refusals".*
+
+**`NSTextView` IS COMPLETE: 186 of 186** — the SIXTH class to finish, and the deepest. Nine doors are real and thirty
+refuse.
+
+**THE REAL THREE**: `-allowsDocumentBackgroundColorChange` gates `-changeDocumentBackgroundColor:` (a colour panel's target,
+both ways measured); `-linkTextAttributes` is the link run's ink and `-clickedOnLink:atIndex:` **asks the delegate first and
+opens the URL second**; and word completion is the trio — the partial word before the caret, the document's own longer
+words that start with it (sorted, deduplicated, the partial excluded), and an insert through the view's one edit path.
+
+**AND FOUR OF THE THIRTY REFUSE BECAUSE THEIR BIT WOULD HAVE NO READER**, which is the rule this file keeps restating:
+`-setAcceptsGlyphInfo:` (the manager never hands glyph info to a view), `-setDisplaysLinkToolTips:` (`NSView` has no
+tool-tips), and `-setAllowedInputSourceLocales:` — which stores the list, answers it back, and SAYS IN ITS OWN REFUSAL that
+nothing reads it. The other twenty-six name their missing piece: `NSTextCheckingResult`/`NSOrthography` (fifteen doors),
+the four panels, the services transport, the speech service, the outline panel and the 10.0-era CJK switch.
+
+**NUMBERS** (§8's rule 4, applied to §1, §2, §6 and §7):
+
+```
+selectors        4305 -> 4344 of 4505   (missing 200 -> 161)
+methods-declared 4834 -> 4873
+NSTextView        147 -> 186 of 186     (COMPLETE)
+classes-complete  118 -> 119 of 129
+refusal census    352 -> 375
+tests             153 -> 154
+```
+
+**WHERE THE NEXT HOUR GOES, AND IT IS A DIFFERENT KIND OF HOUR.** §6's ranking is rewritten above: the six deepest classes
+of this component are DONE, so what remains is the long tail — `NSView` 28 and `NSControl` 28 (spread out, and several of
+their doors are refusals: a layer, a display link, the tool-tip machinery), `NSTableView` 20, `NSDocument` 19,
+`NSWindow` 18, the slider pair (35 between them), and `NSWorkspace`'s ONE remaining door. The instrument is in good shape
+(96% of selectors, 119 of 129 classes at complete coverage, a refusal census that now sees every helper), and the next
+handoff should probably start with a CLASS LIST rather than a slice list: the tail is many small commits, not four big ones.
