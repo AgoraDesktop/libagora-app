@@ -68,7 +68,7 @@
 
 NSAccessibility.m                1
 NSAlert.m                        1
-NSApplication.m                  10
+NSApplication.m                  12
 NSAttributedStringRTF.m          4
 NSAttributedStringRTFD.m         6
 NSBrowser.m                       5
@@ -154,4 +154,4 @@ NSWindow.m                       23
 # name and refuses the LOAD, because the strings-file reader was withdrawn. The class is COMPLETE (all 42 selectors have
 # bodies) and these are the three doors whose bodies say what the tier cannot do.
 #
-# total: 390
+# total: 392
