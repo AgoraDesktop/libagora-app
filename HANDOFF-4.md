@@ -6,11 +6,11 @@ and two slices of `NSTextView`. `HANDOFF.md`, `HANDOFF-2.md` and `HANDOFF-3.md` 
 of them was wrong, and the second file's §2 instrument rules and §4 traps are the ones these sessions used most. **THIS
 FILE'S §2 NUMBERS SUPERSEDE `HANDOFF-3.md`'s**, which are six slices old.*
 
-*State at this handover: **twelve slice commits** since the eighth handoff (and the relicense sweep that touched every
+*State at this handover: **thirteen slice commits** since the eighth handoff (and the relicense sweep that touched every
 file in the meantime), tree clean, **149 tests passing in about 84 s**, `api-ledger check` holding **375 metrics** —
-**131 of 168 classes (78%), 4135 of 4505 selectors (92%), 39 of 56 protocols (70%), 86 of 86 functions**, 4663 methods
-declared with 8 having no body, **114 of the 129 classes with a surface at COMPLETE coverage** — refusal census **311**.*
-*(`HANDOFF-3.md`'s §2 numbers are eight slices older than these; the numbers in this file's §2 are current as of §14.)*
+**131 of 168 classes (78%), 4172 of 4505 selectors (93%), 39 of 56 protocols (70%), 86 of 86 functions**, 4700 methods
+declared with 8 having no body, **115 of the 129 classes with a surface at COMPLETE coverage** — refusal census **316**.*
+*(`HANDOFF-3.md`'s §2 numbers are nine slices older than these; the numbers in this file's §2 are current as of §15.)*
 
 ---
 
@@ -38,26 +38,27 @@ and a different commit line; it is recorded here because the AppKit slice is wha
 
 ```
 classes   131 of 168   (78%)    37 missing
-selectors 4135 of 4505 (92%)   370 missing   114 of 129 classes at COMPLETE coverage
+selectors 4172 of 4505 (93%)   333 missing   115 of 129 classes at COMPLETE coverage
 protocols  39 of  56   (70%)    17 missing
 functions  86 of  86  (100%)     0 missing    10 refuse by name
-methods   4663 declared on this tree's own classes, 8 with NO body on the chain (0.2%)
+methods   4700 declared on this tree's own classes, 8 with NO body on the chain (0.2%)
 ```
 
-**THE 370 MISSING SELECTORS ARE STILL CONCENTRATED, AND `NSBrowser` IS STILL FIRST — BUT ITS REMAINDER IS NO LONGER THE
-ITEM MODEL.** The ledger's debt list, largest first:
+**THE 333 MISSING SELECTORS ARE STILL CONCENTRATED, AND `NSBrowser` HAS LEFT THE LIST ENTIRELY** — 120 of 120, the second
+class and the first class-sized one to reach COMPLETE coverage, with five doors refusing by name. The ledger's debt list,
+largest first:
 
 ```
-NSBrowser 37     NSTextView 39   NSMenuView 37    NSFont 35      NSWorkspace 32
-NSText 31        NSView 28       NSControl 28     NSTableView 20   NSDocument 19
-NSWindow 18      NSSlider 18     NSSliderCell 17  NSDocumentController 8   NSSavePanel 3
+NSTextView 39    NSMenuView 37    NSFont 35        NSWorkspace 32   NSText 31
+NSView 28        NSControl 28     NSTableView 20   NSDocument 19    NSWindow 18
+NSSlider 18      NSSliderCell 17  NSDocumentController 8   NSSavePanel 3
 ```
 
-Everything below `NSSliderCell` is five doors or fewer in a class that is otherwise complete. **FIVE CLASSES HAVE LEFT
-THE DEEPEST-DEBT LIST IN FIVE SLICES**: `NSTextView` 68 → 52 (§9) → 40 (§10) → 39 (§12, an INHERITANCE effect rather than
-an implementation), `NSBrowser` 64 → 47 (§11) → 37 (§14, the item model), `NSResponder` 57 → **0** (§12, the first class
-to reach COMPLETE coverage from the top of the list), and `NSWorkspace` 49 → 32 (§13). What is left of `NSBrowser` is the
-DRAG and FURNITURE half; what is left of `NSTextView` is almost entirely blocked or refused.
+Everything below `NSSliderCell` is five doors or fewer in a class that is otherwise complete. **SIX CLASSES HAVE LEFT
+THE DEEPEST-DEBT LIST IN SIX SLICES**: `NSTextView` 68 → 39, `NSBrowser` 64 → **0** (§11, §14, §15 — the largest debt in
+the component, finished), `NSResponder` 57 → **0** (§12), `NSWorkspace` 49 → 32 (§13). What is left of `NSTextView` is
+mostly blocked or refused; the next-largest usable classes are `NSMenuView` (37, most of them deprecated doors) and
+`NSFont` (35, the descriptor and traits surface).
 
 **THE 37 ABSENT CLASSES GROUP CLEANLY:**
 
@@ -201,25 +202,21 @@ comments to `.cmake`, `.sh` or Python files breaks the gates — that happened, 
 Ranked by reachable surface per unit of work, and the ranking now starts with the class this tree has and has not
 finished:
 
-1. **`NSBrowser` 37 — still the largest debt, and now the DRAG AND FURNITURE half.** §14 answered the item-model
-   question (the protocol advertises the 10.6 contract; the cell contract is the fallback), so what is left is
-   `-canDragRowsWithIndexes:inColumn:withEvent:`, `-draggingImageForRowsWithIndexes:inColumn:withEvent:offset:`,
-   `-setDraggingSourceOperationMask:forLocal:`, `-editItemAtIndexPath:withEvent:select:`,
-   `-reloadDataForRowIndexes:inColumn:`, `-noteHeightOfRowsWithIndexesChanged:inColumn:`, `-addColumn`, `-displayColumn:`,
-   `-displayAllColumns`, `-lastColumn`/`-setLastColumn:`, `-isLoaded`, `-scrollColumnsLeftBy:`/`-scrollColumnsRightBy:`,
-   `-scrollViaScroller:`, `-updateScroller`, the autosave trio, `-reusesColumns`, `-prefersAllColumnUserResizing`,
-   `-sendAction`, `-doClick:`/`-doDoubleClick:` (done), and `-matrixClass`/`-setMatrixClass:`/`-matrixInColumn:`/
-   `-columnOfMatrix:` — **those four must REFUSE by name and say why: this browser's columns are TABLES, and a matrix is
-   what Apple's own columns were; the header already carries that decision, and a refusal is the disposition it owes.**
-   The DRAG doors are what a file manager feels next.
-2. **`NSTextView`'s remaining 39**, which are now almost all BLOCKED or REFUSED rather than absent: the TEXT-CHECKING
+1. **`NSMenuView` 37 — and most of them are `NSMenuView.NSDeprecated`'s.** The menu's own drawing surface: the row
+   geometry, the tracking-session doors and the deprecated spellings a ported caller still sends. It is a THIN class
+   (42 selectors offered, 5 answered), so a pass over it is cheap per door — but read the header first: several of the
+   five that are implemented are the ones a dropdown actually uses, and the rest may be refusals rather than work.
+2. **`NSFont` 35** — the descriptor and traits surface, **with §4's recorded caveat: this tree's FONT DESCRIPTORS CARRY NO
+   TRAITS**, so the traits family must read the FACE (`CTFontGetSymbolicTraits`, `CTFontCopyTraits`) rather than the
+   descriptor, and a slice that forgets it will answer "regular" for every face on the machine.
+3. **`NSTextView`'s remaining 39**, which are now almost all BLOCKED or REFUSED rather than absent: the TEXT-CHECKING
    family (`-checkTextIn…`, `-enabledTextCheckingTypes`, `-handleTextCheckingResults:…`, the three automatic-detection
    toggles) is blocked on `NSTextCheckingResult`/`NSOrthography`, which Foundation here has not got; the LINK/SERVICES
    pair needs a link attribute constant and a services transport; `-startSpeaking:`/`-stopSpeaking:` are speech, refused
    by name; the five `-orderFront…Panel:` doors are panels this tier has not built; and `-complete:`/`-insertCompletion:`
    are the WORD-COMPLETION family, which is the one cluster there that is genuinely a slice. **Do not open the checking
    family before Foundation has the classes** — name them absent and keep the flags refusing.
-3. **`NSWorkspace` 32 — the largest remaining class-shaped gap, and now WITH A CALLER** (§13): the file window opens a
+4. **`NSWorkspace` 32 — the largest remaining class-shaped gap, and now WITH A CALLER** (§13): the file window opens a
    document through `-openFile:` instead of calling Launch Services itself. What is left is the file-operation family
    (`-performFileOperation:source:destination:files:tag:`, `-recycleURLs:completionHandler:`,
    `-duplicateURLs:completionHandler:`, `-openTempFile:`), the Finder-service doors
@@ -230,10 +227,6 @@ finished:
    verbs — but the TRASH MUST NOT BE DUPLICATED: the Workspace's `WSTrash` owns the directories, the Put Back records and
    the empty, so an AppKit `-recycleURLs:completionHandler:` either agrees with that rule or states why it is a
    different one.
-4. **`NSMenuView` 37 and `NSFont` 35**, which are thin classes rather than subsystems: the menu view is the popup's own
-   drawing surface (37 doors, most of them `NSMenuView.NSDeprecated`'s), and `NSFont`'s 35 are the descriptor and traits
-   surface — **with the recorded caveat that this tree's FONT DESCRIPTORS CARRY NO TRAITS** (§4), so the traits family
-   must read the FACE (`CTFontGetSymbolicTraits`, `CTFontCopyTraits`) rather than the descriptor.
 5. **`NSText` 31**, which are siblings of the text-view work: the RTF write/read pair (`-RTFFromRange:`,
    `-replaceCharactersInRange:withRTF:`, …), `-changeFont:`/`-copyFont:`/`-pasteFont:`, the resizability and size limits
    (`-minSize`, `-maxSize`, the two flags), and `-showGuessPanel:`.
@@ -715,3 +708,58 @@ that reads protocol bodies would be measuring something the census has never mea
 (`-reloadDataForRowIndexes:inColumn:`, `-addColumn`, `-displayColumn:`, `-lastColumn`, the scroll pair, the autosave
 name). **The `-matrixClass`/`-matrixInColumn:`/`-columnOfMatrix:` trio should REFUSE by name** with the reason the header
 already gives: this browser's columns are tables, and a matrix is what Apple's own columns were.
+
+## 15. The browser's last thirty-seven doors — and the class is complete
+
+*Session of the thirteenth slice, finishing §6's first item (`NSBrowser` 37). Its commit is "AppKit: the browser is
+complete — drags, reloads, furniture, and five refusals"; tree clean; `ctest --test-dir build -j4` green at **149 tests
+in 84 s** with `appkit-api-census` re-pinned in the same commit.*
+
+**THE RESULT: `sel:NSBrowser` 120 of 120 — COMPLETE, and the first CLASS-SIZED debt the component has finished** (the
+`NSResponder` completion was 145 of 145 in §12; this one is the largest debt in the file, 64 → 0 across §11, §14 and
+here). Thirty-seven doors landed or refused, and every implemented one was written against machinery the class already
+had:
+
+* **Drag quartet** — `-canDragRowsWithIndexes:inColumn:withEvent:` (the delegate's own question first, then the column's
+  table), `-draggingImageForRowsWithIndexes:inColumn:withEvent:offset:` (an image drawn FROM THE ROWS' CELLS, with the
+  offset where the pointer grabbed it), `-setDraggingSourceOperationMask:forLocal:` (stored and handed to EVERY column's
+  table, because a drag starts in a table), `-editItemAtIndexPath:withEvent:select:` (selects the path — loading each
+  column as a click does — then starts the field editor).
+* **Reload trio** — `-reloadDataForRowIndexes:inColumn:`, `-noteHeightOfRowsWithIndexesChanged:inColumn:` (re-tiles: a
+  row's height changes the column's), `-validateVisibleColumns` (asks `-browser:isColumnValid:` per visible column).
+* **Display and scroll** — `-addColumn` (the chain plus one column, selected into), `-displayColumn:`,
+  `-displayAllColumns`, `-lastColumn`/`-setLastColumn:` (a boundary that truncates), `-isLoaded`,
+  `-scrollColumnsLeftBy:`/`-scrollColumnsRightBy:`, `-scrollRowToVisible:inColumn:`, `-scrollViaScroller:` (a scroller's
+  fraction times the horizontal travel, the same arithmetic the scroll view's own action uses),
+  `-autohidesScroller`/`-setAutohidesScroller:`.
+* **Furniture and flags, each with a reader** — `-sendAction` (what `-doClick:` performs), `-allowsTypeSelect` (handed to
+  every column's table, which owns the type-select), `-prefersAllColumnUserResizing` (read by the DIVIDER DRAG, which then
+  re-widths every column), `-allowsBranchSelection` (below), and the column-width autosave in `NSUserDefaults` under
+  `NSBrowser Columns <name>`.
+* **Five refusals** — the matrix quartet (`-matrixClass`, `-setMatrixClass:`, `-matrixInColumn:`, `-columnOfMatrix:`:
+  this browser's columns are tables, and `-cg_tableForColumn:` is the seam) and `-setReusesColumns:` (the columns ARE a
+  256-slot pool, reused by construction, so `-reusesColumns` is YES and there is nothing to ask for).
+
+**THE ONE SEMANTIC THAT NEEDED THOUGHT: `-allowsBranchSelection` DEFAULTS TO NO.** Refusing the selection outright would be
+wrong twice: the era's rule is that a click on a branch still OPENS the column to its right, and this class builds that
+column from the selection chain — so refusing the row would leave a browser that cannot navigate one level down. The path
+taken is Apple's: the branch opens, the CHAIN records the row (that is what the next column is built from), and the
+table's selection is refused so the row is not left highlighted. A PROGRAMMATIC selection is not gated at all — checking
+`_inProgrammaticSelection` is what keeps `-selectRow:inColumn:` the caller's business. The probe had to be told the
+difference: its clicks go through the table, its selections go through the browser.
+
+**THE NUMBERS MOVED** (§8's rule 4):
+
+```
+selectors       4135 -> 4172 of 4505   (missing 370 -> 333)
+methods-declared 4663 -> 4700
+NSBrowser        83 -> 120 of 120      (COMPLETE — off the debt list)
+classes-complete 114 -> 115 of 129
+refusal census   311 -> 316            (five new named refusals, all in NSBrowser.m)
+tests            149 (browser_items grew 40 -> 45 checks)
+```
+
+**WHERE THE NEXT HOUR GOES.** §6 is rewritten above: `NSMenuView` 37 (mostly its deprecated category, and a THIN class —
+read the header before assuming the doors are work), `NSFont` 35 (the descriptor and traits surface, **with §4's caveat
+that this tree's descriptors carry no traits, so the traits family must read the FACE**), then `NSTextView` 39 (blocked or
+refused in the main) and `NSWorkspace` 32 (the file-operation family, with the trash constraint §13 recorded).

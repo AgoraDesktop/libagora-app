@@ -1125,6 +1125,34 @@ positions long. The fix in both cases was the assertion, and the header now says
 `tests/browser_items.m` measures it in **40 checks**, with a cell-based delegate measured beside the item one so the
 fallback is held to the same standard as the new path.
 
+## 42. The browser's last thirty-seven doors, and the five that refuse
+
+**`NSBrowser` IS COMPLETE FOR THE ERA: 120 of 120.** The tail was the part a browser does *to* a column or a row — drag,
+reload, display, scroll, the width autosave and the four behaviour flags — and each of those was written against
+machinery the class already had rather than beside it: a drag starts in a column's table (so the mask is handed to every
+table and the "can I drag" question falls through to the table's own answer), the drag's image is drawn from the ROWS'
+CELLS rather than a generic icon, the reload doors are the table's own, `-addColumn` is the selection chain plus one
+column, and the width autosave is `NSUserDefaults` under a key of this class's own.
+
+**THE ONE SEMANTIC THAT NEEDED THOUGHT IS `-allowsBranchSelection`, WHOSE DEFAULT IS NO.** Refusing the selection outright
+would have been wrong twice over: the era's rule is that a click on a branch still OPENS the column to its right, and this
+class builds that column from the selection chain — so refusing the row would leave a browser that cannot navigate one
+level down, let alone two. The path taken is Apple's: the branch is opened, the chain records the row (which is what the
+next column is built from), and the table's selection is refused, so the row is not left highlighted. A PROGRAMMATIC
+selection is not gated at all — `-selectRow:inColumn:` is the caller's business, which is why the flag is checked against
+`_inProgrammaticSelection`.
+
+**AND FIVE DOORS REFUSE, IN TWO KINDS.** The matrix quartet (`-matrixClass`, `-setMatrixClass:`, `-matrixInColumn:`,
+`-columnOfMatrix:`) describes Apple's implementation, where a column IS a matrix of `NSBrowserCell`s; this browser's
+columns are tables, and the seam that hands one out is `-cg_tableForColumn:`. `-setReusesColumns:` refuses because the
+answer it would set is already the truth: the columns ARE a 256-slot pool and are reused by construction, so
+`-reusesColumns` answers YES and a caller cannot ask for anything else. Both refusals answer their type's empty value and
+name what is missing.
+
+`tests/browser_items.m` grew to **45 checks** with the branch-selection pair: a USER click through the table (not a
+programmatic selection) on a branch leaves the row unselected while still opening the next column, and the same click
+with the flag ON selects it.
+
 ## Keeping in sync
 
 The Fiwix AppKit is the origin and this repository has now diverged from it in the seam. A fix made there

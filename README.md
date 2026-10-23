@@ -2469,6 +2469,37 @@ carrying the leaf flag, the styling door still getting its chance afterwards, al
 chain, the selection path round-tripped both ways, a bad path stopping rather than selecting a phantom — and, beside it,
 a cell-based delegate still painting its cells, because the older contract is the fallback and not the removed one.
 
+### The browser is complete: drags, reloads, the furniture, and four refusals
+
+**`NSBrowser` ANSWERS ALL 120 OF THE ERA'S SELECTORS NOW** — `sel:NSBrowser 120` of 120, the second class in the component
+(and the first class-sized one) to reach COMPLETE coverage. The thirty-odd doors that landed in this last pass are the ones
+a browser does *to* a column or a row once it has one:
+
+- **The drag source**: `-canDragRowsWithIndexes:inColumn:withEvent:` (the delegate's question first, then the column's own
+  table), `-draggingImageForRowsWithIndexes:inColumn:withEvent:offset:` (an image drawn *from the rows' cells*, with the
+  offset where the pointer grabbed it), `-setDraggingSourceOperationMask:forLocal:` (stored and handed to every column's
+  table, because a drag starts in a table), and `-editItemAtIndexPath:withEvent:select:` (which selects the path first —
+  loading each column the way a click does — then starts the field editor over the row).
+- **The reload trio**: `-reloadDataForRowIndexes:inColumn:`, `-noteHeightOfRowsWithIndexesChanged:inColumn:` (which
+  re-tiles, because a row's height changes the column's) and `-validateVisibleColumns` (which asks the delegate
+  `-browser:isColumnValid:` per visible column and reloads the ones that say no).
+- **Display and scrolling**: `-addColumn` (one more column, loaded from the selected item and selected into),
+  `-displayColumn:`, `-displayAllColumns`, `-lastColumn`/`-setLastColumn:` (the boundary, which truncates), `-isLoaded`,
+  `-scrollColumnsLeftBy:`/`-scrollColumnsRightBy:`, `-scrollRowToVisible:inColumn:`, `-scrollViaScroller:` (a scroller's
+  fraction times the horizontal travel) and `-autohidesScroller`/`-setAutohidesScroller:`.
+- **The furniture and the flags, each with a reader**: `-sendAction` (what `-doClick:` performs), `-allowsBranchSelection`
+  — read where the browser decides, so **a click on a branch OPENS it without selecting it when the flag is off** (the era's
+  rule, and the chain still records the row so two levels of navigation work) — `-allowsTypeSelect` (handed to every
+  column's table, which owns the type-select), `-prefersAllColumnUserResizing` (read by the divider drag, which then
+  re-widths every column) and the column-width autosave (`-columnsAutosaveName`, `-removeSavedColumnsWithAutosaveName:`)
+  in `NSUserDefaults` under a key of its own.
+
+**AND FIVE DOORS REFUSE BY NAME, WITH THE REASON IN THE HEADER.** `-matrixClass`, `-setMatrixClass:`, `-matrixInColumn:`
+and `-columnOfMatrix:` describe Apple's implementation — a matrix of `NSBrowserCell`s per column — and this browser's
+columns are tables; a caller that wants a column's view asks `-cg_tableForColumn:`, which is the tier's own seam.
+`-setReusesColumns:` refuses for a different kind of honesty: this browser's columns are a fixed 256-slot pool, reused by
+construction, so `-reusesColumns` is always YES and there is nothing to ask for.
+
 ### Still absent, and why
 
 **NINE THINGS THAT USED TO BE ON THIS LIST ARE NOT ANY MORE, AND THE LIST IS CORRECTED RATHER THAN QUIETLY SHRUNK:**

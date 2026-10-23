@@ -206,7 +206,8 @@ int main(void)
 		check([[browser itemAtRow:1 inColumn:0] isEqual:pics], "and row 1 the second");
 		check([browser itemAtRow:5 inColumn:0] == nil, "a row past the end has no item");
 
-		/* SELECTING LOADS THE NEXT COLUMN FROM THE ITEM. */
+		/* SELECTING LOADS THE NEXT COLUMN FROM THE ITEM. A PROGRAMMATIC selection is the caller's business, which is why
+		 * the branch-selection gate below does not apply to it; the user path is measured in section 6. */
 		[browser selectRow:0 inColumn:0];
 		check([browser cg_activeColumnCount] >= 2, "selecting a branch loads the column to its right");
 		check([browser numberOfRowsInColumn:1] == 2,
@@ -314,12 +315,39 @@ int main(void)
 		check([browser selectedRowInColumn:0] == 0, "the in-range part of a bad path is selected");
 		check([browser selectedRowInColumn:1] < 0, "and the out-of-range part is not");
 
+		/* ============================================================================================ *
+		 * 6. THE BRANCH-SELECTION FLAG, READ WHERE THE BROWSER DECIDES.                                  *
+		 * ============================================================================================ */
+		{
+			NSTableView *table = [browser cg_tableForColumn:0];
+
+			check(![browser allowsBranchSelection],
+			      "`-allowsBranchSelection` is OFF by default, which is Apple's default");
+			[browser setSelectionIndexPath:nil];
+
+			/* A USER CLICK, through the table — not a programmatic selection, which is the caller's business and is
+			 * deliberately not gated. */
+			[table selectRowIndexes:[NSIndexSet indexSetWithIndex:0] byExtendingSelection:NO];
+			check([table selectedRow] < 0,
+			      "with the flag off, a click on a BRANCH leaves it unselected");
+			check([browser cg_activeColumnCount] >= 2,
+			      "and the column to its right is built anyway — opening is not selecting");
+			check([browser selectedRowInColumn:0] == 0,
+			      "while the chain still records the row, which is what the next column was built from");
+
+			[browser setSelectionIndexPath:nil];
+			[browser setAllowsBranchSelection:YES];
+			[table selectRowIndexes:[NSIndexSet indexSetWithIndex:1] byExtendingSelection:NO];
+			check([table selectedRow] == 1,
+			      "and with the flag ON the same click selects the branch");
+		}
+
 		[browser setDelegate:nil];
 		[browser release];
 	}
 
 	/* ============================================================================================ *
-	 * 6. THE CELL-BASED CONTRACT IS STILL THE FALLBACK, AND STILL WORKS.                            *
+	 * 7. THE CELL-BASED CONTRACT IS STILL THE FALLBACK, AND STILL WORKS.                            *
 	 * ============================================================================================ */
 	{
 		NSBrowser *browser = browserInWindow(window, cells);

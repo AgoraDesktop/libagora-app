@@ -20,6 +20,7 @@
 #import <AppKit/NSBrowserCell.h>
 
 #import <AppKit/NSApplication.h>
+#import <AppKit/NSScroller.h>
 #import <AppKit/NSAttributedString.h>
 #import <AppKit/NSBezierPath.h>
 #import <AppKit/NSClipView.h>
@@ -34,6 +35,7 @@
 #import <AppKit/NSTableView.h>
 #import <AppKit/NSView.h>
 #import "NSWindow_internal.h"
+#import "AppKitRefusal.h"	/* the refused doors say what they need. */
 #import <Foundation/NSArray.h>
 #import <Foundation/NSDate.h>
 #import <Foundation/NSNumber.h>
@@ -266,6 +268,17 @@
 		return;
 	}
 	[_browser setWidth:width ofColumn:_dragColumn];
+	/* **ONE DRAG, EVERY COLUMN, WHEN THE CALLER ASKS FOR IT.** `-prefersAllColumnUserResizing` is the era's knob for a
+	 * browser whose columns are meant to stay the same width; without it a divider drag resizes the column it is on. */
+	if ([_browser prefersAllColumnUserResizing]) {
+		NSInteger i, count = [_browser cg_columnCount];
+
+		for (i = 0; i < count; i++) {
+			if (i != _dragColumn) {
+				[_browser setWidth:width ofColumn:i];
+			}
+		}
+	}
 }
 
 - (void)mouseDown:(NSEvent *)event
@@ -507,6 +520,17 @@ static NSString * const AGCoderBrowserCellPrototypeKey = @"cellPrototype";
 	_titled = YES;
 	_clickedRow = -1;
 	_clickedColumn = -1;
+	/* **AND THE REST OF THE ERA'S DEFAULTS, WHICH ARE APPLE'S WHERE APPLE STATS ONE.** `-lastColumn` unset means "wherever
+	 * the selection chain ends"; the drag mask is Copy/Generic, which is the source operation Apple's own browser offers;
+	 * `-allowsBranchSelection` is NO and `-allowsTypeSelect` is YES, both Apple's defaults; and
+	 * `-prefersAllColumnUserResizing` is NO, so a divider drag resizes the column it is dragged on. */
+	_loadedZero = NO;
+	_lastColumn = -1;
+	_localDragMask = NSDragOperationCopy | NSDragOperationGeneric;
+	_nonLocalDragMask = NSDragOperationCopy | NSDragOperationGeneric;
+	_allowsBranchSelection = NO;
+	_allowsTypeSelect = YES;
+	_prefersAllColumnUserResizing = NO;
 	_backgroundColor = [[NSColor whiteColor] retain];
 
 	_documentView = [[NSBrowserDocumentView alloc] initWithFrame:documentFrame];
@@ -540,6 +564,7 @@ static NSString * const AGCoderBrowserCellPrototypeKey = @"cellPrototype";
 	[_cellPrototype release];
 	[_pathSeparator release];
 	[_backgroundColor release];
+	[_columnsAutosaveName release];
 	[super dealloc];
 }
 
@@ -807,6 +832,9 @@ static NSString * const AGCoderBrowserCellPrototypeKey = @"cellPrototype";
 	[table setDataSource:self];
 	[table setDelegate:self];
 	[table setDoubleAction:@selector(cg_tableDoubleClicked:)];
+	[table setAllowsTypeSelect:_allowsTypeSelect];
+	[table setDraggingSourceOperationMask:_localDragMask forLocal:YES];
+	[table setDraggingSourceOperationMask:_nonLocalDragMask forLocal:NO];
 	/* **ONE SCROLL VIEW PER COLUMN, AND IT IS THE VERTICAL ONE.** It is the document of the browser's outer
 	 * scroll view, not a sibling of it: the outer view still owns the horizontal travel across the columns. A
 	 * slot starts at ITS OWN x, not at zero: the pool is built before the first tile, and a column left at zero
@@ -889,6 +917,8 @@ static NSString * const AGCoderBrowserCellPrototypeKey = @"cellPrototype";
 	}
 	_selectedColumn = -1;
 	_firstVisibleColumn = 0;
+	_lastColumn = -1;
+	_loadedZero = YES;
 	rows = [self rowsForColumn:0];
 	if ([_tables count] > 0) {
 		[_columnCounts replaceObjectAtIndex:0 withObject:[NSNumber numberWithInteger:rows]];
@@ -1180,6 +1210,25 @@ static NSString * const AGCoderBrowserCellPrototypeKey = @"cellPrototype";
 	 * the same pair for a real click and the only answer for a synthetic one. */
 	_clickedColumn = column;
 	_clickedRow = row;
+	/* **A BRANCH MAY BE REFUSED BEFORE THE DELEGATE IS ASKED.** With `-allowsBranchSelection` off, a row whose item has
+	 * children is not selectable — the era's rule, and the reason a browser can be a pure navigation surface. Only the
+	 * ITEM model knows which rows are branches; a cell-based delegate has no leaf fact here, which is stated in the
+	 * header. */
+	if (!_allowsBranchSelection && !_inProgrammaticSelection && [self cg_isItemBased]) {
+		id item = [self itemAtRow:row inColumn:column];
+
+		if (item != nil && ![self isLeafItem:item]) {
+			/* **A BRANCH OPENS WITHOUT BEING SELECTED.** That is the era's rule with this flag off: the click still
+			 * builds the column to the right, and what it does NOT do is leave the branch highlighted. The chain is
+			 * recorded anyway — `_selectedRows` is what the NEXT column is built from, so refusing the table's
+			 * selection while forgetting the row would leave a browser that cannot navigate two levels deep. */
+			[_selectedRows replaceObjectAtIndex:(NSUInteger)column
+						 withObject:[NSNumber numberWithInteger:row]];
+			_selectedColumn = column;
+			[self cg_openBranchAtRow:row inColumn:column];
+			return NO;
+		}
+	}
 	if (_delegate != nil && [_delegate respondsToSelector:@selector(browser:selectRow:inColumn:)]) {
 		BOOL answer = [_delegate browser:self selectRow:row inColumn:column];
 		return answer;
@@ -1660,6 +1709,7 @@ static NSString * const AGCoderBrowserCellPrototypeKey = @"cellPrototype";
 		width = _minColumnWidth;
 	}
 	[_columnWidths replaceObjectAtIndex:(NSUInteger)column withObject:[NSNumber numberWithDouble:width]];
+	[self cg_saveColumnWidths];
 	[self tile];
 }
 
@@ -2083,6 +2133,508 @@ static NSString * const AGCoderBrowserCellPrototypeKey = @"cellPrototype";
 {
 	(void)sender;
 	return [self titleOfColumn:column];
+}
+
+
+/* ============================================================================================ *
+ * THE REST OF THE ERA'S SURFACE                                                                *
+ * ============================================================================================ */
+
+/* THE COLUMN A ROW LIVES IN, OR NIL. Every one of these answers nil for a column that does not exist rather than
+ * raising, because a caller asking about a column it has not loaded is asking a question with an honest answer. */
+- (NSTableView *)cg_tableIfAnyForColumn:(NSInteger)column
+{
+	if (column < 0 || column >= (NSInteger)[_tables count]) {
+		return nil;
+	}
+	return [_tables objectAtIndex:(NSUInteger)column];
+}
+
+/* ---- THE RELOAD TRIO ------------------------------------------------------------------------- */
+
+- (void)reloadDataForRowIndexes:(NSIndexSet *)rowIndexes inColumn:(NSInteger)column
+{
+	NSTableView *table = [self cg_tableIfAnyForColumn:column];
+
+	if (table == nil || rowIndexes == nil) {
+		return;
+	}
+	[table reloadDataForRowIndexes:rowIndexes
+		       columnIndexes:[NSIndexSet indexSetWithIndex:0]];
+	/* THE RELOADED ROWS KEEP THE COUNT, so the column's height and the document's width do not change; a re-tile would
+	 * be work for nothing, and the table has already marked what changed. */
+}
+
+- (void)noteHeightOfRowsWithIndexesChanged:(NSIndexSet *)indexSet inColumn:(NSInteger)column
+{
+	NSTableView *table = [self cg_tableIfAnyForColumn:column];
+
+	if (table == nil || indexSet == nil) {
+		return;
+	}
+	[table noteHeightOfRowsWithIndexesChanged:indexSet];
+	[self tile];
+}
+
+/* **ASKING THE DELEGATE WHETHER EACH VISIBLE COLUMN STILL HOLDS.** Apple's door is a validity pass after something
+ * outside the browser changed: the delegate answers `-browser:isColumnValid:` and a column that says NO is reloaded. The
+ * range is the visible one, which is the only range a person can see. */
+- (void)validateVisibleColumns
+{
+	NSInteger first = [self firstVisibleColumn];
+	NSInteger last = [self lastVisibleColumn];
+	NSInteger column;
+
+	for (column = first; column <= last; column++) {
+		if (column < 0 || column >= (NSInteger)[_tables count]) {
+			continue;
+		}
+		if (_delegate != nil && [_delegate respondsToSelector:@selector(browser:isColumnValid:)]) {
+			if (![_delegate browser:self isColumnValid:column]) {
+				[self reloadColumn:column];
+			}
+		}
+	}
+}
+
+/* ---- THE DISPLAY AND COLUMN DOORS ------------------------------------------------------------ */
+
+- (BOOL)isLoaded
+{
+	return _loadedZero;
+}
+
+/* **THE LAST COLUMN THE BROWSER MAY GROW TO.** Unset means "wherever the selection chain ends"; `-setLastColumn:` states a
+ * boundary and truncates anything past it, which is how a caller allows `-addColumn` exactly as far as it wants. */
+- (NSInteger)lastColumn
+{
+	NSInteger i;
+
+	if (_lastColumn >= 0) {
+		return _lastColumn;
+	}
+	for (i = (NSInteger)[_tables count] - 1; i >= 0; i--) {
+		if ([[_columnCounts objectAtIndex:(NSUInteger)i] integerValue] > 0) {
+			return i;
+		}
+	}
+	return 0;
+}
+
+- (void)setLastColumn:(NSInteger)column
+{
+	if (column < 0) {
+		column = 0;
+	}
+	_lastColumn = column;
+	[self truncateColumnsAfter:column];
+	[self tile];
+}
+
+/* **ONE MORE COLUMN, LOADED FROM WHATEVER THE LAST ONE HAS SELECTED.** With nothing selected there is nothing to add;
+ * with a selection, the new column is the selected item's children and the selection moves into it, which is what a
+ * person means by "go one deeper" without navigating. */
+/* **OPENING A BRANCH WITHOUT SELECTING IT** — the branch-selection path above. The next column's rows are the item's
+ * children, asked directly rather than through `-rowsForColumn:`, because that door reads the very chain this call is
+ * establishing. */
+- (void)cg_openBranchAtRow:(NSInteger)row inColumn:(NSInteger)column
+{
+	id item = [self itemAtRow:row inColumn:column];
+	NSInteger rows;
+
+	if (item == nil || _delegate == nil) {
+		return;
+	}
+	rows = [_delegate browser:self numberOfChildrenOfItem:item];
+	[self truncateColumnsAfter:column];
+	if (rows > 0) {
+		[self ensureColumn:column + 1 rows:rows];
+		if (column + 1 < (NSInteger)[_columnCounts count]) {
+			[_columnCounts replaceObjectAtIndex:(NSUInteger)(column + 1)
+						 withObject:[NSNumber numberWithInteger:rows]];
+			[[_tables objectAtIndex:(NSUInteger)(column + 1)] reloadData];
+		}
+	}
+	[self tile];
+	[self scrollColumnToVisible:column + 1];
+}
+
+- (void)addColumn
+{
+	NSInteger next = [self lastColumn] + 1;
+	NSInteger rows;
+
+	if (_selectedColumn < 0 || next >= AG_BROWSER_COLUMN_POOL) {
+		return;
+	}
+	rows = [self rowsForColumn:next];
+	[self ensureColumn:next rows:rows];
+	if (next < (NSInteger)[_columnCounts count]) {
+		[_columnCounts replaceObjectAtIndex:(NSUInteger)next withObject:[NSNumber numberWithInteger:rows]];
+		[[_tables objectAtIndex:(NSUInteger)next] reloadData];
+	}
+	_lastColumn = next;
+	[self tile];
+	[self scrollColumnToVisible:next];
+}
+
+- (void)displayColumn:(NSInteger)column
+{
+	[self scrollColumnToVisible:column];
+}
+
+- (void)displayAllColumns
+{
+	[self scrollColumnToVisible:[self lastColumn]];
+}
+
+/* ---- THE SCROLL FAMILY ----------------------------------------------------------------------- */
+
+- (void)scrollColumnsLeftBy:(NSInteger)shiftAmount
+{
+	[self scrollColumnToVisible:[self firstVisibleColumn] - shiftAmount];
+}
+
+- (void)scrollColumnsRightBy:(NSInteger)shiftAmount
+{
+	[self scrollColumnToVisible:[self firstVisibleColumn] + shiftAmount];
+}
+
+/* **THE OUTER SCROLLER'S OWN ACTION, WHICH IS A FRACTION OF THE HORIZONTAL TRAVEL.** A scroller's value is where its knob
+ * sits in [0, 1]; multiplying that by the document's scrollable width is the one place the two agree, and it is the same
+ * arithmetic the scroll view's own action performs. */
+- (void)scrollViaScroller:(NSScroller *)sender
+{
+	NSClipView *clip;
+	CGFloat travel;
+	CGFloat x;
+
+	if (sender == nil || _scrollView == nil) {
+		return;
+	}
+	clip = [_scrollView contentView];
+	travel = NSWidth([_documentView bounds]) - NSWidth([clip bounds]);
+	if (travel <= 0.0) {
+		return;
+	}
+	x = (CGFloat)[sender floatValue] * travel;
+	[clip scrollToPoint:NSMakePoint(x, 0.0)];
+	[_scrollView reflectScrolledClipView:clip];
+}
+
+- (void)scrollRowToVisible:(NSInteger)row inColumn:(NSInteger)column
+{
+	NSTableView *table = [self cg_tableIfAnyForColumn:column];
+
+	if (table == nil || row < 0) {
+		return;
+	}
+	[table scrollRowToVisible:row];
+}
+
+/* AND THE OUTER BAR'S AUTOHIDE, which is the scroll view's own policy. */
+- (BOOL)autohidesScroller
+{
+	return [_scrollView autohidesScrollers];
+}
+
+- (void)setAutohidesScroller:(BOOL)flag
+{
+	[_scrollView setAutohidesScrollers:flag];
+	[self tile];
+}
+
+/* ---- THE CELL READS -------------------------------------------------------------------------- */
+
+- (NSCell *)selectedCellInColumn:(NSInteger)column
+{
+	NSInteger row = [self selectedRowInColumn:column];
+
+	return (row >= 0) ? [self loadedCellAtRow:row column:column] : nil;
+}
+
+/* **THE CELL THE COLUMN WOULD DRAW, MADE THE SAME WAY A DRAW MAKES IT** — the table's own `-preparedCellAtColumn:row:`,
+ * so the answer includes the item value and the delegate's styling rather than only what the data source returned. */
+- (NSCell *)loadedCellAtRow:(NSInteger)row column:(NSInteger)column
+{
+	NSTableView *table = [self cg_tableIfAnyForColumn:column];
+
+	if (table == nil || row < 0 || row >= [table numberOfRows]) {
+		return nil;
+	}
+	return [table preparedCellAtColumn:0 row:row];
+}
+
+/* ---- THE BEHAVIOUR FLAGS, EACH READ WHERE THE BROWSER DECIDES -------------------------------- */
+
+- (BOOL)allowsBranchSelection
+{
+	return _allowsBranchSelection;
+}
+
+/* READ IN `-tableView:shouldSelectRow:`: a branch row is refused when the flag is off and the delegate is item-based
+ * (the cell contract has no leaf/branch fact to consult, which is stated there). */
+- (void)setAllowsBranchSelection:(BOOL)flag
+{
+	_allowsBranchSelection = flag ? YES : NO;
+}
+
+/* READ BY EVERY COLUMN'S TABLE: this is the browser's flag, and the type-select itself is the table's. */
+- (BOOL)allowsTypeSelect
+{
+	return _allowsTypeSelect;
+}
+
+- (void)setAllowsTypeSelect:(BOOL)flag
+{
+	NSUInteger i;
+
+	_allowsTypeSelect = flag ? YES : NO;
+	for (i = 0; i < [_tables count]; i++) {
+		[[_tables objectAtIndex:i] setAllowsTypeSelect:_allowsTypeSelect];
+	}
+}
+
+/* **THE COLUMNS ARE A POOL AND ARE REUSED BY CONSTRUCTION**, so the answer is always YES and the setter refuses: a
+ * caller cannot ask this browser for columns that are not reused. */
+- (BOOL)reusesColumns
+{
+	return YES;
+}
+
+- (void)setReusesColumns:(BOOL)flag
+{
+	(void)flag;
+	fn_refuse_workspace("NSBrowser -setReusesColumns:",
+			    "columns that are not reused - this browser's columns are a fixed 256-slot pool, "
+			    "reused by construction");
+}
+
+- (BOOL)prefersAllColumnUserResizing
+{
+	return _prefersAllColumnUserResizing;
+}
+
+- (void)setPrefersAllColumnUserResizing:(BOOL)flag
+{
+	_prefersAllColumnUserResizing = flag ? YES : NO;
+}
+
+/* ---- THE COLUMN-WIDTH AUTOSAVE, IN THE TABLE'S OWN STORE -------------------------------------- */
+
+- (NSString *)columnsAutosaveName
+{
+	return _columnsAutosaveName;
+}
+
+/* **SETTING A NAME RESTORES WHAT WAS SAVED** — the same order the table uses for its own columns, and the same store
+ * (`NSUserDefaults`), under a key of this class's own so a browser and a table never read each other's array. */
+- (void)setColumnsAutosaveName:(NSString *)name
+{
+	NSString *copy = [name copy];
+
+	[_columnsAutosaveName release];
+	_columnsAutosaveName = copy;
+	if (_columnsAutosaveName == nil || [_columnsAutosaveName length] == 0) {
+		return;
+	}
+	{
+		NSString *key = [NSString stringWithFormat:@"NSBrowser Columns %@", _columnsAutosaveName];
+		NSArray *widths = [[NSUserDefaults standardUserDefaults] objectForKey:key];
+		NSUInteger i;
+
+		for (i = 0; i < [widths count] && i < [_columnWidths count]; i++) {
+			[_columnWidths replaceObjectAtIndex:i
+						 withObject:[NSNumber numberWithDouble:
+								[[widths objectAtIndex:i] doubleValue]]];
+		}
+	}
+	[self tile];
+}
+
+- (void)removeSavedColumnsWithAutosaveName:(NSString *)name
+{
+	if (name == nil) {
+		return;
+	}
+	[[NSUserDefaults standardUserDefaults] removeObjectForKey:
+		[NSString stringWithFormat:@"NSBrowser Columns %@", name]];
+}
+
+- (void)cg_saveColumnWidths
+{
+	NSMutableArray *widths;
+	NSUInteger i;
+
+	if (_columnsAutosaveName == nil || [_columnsAutosaveName length] == 0) {
+		return;
+	}
+	widths = [NSMutableArray array];
+	for (i = 0; i < [_columnWidths count]; i++) {
+		[widths addObject:[_columnWidths objectAtIndex:i]];
+	}
+	[[NSUserDefaults standardUserDefaults] setObject:widths
+						  forKey:[NSString stringWithFormat:@"NSBrowser Columns %@",
+							       _columnsAutosaveName]];
+}
+
+/* ---- THE ACTION AND THE EDIT ------------------------------------------------------------------ */
+
+/* **THE ACTION SEND, WHICH IS WHAT `-doClick:` DOES ONCE IT HAS RECORDED THE CLICK.** A caller with a synthetic click
+ * (a keyboard shortcut, a menu row) asks for the same thing without inventing a location. */
+- (void)sendAction
+{
+	if (_browserAction != NULL) {
+		[[NSApplication sharedApplication] sendAction:_browserAction to:_browserTarget from:self];
+	}
+}
+
+/* **BEGINNING AN EDIT AT AN ITEM'S PATH.** The path is selected first — every column down to the item loads, exactly as a
+ * click loads them — and then the last column's table starts the field editor over that row, which is the browser's only
+ * editable surface: the cells are the table's. */
+- (void)editItemAtIndexPath:(NSIndexPath *)indexPath withEvent:(NSEvent *)event select:(BOOL)select
+{
+	NSTableView *table;
+	NSInteger column;
+	NSInteger row;
+
+	if (indexPath == nil || [indexPath length] == 0) {
+		return;
+	}
+	[self setSelectionIndexPath:indexPath];
+	column = (NSInteger)[indexPath length] - 1;
+	row = (NSInteger)[indexPath indexAtPosition:[indexPath length] - 1];
+	table = [self cg_tableIfAnyForColumn:column];
+	if (table == nil || row < 0 || row >= [table numberOfRows]) {
+		return;
+	}
+	[table editColumn:0 row:row withEvent:event select:select];
+}
+
+/* ---- THE DRAG SOURCE -------------------------------------------------------------------------- */
+
+/* **WHETHER A DRAG MAY START, ASKED OF THE DELEGATE FIRST AND THE COLUMN'S TABLE SECOND.** The delegate's answer is
+ * Apple's own door; with none, the table decides (its data source must be able to write the rows), which is the same rule
+ * the table applies to its own rows. */
+- (BOOL)canDragRowsWithIndexes:(NSIndexSet *)rowIndexes inColumn:(NSInteger)column withEvent:(NSEvent *)event
+{
+	NSTableView *table = [self cg_tableIfAnyForColumn:column];
+	NSPoint point = NSZeroPoint;
+
+	if (table == nil || rowIndexes == nil || [rowIndexes count] == 0) {
+		return NO;
+	}
+	if (_delegate != nil && [_delegate respondsToSelector:@selector(browser:canDragRowsWithIndexes:inColumn:withEvent:)]) {
+		return [_delegate browser:self canDragRowsWithIndexes:rowIndexes inColumn:column withEvent:event];
+	}
+	if (event != nil) {
+		point = [table convertPoint:[event locationInWindow] fromView:nil];
+	}
+	return [table canDragRowsWithIndexes:rowIndexes atPoint:point];
+}
+
+/* **THE IMAGE THE DRAG CARRIES, DRAWN FROM THE ROWS THEMSELVES.** Each row's cell is asked for its string, the block is
+ * measured with the browser's font, and the image is that block with every row's text on its own line — a picture of what
+ * is being dragged rather than a generic icon. The offset is where the pointer was inside the block, which is what makes
+ * the image appear to be picked up where it was grabbed rather than at its corner. */
+- (NSImage *)draggingImageForRowsWithIndexes:(NSIndexSet *)rowIndexes
+				    inColumn:(NSInteger)column
+				   withEvent:(NSEvent *)event
+				      offset:(NSPointPointer)dragImageOffset
+{
+	NSTableView *table = [self cg_tableIfAnyForColumn:column];
+	NSMutableArray *lines = [NSMutableArray array];
+	NSFont *font;
+	NSSize size;
+	NSImage *image;
+	NSUInteger index;
+	CGFloat lineHeight;
+
+	if (table == nil || rowIndexes == nil || [rowIndexes count] == 0) {
+		return nil;
+	}
+	font = [NSFont systemFontOfSize:[NSFont systemFontSize]];
+	lineHeight = [font ascender] - [font descender] + 2.0;
+	for (index = [rowIndexes firstIndex]; index != NSNotFound; index = [rowIndexes indexGreaterThanIndex:index]) {
+		NSCell *cell = [self loadedCellAtRow:(NSInteger)index column:column];
+		NSString *text = [cell stringValue];
+
+		[lines addObject:(text != nil) ? text : @""];
+	}
+	size = NSMakeSize(1.0, lineHeight * (CGFloat)[lines count]);
+	for (index = 0; index < [lines count]; index++) {
+		NSSize lineSize = [[lines objectAtIndex:index] sizeWithAttributes:
+			[NSDictionary dictionaryWithObject:font forKey:NSFontAttributeName]];
+
+		if (lineSize.width + 6.0 > size.width) {
+			size.width = lineSize.width + 6.0;
+		}
+	}
+	image = [[[NSImage alloc] initWithSize:size] autorelease];
+	[image lockFocus];
+	[[NSColor colorWithCalibratedWhite:0.95 alpha:0.9] setFill];
+	[[NSBezierPath bezierPathWithRect:NSMakeRect(0.0, 0.0, size.width, size.height)] fill];
+	for (index = 0; index < [lines count]; index++) {
+		CGFloat y = size.height - lineHeight * (CGFloat)(index + 1);
+
+		[[lines objectAtIndex:index] drawAtPoint:NSMakePoint(3.0, y + 1.0) withAttributes:
+			[NSDictionary dictionaryWithObjectsAndKeys:font, NSFontAttributeName,
+				[NSColor controlTextColor], NSForegroundColorAttributeName, nil]];
+	}
+	[image unlockFocus];
+	if (dragImageOffset != NULL) {
+		*dragImageOffset = NSMakePoint(3.0, size.height - lineHeight + 1.0);
+	}
+	return image;
+}
+
+/* **THE MASK IS STORED AND HANDED TO EVERY COLUMN'S TABLE**, because each column IS the drag's source: a drag starts in a
+ * table, and the table asks this question of itself. */
+- (void)setDraggingSourceOperationMask:(NSDragOperation)mask forLocal:(BOOL)isLocal
+{
+	NSUInteger i;
+
+	if (isLocal) {
+		_localDragMask = mask;
+	} else {
+		_nonLocalDragMask = mask;
+	}
+	for (i = 0; i < [_tables count]; i++) {
+		[[_tables objectAtIndex:i] setDraggingSourceOperationMask:mask forLocal:isLocal];
+	}
+}
+
+/* ---- AND THE FOUR THAT REFUSE ------------------------------------------------------------------ */
+
+- (Class)matrixClass
+{
+	fn_refuse_workspace("NSBrowser -matrixClass",
+			    "a matrix - this browser's columns are NSTableViews in per-column scroll views");
+	return Nil;
+}
+
+- (void)setMatrixClass:(Class)matrixClass
+{
+	(void)matrixClass;
+	fn_refuse_workspace("NSBrowser -setMatrixClass:",
+			    "a matrix - this browser's columns are NSTableViews in per-column scroll views");
+}
+
+- (id)matrixInColumn:(NSInteger)column
+{
+	(void)column;
+	fn_refuse_workspace("NSBrowser -matrixInColumn:",
+			    "a matrix - this browser's columns are NSTableViews; ask -cg_tableForColumn: for the view");
+	return nil;
+}
+
+- (NSInteger)columnOfMatrix:(id)matrix
+{
+	(void)matrix;
+	fn_refuse_workspace("NSBrowser -columnOfMatrix:",
+			    "a matrix - this browser's columns are NSTableViews; ask -columnForTable: is private, "
+			    "and -cg_tableForColumn: is the seam");
+	return -1;
 }
 
 - (NSInteger)cg_columnCount { return (NSInteger)[_tables count]; }

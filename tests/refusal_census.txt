@@ -71,6 +71,7 @@ NSAlert.m                        1
 NSApplication.m                  10
 NSAttributedStringRTF.m          4
 NSAttributedStringRTFD.m         6
+NSBrowser.m                       5
 NSBezierPath.m                   10
 NSBitmapImageRep.m               22
 NSButtonCell.m                   1
@@ -129,4 +130,4 @@ NSWindow.m                       23
 # `fn_refuse_window` spelling was simply invisible to a census that counted the `APPKIT-REFUSE` literal, so every
 # refusal written the house way — which is the way the header asks for — moved no number.
 #
-# total: 311
+# total: 316

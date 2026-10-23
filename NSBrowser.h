@@ -32,12 +32,14 @@
 #define APPKIT_NSBROWSER_H
 
 #import <AppKit/NSControl.h>
+#import <AppKit/NSDragging.h>	/* NSDragOperation, which the drag doors take and answer. */
 
 NS_ASSUME_NONNULL_BEGIN
 
 @class NSBrowser;
 @class NSBrowserCell;
 @class NSColor;
+@class NSImage;
 @class NSIndexPath;
 @class NSIndexSet;
 @class NSMutableArray;
@@ -45,6 +47,8 @@ NS_ASSUME_NONNULL_BEGIN
 @class NSScrollView;
 @class NSTableView;
 @class NSString;
+@class NSScroller;
+@class NSEvent;
 @class NSView;
 
 typedef NSInteger NSBrowserColumnResizingType;
@@ -103,6 +107,13 @@ enum {
 /* What the item's cell should show. The browser sets it on the cell it makes; a string is the ordinary answer. */
 - (nullable id)browser:(NSBrowser *)browser objectValueForItem:(nullable id)item;
 
+/* Whether a drag may start from these rows. Asked by `-canDragRowsWithIndexes:inColumn:withEvent:`; a delegate that
+ * does not answer leaves the decision to the column's table, which asks its own data source. */
+- (BOOL)browser:(NSBrowser *)browser
+    canDragRowsWithIndexes:(NSIndexSet *)rowIndexes
+	      inColumn:(NSInteger)column
+	     withEvent:(nullable NSEvent *)event;
+
 /* ---- THE CELL-BASED CONTRACT, KEPT AS THE FALLBACK ------------------------------------------------------------ */
 /* Rows per column, for a delegate that does not answer `-browser:numberOfChildrenOfItem:`. */
 - (NSInteger)browser:(NSBrowser *)sender numberOfRowsInColumn:(NSInteger)column;
@@ -158,6 +169,19 @@ enum {
 	BOOL _titled;
 	NSInteger _clickedRow;
 	NSInteger _clickedColumn;
+	/* **AND THE REST OF THE ERA'S STATE, ONE IVAR PER DOOR THAT HAS ONE.** `_loadedZero` is whether column zero has ever
+	 * been built (`-isLoaded`); `_lastColumn` is the highest column the browser will grow to (`-lastColumn`, default -1
+	 * meaning "not set"); the two drag masks are the local and non-local operations (`-setDraggingSourceOperationMask:`);
+	 * and the three flags below are read where the browser makes a decision — the branch-selection gate, the type-select
+	 * the columns' tables do, and the divider drag that may resize every column at once. */
+	BOOL _loadedZero;
+	NSInteger _lastColumn;
+	NSDragOperation _localDragMask;
+	NSDragOperation _nonLocalDragMask;
+	BOOL _allowsBranchSelection;
+	BOOL _allowsTypeSelect;
+	BOOL _prefersAllColumnUserResizing;
+	NSString *_columnsAutosaveName;	/* COPIED, or nil for "no autosave" */
 	/* **AND THE TARGET/ACTION PAIR IS THE BROWSER'S OWN, WHICH IS A DEVIATION WITH A REASON.** `NSControl` keeps that pair
 	 * on its CELL in this tree — a button's action lives in the button cell — and a browser has NO cell, so `-action` would
 	 * answer NULL for ever and every click would send nothing. Apple's `NSControl` keeps the pair on the control, which is
@@ -325,6 +349,82 @@ enum {
 /* DOUBLE-CLICK AND THE ACTION. A selection sends the control's target/action; a double-click sends -doubleAction. */
 - (nullable SEL)doubleAction;
 - (void)setDoubleAction:(nullable SEL)action;
+
+/* ==================================================================================================================
+ * THE REST OF THE ERA'S SURFACE — what a browser does to a column or a row once it has one.
+ *
+ * **FOUR KINDS, AND EACH IS MEASURABLE RATHER THAN STORED.** The DRAG quartet is the source half of the tier's
+ * `NSDraggingSession` (the destination half is the table's, which each column already is): whether a drag may start, the
+ * image it carries, the operation mask, and beginning an edit at an item's path. The RELOAD trio re-reads rows without
+ * rebuilding the column. The DISPLAY and SCROLL family moves the viewport and the outer scroller — `-displayColumn:`,
+ * `-displayAllColumns`, `-scrollColumnsLeftBy:`, `-scrollColumnsRightBy:`, `-scrollViaScroller:`,
+ * `-scrollRowToVisible:inColumn:`, `-autohidesScroller` — because a browser wider than its columns has two axes to move
+ * on and only one of them is a column's own. And the FURNITURE: `-addColumn` grows the chain by one, `-lastColumn` says
+ * how far it may grow, `-isLoaded` says whether column zero exists, `-sendAction` is the action send `-doClick:` uses,
+ * and `-validateVisibleColumns` asks the delegate whether each visible column still holds.
+ *
+ * **THE COLUMN-WIDTH AUTOSAVE IS THE TABLE'S MECHANISM, REUSED.** `-columnsAutosaveName` stores the widths under a
+ * `NSUserDefaults` key of its own (`NSBrowser Columns <name>`), so setting a name RESTORES the saved widths and later
+ * column resizes persist them; `-removeSavedColumnsWithAutosaveName:` deletes the key. Nothing else is autosaved: the
+ * selected rows are the caller's to remember.
+ *
+ * **AND THREE DOORS REFUSE BY NAME, BECAUSE THIS BROWSER'S COLUMNS ARE TABLES.** `-matrixClass`, `-setMatrixClass:`,
+ * `-matrixInColumn:` and `-columnOfMatrix:` describe Apple's implementation — a matrix of `NSBrowserCell`s per column —
+ * and this class has no matrix to hand out. A caller that wants a column's view asks `-cg_tableForColumn:`, which is the
+ * tier's own seam and says what it is. **`-setReusesColumns:` refuses for the same kind of reason**: the browser's
+ * columns ARE a fixed 256-slot pool and are reused by construction, so `-reusesColumns` answers YES and a caller cannot
+ * ask for anything else.
+ * ================================================================================================================ */
+- (BOOL)canDragRowsWithIndexes:(NSIndexSet *)rowIndexes inColumn:(NSInteger)column withEvent:(nullable NSEvent *)event;
+- (nullable NSImage *)draggingImageForRowsWithIndexes:(NSIndexSet *)rowIndexes
+					    inColumn:(NSInteger)column
+					   withEvent:(nullable NSEvent *)event
+					      offset:(nullable NSPointPointer)dragImageOffset;
+- (void)setDraggingSourceOperationMask:(NSDragOperation)mask forLocal:(BOOL)isLocal;
+- (void)editItemAtIndexPath:(NSIndexPath *)indexPath withEvent:(nullable NSEvent *)event select:(BOOL)select;
+
+- (void)reloadDataForRowIndexes:(NSIndexSet *)rowIndexes inColumn:(NSInteger)column;
+- (void)noteHeightOfRowsWithIndexesChanged:(NSIndexSet *)indexSet inColumn:(NSInteger)column;
+- (void)validateVisibleColumns;
+
+- (void)addColumn;
+- (void)displayColumn:(NSInteger)column;
+- (void)displayAllColumns;
+- (NSInteger)lastColumn;
+- (void)setLastColumn:(NSInteger)column;
+- (BOOL)isLoaded;
+
+- (void)scrollColumnsLeftBy:(NSInteger)shiftAmount;
+- (void)scrollColumnsRightBy:(NSInteger)shiftAmount;
+- (void)scrollViaScroller:(nullable NSScroller *)sender;
+- (void)scrollRowToVisible:(NSInteger)row inColumn:(NSInteger)column;
+- (BOOL)autohidesScroller;
+- (void)setAutohidesScroller:(BOOL)flag;
+
+- (nullable NSCell *)selectedCellInColumn:(NSInteger)column;
+- (nullable NSCell *)loadedCellAtRow:(NSInteger)row column:(NSInteger)column;
+
+- (BOOL)allowsBranchSelection;
+- (void)setAllowsBranchSelection:(BOOL)flag;
+- (BOOL)allowsTypeSelect;
+- (void)setAllowsTypeSelect:(BOOL)flag;
+- (BOOL)reusesColumns;
+- (void)setReusesColumns:(BOOL)flag;
+- (BOOL)prefersAllColumnUserResizing;
+- (void)setPrefersAllColumnUserResizing:(BOOL)flag;
+
+- (nullable NSString *)columnsAutosaveName;
+- (void)setColumnsAutosaveName:(nullable NSString *)name;
+- (void)removeSavedColumnsWithAutosaveName:(NSString *)name;
+
+/* Sends the control's action — the one `-doClick:` performs after it records where the click landed. */
+- (void)sendAction;
+
+/* AND THE FOUR THAT REFUSE: see the block note above for why this browser has no matrix to answer with. */
+- (nullable Class)matrixClass;
+- (void)setMatrixClass:(nullable Class)matrixClass;
+- (nullable id)matrixInColumn:(NSInteger)column;
+- (NSInteger)columnOfMatrix:(nullable id)matrix;
 
 /* **THE TIER'S SEAMS.** The table-backed columns are private; a probe asks how many there are and which table a
  * column owns. */
