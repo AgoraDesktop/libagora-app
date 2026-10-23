@@ -1075,6 +1075,16 @@ static NSString *fn_unique_destination(NSString *directory, NSString *name, NSFi
 
 /* **A TEMPORARY FILE THAT IS REALLY THERE**, with a unique name in the system's temporary directory — what a caller that
  * says "open a scratch file" needs to be able to write into. */
+- (BOOL)openTempFile:(NSString *)fullPath
+{
+	if (fullPath == nil) {
+		return NO;
+	}
+	/* THE DEPRECATED FORM OPENS AN EXISTING FILE; the default handler is the same Launch Services answer
+	 * `-openFile:` uses. The creation door is the hyphen-less one above. */
+	return [self openFile:fullPath];
+}
+
 - (NSString *)openTempFile
 {
 	/* **THE TEMPORARY DIRECTORY MAY NOT EXIST, SO THE DOOR TRIES THE STANDARD ONES IN ORDER.** `NSTemporaryDirectory()`

@@ -1509,6 +1509,28 @@ is no `NSScriptCommand` or `NSScriptObjectSpecifier` in this tree.
 `tests/document_tail.m` measures it in **41 checks**; the new `appkit-document-tail` probe uses a private close-decision
 seam and a recorder as the error presenter so the asynchronous, modal production paths remain testable offscreen.
 
+## 54. The last two classes: a package is a directory only when told so, and the deprecated temp-file verb
+
+**`NSSavePanel` is COMPLETE at 47 of 47 and `NSWorkspace` at 58 of 58, the fifteenth and sixteenth classes to finish —
+and with them every class this tree has that carries a surface is COMPLETE: 4505 of 4505 selectors over 129 classes.**
+The 37 classes in the plan's absent list are still absent; the class count is 131 of 168, and their selectors are not
+in the offered total.
+
+**THE SAVE PANEL'S PACKAGE FLAG IS A REAL LISTING RULE.** `-isExpanded` answers NO because this tier has no expanded
+layout. `-treatsFilePackagesAsDirectories` splits the directory listing: with NO (the default) a package — a directory
+whose extension is `.app`, `.bundle`, `.framework`, `.plugin` or `.kext` and which has a `Contents` inside — is listed
+with the files and cannot be entered; with YES it gains the directory slash and is navigable like any other directory,
+including through the typed-path accept. The probe creates `Bundle.app/Contents` and checks both list positions.
+
+**THE WORKSPACE'S DEPRECATED VERB IS A SPELLING OF `-openFile:`.** The hyphen-less `-openTempFile` CREATES a temporary
+file and answers its path; the 10.6 header's `-openTempFile:` takes an existing path and OPENS it, and that is
+`-openFile:` through the Launch Services seam. The probe checks the nil and missing-file answers, which are the two
+this offscreen harness can measure without launching a handler.
+
+`tests/save_panel.m` and `tests/workspace_fileops.m` were extended rather than given new probes; the suite stays at 160
+tests and both additions are negative-where-possible (the package appears as a file, then as a directory; nil and a
+missing path answer NO).
+
 ## Keeping in sync
 
 The Fiwix AppKit is the origin and this repository has now diverged from it in the seam. A fix made there

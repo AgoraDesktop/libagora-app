@@ -1103,6 +1103,15 @@ the compositor is really gone.
   and the three scripting doors refuse by name. `tests/document_tail.m` measures it in 41 checks, and the existing
   close-all probe now pins the walk's stop-at-refusal semantics.
 
+- **And the LAST TWO CLASSES ARE COMPLETE — `NSSavePanel` 47 of 47 and `NSWorkspace` 58 of 58.** The save panel's
+  `-isExpanded` answers NO (this tier has no expanded layout), and `-treatsFilePackagesAsDirectories` is now a REAL
+  listing rule: with NO a package (`Bundle.app` with a `Contents` inside) sits with the files and cannot be entered;
+  with YES it is a directory like any other, in the list and in the typed-path accept. `NSWorkspace`'s one row was
+  the deprecated `-openTempFile:` — the hyphen-less door CREATES a temp file and answers its path, while the era's
+  colon door OPENS an existing one and is `-openFile:` by another name. **THAT CLOSES THE SURFACE THIS TREE CARRIES:
+  4505 of 4505 selectors over all 129 classes with a surface, every one of them complete.** The 37 absent classes
+  remain absent — the class count is still 131 of 168 — and their selectors are not in the offered total.
+
 - **`ctest`: 160 of 160 passed** (the keyboard and the seam, the AppKit and its input path, the controls and their
   metrics, the field control and its cell and its bezel and its placeholder and what it may hold, the text path and its
   word granularity and the multi-line view and its wrapping and its scrolling and its READING OF THE STORE, the STORE

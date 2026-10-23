@@ -24,6 +24,7 @@
 #import "NSTextField.h"
 #import "NSView.h"
 #import "NSWindow.h"
+#import "NSWorkspace.h"
 
 #import <Foundation/NSCharacterSet.h>
 #import <Foundation/NSData.h>
@@ -390,6 +391,12 @@ static BOOL fn_extension_is_allowed(NSString *name, NSArray *types)
 		if (![manager fileExistsAtPath:fullPath isDirectory:&isDirectory]) {
 			continue;
 		}
+		/* **A PACKAGE IS A DIRECTORY ONLY WHEN THE CALLER SAYS SO.** The flag's reader is this split: with NO (the
+		 * default) a package sits with the files and cannot be entered; with YES it is a directory like any other. */
+		if (isDirectory && !_treatsFilePackagesAsDirectories
+		    && [[NSWorkspace sharedWorkspace] isFilePackageAtPath:fullPath]) {
+			isDirectory = NO;
+		}
 		if (_panelDelegate != nil && [_panelDelegate respondsToSelector:@selector(panel:shouldShowFilename:)]
 		    && ![(_panelDelegate) panel:self shouldShowFilename:fullPath]) {
 			continue;
@@ -661,8 +668,13 @@ static BOOL fn_extension_is_allowed(NSString *name, NSArray *types)
 		}
 		if ([[NSFileManager defaultManager] fileExistsAtPath:[url path] isDirectory:&isDirectory]
 		    && isDirectory) {
-			[self cg_navigateToURL:url];
-			return NO;
+			BOOL package = !_treatsFilePackagesAsDirectories
+				&& [[NSWorkspace sharedWorkspace] isFilePackageAtPath:[url path]];
+
+			if (!package) {
+				[self cg_navigateToURL:url];
+				return NO;
+			}
 		}
 		required = ([_requiredFileType length] > 0) ? _requiredFileType
 			: ([_allowedFileTypes count] > 0 ? [_allowedFileTypes objectAtIndex:0] : nil);
@@ -1000,6 +1012,23 @@ static BOOL fn_extension_is_allowed(NSString *name, NSArray *types)
 {
 	_extensionHidden = flag;
 	[_extensionButton setState:flag ? NSOnState : NSOffState];
+}
+/* **THE EXPANDED FORM IS NOT THIS TIER'S FACE.** See the header: the answer is NO, and there is no setter because
+ * Apple's only setter is the expanded layout this tier does not build. */
+- (BOOL)isExpanded
+{
+	return NO;
+}
+
+- (BOOL)treatsFilePackagesAsDirectories
+{
+	return _treatsFilePackagesAsDirectories;
+}
+
+- (void)setTreatsFilePackagesAsDirectories:(BOOL)flag
+{
+	_treatsFilePackagesAsDirectories = flag ? YES : NO;
+	[self cg_reloadEntries];	/* the listing's directory/file split depends on it */
 }
 
 - (NSString *)prompt { return _prompt; }

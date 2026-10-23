@@ -156,6 +156,10 @@ int main(void)
 		if (temp != nil) {
 			(void)[manager removeItemAtPath:temp error:NULL];
 		}
+		check(![workspace openTempFile:nil],
+		      "the deprecated `-openTempFile:` answers NO for a nil path");
+		check(![workspace openTempFile:[scratch stringByAppendingPathComponent:@"missing.tmp"]],
+		      "and NO when the file it would open is not there");
 
 		{
 			NSString *bundle = [scratch stringByAppendingPathComponent:@"Thing.app"];

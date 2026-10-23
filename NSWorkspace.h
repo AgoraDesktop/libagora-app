@@ -241,6 +241,9 @@ enum {
 - (nullable NSArray *)duplicateURLs:(NSArray *)URLs
 		  completionHandler:(void (^ _Nullable)(NSDictionary *newURLs))handler;
 - (nullable NSString *)openTempFile;
+/* **THE ERA'S DEPRECATED VERB, WHICH TAKES AN EXISTING TEMP FILE AND OPENS IT.** The hyphen-less door above CREATES one
+ * and answers its path; this one is `-openFile:` by another name, and that is what Apple's 10.6 header declares. */
+- (BOOL)openTempFile:(nullable NSString *)fullPath;
 
 - (nullable NSArray *)mountedLocalVolumePaths;
 - (nullable NSArray *)fileLabels;

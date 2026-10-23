@@ -25,8 +25,8 @@
  * `-panel:userEnteredFilename:confirmed:` may rename it, `-panel:didChangeToDirectoryURL:` and the deprecated
  * `-panel:directoryDidChange:` hear navigation, and `-panelSelectionDidChange:` hears a selection.
  *
- * **WHAT THIS TIER DOES NOT DO, NAMED.** There is no expanded save panel (`-isExpanded`/`-setExpanded:` are not declared),
- * no file packages (`-treatsFilePackagesAsDirectories` is not declared), no sidebar, no icon grid and no replacement
+ * **WHAT THIS TIER DOES NOT DO, NAMED.** There is no expanded save panel (`-isExpanded` answers NO, and there is no
+ * second layout to set), no sidebar, no icon grid and no replacement
  * confirmation: the panel accepts an existing file's URL and the caller's save overwrites it. The sandbox powerbox and
  * iCloud are refused by their absence, as the plan says. The accessory view gets a fixed 44-point band at the bottom.
  *
@@ -112,6 +112,7 @@ enum {
 	BOOL _canCreateDirectories;
 	BOOL _canSelectHiddenExtension;
 	BOOL _extensionHidden;
+	BOOL _treatsFilePackagesAsDirectories;
 	BOOL _showsHiddenFiles;
 	/* THE OPEN PANEL'S BITS, in the base so the one accept path can read them. */
 	BOOL _canChooseFiles;
@@ -147,6 +148,14 @@ enum {
 - (BOOL)canCreateDirectories;
 - (void)setCanCreateDirectories:(BOOL)flag;
 - (BOOL)canSelectHiddenExtension;
+/* **THERE IS NO EXPANDED SAVE PANEL IN THIS TIER, SO THE ANSWER IS NO.** Apple's expanded form is a second, taller
+ * layout with a file browser; this tier's panel is the single browser below. The getter exists so a caller's question
+ * is answered rather than unrecognized, and the NO is the truth about this face. */
+- (BOOL)isExpanded;
+/* **A FILE PACKAGE IS A DIRECTORY THE USER MAY OR MAY NOT ENTER.** YES lets the panel navigate into a package; NO
+ * treats it as a file (which is Apple's default). */
+- (BOOL)treatsFilePackagesAsDirectories;
+- (void)setTreatsFilePackagesAsDirectories:(BOOL)flag;
 - (void)setCanSelectHiddenExtension:(BOOL)flag;
 - (BOOL)isExtensionHidden;
 - (void)setExtensionHidden:(BOOL)flag;

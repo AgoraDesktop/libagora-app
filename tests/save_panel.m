@@ -172,6 +172,9 @@ int main(void)
 		[files removeItemAtPath:directory error:NULL];
 		(void)[files createDirectoryAtPath:directory withIntermediateDirectories:YES attributes:nil error:NULL];
 		(void)[files createDirectoryAtPath:subdirectory withIntermediateDirectories:NO attributes:nil error:NULL];
+		(void)[files createDirectoryAtPath:[[directory stringByAppendingPathComponent:@"Bundle.app"]
+			    stringByAppendingPathComponent:@"Contents"]
+			    withIntermediateDirectories:YES attributes:nil error:NULL];
 		make_file(directory, @"a.txt");
 		make_file(directory, @"b.rtf");
 		make_file(directory, @"exists.txt");
@@ -206,7 +209,18 @@ int main(void)
 			visible = [panel cg_visibleFilenames];
 			printf("  (note: %lu entries visible, first \"%s\")\n", (unsigned long)[visible count],
 			       [[visible componentsJoinedByString:@", "] UTF8String]);
-			check([visible containsObject:@"a.txt"] && [visible containsObject:@"sub/"]
+			check(![panel isExpanded], "there is no expanded save panel, so the answer is NO");
+			check(![panel treatsFilePackagesAsDirectories], "packages are files by default");
+			check([visible containsObject:@"Bundle.app"],
+			      "and a package is listed as a file, with no directory slash");
+			[panel setTreatsFilePackagesAsDirectories:YES];
+			check([panel treatsFilePackagesAsDirectories], "the package flag round-trips");
+			visible = [panel cg_visibleFilenames];
+			check([visible containsObject:@"Bundle.app/"],
+			      "and YES makes the package a directory the listing can enter");
+			[panel setTreatsFilePackagesAsDirectories:NO];
+			visible = [panel cg_visibleFilenames];
+			check([visible containsObject:@"Bundle.app"] && [visible containsObject:@"a.txt"] && [visible containsObject:@"sub/"]
 				      && [visible containsObject:@"b.rtf"],
 			      "the listing shows files and directories");
 			check(![visible containsObject:@".hidden"], "a hidden file is not shown by default");
