@@ -176,6 +176,15 @@ target_link_libraries(slider_ink PRIVATE App m)
 add_test(NAME appkit-slider-ink COMMAND slider_ink)
 set_tests_properties(appkit-slider-ink PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
 
+# **THE SLIDER'S TICK VALUES, ITS TITLE AND THE TWO NO-ARGUMENT INK DOORS.** The ticks are checked in both directions
+# (the nth mark's value, the nearest mark to a value, and the snap every setter then performs), each mark's centre is
+# matched to the knob's centre in both orientations AND in a flipped view — the case the old inline ink drew upside
+# down — and the title's band is measured by the knob moving down and the words drawing above it.
+add_executable(slider_title_ticks slider_title_ticks.m)
+target_link_libraries(slider_title_ticks PRIVATE App m)
+add_test(NAME appkit-slider-title-ticks COMMAND slider_title_ticks)
+set_tests_properties(appkit-slider-title-ticks PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
+
 # AND THE TRACKING AREA: the class that replaced the window's blanket enter/exit synthesis, and whose SCOPE word is
 # what keeps a background window's controls from lighting up.
 add_executable(tracking_area tracking_area.m)

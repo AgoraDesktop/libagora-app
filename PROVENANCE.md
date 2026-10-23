@@ -1295,6 +1295,47 @@ reader to discover.
 asked first with the link it was given, the completion range and list with their negatives, the insert replacing exactly
 the typed characters — and every refusing door answering its type's empty value without crashing.
 
+## 48. The slider pair complete: ticks as values, a title as a cell, and a flipped scale that was upside down
+
+**THE PAIR IS COMPLETE FOR THE ERA: `NSSlider` 30 of 30 and `NSSliderCell` 35 of 35, the seventh and eighth classes to
+finish.** The tick marks had been INK since the first slider slice; this one makes them part of the control's contract.
+
+**THE TICKS ARE EVENLY SPACED WITH BOTH ENDS INCLUDED**, so the nth of n values is `min + (max-min)·n/(n-1)`, one mark is
+the minimum, and no marks is a value with nothing to snap to. `-closestTickMarkValueToValue:` is the nearest of those, and
+`-allowsTickMarkValuesOnly` reads it in the ONE place every value goes through — `-setDoubleValue:` — so the standing value
+snaps when the flag is turned on, every later value snaps, and moving an end re-clamps and re-snaps through the same door.
+`-rectOfTickMarkAtIndex:` and `-indexOfTickMarkAtPoint:` make the scale askable in the control's coordinates; the hit is
+the mark's own rectangle grown by three points, and a point between marks answers `NSNotFound` because that is what "at
+point" means.
+
+**AND THE NEW PUBLIC GEOMETRY FOUND A BUG IN THE OLD INK.** The vertical mark's along-track position used the unflipped
+formula for both flips, so a FLIPPED vertical slider drew its scale upside down while its knob ran the other way. The
+probe checks each mark's centre against the knob's centre at that mark's value in both orientations and both flips; the
+shared helper `-cg_tickRectAtIndex:inFrame:flipped:` is now what the public door and the drawing both call, so the two
+cannot disagree again.
+
+**THE TITLE IS AN `NSCell`, APPLE'S SHAPE, DRAWN IN A BAND TAKEN OFF THE TOP.** `-titleCell` is a private text cell with a
+colour (the base cell has a font and an alignment but no text colour); `-titleFont` and `-titleColor` are the conveniences
+over it, and `-setTitle:` mirrors the label into it so the string answered and the string drawn are the same. The band is
+removed from the frame before the track and knob are placed, so a titled knob sits lower and an UNTITLED slider's geometry
+is exactly what it was. A frame too short for both keeps four points for the track rather than letting the label eat it.
+
+**THE TWO NO-ARGUMENT INK DOORS NOW HAVE A FRAME.** `-drawKnob` and the deprecated `-knobRectFlipped:` take their
+rectangle from `-controlView`; with no view they answer their type's empty value AND print the shared refusal, because a
+measurement cell has no frame to place ink in. `-trackRect` is the same shape for the rectangle the knob travels in.
+`-image` is Apple's BACKGROUND image (`-setImage:(NSImage *)backgroundImage` is the SDK's own parameter name), so it is
+not a refused face: the cell draws it under the track, the knob and the title, and the probe checks a corner pixel that
+is red while the image is set and white after it is removed.
+
+**THE RECOUNT FOUND THE HANDOFF ONE HIGH.** `HANDOFF-5.md` said 120 of 129 classes at complete coverage; recomputing from
+the OLD pin's `sel:` lines gives 119, and the slider pair makes 121. The census file's prose now says so at the number,
+which is where the next reader will look.
+
+`tests/slider_title_ticks.m` measures it in **52 checks**: the mark values and the snap in both directions, the mark
+centres against the knob's centres in both orientations and flips, the hit test and its negative, the knob's thickness and
+the surviving round trip, the title's cell/font/colour, the band moving the knob and the words drawing in it, and every
+refusing door answering its type's empty value.
+
 ## Keeping in sync
 
 The Fiwix AppKit is the origin and this repository has now diverged from it in the seam. A fix made there

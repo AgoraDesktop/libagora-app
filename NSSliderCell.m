@@ -19,9 +19,15 @@
 #import <AppKit/NSSliderCell.h>
 #import <AppKit/NSView.h>
 #import <AppKit/NSColor.h>
+#import <AppKit/NSFont.h>
 #import <AppKit/NSBezierPath.h>
 #import <AppKit/NSGraphics.h>
+#import <AppKit/NSStringDrawing.h>
+#import <AppKit/NSAttributedString.h>
 #import <Foundation/NSGeometry.h>
+#import <Foundation/NSString.h>
+
+#include "AppKitRefusal.h"
 
 #include <math.h>
 
@@ -50,6 +56,15 @@
  * fill that covers part of it must round ALIKE, or the fill's end shows through the track's own curve. */
 #define NS_SLIDER_TRACK_RADIUS		NS_CELL_BEZEL_RADIUS
 
+/* **THE TICKS' TWO MEASURES, EACH TAKEN FROM SOMETHING RATHER THAN CHOSEN FROM NOTHING.** A tick begins just clear of
+ * the TRACK and ends just clear of the GRABBER — `BREADTH / 2` is exactly where the grabber's outline is — which is
+ * the whole reason to have them: a scale that stops inside the grabber is a scale only the gaps between values can
+ * show. MEASURING THE FAR END FROM THE GRABBER IS THE POINT: a fixed length would be swallowed whole by a tall
+ * grabber and would dwarf a short one, whereas `PEEK` is the same few points of line below the grabber's edge
+ * whatever size that grabber is. */
+#define NS_SLIDER_TICK_INSET		1.0
+#define NS_SLIDER_TICK_PEEK		3.0
+
 /* **AND THE SHAPE'S CONSTANTS. THE GRABBER IS A TEARDROP — ROUND AT THE TOP AND NARROW AT THE BOTTOM — AND THE
  * QUESTION THAT DECIDED THE REST OF THEM IS HOW THE SIDES MEET THE NARROW END.**
  *
@@ -74,6 +89,107 @@
 #define NS_SLIDER_KNOB_SIDE_BOW		0.6	/* of the bow that would just keep the side convex */
 #define FN_KNOB_PI			3.14159265358979323846
 
+/* ============================================================================================
+ * THE TITLE'S DEFAULT CELL, AND THE PRIVATE ARITHMETIC THE NEW DOORS SHARE.
+ * ============================================================================================ */
+
+/* **A TITLE CELL IS AN `NSCell`, AND THE DEFAULT ONE IS THIS PRIVATE TEXT CELL.** Apple's title cell is an `NSCell`,
+ * which is what lets a caller replace it and keep the slider's own arithmetic; what a default title needs beyond the
+ * base cell is exactly one thing — a COLOUR — because `NSCell` has a font and an alignment but no text colour. So this
+ * subclass adds the colour and centres the title on the band it is given. The centre is computed HERE rather than
+ * left to `-alignment` because the slider passes a band the width of the whole control and a title cell that honoured
+ * only the base's left alignment would draw every title at the slider's left edge. */
+@interface AGSliderTitleCell : NSCell
+{
+	NSColor *_titleColor;		/* RETAINED */
+}
+- (nullable NSColor *)titleColor;
+- (void)setTitleColor:(nullable NSColor *)color;
+@end
+
+@implementation AGSliderTitleCell
+
+- (void)dealloc
+{
+	[_titleColor release];
+	[super dealloc];
+}
+
+- (NSColor *)titleColor
+{
+	return _titleColor;
+}
+
+- (void)setTitleColor:(NSColor *)color
+{
+	if (color != _titleColor) {
+		[color retain];
+		[_titleColor release];
+		_titleColor = color;
+	}
+}
+
+- (void)drawInteriorWithFrame:(NSRect)cellFrame inView:(id)controlView
+{
+	NSString *title = [self title];
+	NSFont *font = (NSFont *)[self font];
+	NSColor *ink;
+	NSDictionary *attributes;
+	NSSize size;
+	CGFloat baseline;
+
+	(void)controlView;
+	if (title == nil || [title length] == 0 || NSWidth(cellFrame) <= 0.0 || NSHeight(cellFrame) <= 0.0) {
+		return;
+	}
+	if (font == nil) {
+		font = [NSFont systemFontOfSize:12.0];
+	}
+	/* A DISABLED SLIDER'S TITLE IS DRAWN IN THE DISABLED INK, the same reading its knob takes: the label is still
+	 * there and it still says what the control is; what changed is that the control will not move. A caller's own
+	 * colour is used while the control is enabled, which is what makes `-setTitleColor:` a fact about the face rather
+	 * than about storage. */
+	ink = ![self isEnabled] ? [NSColor disabledControlTextColor]
+			       : ((_titleColor != nil) ? _titleColor : [NSColor controlTextColor]);
+	attributes = [NSDictionary dictionaryWithObjectsAndKeys:font, NSFontAttributeName, ink,
+		      NSForegroundColorAttributeName, nil];
+	size = [title sizeWithAttributes:attributes];
+	if (size.width <= 0.0 || size.height <= 0.0) {
+		return;
+	}
+	/* THE BASELINE ARITHMETIC IS `NSTextFieldCell`'s, one class over: the line's middle is the band's middle, and
+	 * `-drawAtPoint:` takes a BASELINE (not a lower-left corner) in this stack. */
+	baseline = NSMidY(cellFrame) + ([font ascender] - (CGFloat)fabs((double)[font descender])) / 2.0;
+	[title drawAtPoint:NSMakePoint(NSMidX(cellFrame) - size.width / 2.0, baseline) withAttributes:attributes];
+}
+
+@end
+
+/* **THE PRIVATE DOORS, DECLARED BEFORE THEY ARE USED.** The geometric helpers predate this unit and were defined in
+ * reading order; the tick and title helpers are shared by a public door and a drawing door, so naming them here keeps
+ * a change to the arithmetic in ONE place. */
+@interface NSSliderCell (AGSliderPrivate)
+- (CGFloat)cg_fraction;
+- (CGFloat)fn_grabberAlong;
+- (CGFloat)cg_titleBandHeight;
+- (NSRect)cg_barRectForCellFrame:(NSRect)cellFrame flipped:(BOOL)flipped;
+- (NSRect)cg_trackRectForCellFrame:(NSRect)cellFrame;
+- (NSRect)cg_tickRectAtIndex:(NSInteger)index inFrame:(NSRect)cellFrame flipped:(BOOL)flipped;
+- (void)cg_drawTickMarks:(NSRect)cellFrame flipped:(BOOL)flipped;
+- (void)cg_drawTitleInCellFrame:(NSRect)cellFrame flipped:(BOOL)flipped inView:(id)controlView;
+@end
+
+/* THE VALUE THE nth OF n MARKS STANDS FOR: the marks are evenly spaced with BOTH ENDS included, so n == 1 is the
+ * minimum and n == 0 is not a division at all. A static function rather than a method because it is arithmetic over
+ * three numbers the caller has, and three of the doors below ask it the same question. */
+static double fn_tick_value(double lo, double hi, NSInteger index, NSInteger count)
+{
+	if (count <= 1) {
+		return lo;
+	}
+	return lo + (hi - lo) * ((double)index / (double)(count - 1));
+}
+
 @implementation NSSliderCell
 
 /* ============================================================================================
@@ -90,6 +206,10 @@ static NSString * const AGCoderSliderTypeKey = @"sliderType";
 static NSString * const AGCoderSliderTicksKey = @"numberOfTickMarks";
 static NSString * const AGCoderSliderTickPositionKey = @"tickMarkPosition";
 static NSString * const AGCoderSliderAltIncrementKey = @"altIncrementValue";
+static NSString * const AGCoderSliderKnobThicknessKey = @"knobThickness";
+static NSString * const AGCoderSliderTickValuesOnlyKey = @"allowsTickMarkValuesOnly";
+static NSString * const AGCoderSliderTitleFontKey = @"titleFont";
+static NSString * const AGCoderSliderTitleColorKey = @"titleColor";
 
 - (void)encodeWithCoder:(NSCoder *)aCoder
 {
@@ -101,6 +221,10 @@ static NSString * const AGCoderSliderAltIncrementKey = @"altIncrementValue";
 	[aCoder encodeInteger:_numberOfTickMarks forKey:AGCoderSliderTicksKey];
 	[aCoder encodeInteger:(NSInteger)_tickMarkPosition forKey:AGCoderSliderTickPositionKey];
 	[aCoder encodeDouble:_altIncrementValue forKey:AGCoderSliderAltIncrementKey];
+	[aCoder encodeDouble:_knobThickness forKey:AGCoderSliderKnobThicknessKey];
+	[aCoder encodeBool:_allowsTickMarkValuesOnly forKey:AGCoderSliderTickValuesOnlyKey];
+	[aCoder encodeObject:_titleFont forKey:AGCoderSliderTitleFontKey];
+	[aCoder encodeObject:_titleColor forKey:AGCoderSliderTitleColorKey];
 }
 
 - (instancetype)initWithCoder:(NSCoder *)aDecoder
@@ -130,6 +254,24 @@ static NSString * const AGCoderSliderAltIncrementKey = @"altIncrementValue";
 	if ([aDecoder containsValueForKey:AGCoderSliderAltIncrementKey]) {
 		_altIncrementValue = [aDecoder decodeDoubleForKey:AGCoderSliderAltIncrementKey];
 	}
+	/* **THE NEW STATE, AND THE DEFAULTS A DECODE DOES NOT GET FROM `-init`.** A decoded cell never runs `-init`, so
+	 * the two objects the face needs — a title font and a title colour — are made here FIRST and then overwritten by
+	 * the file's own values when it has them. The setters are used rather than the ivars so the title cell (made
+	 * lazily below) is kept in step by the same code a caller's setter uses. */
+	_titleFont = [[NSFont systemFontOfSize:12.0] retain];
+	_titleColor = [[NSColor controlTextColor] retain];
+	if ([aDecoder containsValueForKey:AGCoderSliderKnobThicknessKey]) {
+		_knobThickness = [aDecoder decodeDoubleForKey:AGCoderSliderKnobThicknessKey];
+	}
+	if ([aDecoder containsValueForKey:AGCoderSliderTickValuesOnlyKey]) {
+		_allowsTickMarkValuesOnly = [aDecoder decodeBoolForKey:AGCoderSliderTickValuesOnlyKey];
+	}
+	if ([aDecoder containsValueForKey:AGCoderSliderTitleFontKey]) {
+		[self setTitleFont:[aDecoder decodeObjectForKey:AGCoderSliderTitleFontKey]];
+	}
+	if ([aDecoder containsValueForKey:AGCoderSliderTitleColorKey]) {
+		[self setTitleColor:[aDecoder decodeObjectForKey:AGCoderSliderTitleColorKey]];
+	}
 	return self;
 }
 
@@ -154,6 +296,14 @@ static NSString * const AGCoderSliderAltIncrementKey = @"altIncrementValue";
 		_numberOfTickMarks = 0;
 		_tickMarkPosition = NSTickMarkBelow;
 		_altIncrementValue = 0.0;
+		/* **ZERO MEANS "THE SHAPE'S OWN THICKNESS"**, which is why this is not initialised to a number here: the
+		 * teardrop and the circle have different lengths, and copying one of them into storage would make the other
+		 * shape's default a caller's setting. */
+		_knobThickness = 0.0;
+		_allowsTickMarkValuesOnly = NO;
+		/* THE TITLE'S TWO CONVENIENCES, RETAINED, AND THE CELL ITSELF LAZY — see the header's ivar note. */
+		_titleFont = [[NSFont systemFontOfSize:12.0] retain];
+		_titleColor = [[NSColor controlTextColor] retain];
 		/* **AND THE ONE PLACE THIS CELL DEPARTS FROM `NSCell`'S ZEROED `-isContinuous`: A SLIDER IS CONTINUOUS BY
 		 * DEFAULT.** The ground is the tracking loop's own shape — a slider's value is set BY the pointer, and a value
 		 * that only SPOKE when the button came up is a value the caller cannot watch move, which is the whole point of
@@ -167,6 +317,9 @@ static NSString * const AGCoderSliderAltIncrementKey = @"altIncrementValue";
 
 - (void)dealloc
 {
+	[_titleCell release];
+	[_titleFont release];
+	[_titleColor release];
 	[super dealloc];
 }
 
@@ -226,6 +379,14 @@ static NSString * const AGCoderSliderAltIncrementKey = @"altIncrementValue";
 	if (clamped > _maxValue) {
 		clamped = _maxValue;
 	}
+	/* **AND THEN THE TICKS, WHEN THE CALLER HAS SAID THE VALUE MAY ONLY BE A MARK.** The snap happens HERE rather
+	 * than in each setter for the same reason the clamp does: every value door funnels through this one, including
+	 * the re-clamp that moving an end performs, so "values only on ticks" is a property of the cell rather than of
+	 * four setters that each have to remember it. `-closestTickMarkValueToValue:` is the arithmetic, and it does not
+	 * call back into this door. */
+	if (_allowsTickMarkValuesOnly && _numberOfTickMarks > 0) {
+		clamped = [self closestTickMarkValueToValue:clamped];
+	}
 	if (clamped != _sliderValue) {
 		_sliderValue = clamped;
 		/* **AND THE CONTROL IS MARKED, WHICH IS THE ONE THING A CELL OWES A VIEW IT CHANGED THE FACE OF.** The
@@ -263,6 +424,18 @@ static NSString * const AGCoderSliderAltIncrementKey = @"altIncrementValue";
 - (void)setIntegerValue:(NSInteger)anInteger
 {
 	[self setDoubleValue:(double)anInteger];
+}
+
+/* ---- THE BACKGROUND IMAGE, WHICH THE DRAWING BELOW CONSULTS ------------------------------------------------ */
+
+/* **`-image` IS INHERITED FROM `NSCell`, AND ITS SETTER IS OVERRIDDEN ONLY TO REPAINT.** Apple's slider parameter name
+ * is `backgroundImage`, and the face draws it under the track, the knob and the title — so a caller that sets one on the
+ * CELL (rather than through the control) must see the face change, which is the one thing the base cell's storage does
+ * not do. */
+- (void)setImage:(NSImage *)anImage
+{
+	[super setImage:anImage];
+	[(NSView *)[self controlView] setNeedsDisplay:YES];
 }
 
 /* ---- THE FACE'S FOUR PROPERTIES, AND THE ALTERNATE INCREMENT ---------------------------------------------------- */
@@ -310,6 +483,11 @@ static NSString * const AGCoderSliderAltIncrementKey = @"altIncrementValue";
 - (void)setNumberOfTickMarks:(NSInteger)count
 {
 	_numberOfTickMarks = count;
+	/* **MOVING OR REMOVING THE MARKS RE-SNAPS A STANDING VALUE, because a value that was on a mark may no longer be
+	 * on one.** Removing every mark leaves the value alone: with nothing to snap to, the value is the caller's. */
+	if (_allowsTickMarkValuesOnly && _numberOfTickMarks > 0) {
+		[self setDoubleValue:_sliderValue];
+	}
 	[(NSView *)[self controlView] setNeedsDisplay:YES];
 }
 
@@ -322,6 +500,207 @@ static NSString * const AGCoderSliderAltIncrementKey = @"altIncrementValue";
 {
 	_tickMarkPosition = position;
 	[(NSView *)[self controlView] setNeedsDisplay:YES];
+}
+
+/* ---- THE TICKS AS VALUES: THE ARITHMETIC THE INK AND THE FLAG BOTH USE --------------------------------------- */
+
+- (BOOL)allowsTickMarkValuesOnly
+{
+	return _allowsTickMarkValuesOnly;
+}
+
+- (void)setAllowsTickMarkValuesOnly:(BOOL)flag
+{
+	_allowsTickMarkValuesOnly = flag;
+	/* TURNING IT ON CONSTRAINS THE VALUE THAT IS ALREADY THERE, rather than waiting for the next drag: a knob
+	 * between two marks is not a state this flag allows, and leaving it there until something else moved it would
+	 * make the flag a question about the future instead of about the cell. Turning it OFF changes nothing. */
+	if (flag && _numberOfTickMarks > 0) {
+		[self setDoubleValue:_sliderValue];
+	}
+}
+
+- (double)tickMarkValueAtIndex:(NSInteger)index
+{
+	/* AN INDEX OUTSIDE THE MARKS ANSWERS THE MINIMUM, which is this type's empty answer — the same disposition every
+	 * refusal in this tree takes. There is no tick value to invent, and answering `NAN` or a value off the range
+	 * would be a worse lie than the minimum. **APPLE RAISES `NSRangeException` HERE**; this tree has no such
+	 * exception in use, and aborting a caller from a measurement door would be the worse failure. The deviation is
+	 * stated rather than silent. */
+	if (_numberOfTickMarks <= 0 || index < 0 || index >= _numberOfTickMarks) {
+		return _minValue;
+	}
+	return fn_tick_value(_minValue, _maxValue, index, _numberOfTickMarks);
+}
+
+- (double)closestTickMarkValueToValue:(double)aValue
+{
+	double clamped = aValue;
+	double span;
+	NSInteger index;
+
+	/* THE SAME CLAMP `-setDoubleValue:` APPLIES, repeated here because this door is public and must answer a number
+	 * inside the range whatever it was handed. A NAN is pinned to the minimum for the reason that door records. */
+	if (clamped != clamped) {
+		clamped = _minValue;
+	}
+	if (clamped < _minValue) {
+		clamped = _minValue;
+	}
+	if (clamped > _maxValue) {
+		clamped = _maxValue;
+	}
+	if (_numberOfTickMarks <= 0) {
+		return clamped;		/* no marks: the nearest mark is the value itself, which is the only honest answer */
+	}
+	if (_numberOfTickMarks == 1) {
+		return _minValue;	/* one mark, at the minimum, so every value is it */
+	}
+	span = _maxValue - _minValue;
+	if (span <= 0.0) {
+		return _minValue;
+	}
+	index = (NSInteger)llround(((clamped - _minValue) / span) * (double)(_numberOfTickMarks - 1));
+	if (index < 0) {
+		index = 0;
+	}
+	if (index > _numberOfTickMarks - 1) {
+		index = _numberOfTickMarks - 1;
+	}
+	return fn_tick_value(_minValue, _maxValue, index, _numberOfTickMarks);
+}
+
+/* ---- THE TITLE: A CELL, AND THE TWO CONVENIENCES OVER IT ------------------------------------------------------ */
+
+/* The default cell is a text cell with a colour; the band above the track is the title's. `-title` and `-setTitle:`
+ * are `NSCell`'s and are mirrored into this cell so the label drawn and the label answered cannot drift. */
+- (NSCell *)titleCell
+{
+	if (_titleCell == nil) {
+		AGSliderTitleCell *cell = [[AGSliderTitleCell alloc] initTextCell:(_title != nil) ? _title : @""];
+
+		[cell setFont:_titleFont];
+		[cell setTitleColor:_titleColor];
+		[cell setAlignment:NSCenterTextAlignment];
+		_titleCell = cell;
+	}
+	return _titleCell;
+}
+
+- (void)setTitleCell:(NSCell *)aCell
+{
+	[aCell retain];
+	[_titleCell release];
+	_titleCell = aCell;
+	if (_titleCell != nil) {
+		[_titleCell setTitle:(_title != nil) ? _title : @""];
+		[_titleCell setFont:_titleFont];
+		if ([_titleCell respondsToSelector:@selector(setTitleColor:)]) {
+			[(AGSliderTitleCell *)_titleCell setTitleColor:_titleColor];
+		}
+	}
+	[(NSView *)[self controlView] setNeedsDisplay:YES];
+}
+
+- (void)setTitle:(NSString *)aString
+{
+	[super setTitle:aString];	/* which COPIES and clears the mnemonic, the base's own invariants */
+	[_titleCell setTitle:(_title != nil) ? _title : @""];
+	[(NSView *)[self controlView] setNeedsDisplay:YES];
+}
+
+- (NSFont *)titleFont
+{
+	return _titleFont;
+}
+
+- (void)setTitleFont:(NSFont *)font
+{
+	NSFont *held = [(font != nil) ? font : [NSFont systemFontOfSize:12.0] retain];
+
+	[_titleFont release];
+	_titleFont = held;
+	[_titleCell setFont:_titleFont];
+	[(NSView *)[self controlView] setNeedsDisplay:YES];
+}
+
+- (NSColor *)titleColor
+{
+	return _titleColor;
+}
+
+- (void)setTitleColor:(NSColor *)color
+{
+	NSColor *held = [(color != nil) ? color : [NSColor controlTextColor] retain];
+
+	[_titleColor release];
+	_titleColor = held;
+	if ([_titleCell respondsToSelector:@selector(setTitleColor:)]) {
+		[(AGSliderTitleCell *)_titleCell setTitleColor:_titleColor];
+	}
+	[(NSView *)[self controlView] setNeedsDisplay:YES];
+}
+
+/* **THE BAND THE TITLE OCCUPIES, AND THE FRAME THE TRACK AND KNOB GET.** The title sits at the TOP of the cell frame
+ * in both orientations; the track and knob then live in what is left. A frame too short for both keeps four points
+ * for the track rather than letting the title eat it — a titled slider in a 20-point frame is a real control, and a
+ * zero-height bar would be a titled slider that draws nothing you can drag. */
+- (CGFloat)cg_titleBandHeight
+{
+	CGFloat height;
+
+	if (_titleFont == nil || _title == nil || [_title length] == 0) {
+		return 0.0;
+	}
+	height = ceil([_titleFont ascender] - (CGFloat)[_titleFont descender]) + 2.0;
+	return (height > 0.0) ? height : 0.0;
+}
+
+- (NSRect)cg_barRectForCellFrame:(NSRect)cellFrame flipped:(BOOL)flipped
+{
+	CGFloat band = [self cg_titleBandHeight];
+	CGFloat height = NSHeight(cellFrame);
+
+	if (band > 0.0) {
+		if (height > 4.0 && band > height - 4.0) {
+			band = height - 4.0;
+		}
+		if (band >= height) {
+			band = 0.0;
+		}
+	}
+	if (band <= 0.0) {
+		return cellFrame;
+	}
+	return flipped ? NSMakeRect(NSMinX(cellFrame), NSMinY(cellFrame) + band,
+				    NSWidth(cellFrame), height - band)
+		       : NSMakeRect(NSMinX(cellFrame), NSMinY(cellFrame),
+				    NSWidth(cellFrame), height - band);
+}
+
+- (NSRect)cg_titleRectForCellFrame:(NSRect)cellFrame flipped:(BOOL)flipped
+{
+	CGFloat band = [self cg_titleBandHeight];
+	CGFloat height = NSHeight(cellFrame);
+
+	if (band <= 0.0) {
+		return NSZeroRect;
+	}
+	if (band > height) {
+		band = height;
+	}
+	return flipped ? NSMakeRect(NSMinX(cellFrame), NSMinY(cellFrame), NSWidth(cellFrame), band)
+		       : NSMakeRect(NSMinX(cellFrame), NSMaxY(cellFrame) - band, NSWidth(cellFrame), band);
+}
+
+- (void)cg_drawTitleInCellFrame:(NSRect)cellFrame flipped:(BOOL)flipped inView:(id)controlView
+{
+	NSRect band = [self cg_titleRectForCellFrame:cellFrame flipped:flipped];
+
+	if (band.size.width <= 0.0 || band.size.height <= 0.0) {
+		return;
+	}
+	[[self titleCell] drawWithFrame:band inView:controlView];
 }
 
 /* ---- AND THE GEOMETRY: TWO DOORS THAT ARE EXACT INVERSES ------------------------------------------------------- */
@@ -351,7 +730,28 @@ static NSString * const AGCoderSliderAltIncrementKey = @"altIncrementValue";
  * `BREADTH / 2` — half again as big. */
 - (CGFloat)fn_grabberAlong
 {
+	/* A CALLER'S THICKNESS WINS OVER BOTH SHAPES' DEFAULTS; zero is the "never set" that keeps them. */
+	if (_knobThickness > 0.0) {
+		return (CGFloat)_knobThickness;
+	}
 	return (_numberOfTickMarks > 0) ? NS_SLIDER_KNOB_LENGTH : NS_SLIDER_KNOB_BREADTH;
+}
+
+- (double)knobThickness
+{
+	return (double)[self fn_grabberAlong];
+}
+
+- (void)setKnobThickness:(double)thickness
+{
+	/* A THICKNESS BELOW ONE POINT IS NOT A GRABBER, and a zero would read as "the default" instead of "zero" because
+	 * that is what the ivar's zero means. One point is the smallest thickness the shape can still be seen at, so a
+	 * caller asking for less gets that rather than a knob that vanishes or a setting that silently reverts. */
+	if (thickness < 1.0) {
+		thickness = 1.0;
+	}
+	_knobThickness = thickness;
+	[(NSView *)[self controlView] setNeedsDisplay:YES];
 }
 
 - (NSRect)knobRect:(NSRect)cellFrame flipped:(BOOL)isFlipped
@@ -360,6 +760,11 @@ static NSString * const AGCoderSliderAltIncrementKey = @"altIncrementValue";
 	CGFloat along = [self fn_grabberAlong];	/* along the track: the dimension the tracking is built on */
 	CGFloat across = NS_SLIDER_KNOB_BREADTH;	/* across it: the teardrop's height */
 	NSRect knob;
+
+	/* **THE TITLE'S BAND COMES OFF FIRST, HERE AND IN `-cg_valueAtPoint:`, SO THE GEOMETRY AND THE TRACK AGREE.** A
+	 * slider with no title has a zero band and the frame passes through untouched — the existing probe's numbers do not
+	 * move. */
+	cellFrame = [self cg_barRectForCellFrame:cellFrame flipped:isFlipped];
 
 	/* **THE KNOB IS ELONGATED ACROSS THE TRACK, WHICH IS WHAT MAKES THE GRABBER TALL.** The travel still runs along
 	 * the frame's long side and is still measured against `LENGTH`, so nothing about the value mapping moved when
@@ -395,7 +800,10 @@ static NSString * const AGCoderSliderAltIncrementKey = @"altIncrementValue";
 - (double)cg_valueAtPoint:(NSPoint)aPoint inRect:(NSRect)cellFrame flipped:(BOOL)isFlipped
 {
 	double span = _maxValue - _minValue;
-	CGFloat along = [self fn_grabberAlong];
+	CGFloat along;
+
+	cellFrame = [self cg_barRectForCellFrame:cellFrame flipped:isFlipped];
+	along = [self fn_grabberAlong];
 	CGFloat travel = (_vertical ? NSHeight(cellFrame) : NSWidth(cellFrame)) - along;
 	CGFloat fraction;
 
@@ -421,6 +829,167 @@ static NSString * const AGCoderSliderAltIncrementKey = @"altIncrementValue";
 		fraction = 1.0;
 	}
 	return _minValue + (double)fraction * span;
+}
+
+/* ---- THE TRACK, THE TICK MARKS' RECTANGLES, AND THE POINT THAT NAMES ONE ------------------------------------- */
+
+/* **THE BAR THE KNOB RIDES, WHICH IS `-drawBarInside:flipped:`'s OWN RECTANGLE.** It is computed from the frame the
+ * caller gives (with the title's band already taken off by `-drawWithFrame:inView:`), and the two orientations are
+ * the same two rectangles the drawing has always used. A helper rather than a local so `-trackRect` and the ink
+ * cannot drift apart. */
+- (NSRect)cg_trackRectForCellFrame:(NSRect)cellFrame
+{
+	if (_vertical) {
+		return NSMakeRect(NSMidX(cellFrame) - NS_SLIDER_TRACK_THICKNESS / 2.0,
+				  NSMinY(cellFrame) + NS_SLIDER_TRACK_INSET,
+				  NS_SLIDER_TRACK_THICKNESS,
+				  NSHeight(cellFrame) - 2.0 * NS_SLIDER_TRACK_INSET);
+	}
+	return NSMakeRect(NSMinX(cellFrame),
+			  NSMidY(cellFrame) - NS_SLIDER_TRACK_THICKNESS / 2.0,
+			  NSWidth(cellFrame),
+			  NS_SLIDER_TRACK_THICKNESS);
+}
+
+- (NSRect)trackRect
+{
+	id view = [self controlView];
+
+	if (view == nil) {
+		/* APPKIT-REFUSE: with no control view there is no frame to place a track in. A measurement cell can still
+		 * answer its VALUE and its knob for a frame it is handed; this door has no frame argument, so the empty
+		 * rectangle plus a reason is the honest answer. */
+		fn_refuse_window("NSSliderCell -trackRect", "a control view to take the track's frame from");
+		return NSZeroRect;
+	}
+	/* **THE RECTANGLE THE KNOB TRAVELS IN, NOT THE THIN BAR IT RIDES ON.** Apple's header marks this door "only valid
+	 * while tracking the mouse", because its own storage is captured during a drawing/tracking pass; this tier can
+	 * answer it at any time from the control view, and answers the wider rectangle the knob's own placement uses — the
+	 * cell frame with the title's band removed. `-cg_trackRectForCellFrame:` is the four-point bar the ink fills, and
+	 * the two are deliberately different questions. */
+	return [self cg_barRectForCellFrame:[(NSView *)view bounds] flipped:[(NSView *)view isFlipped]];
+}
+
+/* **A TICK'S RECTANGLE, IN THE FRAME IT IS DRAWN IN.** The mark begins just clear of the TRACK and ends just clear of
+ * the GRABBER — the same two measures the ink uses — and the along-track position is the value's fraction of the
+ * travel. `flipped` is passed rather than read so the drawing door (which is handed a frame and a flip) and the public
+ * door (which reads them from the control view) share ONE arithmetic. */
+- (NSRect)cg_tickRectAtIndex:(NSInteger)index inFrame:(NSRect)cellFrame flipped:(BOOL)flipped
+{
+	CGFloat along = [self fn_grabberAlong];
+	CGFloat travel = (_vertical ? NSHeight(cellFrame) : NSWidth(cellFrame)) - along;
+	CGFloat fraction;
+	CGFloat cross = (_vertical ? NSWidth(cellFrame) : NSHeight(cellFrame)) / 2.0;
+	CGFloat in0 = NS_SLIDER_TRACK_THICKNESS / 2.0 + NS_SLIDER_TICK_INSET;
+	CGFloat out0 = NS_SLIDER_KNOB_BREADTH / 2.0 + NS_SLIDER_TICK_PEEK;
+	CGFloat dir = flipped ? -1.0 : 1.0;
+	CGFloat inner, outer, lo, len;
+
+	if (_numberOfTickMarks <= 0 || index < 0 || index >= _numberOfTickMarks || travel <= 0.0) {
+		return NSZeroRect;
+	}
+	if (out0 > cross) {
+		out0 = cross;
+	}
+	if (out0 < in0) {
+		out0 = in0;
+	}
+	if (_tickMarkPosition == NSTickMarkAbove) {
+		inner = dir * in0;
+		outer = dir * out0;
+	} else {
+		inner = -dir * in0;
+		outer = -dir * out0;
+	}
+	lo = (inner < outer) ? inner : outer;
+	len = (outer > inner) ? (outer - inner) : (inner - outer);
+	fraction = (_numberOfTickMarks == 1) ? 0.0
+		   : (CGFloat)index / (CGFloat)(_numberOfTickMarks - 1);
+	if (_vertical) {
+		/* **THE VERTICAL MARK FOLLOWS THE KNOB, NOT THE RAW FRACTION.** An unflipped view counts up from the bottom,
+		 * so the minimum is at `minY`; a flipped view counts down from the top, so the minimum is at `minY` too but
+		 * the fraction has to run DOWNWARD. The old ink used the unflipped formula for both and drew the marks'
+		 * scale upside down in a flipped view — a bug with no reader until `-rectOfTickMarkAtIndex:` arrived. */
+		CGFloat y = NSMinY(cellFrame) + along / 2.0
+			  + (flipped ? (1.0 - fraction) : fraction) * travel;
+
+		return NSMakeRect(NSMidX(cellFrame) + lo, y - 0.5, len, 1.0);
+	}
+	return NSMakeRect(NSMinX(cellFrame) + along / 2.0 + fraction * travel - 0.5,
+			  NSMidY(cellFrame) + lo, 1.0, len);
+}
+
+- (NSRect)rectOfTickMarkAtIndex:(NSInteger)index
+{
+	id view = [self controlView];
+
+	if (view == nil) {
+		fn_refuse_window("NSSliderCell -rectOfTickMarkAtIndex:", "a control view to take the marks' frame from");
+		return NSZeroRect;
+	}
+	return [self cg_tickRectAtIndex:index
+				inFrame:[self cg_barRectForCellFrame:[(NSView *)view bounds]
+							     flipped:[(NSView *)view isFlipped]]
+				flipped:[(NSView *)view isFlipped]];
+}
+
+- (NSInteger)indexOfTickMarkAtPoint:(NSPoint)point
+{
+	id view = [self controlView];
+	NSRect bar;
+	BOOL flipped;
+	NSInteger i;
+
+	if (view == nil) {
+		/* A POINT IS IN A VIEW'S COORDINATES, so with no view there is no coordinate system to answer in. */
+		fn_refuse_window("NSSliderCell -indexOfTickMarkAtPoint:", "a control view to take the point's space from");
+		return NSNotFound;
+	}
+	if (_numberOfTickMarks <= 0) {
+		return NSNotFound;
+	}
+	flipped = [(NSView *)view isFlipped];
+	bar = [self cg_barRectForCellFrame:[(NSView *)view bounds] flipped:flipped];
+	/* **THE HIT IS THE MARK'S OWN RECTANGLE, GROWN BY THREE POINTS.** A mark is one point wide, which is not a
+	 * target a person can be asked to hit exactly; the growth is stated here rather than hidden in the arithmetic.
+	 * A point between two marks answers `NSNotFound` — this door asks WHICH MARK IS AT THIS POINT, not which is
+	 * nearest, and the nearest question has its own door in value space. */
+	for (i = 0; i < _numberOfTickMarks; i++) {
+		NSRect tick = [self cg_tickRectAtIndex:i inFrame:bar flipped:flipped];
+
+		if (NSPointInRect(point, NSInsetRect(tick, -3.0, -3.0))) {
+			return i;
+		}
+	}
+	return NSNotFound;
+}
+
+/* ---- AND THE TWO DOORS THAT TAKE THEIR RECTANGLE FROM THE CONTROL VIEW --------------------------------------- */
+
+/* **APPLE'S NO-ARGUMENT DRAWING DOOR IS ANSWERABLE BECAUSE THIS CELL KNOWS ITS VIEW.** `-drawKnob` draws the knob at
+ * the rectangle the standing value places it at, and `-knobRectFlipped:` is the deprecated spelling of the same
+ * measurement. Both REFUSE BY NAME without a view: there is no frame to place the rectangle in, and inventing one
+ * would be ink somewhere no caller asked for. */
+- (void)drawKnob
+{
+	id view = [self controlView];
+
+	if (view == nil) {
+		fn_refuse_window("NSSliderCell -drawKnob", "a control view to take the knob's rectangle from");
+		return;
+	}
+	[self drawKnob:[self knobRect:[(NSView *)view bounds] flipped:[(NSView *)view isFlipped]]];
+}
+
+- (NSRect)knobRectFlipped:(BOOL)isFlipped
+{
+	id view = [self controlView];
+
+	if (view == nil) {
+		fn_refuse_window("NSSliderCell -knobRectFlipped:", "a control view to take the knob's frame from");
+		return NSZeroRect;
+	}
+	return [self knobRect:[(NSView *)view bounds] flipped:isFlipped];
 }
 
 /* ---- AND THE TRACKING HOOKS, WHICH ARE WHAT MAKES THE VALUE FOLLOW THE POINTER --------------------------------- */
@@ -457,76 +1026,29 @@ static NSString * const AGCoderSliderAltIncrementKey = @"altIncrementValue";
  * values can show. MEASURING THE FAR END FROM THE GRABBER IS THE POINT: a fixed length would be swallowed whole by a
  * tall grabber and would dwarf a short one, whereas `PEEK` is the same few points of line below the grabber's edge
  * whatever size that grabber is. */
-#define NS_SLIDER_TICK_INSET		1.0
-#define NS_SLIDER_TICK_PEEK		3.0
-
 - (void)cg_drawTickMarks:(NSRect)cellFrame flipped:(BOOL)flipped
 {
 	NSInteger i;
-	CGFloat travel = (_vertical ? NSHeight(cellFrame) : NSWidth(cellFrame)) - [self fn_grabberAlong];
-	CGFloat dir = flipped ? -1.0 : 1.0;
-	/* **AND THE REACH IS CLAMPED TO THE FRAME, because a cell only owns the rectangle it was given.** A frame too
-	 * short for the grabber plus its peek draws the tick out to the frame's edge instead of below it, which is the
-	 * most a tick can honestly do — the alternative is ink outside the cell, on whatever is next to it. */
-	CGFloat cross = (_vertical ? NSWidth(cellFrame) : NSHeight(cellFrame)) / 2.0;
-	CGFloat in0 = NS_SLIDER_TRACK_THICKNESS / 2.0 + NS_SLIDER_TICK_INSET;
-	CGFloat out0 = NS_SLIDER_KNOB_BREADTH / 2.0 + NS_SLIDER_TICK_PEEK;
-	CGFloat inner, outer;
 
-	if (_numberOfTickMarks <= 0 || travel <= 0.0) {
-		return;
-	}
-	if (out0 > cross) {
-		out0 = cross;
-	}
-	if (out0 < in0) {
-		out0 = in0;	/* a frame thinner than the track keeps the tick's own start rather than inverting it */
-	}
-	if (_tickMarkPosition == NSTickMarkAbove) {
-		inner = dir * in0;
-		outer = dir * out0;
-	} else {
-		inner = -dir * in0;
-		outer = -dir * out0;
-	}
+	/* **THE INK ASKS THE SAME RECTANGLE DOOR THE PUBLIC GEOMETRY DOES.** The arithmetic used to live here and in no
+	 * other place, which is how the flipped vertical scale came to disagree with the knob; now there is one function
+	 * (`-cg_tickRectAtIndex:inFrame:flipped:`) and both callers read it. */
 	[[NSColor controlDarkShadowColor] setFill];
 	for (i = 0; i < _numberOfTickMarks; i++) {
-		CGFloat fraction = (_numberOfTickMarks == 1) ? 0.0
-				   : (CGFloat)i / (CGFloat)(_numberOfTickMarks - 1);
-		CGFloat lo = (inner < outer) ? inner : outer;
-		CGFloat len = (outer > inner) ? (outer - inner) : (inner - outer);
-		NSRect tick;
+		NSRect tick = [self cg_tickRectAtIndex:i inFrame:cellFrame flipped:flipped];
 
-		if (_vertical) {
-			CGFloat y = NSMinY(cellFrame) + [self fn_grabberAlong] / 2.0 + fraction * travel;
-
-			tick = NSMakeRect(NSMidX(cellFrame) + lo, y - 0.5, len, 1.0);
-		} else {
-			CGFloat x = NSMinX(cellFrame) + [self fn_grabberAlong] / 2.0 + fraction * travel;
-
-			tick = NSMakeRect(x - 0.5, NSMidY(cellFrame) + lo, 1.0, len);
+		if (tick.size.width > 0.0 && tick.size.height > 0.0) {
+			[[NSBezierPath bezierPathWithRect:tick] fill];
 		}
-		[[NSBezierPath bezierPathWithRect:tick] fill];
 	}
 }
 
 - (void)drawBarInside:(NSRect)cellFrame flipped:(BOOL)flipped
 {
-	NSRect track;
+	NSRect track = [self cg_trackRectForCellFrame:cellFrame];
 	NSRect filled;
 	NSRect knob;
 
-	if (_vertical) {
-		track = NSMakeRect(NSMidX(cellFrame) - NS_SLIDER_TRACK_THICKNESS / 2.0,
-				   NSMinY(cellFrame) + NS_SLIDER_TRACK_INSET,
-				   NS_SLIDER_TRACK_THICKNESS,
-				   NSHeight(cellFrame) - 2.0 * NS_SLIDER_TRACK_INSET);
-	} else {
-		track = NSMakeRect(NSMinX(cellFrame),
-				   NSMidY(cellFrame) - NS_SLIDER_TRACK_THICKNESS / 2.0,
-				   NSWidth(cellFrame),
-				   NS_SLIDER_TRACK_THICKNESS);
-	}
 	[[NSColor controlDarkShadowColor] setFill];
 	[[NSBezierPath bezierPathWithRoundedRect:track xRadius:NS_SLIDER_TRACK_RADIUS
 					  yRadius:NS_SLIDER_TRACK_RADIUS] fill];
@@ -727,11 +1249,22 @@ static NSBezierPath *fn_knob_path(NSRect rect, BOOL flipped)
 - (void)drawWithFrame:(NSRect)cellFrame inView:(NSView *)controlView
 {
 	BOOL flipped = (controlView != nil) ? [controlView isFlipped] : NO;
+	NSRect bar = [self cg_barRectForCellFrame:cellFrame flipped:flipped];
 
+	/* **THE BACKGROUND IMAGE FIRST, WHEN THERE IS ONE — `NSCell`'s `-image` IS THE SLIDER'S BACKGROUND in Apple's
+	 * own parameter name (`-setImage:(NSImage *)backgroundImage`), so it goes under everything and the track, the knob
+	 * and the title all sit on it. This is what gives the image door a reader rather than a stored value nobody
+	 * consults; an image of the wrong size is stretched to the cell, which is the same rule a button's image follows. */
+	if ([self image] != nil) {
+		[[self image] drawInRect:cellFrame];
+	}
 	/* **THE TWO HALVES IN ORDER, WHICH IS WHY THEY ARE PUBLIC**: a subclass that wants a different knob overrides
-	 * `-drawKnob:` and keeps the track, and the bar goes down first so the knob sits ON it rather than behind it. */
-	[self drawBarInside:cellFrame flipped:flipped];
+	 * `-drawKnob:` and keeps the track, and the bar goes down first so the knob sits ON it rather than behind it.
+	 * THE TITLE GOES LAST, in the band the bar was told to leave alone — so the words sit above the track in both
+	 * orientations and the knob can never be drawn over them. */
+	[self drawBarInside:bar flipped:flipped];
 	[self drawKnob:[self knobRect:cellFrame flipped:flipped]];
+	[self cg_drawTitleInCellFrame:cellFrame flipped:flipped inView:controlView];
 }
 
 @end

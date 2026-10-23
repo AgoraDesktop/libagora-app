@@ -1022,7 +1022,22 @@ the compositor is really gone.
   `-allowsContextMenuPlugIns` round-trip — the second governs a mechanism Apple removed, so the flag is stored and no
   plug-in is loaded.
 
-- **`ctest`: 136 of 136 passed** (the keyboard and the seam, the AppKit and its input path, the controls and their
+- **And the SLIDER PAIR is COMPLETE — `NSSlider` 30 of 30 and `NSSliderCell` 35 of 35** (`ctest`, offscreen) — the
+  ticks become VALUES rather than decoration, the title becomes a CELL, and the two no-argument ink doors get the
+  control view's frame. **The tick arithmetic is checked in both directions**: the nth of n marks is
+  `min + (max-min)·n/(n-1)` with both ends included, `-closestTickMarkValueToValue:` is the nearest mark, and
+  `-allowsTickMarkValuesOnly` snaps every value the cell stores — including the standing value when the flag is turned
+  on and the re-clamp that moving an end performs. `-rectOfTickMarkAtIndex:` and `-indexOfTickMarkAtPoint:` make the
+  scale askable, and their centres are matched to the KNOB's centre at each mark's value in both orientations and both
+  flips: that check found that the old vertical ink drew the marks upside down in a flipped view, which is fixed. The
+  knob's thickness is a real setting (the effective length along the track, with the travel following), and the title is
+  an `NSCell` drawn in a band taken off the TOP — a titled knob sits lower by that band, an untitled one is unchanged,
+  and the words' pixels are counted. `-drawKnob` and `-knobRectFlipped:` answer from `-controlView` and REFUSE BY NAME
+  without one; `-image` is Apple's BACKGROUND image and the cell draws it under the track, the knob and the title, which
+  the probe checks by a corner pixel that goes red and then white. `tests/slider_title_ticks.m` measures it in 52 checks. **AND THE RECOUNT FOUND THE HANDOFF'S "120 of 129 COMPLETE" WAS ONE HIGH** — the old pin's
+  own `sel:` lines give 119, and the slider pair makes 121.
+
+- **`ctest`: 155 of 155 passed** (the keyboard and the seam, the AppKit and its input path, the controls and their
   metrics, the field control and its cell and its bezel and its placeholder and what it may hold, the text path and its
   word granularity and the multi-line view and its wrapping and its scrolling and its READING OF THE STORE, the STORE
   the rich-text slice is built on and the REGION it is laid out in and the WEB that ties the three together and the
@@ -1034,7 +1049,8 @@ the compositor is really gone.
   what a drag costs, the resize by edge, the tracking engine, the clip view and the scroller and the scroll view and the
   drawn offset and the ruler it can wear and the TEXT RULER whose markers are tab stops and the block rects and
   attachment sizes the layout answers and the temporary-attribute table and the rect arrays, the chrome and what its
-  buttons do, the chrome theme, the menus and activation, and the manager's own ensure/invalidate doors, the document family's file round trip and change count, the save and open panels, and the pop-up's items, a colour's space and the menu's flags).
+  buttons do, the chrome theme, the menus and activation, and the manager's own ensure/invalidate doors, the document family's file round trip and change count, the save and open panels, and the pop-up's items, a colour's space and the menu's flags, and the slider's tick values, its title band and its two
+  no-argument ink doors).
 - **And the desktop's own text is SUB-PIXEL ANTIALIASED**, which is the AppKit's half of a renderer change in
   CoreGraphics: a window's surface is OPAQUE (`kCGImageAlphaNoneSkipFirst`), and the destination's opacity is
   exactly what decides whether a glyph is rasterised in colour. MEASURED on the live session: the window title's

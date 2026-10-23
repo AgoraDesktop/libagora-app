@@ -13,6 +13,9 @@
  */
 #import <AppKit/NSSlider.h>
 #import <AppKit/NSEvent.h>
+#import <AppKit/NSColor.h>
+#import <AppKit/NSFont.h>
+#import <AppKit/NSImage.h>
 
 /* THE FRAME A FRESHLY MADE SLIDER GETS, named rather than repeated: Apple's slider is a long thin control, and a
  * caller who wants another size sets it — this is the DEFAULT and not a constraint. The height is the knob's plus two
@@ -130,6 +133,108 @@
 - (void)setTickMarkPosition:(NSTickMarkPosition)position
 {
 	[(NSSliderCell *)[self cell] setTickMarkPosition:position];
+	[self setNeedsDisplay:YES];
+}
+
+/* ---- THE TICKS AS VALUES, THE KNOB'S THICKNESS, THE TITLE AND THE IMAGE: FORWARDS AND ONE NAMED REFUSAL -------- */
+
+- (BOOL)allowsTickMarkValuesOnly
+{
+	return [(NSSliderCell *)[self cell] allowsTickMarkValuesOnly];
+}
+
+- (void)setAllowsTickMarkValuesOnly:(BOOL)flag
+{
+	[(NSSliderCell *)[self cell] setAllowsTickMarkValuesOnly:flag];
+	[self setNeedsDisplay:YES];
+}
+
+- (double)tickMarkValueAtIndex:(NSInteger)index
+{
+	return [(NSSliderCell *)[self cell] tickMarkValueAtIndex:index];
+}
+
+- (double)closestTickMarkValueToValue:(double)aValue
+{
+	return [(NSSliderCell *)[self cell] closestTickMarkValueToValue:aValue];
+}
+
+- (NSRect)rectOfTickMarkAtIndex:(NSInteger)index
+{
+	return [(NSSliderCell *)[self cell] rectOfTickMarkAtIndex:index];
+}
+
+- (NSInteger)indexOfTickMarkAtPoint:(NSPoint)point
+{
+	return [(NSSliderCell *)[self cell] indexOfTickMarkAtPoint:point];
+}
+
+- (double)knobThickness
+{
+	return [(NSSliderCell *)[self cell] knobThickness];
+}
+
+- (void)setKnobThickness:(double)thickness
+{
+	[(NSSliderCell *)[self cell] setKnobThickness:thickness];
+	[self setNeedsDisplay:YES];
+}
+
+- (NSString *)title
+{
+	return [(NSSliderCell *)[self cell] title];
+}
+
+- (void)setTitle:(NSString *)aString
+{
+	[(NSSliderCell *)[self cell] setTitle:aString];
+	[self setNeedsDisplay:YES];
+}
+
+- (NSCell *)titleCell
+{
+	return [(NSSliderCell *)[self cell] titleCell];
+}
+
+- (void)setTitleCell:(NSCell *)aCell
+{
+	[(NSSliderCell *)[self cell] setTitleCell:aCell];
+	[self setNeedsDisplay:YES];
+}
+
+- (NSFont *)titleFont
+{
+	return [(NSSliderCell *)[self cell] titleFont];
+}
+
+- (void)setTitleFont:(NSFont *)font
+{
+	[(NSSliderCell *)[self cell] setTitleFont:font];
+	[self setNeedsDisplay:YES];
+}
+
+- (NSColor *)titleColor
+{
+	return [(NSSliderCell *)[self cell] titleColor];
+}
+
+- (void)setTitleColor:(NSColor *)color
+{
+	[(NSSliderCell *)[self cell] setTitleColor:color];
+	[self setNeedsDisplay:YES];
+}
+
+- (NSImage *)image
+{
+	return [(NSCell *)[self cell] image];
+}
+
+- (void)setImage:(NSImage *)theImage
+{
+	/* **A BACKGROUND IMAGE, WHICH IS APPLE'S OWN PARAMETER NAME AND THE CELL'S DRAWING.** The image lives on the cell
+	 * (Apple's storage), and `NSSliderCell -drawWithFrame:inView:` draws it UNDER the track, the knob and the title —
+	 * so the door is not merely stored. Redisplay is asked for because the face changed. */
+	[(NSCell *)[self cell] setImage:theImage];
 	[self setNeedsDisplay:YES];
 }
 

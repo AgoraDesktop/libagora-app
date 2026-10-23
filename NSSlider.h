@@ -18,6 +18,12 @@
  * receiver isn't a text cell" rule never applies here, and the doors above the cell are the same forwards a button
  * uses. Re-declaring them would be a second signature to keep in step with the first.
  *
+ * **THE TICK AND TITLE FAMILIES ARE FORWARDS TOO, AND THE SLIDER IS WHERE THEY ARE ASKED FOR.** A slider's ticks are
+ * values as well as ink — `-tickMarkValueAtIndex:`, `-closestTickMarkValueToValue:` and
+ * `-allowsTickMarkValuesOnly` are the cell's arithmetic — and its title is a cell's label drawn in a band above the
+ * track. The one door that is not the cell's arithmetic is `-image`: Apple's parameter name calls it a BACKGROUND
+ * image, and the cell draws it under the track, the knob and the title rather than inventing a second face.
+ *
  * WHAT IS NOT HERE, ON THE SAME TERMS AS THE CELL: the circular face (`-sliderType` stores and answers
  * `NSCircularSlider`, and the ink is the linear one), and the class doors Apple added after this vintage
  * (`+sliderWithValue:minValue:maxValue:target:action:` is 10.12, and `-tickMarkPosition`'s newer spellings are the
@@ -28,6 +34,10 @@
 
 #import <AppKit/NSControl.h>
 #import <AppKit/NSSliderCell.h>
+
+@class NSColor;
+@class NSFont;
+@class NSImage;
 
 NS_ASSUME_NONNULL_BEGIN
 
@@ -52,6 +62,31 @@ NS_ASSUME_NONNULL_BEGIN
 - (void)setNumberOfTickMarks:(NSInteger)count;
 - (NSTickMarkPosition)tickMarkPosition;
 - (void)setTickMarkPosition:(NSTickMarkPosition)position;
+
+/* **THE TICKS AS VALUES, AND THE FLAG THAT MAKES THEM MANDATORY** — the cell's own arithmetic, forwarded unchanged.
+ * The three questions are: what value is mark n, what mark is nearest a value, and which mark is at a point. */
+- (BOOL)allowsTickMarkValuesOnly;
+- (void)setAllowsTickMarkValuesOnly:(BOOL)flag;
+- (double)tickMarkValueAtIndex:(NSInteger)index;
+- (double)closestTickMarkValueToValue:(double)aValue;
+- (NSRect)rectOfTickMarkAtIndex:(NSInteger)index;
+- (NSInteger)indexOfTickMarkAtPoint:(NSPoint)point;
+
+/* **THE KNOB, THE TITLE AND THE IMAGE.** The thickness is the grabber's length along the track; the title's four doors
+ * are the cell that draws it and the font and colour conveniences over it; and the image is the BACKGROUND the cell
+ * draws under the track, the knob and the title. */
+- (double)knobThickness;
+- (void)setKnobThickness:(double)thickness;
+- (nullable NSString *)title;
+- (void)setTitle:(nullable NSString *)aString;
+- (NSCell *)titleCell;
+- (void)setTitleCell:(nullable NSCell *)aCell;
+- (nullable NSFont *)titleFont;
+- (void)setTitleFont:(nullable NSFont *)font;
+- (nullable NSColor *)titleColor;
+- (void)setTitleColor:(nullable NSColor *)color;
+- (nullable NSImage *)image;
+- (void)setImage:(nullable NSImage *)theImage;
 
 /* **AND THE ONE VIEW DOOR A SLIDER ANSWERS DIFFERENTLY FROM MOST CONTROLS.** Apple's slider takes a press even when
  * its window is not the active one — a slider is dragged, not typed into, so the first click should move the knob

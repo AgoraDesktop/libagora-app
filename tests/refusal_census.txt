@@ -115,7 +115,7 @@ NSResponder.m                    3
 NSRulerView.m                    3
 NSScrollView.m                   1
 NSShadow.m                       1
-NSSliderCell.m                   1
+NSSliderCell.m                   7
 NSSpellChecker.m                 12
 NSText.m                         11
 NSTextInputContext.m             1
@@ -128,8 +128,14 @@ NSViewController.m               1
 NSWorkspace.m                       23
 NSWindow.m                       23
 
+# AND IT ROSE BY FIVE IN THE SLIDER PAIR, ALL ON `NSSliderCell`: five doors that need a control view for the frame a
+# no-argument spelling cannot supply — `-trackRect`, `-rectOfTickMarkAtIndex:`, `-indexOfTickMarkAtPoint:`, `-drawKnob`
+# and `-knobRectFlipped:`. The sixth site in that file is the comment beside `-setSliderType:`'s long-standing
+# circular-face refusal. `NSSlider -setImage:` is NOT a refusal: Apple's parameter name calls the image a background,
+# and the cell draws it under the track, so the door has a reader.
+#
 # AND IT ROSE BY 126 WHEN THE NEEDLE LEARNED THE SHARED HELPER'S NAME. Not one refusal was added by that change: the
 # `fn_refuse_window` spelling was simply invisible to a census that counted the `APPKIT-REFUSE` literal, so every
 # refusal written the house way — which is the way the header asks for — moved no number.
 #
-# total: 376
+# total: 382
