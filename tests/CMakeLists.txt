@@ -1287,6 +1287,18 @@ target_link_libraries(text_view_undo PRIVATE App)
 add_test(NAME appkit-text-view-undo COMMAND text_view_undo)
 set_tests_properties(appkit-text-view-undo PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
 
+# **THE ERA'S WHOLE COMMAND SET, AND WHERE THE PAGE KEYS LAND.** `NSResponder` declares the fifty-seven commands a key
+# binding can name — the movement families, the paragraph set, paging and scrolling, the mark and kill ring, the case and
+# direction families — and every body is one `-nextResponder:` send. The probe registers ONE C function for all
+# fifty-seven and records `_cmd`, so the assertion is that the message ARRIVED at the end of the chain rather than that a
+# method exists; then it drives the commands a text view answers, including the KEYS themselves through the input
+# context's binding, because a mapping that names a selector nobody answers is the shape this file exists to catch.
+add_executable(responder_commands responder_commands.m)
+target_link_libraries(responder_commands PRIVATE App m)
+
+add_test(NAME appkit-responder-commands COMMAND responder_commands)
+set_tests_properties(appkit-responder-commands PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
+
 # **THE STEPPER PAIR AND THE SECURE FIELD PAIR.** The stepper's press IS the step: the probe drives the cell's own tracking
 # hooks in each half of the control, in BOTH flips (a direction that a flip reverses), checks the clamp, the wrap, the action
 # a target receives and that a drag does not step again — then renders the cell and counts ink. The secure field's claim is

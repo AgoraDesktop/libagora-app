@@ -155,7 +155,17 @@ static NSString *fn_selectedLayout = nil;
 
 /* **THE KEY, MAPPED.** This is the direct binding the responder used to do, and the only reason it is here rather
  * than there is that an input method belongs BETWEEN the two — a source that composes would consume the event first
- * and call the client's marked-text doors, and only what it declined would reach this mapping. */
+ * and call the client's marked-text doors, and only what it declined would reach this mapping.
+ *
+ * **AND PAGING IS MAPPED NOW, WHICH IT WAS NOT.** The old comment here said "a page is a viewport's height and this
+ * tier has no viewport" — true when the text view was one line, false since the clip view and the wrapped document
+ * arrived. Page Up/Down name `-pageUp:`/`-pageDown:`, Option with them extends the selection, and the view that
+ * answers them is `NSTextView` (`NSTextView.m`, the paging block). A responder with no viewport has no answer, which
+ * is what the chain is for.
+ *
+ * **WHAT IS DELIBERATELY NOT MAPPED HERE IS EVERY COMMAND-MODIFIED KEY.** Command-A and Command-C are key EQUIVALENTS
+ * — the menu bar's business, resolved by `NSApplication` before a key ever reaches a text view — so inventing them
+ * here would give a window two different answers to one keystroke. */
 - (void)handleEvent:(NSEvent *)event
 {
 	NSString *chars;
@@ -189,15 +199,28 @@ static NSString *fn_selectedLayout = nil;
 
 	switch (c) {
 	case NSUpArrowFunctionKey:
-		command = shift ? @selector(moveUpAndModifySelection:) : @selector(moveUp:);
+		/* **OPTION-UP AND OPTION-DOWN ARE THE PARAGRAPH'S**, which is the era's binding: a plain arrow moves by a
+		 * line, and the modifier one goes to the paragraph's beginning or end. */
+		if (alt) {
+			command = shift ? @selector(moveToBeginningOfParagraphAndModifySelection:)
+					: @selector(moveToBeginningOfParagraph:);
+		} else {
+			command = shift ? @selector(moveUpAndModifySelection:) : @selector(moveUp:);
+		}
 		break;
 	case NSDownArrowFunctionKey:
-		command = shift ? @selector(moveDownAndModifySelection:) : @selector(moveDown:);
+		if (alt) {
+			command = shift ? @selector(moveToEndOfParagraphAndModifySelection:)
+					: @selector(moveToEndOfParagraph:);
+		} else {
+			command = shift ? @selector(moveDownAndModifySelection:) : @selector(moveDown:);
+		}
 		break;
 	case NSPageUpFunctionKey:
+		command = shift ? @selector(pageUpAndModifySelection:) : @selector(pageUp:);
+		break;
 	case NSPageDownFunctionKey:
-		/* NO PAGE MOVEMENT: a page is a viewport's height and this tier has no viewport — a clip view and its
-		 * document height are a later slice, named rather than faked onto a line. */
+		command = shift ? @selector(pageDownAndModifySelection:) : @selector(pageDown:);
 		break;
 	case NSLeftArrowFunctionKey:
 		if (alt) {

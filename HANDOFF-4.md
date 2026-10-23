@@ -6,11 +6,11 @@ and two slices of `NSTextView`. `HANDOFF.md`, `HANDOFF-2.md` and `HANDOFF-3.md` 
 of them was wrong, and the second file's §2 instrument rules and §4 traps are the ones these sessions used most. **THIS
 FILE'S §2 NUMBERS SUPERSEDE `HANDOFF-3.md`'s**, which are six slices old.*
 
-*State at this handover: **nine slice commits** since the eighth handoff (and the relicense sweep that touched every
-file in the meantime), tree clean, **146 tests passing in about 84 s**, `api-ledger check` holding **375 metrics** —
-**131 of 168 classes (78%), 4050 of 4505 selectors (90%), 39 of 56 protocols (70%), 86 of 86 functions**, 4579 methods
-declared with 8 having no body, **113 of the 129 classes with a surface at COMPLETE coverage** — refusal census **292**.*
-*(`HANDOFF-3.md`'s §2 numbers are five slices older than these; the numbers in this file's §2 are current as of §11.)*
+*State at this handover: **ten slice commits** since the eighth handoff (and the relicense sweep that touched every
+file in the meantime), tree clean, **147 tests passing in about 84 s**, `api-ledger check` holding **375 metrics** —
+**131 of 168 classes (78%), 4108 of 4505 selectors (91%), 39 of 56 protocols (70%), 86 of 86 functions**, 4636 methods
+declared with 8 having no body, **114 of the 129 classes with a surface at COMPLETE coverage** — refusal census **292**.*
+*(`HANDOFF-3.md`'s §2 numbers are six slices older than these; the numbers in this file's §2 are current as of §12.)*
 
 ---
 
@@ -38,29 +38,29 @@ and a different commit line; it is recorded here because the AppKit slice is wha
 
 ```
 classes   131 of 168   (78%)    37 missing
-selectors 4050 of 4505 (90%)   455 missing   113 of 129 classes at COMPLETE coverage
+selectors 4108 of 4505 (91%)   397 missing   114 of 129 classes at COMPLETE coverage
 protocols  39 of  56   (70%)    17 missing
 functions  86 of  86  (100%)     0 missing    10 refuse by name
-methods   4579 declared on this tree's own classes, 8 with NO body on the chain (0.2%)
+methods   4636 declared on this tree's own classes, 8 with NO body on the chain (0.2%)
 ```
 
-**THE 455 MISSING SELECTORS ARE STILL CONCENTRATED, AND `NSBrowser` HAS MOVED FROM FIRST TO THIRD IN ONE SLICE.**
-The ledger's debt list, largest first:
+**THE 397 MISSING SELECTORS ARE STILL CONCENTRATED, AND `NSResponder` IS NO LONGER ON THE LIST AT ALL.** The ledger's
+debt list, largest first:
 
 ```
-NSResponder 57  NSWorkspace 49   NSBrowser 47     NSTextView 40   NSMenuView 37
+NSWorkspace 49   NSBrowser 47    NSTextView 39    NSMenuView 37   NSFont 35
 NSFont 35       NSText 31      NSView 28        NSControl 28     NSTableView 20
 NSDocument 19   NSWindow 18    NSSlider 18      NSSliderCell 17  NSDocumentController 8
 NSSavePanel 3
 ```
 
-Everything below `NSSliderCell` is five doors or fewer in a class that is otherwise complete. **THE THREE DEEPEST TEXT
-AND REFERENCE CLASSES HAVE ALL FALLEN IN THREE SLICES**: `NSTextView` 68 → 52 (§9) → 40 (§10) → 40, and `NSBrowser`
-64 → 47 (§11). What is left of `NSTextView` is almost entirely BLOCKED or REFUSED — the text-checking family (Foundation
-here has no `NSTextCheckingResult` or `NSOrthography`), the link/services pair, speech, the panels it has not built — and
-`NSBrowser`'s remaining 47 are now its ITEM-BASED family (`-itemAtIndexPath:`, `-itemAtRow:inColumn:`,
-`-parentForItemsInColumn:`, `-isLeafItem:`), its index paths, its drag doors and its autosave name, which is a design step
-rather than a cluster of one-line doors.
+Everything below `NSSliderCell` is five doors or fewer in a class that is otherwise complete. **FOUR CLASSES HAVE LEFT
+THE DEEPEST-DEBT LIST IN FOUR SLICES**: `NSTextView` 68 → 52 (§9) → 40 (§10) → 39 (§12, and that last one is an
+INHERITANCE effect, not an implementation), `NSBrowser` 64 → 47 (§11), and `NSResponder` 57 → **0** (§12) — the first
+class in this file to reach COMPLETE coverage from the top of the debt list. What is left of `NSTextView` is almost
+entirely BLOCKED or REFUSED — the text-checking family (Foundation here has no `NSTextCheckingResult` or `NSOrthography`),
+the link/services pair, speech, the panels it has not built, and the completion family — and `NSBrowser`'s remaining 47 are
+its ITEM-BASED half, which is a design step rather than a cluster of one-line doors.
 
 **THE 37 ABSENT CLASSES GROUP CLEANLY:**
 
@@ -204,15 +204,13 @@ comments to `.cmake`, `.sh` or Python files breaks the gates — that happened, 
 Ranked by reachable surface per unit of work, and the ranking now starts with the class this tree has and has not
 finished:
 
-1. **`NSResponder` 57 — now the component's largest debt, and the cheapest per door.** Mostly the chain forwarders and the
-   standard key-binding commands; each is small, and the census credits them to `NSResponder` rather than to the views
-   that inherit them. **The window's `-undoManager` was one of these rows and is a real answer in `NSWindow` now** (§10),
-   which is the shape the rest of the family wants: find the natural sender, give it the door.
-2. **`NSWorkspace` 49.** The shell verbs: open/reveal, file operations, the running-application list.
-   `libagora-launchservices` and `libagora-iconservices` are the seams, and the Workspace component is the caller — but
-   NOTE that nothing in the workspace repository calls `NSWorkspace` yet (§11 measured it), so this is reach the tier
-   does not have a consumer for. It is real API and a real gap; it is not the highest VALUE per hour.
-3. **`NSBrowser` 47.** What is left is the ITEM-BASED half (`-itemAtIndexPath:`, `-itemAtRow:inColumn:`,
+1. **`NSWorkspace` 49 — now the component's largest debt.** The shell verbs: open/reveal, file operations, the
+   running-application list. `libagora-launchservices` and `libagora-iconservices` are the seams, and the Workspace
+   component would be the caller — **BUT §11 MEASURED THAT NOTHING IN THE WORKSPACE REPOSITORY CALLS `NSWorkspace` YET**,
+   so this is real API without a consumer. It is the biggest gap and not the highest value per hour; a slice here should
+   probably take the verbs the FILE WINDOW actually needs (open, reveal, move to trash) and wire ONE of them to the
+   Workspace, so the door has a caller as well as a body.
+2. **`NSBrowser` 47.** What is left is the ITEM-BASED half (`-itemAtIndexPath:`, `-itemAtRow:inColumn:`,
    `-parentForItemsInColumn:`, `-isLeafItem:`, `-pathToColumn:`, `-indexPathForColumn:`), the selection index paths, the
    drag doors (`-canDragRowsWithIndexes:inColumn:withEvent:`, `-draggingImageForRowsWithIndexes:…`) and the autosave/column
    furniture. **The item-based family is a DESIGN QUESTION before it is a slice**: it needs the item-based delegate doors
@@ -263,8 +261,15 @@ finished:
   than one range, so the single-selection shape stays the cheap one and every inherited door keeps working.
 * **THIS TREE'S STRINGS ARE BYTE SEQUENCES, NOT CHARACTER SEQUENCES** for non-ASCII (`HANDOFF-2.md` §4): the word and
   paragraph granularities use ASCII `isalnum` and `_`, and say so.
-* **THE SUITE IS 146 TESTS IN ABOUT 84 SECONDS, AND `ctest --test-dir build -j4` IS THE GATE.** The exit status is the
+* **THE SUITE IS 147 TESTS IN ABOUT 84 SECONDS, AND `ctest --test-dir build -j4` IS THE GATE.** The exit status is the
   witness, not the tail of the output.
+* **AN UNDECLARED COMMAND IS UNREACHABLE, NOT MERELY UNIMPLEMENTED.** A key binding names a SELECTOR; if no header declares
+  it, no binding can name it and no chain can deliver it — so a command family "left to the class that will implement it"
+  is a family that does not exist. §12 declared the era's whole set on `NSResponder` and forwarded every one; that is
+  cheap, honest, and it is what let the Page Up/Down binding finally name something.
+* **A COMMENT EXPLAINING WHY SOMETHING IS ABSENT IS A CLAIM WITH A SHELF LIFE.** `NSTextInputContext`'s page binding said
+  "this tier has no viewport" for three slices after the clip view arrived. When a refusal's or a limit's reason names a
+  MISSING PIECE, grep for that piece before trusting the comment — the piece may already be here.
 * **A CELL-LESS `NSControl` ANSWERS NIL FOR `-target` AND NULL FOR `-action`**, because this tree keeps that pair in the
   control's CELL. A subclass with no cell — `NSBrowser` is one — has to keep its own, or a click silently sends nothing.
   Found in §11; the same trap is waiting for any other cell-less control.
@@ -502,3 +507,68 @@ and no refusal was added or retired. The census's prose block is re-pinned from 
 the component, each of which wants the same treatment `-undoManager` got: find the natural sender and give it the door.
 `NSWorkspace`'s 49 is bigger but measured to have NO consumer in the workspace repository yet, and `NSBrowser`'s remaining
 47 are its item-based half, which is a design decision (cell-based vs item-based) before it is a slice.
+
+## 12. The era's command set, and a key binding whose reason had expired
+
+*Session of the tenth slice, taking §6's first item (`NSResponder` 57, the cheapest doors). Its commit is "AppKit: the
+era's command set, and the page keys that finally land"; tree clean; `ctest --test-dir build -j4` green at **147 tests in
+84 s** with `appkit-api-census` re-pinned in the same commit.*
+
+**THE 57 WERE NOT REFUSED, THEY WERE UNNAMEABLE.** A command is a selector a key binding names and a chain delivers; a
+selector no header declares cannot be named, so the family was unreachable regardless of who could have answered it.
+`NSResponder` declares the whole 10.6 set now — the movement families, the three unit selections, paging and scrolling,
+the mark and kill ring, the case four, the six writing-direction doors, and the insertions whose model is still absent —
+and **every body is one `-nextResponder:` send**. `NSResponder` is COMPLETE for the era: **145 of 145**.
+
+**AND THE FIRST BINDING TO BENEFIT HAD A WRITTEN EXCUSE THAT HAD GONE STALE.** `NSTextInputContext` mapped Page Up/Down to
+nothing with the comment *"a page is a viewport's height and this tier has no viewport — a clip view and its document
+height are a later slice"*. The clip view, the wrapped document and `-scrollRangeToVisible:` had all arrived; the comment
+had not. Page Up/Down name `-pageUp:`/`-pageDown:` now (Shift for the extensions), Option-Up/Down name the paragraph pair,
+and `NSTextView` answers them: **a page is the clip view's height in lines**, the caret moves that many VISUAL lines on its
+own column and the view follows, and both clamp at the document's ends.
+
+**THE SCROLL FAMILY IS THE OTHER HALF AND IS DELIBERATELY DIFFERENT**: `-scrollPageUp:`/`-scrollPageDown:`/
+`-scrollLineUp:`/`-scrollLineDown:`/`-scrollToBeginningOfDocument:`/`-scrollToEndOfDocument:`/`-centerSelectionInVisibleArea:`
+move the VIEWPORT and leave the insertion point where it is. Each is `-scrollRectToVisible:` with a rect the size of the
+visible area, so the clamping is the clip view's own arithmetic rather than a second copy of it.
+
+**THE PARAGRAPH IS THE MODEL LINE.** `-moveToBeginningOfParagraph:` and its five siblings, the three unit selections and
+the two deletions are all over the newline-terminated run, so moving to a paragraph's end crosses every wrap — the probe
+uses a 165-character paragraph that the view lays out as eight visual lines. The unit selections are the existing
+granularity door one line deep (so a menu item and a double-click cannot disagree), the deletions go through the edit path
+(so they are undoable and the delegate is asked), and the three base-direction commands set the paragraph style while the
+three text-direction ones stay forwarded and unanswered (a run's own direction is an attribute this tier has not built).
+
+**TWO TRAPS, BOTH PAID FOR BY THE PROBE.**
+
+* **A TEST ASSERTED THAT A FORWARDER EXISTS RATHER THAN THAT THE MESSAGE ARRIVED.** `-respondsToSelector:` for all
+  fifty-seven would restate the census and prove nothing about the bodies. The recorder registers a SINGLE C function for
+  all 57 selectors with `class_addMethod`, records `_cmd`, and the assertion becomes "the message reached the end of the
+  chain" — which is the contract, and which fails if a body forwards the wrong selector, as one of mine did while the
+  table was being typed.
+* **THE CARET'S `-firstRectForCharacterRange:` IS IN SCREEN COORDINATES AND THE CLIP VIEW'S BOUNDS ARE IN THE DOCUMENT'S.**
+  Comparing them directly produced "caret at 37, viewport middle at 464" and looked like a centring bug; converting the
+  rect back into the view first (subtract the window's origin, `-convertPoint:fromView:nil`) made the two comparable. That
+  conversion is the same pair `-characterIndexForPoint:` already spells.
+
+**THE NUMBERS MOVED** (§8's rule 4, applied to §1, §2, §6 and §7):
+
+```
+selectors       4050 -> 4108 of 4505   (missing 455 -> 397)
+methods-declared 4579 -> 4636
+NSResponder      88 -> 145 of 145      (COMPLETE — off the debt list)
+NSTextView       146 -> 147 of 186     (debt 40 -> 39, an INHERITANCE effect: `-complete:` left the list
+                                        because the base declares it now, not because anything implements it)
+tests            146 -> 147            (the new suite: 34 checks)
+classes-complete 113 -> 114 of 129
+```
+
+`classes`, `protocols`, `functions` and the refusal census (**292**) did not move: no class or protocol appeared, no
+function was added, and no refusal was added or retired — the doors whose model is absent are declared-and-forwarded
+rather than refused, and the header says exactly which they are.
+
+**WHERE THE NEXT HOUR GOES.** §6's ranking is rewritten above: `NSWorkspace` 49 is the largest debt now and the only
+class-sized one left, but §11 measured that nothing in the workspace repository calls it — so a slice there should take
+the verbs the FILE WINDOW needs (open, reveal, move to trash) AND wire one of them to the Workspace, or the doors will be
+bodies without callers. `NSBrowser`'s 47 are its item-based half (a design decision first). `NSTextView`'s 39 are almost
+all blocked on Foundation or on panels this tier has not built.

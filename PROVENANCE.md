@@ -998,6 +998,43 @@ it had to satisfy.
 the gutter, a row's place, the inverse with all three edges, the title's ink against an untitled column, the click through
 the table's selection path with both actions, and the width conversion in both the fitting and the scrolling case.
 
+## 39. The command set, and a key binding whose reason had expired
+
+**`NSResponder` HAD 88 OF THE ERA'S 145 SELECTORS, AND THE MISSING 57 WERE THE COMMANDS A KEY BINDING NAMES.** They were
+not refused and not forgotten in the usual way: they were *undeclared*, so a binding could not name them at all, and the
+header's own block explained the absence family by family (the paragraph set needed a layout model, the mark ring needed a
+mark, the insertions needed a breaker). Some of that reasoning had expired — a paragraph IS the model line this tier keeps,
+and the vertical and horizontal movement had been implemented for slices — which is the same "a refusal whose reason has
+expired" this tree keeps finding (`NSBrowser`'s matrix form, the drop limit, the print decision).
+
+**THE BASE STILL DOES NOTHING BUT FORWARD, WHICH IS THE WHOLE IMPLEMENTATION.** Each of the 57 is one `-nextResponder:`
+send. A command nobody answers is silent, exactly as before; what changed is that the command now exists to be named,
+delivered and (by whoever can) honoured. The doors whose model is genuinely absent are declared and forwarded and still
+unimplemented by any view — the soft break (U+2028 is not a break to this tier's breaker), the container break, the
+substitution insertions, the mark and kill ring (no view keeps a mark), and the case four. **Declaration is not a promise
+that a VIEW answers; it is the thing that makes the chain the place the answer is looked for.**
+
+**AND THE PAGE KEYS WERE THE FIRST BINDING TO BENEFIT, because their absence had a written excuse.** `NSTextInputContext`
+mapped Page Up/Down to nothing, and its comment said "a page is a viewport's height and this tier has no viewport — a clip
+view and its document height are a later slice". That was true when the text view was a single line; it was FALSE by the
+time it was read, because the clip view, the wrapped document and `-scrollRangeToVisible:` had all arrived. Page Up/Down
+now name `-pageUp:`/`-pageDown:` (Shift for the extensions), Option-Up/Down name the paragraph pair, and `NSTextView`
+answers them: **a page is the clip view's height in lines**, the insertion point moves that many VISUAL lines on its own
+column and the view follows; Page Up/Down clamp at the document's ends rather than wrapping. The scroll family is the other
+half of the pair and moves the VIEWPORT only — a page command moves the caret, a scroll command does not.
+
+**THE PARAGRAPH IS THE MODEL LINE**, so `-moveToEndOfParagraph:` crosses every wrap a paragraph has — which is the thing a
+visual-line implementation would get wrong and a test with a 165-character paragraph in a narrow view is what holds it.
+The three unit selections are the existing granularity door (`-selectionRangeForProposedRange:granularity:`) one line deep,
+so the menu item and a double-click cannot disagree; the two paragraph deletions go through the edit path, so they are
+undoable and the delegate is asked.
+
+`tests/responder_commands.m` measures it in **34 checks**. The chain half registers ONE C function for all fifty-seven
+selectors through `class_addMethod` and records `_cmd`, so the assertion is that the message ARRIVED at the end of the
+chain — a claim no list of `-respondsToSelector:` answers could make — with a negative control for a selector nobody
+declares. The behaviour half drives the commands in a real scroll view and then drives the KEYS through the input
+context, because a binding that names a selector nobody answers is exactly the shape this file exists to catch.
+
 ## Keeping in sync
 
 The Fiwix AppKit is the origin and this repository has now diverged from it in the seam. A fix made there

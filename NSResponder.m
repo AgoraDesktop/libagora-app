@@ -535,6 +535,146 @@ static NSString * const AGCoderMenuKey = @"menu";
 - (void)delete:(id)sender				{ [[self nextResponder] delete:sender]; }
 
 /* ------------------------------------------------------------------------- */
+/* The rest of the era's command set: forwarders, and nothing else             */
+/* ------------------------------------------------------------------------- */
+
+/* **A FORWARDER IS THE WHOLE IMPLEMENTATION, AND THE HEADER SAYS WHY.** A command is sent to the first responder and
+ * travels the chain until somebody answers it; the base class is the class that passes it on. Writing these the other
+ * way — a refusal — is what this tree did once and had to undo: the declared-only door left a key binding with nothing
+ * to name. THE LAST FIVE ARE THE ONES NO VIEW IN THIS TIER ANSWERS YET, and forwarding them is still right: a window
+ * with a text view that has nothing to page simply does nothing, which is what Apple's base does too. */
+
+/* THE OLDER SPELLINGS, which an old key binding (or a ported nib) may still name. */
+- (void)moveBackward:(id)sender			{ [[self nextResponder] moveBackward:sender]; }
+- (void)moveBackwardAndModifySelection:(id)sender
+{
+	[[self nextResponder] moveBackwardAndModifySelection:sender];
+}
+- (void)moveForward:(id)sender				{ [[self nextResponder] moveForward:sender]; }
+- (void)moveForwardAndModifySelection:(id)sender
+{
+	[[self nextResponder] moveForwardAndModifySelection:sender];
+}
+- (void)moveWordBackward:(id)sender			{ [[self nextResponder] moveWordBackward:sender]; }
+- (void)moveWordBackwardAndModifySelection:(id)sender
+{
+	[[self nextResponder] moveWordBackwardAndModifySelection:sender];
+}
+- (void)moveWordForward:(id)sender			{ [[self nextResponder] moveWordForward:sender]; }
+- (void)moveWordForwardAndModifySelection:(id)sender
+{
+	[[self nextResponder] moveWordForwardAndModifySelection:sender];
+}
+
+/* THE LINE'S TWO ENDS BY THEIR OWN NAMES. */
+- (void)moveToLeftEndOfLine:(id)sender			{ [[self nextResponder] moveToLeftEndOfLine:sender]; }
+- (void)moveToLeftEndOfLineAndModifySelection:(id)sender
+{
+	[[self nextResponder] moveToLeftEndOfLineAndModifySelection:sender];
+}
+- (void)moveToRightEndOfLine:(id)sender			{ [[self nextResponder] moveToRightEndOfLine:sender]; }
+- (void)moveToRightEndOfLineAndModifySelection:(id)sender
+{
+	[[self nextResponder] moveToRightEndOfLineAndModifySelection:sender];
+}
+
+/* THE PARAGRAPH FAMILY. */
+- (void)moveToBeginningOfParagraph:(id)sender		{ [[self nextResponder] moveToBeginningOfParagraph:sender]; }
+- (void)moveToEndOfParagraph:(id)sender			{ [[self nextResponder] moveToEndOfParagraph:sender]; }
+- (void)moveToBeginningOfParagraphAndModifySelection:(id)sender
+{
+	[[self nextResponder] moveToBeginningOfParagraphAndModifySelection:sender];
+}
+- (void)moveToEndOfParagraphAndModifySelection:(id)sender
+{
+	[[self nextResponder] moveToEndOfParagraphAndModifySelection:sender];
+}
+- (void)moveParagraphBackwardAndModifySelection:(id)sender
+{
+	[[self nextResponder] moveParagraphBackwardAndModifySelection:sender];
+}
+- (void)moveParagraphForwardAndModifySelection:(id)sender
+{
+	[[self nextResponder] moveParagraphForwardAndModifySelection:sender];
+}
+- (void)deleteToBeginningOfParagraph:(id)sender		{ [[self nextResponder] deleteToBeginningOfParagraph:sender]; }
+- (void)deleteToEndOfParagraph:(id)sender		{ [[self nextResponder] deleteToEndOfParagraph:sender]; }
+
+/* THE SELECTION'S UNIT COMMANDS. */
+- (void)selectWord:(id)sender				{ [[self nextResponder] selectWord:sender]; }
+- (void)selectLine:(id)sender				{ [[self nextResponder] selectLine:sender]; }
+- (void)selectParagraph:(id)sender			{ [[self nextResponder] selectParagraph:sender]; }
+
+/* PAGING AND SCROLLING — four that move the insertion point and six that move the viewport. */
+- (void)pageUp:(id)sender				{ [[self nextResponder] pageUp:sender]; }
+- (void)pageDown:(id)sender				{ [[self nextResponder] pageDown:sender]; }
+- (void)pageUpAndModifySelection:(id)sender		{ [[self nextResponder] pageUpAndModifySelection:sender]; }
+- (void)pageDownAndModifySelection:(id)sender		{ [[self nextResponder] pageDownAndModifySelection:sender]; }
+- (void)scrollPageUp:(id)sender				{ [[self nextResponder] scrollPageUp:sender]; }
+- (void)scrollPageDown:(id)sender			{ [[self nextResponder] scrollPageDown:sender]; }
+- (void)scrollLineUp:(id)sender				{ [[self nextResponder] scrollLineUp:sender]; }
+- (void)scrollLineDown:(id)sender			{ [[self nextResponder] scrollLineDown:sender]; }
+- (void)scrollToBeginningOfDocument:(id)sender		{ [[self nextResponder] scrollToBeginningOfDocument:sender]; }
+- (void)scrollToEndOfDocument:(id)sender		{ [[self nextResponder] scrollToEndOfDocument:sender]; }
+- (void)centerSelectionInVisibleArea:(id)sender		{ [[self nextResponder] centerSelectionInVisibleArea:sender]; }
+
+/* THE MARK AND THE KILL RING. */
+- (void)setMark:(id)sender				{ [[self nextResponder] setMark:sender]; }
+- (void)selectToMark:(id)sender				{ [[self nextResponder] selectToMark:sender]; }
+- (void)deleteToMark:(id)sender				{ [[self nextResponder] deleteToMark:sender]; }
+- (void)swapWithMark:(id)sender				{ [[self nextResponder] swapWithMark:sender]; }
+- (void)yank:(id)sender					{ [[self nextResponder] yank:sender]; }
+
+/* THE CASE AND DIRECTION FAMILIES. */
+- (void)capitalizeWord:(id)sender			{ [[self nextResponder] capitalizeWord:sender]; }
+- (void)lowercaseWord:(id)sender			{ [[self nextResponder] lowercaseWord:sender]; }
+- (void)uppercaseWord:(id)sender			{ [[self nextResponder] uppercaseWord:sender]; }
+- (void)changeCaseOfLetter:(id)sender			{ [[self nextResponder] changeCaseOfLetter:sender]; }
+- (void)transposeWords:(id)sender			{ [[self nextResponder] transposeWords:sender]; }
+- (void)makeBaseWritingDirectionLeftToRight:(id)sender
+{
+	[[self nextResponder] makeBaseWritingDirectionLeftToRight:sender];
+}
+- (void)makeBaseWritingDirectionRightToLeft:(id)sender
+{
+	[[self nextResponder] makeBaseWritingDirectionRightToLeft:sender];
+}
+- (void)makeBaseWritingDirectionNatural:(id)sender
+{
+	[[self nextResponder] makeBaseWritingDirectionNatural:sender];
+}
+- (void)makeTextWritingDirectionLeftToRight:(id)sender
+{
+	[[self nextResponder] makeTextWritingDirectionLeftToRight:sender];
+}
+- (void)makeTextWritingDirectionRightToLeft:(id)sender
+{
+	[[self nextResponder] makeTextWritingDirectionRightToLeft:sender];
+}
+- (void)makeTextWritingDirectionNatural:(id)sender
+{
+	[[self nextResponder] makeTextWritingDirectionNatural:sender];
+}
+
+/* THE LAST FIVE, WHICH NO VIEW HERE ANSWERS YET — and forwarding is still the right body. */
+- (void)indent:(id)sender				{ [[self nextResponder] indent:sender]; }
+- (void)complete:(id)sender				{ [[self nextResponder] complete:sender]; }
+- (void)insertLineBreak:(id)sender			{ [[self nextResponder] insertLineBreak:sender]; }
+- (void)insertContainerBreak:(id)sender			{ [[self nextResponder] insertContainerBreak:sender]; }
+- (void)insertSingleQuoteIgnoringSubstitution:(id)sender
+{
+	[[self nextResponder] insertSingleQuoteIgnoringSubstitution:sender];
+}
+- (void)insertDoubleQuoteIgnoringSubstitution:(id)sender
+{
+	[[self nextResponder] insertDoubleQuoteIgnoringSubstitution:sender];
+}
+- (void)deleteBackwardByDecomposingPreviousCharacter:(id)sender
+{
+	[[self nextResponder] deleteBackwardByDecomposingPreviousCharacter:sender];
+}
+
+/* ------------------------------------------------------------------------- */
 /* The door that turns events into commands                                    */
 /* ------------------------------------------------------------------------- */
 

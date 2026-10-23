@@ -185,6 +185,13 @@ typedef NSUInteger NSInterfaceStyle;
  * has not been asked to handle it yet, and the chain's end in this tier is silent because there   *
  * is no beep to give it.                                                                          *
  *                                                                                                *
+ * **THE WHOLE ERA'S COMMAND SET IS DECLARED NOW, WHICH IS THE PART THAT MAKES IT REACHABLE AT ALL.**    *
+ * A command exists because a KEY BINDING names it and something in the chain answers it; a command    *
+ * that no header declares cannot be named by a binding, so it cannot be reached — which is why the     *
+ * families below were added as declarations with a forwarder body rather than left to the class that   *
+ * will eventually implement them. THE BASE STILL DOES NOTHING BUT FORWARD, so a command nobody         *
+ * answers is silent, exactly as it was before.
+ *
  * THIS WAS THE SUBSET A SINGLE-LINE FIELD NEEDED, AND EVERY COMMAND THAT NEEDS ONLY THE STRING    *
  * HAS SINCE JOINED IT. The header used to name `-moveWordLeft:` and `-deleteWordForward:` among  *
  * the family that "need[s] a LAYOUT MODEL — words, paragraphs, several lines — that one line of   *
@@ -262,8 +269,9 @@ typedef NSUInteger NSInterfaceStyle;
  * which is why it needs no layout. The `IgnoringFieldEditor` pair is how a caller says "put a newline/tab here even if
  * this surface would end the session instead", and `-insertParagraphSeparator:` is the paragraph break spelled as a
  * command rather than as a keystroke. `-insertLineBreak:` (a SOFT break, U+2028) and `-insertContainerBreak:` (a
- * page/column break) STAY NAMED rather than guessed: this tier's breaker does not treat U+2028 as a break, and a
- * container break needs the container model a table would bring. */
+ * page/column break) are DECLARED AND FORWARDED NOW and still UNIMPLEMENTED BY ANY VIEW: this tier's breaker does not
+ * treat U+2028 as a break, and a container break needs the container model a table would bring — so the command travels
+ * the chain and stops, which is what Apple's base does too. */
 - (void)transpose:(nullable id)sender;
 - (void)insertParagraphSeparator:(nullable id)sender;
 - (void)insertNewlineIgnoringFieldEditor:(nullable id)sender;
@@ -275,6 +283,104 @@ typedef NSUInteger NSInterfaceStyle;
 - (void)cut:(nullable id)sender;
 - (void)paste:(nullable id)sender;
 - (void)delete:(nullable id)sender;
+
+/* ==================================================================================================================
+ * THE REST OF THE ERA'S COMMAND SET — the families a key binding names and a view may answer.
+ *
+ * **EVERY ONE OF THESE IS A FORWARDER HERE AND NOTHING MORE**, which is Apple's contract for the base class and the
+ * reason a command can be sent to a nil target: the responder that CAN honour it answers, and the ones that cannot
+ * pass it on. The block above says why that is the whole implementation rather than a refusal; this one exists
+ * because the SET was incomplete, not because the rule changed.
+ *
+ * Three of these families are implemented by `NSTextView` in this tier — paging and scrolling, the paragraph
+ * movement, and the centred caret — and the rest are answered by whatever a caller builds. That asymmetry is the
+ * point of a chain: a single-line field has nothing to page, and a view with no document has nothing to scroll.
+ * ================================================================================================================ */
+
+/* THE OLDER NAMES FOR THE CHARACTER AND WORD MOVEMENTS. Apple kept both spellings and a key binding may name either;
+ * in a left-to-right paragraph "backward" IS "left", which is why these forward to the pair above rather than to a
+ * separate walk. */
+- (void)moveBackward:(nullable id)sender;
+- (void)moveBackwardAndModifySelection:(nullable id)sender;
+- (void)moveForward:(nullable id)sender;
+- (void)moveForwardAndModifySelection:(nullable id)sender;
+- (void)moveWordBackward:(nullable id)sender;
+- (void)moveWordBackwardAndModifySelection:(nullable id)sender;
+- (void)moveWordForward:(nullable id)sender;
+- (void)moveWordForwardAndModifySelection:(nullable id)sender;
+
+/* THE TWO ENDS OF A LINE, under the names that say which end they are. */
+- (void)moveToLeftEndOfLine:(nullable id)sender;
+- (void)moveToLeftEndOfLineAndModifySelection:(nullable id)sender;
+- (void)moveToRightEndOfLine:(nullable id)sender;
+- (void)moveToRightEndOfLineAndModifySelection:(nullable id)sender;
+
+/* **THE PARAGRAPH FAMILY.** A paragraph is a newline-terminated run — the MODEL line, which is the unit this tier's
+ * text classes already keep — so these are movement and selection over a model line rather than over a visual one. */
+- (void)moveToBeginningOfParagraph:(nullable id)sender;
+- (void)moveToEndOfParagraph:(nullable id)sender;
+- (void)moveToBeginningOfParagraphAndModifySelection:(nullable id)sender;
+- (void)moveToEndOfParagraphAndModifySelection:(nullable id)sender;
+- (void)moveParagraphBackwardAndModifySelection:(nullable id)sender;
+- (void)moveParagraphForwardAndModifySelection:(nullable id)sender;
+- (void)deleteToBeginningOfParagraph:(nullable id)sender;
+- (void)deleteToEndOfParagraph:(nullable id)sender;
+
+/* THE SELECTION'S UNIT COMMANDS: the word, the line or the paragraph around the insertion point. */
+- (void)selectWord:(nullable id)sender;
+- (void)selectLine:(nullable id)sender;
+- (void)selectParagraph:(nullable id)sender;
+
+/* **PAGING AND SCROLLING, WHICH ARE TWO DIFFERENT THINGS AND BOTH DECLARED.** A page command MOVES THE INSERTION POINT
+ * by a viewport; a scroll command moves the VIEWPORT and leaves the insertion point where it is. A one-line field
+ * answers neither, and a view with no enclosing scroll view has no viewport to move. */
+- (void)pageUp:(nullable id)sender;
+- (void)pageDown:(nullable id)sender;
+- (void)pageUpAndModifySelection:(nullable id)sender;
+- (void)pageDownAndModifySelection:(nullable id)sender;
+- (void)scrollPageUp:(nullable id)sender;
+- (void)scrollPageDown:(nullable id)sender;
+- (void)scrollLineUp:(nullable id)sender;
+- (void)scrollLineDown:(nullable id)sender;
+- (void)scrollToBeginningOfDocument:(nullable id)sender;
+- (void)scrollToEndOfDocument:(nullable id)sender;
+- (void)centerSelectionInVisibleArea:(nullable id)sender;
+
+/* **THE MARK AND THE KILL RING, WHICH ARE THE EMACS SET APPLE KEPT.** A mark is a remembered position; the four that
+ * use it select to it, delete to it, swap with it, or yank (put back) what was deleted. Declared here and implemented
+ * by whoever keeps a mark — no class in this tier does yet. */
+- (void)setMark:(nullable id)sender;
+- (void)selectToMark:(nullable id)sender;
+- (void)deleteToMark:(nullable id)sender;
+- (void)swapWithMark:(nullable id)sender;
+- (void)yank:(nullable id)sender;
+
+/* AND THE CASE AND WRITING-DIRECTION FAMILIES. The case four work on the selection's words; the direction six set the
+ * BASE direction of a paragraph (left-to-right, right-to-left, or natural, which is the first strong character's) or
+ * the direction of the text itself. `NSTextView` implements the three base-direction doors over
+ * `-setBaseWritingDirection:range:`; the three text-direction ones are forwarded only, because a run's direction is an
+ * attribute this tier has not built. */
+- (void)capitalizeWord:(nullable id)sender;
+- (void)lowercaseWord:(nullable id)sender;
+- (void)uppercaseWord:(nullable id)sender;
+- (void)changeCaseOfLetter:(nullable id)sender;
+- (void)transposeWords:(nullable id)sender;
+- (void)makeBaseWritingDirectionLeftToRight:(nullable id)sender;
+- (void)makeBaseWritingDirectionRightToLeft:(nullable id)sender;
+- (void)makeBaseWritingDirectionNatural:(nullable id)sender;
+- (void)makeTextWritingDirectionLeftToRight:(nullable id)sender;
+- (void)makeTextWritingDirectionRightToLeft:(nullable id)sender;
+- (void)makeTextWritingDirectionNatural:(nullable id)sender;
+
+/* THE THREE ODD ONES OUT: an indent, a completion, and the insertions whose model this tier has not got (the commands
+ * block above says why they are declared and still unimplemented). */
+- (void)indent:(nullable id)sender;
+- (void)complete:(nullable id)sender;
+- (void)insertLineBreak:(nullable id)sender;
+- (void)insertContainerBreak:(nullable id)sender;
+- (void)insertSingleQuoteIgnoringSubstitution:(nullable id)sender;
+- (void)insertDoubleQuoteIgnoringSubstitution:(nullable id)sender;
+- (void)deleteBackwardByDecomposingPreviousCharacter:(nullable id)sender;
 
 /* **AND THE DOOR THAT TURNS EVENTS INTO COMMANDS.** Apple hands each event to the receiver's INPUT CONTEXT and the
  * answers come back as `-insertText:` and `-doCommandBySelector:`. THE CONTEXT IS HERE NOW (`NSTextInputContext.h`):

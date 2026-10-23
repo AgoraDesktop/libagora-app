@@ -2376,6 +2376,36 @@ under it, heights summing to the column's), the second column's place past the g
 negative control, the click through the table's own selection path, and the width conversion — equal for a column that
 fits its rows, narrower once it scrolls.
 
+### The era's command set, and the page keys that finally land
+
+**A COMMAND IS A SELECTOR A KEY BINDING NAMES AND A CHAIN DELIVERS.** `NSResponder` declares **the whole 10.6 command
+set** now — the movement families (character, word, line-end, paragraph, document), the three unit selections, paging
+and scrolling, the mark and kill ring, the case four and the six writing-direction doors, plus the insertions whose
+model this tier still has not got — and **every body is one `-nextResponder:` send**. That is Apple's contract for the
+base class and the reason a command can carry a nil target: the responder that can honour it answers, the rest pass it
+on. `NSResponder` is COMPLETE for the era: **145 of 145 selectors**.
+
+**AND THE PAGE KEYS LAND NOW, WHICH THEY DID NOT.** `NSTextInputContext` mapped Page Up/Down to nothing, with a comment
+saying *"a page is a viewport's height and this tier has no viewport"* — a reason that had been false since the clip
+view arrived. Page Up/Down now name `-pageUp:`/`-pageDown:`, Shift extends the selection, and Option-Up/Down name the
+paragraph pair; `NSTextView` answers them: a page is the clip view's height in lines, the insertion point moves by that
+many VISUAL lines on the caret's own column, and the view scrolls to follow it. The scroll family
+(`-scrollPageUp:`, `-scrollPageDown:`, `-scrollLineUp:`, `-scrollLineDown:`, `-scrollToBeginningOfDocument:`,
+`-scrollToEndOfDocument:`, `-centerSelectionInVisibleArea:`) moves the VIEWPORT and leaves the caret where it is — that
+is the whole difference between a page command and a scroll command.
+
+**A PARAGRAPH IS THE MODEL LINE, NOT THE WRAP.** `-moveToBeginningOfParagraph:` and its five siblings, the three unit
+selections and the two paragraph deletions are all over the newline-terminated run, so moving to a paragraph's end
+crosses every wrap the paragraph has. The unit selections are the existing granularity door one line deep, which is what
+makes a menu item and a double-click agree. The three base-direction commands set the paragraph style; the three
+text-direction ones are forwarded and unanswered, because a run's own direction is an attribute this tier has not built.
+
+`tests/responder_commands.m` asserts it in 34 checks: a recorder that registers ONE C function for all fifty-seven
+selectors so the claim is "the message ARRIVED at the end of the chain" rather than "the method exists" (with a negative
+control), then the paging behaviour in a real scroll view — the caret moving a viewport, the clamp at either end, the
+extension, the scroll family leaving the caret alone, centring by arithmetic — the paragraph pair crossing a wrap, the
+unit selections, the two deletions, the direction commands, and the keys themselves through the input context.
+
 ### Still absent, and why
 
 **NINE THINGS THAT USED TO BE ON THIS LIST ARE NOT ANY MORE, AND THE LIST IS CORRECTED RATHER THAN QUIETLY SHRUNK:**

@@ -1657,6 +1657,371 @@ static void cg_announce(NSText *text, NSString *name, SEL delegateSelector)
 	[self setSelectedRange:NSMakeRange(_selectedRange.location, [[self string] length] - _selectedRange.location)];
 }
 
+/* ============================================================================================ *
+ * THE PAGING, PARAGRAPH AND SCROLLING COMMANDS                                                  *
+ *                                                                                              *
+ * **THEY ARE DECLARED ON `NSResponder` AND IMPLEMENTED HERE**, which is Apple's placement and the *
+ * reason a command works with a nil target: the binding names the selector, the chain delivers it, *
+ * and the responder that can honour it answers. `NSTextInputContext` binds Page Up and Page Down to *
+ * `-pageUp:`/`-pageDown:` and Option-Up/Down to the paragraph pair, and until this slice the      *
+ * bindings had nothing to name — the mapping said so in a comment ("a page is a viewport's height *
+ * and this tier has no viewport"), which was false by the time it was read: the clip view and the *
+ * document height are what `-scrollRangeToVisible:` has been scrolling since the wrapping slice.   *
+ * ============================================================================================ */
+
+/* **A PAGE IS THE VIEWPORT'S HEIGHT IN LINES**, measured from the clip view the view is inside. A view with no scroll
+ * view has no viewport: every command below answers that by FORWARDING, which is what the base class does and what
+ * leaves the decision to whoever put the view where it is. The count is at least one, so a viewport shorter than a
+ * line still pages by a line rather than by nothing. */
+- (NSInteger)cg_viewportLineCount
+{
+	NSScrollView *scrollView = [self enclosingScrollView];
+	CGFloat height;
+	CGFloat lineHeight;
+
+	if (scrollView == nil) {
+		return 0;
+	}
+	height = NSHeight([[scrollView contentView] bounds]);
+	lineHeight = [self cg_lineHeight];
+	if (height <= 0.0 || lineHeight <= 0.0) {
+		return 0;
+	}
+	{
+		NSInteger lines = (NSInteger)(height / lineHeight);
+
+		return (lines < 1) ? 1 : lines;
+	}
+}
+
+/* **THE INSERTION POINT MOVES BY A VIEWPORT AND THE VIEW FOLLOWS IT.** From a selection the movement starts at the end
+ * it is going towards, which is the rule the vertical pair already keeps; the x is the caret's own, so a page down
+ * lands on the same column. The clamp to the last line is what makes the last page a page that stops at the end
+ * rather than one that does nothing. */
+- (void)pageDown:(id)sender
+{
+	NSInteger lines = [self cg_viewportLineCount];
+
+	(void)sender;
+	if (lines <= 0) {
+		[[self nextResponder] pageDown:sender];
+		return;
+	}
+	{
+		NSUInteger location = _selectedRange.location + _selectedRange.length;
+		NSUInteger line = [self cg_visualLineIndexForCharacterIndex:location];
+		NSUInteger count = [self cg_visualLineCount];
+		NSUInteger target;
+
+		if (_selectedRange.length > 0) {
+			[self setSelectedRange:NSMakeRange(location, 0)];
+		}
+		if (line + (NSUInteger)lines >= count) {
+			line = count - 1;
+		} else {
+			line = line + (NSUInteger)lines;
+		}
+		target = [self cg_indexOnLine:line atX:[self cg_xForIndex:location]];
+		[self setSelectedRange:NSMakeRange(target, 0)];
+		[self scrollRangeToVisible:NSMakeRange(target, 0)];
+	}
+}
+
+- (void)pageUp:(id)sender
+{
+	NSInteger lines = [self cg_viewportLineCount];
+
+	(void)sender;
+	if (lines <= 0) {
+		[[self nextResponder] pageUp:sender];
+		return;
+	}
+	{
+		NSUInteger location = _selectedRange.location;
+		NSUInteger line = [self cg_visualLineIndexForCharacterIndex:location];
+		NSUInteger target;
+
+		if (_selectedRange.length > 0) {
+			[self setSelectedRange:NSMakeRange(location, 0)];
+		}
+		line = ((NSUInteger)lines > line) ? 0 : (line - (NSUInteger)lines);
+		target = [self cg_indexOnLine:line atX:[self cg_xForIndex:location]];
+		[self setSelectedRange:NSMakeRange(target, 0)];
+		[self scrollRangeToVisible:NSMakeRange(target, 0)];
+	}
+}
+
+/* AND THE TWO EXTENSIONS, which move the end the direction moves and leave the other one where it was. */
+- (void)pageDownAndModifySelection:(id)sender
+{
+	NSInteger lines = [self cg_viewportLineCount];
+
+	(void)sender;
+	if (lines <= 0) {
+		[[self nextResponder] pageDownAndModifySelection:sender];
+		return;
+	}
+	{
+		NSUInteger location = _selectedRange.location;
+		NSUInteger end = location + _selectedRange.length;
+		NSUInteger line = [self cg_visualLineIndexForCharacterIndex:end];
+		NSUInteger count = [self cg_visualLineCount];
+		NSUInteger target;
+
+		line = (line + (NSUInteger)lines >= count) ? (count - 1) : (line + (NSUInteger)lines);
+		target = [self cg_indexOnLine:line atX:[self cg_xForIndex:end]];
+		[self setSelectedRange:NSMakeRange(location, target - location)];
+		[self scrollRangeToVisible:NSMakeRange(target, 0)];
+	}
+}
+
+- (void)pageUpAndModifySelection:(id)sender
+{
+	NSInteger lines = [self cg_viewportLineCount];
+
+	(void)sender;
+	if (lines <= 0) {
+		[[self nextResponder] pageUpAndModifySelection:sender];
+		return;
+	}
+	{
+		NSUInteger location = _selectedRange.location;
+		NSUInteger end = location + _selectedRange.length;
+		NSUInteger line = [self cg_visualLineIndexForCharacterIndex:location];
+		NSUInteger target;
+
+		line = ((NSUInteger)lines > line) ? 0 : (line - (NSUInteger)lines);
+		target = [self cg_indexOnLine:line atX:[self cg_xForIndex:location]];
+		[self setSelectedRange:NSMakeRange(target, end - target)];
+		[self scrollRangeToVisible:NSMakeRange(target, 0)];
+	}
+}
+
+/* **A SCROLL COMMAND MOVES THE VIEWPORT AND LEAVES THE INSERTION POINT ALONE.** That is the whole difference from the
+ * page pair above, and it is what a scroll bar's arrow does. The rect handed to `-scrollRectToVisible:` is the size of
+ * the visible area, so the clip view scrolls by exactly one page (or by one line) and clamps at the document's ends —
+ * the same door, one rectangle, no second scroll arithmetic. */
+- (void)cg_scrollByAmount:(CGFloat)amount
+{
+	NSScrollView *scrollView = [self enclosingScrollView];
+	NSRect visible;
+	NSRect target;
+
+	if (scrollView == nil) {
+		return;
+	}
+	visible = [[scrollView contentView] documentVisibleRect];
+	target = NSMakeRect(visible.origin.x, visible.origin.y + amount, visible.size.width, visible.size.height);
+	[self scrollRectToVisible:target];
+}
+
+- (void)scrollPageDown:(id)sender
+{
+	(void)sender;
+	[self cg_scrollByAmount:NSHeight([[[self enclosingScrollView] contentView] bounds])];
+}
+
+- (void)scrollPageUp:(id)sender
+{
+	(void)sender;
+	[self cg_scrollByAmount:-NSHeight([[[self enclosingScrollView] contentView] bounds])];
+}
+
+- (void)scrollLineDown:(id)sender
+{
+	(void)sender;
+	[self cg_scrollByAmount:[self cg_lineHeight]];
+}
+
+- (void)scrollLineUp:(id)sender
+{
+	(void)sender;
+	[self cg_scrollByAmount:-[self cg_lineHeight]];
+}
+
+- (void)scrollToBeginningOfDocument:(id)sender
+{
+	(void)sender;
+	[self scrollRectToVisible:NSMakeRect(0.0, 0.0, 1.0, 1.0)];
+}
+
+- (void)scrollToEndOfDocument:(id)sender
+{
+	(void)sender;
+	[self scrollRangeToVisible:NSMakeRange([[self string] length], 0)];
+}
+
+/* **AND CENTRING IS THE ONE SCROLL THAT ASKS WHERE THE CARET IS AND PUTS IT IN THE MIDDLE.** The clip view is asked to
+ * show the rect whose origin is half a viewport above the caret's line, which leaves the caret's line centred. */
+- (void)centerSelectionInVisibleArea:(id)sender
+{
+	NSScrollView *scrollView = [self enclosingScrollView];
+	NSRect caret;
+	NSRect visible;
+
+	(void)sender;
+	if (scrollView == nil) {
+		return;
+	}
+	visible = [[scrollView contentView] documentVisibleRect];
+	caret = [self cg_rectForCharacterIndex:_selectedRange.location];
+	[self scrollRectToVisible:NSMakeRect(0.0, NSMidY(caret) - visible.size.height / 2.0,
+					    visible.size.width, visible.size.height)];
+}
+
+/* ============================================================================================ *
+ * THE PARAGRAPH FAMILY, AND THE SELECTION'S UNITS                                              *
+ *                                                                                              *
+ * **A PARAGRAPH HERE IS THE MODEL LINE** — a newline-terminated run, which is the unit this class already keeps for
+ * `-cg_lineCount` and its sibling doors. That is the same definition Apple uses for a text view's paragraph, and it is
+ * what makes these commands depend on the STRING rather than on the wrap: a paragraph split by the width is still one
+ * paragraph, and moving to its end must cross the wrap.                                    *
+ * ============================================================================================ */
+
+- (NSRange)cg_paragraphRangeForIndex:(NSUInteger)index
+{
+	NSUInteger line = [self cg_lineIndexForCharacterIndex:index];
+
+	return [self cg_characterRangeOfLine:line];
+}
+
+- (void)moveToBeginningOfParagraph:(id)sender
+{
+	NSRange paragraph = [self cg_paragraphRangeForIndex:_selectedRange.location];
+
+	(void)sender;
+	[self setSelectedRange:NSMakeRange(paragraph.location, 0)];
+}
+
+- (void)moveToEndOfParagraph:(id)sender
+{
+	NSUInteger end = _selectedRange.location + _selectedRange.length;
+	NSRange paragraph = [self cg_paragraphRangeForIndex:end];
+
+	(void)sender;
+	[self setSelectedRange:NSMakeRange(paragraph.location + paragraph.length, 0)];
+}
+
+- (void)moveToBeginningOfParagraphAndModifySelection:(id)sender
+{
+	NSRange paragraph = [self cg_paragraphRangeForIndex:_selectedRange.location];
+	NSUInteger end = _selectedRange.location + _selectedRange.length;
+
+	(void)sender;
+	[self setSelectedRange:NSMakeRange(paragraph.location, end - paragraph.location)];
+}
+
+- (void)moveToEndOfParagraphAndModifySelection:(id)sender
+{
+	NSRange paragraph = [self cg_paragraphRangeForIndex:_selectedRange.location + _selectedRange.length];
+
+	(void)sender;
+	[self setSelectedRange:NSMakeRange(_selectedRange.location,
+					   paragraph.location + paragraph.length - _selectedRange.location)];
+}
+
+/* **THE TWO THAT EXTEND BY A WHOLE PARAGRAPH, WHICH IS THE DOUBLE-CLICK-AND-DRAG SHAPE.** Backward takes the paragraph
+ * before the selection's start; forward takes the one after its end. */
+- (void)moveParagraphBackwardAndModifySelection:(id)sender
+{
+	NSUInteger location = _selectedRange.location;
+	NSRange paragraph = [self cg_paragraphRangeForIndex:location];
+
+	(void)sender;
+	if (paragraph.location == location && location > 0) {
+		paragraph = [self cg_paragraphRangeForIndex:location - 1];
+	}
+	[self setSelectedRange:NSMakeRange(paragraph.location,
+					   _selectedRange.location + _selectedRange.length - paragraph.location)];
+}
+
+- (void)moveParagraphForwardAndModifySelection:(id)sender
+{
+	NSUInteger end = _selectedRange.location + _selectedRange.length;
+	NSRange paragraph = [self cg_paragraphRangeForIndex:end];
+
+	(void)sender;
+	if (paragraph.location + paragraph.length == end && end < [[self string] length]) {
+		paragraph = [self cg_paragraphRangeForIndex:end + 1];
+	}
+	[self setSelectedRange:NSMakeRange(_selectedRange.location,
+					   paragraph.location + paragraph.length - _selectedRange.location)];
+}
+
+/* AND THE TWO DELETIONS, which are the same ranges handed to the edit path. */
+- (void)deleteToBeginningOfParagraph:(id)sender
+{
+	NSRange paragraph = [self cg_paragraphRangeForIndex:_selectedRange.location];
+	NSUInteger location = _selectedRange.location;
+
+	(void)sender;
+	if (location > paragraph.location || _selectedRange.length > 0) {
+		/* THE RANGE GOES THROUGH THE EDIT PATH rather than around it, so the deletion is undoable and the delegate is
+		 * asked: the same two lines `-delete:` uses. */
+		[self setSelectedRange:NSMakeRange(paragraph.location,
+						   location - paragraph.location + _selectedRange.length)];
+		[self insertText:@""];
+	}
+}
+
+- (void)deleteToEndOfParagraph:(id)sender
+{
+	NSUInteger end = _selectedRange.location + _selectedRange.length;
+	NSRange paragraph = [self cg_paragraphRangeForIndex:end];
+	NSUInteger stop = paragraph.location + paragraph.length;
+
+	(void)sender;
+	if (stop > end) {
+		[self setSelectedRange:NSMakeRange(end, stop - end)];
+		[self insertText:@""];
+	}
+}
+
+/* **THE THREE UNIT SELECTIONS ARE ONE LINE EACH, BECAUSE THE GRANULARITY DOOR ALREADY EXISTS.** `-selectWord:`,
+ * `-selectLine:` and `-selectParagraph:` are the selection expanded to a unit around the insertion point — the same
+ * door a double-click and a triple-click go through, which is what makes the menu item and the gesture agree. */
+- (void)selectWord:(id)sender
+{
+	(void)sender;
+	[self setSelectedRange:[self selectionRangeForProposedRange:_selectedRange
+						       granularity:NSTextSelectionGranularityWord]];
+}
+
+- (void)selectLine:(id)sender
+{
+	(void)sender;
+	[self setSelectedRange:[self selectionRangeForProposedRange:_selectedRange
+						       granularity:NSTextSelectionGranularityParagraph]];
+}
+
+- (void)selectParagraph:(id)sender
+{
+	(void)sender;
+	[self setSelectedRange:[self selectionRangeForProposedRange:_selectedRange
+						       granularity:NSTextSelectionGranularityParagraph]];
+}
+
+/* AND THE THREE BASE-DIRECTION COMMANDS, which set the paragraph's direction over the range the paragraph attribute
+ * commands already use. The three "text" direction doors are NOT here: a run's own direction is an attribute this tier
+ * has not built, so the base class forwards them and nothing answers. */
+- (void)makeBaseWritingDirectionLeftToRight:(id)sender
+{
+	(void)sender;
+	[self setBaseWritingDirection:NSWritingDirectionLeftToRight range:[self rangeForUserParagraphAttributeChange]];
+}
+
+- (void)makeBaseWritingDirectionRightToLeft:(id)sender
+{
+	(void)sender;
+	[self setBaseWritingDirection:NSWritingDirectionRightToLeft range:[self rangeForUserParagraphAttributeChange]];
+}
+
+- (void)makeBaseWritingDirectionNatural:(id)sender
+{
+	(void)sender;
+	[self setBaseWritingDirection:NSWritingDirectionNatural range:[self rangeForUserParagraphAttributeChange]];
+}
+
 /* ==================================================================================================================
  * THE RULER.
  *
