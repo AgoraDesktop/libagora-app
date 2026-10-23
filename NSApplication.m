@@ -732,7 +732,10 @@ static double s_last_report;
 	while (i < [_eventQueue count]) {
 		NSEvent *e = [_eventQueue objectAtIndex:i];
 
-		if ((mask & NSAnyEventMask) || (mask & ((NSUInteger)1 << [e type]))) {
+		/* **THE EVENT'S OWN BIT, WHICH IS WHAT "ANY" MEANS ANYWAY.** `NSAnyEventMask` has every bit set, so it
+		 * needs no separate case; asking whether the mask intersects `NSAnyEventMask` at all is true for every
+		 * nonzero mask and would discard events the caller did not name. */
+		if ((mask & ((NSUInteger)1 << [e type])) != 0) {
 			[_eventQueue removeObjectAtIndex:i];
 		} else {
 			i++;
@@ -766,7 +769,10 @@ static double s_last_report;
 		for (i = 0; i < [_eventQueue count]; i++) {
 			NSEvent *e = [_eventQueue objectAtIndex:i];
 
-			if ((mask & NSAnyEventMask) || (mask & ((NSUInteger)1 << [e type]))) {
+			/* AND THE SAME TEST AT THE PEEK, so a mask that does not name this event leaves it in place and
+			 * the search continues — rather than returning the first thing in the queue whatever was asked
+			 * for. */
+			if ((mask & ((NSUInteger)1 << [e type])) != 0) {
 				if (deqFlag) {
 					[e retain];
 					[_eventQueue removeObjectAtIndex:i];
@@ -1227,6 +1233,28 @@ static double s_last_report;
 
 	if (theEvent == nil) {
 		return;
+	}
+	/* **THE MAIN MENU IS OFFERED THE KEY BEFORE ANY WINDOW IS.** Apple's `-sendEvent:` does this for a key-down and
+	 * returns when the menu takes it, and this pump did not: it went straight to `[w sendEvent:]`, so a Command-key
+	 * equivalent never fired on the ORDINARY dispatch route and only worked while a menu was tracking. MEASURED on
+	 * this tree: a main-menu item with an explicit Command modifier and a first responder recording `-keyDown:` —
+	 * the responder won and the menu action never ran.
+	 *
+	 * IT COMES BEFORE THE WINDOW IS EVEN LOOKED UP, because a key equivalent belongs to the MENU BAR and not to a
+	 * window: it must fire when the event's window number names nothing this application has (a menu bar window of
+	 * its own, or the compositor's numbering) and it must fire while a sheet is up, which is exactly when the gate
+	 * below drops input aimed at the sheet's parent. `-performKeyEquivalent:` matches only items that HAVE a key
+	 * equivalent, so an ordinary keystroke falls straight through to the responder chain.
+	 *
+	 * AND A HANDLED EVENT IS CONSUMED, so the action fires once: returning here is what stops the responder seeing
+	 * a keystroke the menu already acted on. */
+	if ([theEvent type] == NSKeyDown && _mainMenu != nil) {
+		if ([_mainMenu performKeyEquivalent:theEvent]) {
+			if (getenv("APPKIT_MENU_DIAG") != NULL) {
+				fprintf(stderr, "  DIAG dispatch: the main menu handled the key equivalent\n");
+			}
+			return;
+		}
 	}
 	w = [self windowWithWindowNumber:[theEvent windowNumber]];
 	if (w == nil) {

@@ -674,6 +674,19 @@ set_tests_properties(appkit-events-headless PROPERTIES SKIP_RETURN_CODE 77
 # lights the theme's pressed art; this proves the RELEASE performs the action — and only when the pointer is still
 # on the button that was pressed. Same harness as the events test, for the same reason: the seam's struct is
 # public and the pump is the application's own, so the only synthetic link is the compositor calling that door.
+# **AND THREE DISPATCH QUESTIONS THE PUMP ANSWERED WRONGLY**, each a wrong answer rather than a missing feature:
+# a mask that named one event selected all of them (the `mask & NSAnyEventMask` pattern, in the posted queue, the
+# discard door AND the per-window queue); a compositor's close bypassed `-windowShouldClose:`; and a main-menu key
+# equivalent never reached the menu bar on the ordinary `-sendEvent:` route, only while a menu was tracking.
+add_executable(appkit_dispatch appkit_dispatch.m)
+target_link_libraries(appkit_dispatch PRIVATE App)
+
+add_test(NAME appkit-dispatch
+  COMMAND "${CMAKE_CURRENT_SOURCE_DIR}/run-appkit-headless.sh" "$<TARGET_FILE:appkit_dispatch>" 3
+	  "all checks passed" )
+set_tests_properties(appkit-dispatch PROPERTIES SKIP_RETURN_CODE 77
+  ENVIRONMENT "${_agora_app_test_env}")
+
 add_executable(chrome_buttons chrome_buttons.m)
 target_link_libraries(chrome_buttons PRIVATE App)
 

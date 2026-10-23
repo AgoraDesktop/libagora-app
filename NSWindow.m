@@ -2878,10 +2878,22 @@ static CGFloat fn_clamp_axis(CGFloat v, CGFloat lo, CGFloat hi)
 	}
 	/* A CLOSE THE COMPOSITOR ASKED FOR IS ACTED ON HERE rather than inside the dispatch that heard it, and this
 	 * is outside the dispatch: `-close` destroys the window, and destroying it while libwayland is still walking
-	 * that window's own listeners is a use-after-free. */
+	 * that window's own listeners is a use-after-free.
+	 *
+	 * **AND IT GOES THROUGH `-performClose:`, WHICH IS THE DOOR WITH THE VETO ON IT.** This used to call `-close`
+	 * directly, so a compositor's close (the shell's `close_window`, a Dock tile's Close) skipped
+	 * `-windowShouldClose:` entirely and a window with unsaved changes went away without being asked — while the
+	 * SAME window's chrome button asked. One window has one close policy; which door the request came through is
+	 * not the application's business. `-performClose:` can refuse, in which case nothing happens here and the
+	 * window stays. */
 	if (_cg_closeRequested) {
 		_cg_closeRequested = NO;
-		[self close];
+		/* **HELD ACROSS THE DECISION, BECAUSE THE DECISION MAY RELEASE THIS WINDOW.** `-performClose:` ends in
+		 * `-close`, and a window that was created with `-setReleasedWhenClosed:YES` is deallocated by it — so the
+		 * frame that asked gets a released receiver back and its next use is a use-after-free. Retaining here costs
+		 * one pair of messages on a path that runs once per close. */
+		[[self retain] autorelease];
+		[self performClose:nil];
 		return nil;
 	}
 	if (ms >= 0) {
@@ -2894,7 +2906,12 @@ static CGFloat fn_clamp_axis(CGFloat v, CGFloat lo, CGFloat hi)
 			NSEvent *ev = [_cg_events objectAtIndex:i];
 			NSUInteger t = (NSUInteger)1 << [ev type];
 
-			if (!(mask & NSAnyEventMask) && !(mask & t)) {
+			/* **`mask & t` IS THE WHOLE TEST, AND IT ALREADY COVERS "ANY".** `NSAnyEventMask` is every bit
+			 * set, so a selective mask that contains this event's type answers nonzero and the all-events mask
+			 * answers nonzero for every event. Asking `mask & NSAnyEventMask` as well — which this did, before an
+			 * event was even looked at — is nonzero for ANY nonzero mask, so the `continue` could never fire and
+			 * a mouse-only peek returned the first key event in the queue. */
+			if ((mask & t) == 0) {
 				continue;
 			}
 			/* NOT DEQUEUING MEANS NOT TAKING: the caller is LOOKING, and the app-level drain polls every
