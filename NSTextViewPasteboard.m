@@ -328,12 +328,24 @@
 	}
 }
 
+/* **THE DELETE COMMAND IS THE ONE PLACE SMART DELETE IS APPLIED, AND IT IS APPLIED TO A SELECTION.** The proposed range is
+ * the selection and the view asks `-smartDeleteRangeForProposedRange:` for the range to actually remove, so a word
+ * deleted between two spaces leaves ONE space rather than two. A CARET DOES NOTHING, which is what this command has always
+ * done with an empty selection — `-deleteBackward:` is the key for that, and it removes one character where there is no
+ * doubled space to avoid. */
 - (void)delete:(id)sender
 {
+	NSRange proposed = _selectedRange;
+
 	(void)sender;
-	if (_selectedRange.length > 0) {
-		[self insertText:@""];
+	if (proposed.length == 0) {
+		return;
 	}
+	proposed = [self smartDeleteRangeForProposedRange:proposed];
+	if (!NSEqualRanges(proposed, _selectedRange)) {
+		[self setSelectedRange:proposed];
+	}
+	[self insertText:@""];
 }
 
 - (void)paste:(id)sender

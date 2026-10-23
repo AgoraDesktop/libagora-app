@@ -193,6 +193,21 @@ enum {
 	 * by a view that allows editing images, and this flag is read where the paste is decoded rather than stored for a
 	 * later slice. */
 	BOOL _cg_allowsImageEditing;
+	/* ============================================================================================
+	 * WHAT TYPING DOES AROUND IT: THE SMART-INSERT FLAG, THE UNDO FLAG, AND WHERE THE LAST EDIT ENDED.
+	 *
+	 * **BOTH FLAGS DEFAULT TO NO, WHICH IS APPLE'S DEFAULT FOR A PROGRAMMATICALLY MADE VIEW** (a text view in a
+	 * document gets YES from the document, and one in a nib from the nib). Stated because this tree has been here
+	 * before: a flag whose default silently differs from the era is a difference a bookmark has to find.
+	 *
+	 * **`_cg_lastEditEnd` IS HOW COALESCING IS DECIDED.** Apple's text view relies on the undo manager's event-driven
+	 * grouping to know where a typing run ends; this Foundation's manager has no event grouping, so the view keeps the
+	 * one fact that answers the same question — WHERE THE PREVIOUS EDIT FINISHED — and an edit that is not adjacent to it
+	 * closes the open group. `NSNotFound` means "no run in progress".
+	 * ========================================================================================== */
+	BOOL _cg_smartInsertDelete;
+	BOOL _cg_allowsUndo;
+	NSUInteger _cg_lastEditEnd;
 }
 
 /* ==================================================================================================================
@@ -498,6 +513,51 @@ enum {
 - (void)setAlignment:(NSTextAlignment)alignment range:(NSRange)range;
 - (void)setBaseWritingDirection:(NSWritingDirection)direction range:(NSRange)range;
 - (void)toggleBaseWritingDirection:(nullable id)sender;
+
+/* ==================================================================================================================
+ * WHAT TYPING DOES AROUND IT — SMART INSERT AND DELETE, AND THE UNDO GROUP.
+ *
+ * **SMART INSERT ADDS THE SPACE THAT TWO WORDS WOULD OTHERWISE LOSE.** A string inserted next to a word — by typing, by a
+ * paste, by a drop — is surrounded by a space where the neighbouring character and the inserted edge are both
+ * *word* characters (a letter, a digit or an underscore), because that is the case where the text would otherwise
+ * fuse into one word. Whitespace at either edge needs nothing, and so does the start or the end of the document. The
+ * three doors are Apple's: the pair answers the two halves, and the whole one answers both, so a caller that only
+ * wants to know whether anything would happen can ask either half.
+ *
+ * **SMART DELETE TAKES THE WHITESPACE THE DELETION WOULD OTHERWISE LEAVE DOUBLED.** `-smartDeleteRangeForProposedRange:`
+ * grows a non-empty range over the whitespace that separates it from the next word — the TRAILING run when there is one,
+ * else the LEADING run — so deleting a word between two spaces leaves one space rather than two. That is the whole
+ * rule, it is applied by `-delete:` (the command a Delete menu item sends), and it does not touch `-deleteBackward:`:
+ * one character at a time there is no doubled space to avoid, and the base class's arithmetic for that key stays its
+ * own.
+ *
+ * **UNDO IS A GROUP OF EDITS, NOT A STACK OF KEYSTROKES.** With `-allowsUndo` on and an undo manager in the responder
+ * chain (`-undoManager`, which this view inherits and a document's window supplies), every edit through the view's
+ * primitive registers the edit that reverses it, so the manager replays the view's own door and the text, the layout
+ * and the selection all follow. A run of ADJACENT edits — typing, or a run of backspaces — stays in ONE group, which is
+ * what makes one `-undo` take back a typed word rather than a letter; an edit somewhere else closes the group and
+ * starts another, and `-breakUndoCoalescing` closes it on demand.
+ *
+ * **AND `-didChangeText` IS THE DOOR THE EDIT PATH CALLS**, rather than the notification being posted from three
+ * places: it announces the change to the delegate and the centre, and it is what an override hooks to see an edit.
+ * ================================================================================================================ */
+
+- (BOOL)smartInsertDeleteEnabled;
+- (void)setSmartInsertDeleteEnabled:(BOOL)flag;
+- (void)toggleSmartInsertDelete:(nullable id)sender;
+- (void)smartInsertForString:(NSString *)pasteString
+	      replacingRange:(NSRange)charRange
+		 beforeString:(NSString * _Nullable * _Nullable)beforeString
+		  afterString:(NSString * _Nullable * _Nullable)afterString;
+- (nullable NSString *)smartInsertBeforeStringForString:(NSString *)pasteString replacingRange:(NSRange)charRange;
+- (nullable NSString *)smartInsertAfterStringForString:(NSString *)pasteString replacingRange:(NSRange)charRange;
+- (NSRange)smartDeleteRangeForProposedRange:(NSRange)proposedCharRange;
+
+- (BOOL)allowsUndo;
+- (void)setAllowsUndo:(BOOL)flag;
+- (void)breakUndoCoalescing;
+- (BOOL)isCoalescingUndo;
+- (void)didChangeText;
 
 /* ==================================================================================================================
  * THE TWO PANELS A COMMAND OPENS.

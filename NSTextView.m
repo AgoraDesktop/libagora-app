@@ -54,6 +54,16 @@ static void cg_announce(NSText *text, NSString *name, SEL delegateSelector)
 	}
 }
 
+/* **THE PRIVATE DOORS THIS FILE ASKS OF `NSTextViewEditing.m`.** The smart insertion and the undo registration are the
+ * editing category's (see that file for why the split is by subject): the edit path here is what asks them, once each,
+ * so the two files cannot disagree about which string is inserted or which range the undo action names. */
+@interface NSTextView (AGEditingPrivate)
+- (NSString *)cg_textWithSmartInsertionForString:(NSString *)text range:(NSRange)range;
+- (void)cg_noteEditInRange:(NSRange)range
+	      insertedText:(NSString *)inserted
+	      replacedText:(NSString *)replaced;
+@end
+
 @implementation NSTextView
 
 - (instancetype)initWithFrame:(NSRect)frameRect
@@ -84,6 +94,10 @@ static void cg_announce(NSText *text, NSString *name, SEL delegateSelector)
 		_cg_textContainerInset = NSMakeSize(0.0, NS_TEXT_INSET);
 		_cg_textContainerOrigin = NSMakePoint(_cg_textContainerInset.width, _cg_textContainerInset.height);
 		_cg_originValid = YES;
+		/* **NO EDIT RUN IS IN PROGRESS**, which is what makes the first edit open an undo group rather than close an
+		 * empty one. The two editing flags (`-smartInsertDeleteEnabled`, `-allowsUndo`) are NO by the zero fill, which
+		 * is Apple's default for a programmatically made view; the header says so where a reader will look. */
+		_cg_lastEditEnd = NSNotFound;
 		/* **AND THE TRIO IS BUILT HERE, IN THE ONE DIRECTION THAT CANNOT CYCLE.** The view retains the STORE, the
 		 * store retains the MANAGER, the manager retains the CONTAINER, and the container holds a BORROWED pointer
 		 * back to this view. The padding is the field's own inset, so the manager's lines start where every other
@@ -759,6 +773,15 @@ static void cg_announce(NSText *text, NSString *name, SEL delegateSelector)
 	if (range.location + range.length > length) {
 		range.length = length - range.location;
 	}
+	/* **THE TEXT THIS EDIT REPLACES IS READ BEFORE THE STORE IS TOUCHED**, because it is what the undo action has to put
+	 * back and the store is about to forget it. Retained for the same reason the run above is: the dictionary the store
+	 * hands back is its own, and `-replaceCharactersInRange:` can free the run it came from. */
+	{
+		NSString *replaced = [[[_cg_textStorage string] substringWithRange:range] retain];
+
+		[self cg_noteEditInRange:range insertedText:text replacedText:replaced];
+		[replaced release];
+	}
 	if (length > 0 && range.location > 0) {
 		/* **AND THE RUN IS RETAINED ACROSS THE EDIT, WHICH IS NOT TIDINESS.** A store's `-attributesAtIndex:` hands back
 		 * the RUN'S OWN dictionary rather than a copy, and the `-replaceCharactersInRange:` below can free that run — so a
@@ -779,9 +802,21 @@ static void cg_announce(NSText *text, NSString *name, SEL delegateSelector)
 	[_cg_textStorage endEditing];
 	[inherited release];
 	[self setSelectedRange:NSMakeRange(range.location + [text length], 0)];
-	cg_announce(self, NSTextDidChangeNotification, @selector(textDidChange:));
+	/* **THE CHANGE IS ANNOUNCED THROUGH ITS OWN DOOR** rather than inline, because `-didChangeText` is Apple's public
+	 * hook for "an edit just happened" and a subclass that overrides it must see every edit this class makes. */
+	[self didChangeText];
 	[self setNeedsDisplay:YES];
 	[self cg_fitHeight];
+}
+
+/* **THE ANNOUNCEMENT THE EDIT PATH MAKES, AND THE PUBLIC HOOK IT IS.** `NSTextDidChangeNotification` goes to the centre
+ * and to the delegate's `-textDidChange:`, which is exactly the pair `NSText`'s own commands make — so a keystroke, a
+ * paste, a drop and an undo replay all announce themselves the same way, and a subclass that overrides this door sees
+ * all four. IT DOES NOT TOUCH THE UNDO GROUP: the group's boundary is decided where the edit is recorded
+ * (`NSTextViewEditing.m`), because that is the only place that knows whether an edit continues the run. */
+- (void)didChangeText
+{
+	cg_announce(self, NSTextDidChangeNotification, @selector(textDidChange:));
 }
 
 /* **AND `-setString:` REPLACES THE WHOLE STORE**, keeping the view's font as the run the new text is set in, because a
@@ -1208,6 +1243,14 @@ static void cg_announce(NSText *text, NSString *name, SEL delegateSelector)
 	target = (replacementRange.location != NSNotFound)
 		 ? replacementRange
 		 : ([self hasMarkedText] ? _cg_markedRange : _selectedRange);
+	/* **AND THE SMART SPACES ARE ADDED BEFORE ANYBODY IS ASKED ABOUT THE EDIT**, so `-shouldChangeTextInRange:…`
+	 * and the delegate behind it are asked about the string that will actually be inserted rather than about the
+	 * caller's, and the undo action records one edit instead of three. A COMPOSITION IS EXEMPT: an input method commits
+	 * into the middle of a word it is still composing, where a space inserted by this rule would be wrong — the same
+	 * reason the marked range is the target above. */
+	if (_cg_smartInsertDelete && [text length] > 0 && ![self hasMarkedText]) {
+		text = [self cg_textWithSmartInsertionForString:text range:target];
+	}
 	{
 		NSRange edit = NSMakeRange(MIN(target.location, [_cg_textStorage length]),
 					   MIN(target.length, [_cg_textStorage length] - MIN(target.location, [_cg_textStorage length])));

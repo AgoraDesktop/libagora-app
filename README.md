@@ -2305,6 +2305,43 @@ One trap is recorded there: **a new container width is a new wrap and the manage
 container's size, so the size change and the invalidation have to happen together, or the old lines are laid out in the
 new container.
 
+### What typing does around it: the smart space, the smart delete, and the undo group
+
+**SMART INSERT ADDS THE SPACE TWO WORDS WOULD OTHERWISE LOSE.** `-smartInsertForString:replacingRange:beforeString:afterString:`
+(and the two halves Apple also publishes) answers a space where the neighbouring character and the inserted edge are both
+word characters — a letter, a digit or an underscore, ASCII, the same set `NSText`'s word movement uses — and nowhere else:
+not at the start or end of the document, not next to whitespace, not next to punctuation. The view applies it in its own
+`-insertText:`, so TYPING, PASTING and DROPPING all get the same answer, and the edit reaches the delegate and the undo
+record as one insertion rather than three. A composition is exempt, because an input method commits into the middle of a
+word it is still composing.
+
+**SMART DELETE TAKES THE WHITESPACE A DELETION WOULD LEAVE DOUBLED.** `-smartDeleteRangeForProposedRange:` grows a
+non-empty range over the run of spaces and tabs that FOLLOWS it, else over the run BEFORE it — one rule, one direction,
+so a deleted word leaves one space instead of two. A newline is never absorbed, because it is a paragraph break rather
+than a gap, and a caret proposes nothing. `-delete:` is what applies it; `-deleteBackward:` is left to the base class,
+where one character at a time there is no doubled space to avoid.
+
+**AND UNDO IS A GROUP OF EDITS, NOT A STACK OF KEYSTROKES.** With `-allowsUndo` on and a manager in the responder chain,
+every edit through the view's primitive registers the edit that reverses it — the range it inserted over and the text it
+replaced — so an undo replays **the view's own door** and the store, the mirror, the layout, the selection and the
+notification all follow exactly as they follow a keystroke. A run of adjacent edits (typing, or a run of backspaces) stays
+in ONE group, which is what makes one `-undo` take back a word rather than a letter; an edit somewhere else closes the
+group and starts another, and `-breakUndoCoalescing` closes it on demand. This Foundation's `NSUndoManager` has no
+event-driven grouping, so the view keeps the one fact that answers the same question — where the previous edit finished —
+and the behaviour is the era's.
+
+**AND THE CHAIN HAD A DEAD DOOR, WHICH THE SLICE FOUND AND FIXED.** `NSWindowDelegate` published
+`-windowWillReturnUndoManager:`, `NSResponder -undoManager` documented its walk in as many words, and **nothing between
+them sent or answered it** — so a text view in a window found no manager at all and `-allowsUndo` could record nothing.
+`-[NSWindow undoManager]` is now the caller; the chain runs view → window → delegate → the document's manager.
+
+`tests/text_view_undo.m` asserts it in 44 checks: the two defaults, each smart-insert half (and the cases that must
+answer nil), the space appearing in the STORE with the flag on and its absence with it off, the four smart-delete ranges
+including the newline that is not a gap, `-delete:` leaving one space, and then a real `NSUndoManager` through a window
+delegate — the negative control (flag off, nothing recorded), one undo for a typed word, a redo through the view's own
+door, a break starting a new group, a non-adjacent edit starting its own, three backspaces as one undo, and a smart
+delete's undo restoring the space it took.
+
 ### Still absent, and why
 
 **NINE THINGS THAT USED TO BE ON THIS LIST ARE NOT ANY MORE, AND THE LIST IS CORRECTED RATHER THAN QUIETLY SHRUNK:**

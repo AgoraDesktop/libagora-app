@@ -29,7 +29,8 @@
  * that matters in a tier with no window server of its own:
  *
  *   `-undoManager` WALKS THE CHAIN and answers Foundation's NSUndoManager, which this tree HAS. A window's
- *   own answer is the delegate's (`-windowWillReturnUndoManager:`, which NSWindow declares), so the walk is
+ *   own answer is the delegate's (`-windowWillReturnUndoManager:`, which `NSWindow` both declares and NOW
+ *   SENDS — the window was the missing caller until the text view's undo slice needed it), so the walk is
  *   the whole implementation and nil at the end of the chain is the truth rather than a refusal.
  *
  *   `-willPresentError:` IS REAL AND IS A HOOK: Apple's default returns the error UNCHANGED, and a subclass

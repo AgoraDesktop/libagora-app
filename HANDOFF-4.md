@@ -6,11 +6,11 @@ and two slices of `NSTextView`. `HANDOFF.md`, `HANDOFF-2.md` and `HANDOFF-3.md` 
 of them was wrong, and the second file's §2 instrument rules and §4 traps are the ones these sessions used most. **THIS
 FILE'S §2 NUMBERS SUPERSEDE `HANDOFF-3.md`'s**, which are six slices old.*
 
-*State at this handover: **seven slice commits** since the eighth handoff (and the relicense sweep that touched every
-file in the meantime), tree clean, **144 tests passing in about 75 s**, `api-ledger check` holding **375 metrics** —
-**131 of 168 classes (78%), 4021 of 4505 selectors (89%), 39 of 56 protocols (70%), 86 of 86 functions**, 4546 methods
+*State at this handover: **eight slice commits** since the eighth handoff (and the relicense sweep that touched every
+file in the meantime), tree clean, **145 tests passing in about 79 s**, `api-ledger check` holding **375 metrics** —
+**131 of 168 classes (78%), 4033 of 4505 selectors (90%), 39 of 56 protocols (70%), 86 of 86 functions**, 4558 methods
 declared with 8 having no body, **113 of the 129 classes with a surface at COMPLETE coverage** — refusal census **292**.*
-*(`HANDOFF-3.md`'s §2 numbers are two slices older than these; the numbers in this file's §2 are current as of §9.)*
+*(`HANDOFF-3.md`'s §2 numbers are four slices older than these; the numbers in this file's §2 are current as of §10.)*
 
 ---
 
@@ -38,27 +38,28 @@ and a different commit line; it is recorded here because the AppKit slice is wha
 
 ```
 classes   131 of 168   (78%)    37 missing
-selectors 4021 of 4505 (89%)   484 missing   113 of 129 classes at COMPLETE coverage
+selectors 4033 of 4505 (90%)   472 missing   113 of 129 classes at COMPLETE coverage
 protocols  39 of  56   (70%)    17 missing
 functions  86 of  86  (100%)     0 missing    10 refuse by name
-methods   4546 declared on this tree's own classes, 8 with NO body on the chain (0.2%)
+methods   4558 declared on this tree's own classes, 8 with NO body on the chain (0.2%)
 ```
 
-**THE 484 MISSING SELECTORS ARE STILL CONCENTRATED, AND THE CONCENTRATION HAS MOVED INWARD AGAIN.** The ledger's debt
-list, largest first:
+**THE 472 MISSING SELECTORS ARE STILL CONCENTRATED, AND THE CONCENTRATION HAS MOVED OUTWARD AGAIN — TO `NSBrowser`.**
+The ledger's debt list, largest first:
 
 ```
-NSTextView 52   NSBrowser 64   NSResponder 57   NSWorkspace 49   NSMenuView 37
+NSBrowser 64    NSResponder 57   NSWorkspace 49   NSTextView 40   NSMenuView 37
 NSFont 35       NSText 31      NSView 28        NSControl 28     NSTableView 20
 NSDocument 19   NSWindow 18    NSSlider 18      NSSliderCell 17  NSDocumentController 8
 NSSavePanel 3
 ```
 
-Everything below `NSSliderCell` is five doors or fewer in a class that is otherwise complete. **`NSTextView`'S DEBT HAS
-STOPPED BEING SUBSYSTEM-SIZED IN SHAPE**: 68 became 52 in §9, what went was the CONTAINER AND INSERTION-POINT family,
-and what is left is three clusters — the text-checking family (BLOCKED on `NSTextCheckingResult`/`NSOrthography`, which
-Foundation here has not got), the link/services pair, and the undo and smart-insert doors. `NSBrowser`'s 64 is now the
-largest single debt in the component, and it is the one the next slice should take.
+Everything below `NSSliderCell` is five doors or fewer in a class that is otherwise complete. **`NSTextView` HAS FALLEN
+FROM FIRST TO FOURTH IN TWO SLICES** — 68 became 52 in §9 (the container and insertion-point family) and 40 in §10 (the
+smart-insert, smart-delete and undo doors) — and what is left is now almost entirely the two BLOCKED or REFUSED clusters:
+the text-checking family (Foundation here has no `NSTextCheckingResult` or `NSOrthography`) and the link/services pair,
+plus the speech and obsolete-character-shape doors, which refuse by name. **`NSBrowser`'s 64 is the component's largest
+debt and the next slice's obvious target.**
 
 **THE 37 ABSENT CLASSES GROUP CLEANLY:**
 
@@ -202,25 +203,25 @@ comments to `.cmake`, `.sh` or Python files breaks the gates — that happened, 
 Ranked by reachable surface per unit of work, and the ranking now starts with the class this tree has and has not
 finished:
 
-1. **`NSTextView`'s remaining 52, and the biggest usable cluster in it is the SMART-INSERT pair plus the undo
-   bookkeeping.** `-smartInsertForString:replacingRange:beforeString:afterString:`, the three `-smart…Delete…` doors,
-   `-toggleSmartInsertDelete:` and its flag are self-contained string arithmetic over doors the base class already has;
-   `-allowsUndo`, `-breakUndoCoalescing` and `-isCoalescingUndo` need an undo manager that Foundation here may not have —
-   **MEASURE THAT FIRST** and refuse by name if it does not, rather than storing a flag nobody reads. `-didChangeText`
-   is one line and is only meaningful once an undo group exists.
-2. **The rest of `NSTextView`**: the LINK/SERVICES pair (`-clickedOnLink:atIndex:`, `-displaysLinkToolTips`,
-   `-registerForServices`) which needs a link attribute constant; and the TEXT-CHECKING family (`-checkTextIn…`,
-   `-enabledTextCheckingTypes`, `-handleTextCheckingResults:…`, the three automatic-detection toggles), which is BLOCKED
-   on `NSTextCheckingResult`/`NSOrthography` — Foundation here has neither, and the asynchronous spell door already
-   refuses for exactly that reason. **Do not open the checking family before Foundation has the classes**; the honest
-   move is to name them absent and keep the flags refusing.
-3. **`NSBrowser` 64.** The Workspace's column view is a table-backed browser; the class itself is a table per column and
-   the remaining 64 are its delegate/data-source surface, drag and column management. It is the second-largest single
-   debt and the one a file manager would feel.
-4. **`NSResponder` 57.** Mostly the chain forwarders and the standard key-binding commands; each is small, and the
-   census credits them to `NSResponder`, not to the views that inherit them.
-5. **`NSWorkspace` 49.** The shell verbs: open/reveal, file operations, the running-application list. `libagora-launchservices`
+1. **`NSBrowser` 64 — NOW THE COMPONENT'S LARGEST DEBT.** The Workspace's column view is a table-backed browser; the class
+   itself is a table per column and the remaining 64 are its delegate/data-source surface, drag and column management.
+   `./tools/api-ledger missing` names them; the delegates (`NSBrowserDelegate`, 20+ doors) are contracts, so §5's rule 7
+   applies: whichever class ends up SENDING them has to say so. It is the one a file manager would feel.
+2. **`NSResponder` 57.** Mostly the chain forwarders and the standard key-binding commands; each is small, and the
+   census credits them to `NSResponder`, not to the views that inherit them. **The window's `-undoManager` was one of
+   this class's rows and is now a real answer in `NSWindow`** (§10) — the rest of the family is the same shape of work.
+3. **`NSWorkspace` 49.** The shell verbs: open/reveal, file operations, the running-application list. `libagora-launchservices`
    and `libagora-iconservices` are the seams, and the Workspace component is the caller.
+4. **`NSTextView`'s remaining 40**, which are now almost all BLOCKED or REFUSED rather than absent: the TEXT-CHECKING
+   family (`-checkTextIn…`, `-enabledTextCheckingTypes`, `-handleTextCheckingResults:…`, the three automatic-detection
+   toggles) is blocked on `NSTextCheckingResult`/`NSOrthography`, which Foundation here has not got; the LINK/SERVICES
+   pair needs a link attribute constant and a services transport; `-startSpeaking:`/`-stopSpeaking:` are speech, refused
+   by name; the five `-orderFront…Panel:` doors are panels this tier has not built; and `-complete:`/`-insertCompletion:`
+   are the WORD-COMPLETION family, which is the one cluster there that is genuinely a slice. **Do not open the checking
+   family before Foundation has the classes** — name them absent and keep the flags refusing.
+5. **`NSText` 31 and `NSFont` 35**, which are siblings rather than subsystems: `NSText`'s remaining doors are the RTF
+   write/read pair, `-changeFont:`/`-copyFont:`/`-pasteFont:`, the resizability and size limits, and `-showGuessPanel:`;
+   `NSFont`'s are the descriptor and traits surface.
 6. **The absent-class groups in §2**, in this order: the editors (`NSImageView`, `NSDrawer`, `NSTokenField`), the rules
    pair, and the controllers/bindings — which are a DESIGN QUESTION before they are a slice, because this tier has no KVO.
 7. **Leave refused** (§A11 and this tree's record): OpenGL, QuickDraw, movies, the four typesetters, `NSCollectionView`
@@ -256,8 +257,13 @@ finished:
   than one range, so the single-selection shape stays the cheap one and every inherited door keeps working.
 * **THIS TREE'S STRINGS ARE BYTE SEQUENCES, NOT CHARACTER SEQUENCES** for non-ASCII (`HANDOFF-2.md` §4): the word and
   paragraph granularities use ASCII `isalnum` and `_`, and say so.
-* **THE SUITE IS 144 TESTS IN ABOUT 75 SECONDS, AND `ctest --test-dir build -j4` IS THE GATE.** The exit status is the
+* **THE SUITE IS 145 TESTS IN ABOUT 79 SECONDS, AND `ctest --test-dir build -j4` IS THE GATE.** The exit status is the
   witness, not the tail of the output.
+* **A DECLARED DELEGATE DOOR WITH NO SENDER IS THE SAME DEFECT AS A DECLARED METHOD WITH NO BODY**, and §10 found one:
+  `NSWindowDelegate -windowWillReturnUndoManager:` was published, `NSResponder -undoManager` documented the walk that was
+  supposed to reach it, and nothing in between sent or answered it. A reader looking for "what is missing" should grep
+  for the door as well as for the row: the ledger counts DECLARATIONS, and a door declared on a protocol whose natural
+  sender never asks it counts as present while doing nothing.
 * **INSTALLING A VIEW AS A WINDOW'S CONTENT VIEW MAKES IT THE WINDOW'S FIRST RESPONDER**, so a text view handed back by
   `-setContentView:` is already `_editing`. "There is no caret here" is a claim you can make only about a view whose
   session you ended (`-resignFirstResponder`), not about a fresh one — this cost §9's slice two false failures.
@@ -346,3 +352,78 @@ extended to 4021.
 **WHERE THE NEXT HOUR GOES.** §6's ranking is rewritten above: `NSTextView`'s remaining 52 with the smart-insert and undo
 doors first (measuring whether Foundation here has an undo manager before storing a flag), then `NSBrowser` 64 — which is
 now the component's largest single debt and the one the Workspace's column view would feel.
+
+## 10. What typing does around it: the smart space, the smart delete, and the undo group
+
+*Session of the eighth slice, taking §6's first item as it then stood (the smart-insert and undo cluster). Its commit is
+"What typing does around it: smart insert, smart delete and the undo group"; tree clean; `ctest --test-dir build -j4`
+green at **145 tests in 79 s** with `appkit-api-census` re-pinned in the same commit.*
+
+**THE MEASUREMENT §6 ASKED FOR FIRST, AND THE ANSWER.** `libagora-base` ships `NSUndoManager` — a full one, with grouping,
+`-isUndoing`/`-isRedoing`, `-groupingLevel`, `-undoCount`, the eight notifications and `-registerUndoWithTarget:handler:`
+— and `NSResponder` implements `-undoManager` as a walk of the chain. So the undo half was never blocked; what was missing
+was a caller, and §10 found it (§"the dead door" below). No flag was stored that nothing reads.
+
+**TWELVE SELECTORS LANDED**, all `NSTextView`'s: `-smartInsertDeleteEnabled`/`-setSmartInsertDeleteEnabled:`/
+`-toggleSmartInsertDelete:`, `-smartInsertForString:replacingRange:beforeString:afterString:` and the two halves,
+`-smartDeleteRangeForProposedRange:`, `-allowsUndo`/`-setAllowsUndo:`, `-breakUndoCoalescing`, `-isCoalescingUndo` and
+`-didChangeText`. They live in a NEW CATEGORY FILE, `NSTextViewEditing.m` — §5's rule 9, because `NSTextView.m` is over
+two thousand lines — with the private doors declared once in each file so the two cannot disagree.
+
+**THE RULES, STATED BECAUSE EACH IS A DECISION.** Smart insert adds a space exactly where the neighbouring character and
+the inserted edge are both WORD characters (ASCII letter, digit, underscore — the same set `NSText`'s word movement uses,
+and the same deviation §4 records for non-ASCII), and nowhere else. Smart delete grows a non-empty range over the
+trailing run of spaces and tabs, else over the leading run — one direction, never both, or the survivors would have no
+space between them — and never over a newline, because a newline is a paragraph break rather than a gap. Both are applied
+in the EDIT PATH (`-insertText:` for the space, `-delete:` for the range) so typing, pasting and dropping agree, the
+delegate is asked about the string that will really be inserted, and the undo record is one action rather than three.
+
+**AND THE UNDO GROUP IS THE ONE PLACE THE ERA'S MECHANISM IS ABSENT.** Apple leans on `NSUndoManager`'s EVENT-DRIVEN
+grouping to know where a typing run ends; this Foundation's manager has none, so the view keeps the one fact that answers
+the same question — `_cg_lastEditEnd`, where the previous edit finished — and a non-adjacent edit closes the top-level
+group before it registers. The behaviour is the era's: one undo takes back a typed word, a run of backspaces is one undo,
+a keystroke elsewhere starts a new group, and `-breakUndoCoalescing` is the explicit boundary. `-isCoalescingUndo` is the
+manager's grouping level rather than a flag of the view's, so the two cannot disagree. The undo action carries the range
+the edit inserted over and the text it replaced, and replaying it calls `-replaceCharactersInRange:withString:` — the
+view's own door, so no second edit path exists for an undo to forget.
+
+**THE DEAD DOOR, WHICH IS THIS SLICE'S REAL FINDING.** `NSWindowDelegate` published `-windowWillReturnUndoManager:`;
+`NSResponder -undoManager` documented its walk and named that door as the window's answer; **nothing sent it and nothing
+answered it.** A text view in a window therefore found no manager, and `-allowsUndo` would have recorded nothing while
+looking perfectly implemented — the exact failure mode §4 of `HANDOFF-2.md` collects, in its delegate-door form. The fix
+is `-[NSWindow undoManager]` asking its delegate, and the probe asserts both halves (no delegate → nil, delegate → its
+manager). §7 carries the general lesson now.
+
+**THE NUMBERS MOVED, so §1, §2, §6 and §7 above changed with them** (§8's rule 4):
+
+```
+selectors       4021 -> 4033 of 4505   (missing 484 -> 472)
+methods-declared 4546 -> 4558
+NSTextView        134 -> 146 of 186    (debt 52 -> 40 — from FIRST to FOURTH largest)
+tests             144 -> 145           (the new suite: 44 checks)
+```
+
+`classes`, `protocols`, `functions` and the refusal census (**292**) did not move again: no class, protocol or function
+was added and no refusal was added or retired. `NSWindow`'s new `-undoManager` is an OVERRIDE of a selector it already
+inherited, so the ledger's `sel:NSWindow` is unchanged — a fact worth knowing when reading the census, because it means
+the instrument cannot see this slice's most important fix. The census's prose block is re-pinned from
+`./tools/api-ledger census` (4033/472/4558) and its answered-history line extended.
+
+**TRAPS AND NOTES FOR THE NEXT SESSION.**
+
+* **`-string` IS THE ASSERTION, NOT THE FLAG.** Every claim in the new suite compares the store's text before and after,
+  because a smart space that is *decided* and not *inserted* would pass a flag assertion and fail a person.
+* **A GROUP WHOSE EDITS CANCEL OUT UNDOES TO NOTHING**, which is correct and looked like a bug: typing `abc` and then
+  backspacing it inside ONE group leaves `""` after `-undo`, because the group's net effect is zero. The probe breaks
+  coalescing between the two runs, which is what a person's pause does in the era's manager.
+* **`-insertText:` ASKS `-shouldChangeTextInRange:` ABOUT THE SMART-EXPANDED STRING**, so a delegate that measures the
+  replacement sees what will really arrive. That ordering is deliberate and is the reason the expansion is applied before
+  the `Should` pair rather than inside the primitive.
+* **NOTHING LAYS OUT ON A REDRAW**, so `-setNeedsDisplayInRect:avoidAdditionalLayout:` is a forward with a comment (§9).
+  The same shape was checked here: the flag does not silently suppress anything because there is nothing to suppress.
+
+**WHERE THE NEXT HOUR GOES.** §6's ranking is rewritten above and now starts with `NSBrowser` 64 — a real subsystem rather
+than a cluster of doors — with `NSResponder` 57 and `NSWorkspace` 49 behind it. `NSTextView`'s remaining 40 is now
+mostly blocked or refused; its one genuine slice left is the WORD-COMPLETION family (`-complete:`,
+`-insertCompletion:forPartialWordRange:movement:isFinal:`, `-completionsForPartialWordRange:indexOfSelectedItem:`,
+`-rangeForUserCompletion`).

@@ -1471,6 +1471,10 @@ extern NSString *NSWindowDidChangeScreenProfileNotification;
 - (BOOL)windowShouldZoom:(NSWindow *)window toFrame:(NSRect)newFrame;
 - (NSRect)windowWillUseStandardFrame:(NSWindow *)window defaultFrame:(NSRect)newFrame;
 - (NSSize)windowWillResize:(NSWindow *)sender toSize:(NSSize)frameSize;
+/* **THIS ONE IS ASKED NOW, AND IT WAS NOT BEFORE.** The door was declared here and never sent — `NSResponder
+ * -undoManager` documented its walk in as many words while the window had no answer of its own — so a text view in a
+ * window found no manager and `-allowsUndo` could record nothing. `-[NSWindow undoManager]` is the caller: it asks this,
+ * and a delegate that answers nil (or a window with no delegate) leaves the chain where it ended before. */
 - (nullable NSUndoManager *)windowWillReturnUndoManager:(NSWindow *)window;
 /* AND THE FIELD EDITOR: what a delegate answers when the window asks which editor a client should be given.
  *

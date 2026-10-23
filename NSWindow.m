@@ -2144,6 +2144,30 @@ static CGFloat fn_clamp_axis(CGFloat v, CGFloat lo, CGFloat hi)
 	_delegate = anObject;
 }
 
+/* ==================================================================================================================
+ * THE UNDO MANAGER — THE ANSWER THE WHOLE RESPONDER CHAIN WAS WAITING FOR.
+ *
+ * **`-windowWillReturnUndoManager:` WAS DECLARED AND NEVER SENT, WHICH IS THE SHAPE THIS TREE KEEPS FINDING.**
+ * `NSWindowDelegate` publishes the door, `NSResponder -undoManager` documents its walk in as many words ("a window's own
+ * answer is the delegate's"), and neither half had a caller: `-undoManager` was `NSResponder`'s, which walks to the next
+ * responder, and a window's next responder is the application. MEASURED: a text view in a window with an `NSDocument`
+ * behind it found NO manager, so `-allowsUndo` could register nothing, and the only thing that kept this from showing was
+ * that nothing in the tier had asked yet. The chain now has a source: view → window → delegate → the document's manager.
+ *
+ * **AND THAT IS APPLE'S ORDER, NOT AN INVENTION.** The window is the one object that knows which document it belongs to,
+ * and the delegate is the only thing that can say; a document that does not want undo returns nil from its own answer and
+ * the walk then ends where it would have ended anyway.
+ * ================================================================================================================ */
+- (NSUndoManager *)undoManager
+{
+	id delegate = [self delegate];
+
+	if (delegate != nil && [delegate respondsToSelector:@selector(windowWillReturnUndoManager:)]) {
+		return [delegate windowWillReturnUndoManager:self];
+	}
+	return [super undoManager];
+}
+
 /* THE WINDOW'S NUMBER IS ASSIGNED WHEN ITS WINDOW IS MADE, and -1 before that — which is Apple's own answer
  * for a window that has no number. It is a small per-process ordinal rather than the server's handle now:
  * a Wayland client is given no window id, and the number only has to be stable and unique within the process

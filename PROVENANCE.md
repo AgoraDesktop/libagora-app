@@ -919,6 +919,44 @@ both colours with the no-session negative, the two doors a pixel cannot witness 
 container doors including `nil`, and `-setConstrainedFrameSize:` as a floor that still decides the wrap — **51
 checks**.
 
+## 37. What typing does around it: the smart space, the smart delete, and an undo group without event grouping
+
+**SMART INSERT AND SMART DELETE ARE ONE IDEA FROM TWO SIDES: THE EDIT SHOULD NOT CHANGE THE SPACING OF THE WORDS AROUND IT.**
+A string inserted where it would fuse two words gets a space (both edges are word characters — letter, digit, underscore,
+ASCII, which is the same deviation `HANDOFF-2.md` §4 records for this tree's word arithmetic); a range deleted where it
+would leave two spaces takes one with it (the trailing gap first, else the leading one — never both, or the survivors
+would have no space between them). A newline is a paragraph break rather than a gap and is never absorbed.
+
+**THE RULE IS APPLIED IN THE EDIT PATH, NOT IN A COMMAND.** `-insertText:` asks for the smart insertion before anybody is
+asked about the edit, so `-shouldChangeTextInRange:` sees what will really be inserted and the undo record is one action
+rather than three; `-delete:` asks for the smart range and replaces it. A composition is exempt — an input method commits
+into the middle of a word — and `NSNotFound` as the range means "the caller did not say" and is answered as the selection.
+
+**AND THE UNDO GROUP IS THE INTERESTING PART, BECAUSE APPLE'S ANSWER IS NOT AVAILABLE HERE.** Apple's text view relies on
+`NSUndoManager`'s EVENT-DRIVEN grouping to decide where a typing run ends. This Foundation's manager has no event grouping
+(its own header says as much: a registration opens a group, an explicit `-endUndoGrouping` or `-undo` closes one), so the
+view keeps the one fact that answers the same question — WHERE THE PREVIOUS EDIT FINISHED — and an edit that is not
+adjacent to that point closes the top-level group before registering. The observable behaviour is the era's: a typed word
+is one undo, a run of backspaces is one undo, and a keystroke somewhere else starts a new one. `-breakUndoCoalescing` is
+the explicit boundary, and `-isCoalescingUndo` is simply the manager's grouping level, so the two cannot disagree.
+
+**THE UNDO ACTION IS THE VIEW'S OWN DOOR.** Each registration carries the range the edit inserted over and the text it
+replaced, so replaying it is one `-replaceCharactersInRange:withString:` — no second edit path, and therefore no second
+place for the mirror, the layout, the selection or the notification to be forgotten. Registrations made WHILE an undo or a
+redo runs are kept (that registration is the other stack, and `NSUndoManager` says so); only the grouping is skipped then,
+because a group opened inside the manager's own operation would nest.
+
+**AND THE SLICE FOUND A DECLARED DOOR WITH NO SENDER, WHICH IS THE SHAPE THIS TREE KEEPS FINDING.** `NSWindowDelegate`
+published `-windowWillReturnUndoManager:`; `NSResponder -undoManager` documented its walk and even named the door; nothing
+sent it or answered it. A text view in a window therefore found NO manager and `-allowsUndo` could register nothing — a
+feature that would have looked implemented and done nothing. `-[NSWindow undoManager]` is the caller now, and the probe
+asserts both halves: a window with no delegate answers nil, and one with a delegate answers the delegate's manager.
+
+`tests/text_view_undo.m` measures it in **44 checks**, every one of them about the text afterwards rather than about a
+flag: the typed space in the store, the fused words with the flag off, the four smart-delete ranges, `-delete:` leaving
+one space, and a real `NSUndoManager` through a window delegate — the flag-off negative control, one undo for a typed
+word, a redo, a break, a non-adjacent edit, three backspaces as one undo, and the smart delete's space restored.
+
 ## Keeping in sync
 
 The Fiwix AppKit is the origin and this repository has now diverged from it in the seam. A fix made there

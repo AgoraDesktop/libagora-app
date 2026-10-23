@@ -1266,6 +1266,17 @@ target_link_libraries(text_view_container PRIVATE App m)
 add_test(NAME appkit-text-view-container COMMAND text_view_container)
 set_tests_properties(appkit-text-view-container PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
 
+# **WHAT TYPING DOES AROUND IT: THE SMART SPACE, THE SMART DELETE, AND THE UNDO GROUP.** Every claim here is about the TEXT
+# afterwards — a space that is in the store, a space that is not, a word that comes back — so the probe compares `-string`
+# before and after rather than reading the flags back. The undo half runs against a real `NSUndoManager` supplied by a
+# window delegate, which is also the assertion that `-windowWillReturnUndoManager:` is SENT at last: the chain had the door
+# declared on the delegate and the walk documented on the responder, and no caller between them until now.
+add_executable(text_view_undo text_view_undo.m)
+target_link_libraries(text_view_undo PRIVATE App)
+
+add_test(NAME appkit-text-view-undo COMMAND text_view_undo)
+set_tests_properties(appkit-text-view-undo PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
+
 # **THE STEPPER PAIR AND THE SECURE FIELD PAIR.** The stepper's press IS the step: the probe drives the cell's own tracking
 # hooks in each half of the control, in BOTH flips (a direction that a flip reverses), checks the clamp, the wrap, the action
 # a target receives and that a drag does not step again — then renders the cell and counts ink. The secure field's claim is
