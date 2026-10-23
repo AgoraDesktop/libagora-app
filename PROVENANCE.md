@@ -1531,6 +1531,26 @@ this offscreen harness can measure without launching a handler.
 tests and both additions are negative-where-possible (the package appears as a file, then as a directory; nil and a
 missing path answer NO).
 
+## 55. `NSImageView` arrives: the cell's face, two edit gates, and a refusal the image class owns
+
+**THE FIRST ABSENT CLASS IS PRESENT: `NSImageView` at 14 of 14, the seventeenth complete class.** It is a thin
+`NSControl` over the existing `NSImageCell`: the image, `-imageAlignment`, `-imageScaling` and `-imageFrameStyle` are
+the cell's, and the view forwards each with a redisplay; `-isEditable` is the cell's flag; `-allowsCutCopyPaste` and
+`-animates` are the view's own storage. The class count is 132 of 168 and the absent list is 36.
+
+**THE ALIGNMENT FORWARD IS MEASURED IN INK, NOT ONLY IN STORAGE.** The probe renders the view with a 20-point red
+image at `NSImageAlignLeft` and `NSImageAlignRight` and reads the red box's x-range: left puts it at the left, right at
+the right. A setting that only round-tripped would pass a value check and draw the same picture either way.
+
+**THE COMMANDS ARE GATED BY BOTH FLAGS, AND THE ENCODER DECIDES THE REST.** `-paste:` with `-allowsCutCopyPaste` and
+`-isEditable` on reads the pasteboard's PNG through `NSImage -initWithPasteboard:` and sets the image; `-delete:` clears
+it. `-copy:`/`-cut:` reach `NSImage -TIFFRepresentation`, which refuses by name because this tree's CoreGraphics has no
+`CGImageDestination`, so cut leaves the image in place rather than clearing a field it could not copy. `-animates` is
+stored and answered, and the header says outright that no timer is made: this tier's `NSImage` has no animation clock.
+
+`tests/image_view.m` measures it in **22 checks**: the cell and defaults, the two alignments' pixels, the forwards
+against the cell, the two flags, and paste/cut/delete on both sides of their gates.
+
 ## Keeping in sync
 
 The Fiwix AppKit is the origin and this repository has now diverged from it in the seam. A fix made there

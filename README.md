@@ -1112,7 +1112,17 @@ the compositor is really gone.
   4505 of 4505 selectors over all 129 classes with a surface, every one of them complete.** The 37 absent classes
   remain absent — the class count is still 131 of 168 — and their selectors are not in the offered total.
 
-- **`ctest`: 160 of 160 passed** (the keyboard and the seam, the AppKit and its input path, the controls and their
+- **And the FIRST ABSENT CLASS HAS ARRIVED: `NSImageView` — 14 of 14** (`ctest`, offscreen). It is a thin `NSControl`
+  over the existing `NSImageCell`: the image and its alignment, scaling and frame are the cell's and the view forwards
+  them with a redisplay; `-isEditable` is the cell's flag and `-allowsCutCopyPaste`/`-animates` are the view's. The
+  alignment forward is checked by the INK's horizontal position, not just the stored value. The standard commands are
+  real where this tier can finish them: `-paste:` reads the pasteboard's PNG through `NSImage`, and `-delete:` clears
+  the field; `-copy:`/`-cut:` reach `NSImage -TIFFRepresentation`, which refuses because this tree has no encoder, so
+  cut does not clear the image. `-animates` is stored and answered but no timer is made — `NSImage` has no animation
+  clock here. **132 of 168 classes (79%) are present, 130 of 130 with a surface are COMPLETE, and 36 absent classes
+  remain.** `tests/image_view.m` measures it in 22 checks.
+
+- **`ctest`: 161 of 161 passed** (the keyboard and the seam, the AppKit and its input path, the controls and their
   metrics, the field control and its cell and its bezel and its placeholder and what it may hold, the text path and its
   word granularity and the multi-line view and its wrapping and its scrolling and its READING OF THE STORE, the STORE
   the rich-text slice is built on and the REGION it is laid out in and the WEB that ties the three together and the

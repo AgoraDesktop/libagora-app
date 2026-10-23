@@ -23,6 +23,8 @@ NS_ASSUME_NONNULL_BEGIN
 
 /* **HOW THE IMAGE SITS IN ITS BOX.** Apple's five values; the names are the era's. */
 typedef NSInteger NSCellImageAlignment;
+/* Apple's name for the same type, so an NSImageView caller can spell it the SDK's way. */
+typedef NSCellImageAlignment NSImageAlignment;
 enum {
 	NSImageAlignCenter = 0,
 	NSImageAlignTop = 1,

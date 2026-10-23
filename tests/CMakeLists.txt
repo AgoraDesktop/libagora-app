@@ -753,6 +753,14 @@ target_link_libraries(image_draw PRIVATE App)
 add_test(NAME appkit-image-draw COMMAND image_draw)
 set_tests_properties(appkit-image-draw PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
 
+# **NSImageView: THE IMAGE CELL'S FACE AND THE TWO EDIT FLAGS.** The alignment is checked by the ink's horizontal
+# position, the forwards against the cell, and paste/cut/delete on both sides of their gate — with the pasteboard
+# carrying a real PNG.
+add_executable(image_view image_view.m)
+target_link_libraries(image_view PRIVATE App m)
+add_test(NAME appkit-image-view COMMAND image_view)
+set_tests_properties(appkit-image-view PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
+
 # **THE PDF CHAIN: VIEW -> BYTES -> REP -> PIXELS.** No window and no compositor: a flipped probe view writes a
 # page through -dataWithPDFInsideRect:, the same bytes go onto a pasteboard under NSPDFPboardType, NSPDFImageRep
 # parses them back, and both the page and the rep's vector draw are read as pixels. The second half asks the
