@@ -7,19 +7,19 @@ THIRTEENTH SLICE HAS LANDED SINCE, and §9 is its record.**
 file's §2 instrument rules and §4 traps are still the ones these sessions used most. **THIS FILE'S §2 NUMBERS SUPERSEDE
 `HANDOFF-4.md`'s**, which are twelve slices old.*
 
-*State at this handover: **fourteen slice commits** since the fourth handoff, tree clean, **156 tests passing in about
-88 s**, `api-ledger check` holding **375 metrics** — **131 of 168 classes (78%), 4400 of 4505 selectors (98%), 39 of 56
-protocols (70%), 86 of 86 functions**, 4929 methods declared with 8 having no body, **122 of the 129 classes with a surface
+*State at this handover: **fifteen slice commits** since the fourth handoff, tree clean, **157 tests passing in about
+88 s**, `api-ledger check` holding **375 metrics** — **131 of 168 classes (78%), 4428 of 4505 selectors (98%), 39 of 56
+protocols (70%), 86 of 86 functions**, 4957 methods declared with 8 having no body, **123 of the 129 classes with a surface
 at COMPLETE coverage** — refusal census **382**, owed census **19**. **The "120 of 129" this paragraph first carried was a
-recount error; §9 records it and the corrected 119 -> 121 movement, and §10 takes it to 122.***
+recount error; §9 records it and the corrected 119 -> 121 movement, §10 takes it to 122, and §11 to 123.***
 
 ---
 
 ## 1. What these sessions did
 
 Twelve slices, in the order they landed. Each is a commit (plus, twice, a commit in the **workspace** repository and a
-gitlink advance in `$AGORA_ROOT`), and each ended green. **The thirteenth and fourteenth are `182bcd4` and `b0bd73c`,
-listed below and recorded in §9 and §10.**
+gitlink advance in `$AGORA_ROOT`), and each ended green. **The thirteenth, fourteenth and fifteenth are `182bcd4`,
+`b0bd73c` and `1c4be0a`, listed below and recorded in §9–§11.**
 
 | Commit | What it landed |
 |---|---|
@@ -37,6 +37,7 @@ listed below and recorded in §9 and §10.**
 | `7a447cb` | **`NSTextView` — COMPLETE** (186/186): document background, links (delegate first, URL second), word completion — and thirty refusals, four of them because their bit would have no reader. |
 | `182bcd4` | **The slider pair — COMPLETE** (`NSSlider` 30/30, `NSSliderCell` 35/35): the tick marks as VALUES with a snap, the title as a CELL in a band taken off the top, the two no-argument ink doors answered from the control view, the background image drawn, and **a flipped vertical scale that was upside down** (§9). |
 | `b0bd73c` | **`NSTableView` — COMPLETE** (123/123): the deprecated spellings mapped to the modern state, the autoresizing styles actually applied by `-tile`, the selection enumerators, both drag-image doors, the focused column's ring, the header indicator image, the three destination-feedback drawings, the cell-click door, and the vertical-motion gate (§10). |
+| `1c4be0a` | **`NSControl` — COMPLETE** (65/65): the cell-class factory, the one-cell selection, the paint/invalidate quartet, the sender-value family, the formatter pair, the attributed value and writing direction, the keyboard refusal, and `-validateEditing` — which lands an editor's string without ending the session (§11). |
 
 Plus, in the **workspace** repository: `e31e44f` (the main-menu test's Print… case was asking a chain-routed row to resolve
 with no key window, and expecting the item's target to be the stand-in) and `47d9a0c` (the file window opens a document
@@ -54,13 +55,13 @@ claim; the recount is the measurement.**
 
 ```
 classes   131 of 168   (78%)    37 missing
-selectors 4400 of 4505 (98%)   105 missing   122 of 129 classes at COMPLETE coverage
+selectors 4428 of 4505 (98%)    77 missing   123 of 129 classes at COMPLETE coverage
 protocols  39 of  56   (70%)    17 missing
 functions  86 of  86  (100%)     0 missing    10 refuse by name
-methods   4929 declared on this tree's own classes, 8 with NO body on the chain (0.2%)
+methods   4957 declared on this tree's own classes, 8 with NO body on the chain (0.2%)
 ```
 
-**NINE CLASSES ARE COMPLETE FOR THE ERA, and every one of them finished with NAMED REFUSALS rather than a stub:**
+**TEN CLASSES ARE COMPLETE FOR THE ERA, and every one of them finished with NAMED REFUSALS rather than a stub:**
 
 | Class | Selectors | Refusing by name |
 |---|---|---|
@@ -73,11 +74,12 @@ methods   4929 declared on this tree's own classes, 8 with NO body on the chain 
 | `NSSlider` | 30 of 30 | 0 (the image is drawn as a background) |
 | `NSSliderCell` | 35 of 35 | 6 (five need a control view; one is the circular face) |
 | `NSTableView` | 123 of 123 | 0 (the deprecated doors are answered; the drag session is the tier's) |
+| `NSControl` | 65 of 65 | 0 (every door is a cell forward or a stated effect) |
 
-**AND ONLY SEVEN CLASSES STILL HAVE ANY DEBT** — the tail, not a subsystem:
+**AND ONLY SIX CLASSES STILL HAVE ANY DEBT** — the tail, not a subsystem:
 
 ```
-NSView 28        NSControl 28     NSDocument 19    NSWindow 18
+NSView 28        NSDocument 19    NSWindow 18
 NSDocumentController 8   NSSavePanel 3   NSWorkspace 1    NSFont 0*
 ```
 
@@ -261,7 +263,7 @@ a library path rather than for want of the code.
 **THE SIX DEEPEST CLASSES OF THIS COMPONENT ARE DONE.** What is left is the long tail, and it is many small commits rather
 than four big slices — so the next session should pick a CLASS, not a subsystem.
 
-1. **`NSView` 28 and `NSControl` 28 — the two longest tails, and they are SPREAD OUT.** The view's remainder is
+1. **DONE for `NSControl` in §11 (65/65). `NSView` 28 is what remains of this item, and it is SPREAD OUT.** The view's remainder is
    `-display`/`-displayIfNeeded`/`-displayRectIgnoringOpacity:` and `-lockFocus`/`-unlockFocus` (which `NSView.h` says are
    ABSENT ON PURPOSE — "draw me where I live"), `-isHiddenOrHasHiddenAncestor`, the rotation queries and setters,
    `-addSubview:positioned:relativeTo:`, `-setSubviews:`, `-autoscroll:`, the layer pair, the definition-lookup door and
@@ -299,7 +301,7 @@ than four big slices — so the next session should pick a CLASS, not a subsyste
 
 ## 7. Things a reader should not have to rediscover
 
-* **THE NINE COMPLETE CLASSES ARE COMPLETE IN A SPECIFIC SENSE**: every selector Apple's 10.6 header declares for them is
+* **THE TEN COMPLETE CLASSES ARE COMPLETE IN A SPECIFIC SENSE**: every selector Apple's 10.6 header declares for them is
   DECLARED and ANSWERED, and a refused door is an ANSWERED door (it prints its reason and returns its type's empty value).
   `-respondsToSelector:` is YES for a refusal. That is the plan's own disposition rule, and it is why the ledger and the
   refusal census have to be read TOGETHER.
@@ -325,7 +327,7 @@ than four big slices — so the next session should pick a CLASS, not a subsyste
 * **THE BROWSER ADVERTISES THE 10.6 ITEM CONTRACT AND FALLS BACK TO THE NEXXT CELL ONE.** `-browser:numberOfChildrenOfItem:`
   is the test for which model a delegate speaks; the item walk starts at `nil`, retains nothing, and a delegate implements
   ONE contract (the one allowed overlap is a styling `-browser:willDisplayCell:atRow:column:`).
-* **THE SUITE IS 156 TESTS IN ABOUT 88 SECONDS, AND `ctest --test-dir build -j4` IS THE GATE.** The exit status is the
+* **THE SUITE IS 157 TESTS IN ABOUT 88 SECONDS, AND `ctest --test-dir build -j4` IS THE GATE.** The exit status is the
   witness, not the tail of the output. The workspace's suite is 14 tests and belongs in the same gate run.
 
 ---
@@ -468,3 +470,51 @@ the data source when the click changed it. Apple's door does no enabled-check; n
 **WHERE THE NEXT HOUR GOES.** `NSView` 28 and `NSControl` 28 are the two longest tails, then `NSDocument` 19 (whose
 autosave family needs a decision about where document state lives), `NSWindow` 18, `NSDocumentController` 8,
 `NSSavePanel` 3 and `NSWorkspace` 1 (the instrument quirk). §6's ordering is otherwise unchanged.
+
+---
+
+## 11. `NSControl` complete: the cell factory, the one-cell selection, and validate-editing
+
+**Commit `1c4be0a`.** `NSControl` is COMPLETE for the era — 65 of 65, the tenth class to finish — and the change is 28
+selector rows (4400 -> 4428 present, 105 -> 77 missing), 28 declarations (4929 -> 4957), and one more class at complete
+coverage (122 -> 123). The suite is 157 tests (about 88 s), the refusal census stayed 382 (no refusal was added), the
+owed census stayed 19, and `tests/control_tail.m` is the new probe (32 checks). The workspace's 14 tests were run too.
+
+**A CONTROL IS A VIEW WITH ONE CELL, SO THE TAIL IS MOSTLY FORWARDS.** The six `-take…ValueFrom:` doors go through the
+cell's own `-take…` doors and redisplay; `-formatter`, `-setFloatingPointFormat:left:right:`,
+`-attributedStringValue`, `-baseWritingDirection` and `-refusesFirstResponder` are the cell's state. The class factory
+is the one new static: `+cellClass` answers `NSCell` until `+setCellClass:` names another, and the header says that a
+subclass which makes a specific cell should override the getter rather than mutate the process-wide default. The
+one-cell selection is `-selectedCell`/`-selectedTag`/`-selectCell:`; `-selectedCell` is the cell even when it is off,
+and `-selectedTag` is -1 only when there is no cell at all.
+
+**THE FOUR PAINT/INVALIDATE DOORS ARE EFFECTS AND THE PROBE MEASURES THEM.** `-drawCell:` and `-drawCellInside:` paint
+the named cell only when it IS this control's, so a stale pointer cannot paint over a replaced cell; `-updateCell:`,
+`-updateCellInside:` and the no-argument `-setNeedsDisplay` are invalidation; and `-calcSize` asks the cell's
+`-calcDrawInfo:` for the control's real bounds. The probe uses a counting cell for all four.
+
+**`-validateEditing` LANDS THE RUNNING EDITOR'S STRING IN THE CELL WITHOUT ENDING THE SESSION.** The editor owns the
+string while it runs, so the cell is written through its own setter — which also tells the editor the value it now
+shows — and ending remains the editor's or `-abortEditing`'s job. The probe opens a real field editor through
+`-selectText:`, changes its string, validates, and checks both the new value and that the editor is still current.
+
+**TRAPS THIS SLICE PAID FOR.**
+
+* **THE FORMATTER SUPERSEDES THE DEPRECATED FLOAT FORMAT, AND THE FIRST PROBE CAUGHT IT BY BEING WRONG.** With an
+  `NSNumberFormatter` attached, the value read "3.142" rather than "3.14": the float format was set, but the cell's own
+  documented precedence lets the formatter win. The probe now asserts BOTH sides — with the formatter `3.142`, after
+  `-setFormatter:nil` the float format's `3.14` — so the deprecated door's reader is visible rather than masked.
+* **`+setCellClass:` IS PROCESS-WIDE, AND THAT IS A DELIBERATE TRANSCRIPTION.** Apple's base class has one factory
+  class; a subclass that builds a specific cell overrides `+cellClass`. This tier's subclasses do not override it yet,
+  which is stated at the door rather than papered over with per-class maps.
+* **`-selectedCell` IS THE CELL, NOT "THE SELECTED ONE".** A single-cell control has no selection to be empty in the
+  matrix sense; `-selectedTag` is -1 only when the control has no cell, and a cell whose state is off is still the
+  answer. The GNUstep implementation and Apple's one-cell prose agree.
+* **A CLASS METHOD NEEDS A CLASS-LEVEL STORE.** The factory is a file static (`sCellClass`) rather than an ivar, and
+  the probe restores `[NSCell class]` after using it so a later case in the same process starts where the era starts.
+
+**WHERE THE NEXT HOUR GOES.** `NSView` 28 is now the longest tail by a wide margin — the display/focus-lock pair
+(absent on purpose), the rotation queries, `-addSubview:positioned:relativeTo:`, `-setSubviews:`, `-autoscroll:`, the
+layer pair, and the nine ruler-view client doors that `NSTextView` already implements. Then `NSDocument` 19,
+`NSWindow` 18, `NSDocumentController` 8, `NSSavePanel` 3 and `NSWorkspace` 1 (the instrument quirk). §6's ordering is
+otherwise unchanged.
