@@ -1401,6 +1401,41 @@ sets the editor's string, validates, and checks both the cell's new value and th
 `tests/control_tail.m` measures it in **32 checks**: a counting cell for the four paint/calc doors, a six-answer sender
 for the take family, and a real field editor for the validation.
 
+## 51. `NSView` complete: forced display, one rotation record, and the ruler client defaults
+
+**THE CLASS IS COMPLETE FOR THE ERA: 221 of 221, the eleventh class to finish.** The tail was 28 doors: four effects,
+five spellings, four refusals, one subview-list pair, autoscroll, and the nine ruler client defaults.
+
+**THE DISPLAY FAMILY'S FORCED FORMS ARE THE EXISTING `…InRect:` DOORS WITH THE BOUNDS SUPPLIED.** `-display` paints the
+tree now and clears the damage; `-displayIfNeeded` paints only the invalidated region; `-displayRectIgnoringOpacity:`
+is the context form with a nil context. The two-argument context form's selector was `…context:` in this tree and is
+Apple's `…inContext:` now, with the internal callers (and `NSPrintOperation`) updated — a spelling that was invisible
+to the ledger until the view's tail made it the only row left.
+
+**ONE STORED ROTATION, TWO APPLE SPELLINGS, AND THE UNIT SQUARE FOR THE SCALED QUESTION.** `-setFrameRotation:` and
+`-setBoundsRotation:` write the record `-rotateByAngle:` already keeps; `-frameRotation` and `-boundsRotation` report it;
+`-isRotatedFromBase` is that record plus the frame-centre rotation, and `-isRotatedOrScaledFromBase` adds a unit square
+that is no longer 1,1. The identity square is now set in both initialisers, because a zero there made the scaled query
+true for every fresh view.
+
+**THE SUBVIEW LIST RUNS THE NOTICES.** `-addSubview:positioned:relativeTo:` is `-addSubview:` plus a reorder, with a
+relative view that is not a child treated as nil (top for Above, bottom for Below). `-setSubviews:` removes the old list
+through `-removeFromSuperview` and adds the new one through `-addSubview:`, so the window link and both move notices run
+exactly as they do for one view.
+
+**FOUR REFUSALS, EACH NAMING ITS SUBSTRATE.** `-lockFocus`/`-unlockFocus` need a lockable per-view graphics-state stack;
+`-setLayer:` needs a CALayer tree; and the range form of the definition look-up needs the Dictionary substrate the
+at-point form already refuses for.
+
+**THE RULER CLIENT DEFAULTS ARE DECLARED ON `NSView` WHERE APPLE DECLARES THEM.** The nine doors allow every add, move
+and remove, keep the location asked for, and do nothing for the notice doors — the same behaviour the ruler's
+`-respondsToSelector:` guards assumed when nobody implemented anything, now checkable and overridable. `-setClientView:`
+tells the OLD client through `-rulerView:willSetClientView:` before the link changes.
+
+`tests/view_tail.m` measures it in **33 checks**: a counting view for the display doors, a notification counter for the
+frame announcement, a real scroll view for autoscroll, a full subview-order case, and an old ruler client that records
+its own farewell.
+
 ## Keeping in sync
 
 The Fiwix AppKit is the origin and this repository has now diverged from it in the seam. A fix made there

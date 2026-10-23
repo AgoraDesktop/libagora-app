@@ -123,11 +123,16 @@ NSTextList.m                     2
 NSTextView.m                     30
 NSToolbar.m                      1
 NSTrackingArea.m                 1
-NSView.m                         16
+NSView.m                         20
 NSViewController.m               1
 NSWorkspace.m                       23
 NSWindow.m                       23
 
+# AND IT ROSE BY FOUR IN THE VIEW'S TAIL, ALL REFUSALS BY NAME: `-lockFocus` and `-unlockFocus` need a lockable
+# per-view graphics-state stack this tier has not got, `-setLayer:` needs a CALayer tree, and the range form of the
+# definition look-up needs the same Dictionary substrate `-showDefinitionForAttributedString:atPoint:` already refuses
+# for.
+#
 # AND IT ROSE BY FIVE IN THE SLIDER PAIR, ALL ON `NSSliderCell`: five doors that need a control view for the frame a
 # no-argument spelling cannot supply — `-trackRect`, `-rectOfTickMarkAtIndex:`, `-indexOfTickMarkAtPoint:`, `-drawKnob`
 # and `-knobRectFlipped:`. The sixth site in that file is the comment beside `-setSliderType:`'s long-standing
@@ -138,4 +143,4 @@ NSWindow.m                       23
 # `fn_refuse_window` spelling was simply invisible to a census that counted the `APPKIT-REFUSE` literal, so every
 # refusal written the house way — which is the way the header asks for — moved no number.
 #
-# total: 382
+# total: 386

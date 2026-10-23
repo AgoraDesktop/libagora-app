@@ -266,6 +266,28 @@ unitToPointsConversionFactor:(CGFloat)conversionFactor
 
 @end
 
+/* ==================================================================================================================
+ * THE CLIENT'S INFORMAL PROTOCOL, DECLARED ON `NSView` WHERE APPLE DECLARES IT.
+ * ================================================================================================================ */
+
+/* **THE RULER'S CLIENT IS A VIEW, AND EVERY VIEW ANSWERS THESE BY DEFAULT.** Apple declares this category in
+ * `NSRulerView.h` and implements none of it — a client that wants to constrain a drag overrides the door. This tier
+ * implements the DEFAULTS on `NSView` (allow every add, move and remove; keep the location asked for; do nothing for
+ * the did/notice doors), so the ruler's `-respondsToSelector:` questions are always YES and a plain view is a client
+ * that permits everything. `NSTextView` overrides them with its tab-stop behaviour. */
+@interface NSView (NSRulerMarkerClientViewDelegation)
+- (BOOL)rulerView:(NSRulerView *)ruler shouldMoveMarker:(NSRulerMarker *)marker;
+- (CGFloat)rulerView:(NSRulerView *)ruler willMoveMarker:(NSRulerMarker *)marker toLocation:(CGFloat)location;
+- (void)rulerView:(NSRulerView *)ruler didMoveMarker:(NSRulerMarker *)marker;
+- (BOOL)rulerView:(NSRulerView *)ruler shouldRemoveMarker:(NSRulerMarker *)marker;
+- (void)rulerView:(NSRulerView *)ruler didRemoveMarker:(NSRulerMarker *)marker;
+- (BOOL)rulerView:(NSRulerView *)ruler shouldAddMarker:(NSRulerMarker *)marker;
+- (CGFloat)rulerView:(NSRulerView *)ruler willAddMarker:(NSRulerMarker *)marker atLocation:(CGFloat)location;
+- (void)rulerView:(NSRulerView *)ruler didAddMarker:(NSRulerMarker *)marker;
+- (void)rulerView:(NSRulerView *)ruler handleMouseDown:(NSEvent *)event;
+- (void)rulerView:(NSRulerView *)ruler willSetClientView:(NSView *)newClient;
+@end
+
 NS_ASSUME_NONNULL_END
 
 #endif /* APPKIT_NSRULERVIEW_H */

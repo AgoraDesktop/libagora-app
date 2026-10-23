@@ -1063,7 +1063,20 @@ the compositor is really gone.
   WITHOUT ending the session; the probe measures it on a real field editor. `tests/control_tail.m` measures it in 32
   checks.
 
-- **`ctest`: 157 of 157 passed** (the keyboard and the seam, the AppKit and its input path, the controls and their
+- **And `NSView` is COMPLETE — 221 of 221** (`ctest`, offscreen) — the view's last twenty-eight doors split into
+  effects and spellings. **The display family now has its forced forms**: `-display` paints the whole tree and clears the
+  damage, `-displayIfNeeded` paints only what was invalidated, and the one-argument `-displayRectIgnoringOpacity:` draws
+  in the current context (the two-argument form's selector was corrected to Apple's `…inContext:`). The frame and
+  rotation setters are real state — `-setFrameOrigin:` moves without resizing and announces, and
+  `-setFrameRotation:`/`-setBoundsRotation:` feed the `isRotated…` queries with the unit square deciding the scaled
+  half. `-addSubview:positioned:relativeTo:` places above and below (including the nil-relative ends) and
+  `-setSubviews:` replaces the list with every move notice run. `-autoscroll:` moves the enclosing clip view one step
+  toward the pointer. **The refusals are named**: `-lockFocus`/`-unlockFocus` need a lockable per-view state stack,
+  `-setLayer:` needs a CALayer tree, and the range form of the definition look-up needs the Dictionary substrate. The
+  nine ruler client doors are declared on `NSView` in `NSRulerView.h` and implement the permissive defaults, and
+  `-setClientView:` tells the OLD client before it stops being one. `tests/view_tail.m` measures it in 33 checks.
+
+- **`ctest`: 158 of 158 passed** (the keyboard and the seam, the AppKit and its input path, the controls and their
   metrics, the field control and its cell and its bezel and its placeholder and what it may hold, the text path and its
   word granularity and the multi-line view and its wrapping and its scrolling and its READING OF THE STORE, the STORE
   the rich-text slice is built on and the REGION it is laid out in and the WEB that ties the three together and the
@@ -1077,7 +1090,8 @@ the compositor is really gone.
   attachment sizes the layout answers and the temporary-attribute table and the rect arrays, the chrome and what its
   buttons do, the chrome theme, the menus and activation, and the manager's own ensure/invalidate doors, the document family's file round trip and change count, the save and open panels, and the pop-up's items, a colour's space and the menu's flags, the slider's tick values, its title band and its two
   no-argument ink doors, the table's deprecated spellings, enumerators, drag images, focus ring and destination
-  feedback, and the control's cell factory, one-cell selection, sender values and validate-editing).
+  feedback, the control's cell factory, one-cell selection, sender values and validate-editing, and the view's
+  forced display, frame and rotation setters, subview list, autoscroll, refusals and ruler client defaults).
 - **And the desktop's own text is SUB-PIXEL ANTIALIASED**, which is the AppKit's half of a renderer change in
   CoreGraphics: a window's surface is OPAQUE (`kCGImageAlphaNoneSkipFirst`), and the destination's opacity is
   exactly what decides whether a glyph is rasterised in colour. MEASURED on the live session: the window title's

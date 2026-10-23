@@ -285,6 +285,7 @@ static NSString * const AGCoderConstraintsKey = @"constraints";
 	_wantsDefaultClipping = YES;
 	_needsDisplay = YES;
 	_cursorRectsStale = YES;
+	_cg_unitSquareSize = NSMakeSize(1.0, 1.0);
 	_needsUpdateConstraints = YES;
 	_needsLayout = YES;
 	_contentHuggingPriority[0] = NSLayoutPriorityDefaultLow;
@@ -446,6 +447,9 @@ static NSString * const AGCoderConstraintsKey = @"constraints";
 	/* THE BOUNDS BEGIN AS THE FRAME'S SIZE AT THE ORIGIN, which is what every view starts as. */
 	_bounds = NSMakeRect(0.0, 0.0, frameRect.size.width, frameRect.size.height);
 	_flipped = NO;
+	/* THE IDENTITY SQUARE, so "is this scaled from its base" is a comparison with 1 and not with a zero this
+	 * class forgot to set. */
+	_cg_unitSquareSize = NSMakeSize(1.0, 1.0);
 	_hidden = NO;
 	/* A VIEW NOTHING HAS DRAWN NEEDS DISPLAY, which is the truthful initial state rather than a choice. */
 	_needsDisplay = YES;
@@ -781,6 +785,21 @@ static NSString * const AGCoderConstraintsKey = @"constraints";
 	return YES;
 }
 
+/* **AUTOSCROLL IS "MAKE THE POINTER'S POINT VISIBLE", ONE STEP PER EVENT.** Apple scrolls by an amount that grows
+ * with the distance outside the visible rectangle; this tier's `-scrollRectToVisible:` moves the origin JUST far
+ * enough, and calling it with a zero-size rectangle at the pointer is the same gesture with the step taken out. It
+ * returns NO when there is no clip view or the point is already visible, which is what lets a drag loop stop asking. */
+- (BOOL)autoscroll:(NSEvent *)event
+{
+	NSPoint where;
+
+	if (event == nil) {
+		return NO;
+	}
+	where = [self convertPoint:[event locationInWindow] fromView:nil];
+	return [self scrollRectToVisible:NSMakeRect(where.x, where.y, 0.0, 0.0)];
+}
+
 - (NSRect)adjustScroll:(NSRect)newVisible
 {
 	return newVisible;
@@ -988,6 +1007,19 @@ static NSString * const AGCoderConstraintsKey = @"constraints";
 	return [self canDraw];
 }
 
+/* **THE FOCUS LOCK PAIR REFUSES BY NAME.** A view draws into the caller's context — a window's backing store, a
+ * bitmap rep — and this tier has no per-view graphics-state stack for a lock to push and an unlock to pop. The
+ * question form above is answerable and stays real; these two would have to invent the stack. */
+- (void)lockFocus
+{
+	fn_refuse_window("-lockFocus", "a lockable per-view graphics-state stack; this tier draws into the caller's context");
+}
+
+- (void)unlockFocus
+{
+	fn_refuse_window("-unlockFocus", "a lockable per-view graphics-state stack; this tier draws into the caller's context");
+}
+
 /* AND THE COORDINATE-SYSTEM TRIO: RECORDED, WITH THE EFFECT NAMED — no transform is applied to this tier's drawing,
  * and each door keeps what it was asked for. */
 - (void)translateOriginToPoint:(NSPoint)translation
@@ -1117,13 +1149,25 @@ static NSString * const AGCoderConstraintsKey = @"constraints";
 
 - (nullable id)rulerView
 {
-	return nil;	/* no NSRulerView in this tier */
+	/* A PLAIN VIEW IS NOT PART OF A RULER: `NSRulerView` exists, and its CLIENT is a view, but this printing-era door
+	 * asks for a ruler attached to the receiver in the sense this tier does not build. Nil is the answer; the ruler's
+	 * client protocol is the nine doors on the category in `NSRulerView.h`. */
+	return nil;
 }
 
 - (void)showDefinitionForAttributedString:(NSAttributedString *)attrString atPoint:(NSPoint)textBaselineOrigin
 {
 	(void)attrString; (void)textBaselineOrigin;
 	fn_refuse_window("-showDefinitionForAttributedString:atPoint:", "the definition look-up, and a text substrate to show it in");
+}
+
+- (void)showDefinitionForAttributedString:(NSAttributedString *)attrString range:(NSRange)targetRange
+				 options:(NSDictionary *)options
+		    baselineOriginProvider:(NSPoint (^)(NSRange adjustedRange))originProvider
+{
+	(void)attrString; (void)targetRange; (void)options; (void)originProvider;
+	fn_refuse_window("-showDefinitionForAttributedString:range:options:baselineOriginProvider:",
+			 "the definition look-up, and a text substrate to show it in");
 }
 
 - (void)writeEPSInsideRect:(NSRect)rect toPasteboard:(NSPasteboard *)pasteboard
@@ -1329,24 +1373,48 @@ static NSString * const AGCoderConstraintsKey = @"constraints";
 	return NO;
 }
 
+/* **THE ERA'S `is`-PREFIXED SPELLINGS**, aliases of the older ones this class shipped first. */
+- (BOOL)isInFullScreenMode { return [self inFullScreenMode]; }
+- (BOOL)isHiddenOrHasHiddenAncestor { return [self hiddenOrHasHiddenAncestor]; }
+
 - (BOOL)rotatedFromBase
 {
-	return NO;	/* this tier's frames are not rotated from a base frame */
+	return (_cg_rotation != 0.0)
+		|| (_frameCenterRotation != 0.0);	/* the stored rotation and the separate frame-centre one */
 }
 
 - (BOOL)rotatedOrScaledFromBase
 {
-	return NO;	/* the same, and nothing scales one either */
+	return [self rotatedFromBase]
+		|| (_cg_unitSquareSize.width != 1.0 || _cg_unitSquareSize.height != 1.0);
 }
 
+- (BOOL)isRotatedFromBase { return [self rotatedFromBase]; }
+- (BOOL)isRotatedOrScaledFromBase { return [self rotatedOrScaledFromBase]; }
+
+/* **ONE STORED ROTATION, TWO APPLE SPELLINGS.** This tier applies no transform to its drawing, so the frame and
+ * bounds rotations are the same record — `-rotateByAngle:` writes it too — and both getters report it rather than two
+ * numbers that could disagree. */
 - (CGFloat)boundsRotation
 {
-	return 0.0;
+	return _cg_rotation;
 }
 
 - (CGFloat)frameRotation
 {
-	return 0.0;
+	return _cg_rotation;
+}
+
+- (void)setBoundsRotation:(CGFloat)angle
+{
+	_cg_rotation = angle;
+	[self setNeedsDisplay:YES];
+}
+
+- (void)setFrameRotation:(CGFloat)angle
+{
+	_cg_rotation = angle;
+	[self setNeedsDisplay:YES];
 }
 
 - (CGFloat)heightAdjustLimit
@@ -1493,6 +1561,12 @@ FN_VIEW_PAIR(setPostsBoundsChangedNotifications, postsBoundsChangedNotifications
 	return nil;	/* no CALayer in this tier: the drawing substrate is a CGContext */
 }
 
+- (void)setLayer:(id)newLayer
+{
+	(void)newLayer;
+	fn_refuse_window("-setLayer:", "a layer tree; this tier draws views directly and has no CALayer substrate");
+}
+
 - (nullable id)inputContext
 {
 	/* **A VIEW THAT IS A TEXT INPUT CLIENT OWNS A CONTEXT; EVERY OTHER VIEW ANSWERS NIL.** Apple's door is what
@@ -1628,7 +1702,7 @@ NSString *NSDefinitionPresentationTypeOverlay = @"Overlay";
 	CGContextTranslateCTM(cg, -rect.origin.x, -rect.origin.y);
 	CGContextTranslateCTM(cg, 0.0, rect.size.height);
 	CGContextScaleCTM(cg, 1.0, -1.0);
-	[self displayRectIgnoringOpacity:rect context:context];
+	[self displayRectIgnoringOpacity:rect inContext:context];
 	CGEPSContextEndPage(cg);
 	CGEPSContextClose(cg);
 	data = [NSData dataWithBytes:CFDataGetBytePtr(eps) length:(NSUInteger)CFDataGetLength(eps)];
@@ -1680,7 +1754,7 @@ NSString *NSDefinitionPresentationTypeOverlay = @"Overlay";
 	CGContextTranslateCTM(cg, -rect.origin.x, -rect.origin.y);
 	CGContextTranslateCTM(cg, 0.0, rect.size.height);
 	CGContextScaleCTM(cg, 1.0, -1.0);
-	[self displayRectIgnoringOpacity:rect context:context];
+	[self displayRectIgnoringOpacity:rect inContext:context];
 	CGPDFContextEndPage(cg);
 	CGPDFContextClose(cg);
 	data = [NSData dataWithBytes:CFDataGetBytePtr(pdf) length:(NSUInteger)CFDataGetLength(pdf)];
@@ -1856,6 +1930,26 @@ NSString *NSDefinitionPresentationTypeOverlay = @"Overlay";
 	[self cg_requestLayout];
 }
 
+/* **MOVING A FRAME IS A FRAME CHANGE WITHOUT A SIZE CHANGE.** The old rectangle belongs to the superview for the
+ * same reason `-setFrame:` says so, the bounds keep their origin and size, and the notice path is the one
+ * `-cg_frameDidChangeFrom:` already owns. */
+- (void)setFrameOrigin:(NSPoint)newOrigin
+{
+	NSRect previousFrame = _frame;
+
+	if (NSEqualPoints(_frame.origin, newOrigin)) {
+		return;
+	}
+	_frame.origin = newOrigin;
+	if (_superview != nil) {
+		[_superview setNeedsDisplayInRect:previousFrame];
+	}
+	_needsDisplay = YES;
+	[self cg_frameDidChangeFrom:previousFrame];
+	_needsLayout = YES;
+	[self cg_requestLayout];
+}
+
 - (NSRect)bounds
 {
 	return _bounds;
@@ -1973,6 +2067,57 @@ NSString *NSDefinitionPresentationTypeOverlay = @"Overlay";
 	 * than leaving the new child at whatever frame its constructor chose. */
 	_needsLayout = YES;
 	[self cg_requestLayout];
+}
+
+/* **A POSITIONED ADD IS AN ADD AND A REORDER.** `-addSubview:` already handles the previous parent, the window link
+ * and the two move notices; this door then moves the retained child to the index the mode and the relative view name.
+ * A relative view that is not this view's child means the same as nil, and nil means "the top" for Above and "the
+ * bottom" for Below — Apple's reading of an unanchored placement. */
+- (void)addSubview:(NSView *)aView positioned:(NSWindowOrderingMode)place relativeTo:(NSView *)otherView
+{
+	NSUInteger index;
+
+	if (aView == nil || aView == self || aView == otherView) {
+		return;
+	}
+	[self addSubview:aView];
+	if (_subviews == nil) {
+		return;
+	}
+	if (otherView != nil && [otherView superview] != self) {
+		otherView = nil;
+	}
+	[aView retain];
+	[_subviews removeObjectIdenticalTo:aView];
+	if (otherView == nil) {
+		index = (place == NSWindowBelow) ? 0 : [_subviews count];
+	} else {
+		index = [_subviews indexOfObjectIdenticalTo:otherView];
+		if (place != NSWindowBelow) {
+			index++;
+		}
+	}
+	[_subviews insertObject:aView atIndex:index];
+	[aView release];
+	[self setNeedsDisplay:YES];
+}
+
+/* **REPLACING THE LIST IS A REMOVAL AND AN ADD PER VIEW.** The copy is taken because each removal edits the array the
+ * loop would otherwise be walking, and the arrivals go through `-addSubview:` so the window link and the two move
+ * notices are the same ones a single add performs. */
+- (void)setSubviews:(NSArray *)newSubviews
+{
+	NSArray *old = [[self subviews] copy];
+	NSUInteger i;
+
+	for (i = 0; i < [old count]; i++) {
+		[[old objectAtIndex:i] removeFromSuperview];
+	}
+	[old release];
+	for (i = 0; i < [newSubviews count]; i++) {
+		[self addSubview:[newSubviews objectAtIndex:i]];
+	}
+	[self setNeedsDisplay:YES];
 }
 
 - (void)removeFromSuperview
@@ -2358,6 +2503,20 @@ const CGFloat NSFullScreenModeWindowLevel = 100.0;
 
 /* THE RECURSION, AND THE RECT IS IN THE RECEIVER'S COORDINATES — the child's is CONVERTED rather than
  * subtracted, so a superview with an offset bounds or a flipped child still lands in the right place. */
+/* **THE FORCED DOORS.** `-display` paints the whole view and its tree NOW, whether or not anything was invalidated,
+ * and then clears the damage it just repaired. `-displayIfNeeded` paints only what was invalidated. Both are the existing
+ * `…InRect:` doors with the receiver's bounds supplied, which is the whole difference. */
+- (void)display
+{
+	[self displayRect:_bounds];
+	[self cg_clearDirtyRegion];
+}
+
+- (void)displayIfNeeded
+{
+	[self displayIfNeededInRect:_bounds];
+}
+
 - (void)displayRect:(NSRect)rect
 {
 	NSUInteger i;
@@ -2428,7 +2587,14 @@ const CGFloat NSFullScreenModeWindowLevel = 100.0;
 	}
 }
 
-- (void)displayRectIgnoringOpacity:(NSRect)rect context:(NSGraphicsContext *)context
+- (void)displayRectIgnoringOpacity:(NSRect)rect
+{
+	/* THE ONE-ARGUMENT FORM DRAWS IN WHATEVER CONTEXT THE CALLER ALREADY SET — the same drawing as the context
+	 * form with a nil context, and the same one `-displayRect:` makes. */
+	[self displayRectIgnoringOpacity:rect inContext:nil];
+}
+
+- (void)displayRectIgnoringOpacity:(NSRect)rect inContext:(NSGraphicsContext *)context
 {
 	/* THE `IgnoringOpacity` FORMS DIFFER ONLY IN THAT NO OPACITY LAYER IS ASKED FOR, and this tree asks for
 	 * none anywhere — so this is the same drawing under the name a caller used, which is stated rather than

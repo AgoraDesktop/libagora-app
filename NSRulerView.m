@@ -392,6 +392,16 @@ NSString *const NSRulerViewUnitPicas = @"Picas";
 
 - (void)setClientView:(NSView *)clientView
 {
+	/* **THE OLD CLIENT IS TOLD BEFORE IT STOPS BEING ONE**, which is the door's whole meaning: a client that caches
+	 * state while it is the ruler's client has one place to clean up. The new client is not told — it learns by being
+	 * asked — and the link is borrowed either way. */
+	if (clientView != _clientView) {
+		NSView *old = _clientView;
+
+		if (old != nil && [old respondsToSelector:@selector(rulerView:willSetClientView:)]) {
+			[old rulerView:self willSetClientView:clientView];
+		}
+	}
 	_clientView = clientView;	/* NOT RETAINED */
 	[self setNeedsDisplay:YES];
 }
@@ -1081,6 +1091,73 @@ unitToPointsConversionFactor:(CGFloat)conversionFactor
 - (void)invalidateHashMarks
 {
 	[self setNeedsDisplay:YES];
+}
+
+@end
+
+/* ==================================================================================================================
+ * THE CLIENT DEFAULTS, ON `NSView`, WHERE A CALLER FINDS THEM.
+ * ================================================================================================================ */
+
+/* **A PLAIN VIEW IS A PERMISSIVE CLIENT.** Every add, move and remove is allowed; both will-doors keep the location
+ * they were asked for; and the five notice doors do nothing. That is exactly what the ruler's `-respondsToSelector:`
+ * guards would assume if nobody implemented anything, so making them real changes no behaviour — it makes the
+ * protocol CHECKABLE and gives `NSTextView` a base to override. */
+@implementation NSView (NSRulerMarkerClientViewDelegation)
+
+- (BOOL)rulerView:(NSRulerView *)ruler shouldMoveMarker:(NSRulerMarker *)marker
+{
+	(void)ruler; (void)marker;
+	return YES;
+}
+
+- (CGFloat)rulerView:(NSRulerView *)ruler willMoveMarker:(NSRulerMarker *)marker toLocation:(CGFloat)location
+{
+	(void)ruler; (void)marker;
+	return location;
+}
+
+- (void)rulerView:(NSRulerView *)ruler didMoveMarker:(NSRulerMarker *)marker
+{
+	(void)ruler; (void)marker;
+}
+
+- (BOOL)rulerView:(NSRulerView *)ruler shouldRemoveMarker:(NSRulerMarker *)marker
+{
+	(void)ruler; (void)marker;
+	return YES;
+}
+
+- (void)rulerView:(NSRulerView *)ruler didRemoveMarker:(NSRulerMarker *)marker
+{
+	(void)ruler; (void)marker;
+}
+
+- (BOOL)rulerView:(NSRulerView *)ruler shouldAddMarker:(NSRulerMarker *)marker
+{
+	(void)ruler; (void)marker;
+	return YES;
+}
+
+- (CGFloat)rulerView:(NSRulerView *)ruler willAddMarker:(NSRulerMarker *)marker atLocation:(CGFloat)location
+{
+	(void)ruler; (void)marker;
+	return location;
+}
+
+- (void)rulerView:(NSRulerView *)ruler didAddMarker:(NSRulerMarker *)marker
+{
+	(void)ruler; (void)marker;
+}
+
+- (void)rulerView:(NSRulerView *)ruler handleMouseDown:(NSEvent *)event
+{
+	(void)ruler; (void)event;
+}
+
+- (void)rulerView:(NSRulerView *)ruler willSetClientView:(NSView *)newClient
+{
+	(void)ruler; (void)newClient;
 }
 
 @end

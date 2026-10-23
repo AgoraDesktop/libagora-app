@@ -62,11 +62,11 @@
 # **AND THE MEASURED NUMBERS, RECOMPUTED RATHER THAN EDITED**, so a reader can see the shape without running anything:
 #
 #     classes   131 of 168   (78%)    37 missing
-#     selectors 4428 of 4505  (98%)   77 missing   123 of 129 classes at COMPLETE coverage
+#     selectors 4456 of 4505  (99%)   49 missing   124 of 129 classes at COMPLETE coverage
 #     protocols  39 of  56   (70%)    17 missing
 #     functions  86 of  86 (100%)     0 missing    10 of them REFUSE BY NAME, which this count does not distinguish
 #                86 declared, 0 declared-not-defined, 0 defined-not-declared
-#     methods   4957 declared on this tree's own classes, 8 with NO body on the chain (0.2%)
+#     methods   4983 declared on this tree's own classes, 8 with NO body on the chain (0.2%)
 #
 # **THE 121 IS A RECOUNT AND IT FOUND THE OLD PROSE ONE HIGH.** The previous block said "120 of 129"; recomputing
 # complete coverage from the OLD pin's own `sel:` lines gives 119, because `NSSlider` and `NSSliderCell` were both
@@ -83,8 +83,14 @@
 #
 # **AND THE CONTROL'S TAIL TOOK THE NEXT ONE: `NSControl` is COMPLETE at 65 of 65, so 122 -> 123.** Its twenty-eight
 # doors were the cell-class factory, the one-cell selection, the paint/invalidate quartet, the sender-value family,
-# the formatter pair and `-validateEditing`. The SIX classes still carrying debt are `NSDocument`,
+# the formatter pair and `-validateEditing`. The SIX classes still carrying debt were `NSDocument`,
 # `NSDocumentController`, `NSSavePanel`, `NSView`, `NSWindow` and `NSWorkspace`.
+#
+# **AND THE VIEW'S TAIL TOOK THE NEXT ONE: `NSView` is COMPLETE at 221 of 221, so 123 -> 124.** Its twenty-eight
+# doors were the forced display family, the frame/rotation setters, the subview list, autoscroll, the focus-lock and
+# layer refusals, the range form of the definition look-up, the two `is`-prefixed rotation/hidden aliases and the
+# nine ruler client defaults. The FIVE classes still carrying debt are `NSDocument`, `NSDocumentController`,
+# `NSSavePanel`, `NSWindow` and `NSWorkspace`.
 #
 # Three things those five lines say together. The 87% on selectors is still the strongest part of the tree and the reason a
 # hand count that looked only at filenames undersold it by a factor of two. THE FUNCTIONS ARE FINISHED — 86 of 86, and
@@ -97,13 +103,14 @@
 # PRINT SYSTEM 146 selectors over 5 classes, 1 protocol and 11 `NSDocument` doors that were not declared before. The
 # selectors' OFFERED count rises with them — `selectors-offered` is the manifest's surface over the classes this tree
 # HAS, so a class appearing adds its rows to both sides of the fraction (4112 -> 4246 -> 4298 -> 4359 -> 4505 offered,
-# 3543 -> 3677 -> 3729 -> 3790 -> 3947 -> 3988 -> 4021 -> 4033 -> 4050 -> 4108 -> 4125 -> 4135 -> 4172 -> 4209 -> 4240 -> 4274 -> 4305 -> 4344 -> 4345 -> 4380 -> 4400 -> 4428 answered). The printing slice is also the first that MOVED THE MISSING
+# 3543 -> 3677 -> 3729 -> 3790 -> 3947 -> 3988 -> 4021 -> 4033 -> 4050 -> 4108 -> 4125 -> 4135 -> 4172 -> 4209 -> 4240 -> 4274 -> 4305 -> 4344 -> 4345 -> 4380 -> 4400 -> 4428 -> 4456 answered). The printing slice is also the first that MOVED THE MISSING
 # COUNT DOWN — 569 -> 558 — because it declared eleven selectors in `NSDocument` that had been absent rather than refused;
 # the text-view attribute slice took it to 517, the clipboard slice to 500, the container slice to 484, the smart-insert
 # and undo slice to 472, the browser-geometry slice to 455, the responder-command slice to 397, and the workspace-launch
 # slice to 380, the browser-item slice to 370, the browser's remaining thirty-seven to 333, the menu view to 296,
 # NSText's own surface to 265, NSFont's to 231, the workspace's file operations to 200, and the text view's last
-# thirty-nine to 161, the slider pair to 125, the table's tail to 105, and the control's tail to 77, by filling in
+# thirty-nine to 161, the slider pair to 125, the table's tail to 105, the control's tail to 77, and the view's tail
+# to 49, by filling in
 # `NSTextView`'s — which is the deepest class here, and the one whose remaining debt has now moved INWARD from its
 # editing surface to its text checking and link halves.
 # `classes-present` has risen by 14 across the last four slices; `NSFileWrapper` stays in the gap for the reason the
@@ -338,7 +345,7 @@ functions-defined-not-declared 0
 functions-missing 0
 functions-offered 86
 functions-present 86
-methods-declared 4957
+methods-declared 4983
 methods-declared-not-implemented 8
 proto:NSAlertDelegate 1
 proto:NSAnimatablePropertyContainer 0
@@ -522,13 +529,13 @@ sel:NSToolbar 27
 sel:NSToolbarItem 33
 sel:NSToolbarItemGroup 2
 sel:NSTrackingArea 5
-sel:NSView 193
+sel:NSView 221
 sel:NSViewAnimation 3
 sel:NSViewController 13
 sel:NSWindow 243
 sel:NSWindowController 26
 sel:NSWorkspace 57
-selectors-missing 77
+selectors-missing 49
 selectors-offered 4505
-selectors-present 4428
+selectors-present 4456
 selphantom:NSObject 8

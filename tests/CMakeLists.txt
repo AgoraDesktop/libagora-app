@@ -209,6 +209,14 @@ target_link_libraries(tracking_area PRIVATE App m)
 add_test(NAME appkit-tracking-area COMMAND tracking_area)
 set_tests_properties(appkit-tracking-area PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
 
+# **THE VIEW'S LAST TWENTY-EIGHT DOORS.** The forced display family, the frame/rotation setters, the subview list,
+# autoscroll, the focus-lock/layer/definition refusals and the ruler client defaults — measured by a counting view, a
+# real clip view and an old ruler client that records its own farewell.
+add_executable(view_tail view_tail.m)
+target_link_libraries(view_tail PRIVATE App m)
+add_test(NAME appkit-view-tail COMMAND view_tail)
+set_tests_properties(appkit-view-tail PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
+
 # AND THE METRICS: a push button's height is a control METRIC and a line of text is a plausible height. Both halves
 # are one defect chain, so they are one probe — see the file's own header for why the order matters.
 add_executable(control_metrics control_metrics.m)

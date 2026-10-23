@@ -47,11 +47,12 @@
  * ABSENT is the layer and backing-scale family: `-convertPointToBacking:`, `-convertPointToLayer:` and
  * `-backingScaleFactor` have no implementation here, and a scale factor is a thing a screen would have to be asked
  * for. A DEFERRAL WHOSE REASON HAS EXPIRED IS WORSE THAN NO NOTE AT ALL, because the next reader trusts it.
- * `-graphicsContext`, `-lockFocus`, `-unlockFocus`,
- * `-lockFocusIfCanDraw` and the `…ToBase`/`…FromBase` conversions are ABSENT BECAUSE THEY ARE `struck`
+ * `-graphicsContext` and the `…ToBase`/`…FromBase` conversions are ABSENT BECAUSE THEY ARE `struck`
  * ROWS: deprecated at this tree's pinned vintage, and the modern replacements
  * (`-cacheDisplayInRect:toBitmapImageRep:`, `-convertPoint:fromView:`) are the ones a caller should
- * have. The responder chain, the layer tree, its `NSMenu`/tooltip surface and its BACKING-SCALE conversions each
+ * have. **THE FOCUS-LOCK PAIR IS ANSWERED RATHER THAN ABSENT NOW**: `-lockFocusIfCanDraw` is the real question
+ * "may I draw", and `-lockFocus`/`-unlockFocus` REFUSE BY NAME because this tier draws into the caller's context and
+ * has no per-view state stack for them to push and pop. The responder chain, the layer tree, its `NSMenu`/tooltip surface and its BACKING-SCALE conversions each
  * need a subsystem that does not exist here; each is absent rather than stubbed. **AUTO LAYOUT USED TO BE ON THAT
  * LIST AND IS NOT ANY MORE**: `NSView`'s constraints, anchors, intrinsic size and layout pass are implemented in
  * `NSLayoutConstraint.h`, `NSLayoutAnchor.h` and `NSLayoutSolver.h`, as a DELIBERATE post-10.6 slice whose reason is
@@ -332,7 +333,11 @@ extern const CGFloat NSViewNoInstrinsicMetric;
 - (void)cacheDisplayInRect:(NSRect)rect toBitmapImageRep:(nullable NSBitmapImageRep *)bitmapImageRep;
 
 - (void)addSubview:(NSView *)aView;
+- (void)addSubview:(NSView *)aView positioned:(NSWindowOrderingMode)place relativeTo:(nullable NSView *)otherView;
 - (void)removeFromSuperview;
+/* **REPLACING THE WHOLE LIST.** The old subviews leave through `-removeFromSuperview` and the new ones arrive through
+ * `-addSubview:`, so every move notice and the window link run exactly as they do for one view. */
+- (void)setSubviews:(NSArray *)newSubviews;
 
 /* THE TREE QUERIES. `-isDescendantOf:` asks the ancestor chain; `-hitTest:` asks the tree the other way
  * round — WHICH VIEW IS AT THIS POINT — and takes its point in the SUPERVIEW's coordinates, as Apple's
@@ -373,8 +378,11 @@ extern const CGFloat NSViewNoInstrinsicMetric;
  * the window used to leave to the content view. The `IgnoringOpacity` forms differ only in that no opacity
  * layer is asked for — and this tree asks for none anywhere, so they are the same drawing with the name a
  * caller used, stated rather than pretended. */
+- (void)display;
+- (void)displayIfNeeded;
 - (void)displayRect:(NSRect)rect;
-- (void)displayRectIgnoringOpacity:(NSRect)rect context:(NSGraphicsContext *)context;
+- (void)displayRectIgnoringOpacity:(NSRect)rect;
+- (void)displayRectIgnoringOpacity:(NSRect)rect inContext:(NSGraphicsContext *)context;
 - (void)displayIfNeededInRect:(NSRect)rect;
 - (void)displayIfNeededInRectIgnoringOpacity:(NSRect)rect;
 - (void)displayIfNeededIgnoringOpacity;
@@ -382,6 +390,9 @@ extern const CGFloat NSViewNoInstrinsicMetric;
 /* THE GEOMETRY, PIECE BY PIECE. Each of the three setters invalidates the view and tells its SUBVIEWS to
  * resize, because a frame change is the only thing that rearranges them. */
 - (void)setFrameSize:(NSSize)newSize;
+- (void)setFrameOrigin:(NSPoint)newOrigin;
+- (void)setFrameRotation:(CGFloat)angle;
+- (void)setBoundsRotation:(CGFloat)angle;
 
 /* ============================================================================================ *
  * THE VIEW'S LAST SIXTY-FOUR DOORS: THE ONES THAT DO REAL WORK, AND THE ONES THAT NAME A          *
@@ -467,10 +478,15 @@ extern const CGFloat NSViewNoInstrinsicMetric;
 - (BOOL)mouse:(NSPoint)aPoint inRect:(NSRect)aRect;
 
 /* AND THE OLD GRAPHICS-STATE DOORS. `-lockFocusIfCanDraw` is REAL — it is the question "may I draw", and this
- * view answers it the way `-canDraw` does — while the four state-stack doors are REFUSED BY NAME, because this
- * tier draws through a `CGContext` and has no state stack for them to push and pop. */
+ * view answers it the way `-canDraw` does — while the four state-stack doors AND the lock/unlock pair are REFUSED BY
+ * NAME, because this tier draws through a `CGContext` and has no state stack for them to push and pop. */
 - (BOOL)lockFocusIfCanDraw;
 - (BOOL)lockFocusIfCanDrawInContext:(nullable NSGraphicsContext *)context;
+/* **THE FOCUS LOCK PAIR HAS NO SUBSTRATE HERE.** A view draws into whatever context the caller supplies (a window's
+ * backing store, a bitmap rep), and this tier has no lockable per-view graphics state to push and pop, so both doors
+ * REFUSE BY NAME. `-lockFocusIfCanDraw` above is the question "may I draw" and is real. */
+- (void)lockFocus;
+- (void)unlockFocus;
 - (void)allocateGState;
 /* **AND THE THREE COORDINATE-SYSTEM DOORS, WHICH ARE RECORDED WITH THEIR EFFECT NAMED.** Apple's doors translate the
  * receiver's coordinate system, scale its unit square and rotate it — a TRANSFORM this tier's drawing does not apply,
@@ -506,6 +522,9 @@ extern const CGFloat NSViewNoInstrinsicMetric;
 - (NSPoint)locationOfPrintRect:(NSRect)aRect;
 - (nullable id)rulerView;
 - (void)showDefinitionForAttributedString:(NSAttributedString *)attrString atPoint:(NSPoint)textBaselineOrigin;
+- (void)showDefinitionForAttributedString:(NSAttributedString *)attrString range:(NSRange)targetRange
+				 options:(nullable NSDictionary *)options
+		    baselineOriginProvider:(NSPoint (^)(NSRange adjustedRange))originProvider;
 - (void)writeEPSInsideRect:(NSRect)rect toPasteboard:(nullable NSPasteboard *)pasteboard;
 - (void)writePDFInsideRect:(NSRect)rect toPasteboard:(nullable NSPasteboard *)pasteboard;
 
@@ -546,6 +565,12 @@ extern const CGFloat NSViewNoInstrinsicMetric;
  * incompatible. The looseness bought nothing and cost the crossing; Apple's 10.6 signature names `NSScrollView` too.
  * And the same search still costs `-enclosingMenuItem` its answer: this tier has no menu ITEM for a view to be inside. */
 - (BOOL)hiddenOrHasHiddenAncestor;
+/* **THE ERA'S `is`-PREFIXED SPELLINGS, WHICH ARE THE ONES THE 10.6 HEADER DECLARES.** This tree shipped the older
+ * spellings first; both are answered now, the old one as the implementation and the new one as its alias. */
+- (BOOL)isHiddenOrHasHiddenAncestor;
+- (BOOL)isInFullScreenMode;
+- (BOOL)isRotatedFromBase;
+- (BOOL)isRotatedOrScaledFromBase;
 - (nullable NSView *)opaqueAncestor;
 - (nullable NSScrollView *)enclosingScrollView;
 - (nullable NSView *)enclosingMenuItem;
@@ -602,6 +627,9 @@ extern const CGFloat NSViewNoInstrinsicMetric;
 - (BOOL)wantsLayer;
 - (void)setWantsLayer:(BOOL)flag;
 - (nullable id)layer;
+/* **A LAYER CANNOT BE SET BECAUSE THERE IS NO LAYER TREE.** `-layer` answers nil; this setter REFUSES BY NAME rather
+ * than storing a pointer no drawing path consults. */
+- (void)setLayer:(nullable id)newLayer;
 - (nullable NSArray *)backgroundFilters;
 - (void)setBackgroundFilters:(nullable NSArray *)filters;
 - (nullable id)compositingFilter;

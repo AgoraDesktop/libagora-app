@@ -9,7 +9,7 @@
  * **THE RENDER IS ONE `CGPDFContext` AND A LOOP OVER PAGE RECTANGLES.** The rectangles come from the view's own
  * pagination doors when it knows its range, and from the ticket's imageable height when it does not; each page is drawn
  * with the same transform `NSView -dataWithPDFInsideRect:` already uses — translate to where the page wants the rect,
- * scale, flip the view's y-down space, then `-displayRectIgnoringOpacity:context:` — so a view that prints and a view
+ * scale, flip the view's y-down space, then `-displayRectIgnoringOpacity:inContext:` — so a view that prints and a view
  * that exports a PDF go through one drawing path.
  *
  * **THE DISPOSITION IS THE LAST DECISION AND IT IS EXPLICIT.** Spool hands the PDF to the seam; save writes
@@ -528,7 +528,7 @@ static NSPrintOperation *s_currentOperation = nil;
 		CGContextTranslateCTM(cg, 0.0, NSHeight(src));
 		CGContextScaleCTM(cg, 1.0, -1.0);
 		CGContextTranslateCTM(cg, -NSMinX(src), -NSMinY(src));
-		[_view displayRectIgnoringOpacity:src context:context];
+		[_view displayRectIgnoringOpacity:src inContext:context];
 		CGContextRestoreGState(cg);
 		CGPDFContextEndPage(cg);
 	}
