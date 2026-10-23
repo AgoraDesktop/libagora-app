@@ -1,22 +1,22 @@
 # libagora-app — a sixth handoff
 
-*Written at the end of **nine slices** that picked `HANDOFF-5.md` up where its §8 stopped — §9–§16 of that file are
+*Written at the end of **ten slices** that picked `HANDOFF-5.md` up where its §8 stopped — §9–§16 of that file are
 their running record, one numbered section per slice, and they are still the long form of everything summarised here.
 `HANDOFF.md`, `HANDOFF-2.md`, `HANDOFF-3.md` and `HANDOFF-4.md` remain worth reading: nothing in any of them was wrong,
 and the second file's §2 instrument rules and §4 traps are still the ones these sessions used most. **THIS FILE'S §2
 NUMBERS SUPERSEDE EVERY EARLIER HANDOFF'S.***
 
-*State at this handover: **nine slice commits** since the fifth handoff, tree clean, **162 tests passing in about 89 s**,
-`api-ledger check` holding **378 metrics** — **134 of 168 classes (80%), 4539 of 4539 selectors (100%), 41 of 56
-protocols (73%), 86 of 86 functions**, 5083 methods declared with 8 having no body, **all 132 classes with a surface at
-COMPLETE coverage** — refusal census **387**, owed census **19**. **The 34 absent classes and the 15 absent protocols are
+*State at this handover: **ten slice commits** since the fifth handoff, tree clean, **163 tests passing in about 88 s**,
+`api-ledger check` holding **379 metrics** — **135 of 168 classes (80%), 4566 of 4566 selectors (100%), 42 of 56
+protocols (75%), 86 of 86 functions**, 5113 methods declared with 8 having no body, **all 133 classes with a surface at
+COMPLETE coverage** — refusal census **387**, owed census **19**. **The 33 absent classes and the 14 absent protocols are
 the remaining surface; the 100% on selectors is 100% of the classes this tree HAS, not of the 10.6 AppKit.***
 
 ---
 
 ## 1. What these sessions did
 
-Nine slices, in the order they landed. Each is a commit in this repository and each ended green. There were no
+Ten slices, in the order they landed. Each is a commit in this repository and each ended green. There were no
 workspace commits in this arc, and the ninth also needed a Foundation fix, which is its own commit in `libagora-base`.
 
 | Commit | What it landed |
@@ -30,6 +30,7 @@ workspace commits in this arc, and the ninth also needed a Foundation fix, which
 | `e199a54` | **`NSSavePanel` and `NSWorkspace` — COMPLETE** (47/47 and 58/58). The package flag became a real listing and accept rule; the deprecated `-openTempFile:` became `-openFile:`'s spelling — closing the last selector rows over the classes already present (§15). |
 | `99baeca` | **`NSImageView` — the first ABSENT class to arrive** (14/14). A thin `NSControl` over `NSImageCell`: the image and its three placement facts forwarded with redisplay, the two edit gates and the animation flag, real paste/delete, and copy/cut reaching the image class's encoder refusal (§16). |
 | `929bba3` | **`NSTokenField` and `NSTokenFieldCell` — the first ABSENT EDITOR to arrive** (10/10 and 10/10) and the two protocols that came with them. The list is the base cell's one value, the three conversions (display/editing/represented) fall back to the object, the chips are one layout shared by drawing/measurement/hit test, a session opens on EDITING strings and commits through `-shouldAddObjects:atIndex:`, the completion delay's sign is the switch, and the field is the ten forwards plus a relay. **It also found a Foundation hang with no caller**, fixed in `libagora-base` `a72b102` (§9). |
+| `ffaef0d` | **`NSDrawer` — the first ABSENT CONTAINER to arrive** (27/27) and `NSDrawerDelegate`. A child window attached at the parent's edge, the four states announced synchronously (the middle is observable inside a handler), the two-axis size with the parent as the absolute limit, the min/max on the USER path only, and the parent's `-drawers` list as the owner. It also fixed two `NSWindow` teardown leaks: the child list was never released and a surviving child kept a dangling parent pointer (§10). |
 
 **AND THE LAST FOUR ROWS OF THE FIFTH HANDOFF WERE NOT A CLASS TAIL AT ALL; THEY WERE THE END OF THE PRESENT SET.**
 `e199a54` closed every class this tree already had. `99baeca` began the other list: the classes the 10.6 manifest names
@@ -42,24 +43,24 @@ remaining editors will take: a cell that owns the model and a view that forwards
 ## 2. The surface, measured
 
 ```
-classes   134 of 168   (80%)    34 missing
-selectors 4539 of 4539 (100%)    0 missing   132 of 132 classes at COMPLETE coverage
-protocols  41 of  56   (73%)    15 missing
+classes   135 of 168   (80%)    33 missing
+selectors 4566 of 4566 (100%)    0 missing   133 of 133 classes at COMPLETE coverage
+protocols  42 of  56   (75%)    14 missing
 functions  86 of  86  (100%)     0 missing    10 refuse by name
-methods   5083 declared on this tree's own classes, 8 with NO body on the chain (0.2%)
+methods   5113 declared on this tree's own classes, 8 with NO body on the chain (0.2%)
 ```
 
 **THE SELECTOR FRACTION IS NOW 100% OF THE CLASSES THIS TREE HAS, AND THE CLASS FRACTION IS 80%.** The manifest
-offers selectors only for the classes that are present; the 34 absent classes contribute no rows to either side. So
-`4539 of 4539` says "every selector 10.6 declares for the 134 classes that exist here is answered", not "the 10.6
-AppKit is finished". The class number, 134 of 168, is the honest headline.
+offers selectors only for the classes that are present; the 33 absent classes contribute no rows to either side. So
+`4566 of 4566` says "every selector 10.6 declares for the 135 classes that exist here is answered", not "the 10.6
+AppKit is finished". The class number, 135 of 168, is the honest headline.
 
-**TWO OF THE 134 PRESENT CLASSES HAVE NO SELECTORS:** `NSSecureTextField` and `NSTextAttachmentCell`. The complete
-coverage denominator is therefore 132, not 134. (`NSSecureTextField` inherits everything from `NSTextField`;
+**TWO OF THE 135 PRESENT CLASSES HAVE NO SELECTORS:** `NSSecureTextField` and `NSTextAttachmentCell`. The complete
+coverage denominator is therefore 133, not 135. (`NSSecureTextField` inherits everything from `NSTextField`;
 `NSTextAttachmentCell` inherits everything from `NSCell`.) The earlier handoffs said "two classes with no surface" and
 did not name them; these are the two.
 
-**THE NINETEEN CLASSES THESE NINE SLICES FINISHED**, in the order they landed. Every one of them finished with named
+**THE TWENTY CLASSES THESE TEN SLICES FINISHED**, in the order they landed. Every one of them finished with named
 refusals or a stated effect rather than a stub:
 
 | Class | Selectors | Refusing by name |
@@ -83,23 +84,23 @@ refusals or a stated effect rather than a stub:
 | `NSImageView` | 14 of 14 | 0 (copy/cut reach the image class's own encoder refusal) |
 | `NSTokenFieldCell` | 10 of 10 | 0 (the list, the three conversions and the chips are all real) |
 | `NSTokenField` | 10 of 10 | 0 (ten forwards and a relay; every delegate door has a sender) |
+| `NSDrawer` | 27 of 27 | 0 (the child window, the four states, the edges and the reviewed user resize) |
 
-(The table lists the nineteen completions since `HANDOFF-4`; the other 113 classes with a surface were already
+(The table lists the twenty completions since `HANDOFF-4`; the other 113 classes with a surface were already
 complete before that arc. `NSFont`'s fifth attachment door was found by `HANDOFF-5`'s own recount and is refused now.)
 
-**AND THE 34 ABSENT CLASSES GROUP CLEANLY. THIS IS THE LIST THE NEXT SLICES PICK FROM:**
+**AND THE 33 ABSENT CLASSES GROUP CLEANLY. THIS IS THE LIST THE NEXT SLICES PICK FROM:**
 
 | Group | Classes | What it needs |
 |---|---|---|
-| Editors and containers | `NSDrawer` | A parent/edge layout and the collapse/expand state. `NSImageView` and the token pair are DONE; this is the remaining editor. |
 | Controllers / bindings | `NSController`, `NSObjectController`, `NSArrayController`, `NSDictionaryController`, `NSUserDefaultsController`, `NSTreeController`, `NSTreeNode` | KVO/KVC substrate — a design question before it is a slice, because this tier has no KVO. |
 | Rules and tokens | `NSRuleEditor`, `NSPredicateEditor`, `NSPredicateEditorRowTemplate` | A predicate editor over the rule editor; both are views over controls that exist, but the predicate model is substantial. |
 | Collection view | `NSCollectionView` | The ITEM exists (`NSCollectionViewItem`); the view is the missing half. |
 | Still refused, per the plan's §A11 | `NSOpenGL*` (5), `NSMovie`, `NSMovieView`, `NSQuickDrawView`, the four typesetters (`NSATSTypesetter`, `NSGlyphGenerator`, `NSSimpleHorizontalTypesetter`, `NSTypesetter`), `NSSpeechSynthesizer`, `NSSpeechRecognizer`, `NSSound`, `NSInputManager`, `NSInputServer`, `NSDockTile`, `NSHelpManager`, `NSPersistentDocument`, `NSTouch` | GL, QuickDraw, movies, a PostScript/typesetting engine, speech, sound, the input-manager era, a Dock contract, a Help Viewer, a document subclass that needs autosave, and touch input with no hardware. Each is named at the door that would have to refuse. |
-| Not this component's | `NSFileWrapper` | Foundation's (`libagora-base/NSFileWrapper.h`). The real AppKit gap is 33. |
+| Not this component's | `NSFileWrapper` | Foundation's (`libagora-base/NSFileWrapper.h`). The real AppKit gap is 32. |
 
-**THE 15 MISSING PROTOCOLS ARE ALMOST ALL CONTRACTS FOR CLASSES IN THAT TABLE:** `NSDrawerDelegate`,
-`NSRuleEditorDelegate`, `NSCollectionViewDelegate`,
+**THE 14 MISSING PROTOCOLS ARE ALMOST ALL CONTRACTS FOR CLASSES IN THAT TABLE:** `NSRuleEditorDelegate`,
+`NSCollectionViewDelegate`,
 `NSSpeechSynthesizerDelegate`, `NSSpeechRecognizerDelegate`, `NSSoundDelegate`, `NSInputServiceProvider`,
 `NSInputServerMouseTracker`, `NSDockTilePlugIn`, `NSGlyphStorage`, `NSAnimatablePropertyContainer`. Four exceptions
 have their classes and are small slices on their own: **`NSTextViewDelegate`** (the view has a delegate and calls
@@ -116,16 +117,17 @@ Four censuses and one ledger, all committed and all gated by `ctest`:
 | Artifact | What it is |
 |---|---|
 | `api/10.6/appkit-manifest.txt` | The SDK's facts: 168 classes + superclasses, 56 protocols, 87 functions, 5208 selectors. |
-| `tests/api-10.6-census.txt` | **378** pinned metrics — the aggregates, one `sel:` line per present class (132 of them), one `proto:` line per protocol, `fn:`/`fndecl:` per function, `selphantom:` per class with a phantom. |
+| `tests/api-10.6-census.txt` | **379** pinned metrics — the aggregates, one `sel:` line per present class (133 of them), one `proto:` line per protocol, `fn:`/`fndecl:` per function, `selphantom:` per class with a phantom. |
 | `tests/api_census.cmake` | The gate: two-directional comparison, arithmetic check, two fault checks. |
 | `tests/refusal_census.txt` | **387** refusal sites, per FILE. |
 | `tests/owed_census.txt` | **19** headers' OWED notes, per file. |
 | `tools/api-ledger` | The parser: `manifest`, `census`, `check`, `missing`. |
 
 * **THE METRIC COUNT RISES BY ONE PER NEW CLASS, AND THAT IS NOT DRIFT.** `NSImageView` added one `sel:` line (375 ->
-  376); the token pair added two more (376 -> **378**). A new class adds a metric; a new test does not.
+  376); the token pair added two more (376 -> 378); the drawer added one (378 -> **379**). A new class adds a metric; a
+  new test does not.
 * **`missing` IS NOW THE ABSENT-CLASS DOOR, NOT THE SLICE-PICKING DOOR.** `./tools/api-ledger missing
-  api/10.6/appkit-manifest.txt . --library build/libagora-app.so` prints **34 classes, 15 protocols, 0 functions, and
+  api/10.6/appkit-manifest.txt . --library build/libagora-app.so` prints **33 classes, 14 protocols, 0 functions, and
   no selector debt at all**. The "largest selector debt" section is gone because every present class is complete. A
   slice now starts by picking a class from that list or a protocol from the list beside it.
 * **THE PER-CLASS RECOUNT IS STILL THE MEASUREMENT THAT CATCHES A SILENT DELETION.** `parse_tree` twice and a `diff`
@@ -134,9 +136,10 @@ Four censuses and one ledger, all committed and all gated by `ctest`:
   is one short and another is one long.
 * **ADDING A CLASS CHANGES THE DENOMINATORS, NOT ONLY THE NUMERATORS.** `NSImageView` took `classes-present` 131 -> 132
   and `selectors-offered`/`present` 4505 -> 4519; the token pair took them 132 -> 134 and 4519 -> 4539, complete coverage
-  130 -> 132, and protocols 39 -> 41. The four hand-written summary lines had to be recomputed: 134 of 168 (80%), 4539 of
-  4539 (100%), 132 of 132. **A class that arrives is a new denominator on both sides, and a protocol that arrives is a
-  `proto:` line moving 0 -> 1.**
+  130 -> 132, and protocols 39 -> 41; the drawer took them 134 -> 135 and 4539 -> 4566, complete coverage 132 -> 133, and
+  protocols 41 -> 42. The four hand-written summary lines had to be recomputed: 135 of 168 (80%), 4566 of 4566 (100%),
+  133 of 133. **A class that arrives is a new denominator on both sides, and a protocol that arrives is a `proto:` line
+  moving 0 -> 1.**
 * **EVERY SLICE RE-PINS DELIBERATELY.** Let `ctest -R appkit-api-census` fail, recompute with `./tools/api-ledger census
   …`, write it in the same commit, and recompute the four hand-written summary lines from `api-ledger census` rather
   than editing them by eye.
@@ -297,15 +300,15 @@ of a library path rather than for want of the code.
 
 ## 6. Where to spend the next hour
 
-**THERE IS NO CLASS TAIL LEFT. THE NEXT WORK IS THE 34 ABSENT CLASSES, AND THEY ARE NOT ONE-LINERS.** The order below
+**THERE IS NO CLASS TAIL LEFT. THE NEXT WORK IS THE 33 ABSENT CLASSES, AND THEY ARE NOT ONE-LINERS.** The order below
 is by reachable surface and by what the tree already has to build on.
 
 1. **DONE: `NSTokenField` and `NSTokenFieldCell`** — the first absent editor, landed as `929bba3` with both protocols
    (§9). The remaining editors are the same shape: a cell that owns a model the tree does not have yet, and a control
    that forwards and relays.
-2. **`NSDrawer`** — the parent/edge layout and the collapse/expand state. The split view's collapse is the nearest
-   machinery; `NSDrawerDelegate` is the contract. Decide up front whether the collapse animates (the animation family
-   exists) or is a stated no-animation door.
+2. **DONE: `NSDrawer`** — the first absent container, landed as `ffaef0d` with `NSDrawerDelegate` (§10). It took the
+   child window as the drawer's surface and made the synchronous transition the stated deviation; a later slice can
+   animate the two middle states without moving any other door.
 3. **`NSCollectionView`** — the ITEM (`NSCollectionViewItem`) already exists; the view is the missing half. It is a
    layout-and-recycling problem over the view tree and the item, not a new drawing engine; `NSCollectionViewDelegate`
    comes with it.
@@ -330,8 +333,8 @@ not by looking for a selector debt; the ledger's `missing` output is the map.
 
 ## 7. Things a reader should not have to rediscover
 
-* **THE 100% IS OVER PRESENT CLASSES.** 4539 of 4539 selectors over 134 present classes; 132 of those have a surface and
-  all 132 are complete. The 34 absent classes contribute no offered selectors. The class number is 134 of 168 (80%).
+* **THE 100% IS OVER PRESENT CLASSES.** 4566 of 4566 selectors over 135 present classes; 133 of those have a surface and
+  all 133 are complete. The 33 absent classes contribute no offered selectors. The class number is 135 of 168 (80%).
 * **THE `openTempFile:` ROW WAS REAL, NOT AN INSTRUMENT QUIRK.** The tree had a hyphen-less `-openTempFile` that CREATES
   a temp file and answers its path; Apple's deprecated `-openTempFile:` takes a path and OPENS it, and it is
   `-openFile:` by another name. The previous handoff's "off by construction" note was wrong; the row is implemented now.
@@ -363,9 +366,9 @@ not by looking for a selector debt; the ledger's `missing` output is the map.
   cell-less subclass answers nil and sends nothing. `NSBrowser` paid for it.
 * **THE PLAN'S PRINTING DECISION WAS AMENDED, AND THE RECORD IS THE PLAN.** `COCOA-10.11-SURFACE-PLAN.md` §4.4/§4.5
   said "physical printers refused"; both now say implemented, with the transport as a seam.
-* **THE SUITE IS 162 TESTS IN ABOUT 89 SECONDS, AND `ctest --test-dir build -j4` IS THE GATE.** The exit status is the
+* **THE SUITE IS 163 TESTS IN ABOUT 88 SECONDS, AND `ctest --test-dir build -j4` IS THE GATE.** The exit status is the
   witness, not the tail of the output. The workspace's suite is 14 tests and belongs in the same gate run.
-* **THE CENSUS IS 378 METRICS, 387 REFUSAL SITES, 19 OWED NOTES.** A new class adds a `sel:` metric; a new refusal
+* **THE CENSUS IS 379 METRICS, 387 REFUSAL SITES, 19 OWED NOTES.** A new class adds a `sel:` metric; a new refusal
   moves the refusal total; a new OWED note moves the owed total. Re-pin all three in the same commit when they move.
 
 ---
@@ -470,3 +473,70 @@ and the citation was the thing that had to change.
 `NSDrawerDelegate`. The token pair's shape is the model to follow: a cell (or a view that owns one) carrying the state
 the tree has not had, every deviation named at the door, and a probe that measures the INK and the round trip rather than
 the getters.
+
+## 10. `NSDrawer` arrives: a child window at the edge, four states, and two axes of size
+
+**Commit `ffaef0d`.** `NSDrawer` is present and COMPLETE at 27 of 27 — the twentieth complete class, and the first
+container off the absent list. The change takes the class count 134 -> 135 (80% of 168), the offered and present
+selectors 4539 -> 4566, complete coverage 132 -> 133, the protocols 41 -> 42, and the declaration count 5083 -> 5113;
+the missing count is still 0. The census holds 379 metrics, the suite is 163 tests (about 88 s), the refusal census
+stayed 387, the owed census stayed 19, and `tests/drawer.m` is the new probe (57 checks). The workspace's 14 tests
+were run too.
+
+**THE DRAWER IS A CHILD WINDOW, WHICH IS APPLE'S MODEL RATHER THAN AN ANALOGY.** `NSDrawer` is an `NSResponder`; the
+class owns a borderless window made at init, `-contentView` IS that window's content view, and opening attaches the
+window to the parent with `-addChildWindow:ordered:` and frames it immediately beyond the parent's edge. The class
+therefore contributes the relationship and the arithmetic, not a second surface: `-setFrame:display:` on the child is
+the layout, and the parent's own move propagation carries the drawer with it.
+
+**THE FOUR STATES ARE REAL BUT SYNCHRONOUS, WHICH IS THE SLICE'S ONE STATED DEVIATION.** `-open` sets
+`NSDrawerOpeningState`, announces `WillOpen`, lays out and attaches, sets `NSDrawerOpenState`, and announces `DidOpen`;
+`-close` does the reverse. The middle states are therefore observable from inside the handler — the probe reads
+`willOpen:1` and `didOpen:2` — and never from a caller waiting for the door to return. **No slide is animated**, because
+this tier has no drawer animation clock; a later slice replaces two assignments and nothing else. A transition owns
+itself: `-close` called from inside `-drawerWillOpen:` is ignored by a re-entrancy flag rather than nested.
+
+**THE SIZE HAS TWO AXES AND THE PARENT LIMITS BOTH.** The content size is the thickness in the motion direction; the
+transverse extent is the parent's minus `-leadingOffset` and `-trailingOffset`; and both clamp to the parent, because
+Apple's one absolute restriction is that a drawer can never be larger than its window. `-setContentSize:` is plain
+storage — Apple says programmatic changes are not limited by the minimum and maximum — while
+`-cg_resizeContentByUserToSize:` is the USER path: it clamps the proposal to `-minContentSize`/`-maxContentSize` first
+and then asks `-drawerWillResizeContents:toSize:`, whose answer is the size that lands. **NO DRAWER-EDGE GESTURE IS
+WIRED**: the door is the user path, and a caller that tracks a pointer can drive it.
+
+**AND THE PARENT OWNS THE DRAWER, WHICH IS WHY THE LIST NEEDED A HOME.** `-setParentWindow:` registers the receiver in
+`NSWindow`'s `-drawers` list; that list retains it, `-parentWindow` is the borrowed back-pointer, and a parent swap
+unregisters and re-registers while moving the attached child. Releasing a drawer that is still attached does not destroy
+it — the probe checks that the parent's list still holds it — and detaching is what lets the next release free it.
+
+### The traps this slice paid for
+
+**THE WINDOW ALREADY ANSWERED `-drawers`.** `NSWindow.h` and `.m` had `-drawers` parsed as a present selector answering
+an empty array, with a comment saying the drawer CLASS was the absent half. A category implementation in `NSDrawer.m`
+would have been a SECOND implementation of one selector, and which one wins is a load-order accident — so the list moved
+into `NSWindow` where the answer already lived, with two `cg_` registration doors for the drawer class to call. The
+lesson is the ledger's own: a selector declared is a door answered, and finding the existing answer is cheaper than
+adding a second one.
+
+**`-setFrame:display:` DOES NOT RESIZE THE CONTENT VIEW.** A drawer whose child window changed size while its content
+view kept the old frame would draw at the wrong size after the first edge change or offset move. The layout therefore
+sets the window's frame and the content view's frame in one door, and the probe reads the CONTENT VIEW's frame as well as
+the window's.
+
+**ORDERING A CHILD OF AN OFFSCREEN PARENT ASKS FOR A SERVER THAT IS NOT THERE.** `-addChildWindow:ordered:` with a real
+order ends in `-orderFront:`, whose first act is `-cg_ensureWindow` — and with no compositor that prints a refusal and
+returns. The attach uses `NSWindowOut` when the parent is not visible (recording the relationship and ordering nothing)
+and orders the child above the parent only when the parent is on screen. That is also what keeps the probe silent and
+deterministic without a display.
+
+**A CHILD THAT OUTLIVED ITS PARENT KEPT A DANGLING POINTER, AND THE CHILD LIST WAS NEVER RELEASED.** `NSWindow -dealloc`
+had no `[_cg_childWindows release]` at all, and a child's `_cg_parentWindow` was left pointing at the freed window — the
+next `-orderOut:` on that child would reach freed memory. Dealloc now tells each drawer its parent is gone first (which
+detaches the drawer's child and takes it out of the list), then clears the remaining children's back-pointers and
+releases the list. The probe releases a parent while still holding its open drawer and asserts that both the drawer's
+and the child's `-parentWindow` answer nil.
+
+**Where the next hour goes:** §6 item 3, `NSCollectionView` — the ITEM (`NSCollectionViewItem`) already exists and the
+view is the missing half. It is a layout-and-recycling problem over the view tree and the item, with
+`NSCollectionViewDelegate`; the drawer's shape is the model to follow (the item owns the model, the view owns the
+layout, and every deviation is named at the door).
