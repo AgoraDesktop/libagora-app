@@ -1330,6 +1330,16 @@ target_link_libraries(text_view_container PRIVATE App m)
 add_executable(text_surface text_surface.m)
 target_link_libraries(text_surface PRIVATE App m)
 
+# **THE TEXT VIEW'S LAST THIRTY-NINE.** The real third is three small features: a colour panel changing a document's
+# background (gated by its flag), a link the delegate may route or that opens its URL, and word completion — the partial word
+# at the caret, the document's words that start with it, and the insert that replaces exactly what was typed. The refusing
+# two thirds is measured too: each door answers its type's empty value rather than crashing or inventing one.
+add_executable(text_view_last text_view_last.m)
+target_link_libraries(text_view_last PRIVATE App)
+
+add_test(NAME appkit-text-view-last COMMAND text_view_last)
+set_tests_properties(appkit-text-view-last PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
+
 add_test(NAME appkit-text-surface COMMAND text_surface)
 set_tests_properties(appkit-text-surface PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
 

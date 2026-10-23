@@ -120,7 +120,7 @@ NSSpellChecker.m                 12
 NSText.m                         11
 NSTextInputContext.m             1
 NSTextList.m                     2
-NSTextView.m                     7
+NSTextView.m                     30
 NSToolbar.m                      1
 NSTrackingArea.m                 1
 NSView.m                         16
@@ -132,4 +132,4 @@ NSWindow.m                       23
 # `fn_refuse_window` spelling was simply invisible to a census that counted the `APPKIT-REFUSE` literal, so every
 # refusal written the house way — which is the way the header asks for — moved no number.
 #
-# total: 352
+# total: 375

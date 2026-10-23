@@ -1267,6 +1267,34 @@ defaults domain, painted by the Workspace), the five change-notification doors, 
 
 `tests/workspace_fileops.m` measures it in **39 checks**, every operation checked by what exists on disk afterwards.
 
+## 47. The text view's last thirty-nine: three real features and thirty refusals
+
+**THE CLASS IS COMPLETE FOR THE ERA: 186 of 186, the sixth class to finish.** The tail sorted into nine doors that do
+something and thirty that cannot, and the split is the interesting part.
+
+**THE REAL THREE ARE SMALL AND VISIBLE.** `-allowsDocumentBackgroundColorChange` gates
+`-changeDocumentBackgroundColor:` — the door a colour panel's target sends — and with it on the colour becomes the
+document's background, which `-drawRect:` already fills. The LINKS are two: `-linkTextAttributes` is the ink a link run is
+drawn in (the attribute itself is Foundation's `NSLinkAttributeName`), and `-clickedOnLink:atIndex:` **asks the delegate
+first and opens the URL second**, which is Apple's order and what makes a link work with no delegate at all. And WORD
+COMPLETION is the trio a person uses: the partial word before the caret, the document's OWN longer words that start with
+it (sorted, deduplicated, the partial excluded), and an insert that goes through the view's one edit path so the mirror,
+the selection, the layout and the undo record all follow.
+
+**THE THIRTY REFUSE, AND FOUR OF THEM ARE THE ONES WORTH READING.** The fifteen-door text-checking family is blocked on
+`NSTextCheckingResult` and `NSOrthography` — Foundation classes this tier has not got, which is why the asynchronous spell
+door already refused for the same reason. The four panels, the services transport, the speech service and the outline panel
+are simply absent. But FOUR doors refuse because their bit WOULD HAVE NO READER, and that is the rule this file keeps
+restating: `-setAcceptsGlyphInfo:` (this tier's manager never hands glyph info to a view), `-setDisplaysLinkToolTips:`
+(`NSView` has no tool-tip machinery), and `-setAllowedInputSourceLocales:` — which STORES the list, answers it back, and
+says in its own refusal message that NOTHING READS IT. A flag that is stored and unread is the failure mode; a flag that is
+stored, answered, and documented as unread is at least honest, and the choice is recorded here rather than left to a
+reader to discover.
+
+`tests/text_view_last.m` measures it in **22 checks**: the background flag gating both ways, the link ink and the delegate
+asked first with the link it was given, the completion range and list with their negatives, the insert replacing exactly
+the typed characters — and every refusing door answering its type's empty value without crashing.
+
 ## Keeping in sync
 
 The Fiwix AppKit is the origin and this repository has now diverged from it in the seam. A fix made there

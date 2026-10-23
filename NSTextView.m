@@ -26,6 +26,8 @@
 #import <AppKit/NSTextAttachment.h>
 #import <AppKit/NSFont.h>
 #import <AppKit/NSColor.h>
+#import <AppKit/NSColorPanel.h>
+#import <AppKit/NSWorkspace.h>
 #import <AppKit/NSGraphicsContext.h>
 #import <AppKit/NSBezierPath.h>
 #import <AppKit/NSWindow.h>
@@ -62,6 +64,12 @@ static void cg_announce(NSText *text, NSString *name, SEL delegateSelector)
 - (void)cg_noteEditInRange:(NSRange)range
 	      insertedText:(NSString *)inserted
 	      replacedText:(NSString *)replaced;
+@end
+
+/* **THE DELEGATE'S LINK DOOR IS INFORMAL**, like every other optional contract in this tier: declared here so the
+ * `-clickedOnLink:atIndex:` path can call it with its real return type rather than through `-performSelector:`. */
+@interface NSTextView (AGLinkDelegate)
+- (BOOL)textView:(NSTextView *)textView clickedOnLink:(id)link atIndex:(NSUInteger)charIndex;
 @end
 
 @implementation NSTextView
@@ -2871,6 +2879,376 @@ static NSString * const AGRulerLineHeightMultipleKey = @"LineHeightMultiple";
 {
 	_cg_findIndicatorRange = charRange;
 	_cg_findIndicatorActive = (charRange.length > 0) ? YES : NO;
+}
+
+/* ============================================================================================ *
+ * THE REMAINING THIRTY-NINE: NINE REAL, THIRTY REFUSED                                         *
+ * ============================================================================================ */
+
+/* ---- THE DOCUMENT BACKGROUND ---------------------------------------------------------------- */
+
+- (BOOL)allowsDocumentBackgroundColorChange
+{
+	return _cg_documentBackgroundChange;
+}
+
+- (void)setAllowsDocumentBackgroundColorChange:(BOOL)flag
+{
+	_cg_documentBackgroundChange = flag ? YES : NO;
+}
+
+/* **THE COLOUR PANEL'S TARGET FOR A DOCUMENT'S BACKGROUND.** With the flag on, the view's own background becomes the
+ * panel's colour — `-drawRect:` fills from `-backgroundColor`, so the choice is visible without a second drawing path. */
+- (void)changeDocumentBackgroundColor:(id)sender
+{
+	NSColor *color = nil;
+
+	(void)sender;
+	if (!_cg_documentBackgroundChange) {
+		return;
+	}
+	if ([sender respondsToSelector:@selector(color)]) {
+		color = [sender color];
+	}
+	if (color == nil) {
+		color = [[NSColorPanel sharedColorPanel] color];
+	}
+	if (color != nil) {
+		[self setBackgroundColor:color];
+		[self setDrawsBackground:YES];
+		[self setNeedsDisplay:YES];
+	}
+}
+
+/* ---- THE LINKS -------------------------------------------------------------------------------- */
+
+- (NSDictionary *)linkTextAttributes
+{
+	return _cg_linkTextAttributes;
+}
+
+/* THE INK A LINK IS DRAWN IN. Read where the manager's runs are drawn: a run carrying `NSLinkAttributeName` wears this
+ * dictionary instead of its own, which is why the setter redraws. */
+- (void)setLinkTextAttributes:(NSDictionary *)attributes
+{
+	NSDictionary *copy = [attributes copy];
+
+	[_cg_linkTextAttributes release];
+	_cg_linkTextAttributes = copy;
+	[self setNeedsDisplay:YES];
+}
+
+/* **A PRESS ON A LINK ASKS THE DELEGATE FIRST AND OPENS THE URL SECOND.** That order is Apple's: a document view that
+ * wants to route a link itself answers YES, and one that does not gets the default behaviour — `-openURL:` through the
+ * workspace — which is what makes a link in a text view do something without any delegate at all. */
+- (BOOL)clickedOnLink:(id)link atIndex:(NSUInteger)charIndex
+{
+	id delegate = [self delegate];
+
+	if (delegate != nil && [delegate respondsToSelector:@selector(textView:clickedOnLink:atIndex:)]) {
+		return [delegate textView:self clickedOnLink:link atIndex:charIndex];
+	}
+	if ([link isKindOfClass:[NSURL class]]) {
+		return [[NSWorkspace sharedWorkspace] openURL:(NSURL *)link];
+	}
+	if ([link isKindOfClass:[NSString class]]) {
+		NSURL *url = [NSURL URLWithString:(NSString *)link];
+
+		return (url != nil) ? [[NSWorkspace sharedWorkspace] openURL:url] : NO;
+	}
+	return NO;
+}
+
+/* ---- THE COMPLETION TRIO ---------------------------------------------------------------------- */
+
+/* **THE PARTIAL WORD BEFORE THE CARET**, which is the range a completion replaces: letters, digits and underscore, back
+ * from the insertion point. A caret in the middle of a word completes the part BEFORE it, which is what the era's door
+ * means and what makes the insert replace exactly the characters the person typed. */
+- (NSRange)rangeForUserCompletion
+{
+	NSString *string = [self string];
+	NSUInteger start = _selectedRange.location;
+	NSUInteger from;
+
+	if (start > [string length]) {
+		start = [string length];
+	}
+	from = start;
+	while (from > 0) {
+		unichar c = [string characterAtIndex:from - 1];
+
+		if (c == '_' || (c >= '0' && c <= '9') || (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')) {
+			from--;
+		} else {
+			break;
+		}
+	}
+	return NSMakeRange(from, start - from);
+}
+
+/* **THE DOCUMENT'S OWN WORDS, STARTING WITH THE PARTIAL ONE.** Sorted and deduplicated, which is what makes `index` a
+ * stable answer for a completion list; the partial word itself is not offered back. The index out-parameter receives the
+ * position of the first suggestion, which is what a caller showing a list selects. */
+- (NSArray *)completionsForPartialWordRange:(NSRange)charRange indexOfSelectedItem:(NSInteger *)index
+{
+	NSString *string = [self string];
+	NSString *prefix;
+	NSMutableSet *words = [NSMutableSet set];
+	NSMutableArray *answer;
+	NSUInteger i = 0;
+
+	if (index != NULL) {
+		*index = 0;
+	}
+	if (charRange.location + charRange.length > [string length]) {
+		return [NSArray array];
+	}
+	prefix = [string substringWithRange:charRange];
+	if ([prefix length] == 0) {
+		return [NSArray array];
+	}
+	while (i < [string length]) {
+		unichar c = [string characterAtIndex:i];
+
+		if (c == '_' || (c >= '0' && c <= '9') || (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')) {
+			NSUInteger start = i;
+
+			while (i < [string length]) {
+				unichar d = [string characterAtIndex:i];
+
+				if (!(d == '_' || (d >= '0' && d <= '9') || (d >= 'a' && d <= 'z') || (d >= 'A' && d <= 'Z'))) {
+					break;
+				}
+				i++;
+			}
+			{
+				NSString *word = [string substringWithRange:NSMakeRange(start, i - start)];
+
+				if ([word length] > [prefix length]
+				    && [word rangeOfString:prefix].location == 0) {
+					[words addObject:word];
+				}
+			}
+		} else {
+			i++;
+		}
+	}
+	answer = [NSMutableArray arrayWithArray:[[words allObjects] sortedArrayUsingSelector:@selector(compare:)]];
+	return answer;
+}
+
+/* **INSERTING A COMPLETION REPLACES THE PARTIAL RANGE**, through the view's one edit path — so the mirror, the selection,
+ * the layout and the undo record all follow. `isFinal` is Apple's "the composition is over": a non-final insert is a
+ * caller walking a list, and this tier treats both the same because there is no list to walk. */
+- (void)insertCompletion:(NSString *)word
+     forPartialWordRange:(NSRange)charRange
+		movement:(NSInteger)movement
+		 isFinal:(BOOL)flag
+{
+	(void)movement;
+	(void)flag;
+	if (word == nil) {
+		return;
+	}
+	[self insertText:word replacementRange:charRange];
+}
+
+/* ---- AND THE THIRTY THAT REFUSE ---------------------------------------------------------------- */
+
+/* THE TEXT-CHECKING FAMILY: `NSTextCheckingResult` and `NSOrthography` are Foundation's and this tier has neither. */
+
+- (void)checkTextInDocument:(id)sender
+{
+	(void)sender;
+	fn_refuse_workspace("NSTextView -checkTextInDocument:", "NSTextCheckingResult and NSOrthography");
+}
+
+- (void)checkTextInSelection:(id)sender
+{
+	(void)sender;
+	fn_refuse_workspace("NSTextView -checkTextInSelection:", "NSTextCheckingResult and NSOrthography");
+}
+
+- (void)checkTextInRange:(NSRange)range types:(NSUInteger)types options:(NSDictionary *)options
+{
+	(void)range;
+	(void)types;
+	(void)options;
+	fn_refuse_workspace("NSTextView -checkTextInRange:types:options:", "NSTextCheckingResult and NSOrthography");
+}
+
+- (void)handleTextCheckingResults:(NSArray *)results
+			 forRange:(NSRange)range
+			    types:(NSUInteger)types
+			  options:(NSDictionary *)options
+		      orthography:(id)orthography
+			wordCount:(NSInteger)wordCount
+{
+	(void)results;
+	(void)range;
+	(void)types;
+	(void)options;
+	(void)orthography;
+	(void)wordCount;
+	fn_refuse_workspace("NSTextView -handleTextCheckingResults:forRange:types:options:orthography:wordCount:",
+			    "NSTextCheckingResult and NSOrthography");
+}
+
+- (NSUInteger)enabledTextCheckingTypes
+{
+	return 0;
+}
+
+- (void)setEnabledTextCheckingTypes:(NSUInteger)types
+{
+	(void)types;
+	fn_refuse_workspace("NSTextView -setEnabledTextCheckingTypes:", "NSTextCheckingResult and NSOrthography");
+}
+
+- (BOOL)isAutomaticDataDetectionEnabled
+{
+	return NO;
+}
+
+- (void)setAutomaticDataDetectionEnabled:(BOOL)flag
+{
+	(void)flag;
+	fn_refuse_workspace("NSTextView -setAutomaticDataDetectionEnabled:", "NSTextCheckingResult and NSOrthography");
+}
+
+- (void)toggleAutomaticDataDetection:(id)sender
+{
+	(void)sender;
+	fn_refuse_workspace("NSTextView -toggleAutomaticDataDetection:", "NSTextCheckingResult and NSOrthography");
+}
+
+- (BOOL)isAutomaticLinkDetectionEnabled
+{
+	return NO;
+}
+
+- (void)setAutomaticLinkDetectionEnabled:(BOOL)flag
+{
+	(void)flag;
+	fn_refuse_workspace("NSTextView -setAutomaticLinkDetectionEnabled:", "NSTextCheckingResult and NSOrthography");
+}
+
+- (void)toggleAutomaticLinkDetection:(id)sender
+{
+	(void)sender;
+	fn_refuse_workspace("NSTextView -toggleAutomaticLinkDetection:", "NSTextCheckingResult and NSOrthography");
+}
+
+- (BOOL)isAutomaticTextReplacementEnabled
+{
+	return NO;
+}
+
+- (void)setAutomaticTextReplacementEnabled:(BOOL)flag
+{
+	(void)flag;
+	fn_refuse_workspace("NSTextView -setAutomaticTextReplacementEnabled:", "NSTextCheckingResult and NSOrthography");
+}
+
+- (void)toggleAutomaticTextReplacement:(id)sender
+{
+	(void)sender;
+	fn_refuse_workspace("NSTextView -toggleAutomaticTextReplacement:", "NSTextCheckingResult and NSOrthography");
+}
+
+/* THE PANELS, THE SERVICES, THE SPEECH AND THE FOUR FLAGS NOBODY WOULD READ. */
+
+- (void)orderFrontLinkPanel:(id)sender
+{
+	(void)sender;
+	fn_refuse_workspace("NSTextView -orderFrontLinkPanel:", "the link panel this tier has not built");
+}
+
+- (void)orderFrontListPanel:(id)sender
+{
+	(void)sender;
+	fn_refuse_workspace("NSTextView -orderFrontListPanel:", "the list panel this tier has not built");
+}
+
+- (void)orderFrontSpacingPanel:(id)sender
+{
+	(void)sender;
+	fn_refuse_workspace("NSTextView -orderFrontSpacingPanel:", "the spacing panel this tier has not built");
+}
+
+- (void)orderFrontTablePanel:(id)sender
+{
+	(void)sender;
+	fn_refuse_workspace("NSTextView -orderFrontTablePanel:", "the table panel this tier has not built");
+}
+
+- (void)registerForServices
+{
+	fn_refuse_workspace("NSTextView -registerForServices", "the services transport (see -performService)");
+}
+
+- (void)startSpeaking:(id)sender
+{
+	(void)sender;
+	fn_refuse_workspace("NSTextView -startSpeaking:", "a speech synthesis service");
+}
+
+- (void)stopSpeaking:(id)sender
+{
+	(void)sender;
+	fn_refuse_workspace("NSTextView -stopSpeaking:", "a speech synthesis service");
+}
+
+- (void)outline:(id)sender
+{
+	(void)sender;
+	fn_refuse_workspace("NSTextView -outline:", "an outline panel, which this tier has not built");
+}
+
+- (void)toggleTraditionalCharacterShape:(id)sender
+{
+	(void)sender;
+	fn_refuse_workspace("NSTextView -toggleTraditionalCharacterShape:",
+			    "the 10.0-era CJK shape switch, which no face in this tier carries");
+}
+
+- (BOOL)acceptsGlyphInfo
+{
+	return NO;
+}
+
+- (void)setAcceptsGlyphInfo:(BOOL)flag
+{
+	(void)flag;
+	fn_refuse_workspace("NSTextView -setAcceptsGlyphInfo:",
+			    "a manager that hands glyph info to a view - this tier's never does, so the flag would be unread");
+}
+
+- (NSArray *)allowedInputSourceLocales
+{
+	return _cg_allowedInputLocales;
+}
+
+- (void)setAllowedInputSourceLocales:(NSArray *)localeIdentifiers
+{
+	NSArray *copy = [localeIdentifiers copy];
+
+	[_cg_allowedInputLocales release];
+	_cg_allowedInputLocales = copy;
+	fn_refuse_workspace("NSTextView -setAllowedInputSourceLocales:",
+			    "an input context that filters its sources by locale - the value is stored, and NOTHING READS IT");
+}
+
+- (BOOL)displaysLinkToolTips
+{
+	return NO;
+}
+
+- (void)setDisplaysLinkToolTips:(BOOL)flag
+{
+	(void)flag;
+	fn_refuse_workspace("NSTextView -setDisplaysLinkToolTips:",
+			    "the tool-tip machinery, which NSView in this tier has not got");
 }
 
 @end

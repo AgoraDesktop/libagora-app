@@ -81,6 +81,10 @@ NS_ASSUME_NONNULL_BEGIN
 /* **THE ERA'S TWO SELECTION ENUMS.** Apple declares them in this header and not in Foundation, and their values are
  * the header's own: an affinity is which end of a selection the caret is at (upstream is the start), and a granularity
  * is the unit a selection prefers — the character, the word, the paragraph or the whole document. */
+/* **THE LINK ATTRIBUTE IS FOUNDATION'S HERE** (`NSLinkAttributeName`, in `Foundation/NSAttributedString.h`), so this
+ * header does not declare it a second time: the value is an `NSURL` (or a string this tier can make one from),
+ * `-linkTextAttributes` is the ink such a run is drawn in, and `-clickedOnLink:atIndex:` is what a press on it sends. */
+
 typedef NSInteger NSTextSelectionAffinity;
 enum {
 	NSTextSelectionAffinityUpstream = 0,
@@ -193,6 +197,11 @@ enum {
 	 * by a view that allows editing images, and this flag is read where the paste is decoded rather than stored for a
 	 * later slice. */
 	BOOL _cg_allowsImageEditing;
+	/* **AND THE STATE THE LAST THIRTY-NINE DOORS NEED** — the document-background permission a colour panel asks, the ink
+	 * a link run is drawn in, and the locale list (stored, with a setter that says nothing reads it). */
+	BOOL _cg_documentBackgroundChange;
+	NSDictionary *_cg_linkTextAttributes;	/* RETAINED (a copy), or nil for the platform's link ink */
+	NSArray *_cg_allowedInputLocales;	/* RETAINED (a copy), or nil */
 	/* ============================================================================================
 	 * WHAT TYPING DOES AROUND IT: THE SMART-INSERT FLAG, THE UNDO FLAG, AND WHERE THE LAST EDIT ENDED.
 	 *
@@ -619,6 +628,86 @@ enum {
 /* AND WHETHER A PASTE MAY CARRY A PICTURE — see the ivar's note. */
 - (BOOL)allowsImageEditing;
 - (void)setAllowsImageEditing:(BOOL)flag;
+
+/* ==================================================================================================================
+ * THE REMAINING THIRTY-NINE — nine real, thirty refused by name.
+ *
+ * **THE REAL ONES ARE THE DOCUMENT BACKGROUND, THE LINKS AND THE COMPLETION.** `-allowsDocumentBackgroundColorChange`
+ * gates `-changeDocumentBackgroundColor:`, which is what a colour panel's target does; `-linkTextAttributes` is the ink a
+ * link is DRAWN in (the attribute itself is `NSLinkAttributeName`, declared in this header because Apple declares it in an
+ * AppKit category) and `-clickedOnLink:atIndex:` asks the delegate first and opens a URL second; and the completion trio
+ * is the era's word completion — the partial word at the caret, the document's words that start with it, and the insert
+ * that replaces the range.
+ *
+ * **THE THIRTY REFUSE, EACH NAMING THE PIECE THAT IS ABSENT, AND THE FAMILIES ARE WORTH NAMING ONCE HERE:**
+ *
+ *   - the TEXT-CHECKING family (fifteen doors: `-checkTextIn…`, `-enabledTextCheckingTypes`, `-handleTextCheckingResults:…`,
+ *     and the three `-isAutomatic…Enabled`/`-setAutomatic…`/`-toggleAutomatic…` triples) is BLOCKED on
+ *     `NSTextCheckingResult` and `NSOrthography`, which Foundation in this tier has not got — the asynchronous spell door
+ *     already refuses for exactly that reason, so these answer with it;
+ *   - the four `-orderFront…Panel:` doors need the link, list, spacing and table panels, which this tier has not built;
+ *   - `-startSpeaking:`/`-stopSpeaking:` need a speech service;
+ *   - `-registerForServices` needs the services transport (the same gap `-performService` refuses for);
+ *   - `-acceptsGlyphInfo`/`-setAcceptsGlyphInfo:` would be a flag NOBODY READS: the manager in this tier never hands glyph
+ *     info to a view;
+ *   - `-allowedInputSourceLocales`/`-setAllowedInputSourceLocales:` would be a second flag nobody reads: the input context
+ *     here does not filter its sources by locale;
+ *   - `-displaysLinkToolTips`/`-setDisplaysLinkToolTips:` need the tool-tip machinery `NSView` has not got;
+ *   - `-outline:` needs an outline panel, and `-toggleTraditionalCharacterShape:` is a 10.0-era CJK shape switch that no
+ *     modern face has.
+ * ================================================================================================================ */
+
+- (BOOL)allowsDocumentBackgroundColorChange;
+- (void)setAllowsDocumentBackgroundColorChange:(BOOL)flag;
+- (void)changeDocumentBackgroundColor:(nullable id)sender;
+
+- (nullable NSDictionary *)linkTextAttributes;
+- (void)setLinkTextAttributes:(nullable NSDictionary *)attributes;
+- (BOOL)clickedOnLink:(id)link atIndex:(NSUInteger)charIndex;
+- (BOOL)displaysLinkToolTips;
+- (void)setDisplaysLinkToolTips:(BOOL)flag;
+
+- (NSRange)rangeForUserCompletion;
+- (nullable NSArray *)completionsForPartialWordRange:(NSRange)charRange indexOfSelectedItem:(nullable NSInteger *)index;
+- (void)insertCompletion:(NSString *)word
+    forPartialWordRange:(NSRange)charRange
+		 movement:(NSInteger)movement
+		  isFinal:(BOOL)flag;
+
+- (nullable NSArray *)allowedInputSourceLocales;
+- (void)setAllowedInputSourceLocales:(nullable NSArray *)localeIdentifiers;
+- (BOOL)acceptsGlyphInfo;
+- (void)setAcceptsGlyphInfo:(BOOL)flag;
+- (void)outline:(nullable id)sender;
+- (void)toggleTraditionalCharacterShape:(nullable id)sender;
+- (void)startSpeaking:(nullable id)sender;
+- (void)stopSpeaking:(nullable id)sender;
+- (void)registerForServices;
+- (void)orderFrontLinkPanel:(nullable id)sender;
+- (void)orderFrontListPanel:(nullable id)sender;
+- (void)orderFrontSpacingPanel:(nullable id)sender;
+- (void)orderFrontTablePanel:(nullable id)sender;
+
+- (void)checkTextInDocument:(nullable id)sender;
+- (void)checkTextInSelection:(nullable id)sender;
+- (void)checkTextInRange:(NSRange)range types:(NSUInteger)types options:(nullable NSDictionary *)options;
+- (void)handleTextCheckingResults:(NSArray *)results
+			 forRange:(NSRange)range
+			    types:(NSUInteger)types
+			  options:(nullable NSDictionary *)options
+		      orthography:(nullable id)orthography
+			wordCount:(NSInteger)wordCount;
+- (NSUInteger)enabledTextCheckingTypes;
+- (void)setEnabledTextCheckingTypes:(NSUInteger)types;
+- (BOOL)isAutomaticDataDetectionEnabled;
+- (void)setAutomaticDataDetectionEnabled:(BOOL)flag;
+- (void)toggleAutomaticDataDetection:(nullable id)sender;
+- (BOOL)isAutomaticLinkDetectionEnabled;
+- (void)setAutomaticLinkDetectionEnabled:(BOOL)flag;
+- (void)toggleAutomaticLinkDetection:(nullable id)sender;
+- (BOOL)isAutomaticTextReplacementEnabled;
+- (void)setAutomaticTextReplacementEnabled:(BOOL)flag;
+- (void)toggleAutomaticTextReplacement:(nullable id)sender;
 
 @end
 

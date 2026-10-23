@@ -2627,6 +2627,34 @@ its source, a destroy that removes the file, a recycle that lands in the per-vol
 a duplicate under a name of its own, the handler called exactly once, a temporary file that is there, the volume list
 containing `/`, the label pair, four announcements — and the thirteen refusals.
 
+### The text view's last thirty-nine: document background, links, completion — and thirty refusals
+
+**`NSTextView` ANSWERS ALL 186 OF THE ERA'S SELECTORS NOW** — the sixth complete class (with `NSResponder`, `NSBrowser`,
+`NSMenuView`, `NSText` and `NSFont`). Nine of the last thirty-nine are real, and thirty refuse by name:
+
+- **The document background**: `-allowsDocumentBackgroundColorChange` gates `-changeDocumentBackgroundColor:`, which is
+  what a colour panel's target does — with the flag off the panel's colour does not reach the view; with it on the colour
+  *is* the document's background, which the view already draws.
+- **The links**: `-linkTextAttributes` is the ink a link run is drawn in (`NSLinkAttributeName` is Foundation's), and
+  `-clickedOnLink:atIndex:` **asks the delegate first and opens the URL second** — so a document view can route a link
+  itself, and one that does not gets the workspace's `-openURL:`.
+- **Word completion**: `-rangeForUserCompletion` is the word characters before the caret,
+  `-completionsForPartialWordRange:indexOfSelectedItem:` is the document's own longer words that start with it (sorted and
+  deduplicated, with the partial word itself excluded), and `-insertCompletion:forPartialWordRange:movement:isFinal:`
+  replaces exactly the typed characters through the view's one edit path.
+
+**AND THE THIRTY REFUSE, IN FAMILIES THAT NAME THEIR MISSING PIECE.** The fifteen-door **text-checking** family is blocked
+on `NSTextCheckingResult` and `NSOrthography`, which Foundation in this tier has not got. The four `-orderFront…Panel:`
+doors need panels this tier has not built. `-startSpeaking:`/`-stopSpeaking:` need a speech service;
+`-registerForServices` needs the services transport; `-outline:` needs an outline panel; `-toggleTraditionalCharacterShape:`
+is a 10.0-era CJK switch no face here carries. And four flags refuse rather than lie: `-setAcceptsGlyphInfo:` (the manager
+never hands glyph info to a view), `-setAllowedInputSourceLocales:` (the value is stored and the setter says nothing reads
+it), `-setDisplaysLinkToolTips:` (no tool-tip machinery in `NSView`).
+
+`tests/text_view_last.m` asserts it in 22 checks: the flag gating the background (both ways), the link ink and the
+delegate being asked first, the completion range, list and insert (with the negative cases — no partial word, no
+non-prefix word), and every refusing door answering its type's empty value.
+
 ### Still absent, and why
 
 **NINE THINGS THAT USED TO BE ON THIS LIST ARE NOT ANY MORE, AND THE LIST IS CORRECTED RATHER THAN QUIETLY SHRUNK:**
