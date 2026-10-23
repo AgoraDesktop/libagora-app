@@ -7,19 +7,19 @@ THIRTEENTH SLICE HAS LANDED SINCE, and §9 is its record.**
 file's §2 instrument rules and §4 traps are still the ones these sessions used most. **THIS FILE'S §2 NUMBERS SUPERSEDE
 `HANDOFF-4.md`'s**, which are twelve slices old.*
 
-*State at this handover: **sixteen slice commits** since the fourth handoff, tree clean, **158 tests passing in about
-82 s**, `api-ledger check` holding **375 metrics** — **131 of 168 classes (78%), 4456 of 4505 selectors (99%), 39 of 56
-protocols (70%), 86 of 86 functions**, 4983 methods declared with 8 having no body, **124 of the 129 classes with a surface
+*State at this handover: **seventeen slice commits** since the fourth handoff, tree clean, **159 tests passing in about
+83 s**, `api-ledger check` holding **375 metrics** — **131 of 168 classes (78%), 4474 of 4505 selectors (99%), 39 of 56
+protocols (70%), 86 of 86 functions**, 5001 methods declared with 8 having no body, **125 of the 129 classes with a surface
 at COMPLETE coverage** — refusal census **386**, owed census **19**. **The "120 of 129" this paragraph first carried was a
-recount error; §9 records it and the corrected 119 -> 121 movement, §10 takes it to 122, §11 to 123, and §12 to 124.***
+recount error; §9 records it and the corrected 119 -> 121 movement, and §10–§13 take it to 125.***
 
 ---
 
 ## 1. What these sessions did
 
 Twelve slices, in the order they landed. Each is a commit (plus, twice, a commit in the **workspace** repository and a
-gitlink advance in `$AGORA_ROOT`), and each ended green. **The thirteenth through sixteenth are `182bcd4`, `b0bd73c`,
-`1c4be0a` and `db418e3`, listed below and recorded in §9–§12.**
+gitlink advance in `$AGORA_ROOT`), and each ended green. **The thirteenth through seventeenth are `182bcd4`, `b0bd73c`,
+`1c4be0a`, `db418e3` and `1d1d7f4`, listed below and recorded in §9–§13.**
 
 | Commit | What it landed |
 |---|---|
@@ -39,6 +39,7 @@ gitlink advance in `$AGORA_ROOT`), and each ended green. **The thirteenth throug
 | `b0bd73c` | **`NSTableView` — COMPLETE** (123/123): the deprecated spellings mapped to the modern state, the autoresizing styles actually applied by `-tile`, the selection enumerators, both drag-image doors, the focused column's ring, the header indicator image, the three destination-feedback drawings, the cell-click door, and the vertical-motion gate (§10). |
 | `1c4be0a` | **`NSControl` — COMPLETE** (65/65): the cell-class factory, the one-cell selection, the paint/invalidate quartet, the sender-value family, the formatter pair, the attributed value and writing direction, the keyboard refusal, and `-validateEditing` — which lands an editor's string without ending the session (§11). |
 | `db418e3` | **`NSView` — COMPLETE** (221/221): the forced display family, the frame/rotation setters, the subview list, autoscroll, the four named refusals (focus lock, layer, definition range) and the nine ruler client defaults — with `…inContext:` corrected to Apple's spelling (§12). |
+| `1d1d7f4` | **`NSWindow` — COMPLETE** (261/261): the mutable style mask, the three `is` aliases, the represented-filename setter, the default button/backing/order/colour state, the spaces flag, the screen initialiser, the direct animated frame set, and the local event queue's post/discard pair — plus a deferred window that can now drain its queue (§13). |
 
 Plus, in the **workspace** repository: `e31e44f` (the main-menu test's Print… case was asking a chain-routed row to resolve
 with no key window, and expecting the item's target to be the stand-in) and `47d9a0c` (the file window opens a document
@@ -56,13 +57,13 @@ claim; the recount is the measurement.**
 
 ```
 classes   131 of 168   (78%)    37 missing
-selectors 4456 of 4505 (99%)    49 missing   124 of 129 classes at COMPLETE coverage
+selectors 4474 of 4505 (99%)    31 missing   125 of 129 classes at COMPLETE coverage
 protocols  39 of  56   (70%)    17 missing
 functions  86 of  86  (100%)     0 missing    10 refuse by name
-methods   4983 declared on this tree's own classes, 8 with NO body on the chain (0.2%)
+methods   5001 declared on this tree's own classes, 8 with NO body on the chain (0.2%)
 ```
 
-**ELEVEN CLASSES ARE COMPLETE FOR THE ERA, and every one of them finished with NAMED REFUSALS rather than a stub:**
+**TWELVE CLASSES ARE COMPLETE FOR THE ERA, and every one of them finished with NAMED REFUSALS rather than a stub:**
 
 | Class | Selectors | Refusing by name |
 |---|---|---|
@@ -77,12 +78,12 @@ methods   4983 declared on this tree's own classes, 8 with NO body on the chain 
 | `NSTableView` | 123 of 123 | 0 (the deprecated doors are answered; the drag session is the tier's) |
 | `NSControl` | 65 of 65 | 0 (every door is a cell forward or a stated effect) |
 | `NSView` | 221 of 221 | 20 sites (printing, focus lock, layer, definition, file drag, full screen) |
+| `NSWindow` | 261 of 261 | 23 sites (server placement, DRM-less backings, the missing device/session pieces) |
 
-**AND ONLY FIVE CLASSES STILL HAVE ANY DEBT** — the tail, and no longer any of the deepest views:
+**AND ONLY FOUR CLASSES STILL HAVE ANY DEBT** — the tail:
 
 ```
-NSDocument 19    NSWindow 18
-NSDocumentController 8   NSSavePanel 3   NSWorkspace 1    NSFont 0*
+NSDocument 19    NSDocumentController 8   NSSavePanel 3   NSWorkspace 1    NSFont 0*
 ```
 
 `*` `NSWorkspace`'s one is an INSTRUMENT quirk, not a door: the manifest's row is `selector NSWorkspace openTempFile:`
@@ -282,10 +283,9 @@ than four big slices — so the next session should pick a CLASS, not a subsyste
    commands (which would REFUSE like every other script door), the page-layout pair, and the `-presentError:` family
    (`-willPresentError:` is real; the modal form refuses). The autosave family needs a decision about WHERE a document's
    state lives before it is code.
-4. **`NSWindow` 18** — `-canBeVisibleOnAllSpaces` (a compositor contract this tier has not got), `-colorSpace`,
-   `-deviceDescription`, `-discardEventsMatchingMask:beforeEvent:`, `-postEvent:atStart:`, the style queries
-   (`-isMiniaturizable`/`-isResizable`/`-isZoomable`), `-setDefaultButtonCell:`, `-setFrame:display:animate:`,
-   `-setRepresentedFilename:` and the rest — several are one-liners over the style mask.
+4. **DONE in §13: `NSWindow` 261/261.** The style queries, the mutable mask, the represented-filename setter, the
+   default button/backing/order/colour state and the local event queue's post/discard pair — and with it the fixed
+   deferred-window drain. **`NSDocument`'s autosave family is the design question that remains.**
 5. **DONE in §9 and §10: `NSSlider`/`NSSliderCell` 30/30 and 35/35, and `NSTableView` 123/123.** The slider slice
    found a flipped vertical scale drawn upside down; the table slice made the deprecated spellings and the three
    feedback drawings real. **The two deepest tails above are what is left of the big classes**; `NSDocument`'s
@@ -303,7 +303,7 @@ than four big slices — so the next session should pick a CLASS, not a subsyste
 
 ## 7. Things a reader should not have to rediscover
 
-* **THE ELEVEN COMPLETE CLASSES ARE COMPLETE IN A SPECIFIC SENSE**: every selector Apple's 10.6 header declares for them is
+* **THE TWELVE COMPLETE CLASSES ARE COMPLETE IN A SPECIFIC SENSE**: every selector Apple's 10.6 header declares for them is
   DECLARED and ANSWERED, and a refused door is an ANSWERED door (it prints its reason and returns its type's empty value).
   `-respondsToSelector:` is YES for a refusal. That is the plan's own disposition rule, and it is why the ledger and the
   refusal census have to be read TOGETHER.
@@ -329,7 +329,7 @@ than four big slices — so the next session should pick a CLASS, not a subsyste
 * **THE BROWSER ADVERTISES THE 10.6 ITEM CONTRACT AND FALLS BACK TO THE NEXXT CELL ONE.** `-browser:numberOfChildrenOfItem:`
   is the test for which model a delegate speaks; the item walk starts at `nil`, retains nothing, and a delegate implements
   ONE contract (the one allowed overlap is a styling `-browser:willDisplayCell:atRow:column:`).
-* **THE SUITE IS 158 TESTS IN ABOUT 82 SECONDS, AND `ctest --test-dir build -j4` IS THE GATE.** The exit status is the
+* **THE SUITE IS 159 TESTS IN ABOUT 83 SECONDS, AND `ctest --test-dir build -j4` IS THE GATE.** The exit status is the
   witness, not the tail of the output. The workspace's suite is 14 tests and belongs in the same gate run.
 
 ---
@@ -575,3 +575,49 @@ tells the OLD client through `-rulerView:willSetClientView:` before the link cha
 where document state lives), `NSWindow` 18, `NSDocumentController` 8, `NSSavePanel` 3, and `NSWorkspace` 1 (the
 instrument quirk). `NSWindow`'s list is mostly one-liners over the style mask and is the natural next slice; `NSDocument`
 is the one that is a design question first.
+
+---
+
+## 13. `NSWindow` complete: a mutable style mask, the screen form, and a queue a deferred window can drain
+
+**Commit `1d1d7f4`.** `NSWindow` is COMPLETE for the era — 261 of 261, the twelfth class to finish — and the change is
+18 selector rows (4456 -> 4474 present, 49 -> 31 missing), 18 declarations (4983 -> 5001), and one more class at
+complete coverage (124 -> 125). The suite is 159 tests (about 83 s), the refusal census stayed 386, the owed census
+stayed 19, and `tests/window_tail.m` is the new probe (33 checks). The workspace's 14 tests were run too.
+
+**THE STYLE MASK IS MUTABLE AND PRESERVES THE CONTENT RECT.** `-setStyleMask:` measures the content rectangle under the
+old mask, changes the mask, and sets the frame that holds that content under the new one — so adding a title bar grows
+the frame instead of shrinking the document. The three `-isResizable`/`-isMiniaturizable`/`-isZoomable` spellings are
+aliases of the older getters and answer the same style bits.
+
+**THE REPRESENTED FILENAME'S TWO SETTERS DIFFER, AND BOTH NOW EXIST.** `-setRepresentedFilename:` stores the path and
+leaves the title alone; `-setTitleWithRepresentedFilename:` makes the file's name the title. The default button cell, the
+preferred backing location (the ACTUAL location stays main memory), the ordered index and the colour space round-trip;
+`-deviceDescription` is the screen's description, `-userSpaceScaleFactor` is 1.0, and the spaces flag is stored with the
+one-space truth stated at the door. The screen initialiser makes the designated frame, and
+`-setFrame:display:animate:` lands the geometry directly with no second placement path.
+
+**THE EVENT QUEUE'S TWO WRITERS, AND THE DRAIN BUG THEY EXPOSED.** `-postEvent:atStart:` orders head/tail and adjusts
+the process-wide queued count; `-discardEventsMatchingMask:beforeEvent:` removes the matching events before the named
+one (identity) or all matching when the event is nil. The probe then found that `-nextEventMatchingMask:` returned nil
+at the top when `_agwindow` was NULL — BEFORE looking at the local queue — so a deferred window's posted events were
+unreachable. The drain now serves the queue first and returns nil only when there is nothing queued and nothing to wait
+on; that is a behaviour change for every caller that posts to an unordered window.
+
+**TRAPS THIS SLICE PAID FOR.**
+
+* **A DEFERRED WINDOW'S QUEUE IS STILL A QUEUE.** The guard that made server-less windows answer nil was right about
+  the WAIT and wrong about the POP: `-postEvent:` is public and works before `-orderFront:`, and Apple's window queues
+  events for a window that is not on screen. The probe caught it because it posts and drains in the same case.
+* **THE TWO REPRESENTED-FILENAME DOORS ARE NOT ONE DOOR.** The tree had the title-changing form; the setter that only
+  remembers the path was missing, and making either call the other would have changed a documented behaviour in both
+  directions.
+* **`-setStyleMask:` IS GEOMETRY, NOT A STORE.** Writing `_styleMask` alone would leave the frame holding the old
+  chrome's worth of content; measure the content, change the mask, then set the frame that keeps it.
+* **THE `is` ALIASES ARE REAL ROWS.** `-resizable` and `-isResizable` are two manifest rows for one style bit; the
+  older spelling is the implementation and the newer is the alias, which is the least surprising of the two orders.
+
+**WHERE THE NEXT HOUR GOES.** Four classes remain: `NSDocument` 19 (the autosave family is a design decision about where
+document state lives, not a list of one-liners), `NSDocumentController` 8, `NSSavePanel` 3 (a flag and two lines), and
+`NSWorkspace` 1 (the `openTempFile:` instrument quirk that is off by construction). `NSSavePanel` and
+`NSDocumentController` are the small clean slices; `NSDocument` is the one to decide before typing.
