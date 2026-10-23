@@ -332,10 +332,18 @@ is by reachable surface and by what the tree already has to build on.
    through KVC when the value is immutable; the set form maps union/minus/intersect/set to those kinds with NSSet
    values). **THE LIMITS ARE NAMED, NOT HIDDEN:** setters taking a struct/pointer/C-string/selector, keys with no
    setter, dotted key paths for automatic notification, dependent keys
-   (`+keyPathsForValuesAffectingValueForKey:`), and the ordered-set proxy. The design question that remains is the
-   CONTROLLER model: what a controller observes, how `content`/`contentObject`/selection are exposed (including the
-   `-selection` proxy and the three marker singletons), and whether bindings are a façade over KVO or a second
-   registry. Do not start with a header.
+   (`+keyPathsForValuesAffectingValueForKey:`), and the ordered-set proxy. **AND THE BINDING LAYER ITSELF IS IN**
+   (`0b3bd44`, `tests/binding_base.m`, 26 checks): the three marker singletons and `NSIsControllerMarker`, the three
+   info keys, `-bind:toObject:withKeyPath:options:` (one observation per binding, Initial at bind time, the value
+   written through KVC), `-unbind:`, `-infoForBinding:`, `+exposeBinding:`/`-exposedBindings`,
+   `-valueClassForBinding:`, the class-keyed placeholder table, the NSEditor defaults, and all 78 binding names and 26
+   option keys. Two options have readers (`NSNullPlaceholderBindingOption`,
+   `NSRaisesForNotApplicableKeysBindingOption`); the rest are stored for the controls that will act on them. **THE
+   NEXT SLICE IS `NSController` + `NSObjectController`** (37 selectors): the content/contentObject/selection model, the
+   `-selection` proxy (single object; `NSNoSelectionMarker` when there is none), `-newObject`/`-addObject:` against a
+   mutable collection, `-automaticallyPreparesContent`/`-prepareContent`, the Core Data doors refused by name, and the
+   bindings the controller exposes. Then `NSArrayController` (47), then `NSUserDefaultsController` (12),
+   `NSDictionaryController` (13), `NSTreeController`/`NSTreeNode` (55).
 6. **The small protocol slices** — `NSTextViewDelegate`, `NSIgnoreMisspelledWords`, `NSChangeSpelling`,
    `NSUserInterfaceItemSearching`. Each has its class already; each is a contract the class can start sending.
 7. **And leave refused** (§A11 and this tree's record): OpenGL, QuickDraw, movies, the four typesetters,
