@@ -555,12 +555,222 @@ static NSString * const AGCoderBrowserCellPrototypeKey = @"cellPrototype";
 	return (index == NSNotFound) ? -1 : (NSInteger)index;
 }
 
+/* **THE ROW COUNT COMES FROM THE ITEM MODEL WHEN THE DELEGATE SPEAKS IT.** Column zero asks for the children of nil —
+ * the root — and every later column for the children of the item selected in the column to its left, which is what makes
+ * the browser a hierarchy rather than a list of lists. The cell-based door is the fallback, and a delegate that answers
+ * neither yields an empty column rather than a wrong one. */
 - (NSInteger)rowsForColumn:(NSInteger)column
 {
+	if ([self cg_isItemBased]) {
+		return [_delegate browser:self numberOfChildrenOfItem:[self parentForItemsInColumn:column]];
+	}
 	if (_delegate != nil && [_delegate respondsToSelector:@selector(browser:numberOfRowsInColumn:)]) {
 		return [_delegate browser:self numberOfRowsInColumn:column];
 	}
 	return 0;
+}
+
+
+/* ============================================================================================ *
+ * THE ITEM-BASED MODEL: WALKING FROM NIL, AND THE ROWS IT PRODUCES                              *
+ *                                                                                              *
+ * **THE DELEGATE OWNS EVERY ITEM AND THE BROWSER RETAINS NONE**, which is why nothing here is  *
+ * cached: each reading door follows `-browser:child:ofItem:` from the root, and the only state  *
+ * the walk consumes is the selected rows this class already keeps. That is also why a path that *
+ * runs out answers nil instead of a stale object — the walk has nowhere to go.                    *
+ * ============================================================================================ */
+
+/* WHETHER THE DELEGATE WANTS THE 10.6 MODEL. The count door is the test, because a browser cannot ask for children
+ * without it; `-browser:child:ofItem:` alone would give it nothing to iterate. */
+- (BOOL)cg_isItemBased
+{
+	return (_delegate != nil && [_delegate respondsToSelector:@selector(browser:numberOfChildrenOfItem:)]);
+}
+
+- (id)cg_childOfItem:(id)item atIndex:(NSInteger)index
+{
+	if (index < 0 || _delegate == nil || ![_delegate respondsToSelector:@selector(browser:child:ofItem:)]) {
+		return nil;
+	}
+	return [_delegate browser:self child:index ofItem:item];
+}
+
+/* **THE ITEM WHOSE CHILDREN A COLUMN SHOWS.** Column zero's parent is the ROOT, which is nil; every later column's is the
+ * item at the selected row of the column before it. A column before the selection chain has no parent, and the walk
+ * stops there rather than guessing. */
+- (id)parentForItemsInColumn:(NSInteger)column
+{
+	id item = nil;
+	NSInteger i;
+
+	if (column <= 0) {
+		return nil;
+	}
+	for (i = 0; i < column; i++) {
+		NSInteger row;
+
+		if (i >= (NSInteger)[_selectedRows count]) {
+			return nil;
+		}
+		row = [[_selectedRows objectAtIndex:(NSUInteger)i] integerValue];
+		if (row < 0) {
+			return nil;
+		}
+		item = [self cg_childOfItem:item atIndex:row];
+	}
+	return item;
+}
+
+- (id)itemAtRow:(NSInteger)row inColumn:(NSInteger)column
+{
+	id parent;
+
+	if (row < 0) {
+		return [self parentForItemsInColumn:column];
+	}
+	parent = [self parentForItemsInColumn:column];
+	return [self cg_childOfItem:parent atIndex:row];
+}
+
+- (id)itemAtIndexPath:(NSIndexPath *)indexPath
+{
+	id item = nil;
+	NSUInteger i, length;
+
+	if (indexPath == nil) {
+		return nil;
+	}
+	length = [indexPath length];
+	for (i = 0; i < length; i++) {
+		item = [self cg_childOfItem:item atIndex:(NSInteger)[indexPath indexAtPosition:i]];
+		if (item == nil) {
+			return nil;
+		}
+	}
+	return item;
+}
+
+- (BOOL)isLeafItem:(id)item
+{
+	if (_delegate != nil && [_delegate respondsToSelector:@selector(browser:isLeafItem:)]) {
+		return [_delegate browser:self isLeafItem:item];
+	}
+	return NO;
+}
+
+/* THE PARENT'S PATH: one index per column BEFORE this one, taken from the selected rows. */
+- (NSIndexPath *)indexPathForColumn:(NSInteger)column
+{
+	NSUInteger indexes[AG_BROWSER_COLUMN_POOL];
+	NSInteger i;
+
+	if (column <= 0 || column > (NSInteger)[_selectedRows count]) {
+		return [NSIndexPath indexPathWithIndexes:indexes length:0];
+	}
+	for (i = 0; i < column; i++) {
+		NSInteger row = [[_selectedRows objectAtIndex:(NSUInteger)i] integerValue];
+
+		if (row < 0) {
+			return [NSIndexPath indexPathWithIndexes:indexes length:0];
+		}
+		indexes[i] = (NSUInteger)row;
+	}
+	return [NSIndexPath indexPathWithIndexes:indexes length:(NSUInteger)column];
+}
+
+/* **THE SAME CHAIN AS A STRING, WHICH IS WHAT A CALLER SAVING A LOCATION WANTS.** Each step is a column's selected
+ * cell's string, joined by `-pathSeparator`; the cells are the browser's own, so the string agrees with what is on
+ * screen rather than with what the items would print. */
+- (NSString *)pathToColumn:(NSInteger)column
+{
+	NSMutableString *answer = [NSMutableString string];
+	NSInteger i;
+
+	if (column <= 0) {
+		return @"";
+	}
+	for (i = 0; i < column; i++) {
+		NSInteger row = [[_selectedRows objectAtIndex:(NSUInteger)i] integerValue];
+		NSString *part;
+
+		if (row < 0) {
+			break;
+		}
+		part = [self stringForCellAtRow:row column:i];
+		if (part == nil) {
+			break;
+		}
+		if ([answer length] > 0) {
+			[answer appendString:((_pathSeparator != nil) ? _pathSeparator : @"/")];
+		}
+		[answer appendString:part];
+	}
+	return answer;
+}
+
+/* THE SELECTION AS ONE PATH — the last column's row last. */
+- (NSIndexPath *)selectionIndexPath
+{
+	NSUInteger indexes[AG_BROWSER_COLUMN_POOL];
+	NSInteger count = 0;
+	NSInteger i;
+
+	if (_selectedColumn < 0) {
+		return nil;
+	}
+	for (i = 0; i <= _selectedColumn && i < (NSInteger)[_selectedRows count]; i++) {
+		NSInteger row = [[_selectedRows objectAtIndex:(NSUInteger)i] integerValue];
+
+		if (row < 0) {
+			break;
+		}
+		indexes[count++] = (NSUInteger)row;
+	}
+	return (count > 0) ? [NSIndexPath indexPathWithIndexes:indexes length:(NSUInteger)count] : nil;
+}
+
+/* **SELECTING A PATH IS SELECTING EACH COLUMN IN TURN**, which loads the next column the way a click does — the rows are
+ * the browser's own state, so `-selectRow:inColumn:` is the one door that has to be used, and it already truncates
+ * whatever was to the right. A path whose row is out of range stops the walk rather than selecting a phantom. */
+- (void)setSelectionIndexPath:(NSIndexPath *)path
+{
+	NSUInteger i, length;
+
+	if (path == nil) {
+		for (i = 0; i < (NSUInteger)[_selectedRows count]; i++) {
+			(void)[self selectRowIndexes:nil inColumn:(NSInteger)i];
+		}
+		_selectedColumn = -1;
+		return;
+	}
+	length = [path length];
+	for (i = 0; i < length; i++) {
+		NSInteger row = (NSInteger)[path indexAtPosition:i];
+		NSInteger rows;
+
+		if (i >= (NSUInteger)[_tables count]) {
+			break;
+		}
+		rows = [self numberOfRowsInColumn:(NSInteger)i];
+		if (row < 0 || row >= rows) {
+			break;
+		}
+		[self selectRow:row inColumn:(NSInteger)i];
+	}
+}
+
+/* AND THE PLURAL FORM IS APPLE'S, EVEN THOUGH A BROWSER HAS ONE SELECTION: the array holds the one path this class can
+ * represent, or nothing at all. Saying so is better than pretending several selections exist. */
+- (NSArray *)selectionIndexPaths
+{
+	NSIndexPath *path = [self selectionIndexPath];
+
+	return (path != nil) ? [NSArray arrayWithObject:path] : [NSArray array];
+}
+
+- (void)setSelectionIndexPaths:(NSArray *)paths
+{
+	[self setSelectionIndexPath:([paths count] > 0) ? [paths objectAtIndex:0] : nil];
 }
 
 - (NSCell *)newDataCell
@@ -926,14 +1136,33 @@ static NSString * const AGCoderBrowserCellPrototypeKey = @"cellPrototype";
 	return nil;
 }
 
+/* **A ROW'S CELL IS THE ITEM'S CELL WHEN THE DELEGATE IS ITEM-BASED, AND THE DELEGATE MAY THEN STYLE IT.** The browser
+ * asks `-browser:objectValueForItem:` for what the cell shows and `-browser:isLeafItem:` for whether a branch triangle
+ * belongs — that is the browser making the cell, which is the entire point of the 10.6 model — and only afterwards does
+ * `-browser:willDisplayCell:atRow:column:` get its chance, which is the one overlap Apple allows between the two
+ * contracts. A cell-based delegate sees exactly what it saw before. */
 - (void)tableView:(NSTableView *)tableView willDisplayCell:(id)cell
    forTableColumn:(NSTableColumn *)tableColumn row:(NSInteger)row
 {
 	NSInteger column = [self columnForTable:tableView];
 
 	(void)tableColumn;
-	if (column >= 0 && _delegate != nil
-	    && [_delegate respondsToSelector:@selector(browser:willDisplayCell:atRow:column:)]) {
+	if (column < 0) {
+		return;
+	}
+	if ([self cg_isItemBased] && _delegate != nil) {
+		id item = [self itemAtRow:row inColumn:column];
+
+		if (item != nil) {
+			if ([_delegate respondsToSelector:@selector(browser:objectValueForItem:)]) {
+				[cell setObjectValue:[_delegate browser:self objectValueForItem:item]];
+			}
+			if ([cell isKindOfClass:[NSBrowserCell class]]) {
+				[(NSBrowserCell *)cell setLeaf:[self isLeafItem:item]];
+			}
+		}
+	}
+	if (_delegate != nil && [_delegate respondsToSelector:@selector(browser:willDisplayCell:atRow:column:)]) {
 		[_delegate browser:self willDisplayCell:cell atRow:row column:column];
 	}
 }

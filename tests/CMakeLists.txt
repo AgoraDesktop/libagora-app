@@ -860,6 +860,16 @@ target_link_libraries(browser_geometry PRIVATE App m)
 add_test(NAME appkit-browser-geometry COMMAND browser_geometry)
 set_tests_properties(appkit-browser-geometry PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
 
+# **AND THE 10.6 ITEM-BASED MODEL, WHICH THIS CLASS NOW ADVERTISES.** A delegate of model objects — how many children an
+# item has, which child is at an index, whether an item is a leaf, what its cell should show — drives a browser that makes
+# its own cells, walks an item path from the nil root, and reads and writes the selection as an index path. The cell-based
+# delegate is measured beside it, because the older contract is the FALLBACK rather than the removed one.
+add_executable(browser_items browser_items.m)
+target_link_libraries(browser_items PRIVATE App)
+
+add_test(NAME appkit-browser-items COMMAND browser_items)
+set_tests_properties(appkit-browser-items PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
+
 # **THE PROGRESS INDICATOR: A VALUE AS A BAR.** Offscreen, with a bitmap for the fill.
 add_executable(progress_indicator progress_indicator.m)
 target_link_libraries(progress_indicator PRIVATE App m)

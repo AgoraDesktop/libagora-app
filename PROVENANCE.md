@@ -1091,6 +1091,40 @@ And the caller this slice added: the Workspace's file window now opens a documen
 `[[NSWorkspace sharedWorkspace] openFile:]` instead of building a `CFURL` and calling `LSOpenCFURLRef` itself. The
 AppKit owns the launch decision, and the file manager asks it.
 
+## 41. The browser advertises the 10.6 item model, and the cell model becomes its fallback
+
+**THE DESIGN DECISION WAS "ADVERTISE THE 10.6 ONE", AND IT IS APPLE'S OWN TWO-CONTRACT SHAPE RATHER THAN A REWRITE.**
+`NSBrowser` has carried two delegate contracts since 10.6: the NeXT-era CELL one (rows per column, and the delegate fills
+each cell) and the ITEM one (the delegate answers with model objects and the browser makes the cells). This tree had
+declared and asked only the cell one — which is what a table-backed browser written from the older API would do — so the
+item half was unnameable as well as unimplemented.
+
+**THE ITEM DOORS ARE ASKED FIRST AND THE CELL DOORS ARE THE FALLBACK.** `-browser:numberOfChildrenOfItem:` is the test
+for which model a delegate speaks; with it, rows come from the item tree and cells come from
+`-browser:objectValueForItem:` and `-browser:isLeafItem:`, and the styling `-browser:willDisplayCell:atRow:column:` is
+still offered afterwards because that is the one overlap Apple allows between the contracts. Without it, nothing changes
+for a cell-based delegate — which is why the Workspace's column view needed no edit and its fourteen tests stayed green.
+
+**THE ROOT IS NIL AND NOTHING IS RETAINED.** This is the part that makes the item model cheap here: there is no root
+object, so column zero is "the children of nil", and every reading door — `-itemAtRow:inColumn:`, `-itemAtIndexPath:`,
+`-parentForItemsInColumn:`, `-indexPathForColumn:`, `-pathToColumn:`, `-isLeafItem:` — follows `-browser:child:ofItem:`
+from nil over the selected rows the browser already keeps. No item cache exists to fall out of step with the delegate, and
+no item is retained, which is Apple's rule as well as the seam's. `-indexPathForColumn:` answers the path of the item
+WHOSE CHILDREN a column shows (Apple's own wording), which is the reading of that door that makes the walk terminate.
+
+**AND THE SELECTION HAS A PATH FORM.** `-selectionIndexPath` is the selected rows root-first; setting one drives
+`-selectRow:inColumn:` down the path, so the columns load exactly as a click would load them; a row past the end stops the
+walk rather than selecting a phantom. The plural pair holds the single path a browser can represent, and says so.
+
+**TWO PROBE TRAPS, BOTH CHEAP AND BOTH WORTH RECORDING.** A nil check written as `[[browser parentForItemsInColumn:0]
+isEqual:nil]` FAILS WHETHER OR NOT THE DOOR IS RIGHT — the message goes to nil and answers nil — which is the same shape as
+the "a test that passes for the wrong reason" this suite keeps catching, inverted. And a selection assertion written
+before a later section had selected a second column was measuring a stale expectation, not a bug: the path really was two
+positions long. The fix in both cases was the assertion, and the header now says which shape each door answers.
+
+`tests/browser_items.m` measures it in **40 checks**, with a cell-based delegate measured beside the item one so the
+fallback is held to the same standard as the new path.
+
 ## Keeping in sync
 
 The Fiwix AppKit is the origin and this repository has now diverged from it in the seam. A fix made there

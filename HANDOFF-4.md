@@ -6,11 +6,11 @@ and two slices of `NSTextView`. `HANDOFF.md`, `HANDOFF-2.md` and `HANDOFF-3.md` 
 of them was wrong, and the second file's §2 instrument rules and §4 traps are the ones these sessions used most. **THIS
 FILE'S §2 NUMBERS SUPERSEDE `HANDOFF-3.md`'s**, which are six slices old.*
 
-*State at this handover: **ten slice commits** since the eighth handoff (and the relicense sweep that touched every
-file in the meantime), tree clean, **147 tests passing in about 84 s**, `api-ledger check` holding **375 metrics** —
-**131 of 168 classes (78%), 4108 of 4505 selectors (91%), 39 of 56 protocols (70%), 86 of 86 functions**, 4636 methods
-declared with 8 having no body, **114 of the 129 classes with a surface at COMPLETE coverage** — refusal census **292**.*
-*(`HANDOFF-3.md`'s §2 numbers are six slices older than these; the numbers in this file's §2 are current as of §12.)*
+*State at this handover: **twelve slice commits** since the eighth handoff (and the relicense sweep that touched every
+file in the meantime), tree clean, **149 tests passing in about 84 s**, `api-ledger check` holding **375 metrics** —
+**131 of 168 classes (78%), 4135 of 4505 selectors (92%), 39 of 56 protocols (70%), 86 of 86 functions**, 4663 methods
+declared with 8 having no body, **114 of the 129 classes with a surface at COMPLETE coverage** — refusal census **311**.*
+*(`HANDOFF-3.md`'s §2 numbers are eight slices older than these; the numbers in this file's §2 are current as of §14.)*
 
 ---
 
@@ -38,29 +38,26 @@ and a different commit line; it is recorded here because the AppKit slice is wha
 
 ```
 classes   131 of 168   (78%)    37 missing
-selectors 4108 of 4505 (91%)   397 missing   114 of 129 classes at COMPLETE coverage
+selectors 4135 of 4505 (92%)   370 missing   114 of 129 classes at COMPLETE coverage
 protocols  39 of  56   (70%)    17 missing
 functions  86 of  86  (100%)     0 missing    10 refuse by name
-methods   4636 declared on this tree's own classes, 8 with NO body on the chain (0.2%)
+methods   4663 declared on this tree's own classes, 8 with NO body on the chain (0.2%)
 ```
 
-**THE 397 MISSING SELECTORS ARE STILL CONCENTRATED, AND `NSResponder` IS NO LONGER ON THE LIST AT ALL.** The ledger's
-debt list, largest first:
+**THE 370 MISSING SELECTORS ARE STILL CONCENTRATED, AND `NSBrowser` IS STILL FIRST — BUT ITS REMAINDER IS NO LONGER THE
+ITEM MODEL.** The ledger's debt list, largest first:
 
 ```
-NSWorkspace 49   NSBrowser 47    NSTextView 39    NSMenuView 37   NSFont 35
-NSFont 35       NSText 31      NSView 28        NSControl 28     NSTableView 20
-NSDocument 19   NSWindow 18    NSSlider 18      NSSliderCell 17  NSDocumentController 8
-NSSavePanel 3
+NSBrowser 37     NSTextView 39   NSMenuView 37    NSFont 35      NSWorkspace 32
+NSText 31        NSView 28       NSControl 28     NSTableView 20   NSDocument 19
+NSWindow 18      NSSlider 18     NSSliderCell 17  NSDocumentController 8   NSSavePanel 3
 ```
 
-Everything below `NSSliderCell` is five doors or fewer in a class that is otherwise complete. **FOUR CLASSES HAVE LEFT
-THE DEEPEST-DEBT LIST IN FOUR SLICES**: `NSTextView` 68 → 52 (§9) → 40 (§10) → 39 (§12, and that last one is an
-INHERITANCE effect, not an implementation), `NSBrowser` 64 → 47 (§11), and `NSResponder` 57 → **0** (§12) — the first
-class in this file to reach COMPLETE coverage from the top of the debt list. What is left of `NSTextView` is almost
-entirely BLOCKED or REFUSED — the text-checking family (Foundation here has no `NSTextCheckingResult` or `NSOrthography`),
-the link/services pair, speech, the panels it has not built, and the completion family — and `NSBrowser`'s remaining 47 are
-its ITEM-BASED half, which is a design step rather than a cluster of one-line doors.
+Everything below `NSSliderCell` is five doors or fewer in a class that is otherwise complete. **FIVE CLASSES HAVE LEFT
+THE DEEPEST-DEBT LIST IN FIVE SLICES**: `NSTextView` 68 → 52 (§9) → 40 (§10) → 39 (§12, an INHERITANCE effect rather than
+an implementation), `NSBrowser` 64 → 47 (§11) → 37 (§14, the item model), `NSResponder` 57 → **0** (§12, the first class
+to reach COMPLETE coverage from the top of the list), and `NSWorkspace` 49 → 32 (§13). What is left of `NSBrowser` is the
+DRAG and FURNITURE half; what is left of `NSTextView` is almost entirely blocked or refused.
 
 **THE 37 ABSENT CLASSES GROUP CLEANLY:**
 
@@ -204,15 +201,17 @@ comments to `.cmake`, `.sh` or Python files breaks the gates — that happened, 
 Ranked by reachable surface per unit of work, and the ranking now starts with the class this tree has and has not
 finished:
 
-1. **`NSBrowser` 47 — now the component's largest debt.** What is left is the ITEM-BASED half (`-itemAtIndexPath:`,
-   `-itemAtRow:inColumn:`, `-parentForItemsInColumn:`, `-isLeafItem:`, `-pathToColumn:`, `-indexPathForColumn:`), the
-   selection index paths, the drag doors (`-canDragRowsWithIndexes:inColumn:withEvent:`,
-   `-draggingImageForRowsWithIndexes:…`) and the autosave/column furniture. **The item-based family is a DESIGN QUESTION
-   before it is a slice**: it needs the item-based delegate doors (`-browser:child:ofItem:`, `-browser:isLeafItem:`,
-   `-browser:objectValueForItem:`, `-rootItemForBrowser:`) which the protocol does not declare yet, and a browser can be
-   cell-based or item-based but this class is built as the former. Note that the first slice made a file manager's browser
-   DRAW — titles, frames, hit tests — which is the part the Workspace uses; what is left is the API a different caller
-   would use.
+1. **`NSBrowser` 37 — still the largest debt, and now the DRAG AND FURNITURE half.** §14 answered the item-model
+   question (the protocol advertises the 10.6 contract; the cell contract is the fallback), so what is left is
+   `-canDragRowsWithIndexes:inColumn:withEvent:`, `-draggingImageForRowsWithIndexes:inColumn:withEvent:offset:`,
+   `-setDraggingSourceOperationMask:forLocal:`, `-editItemAtIndexPath:withEvent:select:`,
+   `-reloadDataForRowIndexes:inColumn:`, `-noteHeightOfRowsWithIndexesChanged:inColumn:`, `-addColumn`, `-displayColumn:`,
+   `-displayAllColumns`, `-lastColumn`/`-setLastColumn:`, `-isLoaded`, `-scrollColumnsLeftBy:`/`-scrollColumnsRightBy:`,
+   `-scrollViaScroller:`, `-updateScroller`, the autosave trio, `-reusesColumns`, `-prefersAllColumnUserResizing`,
+   `-sendAction`, `-doClick:`/`-doDoubleClick:` (done), and `-matrixClass`/`-setMatrixClass:`/`-matrixInColumn:`/
+   `-columnOfMatrix:` — **those four must REFUSE by name and say why: this browser's columns are TABLES, and a matrix is
+   what Apple's own columns were; the header already carries that decision, and a refusal is the disposition it owes.**
+   The DRAG doors are what a file manager feels next.
 2. **`NSTextView`'s remaining 39**, which are now almost all BLOCKED or REFUSED rather than absent: the TEXT-CHECKING
    family (`-checkTextIn…`, `-enabledTextCheckingTypes`, `-handleTextCheckingResults:…`, the three automatic-detection
    toggles) is blocked on `NSTextCheckingResult`/`NSOrthography`, which Foundation here has not got; the LINK/SERVICES
@@ -273,8 +272,12 @@ finished:
   than one range, so the single-selection shape stays the cheap one and every inherited door keeps working.
 * **THIS TREE'S STRINGS ARE BYTE SEQUENCES, NOT CHARACTER SEQUENCES** for non-ASCII (`HANDOFF-2.md` §4): the word and
   paragraph granularities use ASCII `isalnum` and `_`, and say so.
-* **THE SUITE IS 148 TESTS IN ABOUT 84 SECONDS, AND `ctest --test-dir build -j4` IS THE GATE.** The exit status is the
+* **THE SUITE IS 149 TESTS IN ABOUT 84 SECONDS, AND `ctest --test-dir build -j4` IS THE GATE.** The exit status is the
   witness, not the tail of the output.
+* **`NSBrowser` HAS TWO DELEGATE CONTRACTS AND A DELEGATE IMPLEMENTS ONE.** `-browser:numberOfChildrenOfItem:` decides
+  which: with it the browser is ITEM-based (model objects, browser-made cells); without it CELL-based (rows and cells the
+  delegate fills). The one allowed overlap is a styling `-browser:willDisplayCell:atRow:column:` on top of the browser's
+  item-made cell. The ROOT of the item model is `nil`, and no item is ever retained — they belong to the delegate.
 * **A HEADER EDIT THAT REPLACES A BLOCK CAN DELETE DECLARATIONS SILENTLY.** §13 replaced the icon block in
   `NSWorkspace.h` and took `-iconForFile:` and `-iconForFileType:` with it: the compiler only warns at a call site, the
   bodies were still in the `.m`, and the probe passed because it called `-iconForFiles:`. The only witness was the
@@ -651,3 +654,64 @@ is a design question; `NSTextView` 39 is almost all blocked or refused; and `NSW
 FILE-OPERATION family, which is the honest next slice — plain filesystem verbs, **except that the TRASH MUST NOT BE
 DUPLICATED**: the Workspace's `WSTrash` owns the directories, the Put Back records and the empty, so an AppKit
 `-recycleURLs:completionHandler:` has to agree with that rule or say why it is a different one.
+
+## 14. The browser advertises the 10.6 item model, and the cell model becomes its fallback
+
+*Session of the twelfth slice. Unlike the others it began with a DECISION rather than a measurement: §11 had left
+"`NSBrowser`'s remaining 47 are its item-based half, which is a design decision (cell- vs item-based) before it is a
+slice", and the instruction was **"advertise the 10.6 one, not the NeXT one."** Its commit is "AppKit: the browser
+advertises the 10.6 item model"; tree clean; `ctest --test-dir build -j4` green at **149 tests in 84 s** with
+`appkit-api-census` re-pinned in the same commit.*
+
+**THE DECISION AND WHAT IT MEANS CONCRETELY.** Apple has carried two delegate contracts on this class since 10.6: the
+NeXT-era CELL contract (rows per column, delegate fills each cell) and the ITEM contract (the delegate answers with model
+objects, the browser makes the cells). This tree had declared and asked only the cell one. The slice declares the item
+doors — `-browser:numberOfChildrenOfItem:`, `-browser:child:ofItem:`, `-browser:isLeafItem:`,
+`-browser:objectValueForItem:` — makes them the ones the browser ASKS FIRST, and leaves the cell doors declared and
+working as the FALLBACK. That is Apple's own two-contract shape rather than a rewrite, and it is why the Workspace's
+`WSColumnView` (written against the cell doors) needed no edit: its fourteen tests stayed green without being touched.
+
+**TEN SELECTORS: the six walking doors and the four selection-path ones.** `-itemAtRow:inColumn:` (row −1 answers the
+parent), `-itemAtIndexPath:`, `-parentForItemsInColumn:`, `-isLeafItem:`, `-indexPathForColumn:` (the path of the item
+WHOSE CHILDREN a column shows — Apple's wording, and the reading that makes the walk terminate), `-pathToColumn:`,
+`-selectionIndexPath`/`-setSelectionIndexPath:`, `-selectionIndexPaths`/`-setSelectionIndexPaths:`. Every reading door
+follows `-browser:child:ofItem:` FROM NIL over the selected rows the class already keeps, so **there is no item cache to
+fall out of step with the delegate and no item is retained** — items belong to the delegate, which is Apple's rule as
+much as the seam's. Setting a path drives `-selectRow:inColumn:` down it, so the columns load exactly as a click loads
+them, and a row past the end stops the walk instead of selecting a phantom.
+
+**AND THE CELLS ARE THE BROWSER'S NOW** for an item-based delegate: `-tableView:willDisplayCell:forTableColumn:row:` asks
+`-browser:objectValueForItem:` for the value and `-browser:isLeafItem:` for the branch flag, then still offers the styling
+door — the one overlap Apple allows between the contracts.
+
+**THE TWO PROBE TRAPS, both cheap and both worth the paragraph.** A nil check written as
+`[[browser parentForItemsInColumn:0] isEqual:nil]` FAILS WHETHER OR NOT THE DOOR IS RIGHT — the message goes to nil and
+answers nil — which is the "passes for the wrong reason" failure inverted: one that fails for the wrong reason. And a
+selection assertion written before a later section had selected a second column was measuring a stale expectation rather
+than a bug (the path really was two positions long). Both fixes were in the test, and both are the kind of thing a
+recorded trap saves the next session.
+
+**THE NUMBERS MOVED** (§8's rule 4):
+
+```
+selectors       4125 -> 4135 of 4505   (missing 380 -> 370)
+methods-declared 4653 -> 4663
+NSBrowser        73 -> 83 of 120       (debt 47 -> 37)
+tests            148 -> 149            (the new suite: 40 checks)
+```
+
+`classes`, `protocols`, `functions` and the refusal census (**311**) did not move — the item doors are declared on the
+protocol that already existed, so no protocol appeared, and nothing new refuses.
+
+**AND A NOTE ON THE INSTRUMENT, LEARNED IN §13 AND CONFIRMED HERE.** The API census counts SELECTORS on CLASSES: Apple's
+`NSBrowserDelegate` doors are invisible to it (the manifest has 5208 selector lines, none of them a protocol's). So the
+four item doors this slice declared move only `methods-declared` by their own count, and the *delegate surface* — which
+is the whole point of the slice — is held by the header's prose and by `tests/browser_items.m` alone. A future instrument
+that reads protocol bodies would be measuring something the census has never measured.
+
+**WHERE THE NEXT HOUR GOES.** `NSBrowser` 37: the DRAG doors first (`-canDragRowsWithIndexes:inColumn:withEvent:`,
+`-draggingImageForRowsWithIndexes:inColumn:withEvent:offset:`, `-setDraggingSourceOperationMask:forLocal:`,
+`-editItemAtIndexPath:withEvent:select:`) — a file manager's browser drags rows between columns — and then the furniture
+(`-reloadDataForRowIndexes:inColumn:`, `-addColumn`, `-displayColumn:`, `-lastColumn`, the scroll pair, the autosave
+name). **The `-matrixClass`/`-matrixInColumn:`/`-columnOfMatrix:` trio should REFUSE by name** with the reason the header
+already gives: this browser's columns are tables, and a matrix is what Apple's own columns were.

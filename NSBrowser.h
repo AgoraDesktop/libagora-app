@@ -38,6 +38,7 @@ NS_ASSUME_NONNULL_BEGIN
 @class NSBrowser;
 @class NSBrowserCell;
 @class NSColor;
+@class NSIndexPath;
 @class NSIndexSet;
 @class NSMutableArray;
 @class NSCell;
@@ -59,13 +60,54 @@ enum {
 	NSBrowserDropAbove = 1
 };
 
-/* **THE LAST THREE SIZE HOOKS ARE DECLARED AND NOT ASKED IN THIS SLICE.** Rows have the browser's fixed row height
+/* ==================================================================================================================
+ * THE ADVERTISED MODEL IS THE 10.6 ONE: ITEMS, NOT CELLS AND NOT MATRICES.
+ *
+ * **APPLE SHIPPED TWO DELEGATE CONTRACTS IN ONE CLASS, AND THIS HEADER NOW ADVERTISES THE LATER ONE.** The NeXT-era
+ * contract is CELL-based: the delegate counts ROWS per column and fills each cell through
+ * `-browser:willDisplayCell:atRow:column:`, and the browser's columns were matrices of `NSBrowserCell`s. 10.6 added an
+ * ITEM-based contract: the delegate answers with model objects — how many children an item has, which child is at an
+ * index, whether an item is a leaf, and what an item's cell should show — and the browser makes the cells itself.
+ *
+ * **THE ITEM DOORS ARE THE ONES THIS CLASS ASKS FIRST, AND THE CELL DOORS ARE THE FALLBACK.** That is Apple's own order
+ * and the reason both are declared: a delegate that implements `-browser:numberOfChildrenOfItem:`,
+ * `-browser:child:ofItem:`, `-browser:isLeafItem:` and `-browser:objectValueForItem:` drives the browser — one object
+ * per row, no cells to configure — while a delegate written for the older API keeps working unchanged. **A DELEGATE
+ * SHOULD IMPLEMENT ONE OR THE OTHER, NOT BOTH** (an item-based delegate may still implement
+ * `-browser:willDisplayCell:atRow:column:` to STYLE the cells the browser made, which is the one overlap Apple allows).
+ *
+ * **AND THE ROOT IS `nil`.** The item-based model has no root object: column zero shows `-browser:numberOfChildrenOfItem:`
+ * for NIL, and every later column shows the children of the item selected in the column to its left. That is why
+ * `-indexPathForColumn:` answers the path of the item WHOSE CHILDREN are in that column, and why every reading door
+ * below can walk to its answer from nil without the browser caching anything: an item belongs to the delegate, and the
+ * browser never retains one.
+ *
+ * The CELL-based doors are still asked when the item ones are absent — `WSColumnView`, in the Workspace repository, is
+ * written against them — and they are documented here as the older alternative rather than removed, because Apple kept
+ * them and a ported delegate may use either.
+ *
+ * **THE LAST THREE SIZE HOOKS ARE DECLARED AND NOT ASKED IN THIS SLICE.** Rows have the browser's fixed row height
  * and columns its fixed width; `-browser:heightOfRow:inColumn:`, `-browser:shouldSizeColumn:…` and
  * `-browser:sizeToFitWidthOfColumn:` are here because the era's protocol declares them, and a delegate that answers
- * them will be called when those rules arrive rather than now. */
+ * them will be called when those rules arrive rather than now.
+ * ================================================================================================================ */
 @protocol NSBrowserDelegate <NSObject>
 @optional
+/* ---- THE 10.6 ITEM-BASED CONTRACT, WHICH THIS CLASS ASKS FIRST ------------------------------------------------ */
+/* How many children the item has. `nil` is the ROOT, so column zero's row count comes from this with nil. */
+- (NSInteger)browser:(NSBrowser *)browser numberOfChildrenOfItem:(nullable id)item;
+/* The child of `item` at `index` — one call per row, and the object the browser hands back from `-itemAtRow:inColumn:`. */
+- (nullable id)browser:(NSBrowser *)browser child:(NSInteger)index ofItem:(nullable id)item;
+/* Whether an item has no children, which is what draws a row without a branch triangle. */
+- (BOOL)browser:(NSBrowser *)browser isLeafItem:(nullable id)item;
+/* What the item's cell should show. The browser sets it on the cell it makes; a string is the ordinary answer. */
+- (nullable id)browser:(NSBrowser *)browser objectValueForItem:(nullable id)item;
+
+/* ---- THE CELL-BASED CONTRACT, KEPT AS THE FALLBACK ------------------------------------------------------------ */
+/* Rows per column, for a delegate that does not answer `-browser:numberOfChildrenOfItem:`. */
 - (NSInteger)browser:(NSBrowser *)sender numberOfRowsInColumn:(NSInteger)column;
+/* Filling a cell the browser made — either as the whole cell contract (no item doors) or to STYLE what the item doors
+ * produced, which is the one overlap Apple's documentation allows. */
 - (void)browser:(NSBrowser *)sender willDisplayCell:(id)cell atRow:(NSInteger)row column:(NSInteger)column;
 - (nullable NSString *)browser:(NSBrowser *)sender titleOfColumn:(NSInteger)column;
 - (BOOL)browser:(NSBrowser *)sender isColumnValid:(NSInteger)column;
@@ -151,6 +193,30 @@ enum {
 - (void)setSelectedPath:(nullable NSString *)path;
 - (nullable NSString *)pathSeparator;
 - (void)setPathSeparator:(nullable NSString *)separator;
+
+/* ==================================================================================================================
+ * THE ITEM-BASED READING DOORS — the 10.6 half of the model, over the same columns.
+ *
+ * **EVERY ONE OF THEM WALKS FROM `nil` THROUGH THE DELEGATE, SO NOTHING IS CACHED AND NO ITEM IS RETAINED.** An item
+ * belongs to the delegate; the browser asks `-browser:child:ofItem:` for each step of the path it is following, which is
+ * what Apple's own documentation means by "the browser does not retain items". A path that runs out (a column with no
+ * selection) answers nil rather than a wrong object.
+ *
+ * `-itemAtRow:inColumn:` is the row's item; `-parentForItemsInColumn:` is the item WHOSE CHILDREN the column shows;
+ * `-indexPathForColumn:` is that parent's path; `-pathToColumn:` is the same chain as a `-path`-style string; and
+ * `-isLeafItem:` asks the delegate whether the chain ends there. The two selection doors read and write the selected
+ * rows as one index path, which is what a caller restoring a folder's selection needs.
+ * ================================================================================================================ */
+- (nullable id)itemAtRow:(NSInteger)row inColumn:(NSInteger)column;
+- (nullable id)itemAtIndexPath:(nullable NSIndexPath *)indexPath;
+- (nullable id)parentForItemsInColumn:(NSInteger)column;
+- (BOOL)isLeafItem:(nullable id)item;
+- (nullable NSIndexPath *)indexPathForColumn:(NSInteger)column;
+- (nullable NSString *)pathToColumn:(NSInteger)column;
+- (nullable NSIndexPath *)selectionIndexPath;
+- (void)setSelectionIndexPath:(nullable NSIndexPath *)path;
+- (NSArray *)selectionIndexPaths;
+- (void)setSelectionIndexPaths:(NSArray *)paths;
 
 /* GEOMETRY AND COLUMN STATE. `-columnWidth` is the width a NEW column gets and the width
  * `-setColumnWidth:` gives every existing one; `-widthOfColumn:`/`-setWidth:ofColumn:` are the per-column pair.

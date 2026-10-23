@@ -2443,6 +2443,32 @@ name outside the search list, the deprecated dictionaries against a fed-in windo
 icon and file questions, a launch that cannot happen answering nil AND an error, and every refused door checked both
 ways — the empty answer and that it neither crashed nor invented something.
 
+### The browser's item model: the delegate hands over objects, the browser makes the cells
+
+**APPLE SHIPPED TWO DELEGATE CONTRACTS IN ONE CLASS, AND THIS ONE NOW ADVERTISES THE 10.6 CONTRACT.** The NeXT-era
+contract is cell-based — count rows per column, fill each cell in `-browser:willDisplayCell:atRow:column:` — and this
+browser asked only that. The 10.6 contract is item-based: the delegate answers **how many children an item has**, **which
+child is at an index**, **whether an item is a leaf** and **what an item's cell should show**, and the browser makes the
+cells itself. Those four doors are declared now, and they are the ones this class asks first; the cell doors stay declared
+and are the fallback, which is what keeps the Workspace's `WSColumnView` — written against them — working unchanged.
+
+**THE ROOT IS `nil` AND NOTHING IS CACHED.** Column zero lists `-browser:numberOfChildrenOfItem:` for nil; every later
+column lists the children of the item selected in the column to its left. Every reading door walks that chain from nil on
+demand — `-itemAtRow:inColumn:` (row −1 answers the parent), `-itemAtIndexPath:`, `-parentForItemsInColumn:`,
+`-indexPathForColumn:` (the path of the item *whose children* a column shows), `-pathToColumn:` (the same chain as a
+`-path`-style string) and `-isLeafItem:` — so the browser retains no item: they belong to the delegate, which is Apple's
+rule as much as this tier's.
+
+**AND THE SELECTION IS A PATH NOW.** `-selectionIndexPath` is the selected rows from the root down, `-setSelectionIndexPath:`
+selects each column in turn (loading exactly what a click would load, and stopping if a row is out of range), and the
+plural pair holds the one path a browser can represent — stated rather than pretending several selections exist.
+
+`tests/browser_items.m` asserts it in 40 checks: a three-level tree of model objects, column zero's rows coming from the
+nil root, a selected branch loading its children, the cell the browser made showing `-browser:objectValueForItem:` and
+carrying the leaf flag, the styling door still getting its chance afterwards, all six walking doors against the same
+chain, the selection path round-tripped both ways, a bad path stopping rather than selecting a phantom — and, beside it,
+a cell-based delegate still painting its cells, because the older contract is the fallback and not the removed one.
+
 ### Still absent, and why
 
 **NINE THINGS THAT USED TO BE ON THIS LIST ARE NOT ANY MORE, AND THE LIST IS CORRECTED RATHER THAN QUIETLY SHRUNK:**
