@@ -458,6 +458,14 @@ static void fn_activation(void *context, int active)
 	}
 }
 
+/* **THE PASSIVE DOOR: THE CONNECTION IF THERE IS ONE, AND NOTHING IF THERE IS NOT.** Anything reachable from a
+ * zero-time poll or a nonblocking query has to answer WITHOUT connecting, because discovery does round trips and a
+ * query that blocks is not a query. */
+static AGWindowServer *fn_server_if_connected(void)
+{
+	return s_server;
+}
+
 static AGWindowServer *fn_server(void)
 {
 	if (s_server == NULL) {
@@ -1986,12 +1994,26 @@ static int s_connection_gone;
 
 + (BOOL)cg_waitForEventInMilliseconds:(long)ms
 {
-	AGWindowServer *server = fn_server();
+	/* **A POLL DOES NOT MAKE A CONNECTION, AND A CALLER THAT ALREADY HAS ONE KEEPS GETTING IT.** `fn_server` is this
+	 * file's laziest door — it CONNECTS — and reaching it from a zero-time poll meant a "is anything waiting?" query
+	 * could open a connection to the compositor, and block doing the round trips discovery needs, on a process that
+	 * had never ordered a window. A poll asks about a connection that exists; only a real WAIT is allowed to make
+	 * one. */
+	AGWindowServer *server = (ms > 0) ? fn_server() : s_server;
 
 	if (server == NULL) {
 		return NO;
 	}
+	/* **QUEUED INPUT DOES NOT STARVE THE CONNECTION.** This used to return YES the moment anything was queued, so
+	 * under continuous input the native connection was never serviced again: buffer-release callbacks and frame
+	 * callbacks that arrive on it stayed undelivered, and presentation stopped advancing while the application's own
+	 * loop reported event after event. A turn here is NONBLOCKING whatever the caller asked for, so it cannot delay
+	 * the event the caller is about to collect, and it is what keeps the two halves of one connection in step. */
 	if (s_queued_events > 0) {
+		if (AGWindowServerDispatchTimeout(server, 0) < 0) {
+			s_connection_gone = 1;
+			return NO;
+		}
 		return YES;
 	}
 	if (AGWindowServerDispatchTimeout(server, (int)ms) < 0) {
@@ -2167,18 +2189,49 @@ static CGFloat fn_clamp_axis(CGFloat v, CGFloat lo, CGFloat hi)
 		}
 		fn_announce(self, NSWindowDidMoveNotification, @selector(windowDidMove:));
 	}
-	if (resized) {
-		fn_announce(self, NSWindowDidResizeNotification, @selector(windowDidResize:));
-	}
 	/* **A RESIZE RE-LAYS THE CONTENT VIEW, WITH OR WITHOUT A TOOLBAR; A MOVE DOES NOT NEED TO.** A window's content
 	 * view is the view the frame describes, so a resize that leaves it at its old size is a window whose document is
 	 * the wrong shape — MEASURED on a scroll view and again on a table, where the clip view changed and the view
 	 * inside it did not. A move changes no content rectangle, and marking the window stale for one would repaint a
 	 * surface that did not move. */
 	if (resized) {
-		[self cg_toolbarLayoutChanged];
+		/* **THE LAYOUT IS APPLIED BEFORE THE NOTIFICATION, AND THAT ORDER IS THE WHOLE POINT OF IT.** This tail ran
+		 * the other way round: `-windowDidResize:` was announced first and the content view re-laid afterwards, so
+		 * a resize observer — which is exactly what a scroll view, a table or a document registers — read the NEW
+		 * frame and the OLD content bounds in the same callback and computed a layout for a size the window no
+		 * longer had. MEASURED on a scroll view, where the clip view moved and the view inside it did not. */
+		[self cg_layoutForResize];
+		fn_announce(self, NSWindowDidResizeNotification, @selector(windowDidResize:));
 	}
 	(void)flag;
+}
+
+/* **THE LAYOUT HALF OF A RESIZE, IN ONE PLACE BECAUSE THERE ARE NOW TWO DOORS THAT RESIZE.** A frame the
+ * application sets and a frame the compositor configures used to take different paths through this file: the
+ * application's re-laid the content and the compositor's did not. One window has one content geometry. */
+- (void)cg_layoutForResize
+{
+	[self cg_toolbarLayoutChanged];
+	_viewsNeedDisplay = YES;
+}
+
+/* **AND THE COMPOSITOR'S OWN RESIZE, LANDED.** The size was taken in the listener (see
+ * `cg_handleSeamEvent:`); this is the tail that could not run there — layout first, then a repaint from the NEW
+ * geometry, then the delegate's notification, once for the size the batch settled on. The origin does not move: a
+ * compositor configures a size, and this tier places nothing. */
+- (void)cg_configureDidLand
+{
+	NSSize previous = _cg_configuredSize;
+
+	_cg_configuredSize = _frame.size;
+	[self cg_layoutForResize];
+	[self cg_drawFrame];
+	/* THE NOTIFICATION IS A TRANSITION, NOT A COUNT, exactly as activation's is: a batch of configures that ends
+	 * where it started is not a resize, and one the delegate has already been told about at this size is not told
+	 * again. */
+	if (previous.width != _frame.size.width || previous.height != _frame.size.height) {
+		fn_announce(self, NSWindowDidResizeNotification, @selector(windowDidResize:));
+	}
 }
 
 /* **THE ANIMATED SPELLING HAS NO FRAMES IN BETWEEN.** The geometry is the direct set's and the redraw is the direct
@@ -2865,7 +2918,11 @@ static CGFloat fn_clamp_axis(CGFloat v, CGFloat lo, CGFloat hi)
 - (NSEvent *)cg_nextEventWaiting:(BOOL)wait milliseconds:(long)ms mask:(NSUInteger)mask
 				dequeue:(BOOL)dequeue
 {
-	AGWindowServer *server = fn_server();
+	/* **PASSIVE, BECAUSE THE APPLICATION PUMPS EVERY WINDOW ON EVERY PASS.** The lazy door would CONNECT here — for
+	 * a window that has no native window and therefore nothing to wait for — and the application's own drain calls
+	 * this with an already-past date, so a "poll" could open a connection and block in discovery. A window with an
+	 * `AGWindow` implies the connection exists, so the passive answer is the same one whenever it matters. */
+	AGWindowServer *server = fn_server_if_connected();
 	NSTimeInterval deadline = -1.0;
 	BOOL noServer = (server == NULL || _agwindow == NULL);
 
@@ -2886,6 +2943,13 @@ static CGFloat fn_clamp_axis(CGFloat v, CGFloat lo, CGFloat hi)
 	 * SAME window's chrome button asked. One window has one close policy; which door the request came through is
 	 * not the application's business. `-performClose:` can refuse, in which case nothing happens here and the
 	 * window stays. */
+	/* **A CONFIGURE DECIDED OUTSIDE THE DISPATCH.** The size is already applied; what is left is the work that
+	 * cannot run inside a native callback — re-lay the content and toolbar, mark the window stale, and tell the
+	 * delegate ONCE for the size the batch settled on. */
+	if (_cg_configurePending) {
+		_cg_configurePending = NO;
+		[self cg_configureDidLand];
+	}
 	if (_cg_closeRequested) {
 		_cg_closeRequested = NO;
 		/* **HELD ACROSS THE DECISION, BECAUSE THE DECISION MAY RELEASE THIS WINDOW.** `-performClose:` ends in
@@ -3687,13 +3751,20 @@ static CGFloat fn_clamp_axis(CGFloat v, CGFloat lo, CGFloat hi)
 {
 	switch (event->type) {
 	case AGEventConfigure:
-		/* THE SIZE IS THE COMPOSITOR'S TO DECIDE, and this is the only place the real one comes from. The Cocoa
-		 * frame keeps its origin and takes the new size; the backing store is remade by `cg_ensureSurface` on the
-		 * next draw, because its size no longer matches. */
+		/* **THE SIZE IS TAKEN NOW AND EVERYTHING ELSE IS TAKEN LATER.** This runs INSIDE libwayland's listener
+		 * dispatch, and it used to assign the size, mark the window dirty and DRAW — from inside a native
+		 * callback. Three things were wrong with that. The draw happened with the content view still at its old
+		 * frame, because the layout tail had not run, so the frame painted was stale geometry. A delegate reached
+		 * from that draw could close the window while the surface's own callbacks were still on the stack. And
+		 * the resize was never ANNOUNCED at all, so the compositor's resize and the application's took two
+		 * different paths.
+		 *
+		 * So the SIZE is assigned here — it must be, because the input events that follow in this same native
+		 * batch are converted through this frame — and the layout, repaint and notification are deferred to the
+		 * pump, one pass per batch. See `_cg_configurePending`. */
 		_frame.size.width = (CGFloat)event->x;
 		_frame.size.height = (CGFloat)event->y;
-		_viewsNeedDisplay = YES;
-		[self cg_drawFrame];
+		_cg_configurePending = YES;
 		break;
 	case AGEventClose:
 		_cg_closeRequested = YES;

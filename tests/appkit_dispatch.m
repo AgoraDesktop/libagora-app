@@ -211,6 +211,17 @@ int main(void)
 		NSEvent *second;
 
 		setvbuf(stdout, NULL, _IONBF, 0);
+
+		/* ============================================================================================
+		 * 0. A POLL DOES NOT MAKE A CONNECTION — checked BEFORE anything is ordered in, because that is the
+		 *    only moment at which the answer can be observed. A compositor IS reachable here: the runner starts
+		 *    one, so a lazy connect would succeed, which is what makes "it did not" a real claim rather than an
+		 *    assertion about an unreachable socket.
+		 * ============================================================================================ */
+		check(![NSWindow cg_hasWindowServer], "nothing is connected before a window is ordered in");
+		(void)[NSWindow cg_waitForEventInMilliseconds:0];
+		check(![NSWindow cg_hasWindowServer], "and a ZERO-TIME poll does not create a connection");
+
 		[application finishLaunching];
 
 		window = [[NSWindow alloc] initWithContentRect:NSMakeRect(0.0, 0.0, 640.0, 400.0)

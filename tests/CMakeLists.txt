@@ -687,6 +687,20 @@ add_test(NAME appkit-dispatch
 set_tests_properties(appkit-dispatch PROPERTIES SKIP_RETURN_CODE 77
   ENVIRONMENT "${_agora_app_test_env}")
 
+# **AND THE COMPOSITOR'S RESIZE IS THE APPLICATION'S RESIZE.** The configure used to assign the size, mark dirty and
+# DRAW inside libwayland's listener — painting stale content geometry, announcing nothing to the delegate, and putting
+# a delegate that closes the window inside a live native callback. The application's own path announced
+# `-windowDidResize:` before re-laying the content, so an observer read new bounds and old ones in one callback.
+# This measures WHEN each half becomes visible, and that a batch of configures is one resize.
+add_executable(appkit_resize appkit_resize.m)
+target_link_libraries(appkit_resize PRIVATE App)
+
+add_test(NAME appkit-resize
+  COMMAND "${CMAKE_CURRENT_SOURCE_DIR}/run-appkit-headless.sh" "$<TARGET_FILE:appkit_resize>" 3
+	  "all checks passed" )
+set_tests_properties(appkit-resize PROPERTIES SKIP_RETURN_CODE 77
+  ENVIRONMENT "${_agora_app_test_env}")
+
 add_executable(chrome_buttons chrome_buttons.m)
 target_link_libraries(chrome_buttons PRIVATE App)
 

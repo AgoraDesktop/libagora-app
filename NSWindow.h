@@ -376,6 +376,16 @@ typedef NSUInteger NSWindowSharingType;
 	BOOL _cg_resizePending;
 	NSInteger _cg_windowNumber; /* Apple's window number, assigned when the AGWindow is made; -1 before */
 	BOOL _cg_closeRequested; /* the compositor asked the window to close; acted on in the pump */
+	/* **A CONFIGURE IS APPLIED IN TWO HALVES, AND THAT IS ONE BUG'S WHOLE FIX.** The SIZE is taken the moment the
+	 * compositor sends it, because the input events behind it in the same native batch are measured in it — a click
+	 * converted through the old frame lands in the wrong place. The LAYOUT, the repaint and the delegate's resize
+	 * notification are deferred to the pump, because this runs inside libwayland's listener dispatch: a delegate
+	 * that closes the window there would destroy the surface whose callbacks are still on the stack. Coalescing is
+	 * what the flag buys — a batch of configures asks for ONE layout and ONE notification, at the final size. */
+	BOOL _cg_configurePending;
+	/* THE SIZE THE DELEGATE WAS LAST TOLD ABOUT, so a configure that settles on the size it started from is not a
+	 * resize and is not announced as one. */
+	NSSize _cg_configuredSize;
 	/* ONCE THE DOCUMENT HAS APPROVED THE CLOSE, the second `-performClose:` pass skips asking it again. */
 	BOOL _cg_documentCloseApproved;
 	NSRect _frame;          /* COCOA's coordinates: bottom-left origin */

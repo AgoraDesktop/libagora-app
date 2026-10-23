@@ -761,6 +761,16 @@ static double s_last_report;
 	if (_mainMenu != nil && _menuBarWindow == nil) {
 		[self cg_updateMenuBarWindow];
 	}
+	/* **AND A QUEUED EVENT GIVES THE CONNECTION ITS TURN FIRST, ONCE PER PASS.** This door returns the durable queue
+	 * and the windows' queues BEFORE it ever waits, so under continuous input it returned event after event and the
+	 * native connection was never serviced: buffer-release and frame callbacks that arrive ON that connection stayed
+	 * undelivered and presentation stopped advancing, while the loop looked perfectly busy. A nonblocking service
+	 * turn costs one `poll` with a zero timeout, cannot delay the event about to be collected, and cannot extend the
+	 * caller's deadline. Nothing is created either — a process with no connection is not made one by asking — which
+	 * is the other half of the report: a zero-time poll must not bootstrap a connection. */
+	if ([NSWindow cg_hasWindowServer]) {
+		(void)[NSWindow cg_waitForEventInMilliseconds:0];
+	}
 	for (;;) {
 		NSUInteger i;
 
