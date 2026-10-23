@@ -1508,6 +1508,14 @@ target_link_libraries(document PRIVATE App)
 add_test(NAME appkit-document COMMAND document)
 set_tests_properties(appkit-document PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
 
+# **THE DOCUMENT'S TAIL: AUTOSAVE, CLOSE REVIEW, THE FILENAME STATE AND THE ERROR CHAIN.** The autosave is measured as a
+# separate file, a reopened document, and a real save that deletes the obsolete copy; close decisions use the private
+# seam for the alert's answer; and the error chain is checked with a recorder as the controller's presenter.
+add_executable(document_tail document_tail.m)
+target_link_libraries(document_tail PRIVATE App m)
+add_test(NAME appkit-document-tail COMMAND document_tail)
+set_tests_properties(appkit-document-tail PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
+
 # **THE SAVE AND OPEN PANELS.** A temp directory with files, a subdirectory, a hidden file and a file the delegate hides;
 # a save panel accepts a name (with the allowed type's extension and the deprecated required type), navigates into a
 # selected directory and back through ".."; the delegate vetoes a URL, renames one, and its filters remove entries from

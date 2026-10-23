@@ -49,6 +49,7 @@
 
 #import "AppKitRefusal.h"
 #import "NSDockMenu.h"	/* the dock menu's description, which this window carries out for the application */
+#import "NSDocument.h"
 #import "NSMenu.h"
 #import <CoreGraphics/CGBitmapContext.h>
 
@@ -112,6 +113,7 @@
 - (void)cg_setPointerGrab:(BOOL)flag;
 /* **AND THE ONE A DRAG USES, WHICH IS A REAL GRAB — see `-cg_setPointerCapture` for why the two differ.** */
 - (void)cg_setPointerCapture:(BOOL)flag;
+- (void)cg_setDocumentCloseApproved:(BOOL)flag;
 /* AND WHETHER THERE IS A COMPOSITOR TO MAKE A WINDOW ON AT ALL, which is the question a drag image's floating
  * window has to ask before ordering itself in: with none, the session runs without an image rather than printing a
  * refusal for a window that could never be shown. */
@@ -658,6 +660,48 @@ static void fn_dock_menu_action(void *context, AGWindow *window, int item)
 	(void)window;
 	[[NSApplication sharedApplication] cg_performDockMenuItem:(NSInteger)item];
 }
+
+/* **THE WINDOW'S HALF OF THE DOCUMENT'S CLOSE REVIEW.** The window asks its controller's document before it closes;
+ * the answer arrives through this object, and a YES sets the approved flag and starts a second `-performClose:` pass
+ * that goes on to the window delegate. The window is retained so a sheet that outlives the first pass still has one
+ * to close. */
+@interface AGWindowCloseReview : NSObject
+{
+@public
+	NSWindow *_window;	/* RETAINED */
+}
+- (instancetype)initWithWindow:(NSWindow *)window;
+- (void)document:(NSDocument *)document shouldClose:(BOOL)shouldClose contextInfo:(void *)contextInfo;
+@end
+
+@implementation AGWindowCloseReview
+
+- (instancetype)initWithWindow:(NSWindow *)window
+{
+	self = [super init];
+	if (self != nil) {
+		_window = [window retain];
+	}
+	return self;
+}
+
+- (void)dealloc
+{
+	[_window release];
+	[super dealloc];
+}
+
+- (void)document:(NSDocument *)document shouldClose:(BOOL)shouldClose contextInfo:(void *)contextInfo
+{
+	(void)document;
+	(void)contextInfo;
+	if (shouldClose) {
+		[_window cg_setDocumentCloseApproved:YES];
+		[_window performClose:nil];
+	}
+}
+
+@end
 
 @implementation NSWindow
 
@@ -5763,19 +5807,42 @@ NSString *NSWindowDidDeminiaturizeNotification = @"NSWindowDidDeminiaturizeNotif
 - (void)performClose:(id)sender
 {
 	(void)sender;
+	/* **THE DOCUMENT'S REVIEW COMES FIRST, THEN THE WINDOW'S.** Apple asks the controller's document for a window
+	 * whose controller has one; a YES comes back through `AGWindowCloseReview`, sets the approved flag and starts a
+	 * second pass that skips the document and asks the window delegate. The flag is cleared on that pass so a later
+	 * close asks again. */
+	if (!_cg_documentCloseApproved && _cg_windowController != nil
+	    && [_cg_windowController respondsToSelector:@selector(document)]) {
+		id document = [_cg_windowController document];
+
+		if (document != nil
+		    && [document respondsToSelector:@selector(shouldCloseWindowController:delegate:shouldCloseSelector:contextInfo:)]) {
+			AGWindowCloseReview *review = [[AGWindowCloseReview alloc] initWithWindow:self];
+
+			[document shouldCloseWindowController:_cg_windowController
+						     delegate:review
+						  shouldCloseSelector:@selector(document:shouldClose:contextInfo:)
+							contextInfo:NULL];
+			[review release];
+			return;
+		}
+	}
+	_cg_documentCloseApproved = NO;
 	/* **THE WINDOW IS ASKED BEFORE IT CLOSES, WHICH IS THE WHOLE OF THIS DOOR.** Apple sends
 	 * `-windowShouldClose:` to the DELEGATE and closes only if it answers YES — so a caller that wires an
 	 * unsaved-changes prompt to that message gets it from the button AND from the menu item, which is why both
-	 * go through here. `NSWindowDelegate` is not a protocol this tier ships, so the message is asked for BY
-	 * SELECTOR rather than declared — the informal-protocol pattern used elsewhere in this tree. */
-	/* **THE ASKING IS NOW A REAL PROTOCOL SEND.** `NSWindowDelegate` declares this message with its signature, so
-	 * this is an ordinary checked send — the informal `NSObject` category it used to go through is gone. */
+	 * go through here. */
 	if (_delegate != nil && [_delegate respondsToSelector:@selector(windowShouldClose:)]) {
 		if (![(id <NSWindowDelegate>)_delegate windowShouldClose:self]) {
 			return;	/* REFUSED — and nothing was announced and nothing changed, because a refusal is not an event */
 		}
 	}
 	[self close];
+}
+
+- (void)cg_setDocumentCloseApproved:(BOOL)flag
+{
+	_cg_documentCloseApproved = flag;
 }
 
 - (void)miniaturize:(id)sender

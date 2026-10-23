@@ -1088,7 +1088,22 @@ the compositor is really gone.
   window with no server window can still drain its queue, which it could not before. `tests/window_tail.m` measures it
   in 33 checks.
 
-- **`ctest`: 159 of 159 passed** (the keyboard and the seam, the AppKit and its input path, the controls and their
+- **And the DOCUMENT PAIR is COMPLETE — `NSDocument` 104 of 104 and `NSDocumentController` 51 of 51** (`ctest`,
+  offscreen) — autosave, the close review and the error chain. **Autosave writes a SEPARATE contents file** to the
+  controller's `~/Library/Autosave` (temp fallback), named per process and type, with a registry plist so a fresh
+  controller can reopen a crashed session; `-saveToURL:…NSAutosaveOperation` sets `autosavedContentsFileURL` and
+  `NSChangeAutosaved` and never touches `fileURL`, while a real save deletes the obsolete copy. The controller's
+  `-autosavingDelay` drives a timer (0 disables it) that only autosaves documents with `-hasUnautosavedChanges` and a
+  non-nil `-autosavingFileType`. **Close is Apple's asynchronous review**: Save/Cancel/Don't Save as a sheet or an
+  app-modal alert, `-shouldCloseWindowController:…` wired into `-performClose:`, and `-closeAllDocuments…` walks the
+  documents and stops at the first refusal. **The error chain is document → controller → application**, and
+  `NSResponder -presentError:` now builds an `NSAlert` instead of refusing because "NSAlert is not in this tier" —
+  the class exists. Page layout uses the existing panel with the two document hooks; `-lastComponentOfFileName`,
+  `-fileTypeFromLastRunSavePanel` and `-fileNameExtensionWasHiddenInLastRunSavePanel` record the name and panel state;
+  and the three scripting doors refuse by name. `tests/document_tail.m` measures it in 41 checks, and the existing
+  close-all probe now pins the walk's stop-at-refusal semantics.
+
+- **`ctest`: 160 of 160 passed** (the keyboard and the seam, the AppKit and its input path, the controls and their
   metrics, the field control and its cell and its bezel and its placeholder and what it may hold, the text path and its
   word granularity and the multi-line view and its wrapping and its scrolling and its READING OF THE STORE, the STORE
   the rich-text slice is built on and the REGION it is laid out in and the WEB that ties the three together and the

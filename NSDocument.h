@@ -28,9 +28,11 @@
  * `runModal…` doors are the page-layout and operation sheets. A subclass that draws its own pages overrides
  * `-printOperationWithSettings:error:` and keeps everything else.
  *
- * **AUTOSAVE, SCRIPTING AND THE SAVE PANEL ARE STILL NOT DECLARED.** No autosave timer and no save panel live here;
- * `-saveDocument:` REFUSES BY NAME when the document has no URL (that is the save-panel path) and
- * `-saveDocumentAs:`/`-saveDocumentTo:` always refuse; a direct `-saveToURL:…` is real.
+ * **AUTOSAVE, THE SAVE PANEL, CLOSE REVIEW, PAGE LAYOUT AND THE ERROR CHAIN ARE HERE NOW.** Autosave writes a
+ * separate contents file and asks the owning controller for its location and its crash-time registry; the save panel
+ * records its chosen name and hidden-extension answer; close is an asynchronous Save/Cancel/Don't Save review; page
+ * layout uses the existing panel with the `-preparePageLayout:`/`-shouldChangePrintInfo:` hooks; and errors walk
+ * document -> controller -> application. The scripting suite is still absent, so its three doors refuse by name.
  *
  * **THE CHANGE COUNT IS THE DOCUMENT'S, NOT THE UNDO MANAGER'S.** `-updateChangeCount:` is the one writer; the document
  * registers for the undo manager's did-undo/did-redo notifications so the count follows an undo the application never
@@ -46,7 +48,7 @@
 
 NS_ASSUME_NONNULL_BEGIN
 
-@class NSData, NSDate, NSDictionary, NSError, NSFileWrapper, NSPrintInfo, NSPrintOperation, NSString, NSUndoManager, NSURL, NSWindow, NSWindowController;
+@class NSData, NSDate, NSDictionary, NSError, NSFileWrapper, NSPageLayout, NSPrintInfo, NSPrintOperation, NSString, NSUndoManager, NSURL, NSWindow, NSWindowController;
 
 /* WHAT A CHANGE DID, in Apple's order and with Apple's numbers. `NSChangeRedone` is the 10.5 addition and sits at 5 because
  * 4 was already `NSChangeAutosaved`. */
@@ -82,6 +84,20 @@ enum {
 	BOOL _hasUndoManager;
 	id _cg_documentController;		/* NOT RETAINED: the controller that added this document */
 	NSPrintInfo *_printInfo;		/* RETAINED: made from the shared ticket on first ask */
+	/* **THE AUTOSAVE FAMILY'S STATE.** `_autosavedContentsFileURL` is the separate file the contents were last
+	 * autosaved to; `_hasUnautosavedChanges` is the history flag `-hasUnautosavedChanges` answers, which is NOT
+	 * `-isDocumentEdited` (an autosaved document is still edited until it is saved or reverted). */
+	NSURL *_autosavedContentsFileURL;	/* RETAINED */
+	BOOL _hasUnautosavedChanges;
+	/* **THE NAME AND THE LAST SAVE PANEL'S ANSWERS.** `_lastComponentOfFileName` is the name to display/save, which
+	 * can differ from the URL's last component; the other two record what a panel run chose, and the flag says a
+	 * panel has actually run (so "nil" and "no panel yet" are different answers). */
+	NSString *_lastComponentOfFileName;	/* RETAINED */
+	NSString *_fileTypeFromLastRunSavePanel;	/* RETAINED */
+	BOOL _fileNameExtensionWasHidden;
+	BOOL _cgSavePanelHasRun;
+	/* A TEST SEAM: -1 means "ask the user"; a return code from the close alert means "use this answer". */
+	NSInteger _cgCloseDecision;
 }
 
 /* ---- INITIALIZATION ------------------------------------------------------------------------------- */
@@ -255,6 +271,59 @@ originalContentsURL:(nullable NSURL *)absoluteOriginalContentsURL
 - (nullable NSString *)fileNameExtensionForType:(nullable NSString *)typeName
 				  saveOperation:(NSSaveOperationType)saveOperation;
 - (BOOL)validateUserInterfaceItem:(id <NSValidatedUserInterfaceItem>)anItem;
+
+/* ---- AUTOSAVING ----------------------------------------------------------------------------------- */
+
+/* **THE AUTOSAVE FILE IS SEPARATE FROM THE DOCUMENT'S FILE.** `-autosavedContentsFileURL` is the location of the
+ * contents written by `NSAutosaveOperation`; `-setAutosavedContentsFileURL:` also tells the owning controller to
+ * remember the document for a crash-time reopen. `-autosavingFileType` answers the file type used for the autosave and
+ * may be overridden to nil to disable autosaving for one document. */
+- (BOOL)hasUnautosavedChanges;
+- (void)autosaveDocumentWithDelegate:(nullable id)delegate didAutosaveSelector:(nullable SEL)didAutosaveSelector
+			 contextInfo:(nullable void *)contextInfo;
+- (nullable NSURL *)autosavedContentsFileURL;
+- (void)setAutosavedContentsFileURL:(nullable NSURL *)absoluteURL;
+- (nullable NSString *)autosavingFileType;
+
+/* ---- CLOSING, AND THE SAVE PANEL'S TWO ANSWERS ----------------------------------------------------- */
+
+/* **THE CLOSE CONFIRMATION IS ASYNCHRONOUS, AS APPLE'S IS.** A document with changes presents Save/Cancel/Don't Save,
+ * and the delegate is messaged with `-document:shouldClose:contextInfo:` when the decision (and any save it implies)
+ * is complete. `-shouldCloseWindowController:…` is the window's half: it asks the document when the controller owns
+ * the document's closing or when it is the only controller, and answers YES otherwise. */
+- (void)canCloseDocumentWithDelegate:(nullable id)delegate shouldCloseSelector:(nullable SEL)shouldCloseSelector
+			 contextInfo:(nullable void *)contextInfo;
+- (void)shouldCloseWindowController:(NSWindowController *)windowController delegate:(nullable id)delegate
+		shouldCloseSelector:(nullable SEL)shouldCloseSelector contextInfo:(nullable void *)contextInfo;
+
+/* **THE NAME THE USER SEES, AND WHAT THE LAST SAVE PANEL DECIDED.** `-lastComponentOfFileName` is a stored override
+ * (set by a panel or a caller) that `-displayName` prefers; the two panel answers are nil/NO until a panel has run. */
+- (nullable NSString *)lastComponentOfFileName;
+- (void)setLastComponentOfFileName:(nullable NSString *)fileName;
+- (nullable NSString *)fileTypeFromLastRunSavePanel;
+- (BOOL)fileNameExtensionWasHiddenInLastRunSavePanel;
+
+/* ---- PAGE LAYOUT AND ERROR PRESENTATION ----------------------------------------------------------- */
+
+/* **PAGE SETUP IS THE EXISTING PANEL'S, WITH THE DOCUMENT'S HOOKS.** `-preparePageLayout:` may refuse the panel; an
+ * accepted panel asks `-shouldChangePrintInfo:` before the document takes the new ticket. */
+- (BOOL)preparePageLayout:(NSPageLayout *)pageLayout;
+- (void)runPageLayout:(nullable id)sender;
+
+/* **THE ERROR CHAIN APPLE DOCUMENTS: DOCUMENT -> CONTROLLER -> APPLICATION.** `-willPresentError:` is the hook at each
+ * link; the modal form presents in a sheet when there is a window and application-modally otherwise. */
+- (NSError *)willPresentError:(NSError *)error;
+- (BOOL)presentError:(NSError *)error;
+- (void)presentError:(NSError *)error modalForWindow:(nullable NSWindow *)window delegate:(nullable id)delegate
+   didPresentSelector:(nullable SEL)didPresentSelector contextInfo:(nullable void *)contextInfo;
+
+/* ---- SCRIPTING ------------------------------------------------------------------------------------ */
+
+/* **THERE IS NO SCRIPTING SUITE IN THIS TIER**, so the two command handlers REFUSE BY NAME and `-objectSpecifier`
+ * answers nil; a caller porting a scripted document learns that at the call rather than at a link error. */
+- (nullable id)handleCloseScriptCommand:(nullable id)command;
+- (nullable id)handleSaveScriptCommand:(nullable id)command;
+- (nullable id)objectSpecifier;
 
 /* ---- THE CONTROLLER'S ASSOCIATION (cg_) ------------------------------------------------------------ */
 

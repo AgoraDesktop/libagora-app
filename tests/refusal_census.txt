@@ -83,7 +83,7 @@ NSColorList.m                    4
 NSColorSpace.m                   4
 NSComboBoxCell.m                 9
 NSCustomImageRep.m               2
-NSDocument.m                     2
+NSDocument.m                     5
 NSDragging.m                     4
 NSEPSImageRep.m                  2
 NSEvent.m                        11
@@ -111,7 +111,7 @@ NSPopUpButtonCell.m              1
 NSPrintInfo.m                    6
 NSPrintOperation.m               6
 NSProgressIndicator.m            1
-NSResponder.m                    3
+NSResponder.m                    1
 NSRulerView.m                    3
 NSScrollView.m                   1
 NSShadow.m                       1
@@ -128,6 +128,10 @@ NSViewController.m               1
 NSWorkspace.m                       23
 NSWindow.m                       23
 
+# AND THE DOCUMENT SLICE MOVED IT BY ONE NET: +3 in `NSDocument.m` for the scripting trio that refuses by name, and
+# -2 in `NSResponder.m` because the two error-presentation refusals whose reason was "NSAlert is not in this tier" are
+# now REAL presentations — the alert class exists, so the refusal had expired.
+#
 # AND IT ROSE BY FOUR IN THE VIEW'S TAIL, ALL REFUSALS BY NAME: `-lockFocus` and `-unlockFocus` need a lockable
 # per-view graphics-state stack this tier has not got, `-setLayer:` needs a CALayer tree, and the range form of the
 # definition look-up needs the same Dictionary substrate `-showDefinitionForAttributedString:atPoint:` already refuses
@@ -143,4 +147,4 @@ NSWindow.m                       23
 # `fn_refuse_window` spelling was simply invisible to a census that counted the `APPKIT-REFUSE` literal, so every
 # refusal written the house way — which is the way the header asks for — moved no number.
 #
-# total: 386
+# total: 387

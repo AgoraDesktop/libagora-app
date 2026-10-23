@@ -15,8 +15,13 @@
 #import "NSWindow.h"
 #import "NSWindowController.h"
 #import "NSOpenPanel.h"
+#import "NSAlert.h"
+#import "NSApplication.h"
 
 #import <Foundation/NSBundle.h>
+#import <Foundation/NSFileManager.h>
+#import <Foundation/NSProcessInfo.h>
+#import <Foundation/NSTimer.h>
 #import <Foundation/NSDictionary.h>
 #import <Foundation/NSError.h>
 #import <Foundation/NSString.h>
@@ -30,6 +35,29 @@ enum {
 	AGControllerErrorNoType = 2,
 	AGControllerErrorOpen = 3
 };
+
+typedef void (*AGControllerDidCloseAllIMP)(id, SEL, id, BOOL, void *);
+typedef void (*AGControllerDidReviewIMP)(id, SEL, id, BOOL, void *);
+
+/* THE CLOSE-ALL WALK, ASYNCHRONOUS BECAUSE EACH DOCUMENT'S ANSWER MAY BE. The context owns itself until the last
+ * document has answered and the caller's delegate has been messaged. */
+@interface AGControllerCloseAllContext : NSObject
+{
+@public
+	NSDocumentController *_controller;	/* NOT RETAINED: the context is owned by the call it serves */
+	id _delegate;				/* RETAINED while the walk is open */
+	SEL _selector;
+	void *_contextInfo;
+	NSArray *_documents;			/* RETAINED snapshot */
+	NSUInteger _index;
+	BOOL _allClosed;
+}
+- (instancetype)initWithController:(NSDocumentController *)controller delegate:(id)delegate
+			  selector:(SEL)selector contextInfo:(void *)contextInfo documents:(NSArray *)documents;
+- (void)advance;
+- (void)document:(NSDocument *)document shouldClose:(BOOL)shouldClose contextInfo:(void *)contextInfo;
+- (void)finish:(BOOL)allClosed;
+@end
 
 static void fn_controller_error(NSError * _Nullable * _Nullable outError, NSInteger code, NSString *description)
 {
@@ -85,6 +113,69 @@ static BOOL fn_entry_matches_type(NSDictionary *entry, NSString *typeName)
 
 typedef void (*AGControllerDidCloseAllIMP)(id, SEL, id, BOOL, void *);
 
+@implementation AGControllerCloseAllContext
+
+- (instancetype)initWithController:(NSDocumentController *)controller delegate:(id)delegate
+			  selector:(SEL)selector contextInfo:(void *)contextInfo documents:(NSArray *)documents
+{
+	self = [super init];
+	if (self != nil) {
+		_controller = controller;
+		_delegate = [delegate retain];
+		_selector = selector;
+		_contextInfo = contextInfo;
+		_documents = [documents retain];
+		_index = 0;
+		_allClosed = YES;
+	}
+	return self;
+}
+
+- (void)dealloc
+{
+	[_delegate release];
+	[_documents release];
+	[super dealloc];
+}
+
+- (void)advance
+{
+	if (_index >= [_documents count]) {
+		[self finish:_allClosed];
+		return;
+	}
+	{
+		NSDocument *document = [_documents objectAtIndex:_index++];
+
+		[document canCloseDocumentWithDelegate:self shouldCloseSelector:@selector(document:shouldClose:contextInfo:)
+					 contextInfo:NULL];
+	}
+}
+
+- (void)document:(NSDocument *)document shouldClose:(BOOL)shouldClose contextInfo:(void *)contextInfo
+{
+	(void)contextInfo;
+	if (!shouldClose) {
+		_allClosed = NO;
+		[self finish:NO];
+		return;
+	}
+	[document close];
+	[self advance];
+}
+
+- (void)finish:(BOOL)allClosed
+{
+	if (_delegate != nil && _selector != NULL && [_delegate respondsToSelector:_selector]) {
+		AGControllerDidCloseAllIMP imp = (AGControllerDidCloseAllIMP)[_delegate methodForSelector:_selector];
+
+		imp(_delegate, _selector, _controller, allClosed, _contextInfo);
+	}
+	[self release];
+}
+
+@end
+
 @implementation NSDocumentController
 
 /* The first controller made is the shared one, which is Apple's rule and the reason a subclass installed first wins. */
@@ -107,6 +198,12 @@ static NSDocumentController *s_sharedDocumentController = nil;
 		_currentDirectory = nil;
 		_cg_documentTypes = nil;
 		_shouldCreateUI = YES;
+		_autosavingDelay = 0.0;
+		_autosaveTimer = nil;
+		_cgAutosaveRecords = [[NSMutableArray alloc] init];
+		_cgAutosaveIndex = 0;
+		_cgAutosaveDirectoryOverride = nil;
+		_cgErrorPresenter = nil;
 		if (s_sharedDocumentController == nil) {
 			s_sharedDocumentController = self;
 		}
@@ -120,6 +217,12 @@ static NSDocumentController *s_sharedDocumentController = nil;
 	[_recentDocumentURLs release];
 	[_currentDirectory release];
 	[_cg_documentTypes release];
+	if (_autosaveTimer != nil) {
+		[_autosaveTimer invalidate];
+		[_autosaveTimer release];
+	}
+	[_cgAutosaveRecords release];
+	[_cgAutosaveDirectoryOverride release];
 	[super dealloc];
 }
 
@@ -623,30 +726,6 @@ static NSDocumentController *s_sharedDocumentController = nil;
 	[documents release];
 }
 
-- (void)closeAllDocumentsWithDelegate:(id)delegate didCloseAllSelector:(SEL)didCloseAllSelector
-			  contextInfo:(void *)contextInfo
-{
-	BOOL allClosed = ![self hasEditedDocuments];
-
-	/* **NO ALERT YET, SO AN EDITED SET IS LEFT ALONE.** Discarding edits silently would be the one failure mode of a close
-	 * all that a user cannot undo; the delegate is told NO and nothing moves. */
-	if (allClosed) {
-		NSArray *documents = [[NSArray alloc] initWithArray:_documents];
-		NSUInteger i;
-
-		for (i = 0; i < [documents count]; i++) {
-			[[documents objectAtIndex:i] close];
-		}
-		[documents release];
-	}
-	if (delegate != nil && didCloseAllSelector != NULL
-	    && [delegate respondsToSelector:didCloseAllSelector]) {
-		AGControllerDidCloseAllIMP imp = (AGControllerDidCloseAllIMP)[delegate methodForSelector:didCloseAllSelector];
-
-		imp(delegate, didCloseAllSelector, self, allClosed, contextInfo);
-	}
-}
-
 /* ---- RECENT DOCUMENTS ----------------------------------------------------------------------------- */
 
 - (NSUInteger)maximumRecentDocumentCount
@@ -704,5 +783,354 @@ static NSDocumentController *s_sharedDocumentController = nil;
 		|| action == @selector(saveAllDocuments:)
 		|| action == @selector(clearRecentDocuments:);
 }
+
+
+/* ==================================================================================================
+ * AUTOSAVING, CLOSING THE SET, AND THE ERROR CHAIN.
+ * ================================================================================================ */
+
+/* ---- AUTOSAVING ----------------------------------------------------------------------------------- */
+
+- (NSTimeInterval)autosavingDelay
+{
+	return _autosavingDelay;
+}
+
+- (void)setAutosavingDelay:(NSTimeInterval)autosavingDelay
+{
+	if (_autosaveTimer != nil) {
+		[_autosaveTimer invalidate];
+		[_autosaveTimer release];
+		_autosaveTimer = nil;
+	}
+	_autosavingDelay = autosavingDelay;
+	if (autosavingDelay > 0.0) {
+		_autosaveTimer = [[NSTimer scheduledTimerWithTimeInterval:autosavingDelay
+								  target:self
+								selector:@selector(cg_autosaveDocuments:)
+								userInfo:nil
+								 repeats:YES] retain];
+	}
+}
+
+- (void)cg_autosaveDocuments:(NSTimer *)timer
+{
+	NSArray *snapshot = [[NSArray alloc] initWithArray:_documents];
+	NSUInteger i;
+
+	(void)timer;
+	for (i = 0; i < [snapshot count]; i++) {
+		NSDocument *document = [snapshot objectAtIndex:i];
+
+		if ([document hasUnautosavedChanges] && [document autosavingFileType] != nil) {
+			[document autosaveDocumentWithDelegate:nil didAutosaveSelector:NULL contextInfo:NULL];
+		}
+	}
+	[snapshot release];
+}
+
+static NSString *fn_autosave_process_name(void)
+{
+	NSString *name = [[NSProcessInfo processInfo] processName];
+
+	if (name == nil || [name length] == 0) {
+		return @"Agora";
+	}
+	return [name stringByReplacingOccurrencesOfString:@"/" withString:@"-"];
+}
+
+static NSString *fn_autosave_default_directory(void)
+{
+	NSFileManager *manager = [NSFileManager defaultManager];
+	NSString *path = [NSHomeDirectory() stringByAppendingPathComponent:@"Library/Autosave"];
+
+	if (![manager createDirectoryAtPath:path withIntermediateDirectories:YES attributes:nil error:NULL]) {
+		path = [NSTemporaryDirectory() stringByAppendingPathComponent:@"Agora-Autosave"];
+		if (![manager createDirectoryAtPath:path withIntermediateDirectories:YES attributes:nil error:NULL]) {
+			path = @"/tmp/Agora-Autosave";
+			(void)[manager createDirectoryAtPath:path withIntermediateDirectories:YES attributes:nil error:NULL];
+		}
+	}
+	return path;
+}
+
+- (NSString *)cg_autosaveDirectory
+{
+	return (_cgAutosaveDirectoryOverride != nil) ? _cgAutosaveDirectoryOverride : fn_autosave_default_directory();
+}
+
+- (NSURL *)cg_autosaveRegistryURL
+{
+	NSString *name = [NSString stringWithFormat:@"Agora-%@.plist", fn_autosave_process_name()];
+
+	return [NSURL fileURLWithPath:[[self cg_autosaveDirectory] stringByAppendingPathComponent:name]];
+}
+
+- (void)cg_setAutosaveDirectoryPath:(NSString *)path
+{
+	NSString *copy = [path copy];
+
+	[_cgAutosaveDirectoryOverride release];
+	_cgAutosaveDirectoryOverride = copy;
+}
+
++ (NSString *)cg_defaultAutosaveRegistryPath
+{
+	NSString *name = [NSString stringWithFormat:@"Agora-%@.plist", fn_autosave_process_name()];
+
+	return [fn_autosave_default_directory() stringByAppendingPathComponent:name];
+}
+
++ (BOOL)cg_hasAutosavedDocumentsToReopen
+{
+	return [[NSFileManager defaultManager] fileExistsAtPath:[self cg_defaultAutosaveRegistryPath]];
+}
+
+- (void)cg_persistAutosaveRecords
+{
+	(void)[_cgAutosaveRecords writeToURL:[self cg_autosaveRegistryURL] error:NULL];
+}
+
+- (void)cg_recordAutosaveForDocument:(NSDocument *)document
+{
+	NSURL *contents = [document autosavedContentsFileURL];
+	NSURL *documentURL = [document fileURL];
+	NSString *contentsPath = [contents path];
+	NSString *documentPath = [documentURL path];
+	NSMutableArray *kept = [NSMutableArray array];
+	NSUInteger i;
+
+	if (contentsPath == nil) {
+		return;
+	}
+	for (i = 0; i < [_cgAutosaveRecords count]; i++) {
+		NSDictionary *record = [_cgAutosaveRecords objectAtIndex:i];
+		NSString *recordContents = [record objectForKey:@"contentsURL"];
+		NSString *recordDocument = [record objectForKey:@"documentURL"];
+
+		if ([recordContents isEqual:contentsPath]
+		    || (documentPath != nil && [recordDocument isEqual:documentPath])) {
+			continue;
+		}
+		[kept addObject:record];
+	}
+	{
+		NSMutableDictionary *record = [NSMutableDictionary dictionary];
+
+		[record setObject:contentsPath forKey:@"contentsURL"];
+		if (documentPath != nil) {
+			[record setObject:documentPath forKey:@"documentURL"];
+		}
+		[kept addObject:record];
+	}
+	[_cgAutosaveRecords setArray:kept];
+	[self cg_persistAutosaveRecords];
+}
+
+- (void)cg_forgetAutosaveForDocument:(NSDocument *)document
+{
+	NSURL *contents = [document autosavedContentsFileURL];
+	NSURL *documentURL = [document fileURL];
+	NSString *contentsPath = [contents path];
+	NSString *documentPath = [documentURL path];
+	NSMutableArray *kept = [NSMutableArray array];
+	NSUInteger i;
+
+	for (i = 0; i < [_cgAutosaveRecords count]; i++) {
+		NSDictionary *record = [_cgAutosaveRecords objectAtIndex:i];
+		NSString *recordContents = [record objectForKey:@"contentsURL"];
+		NSString *recordDocument = [record objectForKey:@"documentURL"];
+
+		if ((contentsPath != nil && [recordContents isEqual:contentsPath])
+		    || (documentPath != nil && [recordDocument isEqual:documentPath])) {
+			continue;
+		}
+		[kept addObject:record];
+	}
+	[_cgAutosaveRecords setArray:kept];
+	[self cg_persistAutosaveRecords];
+}
+
+- (NSURL *)cg_autosaveURLForDocument:(NSDocument *)document typeName:(NSString *)typeName
+{
+	NSString *extension = [document fileNameExtensionForType:typeName saveOperation:NSAutosaveOperation];
+	NSString *name;
+	NSString *path;
+
+	if (extension == nil || [extension length] == 0) {
+		extension = @"autosave";
+	}
+	name = [NSString stringWithFormat:@"Agora-%@-%lu.%@", fn_autosave_process_name(),
+						 (unsigned long)_cgAutosaveIndex++, extension];
+	path = [[self cg_autosaveDirectory] stringByAppendingPathComponent:name];
+	return [NSURL fileURLWithPath:path];
+}
+
+- (void)cg_reopenAutosavedDocuments
+{
+	NSArray *records = [NSArray arrayWithContentsOfURL:[self cg_autosaveRegistryURL] error:NULL];
+	NSMutableArray *keep = [NSMutableArray array];
+	NSUInteger i;
+
+	for (i = 0; records != nil && i < [records count]; i++) {
+		NSDictionary *record = [records objectAtIndex:i];
+		NSString *contentsPath = [record objectForKey:@"contentsURL"];
+		NSString *documentPath = [record objectForKey:@"documentURL"];
+		NSFileManager *manager = [NSFileManager defaultManager];
+
+		if (contentsPath == nil || ![manager fileExistsAtPath:contentsPath]) {
+			continue;
+		}
+		{
+			NSURL *documentURL = (documentPath != nil) ? [NSURL fileURLWithPath:documentPath] : nil;
+			NSError *error = nil;
+
+			if (![self reopenDocumentForURL:documentURL withContentsOfURL:[NSURL fileURLWithPath:contentsPath]
+						  error:&error]) {
+				continue;	/* a stale record is dropped rather than retried for ever */
+			}
+		}
+		[keep addObject:record];
+	}
+	[_cgAutosaveRecords setArray:keep];
+	[self cg_persistAutosaveRecords];
+}
+
+/* ---- CLOSING THE SET ------------------------------------------------------------------------------ */
+
+- (void)closeAllDocumentsWithDelegate:(id)delegate didCloseAllSelector:(SEL)didCloseAllSelector
+			  contextInfo:(void *)contextInfo
+{
+	NSArray *documents = [[NSArray alloc] initWithArray:_documents];
+	AGControllerCloseAllContext *context = [[AGControllerCloseAllContext alloc] initWithController:self
+											      delegate:delegate
+											      selector:didCloseAllSelector
+											   contextInfo:contextInfo
+											     documents:documents];
+
+	[documents release];
+	[context advance];	/* the context releases itself when the walk ends */
+}
+
+/* **THE REVIEW IS THE MULTI-DOCUMENT LAYER OVER THE SAME WALK.** One edited document is the document's own question;
+ * several get the application-modal Save All/Cancel/Don't Save alert first. */
+- (void)reviewUnsavedDocumentsWithAlertTitle:(NSString *)title cancellable:(BOOL)cancellable
+				    delegate:(id)delegate didReviewAllSelector:(SEL)didReviewAllSelector
+				 contextInfo:(void *)contextInfo
+{
+	NSInteger edited = 0;
+	NSUInteger i;
+
+	(void)title;
+	if (![self hasEditedDocuments]) {
+		if (delegate != nil && didReviewAllSelector != NULL && [delegate respondsToSelector:didReviewAllSelector]) {
+			AGControllerDidReviewIMP imp = (AGControllerDidReviewIMP)[delegate methodForSelector:didReviewAllSelector];
+
+			imp(delegate, didReviewAllSelector, self, YES, contextInfo);
+		}
+		return;
+	}
+	for (i = 0; i < [_documents count]; i++) {
+		if ([[_documents objectAtIndex:i] isDocumentEdited]) {
+			edited++;
+		}
+	}
+	if (edited <= 1) {
+		[self closeAllDocumentsWithDelegate:delegate didCloseAllSelector:didReviewAllSelector contextInfo:contextInfo];
+		return;
+	}
+	{
+		NSAlert *alert = [NSAlert alertWithMessageText:@"There are unsaved documents."
+						defaultButton:@"Save All"
+					      alternateButton:(cancellable ? @"Cancel" : nil)
+						  otherButton:@"Don't Save"
+					    informativeTextWithFormat:@"Your changes will be lost if you don't save them."];
+		NSInteger code = [alert runModal];
+		BOOL cancel = (cancellable && code == NSAlertSecondButtonReturn);
+		BOOL doNotSave = (!cancellable && code == NSAlertSecondButtonReturn)
+			|| (cancellable && code == NSAlertThirdButtonReturn);
+
+		if (cancel || (code != NSAlertFirstButtonReturn && !doNotSave)) {
+			if (delegate != nil && didReviewAllSelector != NULL
+			    && [delegate respondsToSelector:didReviewAllSelector]) {
+				AGControllerDidReviewIMP imp =
+					(AGControllerDidReviewIMP)[delegate methodForSelector:didReviewAllSelector];
+
+				imp(delegate, didReviewAllSelector, self, NO, contextInfo);
+			}
+			return;
+		}
+		if (code == NSAlertFirstButtonReturn) {
+			[self saveAllDocuments:nil];
+		} else {
+			for (i = 0; i < [_documents count]; i++) {
+				[[_documents objectAtIndex:i] updateChangeCount:NSChangeCleared];
+			}
+		}
+		[self closeAllDocumentsWithDelegate:delegate didCloseAllSelector:didReviewAllSelector contextInfo:contextInfo];
+	}
+}
+
+/* ---- THE ALIASES AND THE ERROR CHAIN --------------------------------------------------------------- */
+
+- (id)makeUntitledDocumentOfType:(NSString *)typeName
+{
+	return [self makeUntitledDocumentOfType:typeName error:NULL];
+}
+
+- (NSArray *)fileNamesFromRunningOpenPanel
+{
+	NSArray *urls = [self URLsFromRunningOpenPanel];
+	NSMutableArray *paths = [NSMutableArray array];
+	NSUInteger i;
+
+	for (i = 0; i < [urls count]; i++) {
+		NSString *path = [[urls objectAtIndex:i] path];
+
+		if (path != nil) {
+			[paths addObject:path];
+		}
+	}
+	return paths;
+}
+
+- (NSError *)willPresentError:(NSError *)error
+{
+	return error;
+}
+
+- (id)cg_errorPresenter
+{
+	return (_cgErrorPresenter != nil) ? _cgErrorPresenter : (id)[NSApplication sharedApplication];
+}
+
+- (void)cg_setErrorPresenter:(id)presenter
+{
+	_cgErrorPresenter = presenter;	/* NOT RETAINED: the test owns it for the call */
+}
+
+- (BOOL)presentError:(NSError *)error
+{
+	NSError *custom = [self willPresentError:error];
+	id presenter = [self cg_errorPresenter];
+
+	if ([presenter respondsToSelector:@selector(presentError:)]) {
+		return [presenter presentError:custom];
+	}
+	return NO;
+}
+
+- (void)presentError:(NSError *)error modalForWindow:(NSWindow *)window delegate:(id)delegate
+   didPresentSelector:(SEL)didPresentSelector contextInfo:(void *)contextInfo
+{
+	NSError *custom = [self willPresentError:error];
+	id presenter = [self cg_errorPresenter];
+
+	if ([presenter respondsToSelector:@selector(presentError:modalForWindow:delegate:didPresentSelector:contextInfo:)]) {
+		[presenter presentError:custom modalForWindow:window delegate:delegate
+		      didPresentSelector:didPresentSelector contextInfo:contextInfo];
+	}
+}
+
 
 @end

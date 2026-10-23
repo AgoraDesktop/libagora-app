@@ -26,6 +26,7 @@
 #import <AppKit/NSDocumentController.h>
 #import <AppKit/NSWindow.h>
 #import <AppKit/NSWindowController.h>
+#import <AppKit/NSAlert.h>
 #import <Foundation/Foundation.h>
 
 #include <stdio.h>
@@ -33,6 +34,11 @@
 #include <unistd.h>
 
 static int failures;
+
+/* THE PRIVATE CLOSE SEAM: a positive alert return code answers the close question without a panel. */
+@interface NSDocument (AGTestCloseDecision)
+- (void)setCloseDecision:(NSInteger)code;
+@end
 
 static void check(int ok, const char *what)
 {
@@ -415,12 +421,19 @@ int main(void)
 			[second setText:@"edited too"];
 			[second updateChangeCount:NSChangeDone];
 			check([controller hasEditedDocuments], "the controller sees an edited document");
+			/* THE USER CANCELS THE FIRST DOCUMENT'S CLOSE ALERT, so the walk stops there; the seam is the
+			 * alert's return code without a panel. */
+			[document setCloseDecision:NSAlertSecondButtonReturn];
+			[second setCloseDecision:NSAlertSecondButtonReturn];
 			[controller closeAllDocumentsWithDelegate:watcher
 				       didCloseAllSelector:@selector(controller:didCloseAll:contextInfo:)
 					      contextInfo:NULL];
 			check(watcher->closeCalls == 1 && watcher->closedAll == 0,
 			      "closing all refuses while a document is edited, and says so");
-			check([[controller documents] count] == 3, "and nothing was closed");
+			/* THE WALK CLOSES THE UNEDITED DOCUMENT BEFORE IT REACHES THE EDITED ONE, then stops on the
+			 * cancellation — Apple's close-all is a walk, not a transaction. */
+			check([[controller documents] count] == 2,
+			      "the unedited document before the refusal closed, and the edited one did not");
 
 			[document updateChangeCount:NSChangeCleared];
 			[second updateChangeCount:NSChangeCleared];

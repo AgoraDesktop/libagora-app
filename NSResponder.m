@@ -36,6 +36,9 @@
  */
 #import <AppKit/NSResponder.h>
 #import <AppKit/NSTextInputContext.h>
+#import <AppKit/NSAlert.h>
+#import <AppKit/NSApplication.h>
+#import <AppKit/NSWindow.h>
 
 #include "AppKitRefusal.h"	/* fn_refuse_window — the one refusal message, in one place. */
 
@@ -43,6 +46,50 @@
  * HEADER. A responder that is not a view does not answer it, which the guard in `-interpretKeyEvents:` allows for. */
 @interface NSResponder (FNInputContext)
 - (nullable id)inputContext;
+@end
+
+typedef void (*AGErrorDidPresentIMP)(id, SEL, BOOL, void *);
+
+@interface AGErrorPresentationContext : NSObject
+{
+@public
+	id _delegate;
+	SEL _selector;
+	void *_contextInfo;
+}
+- (instancetype)initWithDelegate:(id)delegate selector:(SEL)selector contextInfo:(void *)contextInfo;
+- (void)finish;
+@end
+
+@implementation AGErrorPresentationContext
+
+- (instancetype)initWithDelegate:(id)delegate selector:(SEL)selector contextInfo:(void *)contextInfo
+{
+	self = [super init];
+	if (self != nil) {
+		_delegate = [delegate retain];
+		_selector = selector;
+		_contextInfo = contextInfo;
+	}
+	return self;
+}
+
+- (void)dealloc
+{
+	[_delegate release];
+	[super dealloc];
+}
+
+- (void)finish
+{
+	if (_delegate != nil && _selector != NULL && [_delegate respondsToSelector:_selector]) {
+		AGErrorDidPresentIMP imp = (AGErrorDidPresentIMP)[_delegate methodForSelector:_selector];
+
+		imp(_delegate, _selector, NO, _contextInfo);
+	}
+	[self release];
+}
+
 @end
 
 @implementation NSResponder
@@ -419,12 +466,20 @@ static NSString * const AGCoderMenuKey = @"menu";
 	if ([self nextResponder] != nil) {
 		return [[self nextResponder] presentError:custom];
 	}
-	/* AND WHERE THE CHAIN ENDS THIS TIER CANNOT FINISH THE JOB: Apple's own last step puts the error in an
-	 * NSAlert and begins it as a sheet, and NSAlert is a class this tier has not got. NO means "not
-	 * presented", so a caller can tell a refusal from a presentation. */
-	fn_refuse_window("-presentError:", "an alert to present the error in (NSAlert is not in this tier)");
-	return NO;
+	/* **THE END OF THE CHAIN PRESENTS THE ERROR NOW.** `NSAlert` exists, so the last responder builds an alert
+	 * from the error — its localized description, failure reason and recovery options are the alert factory's —
+	 * and runs it. */
+	{
+		NSAlert *alert = [NSAlert alertWithError:custom];
+
+		(void)[alert runModal];
+		return YES;	/* the alert was presented; this tier has no recovery delegate to report */
+	}
 }
+
+/* **THE END OF THE CHAIN PRESENTS THE MODAL FORM TOO.** A window gets a sheet; a windowless call gets the
+ * application-modal alert. The caller's `didPresentSelector` receives `didRecover:NO` — this tier has no recovery
+ * delegate to attempt a recovery option with, which is the honest answer rather than a second recovery model. */
 
 - (void)presentError:(NSError *)error
        modalForWindow:(NSWindow *)window
@@ -432,19 +487,38 @@ static NSString * const AGCoderMenuKey = @"menu";
    didPresentSelector:(SEL)didPresentSelector
 	contextInfo:(void *)contextInfo
 {
-	/* THE MODAL FORM IS THE SAME SHAPE and is refused in the same place — at the END of the chain, so a
-	 * responder that CAN present (none in this tier can yet) would have taken it first. Handing an alert to
-	 * a sheet is what the window layer would do; what is missing is the alert, not the sheet. */
+	NSError *custom = [self willPresentError:error];
+
 	if ([self nextResponder] != nil) {
-		[[self nextResponder] presentError:error
+		[[self nextResponder] presentError:custom
 				    modalForWindow:window
 					  delegate:delegate
 				didPresentSelector:didPresentSelector
 				       contextInfo:contextInfo];
 		return;
 	}
-	fn_refuse_window("-presentError:modalForWindow:delegate:didPresentSelector:contextInfo:",
-			 "an alert to present the error in (NSAlert is not in this tier)");
+	{
+		NSAlert *alert = [NSAlert alertWithError:custom];
+		AGErrorPresentationContext *context = [[AGErrorPresentationContext alloc] initWithDelegate:delegate
+												 selector:didPresentSelector
+											      contextInfo:contextInfo];
+
+		if (window != nil && [[NSApplication sharedApplication] isRunning]) {
+			[alert beginSheetModalForWindow:window modalDelegate:self
+					  didEndSelector:@selector(cg_errorAlertDidEnd:returnCode:contextInfo:)
+					     contextInfo:context];
+			return;
+		}
+		(void)[alert runModal];
+		[context finish];
+	}
+}
+
+- (void)cg_errorAlertDidEnd:(NSAlert *)alert returnCode:(NSInteger)code contextInfo:(void *)contextInfo
+{
+	(void)alert;
+	(void)code;
+	[(AGErrorPresentationContext *)contextInfo finish];
 }
 
 /* ------------------------------------------------------------------------- */

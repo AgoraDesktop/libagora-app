@@ -375,6 +375,8 @@ typedef NSUInteger NSWindowSharingType;
 	BOOL _cg_resizePending;
 	NSInteger _cg_windowNumber; /* Apple's window number, assigned when the AGWindow is made; -1 before */
 	BOOL _cg_closeRequested; /* the compositor asked the window to close; acted on in the pump */
+	/* ONCE THE DOCUMENT HAS APPROVED THE CLOSE, the second `-performClose:` pass skips asking it again. */
+	BOOL _cg_documentCloseApproved;
 	NSRect _frame;          /* COCOA's coordinates: bottom-left origin */
 	/* THE PLACE THE WINDOW HAD BEFORE IT ZOOMED, and whether it is zoomed — the pair is the whole state of
 	 * `-zoom:`, because Apple's zoom ALTERNATES between the user's frame and the standard one. */

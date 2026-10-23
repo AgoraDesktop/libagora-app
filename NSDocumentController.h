@@ -20,15 +20,17 @@
  * doors (`-noteNewRecentDocumentURL:`, `-recentDocumentURLs`, `-clearRecentDocuments:`, `-maximumRecentDocumentCount`) are
  * real and are what the persistence and the menu will be built on.
  *
- * **CLOSING ALL IS SAFE, NOT CLEVER.** With no unsaved-changes alert in this tier, `-closeAllDocumentsWithDelegate:…` will
- * not silently discard an edited document: if any document is edited it closes NONE and tells the delegate NO. When the
- * alert exists, that branch becomes the alert.
+ * **CLOSING ALL IS A WALK, AND THE DOCUMENT OWNS THE QUESTION.** `-closeAllDocumentsWithDelegate:…` asks each open
+ * document's `-canCloseDocumentWithDelegate:…` in order, closing the ones that answer YES and stopping at the first NO;
+ * `-reviewUnsavedDocumentsWithAlertTitle:…` adds the multi-document Save All/Cancel/Don't Save alert above that walk.
+ * An unedited document before a refusal is closed, because the walk is not a transaction.
  */
 #ifndef APPKIT_NSDOCUMENTCONTROLLER_H
 #define APPKIT_NSDOCUMENTCONTROLLER_H
 
 #import <Foundation/NSObject.h>
 #import <Foundation/NSArray.h>
+#import <Foundation/NSDate.h>
 #import <AppKit/NSUserInterfaceValidation.h>
 
 NS_ASSUME_NONNULL_BEGIN
@@ -42,6 +44,15 @@ NS_ASSUME_NONNULL_BEGIN
 	NSString *_currentDirectory;		/* RETAINED, or nil: the last directory an open/save touched */
 	NSArray *_cg_documentTypes;		/* RETAINED: the Info.plist entries, read once */
 	BOOL _shouldCreateUI;			/* stored; this tier always shows the UI it makes */
+	/* **THE AUTOSAVE TIMER AND THE CRASH-TIME REGISTRY.** `_autosavingDelay` is Apple's interval (0 disables); the
+	 * registry is the list of documents whose autosaved contents should be reopened at launch. */
+	NSTimeInterval _autosavingDelay;
+	id _autosaveTimer;			/* RETAINED while scheduled */
+	NSMutableArray *_cgAutosaveRecords;	/* RETAINED: dictionaries with documentURL/contentsURL */
+	NSUInteger _cgAutosaveIndex;
+	NSString *_cgAutosaveDirectoryOverride;	/* RETAINED: a test seam, else nil */
+	/* A TEST SEAM for the error chain: nil means the application. */
+	id _cgErrorPresenter;			/* NOT RETAINED */
 }
 
 /* ---- THE SHARED CONTROLLER ------------------------------------------------------------------------ */
@@ -66,11 +77,15 @@ NS_ASSUME_NONNULL_BEGIN
 					error:(NSError * _Nullable * _Nullable)outError;
 - (nullable id)makeUntitledDocumentOfType:(NSString *)typeName
 				    error:(NSError * _Nullable * _Nullable)outError;
+/* THE 10.3 SPELLING: the same document without the error out-parameter. */
+- (nullable id)makeUntitledDocumentOfType:(NSString *)typeName;
 
 /* **THE OPEN PANEL'S ACTION, AND THE TWO DOORS UNDER IT.** `-openDocument:` asks `-URLsFromRunningOpenPanel` and opens
  * each answer; a caller that has a panel of its own can use `-runModalOpenPanel:forTypes:` and read `-URLs` itself. */
 - (void)openDocument:(nullable id)sender;
 - (NSArray *)URLsFromRunningOpenPanel;
+/* THE 10.3 SPELLING: the paths of the URLs the open panel answered. */
+- (NSArray *)fileNamesFromRunningOpenPanel;
 - (NSInteger)runModalOpenPanel:(NSOpenPanel *)openPanel forTypes:(nullable NSArray *)types;
 
 - (nullable id)openDocumentWithContentsOfURL:(NSURL *)absoluteURL
@@ -94,6 +109,31 @@ NS_ASSUME_NONNULL_BEGIN
 - (void)closeAllDocumentsWithDelegate:(nullable id)delegate
 		  didCloseAllSelector:(nullable SEL)didCloseAllSelector
 			  contextInfo:(nullable void *)contextInfo;
+/* **THE MULTI-DOCUMENT REVIEW AT QUIT TIME.** One edited document is handed to the document's own close confirmation;
+ * several get the application-modal Save All/Cancel/Don't Save alert first. `cancellable:NO` removes Cancel, which is
+ * what an unconditional quit path wants. */
+- (void)reviewUnsavedDocumentsWithAlertTitle:(nullable NSString *)title
+				  cancellable:(BOOL)cancellable
+				     delegate:(nullable id)delegate
+		       didReviewAllSelector:(nullable SEL)didReviewAllSelector
+				  contextInfo:(nullable void *)contextInfo;
+
+/* ---- AUTOSAVING ----------------------------------------------------------------------------------- */
+
+/* **THE TIMER IS THE CONTROLLER'S.** Apple's `-autosavingDelay` is the interval between passes over the open documents;
+ * 0 (the default) disables it. A document is autosaved only when `-hasUnautosavedChanges` is YES and its
+ * `-autosavingFileType` is not nil. */
+- (NSTimeInterval)autosavingDelay;
+- (void)setAutosavingDelay:(NSTimeInterval)autosavingDelay;
+
+/* ---- ERROR PRESENTATION --------------------------------------------------------------------------- */
+
+/* **THE CONTROLLER IS THE DOCUMENT'S NEXT LINK.** `-willPresentError:` is the hook; the two present doors forward to
+ * the application (which is the end of the chain), or to the test seam when one is set. */
+- (NSError *)willPresentError:(NSError *)error;
+- (BOOL)presentError:(NSError *)error;
+- (void)presentError:(NSError *)error modalForWindow:(nullable NSWindow *)window delegate:(nullable id)delegate
+   didPresentSelector:(nullable SEL)didPresentSelector contextInfo:(nullable void *)contextInfo;
 
 /* ---- RECENT DOCUMENTS ----------------------------------------------------------------------------- */
 

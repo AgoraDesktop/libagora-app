@@ -24,6 +24,7 @@
 #import "NSPrintInfo.h"
 #import "NSPrintOperation.h"
 #import "NSPageLayout.h"
+#import "NSAlert.h"
 #import "NSView.h"
 
 #import <Foundation/NSData.h>
@@ -76,11 +77,101 @@ static NSDate *fn_modification_date(NSURL *url)
  * than through `-performSelector:` (which cannot carry a BOOL and a void *) or `NSInvocation` (which in this tier refuses
  * a 32-byte argument — `NSCustomImageRep`'s finding). */
 typedef void (*AGDocumentDidSaveIMP)(id, SEL, id, BOOL, void *);
+typedef void (*AGDocumentShouldCloseIMP)(id, SEL, id, BOOL, void *);
+typedef void (*AGDocumentDidPresentIMP)(id, SEL, BOOL, void *);
+typedef void (*AGDocumentDidReviewIMP)(id, SEL, id, BOOL, void *);
+typedef void (*AGDocumentDidLayoutIMP)(id, SEL, id, NSInteger, void *);
+
+/* **THE CLOSE DECISION'S CONTEXT.** The delegate and its selector must survive an asynchronous sheet, so this object
+ * retains the delegate for the duration and releases itself when the answer is delivered. The caller allocates one
+ * and hands it over; it does NOT release it. */
+@interface AGDocumentCloseContext : NSObject
+{
+@public
+	id _delegate;		/* RETAINED while the question is open */
+	SEL _selector;
+	void *_contextInfo;
+}
+- (instancetype)initWithDelegate:(id)delegate selector:(SEL)selector contextInfo:(void *)contextInfo;
+- (void)finishWithDocument:(NSDocument *)document shouldClose:(BOOL)shouldClose;
+@end
+
+/* THE SAVE-BEFORE-CLOSE BRIDGE: one context for the save, holding the close context. */
+@interface AGDocumentSaveCloseContext : NSObject
+{
+@public
+	AGDocumentCloseContext *_closeContext;	/* RETAINED */
+}
+- (instancetype)initWithCloseContext:(AGDocumentCloseContext *)closeContext;
+- (void)document:(NSDocument *)document didSave:(BOOL)ok contextInfo:(void *)contextInfo;
+@end
 
 /* THE UNDO OBSERVERS, declared before the implementation that registers them. */
 @interface NSDocument (AGPrivate)
+- (void)cg_closeAlertDidEnd:(NSAlert *)alert returnCode:(NSInteger)code contextInfo:(void *)contextInfo;
+- (void)cg_finishCloseWithCode:(NSInteger)code context:(AGDocumentCloseContext *)context;
+- (void)cg_pageLayoutDidRun:(NSDocument *)document accepted:(NSInteger)code contextInfo:(void *)contextInfo;
+- (void)cg_removeAutosavedContentsFile;
+- (void)setCloseDecision:(NSInteger)code;
+- (void)cg_noteSavePanelResult:(NSSavePanel *)panel;
 - (void)cg_undoManagerDidUndo:(NSNotification *)notification;
 - (void)cg_undoManagerDidRedo:(NSNotification *)notification;
+@end
+
+@implementation AGDocumentCloseContext
+
+- (instancetype)initWithDelegate:(id)delegate selector:(SEL)selector contextInfo:(void *)contextInfo
+{
+	self = [super init];
+	if (self != nil) {
+		_delegate = [delegate retain];
+		_selector = selector;
+		_contextInfo = contextInfo;
+	}
+	return self;
+}
+
+- (void)dealloc
+{
+	[_delegate release];
+	[super dealloc];
+}
+
+- (void)finishWithDocument:(NSDocument *)document shouldClose:(BOOL)shouldClose
+{
+	if (_delegate != nil && _selector != NULL && [_delegate respondsToSelector:_selector]) {
+		AGDocumentShouldCloseIMP imp = (AGDocumentShouldCloseIMP)[_delegate methodForSelector:_selector];
+
+		imp(_delegate, _selector, document, shouldClose, _contextInfo);
+	}
+	[self release];	/* the context owns itself for the duration; this is the matching release */
+}
+
+@end
+
+@implementation AGDocumentSaveCloseContext
+
+- (instancetype)initWithCloseContext:(AGDocumentCloseContext *)closeContext
+{
+	self = [super init];
+	if (self != nil) {
+		_closeContext = [closeContext retain];
+	}
+	return self;
+}
+
+- (void)dealloc
+{
+	[_closeContext release];
+	[super dealloc];
+}
+
+- (void)document:(NSDocument *)document didSave:(BOOL)ok contextInfo:(void *)contextInfo
+{
+	(void)contextInfo;
+	[_closeContext finishWithDocument:document shouldClose:ok];
+}
+
 @end
 
 @implementation NSDocument
@@ -102,6 +193,13 @@ typedef void (*AGDocumentDidSaveIMP)(id, SEL, id, BOOL, void *);
 		 * manager never pays for one; one that asks gets it, and then the observers that move the change count. */
 		_hasUndoManager = YES;
 		_cg_documentController = nil;
+		_autosavedContentsFileURL = nil;
+		_hasUnautosavedChanges = NO;
+		_lastComponentOfFileName = nil;
+		_fileTypeFromLastRunSavePanel = nil;
+		_fileNameExtensionWasHidden = NO;
+		_cgSavePanelHasRun = NO;
+		_cgCloseDecision = -1;
 	}
 	return self;
 }
@@ -112,6 +210,9 @@ typedef void (*AGDocumentDidSaveIMP)(id, SEL, id, BOOL, void *);
 	[_fileURL release];
 	[_fileType release];
 	[_fileModificationDate release];
+	[_autosavedContentsFileURL release];
+	[_lastComponentOfFileName release];
+	[_fileTypeFromLastRunSavePanel release];
 	[_windowControllers release];
 	[super dealloc];
 }
@@ -165,6 +266,11 @@ typedef void (*AGDocumentDidSaveIMP)(id, SEL, id, BOOL, void *);
 	[self setFileURL:absoluteDocumentURL];
 	[self setFileType:typeName];
 	[self setFileModificationDate:fn_modification_date(absoluteDocumentContentsURL)];
+	/* **THE CONTENTS URL IS THE AUTOSAVE URL WHEN THE TWO DIFFER.** Apple's designated initialiser records it, and the
+	 * record is what lets a later save delete the obsolete file; when they are equal there is no separate autosave. */
+	if (absoluteDocumentURL == nil || ![absoluteDocumentURL isEqual:absoluteDocumentContentsURL]) {
+		[self setAutosavedContentsFileURL:absoluteDocumentContentsURL];
+	}
 	/* **A DOCUMENT REOPENED FROM SOMEWHERE ELSE IS EDITED** — it cannot be in sync with its own file until it is saved. */
 	[self updateChangeCount:((absoluteDocumentURL != nil && [absoluteDocumentURL isEqual:absoluteDocumentContentsURL])
 		? NSChangeCleared : NSChangeReadOtherContents)];
@@ -196,9 +302,18 @@ typedef void (*AGDocumentDidSaveIMP)(id, SEL, id, BOOL, void *);
 - (void)setFileURL:(NSURL *)absoluteURL
 {
 	NSURL *held = [absoluteURL retain];
+	NSString *name = nil;
 
 	[_fileURL release];
 	_fileURL = held;
+	/* **THE DISPLAYED NAME FOLLOWS THE URL UNLESS A CALLER SETS ONE EXPLICITLY.** A save to a new URL is a new name;
+	 * a save panel that hid the extension is handled by `-displayName` from the separate flag. */
+	if (_fileURL != nil) {
+		name = [[_fileURL path] lastPathComponent];
+	}
+	[name retain];
+	[_lastComponentOfFileName release];
+	_lastComponentOfFileName = name;
 }
 
 - (NSURL *)fileURL { return _fileURL; }
@@ -455,26 +570,33 @@ originalContentsURL:(NSURL *)absoluteOriginalContentsURL
 	if (![self writeSafelyToURL:absoluteURL ofType:typeName forSaveOperation:saveOperation error:outError]) {
 		return NO;
 	}
-	/* **AN EXPORT IS A COPY, NOT THE DOCUMENT'S FILE.** `NSSaveToOperation` writes where the panel said and stops: the
-	 * document keeps its URL and type, stays edited if it was, and is not noted as recent. Only a save or save-as makes
-	 * the written file the document's own. */
+	/* **AN AUTOSAVE IS A SEPARATE COPY, NOT THE DOCUMENT'S FILE.** The written URL becomes `-autosavedContentsFileURL`
+	 * and the on-disk revision the document's own URL still points at is untouched; the document is still edited (the
+	 * autosave merely makes the crash recovery copy current). */
+	if (saveOperation == NSAutosaveOperation) {
+		[self setAutosavedContentsFileURL:absoluteURL];
+		[self updateChangeCount:NSChangeAutosaved];
+		return YES;
+	}
+	/* **AND AN EXPORT IS A COPY TOO.** `NSSaveToOperation` writes where the panel said and stops: the document keeps
+	 * its URL and type, stays edited if it was, and is not noted as recent. */
 	if (saveOperation == NSSaveToOperation) {
 		return YES;
 	}
+	/* **A REAL SAVE MAKES THE AUTOSAVE OBSOLETE.** Delete it before the new URL becomes the document's own. */
+	[self cg_removeAutosavedContentsFile];
 	[self setFileURL:absoluteURL];
 	[self setFileType:typeName];
 	[self setFileModificationDate:fn_modification_date(absoluteURL)];
-	[self updateChangeCount:(saveOperation == NSAutosaveOperation) ? NSChangeAutosaved : NSChangeCleared];
-	if (saveOperation != NSAutosaveOperation) {
+	[self updateChangeCount:NSChangeCleared];
+	{
 		/* **THE RECENT LIST IS THE OWNING CONTROLLER'S.** A document made by a controller made by hand belongs to that
 		 * controller, not to the shared one; the shared one is only the fallback for a document nobody added. */
-		{
-			id owner = (_cg_documentController != nil) ? _cg_documentController
-								  : [NSDocumentController sharedDocumentController];
+		id owner = (_cg_documentController != nil) ? _cg_documentController
+							  : [NSDocumentController sharedDocumentController];
 
-			if ([owner respondsToSelector:@selector(noteNewRecentDocument:)]) {
-				[owner noteNewRecentDocument:self];
-			}
+		if ([owner respondsToSelector:@selector(noteNewRecentDocument:)]) {
+			[owner noteNewRecentDocument:self];
 		}
 	}
 	return YES;
@@ -570,13 +692,15 @@ originalContentsURL:(NSURL *)absoluteOriginalContentsURL
 
 	if (_fileURL != nil) {
 		directory = [[_fileURL path] stringByDeletingLastPathComponent];
-		name = [[_fileURL path] lastPathComponent];
+		name = (_lastComponentOfFileName != nil && [_lastComponentOfFileName length] > 0)
+			? _lastComponentOfFileName : [[_fileURL path] lastPathComponent];
 	} else {
 		id controller = (_cg_documentController != nil) ? _cg_documentController
 							       : [NSDocumentController sharedDocumentController];
 
 		directory = [controller currentDirectory];
-		name = @"Untitled";
+		name = (_lastComponentOfFileName != nil && [_lastComponentOfFileName length] > 0)
+			? _lastComponentOfFileName : @"Untitled";
 	}
 	if (directory != nil) {
 		[panel setDirectory:directory];
@@ -606,6 +730,7 @@ originalContentsURL:(NSURL *)absoluteOriginalContentsURL
 			NSError *error = nil;
 
 			if (result == NSOKButton) {
+				[self cg_noteSavePanelResult:panel];
 				ok = [self saveToURL:[panel URL] ofType:[self fileType]
 				     forSaveOperation:saveOperation error:&error];
 			}
@@ -626,6 +751,7 @@ originalContentsURL:(NSURL *)absoluteOriginalContentsURL
 		NSError *error = nil;
 
 		if (result == NSOKButton) {
+			[self cg_noteSavePanelResult:panel];
 			ok = [self saveToURL:[panel URL] ofType:[self fileType] forSaveOperation:saveOperation error:&error];
 		}
 		if (!ok && error != nil) {
@@ -665,6 +791,7 @@ originalContentsURL:(NSURL *)absoluteOriginalContentsURL
 		return NO;
 	}
 	[self setFileModificationDate:fn_modification_date(absoluteURL)];
+	[self cg_removeAutosavedContentsFile];
 	[self updateChangeCount:NSChangeCleared];
 	/* AN UNDO STACK OVER CONTENTS THAT ARE NO LONGER THERE WOULD UNDO INTO A MIXTURE. */
 	if (_undoManager != nil) {
@@ -694,6 +821,309 @@ originalContentsURL:(NSURL *)absoluteOriginalContentsURL
 	return [self revertToContentsOfURL:[NSURL fileURLWithPath:fileName] ofType:type error:NULL];
 }
 
+/* ---- AUTOSAVING, CLOSING, THE NAME, PAGE LAYOUT AND ERRORS --------------------------------------- */
+
+/* ---- AUTOSAVING ----------------------------------------------------------------------------------- */
+
+- (BOOL)hasUnautosavedChanges
+{
+	return _hasUnautosavedChanges;
+}
+
+- (NSURL *)autosavedContentsFileURL
+{
+	return _autosavedContentsFileURL;
+}
+
+/* **SETTING THE AUTOSAVE URL RECORDS IT WITH THE CONTROLLER, WHICH IS WHAT MAKES A CRASH-TIME REOPEN POSSIBLE.** The
+ * document owns the URL; the controller owns the list of documents to reopen and the file on disk. Clearing the URL is
+ * a withdrawal from that list. */
+- (void)setAutosavedContentsFileURL:(NSURL *)absoluteURL
+{
+	NSURL *held = [absoluteURL retain];
+	NSURL *old = _autosavedContentsFileURL;
+	id owner;
+
+	owner = (_cg_documentController != nil) ? _cg_documentController : [NSDocumentController sharedDocumentController];
+	/* **THE WITHDRAWAL USES THE OLD URL, SO IT HAPPENS BEFORE THE ASSIGNMENT.** The controller finds the record by
+	 * the URL the document is about to stop naming. */
+	if (held == nil && old != nil && [owner respondsToSelector:@selector(cg_forgetAutosaveForDocument:)]) {
+		[owner cg_forgetAutosaveForDocument:self];
+	}
+	_autosavedContentsFileURL = held;
+	if (held != nil && [owner respondsToSelector:@selector(cg_recordAutosaveForDocument:)]) {
+		[owner cg_recordAutosaveForDocument:self];
+	}
+	[old release];
+}
+
+- (NSString *)autosavingFileType
+{
+	return _fileType;
+}
+
+/* **THE AUTOSAVE WRITES WHERE THE DOCUMENT ALREADY AUTOSAVED, OR ASKS THE CONTROLLER FOR A NAME.** The controller's
+ * name is the one the registry can find again; the type is `-autosavingFileType`, and nil disables the operation (the
+ * controller's timer does not send the message for such a document). */
+- (void)autosaveDocumentWithDelegate:(id)delegate didAutosaveSelector:(SEL)didAutosaveSelector contextInfo:(void *)contextInfo
+{
+	NSString *typeName = [self autosavingFileType];
+	NSURL *url = _autosavedContentsFileURL;
+	id owner;
+
+	if (typeName == nil) {
+		if (delegate != nil && didAutosaveSelector != NULL && [delegate respondsToSelector:didAutosaveSelector]) {
+			AGDocumentDidSaveIMP imp = (AGDocumentDidSaveIMP)[delegate methodForSelector:didAutosaveSelector];
+
+			imp(delegate, didAutosaveSelector, self, NO, contextInfo);
+		}
+		return;
+	}
+	if (url == nil) {
+		owner = (_cg_documentController != nil) ? _cg_documentController : [NSDocumentController sharedDocumentController];
+		if ([owner respondsToSelector:@selector(cg_autosaveURLForDocument:typeName:)]) {
+			url = [owner cg_autosaveURLForDocument:self typeName:typeName];
+		}
+	}
+	if (url == nil) {
+		NSError *error = nil;
+
+		fn_document_error(&error, AGDocumentErrorWrite, @"There is no location for this document's autosave.");
+		[self presentError:error];
+		if (delegate != nil && didAutosaveSelector != NULL && [delegate respondsToSelector:didAutosaveSelector]) {
+			AGDocumentDidSaveIMP imp = (AGDocumentDidSaveIMP)[delegate methodForSelector:didAutosaveSelector];
+
+			imp(delegate, didAutosaveSelector, self, NO, contextInfo);
+		}
+		return;
+	}
+	[self saveToURL:url ofType:typeName forSaveOperation:NSAutosaveOperation
+		delegate:delegate didSaveSelector:didAutosaveSelector contextInfo:contextInfo];
+}
+
+/* **DELETING THE AUTOSAVE FILE IS THE DOCUMENT'S JOB, BECAUSE THE DOCUMENT KNOWS WHERE IT PUT IT.** The controller's
+ * registry is updated by the URL setter; the unlink happens here. */
+- (void)cg_removeAutosavedContentsFile
+{
+	if (_autosavedContentsFileURL != nil) {
+		NSURL *old = [_autosavedContentsFileURL retain];
+
+		[self setAutosavedContentsFileURL:nil];	/* which withdraws the registry record */
+		[[NSFileManager defaultManager] removeItemAtURL:old error:NULL];
+		[old release];
+	}
+}
+
+/* ---- CLOSING --------------------------------------------------------------------------------------- */
+
+/* **SAVE / CANCEL / DON'T SAVE, ASYNCHRONOUSLY.** The alert is a sheet when there is a window and the application is
+ * running; otherwise it is application-modal, which is the only thing a windowless document can do. The context owns
+ * itself for the duration and releases after the delegate is messaged. */
+- (void)canCloseDocumentWithDelegate:(id)delegate shouldCloseSelector:(SEL)shouldCloseSelector contextInfo:(void *)contextInfo
+{
+	AGDocumentCloseContext *context = [[AGDocumentCloseContext alloc] initWithDelegate:delegate
+										 selector:shouldCloseSelector
+									      contextInfo:contextInfo];
+	NSAlert *alert;
+	NSWindow *sheet;
+
+	if (![self isDocumentEdited]) {
+		[context finishWithDocument:self shouldClose:YES];
+		return;
+	}
+	if (_cgCloseDecision >= 0) {
+		NSInteger decision = _cgCloseDecision;
+
+		_cgCloseDecision = -1;
+		[self cg_finishCloseWithCode:decision context:context];
+		return;
+	}
+	alert = [NSAlert alertWithMessageText:@"Do you want to save the changes?"
+				defaultButton:@"Save"
+			      alternateButton:@"Cancel"
+				  otherButton:@"Don't Save"
+		    informativeTextWithFormat:@"Your changes to “%@” will be lost if you don't save them.",
+					     [self displayName]];
+	sheet = [self windowForSheet];
+	if (sheet != nil && [[NSApplication sharedApplication] isRunning]) {
+		[alert beginSheetModalForWindow:sheet modalDelegate:self
+				  didEndSelector:@selector(cg_closeAlertDidEnd:returnCode:contextInfo:)
+				     contextInfo:context];
+		return;
+	}
+	[self cg_finishCloseWithCode:[alert runModal] context:context];
+}
+
+- (void)cg_closeAlertDidEnd:(NSAlert *)alert returnCode:(NSInteger)code contextInfo:(void *)contextInfo
+{
+	(void)alert;
+	[self cg_finishCloseWithCode:code context:(AGDocumentCloseContext *)contextInfo];
+}
+
+- (void)cg_finishCloseWithCode:(NSInteger)code context:(AGDocumentCloseContext *)context
+{
+	if (code == NSAlertFirstButtonReturn) {
+		AGDocumentSaveCloseContext *save = [[AGDocumentSaveCloseContext alloc] initWithCloseContext:context];
+
+		[self saveDocumentWithDelegate:save didSaveSelector:@selector(document:didSave:contextInfo:)
+				   contextInfo:NULL];
+		[save release];
+		return;
+	}
+	[context finishWithDocument:self shouldClose:(code == NSAlertThirdButtonReturn)];
+}
+
+- (void)shouldCloseWindowController:(NSWindowController *)windowController delegate:(id)delegate
+		shouldCloseSelector:(SEL)shouldCloseSelector contextInfo:(void *)contextInfo
+{
+	BOOL ownsClosing = [windowController shouldCloseDocument] || [[self windowControllers] count] <= 1;
+
+	if (ownsClosing) {
+		[self canCloseDocumentWithDelegate:delegate shouldCloseSelector:shouldCloseSelector contextInfo:contextInfo];
+		return;
+	}
+	if (delegate != nil && shouldCloseSelector != NULL && [delegate respondsToSelector:shouldCloseSelector]) {
+		AGDocumentShouldCloseIMP imp = (AGDocumentShouldCloseIMP)[delegate methodForSelector:shouldCloseSelector];
+
+		imp(delegate, shouldCloseSelector, self, YES, contextInfo);
+	}
+}
+
+/* THE TEST SEAM: -1 asks the user; a positive alert return code is used as the answer. */
+- (void)setCloseDecision:(NSInteger)code
+{
+	_cgCloseDecision = code;
+}
+
+/* ---- THE NAME AND THE SAVE PANEL'S ANSWERS ---------------------------------------------------------- */
+
+- (NSString *)lastComponentOfFileName
+{
+	return _lastComponentOfFileName;
+}
+
+- (void)setLastComponentOfFileName:(NSString *)fileName
+{
+	NSString *copy = [fileName copy];
+
+	[_lastComponentOfFileName release];
+	_lastComponentOfFileName = copy;
+}
+
+/* **THE PANEL'S TWO ANSWERS, RECORDED WHEN IT ACCEPTS.** The document has no type popup in this tier's save panel, so
+ * the type the panel was run for is the document's own; the hidden-extension flag and the chosen name are the panel's
+ * real answers. */
+- (void)cg_noteSavePanelResult:(NSSavePanel *)panel
+{
+	NSString *name = [[panel URL] path];
+
+	_cgSavePanelHasRun = YES;
+	[_fileTypeFromLastRunSavePanel release];
+	_fileTypeFromLastRunSavePanel = [_fileType copy];
+	_fileNameExtensionWasHidden = [panel isExtensionHidden];
+	[name retain];
+	[_lastComponentOfFileName release];
+	_lastComponentOfFileName = (name != nil) ? [name lastPathComponent] : nil;
+	[_lastComponentOfFileName retain];
+	[name release];
+}
+
+- (NSString *)fileTypeFromLastRunSavePanel
+{
+	return _cgSavePanelHasRun ? _fileTypeFromLastRunSavePanel : nil;
+}
+
+- (BOOL)fileNameExtensionWasHiddenInLastRunSavePanel
+{
+	return _cgSavePanelHasRun ? _fileNameExtensionWasHidden : NO;
+}
+
+/* ---- PAGE LAYOUT ----------------------------------------------------------------------------------- */
+
+- (BOOL)preparePageLayout:(NSPageLayout *)pageLayout
+{
+	(void)pageLayout;
+	return YES;
+}
+
+/* **THE PANEL IS THE EXISTING ONE, WITH A COPY OF THE TICKET.** The copy is released by the private callback whether
+ * the user accepts or cancels; `-shouldChangePrintInfo:` is the hook between the panel and the document's ticket. */
+- (void)runPageLayout:(id)sender
+{
+	NSPrintInfo *copy = [[self printInfo] copy];
+
+	(void)sender;
+	[self runModalPageLayoutWithPrintInfo:copy delegate:self
+			      didRunSelector:@selector(cg_pageLayoutDidRun:accepted:contextInfo:)
+				 contextInfo:(void *)copy];
+}
+
+- (void)cg_pageLayoutDidRun:(NSDocument *)document accepted:(NSInteger)code contextInfo:(void *)contextInfo
+{
+	NSPrintInfo *printInfo = (NSPrintInfo *)contextInfo;
+
+	(void)document;
+	if (code == NSOKButton && [self shouldChangePrintInfo:printInfo]) {
+		[self setPrintInfo:printInfo];
+	}
+	[printInfo release];
+}
+
+/* ---- ERROR PRESENTATION ----------------------------------------------------------------------------- */
+
+- (NSError *)willPresentError:(NSError *)error
+{
+	return error;
+}
+
+- (BOOL)presentError:(NSError *)error
+{
+	NSError *custom = [self willPresentError:error];
+	id next = (_cg_documentController != nil) ? _cg_documentController : [NSDocumentController sharedDocumentController];
+
+	if ([next respondsToSelector:@selector(presentError:)]) {
+		return [next presentError:custom];
+	}
+	return [[NSApplication sharedApplication] presentError:custom];
+}
+
+- (void)presentError:(NSError *)error modalForWindow:(NSWindow *)window delegate:(id)delegate
+   didPresentSelector:(SEL)didPresentSelector contextInfo:(void *)contextInfo
+{
+	NSError *custom = [self willPresentError:error];
+	id next = (_cg_documentController != nil) ? _cg_documentController : [NSDocumentController sharedDocumentController];
+
+	if ([next respondsToSelector:@selector(presentError:modalForWindow:delegate:didPresentSelector:contextInfo:)]) {
+		[next presentError:custom modalForWindow:window delegate:delegate didPresentSelector:didPresentSelector
+			 contextInfo:contextInfo];
+		return;
+	}
+	[[NSApplication sharedApplication] presentError:custom modalForWindow:window delegate:delegate
+				      didPresentSelector:didPresentSelector contextInfo:contextInfo];
+}
+
+/* ---- SCRIPTING -------------------------------------------------------------------------------------- */
+
+- (id)handleCloseScriptCommand:(id)command
+{
+	(void)command;
+	fn_refuse_window("-handleCloseScriptCommand:", "the scripting suite (this tree has no NSScriptCommand)");
+	return nil;
+}
+
+- (id)handleSaveScriptCommand:(id)command
+{
+	(void)command;
+	fn_refuse_window("-handleSaveScriptCommand:", "the scripting suite (this tree has no NSScriptCommand)");
+	return nil;
+}
+
+- (id)objectSpecifier
+{
+	fn_refuse_window("-objectSpecifier", "the scripting suite (this tree has no NSScriptObjectSpecifier)");
+	return nil;
+}
+
 /* ---- CHANGE COUNT AND UNDO ------------------------------------------------------------------------ */
 
 - (BOOL)isDocumentEdited
@@ -707,20 +1137,26 @@ originalContentsURL:(NSURL *)absoluteOriginalContentsURL
 	case NSChangeDone:
 	case NSChangeRedone:
 		_changeCount++;
+		_hasUnautosavedChanges = YES;
 		break;
 	case NSChangeUndone:
 		/* **SIGNED, NOT CLAMPED.** An undo below zero is a document whose edits have all been taken back; it is still a
 		 * document with an edit history the next redo will walk, and zeroing it would put the count out of step. */
 		_changeCount--;
+		_hasUnautosavedChanges = YES;
 		break;
 	case NSChangeCleared:
 		_changeCount = 0;
+		_hasUnautosavedChanges = NO;
 		break;
 	case NSChangeReadOtherContents:
+		/* **THE REOPENED DOCUMENT IS EDITED BUT NOT "UNAUTOSAVED".** Apple's prose says this change has no effect on
+		 * `-hasUnautosavedChanges`; the contents it was reopened from are already the autosave. */
 		_changeCount = 1;
 		break;
 	case NSChangeAutosaved:
 		/* An autosave makes the ON-DISK copy current but does not make the document unedited. */
+		_hasUnautosavedChanges = NO;
 		break;
 	}
 	{
@@ -882,14 +1318,18 @@ originalContentsURL:(NSURL *)absoluteOriginalContentsURL
 
 - (NSString *)displayName
 {
-	if (_fileURL != nil) {
-		NSString *name = [[_fileURL path] lastPathComponent];
+	NSString *name = (_lastComponentOfFileName != nil && [_lastComponentOfFileName length] > 0)
+		? _lastComponentOfFileName
+		: ((_fileURL != nil) ? [[_fileURL path] lastPathComponent] : nil);
 
-		if (name != nil && [name length] > 0) {
-			return name;
-		}
+	if (name == nil || [name length] == 0) {
+		return @"Untitled";
 	}
-	return @"Untitled";
+	/* **THE SAVE PANEL MAY HAVE HIDDEN THE EXTENSION**, and Apple's display name honours that choice. */
+	if (_cgSavePanelHasRun && _fileNameExtensionWasHidden && [[name pathExtension] length] > 0) {
+		return [name stringByDeletingPathExtension];
+	}
+	return name;
 }
 
 - (void)close
@@ -897,6 +1337,9 @@ originalContentsURL:(NSURL *)absoluteOriginalContentsURL
 	NSArray *controllers = [[NSArray alloc] initWithArray:_windowControllers];
 	NSUInteger i;
 	id owner = _cg_documentController;
+
+	/* A CLOSED DOCUMENT'S AUTOSAVE IS OBSOLETE. */
+	[self cg_removeAutosavedContentsFile];
 
 	for (i = 0; i < [controllers count]; i++) {
 		[(NSWindowController *)[controllers objectAtIndex:i] close];
@@ -951,8 +1394,18 @@ originalContentsURL:(NSURL *)absoluteOriginalContentsURL
 
 - (NSString *)fileNameExtensionForType:(NSString *)typeName saveOperation:(NSSaveOperationType)saveOperation
 {
-	(void)typeName;
+	/* **THE CONTROLLER'S TYPE TABLE IS THE DEFAULT SOURCE.** Apple's default asks the workspace for a UTI's preferred
+	 * extension or the controller for the type's extension list; this tier has no UTI database, so the list is the
+	 * honest answer and its first entry is the extension. */
+	id owner = (_cg_documentController != nil) ? _cg_documentController : [NSDocumentController sharedDocumentController];
 	(void)saveOperation;
+	if (typeName != nil && [owner respondsToSelector:@selector(fileExtensionsFromType:)]) {
+		NSArray *extensions = [owner fileExtensionsFromType:typeName];
+
+		if ([extensions count] > 0) {
+			return [extensions objectAtIndex:0];
+		}
+	}
 	return nil;
 }
 
@@ -1101,6 +1554,18 @@ originalContentsURL:(NSURL *)absoluteOriginalContentsURL
 	NSWindow *sheetWindow = [self windowForSheet];
 	NSPageLayout *layout = [NSPageLayout pageLayout];
 
+	/* **THE DOCUMENT MAY REFUSE THE PANEL BEFORE IT IS SHOWN.** Apple's hook is `-preparePageLayout:`; a NO leaves the
+	 * ticket alone and does not call the caller back. */
+	if (![self preparePageLayout:layout]) {
+		/* THE HOOK REFUSED THE PANEL, so the caller is told the user did not accept and the run's context (a print
+		 * ticket, in `-runPageLayout:`'s case) is released by the same callback. */
+		if (delegate != nil && didRunSelector != NULL) {
+			AGDocumentDidLayoutIMP imp = (AGDocumentDidLayoutIMP)[delegate methodForSelector:didRunSelector];
+
+			imp(delegate, didRunSelector, self, NSCancelButton, contextInfo);
+		}
+		return;
+	}
 	if (sheetWindow != nil && [[NSApplication sharedApplication] isRunning]) {
 		[layout beginSheetWithPrintInfo:printInfo modalForWindow:sheetWindow delegate:delegate
 				  didEndSelector:didRunSelector contextInfo:contextInfo];

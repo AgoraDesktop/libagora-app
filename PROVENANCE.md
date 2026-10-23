@@ -1467,6 +1467,48 @@ queue first now and returns nil only when there is nothing queued and nothing to
 the state set, the screen form, the direct animated set, and the queue's ordering and discarding through the same drain
 the run loop uses.
 
+## 53. The document pair complete: a separate autosave file, an asynchronous close review, and an error chain that ends in an alert
+
+**BOTH CLASSES ARE COMPLETE FOR THE ERA: `NSDocument` 104 of 104 and `NSDocumentController` 51 of 51, the thirteenth
+and fourteenth classes to finish.** The two are one slice because the controller owns the timer, the reopen registry,
+the close-all walk and the error forwarder the document's new doors reach.
+
+**AUTOSAVE IS A SEPARATE FILE, NOT A SAVE.** `-saveToURL:ofType:forSaveOperation:error:` branches on
+`NSAutosaveOperation`: it sets `-autosavedContentsFileURL` and `NSChangeAutosaved`, never `fileURL`, `fileType`, the
+modification date or the recent list. `-initForURL:withContentsOfURL:` records the contents URL; a real save, a revert
+or a close deletes the obsolete file. `-hasUnautosavedChanges` is a history flag independent of `-isDocumentEdited`
+(NO after Cleared/Autosaved, YES after Done/Undone/Redone, unaffected by ReadOtherContents), and the controller's
+`-autosavingDelay` timer (0 disables it) sends autosave only to documents with that flag and a non-nil
+`-autosavingFileType`.
+
+**THE LOCATION IS `~/Library/Autosave` WITH A TEMP FALLBACK, AND THE REGISTRY IS A PLIST.** `NSSearchPathForDirectoriesInDomains`
+is a named refusal in this Foundation, so the path is built from `NSHomeDirectory()` and created; `NSColorList` already
+uses `~/Library` for user state. Files are named `Agora-<process>-<index>.<ext>`; the controller's registry records
+`documentURL` and `contentsURL`, and `NSApplication -finishLaunching` asks a fresh controller to reopen the entries
+before the launch delegate runs. A stale record (missing contents or a failed reopen) is dropped.
+
+**CLOSE IS ASYNCHRONOUS AND APPLE-SHAPED.** `-canCloseDocumentWithDelegate:shouldCloseSelector:contextInfo:` presents
+Save/Cancel/Don't Save as a sheet when there is a window and the app is running, and application-modally otherwise. The
+delegate is messaged once the decision and any save are complete. `-shouldCloseWindowController:…` asks the document
+when the controller owns the close or is the only one, and `NSWindow -performClose:` now asks it before the window
+delegate. `-closeAllDocuments…` walks the documents, closes the yeses and stops at the first no;
+`-reviewUnsavedDocuments…` adds the multi-document Save All/Cancel/Don't Save alert. The existing close-all probe was
+updated: an unedited document before a refusal has already closed, because the walk is not a transaction.
+
+**THE ERROR CHAIN NOW ENDS IN AN ALERT.** `NSDocument` and `NSDocumentController` implement `-willPresentError:` and
+both `-presentError:` forms; the document forwards to the controller, which forwards to the application. `NSResponder`'s
+two error refusals — whose reason was "NSAlert is not in this tier" — are replaced by real `NSAlert` presentation, so
+the refusal census lost two sites. The modal form uses a sheet when a window is available and the caller's
+`didPresentSelector` gets `didRecover:NO` (this tier has no recovery delegate).
+
+**THE REMAINING DOORS ARE SMALL AND HONEST.** `-preparePageLayout:`/`-runPageLayout:` reuse the existing page-layout
+panel and its callback; `-lastComponentOfFileName` is a stored display/save-name override that `-displayName` prefers;
+the two save-panel answers are recorded only after a panel runs; and the scripting trio refuses by name because there
+is no `NSScriptCommand` or `NSScriptObjectSpecifier` in this tree.
+
+`tests/document_tail.m` measures it in **41 checks**; the new `appkit-document-tail` probe uses a private close-decision
+seam and a recorder as the error presenter so the asynchronous, modal production paths remain testable offscreen.
+
 ## Keeping in sync
 
 The Fiwix AppKit is the origin and this repository has now diverged from it in the seam. A fix made there

@@ -214,6 +214,12 @@ static void fn_announce_window(NSWindow *w, NSString *name, SEL delegateSelector
 - (BOOL)cg_handleReopen;
 @end
 
+/* THE DOCUMENT CONTROLLER'S CRASH-TIME REOPEN IS A PRIVATE CONTRACT WITH THIS CLASS. */
+@interface NSDocumentController (AGAutosaveReopen)
++ (BOOL)cg_hasAutosavedDocumentsToReopen;
+- (void)cg_reopenAutosavedDocuments;
+@end
+
 @implementation NSApplication
 
 + (NSApplication *)sharedApplication
@@ -508,6 +514,12 @@ BOOL NSApplicationLoad(void)
 		return;
 	}
 	_launched = YES;
+	/* **A CRASHED SESSION'S AUTOSAVED DOCUMENTS COME BACK BEFORE THE DELEGATE'S LAUNCH PAIR.** The registry is the
+	 * controller's; this class only asks whether one exists, so a non-document application pays one `stat`, and a
+	 * document application reopens through the same `-reopenDocumentForURL:withContentsOfURL:` path the Finder uses. */
+	if ([NSDocumentController cg_hasAutosavedDocumentsToReopen]) {
+		[[NSDocumentController sharedDocumentController] cg_reopenAutosavedDocuments];
+	}
 	/* THE DELEGATE'S PAIR, SENT IF IT ANSWERS — the same `-respondsToSelector:` shape every informal contract
 	 * in this library uses, so a delegate implements what it cares about. */
 	fn_announce(self, NSApplicationWillFinishLaunchingNotification, @selector(applicationWillFinishLaunching:));
