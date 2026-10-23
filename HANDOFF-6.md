@@ -322,8 +322,14 @@ is by reachable surface and by what the tree already has to build on.
    Foundation has no `NSPredicate` family; the rule editor's three predicate doors say so. Growing that pair is a
    Foundation decision (the predicate grammar), not an AppKit slice.
 5. **The controllers/bindings family** — `NSController`, the four object controllers, `NSTreeController` and
-   `NSTreeNode`. This tier has no KVO, so this is a **design question before it is a slice**: what observes what, and
-   whether the tree grows a KVO substrate or the controllers remain a stored-value façade. Do not start with a header.
+   `NSTreeNode`. **THE SUBSTRATE IS HERE NOW, WHICH CHANGES THE QUESTION RATHER THAN ANSWERING IT.** `libagora-base`
+   grew KVO's automatic half (commit `3463c5f`, `tests/kvo_automatic.m`, 34 cases): the first observation of a simple
+   key moves the object to a dynamic subclass whose setter brackets the original IMP with the will/did pair, so
+   `[model setName:x]` notifies with the options and context; KVC's `-setValue:forKey:` asks an internal seam so one
+   write is announced once; struct/pointer/C-string setters, keys with no setter, dotted key paths and dependent keys
+   are the named limits (the manual pair covers the first three; dependent keys are a later row). The design question
+   that remains is the CONTROLLER model: what a controller observes, how `content`/`contentObject`/selection are
+   exposed, and whether bindings are a façade over KVO or a second registry. Do not start with a header.
 6. **The small protocol slices** — `NSTextViewDelegate`, `NSIgnoreMisspelledWords`, `NSChangeSpelling`,
    `NSUserInterfaceItemSearching`. Each has its class already; each is a contract the class can start sending.
 7. **And leave refused** (§A11 and this tree's record): OpenGL, QuickDraw, movies, the four typesetters,
