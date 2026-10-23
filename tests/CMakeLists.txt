@@ -141,6 +141,15 @@ target_link_libraries(table_advanced PRIVATE App m)
 add_test(NAME appkit-table-advanced COMMAND table_advanced)
 set_tests_properties(appkit-table-advanced PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
 
+# **THE TABLE'S LAST TWENTY DOORS.** The deprecated spellings are checked through their modern counterparts, the
+# autoresizing styles by the widths they leave, and the drawings by pixels: the grid mask, the focus ring, the header's
+# indicator image, the three drag-destination feedback styles, and the drag image's union size. The vertical-motion gate
+# is measured through a table subclass whose drag entry point is a counter, so "the drag began" is a fact.
+add_executable(table_tail table_tail.m)
+target_link_libraries(table_tail PRIVATE App m)
+add_test(NAME appkit-table-tail COMMAND table_tail)
+set_tests_properties(appkit-table-tail PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
+
 # **THE SPLIT VIEW: PANES, DIVIDERS, THE DRAG, THE COLLAPSE AND THE DELEGATE.** Offscreen: the geometry, the
 # effective rectangles and the ink need no compositor, and a synthetic press is delivered to the view directly.
 add_executable(split_view split_view.m)

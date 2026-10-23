@@ -1037,7 +1037,22 @@ the compositor is really gone.
   the probe checks by a corner pixel that goes red and then white. `tests/slider_title_ticks.m` measures it in 52 checks. **AND THE RECOUNT FOUND THE HANDOFF'S "120 of 129 COMPLETE" WAS ONE HIGH** — the old pin's
   own `sel:` lines give 119, and the slider pair makes 121.
 
-- **`ctest`: 155 of 155 passed** (the keyboard and the seam, the AppKit and its input path, the controls and their
+- **And `NSTableView` is COMPLETE — 123 of 123** (`ctest`, offscreen) — the last twenty doors are spellings and
+  drawings over machinery that was already here. **The deprecated flags are the modern state, not a second field**:
+  `-drawsGrid` reads and writes the grid mask, `-autoresizesAllColumnsToFit` maps to Uniform/LastColumnOnly, and
+  `-tile` now APPLIES the autoresizing style (proportional, last-column, sequential and reverse-sequential, each
+  clamped to the columns' min/max). The single-index selection pair and the two enumerators answer the index-set
+  selection; `-columnsInRect:` is the range spelling of `-columnIndexesInRect:`. The drawings are measured: the grid
+  adds 2313 of its colour's pixels against 185 from antialiased text, the focus ring is
+  `keyboardFocusIndicatorColor` around the SELECTED row's cell in `-focusedColumn`, the header draws a column's
+  indicator image at its right edge, and the three destination-feedback styles are three pictures (Regular's line,
+  SourceList's inset line or DropOn plate, None's nothing; a source-list selection style chooses SourceList).
+  `-performClickOnCellAtColumn:row:` copies the prepared CELL with its target/action and sends it, and
+  `-verticalMotionCanBeginDrag` is a real gate measured through a probe table whose drag entry point is a counter.
+  The two drag-image doors return a snapshot of the named rows/columns at their union's size, with the offset left at
+  Apple's zero. `tests/table_tail.m` measures it in 34 checks.
+
+- **`ctest`: 156 of 156 passed** (the keyboard and the seam, the AppKit and its input path, the controls and their
   metrics, the field control and its cell and its bezel and its placeholder and what it may hold, the text path and its
   word granularity and the multi-line view and its wrapping and its scrolling and its READING OF THE STORE, the STORE
   the rich-text slice is built on and the REGION it is laid out in and the WEB that ties the three together and the
@@ -1049,8 +1064,9 @@ the compositor is really gone.
   what a drag costs, the resize by edge, the tracking engine, the clip view and the scroller and the scroll view and the
   drawn offset and the ruler it can wear and the TEXT RULER whose markers are tab stops and the block rects and
   attachment sizes the layout answers and the temporary-attribute table and the rect arrays, the chrome and what its
-  buttons do, the chrome theme, the menus and activation, and the manager's own ensure/invalidate doors, the document family's file round trip and change count, the save and open panels, and the pop-up's items, a colour's space and the menu's flags, and the slider's tick values, its title band and its two
-  no-argument ink doors).
+  buttons do, the chrome theme, the menus and activation, and the manager's own ensure/invalidate doors, the document family's file round trip and change count, the save and open panels, and the pop-up's items, a colour's space and the menu's flags, the slider's tick values, its title band and its two
+  no-argument ink doors, and the table's deprecated spellings, enumerators, drag images, focus ring and destination
+  feedback).
 - **And the desktop's own text is SUB-PIXEL ANTIALIASED**, which is the AppKit's half of a renderer change in
   CoreGraphics: a window's surface is OPAQUE (`kCGImageAlphaNoneSkipFirst`), and the destination's opacity is
   exactly what decides whether a glyph is rasterised in colour. MEASURED on the live session: the window title's

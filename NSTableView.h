@@ -42,7 +42,9 @@ NS_ASSUME_NONNULL_BEGIN
 
 @class NSArray;
 @class NSColor;
+@class NSEnumerator;
 @class NSEvent;
+@class NSImage;
 @class NSPasteboard;
 @class NSMutableArray;
 @class NSMutableIndexSet;
@@ -84,6 +86,15 @@ enum {
 	NSTableViewDropAbove = 1
 };
 typedef NSInteger NSTableViewDropOperation;
+
+/* **THE DRAG DESTINATION'S FEEDBACK STYLE.** The 10.6 header names three: none (no insertion mark), regular (the
+ * table's line) and source list (the sidebar's, which the selection style can choose on a caller's behalf). */
+enum {
+	NSTableViewDraggingDestinationFeedbackStyleNone = -1,
+	NSTableViewDraggingDestinationFeedbackStyleRegular = 0,
+	NSTableViewDraggingDestinationFeedbackStyleSourceList = 1
+};
+typedef NSInteger NSTableViewDraggingDestinationFeedbackStyle;
 
 /* THE FOUR ANNOUNCEMENTS THE CORE MAKES. Selection changes are the two every caller listens for; the column pair is
  * for a header that moved or resized a column. */
@@ -186,7 +197,20 @@ extern NSString *NSTableViewColumnDidResizeNotification;
 	NSPoint _cgDragStartPoint;
 	BOOL _cgDragging;
 	NSTableViewColumnAutoresizingStyle _columnAutoresizingStyle;
+	/* THE DEPRECATED AUTORESIZE FLAG IS A SPELLING OF THE STYLE, and `tile` is the reader of both: Uniform fills the
+	 * width proportionally, LastColumnOnly gives the difference to the last column, and the sequential pair walks from
+	 * one end. The guard is what keeps `-setWidth:` (which calls `-tile`) from recursing through the autoresize pass. */
+	BOOL _cgAutoresizingColumns;
 	NSTableViewSelectionHighlightStyle _selectionHighlightStyle;
+	NSTableViewDraggingDestinationFeedbackStyle _draggingDestinationFeedbackStyle;
+	/* THE FOCUS RING'S COLUMN, or -1. The ring is drawn around the SELECTED ROW's cell in this column, which is the
+	 * shape Apple's header describes. */
+	NSInteger _focusedColumn;
+	/* Whether a VERTICAL drag can begin a row drag, or is a drag-select instead. YES is Apple's default. */
+	BOOL _verticalMotionCanBeginDrag;
+	/* THE HEADER INDICATOR IMAGES, keyed by a pointer to the column — a per-column association Apple keeps on the
+	 * table rather than on `NSTableColumn`, which is why these are table doors. */
+	NSMutableDictionary *_cgIndicatorImages;	/* RETAINED */
 	NSInteger _highlightedTableColumn;
 	NSInteger _clickedRow;
 	NSInteger _clickedColumn;
@@ -222,8 +246,16 @@ extern NSString *NSTableViewColumnDidResizeNotification;
 - (BOOL)allowsColumnResizing;
 - (void)setColumnAutoresizingStyle:(NSTableViewColumnAutoresizingStyle)style;
 - (NSTableViewColumnAutoresizingStyle)columnAutoresizingStyle;
+/* **THE DEPRECATED FLAG IS A SPELLING OF THE STYLE, NOT A SECOND FIELD.** YES sets
+ * `NSTableViewUniformColumnAutoresizingStyle`; NO sets `NSTableViewLastColumnOnlyAutoresizingStyle`. The getter answers
+ * YES exactly for Uniform, so a table in either sequential style reads NO. */
+- (void)setAutoresizesAllColumnsToFit:(BOOL)flag;
+- (BOOL)autoresizesAllColumnsToFit;
 - (void)setGridStyleMask:(NSUInteger)gridType;
 - (NSUInteger)gridStyleMask;
+/* THE DEPRECATED BOOLEAN SPELLING OF THE GRID MASK: YES is both solid line masks, NO is none. */
+- (void)setDrawsGrid:(BOOL)flag;
+- (BOOL)drawsGrid;
 - (void)setIntercellSpacing:(NSSize)aSize;
 - (NSSize)intercellSpacing;
 - (void)setUsesAlternatingRowBackgroundColors:(BOOL)useAlternatingRowColors;
@@ -271,6 +303,10 @@ extern NSString *NSTableViewColumnDidResizeNotification;
 /* EDITING. `-editColumn:row:withEvent:select:` starts the window's field editor over the cell; the data source's
  * `-tableView:setObjectValue:forTableColumn:row:` is what receives the result when the session ends. */
 - (void)editColumn:(NSInteger)column row:(NSInteger)row withEvent:(nullable NSEvent *)theEvent select:(BOOL)select;
+/* **A CLICK ON A CELL, WHICH IS THE CELL'S ACTION RATHER THAN THE TABLE'S.** The prepared cell is copied (with its
+ * target/action carried over), clicked, and its object value written back to the data source when the click changed
+ * it. Apple's door does no enabled-check; neither does this one. */
+- (void)performClickOnCellAtColumn:(NSInteger)column row:(NSInteger)row;
 - (BOOL)shouldFocusCell:(NSCell *)cell atColumn:(NSInteger)column row:(NSInteger)row;
 - (nullable NSText *)currentEditor;
 - (BOOL)abortEditing;
@@ -288,6 +324,31 @@ extern NSString *NSTableViewColumnDidResizeNotification;
 - (void)setDraggingSourceOperationMask:(NSDragOperation)mask forLocal:(BOOL)isLocal;
 - (NSDragOperation)draggingSourceOperationMaskForLocal:(BOOL)isLocal;
 - (void)setDropRow:(NSInteger)row dropOperation:(NSTableViewDropOperation)dropOperation;
+/* THE DESTINATION'S FEEDBACK, THE FOCUSED COLUMN, AND THE HEADER'S INDICATOR IMAGE. A source list selection style
+ * sets the feedback style to SourceList, which is Apple's documented coupling; `-setDraggingDestinationFeedbackStyle:`
+ * can still override it afterwards. */
+- (void)setDraggingDestinationFeedbackStyle:(NSTableViewDraggingDestinationFeedbackStyle)style;
+- (NSTableViewDraggingDestinationFeedbackStyle)draggingDestinationFeedbackStyle;
+- (void)setFocusedColumn:(NSInteger)focusedColumn;
+- (NSInteger)focusedColumn;
+- (nullable NSImage *)indicatorImageInTableColumn:(NSTableColumn *)tableColumn;
+- (void)setIndicatorImage:(nullable NSImage *)anImage inTableColumn:(NSTableColumn *)tableColumn;
+
+/* **THE TWO DRAG IMAGES.** The modern door builds a snapshot of the named rows and columns through
+ * `-cacheDisplayInRect:toBitmapImageRep:`; the deprecated one takes an array of row numbers and forwards. The offset
+ * is in/out: the caller hands NSZeroPoint and may be given a re-positioning, which this tier leaves at zero (Apple's
+ * "centred under the mouse"). */
+- (nullable NSImage *)dragImageForRowsWithIndexes:(NSIndexSet *)dragRows
+				     tableColumns:(nullable NSArray *)tableColumns
+					    event:(nullable NSEvent *)dragEvent
+					   offset:(NSPointPointer)dragImageOffset;
+- (nullable NSImage *)dragImageForRows:(NSArray *)dragRows
+				 event:(nullable NSEvent *)dragEvent
+		       dragImageOffset:(NSPointPointer)dragImageOffset;
+/* Whether a vertical motion can START a row drag; NO makes it a drag-select, which this tier's click loop does not
+ * implement, so the motion simply does not begin a drag. */
+- (void)setVerticalMotionCanBeginDrag:(BOOL)flag;
+- (BOOL)verticalMotionCanBeginDrag;
 
 /* SELECTION. */
 - (void)setAllowsMultipleSelection:(BOOL)flag;
@@ -300,6 +361,12 @@ extern NSString *NSTableViewColumnDidResizeNotification;
 - (void)deselectAll:(nullable id)sender;
 - (void)selectColumnIndexes:(NSIndexSet *)indexes byExtendingSelection:(BOOL)extend;
 - (void)selectRowIndexes:(NSIndexSet *)indexes byExtendingSelection:(BOOL)extend;
+/* THE DEPRECATED SINGLE-INDEX SPELLINGS, and the two enumerators over the selected sets. The enumerators answer
+ * NSNumber objects, which is what Apple's deprecated doors have always yielded. */
+- (void)selectColumn:(NSInteger)column byExtendingSelection:(BOOL)extend;
+- (void)selectRow:(NSInteger)row byExtendingSelection:(BOOL)extend;
+- (NSEnumerator *)selectedColumnEnumerator;
+- (NSEnumerator *)selectedRowEnumerator;
 - (NSIndexSet *)selectedColumnIndexes;
 - (NSIndexSet *)selectedRowIndexes;
 - (void)deselectColumn:(NSInteger)column;
@@ -317,6 +384,8 @@ extern NSString *NSTableViewColumnDidResizeNotification;
 - (NSRect)rectOfColumn:(NSInteger)column;
 - (NSRect)rectOfRow:(NSInteger)row;
 - (NSIndexSet *)columnIndexesInRect:(NSRect)rect;
+/* THE DEPRECATED RANGE SPELLING of the index-set door: the first through the last column the rect touches. */
+- (NSRange)columnsInRect:(NSRect)rect;
 - (NSRange)rowsInRect:(NSRect)rect;
 - (NSInteger)columnAtPoint:(NSPoint)point;
 - (NSInteger)rowAtPoint:(NSPoint)point;

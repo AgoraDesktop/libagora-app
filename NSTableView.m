@@ -36,6 +36,7 @@
 #import "NSBitmapImageRep.h"
 #import "NSWindow.h"
 #import "NSPasteboard.h"
+#import "NSPopUpButtonCell.h"
 
 #import <Foundation/NSArray.h>
 #import <Foundation/NSDate.h>
@@ -47,6 +48,7 @@
 #import <Foundation/NSSortDescriptor.h>
 #import <Foundation/NSString.h>
 #import <Foundation/NSUserDefaults.h>
+#import <Foundation/NSValue.h>
 
 #include <math.h>
 
@@ -78,6 +80,9 @@ NSString *NSTableViewColumnDidResizeNotification = @"NSTableViewColumnDidResizeN
 - (void)doneDragging;
 - (NSDragOperation)cg_validateDrop:(id <NSDraggingInfo>)info;
 - (NSString *)cg_typeSelectStringForRow:(NSInteger)row;
+- (void)cg_autoresizeColumnsToWidth:(CGFloat)width;
+- (nullable NSImage *)cg_dragImageForRows:(NSIndexSet *)rows columns:(nullable NSArray *)columns
+			       unionRect:(NSRect *)unionRect;
 @end
 
 @implementation NSTableView
@@ -110,6 +115,8 @@ static NSString * const AGCoderTableEmptyKey = @"allowsEmptySelection";
 static NSString * const AGCoderTableColumnSelectionKey = @"allowsColumnSelection";
 static NSString * const AGCoderTableAlternatingKey = @"usesAlternatingRowBackgroundColors";
 static NSString * const AGCoderTableTypeSelectKey = @"allowsTypeSelect";
+static NSString * const AGCoderTableDragFeedbackKey = @"draggingDestinationFeedbackStyle";
+static NSString * const AGCoderTableVerticalMotionKey = @"verticalMotionCanBeginDrag";
 
 - (void)encodeWithCoder:(NSCoder *)aCoder
 {
@@ -135,6 +142,8 @@ static NSString * const AGCoderTableTypeSelectKey = @"allowsTypeSelect";
 	[aCoder encodeBool:_allowsColumnSelection forKey:AGCoderTableColumnSelectionKey];
 	[aCoder encodeBool:_usesAlternatingRowBackgroundColors forKey:AGCoderTableAlternatingKey];
 	[aCoder encodeBool:_allowsTypeSelect forKey:AGCoderTableTypeSelectKey];
+	[aCoder encodeInteger:(NSInteger)_draggingDestinationFeedbackStyle forKey:AGCoderTableDragFeedbackKey];
+	[aCoder encodeBool:_verticalMotionCanBeginDrag forKey:AGCoderTableVerticalMotionKey];
 }
 
 - (instancetype)initWithCoder:(NSCoder *)aDecoder
@@ -193,6 +202,13 @@ static NSString * const AGCoderTableTypeSelectKey = @"allowsTypeSelect";
 	}
 	if ([aDecoder containsValueForKey:AGCoderTableTypeSelectKey]) {
 		_allowsTypeSelect = [aDecoder decodeBoolForKey:AGCoderTableTypeSelectKey];
+	}
+	if ([aDecoder containsValueForKey:AGCoderTableDragFeedbackKey]) {
+		_draggingDestinationFeedbackStyle =
+			(NSTableViewDraggingDestinationFeedbackStyle)[aDecoder decodeIntegerForKey:AGCoderTableDragFeedbackKey];
+	}
+	if ([aDecoder containsValueForKey:AGCoderTableVerticalMotionKey]) {
+		_verticalMotionCanBeginDrag = [aDecoder decodeBoolForKey:AGCoderTableVerticalMotionKey];
 	}
 	if ([aDecoder containsValueForKey:AGCoderTableIntercellKey]) {
 		_intercellSpacing = [aDecoder decodeSizeForKey:AGCoderTableIntercellKey];
@@ -259,7 +275,12 @@ static NSString * const AGCoderTableTypeSelectKey = @"allowsTypeSelect";
 		_intercellSpacing = NSMakeSize(3.0, 2.0);
 		_gridStyleMask = NSTableViewGridNone;
 		_columnAutoresizingStyle = NSTableViewNoColumnAutoresizing;
+		_cgAutoresizingColumns = NO;
 		_selectionHighlightStyle = NSTableViewSelectionHighlightStyleRegular;
+		_draggingDestinationFeedbackStyle = NSTableViewDraggingDestinationFeedbackStyleRegular;
+		_focusedColumn = -1;
+		_verticalMotionCanBeginDrag = YES;
+		_cgIndicatorImages = [[NSMutableDictionary alloc] init];
 		_highlightedTableColumn = -1;
 		_clickedRow = -1;
 		_clickedColumn = -1;
@@ -307,6 +328,7 @@ static NSString * const AGCoderTableTypeSelectKey = @"allowsTypeSelect";
 	[_autosaveName release];
 	[_cgDragRows release];
 	[_cgDragPasteboard release];
+	[_cgIndicatorImages release];
 	[super dealloc];
 }
 
@@ -437,10 +459,63 @@ static NSString * const AGCoderTableTypeSelectKey = @"allowsTypeSelect";
 - (BOOL)allowsColumnReordering			{ return _allowsColumnReordering; }
 - (void)setAllowsColumnResizing:(BOOL)flag	{ _allowsColumnResizing = flag ? YES : NO; }
 - (BOOL)allowsColumnResizing			{ return _allowsColumnResizing; }
-- (void)setColumnAutoresizingStyle:(NSTableViewColumnAutoresizingStyle)style { _columnAutoresizingStyle = style; }
+- (void)setColumnAutoresizingStyle:(NSTableViewColumnAutoresizingStyle)style
+{
+	_columnAutoresizingStyle = style;
+	[self tile];
+}
 - (NSTableViewColumnAutoresizingStyle)columnAutoresizingStyle { return _columnAutoresizingStyle; }
+
+/* **THE DEPRECATED FLAG IS THE STYLE'S TWO SPELLINGS, WHICH IS APPLE'S OWN MAPPING** (the 10.6 header says so in the
+ * door's comment): YES is Uniform, NO is LastColumnOnly. The getter answers YES exactly for Uniform, so the sequential
+ * styles read NO even though they, too, resize to fit. */
+- (void)setAutoresizesAllColumnsToFit:(BOOL)flag
+{
+	[self setColumnAutoresizingStyle:flag ? NSTableViewUniformColumnAutoresizingStyle
+					     : NSTableViewLastColumnOnlyAutoresizingStyle];
+}
+- (BOOL)autoresizesAllColumnsToFit
+{
+	return _columnAutoresizingStyle == NSTableViewUniformColumnAutoresizingStyle;
+}
+
 - (void)setGridStyleMask:(NSUInteger)gridType { _gridStyleMask = gridType; [self setNeedsDisplay:YES]; }
 - (NSUInteger)gridStyleMask { return _gridStyleMask; }
+
+/* THE DEPRECATED BOOLEAN SPELLING, ON THE SAME TERMS: it reads and writes the mask rather than adding a second flag. */
+- (BOOL)drawsGrid { return _gridStyleMask != NSTableViewGridNone; }
+- (void)setDrawsGrid:(BOOL)flag
+{
+	_gridStyleMask = flag ? (NSTableViewSolidVerticalGridLineMask | NSTableViewSolidHorizontalGridLineMask)
+			      : NSTableViewGridNone;
+	[self setNeedsDisplay:YES];
+}
+
+- (BOOL)verticalMotionCanBeginDrag { return _verticalMotionCanBeginDrag; }
+- (void)setVerticalMotionCanBeginDrag:(BOOL)flag
+{
+	_verticalMotionCanBeginDrag = flag ? YES : NO;
+}
+
+- (NSTableViewDraggingDestinationFeedbackStyle)draggingDestinationFeedbackStyle
+{
+	return _draggingDestinationFeedbackStyle;
+}
+- (void)setDraggingDestinationFeedbackStyle:(NSTableViewDraggingDestinationFeedbackStyle)style
+{
+	_draggingDestinationFeedbackStyle = style;
+	[self setNeedsDisplay:YES];
+}
+
+- (NSInteger)focusedColumn { return _focusedColumn; }
+- (void)setFocusedColumn:(NSInteger)focusedColumn
+{
+	if (_focusedColumn == focusedColumn) {
+		return;
+	}
+	_focusedColumn = focusedColumn;
+	[self setNeedsDisplay:YES];
+}
 
 - (void)setIntercellSpacing:(NSSize)aSize
 {
@@ -571,6 +646,7 @@ static NSString * const AGCoderTableTypeSelectKey = @"allowsTypeSelect";
 		return;
 	}
 	[tableColumn retain];
+	[_cgIndicatorImages removeObjectForKey:[NSValue valueWithPointer:tableColumn]];
 	[tableColumn setTableView:nil];
 	[_tableColumns removeObjectIdenticalTo:tableColumn];
 	[tableColumn release];
@@ -638,6 +714,100 @@ static NSString * const AGCoderTableTypeSelectKey = @"allowsTypeSelect";
 
 /* ---- THE SIZE AND THE LAYOUT -------------------------------------------------------------------- */
 
+/* **THE AUTORESIZING STYLES ARE ARITHMETIC OVER THE COLUMN WIDTHS, AND `tile` IS WHERE THEY ARE APPLIED.** Each style
+ * is the same question — the caller says how wide the table is, the columns absorb the difference — with a different
+ * order and a different clamp. `_cgAutoresizingColumns` is the re-entry guard: `-setWidth:` calls `tile`, and without
+ * the guard one autoresize pass would start another from inside itself. The nested `tile` still recomputes the frame;
+ * it simply does not autoresize again. */
+- (void)cg_autoresizeColumnsToWidth:(CGFloat)target
+{
+	NSArray *visible = [self fn_visibleColumns];
+	NSUInteger count = [visible count];
+	NSUInteger i;
+	CGFloat spacing;
+	CGFloat total = 0.0;
+	CGFloat delta;
+
+	if (count == 0 || _columnAutoresizingStyle == NSTableViewNoColumnAutoresizing || _cgAutoresizingColumns) {
+		return;
+	}
+	spacing = _intercellSpacing.width * (CGFloat)(count - 1);
+	for (i = 0; i < count; i++) {
+		total += [[visible objectAtIndex:i] width];
+	}
+	total += spacing;
+	delta = target - total;
+	if (fabs((double)delta) < 0.01) {
+		return;
+	}
+	_cgAutoresizingColumns = YES;
+	if (_columnAutoresizingStyle == NSTableViewLastColumnOnlyAutoresizingStyle) {
+		NSTableColumn *last = [visible lastObject];
+
+		[last setWidth:[last width] + delta];
+	} else if (_columnAutoresizingStyle == NSTableViewSequentialColumnAutoresizingStyle
+		   || _columnAutoresizingStyle == NSTableViewReverseSequentialColumnAutoresizingStyle) {
+		BOOL reverse = (_columnAutoresizingStyle == NSTableViewReverseSequentialColumnAutoresizingStyle);
+		CGFloat remaining = delta;
+		NSUInteger step;
+
+		for (step = 0; step < count && fabs((double)remaining) > 0.01; step++) {
+			NSUInteger index = reverse ? (count - 1 - step) : step;
+			NSTableColumn *column = [visible objectAtIndex:index];
+			CGFloat before = [column width];
+
+			[column setWidth:before + remaining];
+			remaining -= ([column width] - before);
+		}
+	} else if (_columnAutoresizingStyle == NSTableViewUniformColumnAutoresizingStyle) {
+		CGFloat remaining = delta;
+		NSUInteger pass;
+
+		/* **TWO OR THREE PASSES, NOT ONE, BECAUSE A CLAMP CHANGES THE BASIS.** The first pass shares the difference
+		 * in proportion to each column's width; a column that hits its min/max takes only what it can, and the rest
+		 * is re-shared among the columns that can still move. The loop ends when nothing moves or nothing can. */
+		for (pass = 0; pass < count + 1 && fabs((double)remaining) > 0.01; pass++) {
+			CGFloat basis = 0.0;
+			NSUInteger movable = 0;
+			CGFloat beforePass = remaining;
+
+			for (i = 0; i < count; i++) {
+				NSTableColumn *column = [visible objectAtIndex:i];
+				CGFloat width = [column width];
+				BOOL can = (remaining > 0.0)
+					? ([column maxWidth] <= 0.0 || width < [column maxWidth])
+					: (width > [column minWidth]);
+
+				if (can) {
+					basis += width;
+					movable++;
+				}
+			}
+			if (movable == 0 || basis <= 0.0) {
+				break;
+			}
+			for (i = 0; i < count; i++) {
+				NSTableColumn *column = [visible objectAtIndex:i];
+				CGFloat width = [column width];
+				BOOL can = (remaining > 0.0)
+					? ([column maxWidth] <= 0.0 || width < [column maxWidth])
+					: (width > [column minWidth]);
+
+				if (can) {
+					CGFloat old = width;
+
+					[column setWidth:width + beforePass * (width / basis)];
+					remaining -= ([column width] - old);
+				}
+			}
+			if (fabs((double)(remaining - beforePass)) < 0.01) {
+				break;
+			}
+		}
+	}
+	_cgAutoresizingColumns = NO;
+}
+
 - (void)tile
 {
 	NSScrollView *scroll = (NSScrollView *)[self enclosingScrollView];
@@ -647,6 +817,10 @@ static NSString * const AGCoderTableTypeSelectKey = @"allowsTypeSelect";
 	NSUInteger i;
 	BOOL first = YES;
 
+	/* THE STYLE GETS THE FIRST SAY, BEFORE THE FRAME IS MEASURED FROM THE WIDTHS IT CHOSE. */
+	if (clip.width > 0.0) {
+		[self cg_autoresizeColumnsToWidth:clip.width];
+	}
 	for (i = 0; i < [_tableColumns count]; i++) {
 		NSTableColumn *column = [_tableColumns objectAtIndex:i];
 
@@ -950,6 +1124,51 @@ static NSString * const AGCoderTableTypeSelectKey = @"allowsTypeSelect";
 	[allowed release];
 }
 
+/* **THE DEPRECATED SINGLE-INDEX SPELLINGS GO THROUGH THE INDEX-SET DOORS.** That is Apple's own compatibility note:
+ * the single-index door is invoked per index, and a subclass that overrides the multi-index door is the one in charge.
+ * An out-of-range index is dropped by the index-set door's own bound check rather than by a second one here. */
+- (void)selectRow:(NSInteger)row byExtendingSelection:(BOOL)extend
+{
+	if (row < 0) {
+		return;
+	}
+	[self selectRowIndexes:[NSIndexSet indexSetWithIndex:(NSUInteger)row] byExtendingSelection:extend];
+}
+
+- (void)selectColumn:(NSInteger)column byExtendingSelection:(BOOL)extend
+{
+	if (column < 0) {
+		return;
+	}
+	[self selectColumnIndexes:[NSIndexSet indexSetWithIndex:(NSUInteger)column] byExtendingSelection:extend];
+}
+
+/* THE ENUMERATORS ARE SNAPSHOTS, like every other selection getter here: the enumerator owns an array of NSNumber
+ * objects built from the set as it stands, so a selection changed during the walk cannot disturb it. */
+- (NSEnumerator *)selectedRowEnumerator
+{
+	NSMutableArray *numbers = [NSMutableArray array];
+	NSUInteger index = [_selectedRowIndexes firstIndex];
+
+	while (index != NSNotFound) {
+		[numbers addObject:[NSNumber numberWithInteger:(NSInteger)index]];
+		index = [_selectedRowIndexes indexGreaterThanIndex:index];
+	}
+	return [numbers objectEnumerator];
+}
+
+- (NSEnumerator *)selectedColumnEnumerator
+{
+	NSMutableArray *numbers = [NSMutableArray array];
+	NSUInteger index = [_selectedColumnIndexes firstIndex];
+
+	while (index != NSNotFound) {
+		[numbers addObject:[NSNumber numberWithInteger:(NSInteger)index]];
+		index = [_selectedColumnIndexes indexGreaterThanIndex:index];
+	}
+	return [numbers objectEnumerator];
+}
+
 - (void)selectColumnIndexes:(NSIndexSet *)indexes byExtendingSelection:(BOOL)extend
 {
 	NSMutableIndexSet *proposed = [[NSMutableIndexSet alloc] init];
@@ -1067,6 +1286,11 @@ static NSString * const AGCoderTableTypeSelectKey = @"allowsTypeSelect";
 - (void)setSelectionHighlightStyle:(NSTableViewSelectionHighlightStyle)style
 {
 	_selectionHighlightStyle = style;
+	/* **A SOURCE LIST SELECTION WEARS THE SOURCE LIST DRAG FEEDBACK**, the coupling the 10.6 header documents. It is
+	 * one direction only: a caller can still set the feedback style explicitly afterwards. */
+	if (style == NSTableViewSelectionHighlightStyleSourceList) {
+		_draggingDestinationFeedbackStyle = NSTableViewDraggingDestinationFeedbackStyleSourceList;
+	}
 	[self setNeedsDisplay:YES];
 }
 
@@ -1187,6 +1411,20 @@ static NSString * const AGCoderTableTypeSelectKey = @"allowsTypeSelect";
 		}
 	}
 	return indexes;
+}
+
+/* **THE DEPRECATED RANGE SPELLING IS THE SAME QUESTION WITH A CONTIGUOUS ANSWER.** A hidden column can leave a gap
+ * between two visible ones, so the range names the first through the last intersecting column — which is what a range
+ * can say — and `-columnIndexesInRect:` is the door to ask when the gaps matter. `NSNotFound` is the era's empty range
+ * for "no column intersects", the same answer `-rowsInRect:` gives. */
+- (NSRange)columnsInRect:(NSRect)rect
+{
+	NSIndexSet *indexes = [self columnIndexesInRect:rect];
+
+	if ([indexes count] == 0) {
+		return NSMakeRange(NSNotFound, 0);
+	}
+	return NSMakeRange([indexes firstIndex], [indexes lastIndex] - [indexes firstIndex] + 1);
 }
 
 - (NSRect)frameOfCellAtColumn:(NSInteger)column row:(NSInteger)row
@@ -1368,7 +1606,11 @@ static NSString * const AGCoderTableTypeSelectKey = @"allowsTypeSelect";
 		}
 	}
 	[self drawGridInClipRect:dirtyRect];
-	if (_cgDragging && _cgDropRow >= 0) {
+	/* **THE DROP FEEDBACK IS THE STYLE'S, AND THE DROP ROW IS THE STATE THAT DRAWS IT.** A data source sets that row
+	 * through `-setDropRow:dropOperation:` during validation, so the feedback is drawn whenever one is set — the
+	 * session's own mouse loop sets it too, and the two paths agree. None draws nothing; Regular draws the table's
+	 * line; SourceList draws the sidebar's inset line, or a rounded plate when the operation is DropOn. */
+	if (_cgDropRow >= 0 && _draggingDestinationFeedbackStyle != NSTableViewDraggingDestinationFeedbackStyleNone) {
 		CGFloat y = 0.0;
 
 		if (_cgDropRow < _numberOfRows) {
@@ -1376,8 +1618,38 @@ static NSString * const AGCoderTableTypeSelectKey = @"allowsTypeSelect";
 		} else if (_numberOfRows > 0) {
 			y = NSMaxY([self rectOfRow:_numberOfRows - 1]);
 		}
-		[[NSColor cg_accentColor] setFill];
-		[[NSBezierPath bezierPathWithRect:NSMakeRect(0.0, y - 1.0, [self frame].size.width, 2.0)] fill];
+		if (_draggingDestinationFeedbackStyle == NSTableViewDraggingDestinationFeedbackStyleSourceList
+		    && _cgDropOperation == NSTableViewDropOn && _cgDropRow < _numberOfRows) {
+			NSRect plate = NSInsetRect([self rectOfRow:_cgDropRow], 2.0, 2.0);
+
+			[[NSColor cg_accentColor] setFill];
+			[[NSBezierPath bezierPathWithRoundedRect:plate xRadius:4.0 yRadius:4.0] fill];
+		} else {
+			CGFloat inset = (_draggingDestinationFeedbackStyle == NSTableViewDraggingDestinationFeedbackStyleSourceList)
+				? 8.0 : 0.0;
+
+			[[NSColor cg_accentColor] setFill];
+			[[NSBezierPath bezierPathWithRect:NSMakeRect(inset, y - 1.0,
+								     [self frame].size.width - 2.0 * inset, 2.0)] fill];
+		}
+	}
+	/* **THE FOCUS RING AROUND THE SELECTED ROW'S CELL IN THE FOCUSED COLUMN**, which is the shape Apple's header
+	 * describes: the interaction is always on the selected row. A table with no focused column (-1) or no selection
+	 * draws none, which is why every existing rendering is unchanged. */
+	if (_focusedColumn >= 0) {
+		NSInteger selected = [self selectedRow];
+
+		if (selected >= 0) {
+			NSRect cell = [self frameOfCellAtColumn:_focusedColumn row:selected];
+
+			if (!NSIsEmptyRect(cell)) {
+				NSBezierPath *ring = [NSBezierPath bezierPathWithRect:NSInsetRect(cell, 1.0, 1.0)];
+
+				[[NSColor keyboardFocusIndicatorColor] setStroke];
+				[ring setLineWidth:2.0];
+				[ring stroke];
+			}
+		}
 	}
 }
 
@@ -1465,16 +1737,105 @@ static NSString * const AGCoderTableTypeSelectKey = @"allowsTypeSelect";
  *
  * THE IMAGE IS THE ROWS' OWN INK, captured through `-cacheDisplayInRect:toBitmapImageRep:` so it is a snapshot of
  * what the table drew (the selection plate included) rather than a second drawing routine that could disagree. */
+/* **THE DRAG IMAGE IS A SNAPSHOT OF THE CELLS, NOT A SECOND DRAWING.** The union of the selected rows' cells (over
+ * the named columns, or every visible column when the caller passes none) is handed to `-cacheDisplayInRect:` so the
+ * image carries the selection plate and the grid exactly as the table drew them. The modern door is the one the mouse
+ * loop calls; the deprecated array spelling converts its NSNumbers and forwards. */
+- (NSImage *)cg_dragImageForRows:(NSIndexSet *)rows columns:(NSArray *)columns unionRect:(NSRect *)unionRect
+{
+	NSArray *useColumns = (columns != nil && [columns count] > 0) ? columns : [self tableColumns];
+	NSRect unionBox = NSZeroRect;	/* not `union`: that is a C keyword, and the compiler says so plainly */
+	BOOL first = YES;
+	NSUInteger row;
+	NSBitmapImageRep *rep;
+	NSImage *image;
+
+	if ([rows count] == 0) {
+		return nil;
+	}
+	for (row = [rows firstIndex]; row != NSNotFound; row = [rows indexGreaterThanIndex:row]) {
+		NSUInteger c;
+
+		if ((NSInteger)row >= _numberOfRows) {
+			continue;
+		}
+		for (c = 0; c < [useColumns count]; c++) {
+			NSTableColumn *column = [useColumns objectAtIndex:c];
+			NSInteger columnIndex = (NSInteger)[_tableColumns indexOfObjectIdenticalTo:column];
+			NSRect cell;
+
+			if (columnIndex == (NSInteger)NSNotFound || [column isHidden]) {
+				continue;
+			}
+			cell = [self frameOfCellAtColumn:columnIndex row:(NSInteger)row];
+			if (NSIsEmptyRect(cell)) {
+				continue;
+			}
+			unionBox = first ? cell : NSUnionRect(unionBox, cell);
+			first = NO;
+		}
+	}
+	if (first || NSIsEmptyRect(unionBox)) {
+		return nil;
+	}
+	rep = [self bitmapImageRepForCachingDisplayInRect:unionBox];
+	if (rep == nil) {
+		return nil;
+	}
+	[self cacheDisplayInRect:unionBox toBitmapImageRep:rep];
+	image = [[[NSImage alloc] initWithSize:unionBox.size] autorelease];
+	[image addRepresentation:rep];
+	if (unionRect != NULL) {
+		*unionRect = unionBox;
+	}
+	return image;
+}
+
+- (NSImage *)dragImageForRowsWithIndexes:(NSIndexSet *)dragRows
+			     tableColumns:(NSArray *)tableColumns
+				    event:(NSEvent *)dragEvent
+				   offset:(NSPointPointer)dragImageOffset
+{
+	(void)dragEvent;
+	/* IN/OUT, AND THIS TIER LEAVES IT AT ZERO: zero is Apple's "centred under the mouse", which is the offset the
+	 * table's own mouse loop uses. A subclass may overwrite it, which is the point of the parameter. */
+	if (dragImageOffset != NULL) {
+		*dragImageOffset = NSZeroPoint;
+	}
+	return [self cg_dragImageForRows:dragRows columns:tableColumns unionRect:NULL];
+}
+
+- (NSImage *)dragImageForRows:(NSArray *)dragRows
+			event:(NSEvent *)dragEvent
+	      dragImageOffset:(NSPointPointer)dragImageOffset
+{
+	NSMutableIndexSet *rows = [[NSMutableIndexSet alloc] init];
+	NSUInteger i;
+	NSImage *image;
+
+	for (i = 0; i < [dragRows count]; i++) {
+		id object = [dragRows objectAtIndex:i];
+
+		if ([object respondsToSelector:@selector(integerValue)]) {
+			NSInteger row = [object integerValue];
+
+			if (row >= 0) {
+				[rows addIndex:(NSUInteger)row];
+			}
+		}
+	}
+	image = [self dragImageForRowsWithIndexes:rows tableColumns:nil event:dragEvent offset:dragImageOffset];
+	[rows release];
+	return image;
+}
+
 - (void)mouseDragged:(NSEvent *)event
 {
 	NSPoint point;
 	NSIndexSet *rows;
 	NSPasteboard *pasteboard;
 	NSRect unionRect = NSZeroRect;
-	NSBitmapImageRep *rep;
 	NSImage *image;
-	NSUInteger row;
-	BOOL first = YES;
 
 	if (_clickedRow < 0 || _dataSource == nil || _cgDragging) {
 		if (!_cgDragging) {
@@ -1483,8 +1844,15 @@ static NSString * const AGCoderTableTypeSelectKey = @"allowsTypeSelect";
 		return;
 	}
 	point = [self convertPoint:[event locationInWindow] fromView:nil];
-	if (fabs((double)(point.x - _cgDragStartPoint.x)) < 4.0
-	    && fabs((double)(point.y - _cgDragStartPoint.y)) < 4.0) {
+	if (_verticalMotionCanBeginDrag) {
+		if (fabs((double)(point.x - _cgDragStartPoint.x)) < 4.0
+		    && fabs((double)(point.y - _cgDragStartPoint.y)) < 4.0) {
+			return;
+		}
+	} else if (fabs((double)(point.x - _cgDragStartPoint.x)) < 4.0) {
+		/* **VERTICAL MOTION CANNOT BEGIN A DRAG, SO ONLY THE HORIZONTAL AXIS IS THE THRESHOLD.** Apple's other half of
+		 * this flag is a drag-select; this tier's click loop has no drag-select, so the honest reading is that the drag
+		 * does not begin. A later slice that adds the marquee turns this branch into that gesture. */
 		return;
 	}
 	rows = _selectedRowIndexes;
@@ -1502,22 +1870,10 @@ static NSString * const AGCoderTableTypeSelectKey = @"allowsTypeSelect";
 	if (![_dataSource tableView:self writeRowsWithIndexes:rows toPasteboard:pasteboard]) {
 		return;
 	}
-	for (row = [rows firstIndex]; row != NSNotFound; row = [rows indexGreaterThanIndex:row]) {
-		NSRect rowRect = [self rectOfRow:(NSInteger)row];
-
-		unionRect = first ? rowRect : NSUnionRect(unionRect, rowRect);
-		first = NO;
-	}
-	if (first) {
+	image = [[self cg_dragImageForRows:rows columns:nil unionRect:&unionRect] retain];
+	if (image == nil) {
 		return;
 	}
-	rep = [self bitmapImageRepForCachingDisplayInRect:unionRect];
-	if (rep == nil) {
-		return;
-	}
-	[self cacheDisplayInRect:unionRect toBitmapImageRep:rep];
-	image = [[NSImage alloc] initWithSize:unionRect.size];
-	[image addRepresentation:rep];
 	[_cgDragRows release];
 	_cgDragRows = [rows copy];
 	[_cgDragPasteboard release];
@@ -1872,6 +2228,54 @@ static NSString * const AGCoderTableTypeSelectKey = @"allowsTypeSelect";
 	return nil;
 }
 
+/* **A CLICK ON A CELL IS THE CELL'S ACTION, AND THE CELL IS A COPY WITH ITS TARGET/ACTION CARRIED OVER.** The
+ * prepared cell is the one the table would draw; it is copied so the column's own data cell is not left in a clicked
+ * state, and the target/action pair is set on the copy because `NSCell`'s archive-based `-copy` does not carry a
+ * non-retained target. If the click changed the cell's object value, that value goes back through the data source —
+ * Apple's "updates the data source if required". The door deliberately does not ask whether the cell is enabled;
+ * Apple's does not either. */
+- (void)performClickOnCellAtColumn:(NSInteger)column row:(NSInteger)row
+{
+	NSTableColumn *tableColumn;
+	NSCell *prepared;
+	NSCell *cell;
+	NSRect frame;
+	id before;
+	BOOL changed;
+
+	if (column < 0 || (NSUInteger)column >= [_tableColumns count] || row < 0 || row >= _numberOfRows) {
+		return;
+	}
+	tableColumn = [_tableColumns objectAtIndex:(NSUInteger)column];
+	if ([tableColumn isHidden]) {
+		return;
+	}
+	frame = [self frameOfCellAtColumn:column row:row];
+	prepared = [self preparedCellAtColumn:column row:row];
+	if (prepared == nil || NSIsEmptyRect(frame)) {
+		return;
+	}
+	before = [[prepared objectValue] retain];
+	cell = [prepared copy];
+	if (cell == nil) {
+		cell = [prepared retain];
+	}
+	[cell setTarget:[prepared target]];
+	[cell setAction:[prepared action]];
+	if ([cell respondsToSelector:@selector(performClickWithFrame:inView:)]) {
+		[(NSPopUpButtonCell *)cell performClickWithFrame:frame inView:self];
+	} else {
+		[cell performClick:self];
+	}
+	changed = (before != nil) ? ![[cell objectValue] isEqual:before] : ([cell objectValue] != nil);
+	if (changed && _dataSource != nil
+	    && [_dataSource respondsToSelector:@selector(tableView:setObjectValue:forTableColumn:row:)]) {
+		[_dataSource tableView:self setObjectValue:[cell objectValue] forTableColumn:tableColumn row:row];
+	}
+	[cell release];
+	[before release];
+}
+
 - (BOOL)abortEditing
 {
 	BOOL aborted = NO;
@@ -2123,6 +2527,34 @@ static NSString * const AGCoderTableTypeSelectKey = @"allowsTypeSelect";
 {
 	_cgDropRow = row;
 	_cgDropOperation = dropOperation;
+	[self setNeedsDisplay:YES];
+}
+
+/* **THE INDICATOR IS A PER-COLUMN ASSOCIATION KEPT ON THE TABLE, WHICH IS WHY THE DOORS ARE HERE.** A pointer is the
+ * key rather than the identifier: two columns may share an identifier in a broken design, and identity is what a
+ * caller handed over. The header is the reader, and it is told to repaint when the association changes. */
+- (NSImage *)indicatorImageInTableColumn:(NSTableColumn *)tableColumn
+{
+	if (tableColumn == nil) {
+		return nil;
+	}
+	return [_cgIndicatorImages objectForKey:[NSValue valueWithPointer:tableColumn]];
+}
+
+- (void)setIndicatorImage:(NSImage *)anImage inTableColumn:(NSTableColumn *)tableColumn
+{
+	NSValue *key;
+
+	if (tableColumn == nil) {
+		return;
+	}
+	key = [NSValue valueWithPointer:tableColumn];
+	if (anImage != nil) {
+		[_cgIndicatorImages setObject:anImage forKey:key];
+	} else {
+		[_cgIndicatorImages removeObjectForKey:key];
+	}
+	[_headerView setNeedsDisplay:YES];
 }
 
 - (BOOL)validateUserInterfaceItem:(id <NSValidatedUserInterfaceItem>)anItem

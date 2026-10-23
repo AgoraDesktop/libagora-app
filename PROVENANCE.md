@@ -1336,6 +1336,41 @@ centres against the knob's centres in both orientations and flips, the hit test 
 the surviving round trip, the title's cell/font/colour, the band moving the knob and the words drawing in it, and every
 refusing door answering its type's empty value.
 
+## 49. `NSTableView` complete: deprecated spellings, a drag image, and a focus ring around the selected cell
+
+**THE CLASS IS COMPLETE FOR THE ERA: 123 of 123, the ninth class to finish.** The last twenty selectors were mostly
+spellings of state the table already had, which is why the slice is small and the census movement is large.
+
+**THE DEPRECATED FLAGS ARE THE MODERN STATE RATHER THAN A SECOND FIELD.** `-drawsGrid` reads and writes the grid style
+mask; `-autoresizesAllColumnsToFit` maps YES to `NSTableViewUniformColumnAutoresizingStyle` and NO to
+`LastColumnOnly`, exactly as the SDK's own compatibility note says. That mapping made the autoresizing styles worth
+implementing, and `-tile` now applies them: Uniform shares the difference proportionally with a clamp-and-re-share loop,
+LastColumnOnly gives it all to the last column, and the sequential pair walks from one end. `_cgAutoresizingColumns` is
+the re-entry guard, because `NSTableColumn -setWidth:` calls `-tile`.
+
+**THE DRAWINGS ARE THE READERS.** The focused column draws `keyboardFocusIndicatorColor` around the SELECTED row's cell
+in that column, which is the SDK's own description; the header draws `-indicatorImageInTableColumn:` at its right edge;
+the destination feedback style draws the table's line (Regular), an inset line or a DropOn plate (SourceList), or
+nothing (None); and a source-list selection style chooses SourceList for the caller. `-verticalMotionCanBeginDrag` is a
+gate in the mouse-drag threshold, measured through a table subclass whose drag entry point is a counter — with NO a
+vertical motion does not begin a drag and a horizontal one does.
+
+**THE TWO DRAG-IMAGE DOORS ARE ONE SNAPSHOT.** The union of the named rows' cells over the named columns (or every
+column when none is named) is captured through `-cacheDisplayInRect:toBitmapImageRep:`, so the image carries the
+selection plate and the grid. The deprecated array spelling converts its NSNumbers and forwards. The offset is in/out
+and stays at Apple's zero (centred under the mouse). The table's own mouse loop now calls the same helper, so the drag
+image and the cursor cannot disagree.
+
+**`-performClickOnCellAtColumn:row:` IS THE CELL'S CLICK.** The prepared cell is copied (its target/action re-attached,
+because this tree's archive-based `NSCell -copy` does not carry a non-retained target), clicked through `-performClick:`
+or `-performClickWithFrame:inView:`, and its object value written back to the data source when the click changed it.
+`-columnsInRect:` is the contiguous range spelling of `-columnIndexesInRect:`, and the single-index selection doors go
+through the index-set doors, which is Apple's own compatibility rule.
+
+`tests/table_tail.m` measures it in **34 checks**: the three autoresizing behaviours by the widths they leave, the grid
+by its colour's pixels, the focus ring and indicator image by theirs, the three feedback styles as three pictures, the
+drag image's union size, and the vertical-motion gate through a counted drag entry point.
+
 ## Keeping in sync
 
 The Fiwix AppKit is the origin and this repository has now diverged from it in the seam. A fix made there

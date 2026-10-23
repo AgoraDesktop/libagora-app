@@ -17,6 +17,7 @@
 
 #import "NSColor.h"
 #import "NSBezierPath.h"
+#import "NSImage.h"
 #import "NSEvent.h"
 #import <Foundation/NSSortDescriptor.h>
 #import "NSWindow.h"
@@ -140,6 +141,22 @@
 		}
 		if (cell != nil) {
 			[cell drawWithFrame:rect inView:self];
+		}
+		/* **THE INDICATOR IMAGE IS THE COLUMN'S, ASSOCIATED BY THE TABLE AND DRAWN AT THE HEADER'S RIGHT EDGE.** The
+		 * image's own size places it, so a small mark stays small; it is centred vertically and inset four points, the
+		 * same right-hand zone the sort mark lives in (and a caller that sets both gets both, which is Apple's own
+		 * reading of the two as separate marks). */
+		{
+			NSImage *indicator = [_tableView indicatorImageInTableColumn:column];
+
+			if (indicator != nil) {
+				NSSize size = [indicator size];
+				NSRect where = NSMakeRect(NSMaxX(rect) - size.width - 4.0,
+							  NSMidY(rect) - size.height / 2.0,
+							  size.width, size.height);
+
+				[indicator drawInRect:where];
+			}
 		}
 		/* THE SORT MARK IS THE HEADER'S, because only it knows which column the table's first descriptor names. */
 		descriptors = [_tableView sortDescriptors];
