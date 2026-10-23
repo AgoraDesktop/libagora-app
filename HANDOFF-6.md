@@ -1,22 +1,22 @@
 # libagora-app — a sixth handoff
 
-*Written at the end of **eleven slices** that picked `HANDOFF-5.md` up where its §8 stopped — §9–§16 of that file are
+*Written at the end of **twelve slices** that picked `HANDOFF-5.md` up where its §8 stopped — §9–§16 of that file are
 their running record, one numbered section per slice, and they are still the long form of everything summarised here.
 `HANDOFF.md`, `HANDOFF-2.md`, `HANDOFF-3.md` and `HANDOFF-4.md` remain worth reading: nothing in any of them was wrong,
 and the second file's §2 instrument rules and §4 traps are still the ones these sessions used most. **THIS FILE'S §2
 NUMBERS SUPERSEDE EVERY EARLIER HANDOFF'S.***
 
-*State at this handover: **eleven slice commits** since the fifth handoff, tree clean, **164 tests passing in about 85 s**,
-`api-ledger check` holding **380 metrics** — **136 of 168 classes (80%), 4594 of 4594 selectors (100%), 43 of 56
-protocols (76%), 86 of 86 functions**, 5144 methods declared with 8 having no body, **all 134 classes with a surface at
-COMPLETE coverage** — refusal census **387**, owed census **19**. **The 32 absent classes and the 13 absent protocols are
+*State at this handover: **twelve slice commits** since the fifth handoff, tree clean, **165 tests passing in about 85 s**,
+`api-ledger check` holding **381 metrics** — **137 of 168 classes (81%), 4636 of 4636 selectors (100%), 44 of 56
+protocols (78%), 86 of 86 functions**, 5186 methods declared with 8 having no body, **all 135 classes with a surface at
+COMPLETE coverage** — refusal census **390**, owed census **19**. **The 31 absent classes and the 12 absent protocols are
 the remaining surface; the 100% on selectors is 100% of the classes this tree HAS, not of the 10.6 AppKit.***
 
 ---
 
 ## 1. What these sessions did
 
-Eleven slices, in the order they landed. Each is a commit in this repository and each ended green. There were no
+Twelve slices, in the order they landed. Each is a commit in this repository and each ended green. There were no
 workspace commits in this arc, and the ninth also needed a Foundation fix, which is its own commit in `libagora-base`.
 
 | Commit | What it landed |
@@ -32,6 +32,7 @@ workspace commits in this arc, and the ninth also needed a Foundation fix, which
 | `929bba3` | **`NSTokenField` and `NSTokenFieldCell` — the first ABSENT EDITOR to arrive** (10/10 and 10/10) and the two protocols that came with them. The list is the base cell's one value, the three conversions (display/editing/represented) fall back to the object, the chips are one layout shared by drawing/measurement/hit test, a session opens on EDITING strings and commits through `-shouldAddObjects:atIndex:`, the completion delay's sign is the switch, and the field is the ten forwards plus a relay. **It also found a Foundation hang with no caller**, fixed in `libagora-base` `a72b102` (§9). |
 | `ffaef0d` | **`NSDrawer` — the first ABSENT CONTAINER to arrive** (27/27) and `NSDrawerDelegate`. A child window attached at the parent's edge, the four states announced synchronously (the middle is observable inside a handler), the two-axis size with the parent as the absolute limit, the min/max on the USER path only, and the parent's `-drawers` list as the owner. It also fixed two `NSWindow` teardown leaks: the child list was never released and a surviving child kept a dangling parent pointer (§10). |
 | `2a43fca` | **`NSCollectionView` — the first ABSENT COLLECTION to arrive** (28/28) and `NSCollectionViewDelegate`. The grid (a flipped cell grid sized from the prototype and clamped by min/max), the item factory and index-preserving pool, the selection set copied to the tiles, the gradient backdrop, and BOTH halves of a drag (source: canDrag/writeItems/image/masks/promised files; destination: validateDrop/acceptDrop with a proposed before/on index). It also gave `NSCollectionViewItem` its `NSCopying` copy (§11). |
+| `20cca8a` | **`NSRuleEditor` — the first ABSENT RULE EDITOR to arrive** (42/42) and `NSRuleEditorDelegate`. The delegate's criterion tree drawn as bands, the four nesting modes enforced at the insertion boundary, pre-order flat numbering computed on demand, adoption on removal, the selection and the row drawing (strings, menu titles, live views, the formatting dictionary). **Its three predicate doors refuse by name**, and `NSPredicateEditor`/`NSPredicateEditorRowTemplate` stay absent on purpose because this Foundation has no predicate family (§12). |
 
 **AND THE LAST FOUR ROWS OF THE FIFTH HANDOFF WERE NOT A CLASS TAIL AT ALL; THEY WERE THE END OF THE PRESENT SET.**
 `e199a54` closed every class this tree already had. `99baeca` began the other list: the classes the 10.6 manifest names
@@ -44,24 +45,24 @@ remaining editors will take: a cell that owns the model and a view that forwards
 ## 2. The surface, measured
 
 ```
-classes   136 of 168   (80%)    32 missing
-selectors 4594 of 4594 (100%)    0 missing   134 of 134 classes at COMPLETE coverage
-protocols  43 of  56   (76%)    13 missing
+classes   137 of 168   (81%)    31 missing
+selectors 4636 of 4636 (100%)    0 missing   135 of 135 classes at COMPLETE coverage
+protocols  44 of  56   (78%)    12 missing
 functions  86 of  86  (100%)     0 missing    10 refuse by name
-methods   5144 declared on this tree's own classes, 8 with NO body on the chain (0.2%)
+methods   5186 declared on this tree's own classes, 8 with NO body on the chain (0.2%)
 ```
 
 **THE SELECTOR FRACTION IS NOW 100% OF THE CLASSES THIS TREE HAS, AND THE CLASS FRACTION IS 80%.** The manifest
-offers selectors only for the classes that are present; the 32 absent classes contribute no rows to either side. So
-`4594 of 4594` says "every selector 10.6 declares for the 136 classes that exist here is answered", not "the 10.6
-AppKit is finished". The class number, 136 of 168, is the honest headline.
+offers selectors only for the classes that are present; the 31 absent classes contribute no rows to either side. So
+`4636 of 4636` says "every selector 10.6 declares for the 137 classes that exist here is answered", not "the 10.6
+AppKit is finished". The class number, 137 of 168, is the honest headline.
 
-**TWO OF THE 136 PRESENT CLASSES HAVE NO SELECTORS:** `NSSecureTextField` and `NSTextAttachmentCell`. The complete
-coverage denominator is therefore 134, not 136. (`NSSecureTextField` inherits everything from `NSTextField`;
+**TWO OF THE 137 PRESENT CLASSES HAVE NO SELECTORS:** `NSSecureTextField` and `NSTextAttachmentCell`. The complete
+coverage denominator is therefore 135, not 137. (`NSSecureTextField` inherits everything from `NSTextField`;
 `NSTextAttachmentCell` inherits everything from `NSCell`.) The earlier handoffs said "two classes with no surface" and
 did not name them; these are the two.
 
-**THE TWENTY-ONE CLASSES THESE ELEVEN SLICES FINISHED**, in the order they landed. Every one of them finished with named
+**THE TWENTY-TWO CLASSES THESE TWELVE SLICES FINISHED**, in the order they landed. Every one of them finished with named
 refusals or a stated effect rather than a stub:
 
 | Class | Selectors | Refusing by name |
@@ -87,20 +88,21 @@ refusals or a stated effect rather than a stub:
 | `NSTokenField` | 10 of 10 | 0 (ten forwards and a relay; every delegate door has a sender) |
 | `NSDrawer` | 27 of 27 | 0 (the child window, the four states, the edges and the reviewed user resize) |
 | `NSCollectionView` | 28 of 28 | 0 (the grid, the item factory and pool, the selection and both drag halves) |
+| `NSRuleEditor` | 42 of 42 | 3 (the two predicate doors and the strings-file load) |
 
-(The table lists the twenty-one completions since `HANDOFF-4`; the other 113 classes with a surface were already
+(The table lists the twenty-two completions since `HANDOFF-4`; the other 113 classes with a surface were already
 complete before that arc. `NSFont`'s fifth attachment door was found by `HANDOFF-5`'s own recount and is refused now.)
 
-**AND THE 32 ABSENT CLASSES GROUP CLEANLY. THIS IS THE LIST THE NEXT SLICES PICK FROM:**
+**AND THE 31 ABSENT CLASSES GROUP CLEANLY. THIS IS THE LIST THE NEXT SLICES PICK FROM:**
 
 | Group | Classes | What it needs |
 |---|---|---|
 | Controllers / bindings | `NSController`, `NSObjectController`, `NSArrayController`, `NSDictionaryController`, `NSUserDefaultsController`, `NSTreeController`, `NSTreeNode` | KVO/KVC substrate — a design question before it is a slice, because this tier has no KVO. |
-| Rules and tokens | `NSRuleEditor`, `NSPredicateEditor`, `NSPredicateEditorRowTemplate` | A predicate editor over the rule editor; both are views over controls that exist, but the predicate model is substantial. |
+| Predicate editor | `NSPredicateEditor`, `NSPredicateEditorRowTemplate` | **REFUSED ON PURPOSE: their whole surface is `NSPredicate`/`NSExpression`/`NSComparisonPredicate`, and this stack's Foundation has none of that family (§63.161).** The rule editor under them is DONE and its predicate doors name the missing model (§12). |
 | Still refused, per the plan's §A11 | `NSOpenGL*` (5), `NSMovie`, `NSMovieView`, `NSQuickDrawView`, the four typesetters (`NSATSTypesetter`, `NSGlyphGenerator`, `NSSimpleHorizontalTypesetter`, `NSTypesetter`), `NSSpeechSynthesizer`, `NSSpeechRecognizer`, `NSSound`, `NSInputManager`, `NSInputServer`, `NSDockTile`, `NSHelpManager`, `NSPersistentDocument`, `NSTouch` | GL, QuickDraw, movies, a PostScript/typesetting engine, speech, sound, the input-manager era, a Dock contract, a Help Viewer, a document subclass that needs autosave, and touch input with no hardware. Each is named at the door that would have to refuse. |
-| Not this component's | `NSFileWrapper` | Foundation's (`libagora-base/NSFileWrapper.h`). The real AppKit gap is 31. |
+| Not this component's | `NSFileWrapper` | Foundation's (`libagora-base/NSFileWrapper.h`). The real AppKit gap is 30. |
 
-**THE 13 MISSING PROTOCOLS ARE ALMOST ALL CONTRACTS FOR CLASSES IN THAT TABLE:** `NSRuleEditorDelegate`,
+**THE 12 MISSING PROTOCOLS ARE ALMOST ALL CONTRACTS FOR CLASSES IN THAT TABLE:**
 `NSSpeechSynthesizerDelegate`, `NSSpeechRecognizerDelegate`, `NSSoundDelegate`, `NSInputServiceProvider`,
 `NSInputServerMouseTracker`, `NSDockTilePlugIn`, `NSGlyphStorage`, `NSAnimatablePropertyContainer`. Four exceptions
 have their classes and are small slices on their own: **`NSTextViewDelegate`** (the view has a delegate and calls
@@ -117,7 +119,7 @@ Four censuses and one ledger, all committed and all gated by `ctest`:
 | Artifact | What it is |
 |---|---|
 | `api/10.6/appkit-manifest.txt` | The SDK's facts: 168 classes + superclasses, 56 protocols, 87 functions, 5208 selectors. |
-| `tests/api-10.6-census.txt` | **380** pinned metrics — the aggregates, one `sel:` line per present class (134 of them), one `proto:` line per protocol, `fn:`/`fndecl:` per function, `selphantom:` per class with a phantom. |
+| `tests/api-10.6-census.txt` | **381** pinned metrics — the aggregates, one `sel:` line per present class (135 of them), one `proto:` line per protocol, `fn:`/`fndecl:` per function, `selphantom:` per class with a phantom. |
 | `tests/api_census.cmake` | The gate: two-directional comparison, arithmetic check, two fault checks. |
 | `tests/refusal_census.txt` | **387** refusal sites, per FILE. |
 | `tests/owed_census.txt` | **19** headers' OWED notes, per file. |
@@ -125,9 +127,9 @@ Four censuses and one ledger, all committed and all gated by `ctest`:
 
 * **THE METRIC COUNT RISES BY ONE PER NEW CLASS, AND THAT IS NOT DRIFT.** `NSImageView` added one `sel:` line (375 ->
   376); the token pair added two more (376 -> 378); the drawer added one (378 -> 379); the collection view one more
-  (379 -> **380**). A new class adds a metric; a new test does not.
+  (379 -> 380); the rule editor one more (380 -> **381**). A new class adds a metric; a new test does not.
 * **`missing` IS NOW THE ABSENT-CLASS DOOR, NOT THE SLICE-PICKING DOOR.** `./tools/api-ledger missing
-  api/10.6/appkit-manifest.txt . --library build/libagora-app.so` prints **32 classes, 13 protocols, 0 functions, and
+  api/10.6/appkit-manifest.txt . --library build/libagora-app.so` prints **31 classes, 12 protocols, 0 functions, and
   no selector debt at all**. The "largest selector debt" section is gone because every present class is complete. A
   slice now starts by picking a class from that list or a protocol from the list beside it.
 * **THE PER-CLASS RECOUNT IS STILL THE MEASUREMENT THAT CATCHES A SILENT DELETION.** `parse_tree` twice and a `diff`
@@ -138,8 +140,9 @@ Four censuses and one ledger, all committed and all gated by `ctest`:
   and `selectors-offered`/`present` 4505 -> 4519; the token pair took them 132 -> 134 and 4519 -> 4539, complete coverage
   130 -> 132, and protocols 39 -> 41; the drawer took them 134 -> 135 and 4539 -> 4566, complete coverage 132 -> 133, and
   protocols 41 -> 42; the collection view took them 135 -> 136 and 4566 -> 4594, complete coverage 133 -> 134, and
-  protocols 42 -> 43. The four hand-written summary lines had to be recomputed: 136 of 168 (80%), 4594 of 4594 (100%),
-  134 of 134. **A class that arrives is a new denominator on both sides, and a protocol that arrives is a `proto:` line
+  protocols 42 -> 43; the rule editor took them 136 -> 137 and 4594 -> 4636, complete coverage 134 -> 135, and protocols
+  43 -> 44. The four hand-written summary lines had to be recomputed: 137 of 168 (81%), 4636 of 4636 (100%), 135 of
+  135. **A class that arrives is a new denominator on both sides, and a protocol that arrives is a `proto:` line
   moving 0 -> 1.**
 * **EVERY SLICE RE-PINS DELIBERATELY.** Let `ctest -R appkit-api-census` fail, recompute with `./tools/api-ledger census
   …`, write it in the same commit, and recompute the four hand-written summary lines from `api-ledger census` rather
@@ -301,7 +304,7 @@ of a library path rather than for want of the code.
 
 ## 6. Where to spend the next hour
 
-**THERE IS NO CLASS TAIL LEFT. THE NEXT WORK IS THE 32 ABSENT CLASSES, AND THEY ARE NOT ONE-LINERS.** The order below
+**THERE IS NO CLASS TAIL LEFT. THE NEXT WORK IS THE 31 ABSENT CLASSES, AND THEY ARE NOT ONE-LINERS.** The order below
 is by reachable surface and by what the tree already has to build on.
 
 1. **DONE: `NSTokenField` and `NSTokenFieldCell`** — the first absent editor, landed as `929bba3` with both protocols
@@ -313,9 +316,11 @@ is by reachable surface and by what the tree already has to build on.
 3. **DONE: `NSCollectionView`** — the first absent collection, landed as `2a43fca` with `NSCollectionViewDelegate`
    (§11). It is the grid, the index-preserving pool, the selection set, the gradient backdrop and both drag halves; the
    item class it belongs to was already here.
-4. **`NSRuleEditor` and then `NSPredicateEditor`/`NSPredicateEditorRowTemplate`** — views over controls that exist, but
-   the predicate model is substantial. Build the rule editor's rows/criteria first and make the predicate editor its
-   consumer, or refuse the predicate half by name until the model is decided.
+4. **DONE: `NSRuleEditor`** — landed as `20cca8a` with `NSRuleEditorDelegate` (§12): the criterion tree, the four
+   nesting modes, the pre-order flat numbering, adoption on removal and the row drawing. **AND THE PREDICATE HALF IS
+   REFUSED BY NAME, NOT DEFERRED AGAIN:** `NSPredicateEditor`/`NSPredicateEditorRowTemplate` stay absent because this
+   Foundation has no `NSPredicate` family; the rule editor's three predicate doors say so. Growing that pair is a
+   Foundation decision (the predicate grammar), not an AppKit slice.
 5. **The controllers/bindings family** — `NSController`, the four object controllers, `NSTreeController` and
    `NSTreeNode`. This tier has no KVO, so this is a **design question before it is a slice**: what observes what, and
    whether the tree grows a KVO substrate or the controllers remain a stored-value façade. Do not start with a header.
@@ -334,8 +339,8 @@ not by looking for a selector debt; the ledger's `missing` output is the map.
 
 ## 7. Things a reader should not have to rediscover
 
-* **THE 100% IS OVER PRESENT CLASSES.** 4594 of 4594 selectors over 136 present classes; 134 of those have a surface and
-  all 134 are complete. The 32 absent classes contribute no offered selectors. The class number is 136 of 168 (80%).
+* **THE 100% IS OVER PRESENT CLASSES.** 4636 of 4636 selectors over 137 present classes; 135 of those have a surface and
+  all 135 are complete. The 31 absent classes contribute no offered selectors. The class number is 137 of 168 (81%).
 * **THE `openTempFile:` ROW WAS REAL, NOT AN INSTRUMENT QUIRK.** The tree had a hyphen-less `-openTempFile` that CREATES
   a temp file and answers its path; Apple's deprecated `-openTempFile:` takes a path and OPENS it, and it is
   `-openFile:` by another name. The previous handoff's "off by construction" note was wrong; the row is implemented now.
@@ -367,9 +372,9 @@ not by looking for a selector debt; the ledger's `missing` output is the map.
   cell-less subclass answers nil and sends nothing. `NSBrowser` paid for it.
 * **THE PLAN'S PRINTING DECISION WAS AMENDED, AND THE RECORD IS THE PLAN.** `COCOA-10.11-SURFACE-PLAN.md` §4.4/§4.5
   said "physical printers refused"; both now say implemented, with the transport as a seam.
-* **THE SUITE IS 164 TESTS IN ABOUT 85 SECONDS, AND `ctest --test-dir build -j4` IS THE GATE.** The exit status is the
+* **THE SUITE IS 165 TESTS IN ABOUT 85 SECONDS, AND `ctest --test-dir build -j4` IS THE GATE.** The exit status is the
   witness, not the tail of the output. The workspace's suite is 14 tests and belongs in the same gate run.
-* **THE CENSUS IS 380 METRICS, 387 REFUSAL SITES, 19 OWED NOTES.** A new class adds a `sel:` metric; a new refusal
+* **THE CENSUS IS 381 METRICS, 390 REFUSAL SITES, 19 OWED NOTES.** A new class adds a `sel:` metric; a new refusal
   moves the refusal total; a new OWED note moves the owed total. Re-pin all three in the same commit when they move.
 
 ---
@@ -608,3 +613,67 @@ which is the door the probe exercises.
 **Where the next hour goes:** §6 item 4, `NSRuleEditor` and then `NSPredicateEditor`/`NSPredicateEditorRowTemplate` — the
 views over controls that exist, with the predicate model as the substantial half. The collection view's shape is the
 model: the item owns the data, the view owns the layout, the delegate owns every decision that is not geometry.
+
+## 12. `NSRuleEditor` arrives: the criterion tree, four modes, and the predicate pair refused on purpose
+
+**Commit `20cca8a`.** `NSRuleEditor` is present and COMPLETE at 42 of 42 — the twenty-second complete class, and the
+first rule editor. The change takes the class count 136 -> 137 (81% of 168), the offered and present selectors
+4594 -> 4636, complete coverage 134 -> 135, the protocols 43 -> 44, and the declaration count 5144 -> 5186; the missing
+count is still 0. The census holds 381 metrics, the suite is 165 tests (about 85 s), the refusal census moved 387 -> 390
+for three named refusals, the owed census stayed 19, and `tests/rule_editor.m` is the new probe (60 checks). The
+workspace's 14 tests were run too.
+
+**A ROW IS A PATH THROUGH THE DELEGATE'S TREE, AND THE FLAT NUMBERING IS COMPUTED.** The delegate answers how many
+children a criterion has, which child is at an index, and what to display for it; a new row walks first-root-then-first-child
+to a leaf, and `-reloadCriteria` re-asks while keeping the longest prefix that is still a root-then-child chain. Every
+door speaks a pre-order flat index, computed by flattening the tree on demand — there is no cached order to fall out of
+date, which is the same decision the collection view made about its own coordinates and the table about its row tops.
+
+**INSERTION IS A BOUNDARY RULE, REMOVAL ADOPTS, AND THE FOUR MODES ARE ENFORCED.** An insertion index must be the
+position before a parent's first child or after one of their subtrees; an index inside another row's subtree raises, and
+so does a nesting mode that forbids the row. Single, List, Simple and Compound each refuse what they cannot hold, and
+`-addRow:` chooses what its mode can. Removing a row splices its children into its parent's list (or makes them roots);
+`-removeRowsAtIndexes:includeSubrows:YES` takes the subtree instead.
+
+**THE DRAWING IS BANDS WITH ONE MEASUREMENT.** The view is flipped, each row is a `-rowHeight` band, and the display
+values advance through the band by the same width arithmetic in `-drawRect:` and in the value-view layout — a string, a
+menu item's title, or a live `NSView` at the position the string would have taken. The formatting dictionary rewrites
+string values, the selection fills the band with the platform accent, and `-isEditable` gates the pointer.
+
+**AND THE PREDICATE PAIR IS REFUSED, WHICH IS THE DESIGN DECISION THE HANDOFF ASKED FOR.** This stack's Foundation has
+no `NSPredicate`/`NSExpression`/`NSComparisonPredicate` (§63.161). `-predicate` and `-predicateForRow:` therefore ask
+the delegate for its `NSRuleEditorPredicate…` parts — so that optional door has a sender — and refuse to assemble them;
+`-setFormattingStringsFilename:` records the name and refuses the load, because the strings reader was withdrawn.
+**`NSPredicateEditor` and `NSPredicateEditorRowTemplate` stay ABSENT**, and the absent table now says why: their whole
+surface is the missing model. That is a door, not a stub, and it is the honest end of §6 item 4.
+
+### The traps this slice paid for
+
+**A HAND-SET BITMAP CONTEXT DID NOT RECEIVE THE VIEW'S DRAWING; THE CACHING DOOR DID.** The probe's first renderer set
+`[NSGraphicsContext setCurrentContext:]` to a bitmap context and called `[view drawRect:]` — the collection view's probe
+had done exactly that and worked. For this view the rep stayed untouched: not the background, not the accent, not a
+direct `NSRectFill` at the top of `-drawRect:`. `-cacheDisplayInRect:toBitmapImageRep:` (the door `NSView.h` names as
+the substrate) painted immediately. **The lesson is the layer's own sentence: the caching door IS the rendering
+substrate, and a caller who reaches past it is testing a context nobody promised.** The probe now renders through it.
+
+**`-setCriteria:andDisplayValues:forRowAtIndex:` ASKED FOR THE WRONG STEP FIRST.** The extension loop asked for each
+newly appended child's display value BEFORE the first criterion's value was ever asked for, so with an empty values
+array a row whose first criterion returned an `NSView` stored the values shifted by one — the view was never in
+`-displayValuesForRow:` and never became a subview. The fix is Apple's order written out: extend the path to a leaf
+first, then fill the values in order from the caller's prefix. The probe's "a VIEW display value is adopted as a
+subview of its band" is the measurement.
+
+**A FORMATTING-DICTIONARY PROBE MUST OWN ITS ROW.** The first version set the dictionary key for `show:Name` while the
+row under the render was `show:Kind` (the earlier removal section had changed which row was first), so both renders had
+the same ink and the check failed for the right reason: it was measuring a row the dictionary did not name. The probe
+now sets the row's criteria immediately before the check.
+
+**THE REFUSAL CENSUS MOVED, AND THE MOVE IS THE POINT.** 387 -> 390 for the two predicate doors and the strings-file
+load. A complete class can still refuse; the census is what makes the refusals visible instead of letting "complete"
+read as "does everything".
+
+**Where the next hour goes:** §6 item 5, the controllers/bindings family — and it is a DESIGN question before it is a
+slice, because this tier has no KVO and `NSRuleEditor`'s own binding settings are the fresh evidence: five selectors
+stored, answered and named as unread. Decide what observes what first. If a slice is wanted before that design, §6 item
+6's small protocol slices (`NSTextViewDelegate`, `NSIgnoreMisspelledWords`, `NSChangeSpelling`,
+`NSUserInterfaceItemSearching`) each have their class already and are a day's work rather than a design.
