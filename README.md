@@ -1151,7 +1151,21 @@ the compositor is really gone.
   leaks in `NSWindow`'s child-window teardown. **135 of 168 classes (80%), 133 of 133 with a surface COMPLETE, 42 of 56
   protocols, 33 absent classes.** `tests/drawer.m` measures it in 57 checks.
 
-- **`ctest`: 163 of 163 passed** (the keyboard and the seam, the AppKit and its input path, the controls and their
+- **And the FIRST ABSENT COLLECTION HAS ARRIVED: `NSCollectionView` — 28 of 28** (`ctest`, offscreen). It is the other
+  half of the `NSCollectionViewItem` that has been here since an earlier slice: the grid, the item factory and pool, the
+  selection, the backdrop and both halves of a drag. A cell is the PROTOTYPE VIEW's size clamped by the min/max item
+  sizes, the columns are the width divided by that cell (capped by `-maxNumberOfColumns:`), and `-isFlipped` is YES so
+  row 0 is at the top; `-maxNumberOfRows:` caps the TILES, not the items, and `-frameForItemAtIndex:` is the one place a
+  rectangle is computed. Items are copied from the prototype (`NSCopying`, by class and view geometry) and pooled by
+  index across content changes, so the same slot answers the same controller. Selection is one index set copied to the
+  items' `-setSelected:`, driven by a click with Command/Shift/plain meanings and reported by `-isFirstResponder`. The
+  backdrop is nil (default fill), one colour or a gradient. **The drag is wired on both sides**: `-mouseDragged:` asks
+  `canDrag`/`writeItems` for the selection and begins a session with the local/foreign masks, the image door prefers the
+  delegate's own, and `-draggingEntered:`/`-performDragOperation:` propose a before/on index from the cell's halves and
+  ask `validateDrop`/`acceptDrop`. **136 of 168 classes (80%), 134 of 134 with a surface COMPLETE, 43 of 56 protocols,
+  32 absent classes.** `tests/collection_view.m` measures it in 68 checks.
+
+- **`ctest`: 164 of 164 passed** (the keyboard and the seam, the AppKit and its input path, the controls and their
   metrics, the field control and its cell and its bezel and its placeholder and what it may hold, the text path and its
   word granularity and the multi-line view and its wrapping and its scrolling and its READING OF THE STORE, the STORE
   the rich-text slice is built on and the REGION it is laid out in and the WEB that ties the three together and the
@@ -1167,8 +1181,9 @@ the compositor is really gone.
   no-argument ink doors, the table's deprecated spellings, enumerators, drag images, focus ring and destination
   feedback, the control's cell factory, one-cell selection, sender values and validate-editing, the view's
   forced display, frame and rotation setters, subview list, autoscroll, refusals and ruler client defaults, the token
-  field's list, its three strings, its chips, its session, its completion and its pasteboard, and the drawer's child
-  window, four states, five edge geometries and reviewed user resize).
+  field's list, its three strings, its chips, its session, its completion and its pasteboard, the drawer's child
+  window, four states, five edge geometries and reviewed user resize, and the collection view's grid, pool, selection,
+  gradient backdrop and both drag halves).
 - **And the desktop's own text is SUB-PIXEL ANTIALIASED**, which is the AppKit's half of a renderer change in
   CoreGraphics: a window's surface is OPAQUE (`kCGImageAlphaNoneSkipFirst`), and the destination's opacity is
   exactly what decides whether a glyph is rasterised in colour. MEASURED on the live session: the window title's

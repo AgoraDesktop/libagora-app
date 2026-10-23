@@ -1567,3 +1567,13 @@ add_executable(drawer drawer.m)
 target_link_libraries(drawer PRIVATE App m)
 add_test(NAME appkit-drawer COMMAND drawer)
 set_tests_properties(appkit-drawer PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
+
+# **THE FIRST ABSENT COLLECTION: THE GRID, THE ITEM POOL AND THE TWO DRAG HALVES.** The layout is measured through
+# `-frameForItemAtIndex:` and the tiles' own frames, the selection through both the index set and the items, and the
+# backdrop through pixels (one colour flat, two a gradient). The item pool is checked by identity across a content
+# change; the drag source and destination are driven through real delegate doors, with a fake NSDraggingInfo for the
+# proposal arithmetic. No compositor and no run loop are needed.
+add_executable(collection_view collection_view.m)
+target_link_libraries(collection_view PRIVATE App m)
+add_test(NAME appkit-collection-view COMMAND collection_view)
+set_tests_properties(appkit-collection-view PROPERTIES ENVIRONMENT "${_agora_app_test_env}")

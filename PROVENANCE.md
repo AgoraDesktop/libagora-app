@@ -1648,6 +1648,52 @@ announcements' states from both the notification center and the delegate, the fi
 the permission doors, toggle and the action spellings, the preference-versus-position rule, the user resize's order of
 clamp-then-review, the orphan refusal, the parent swap, and the parent's death.
 
+## 58. `NSCollectionView` arrives: the grid, the pool, the selection, and the two drag halves
+
+**THE FIRST ABSENT COLLECTION IS PRESENT: `NSCollectionView` at 28 of 28, the twenty-first complete class.** The class
+count is 136 of 168 and the absent list is 32; `NSCollectionViewDelegate` arrived with it, so the protocol count is 43 of
+56. It is the other half of `NSCollectionViewItem`, which has been present since before this arc: the item is the
+controller, and this view is the thing that makes, places, selects and drags them.
+
+**A CELL IS THE PROTOTYPE VIEW'S SIZE, CLAMPED, AND THE GRID IS FLIPPED.** `-isFlipped` is YES, so row 0 is at the top
+and y grows down; the cell's size is the prototype view's frame raised by `-minItemSize` and lowered by
+`-maxItemSize`; the columns are the view's width divided by the cell width (at least one, at most
+`-maxNumberOfColumns:` when set); and `-frameForItemAtIndex:` is the ONE place a rectangle is computed, read by the
+layout, the hit test and the drag image alike. `-maxNumberOfRows:` is a DISPLAY cap: `-itemAtIndex:` still answers an
+item past it, but that item has no tile.
+
+**ITEMS ARE COPIED FROM THE PROTOTYPE AND POOLED BY INDEX.** `-newItemForRepresentedObject:` copies the prototype
+(`NSCollectionViewItem` gained `NSCopying`: the class, the view's class and frame, the represented object and the
+selected bit — a subclass's own ivars need an override, and the header says so) and sets the object. A content change
+keeps the slots it had, pools only the controllers whose indexes ceased to exist, and reuses them for new indexes — so
+the same index answers the same controller across a change, which is what a caller holding an item expects. The pool is
+not scroll-driven: this tier has no clip-view recycling, and the header names that difference.
+
+**SELECTION IS ONE SET, AND THE TILES HEAR IT.** `-selectionIndexes` is pruned to the content and to one index when
+multiple selection is off; every change is copied to the items' `-setSelected:` so the tile's own drawing is what
+changes. A plain click selects, Command toggles, Shift extends from the last plain click, empty space clears, and the
+click makes the view the window's first responder — which is what `-isFirstResponder` answers and what a focused tile's
+highlight would read.
+
+**THE BACKDROP IS A LIST OF COLOURS AND ITS LENGTH IS THE RULE.** nil or empty draws `+controlBackgroundColor`; one
+colour fills; two or more draw a vertical gradient. The array is copied, so a caller's mutable array cannot repaint the
+view later.
+
+**AND THE DRAG IS BOTH DIRECTIONS, WITH EVERY DELEGATE DOOR SENT.** As a source, `-mouseDragged:` asks
+`-collectionView:canDragItemsAtIndexes:withEvent:` (default YES) and `-collectionView:writeItemsAtIndexes:toPasteboard:`
+(no default: without it there is no drag), composes the image with `-draggingImageForItemsAtIndexes:withEvent:offset:`
+(the delegate's own door wins), begins the session with the two masks from
+`-setDraggingSourceOperationMask:forLocal:`, and answers `-namesOfPromisedFilesDroppedAtDestination:` from the delegate
+with the dragged indexes. As a destination, `-draggingEntered:`/`-draggingUpdated:` propose DROP-BEFORE for the left
+half of a cell and DROP-ON for the right, propose the index after the last tile for empty space, and ask
+`-collectionView:validateDrop:proposedIndex:dropOperation:`, whose in/out values are stored for
+`-performDragOperation:` to hand to `-collectionView:acceptDrop:index:dropOperation:`.
+
+`tests/collection_view.m` measures it in **68 checks**: the defaults, the prototype factory, the grid arithmetic and
+both caps, the min/max clamps, recycling by identity, the selection set and four pointer gestures, first responder, the
+backdrop in pixels, the drag image and its delegate override, the masks, the source's two delegate doors with the real
+pasteboard, and the destination's proposal arithmetic and retargeting.
+
 ## Keeping in sync
 
 The Fiwix AppKit is the origin and this repository has now diverged from it in the seam. A fix made there

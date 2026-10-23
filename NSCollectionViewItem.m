@@ -10,6 +10,8 @@
  */
 #import "NSCollectionViewItem.h"
 
+#import <AppKit/NSView.h>
+
 @implementation NSCollectionViewItem
 
 - (NSCollectionView *)collectionView
@@ -25,6 +27,32 @@
 - (BOOL)isSelected
 {
 	return _selected;
+}
+
+/* **THE LOADED VIEW WITHOUT THE LOADING.** `-view` is the door that loads a nib or raises when there is none; a collection
+ * view deciding whether an item has a tile must not trip that. `_view` is `NSViewController`'s protected ivar, so the
+ * subclass can answer it directly. */
+- (NSView *)cg_viewIfLoaded
+{
+	return _view;
+}
+
+/* **THE COPY A PROTOTYPE IS FOR: THE CLASS, THE VIEW'S CLASS AND FRAME, THE OBJECT AND THE SELECTED BIT.** Apple's own
+ * item copies through an archive; this tier has no controller archive, so the copy is written out rather than implied —
+ * and the header names what a subclass with its own ivars must do to keep them. */
+- (id)copy
+{
+	NSCollectionViewItem *copy = [[[self class] alloc] initWithNibName:nil bundle:nil];
+
+	if (_view != nil) {
+		NSView *viewCopy = [[[_view class] alloc] initWithFrame:[_view frame]];
+
+		[copy setView:viewCopy];
+		[viewCopy release];
+	}
+	[copy setRepresentedObject:[self representedObject]];
+	[copy setSelected:[self isSelected]];
+	return copy;
 }
 
 - (void)setSelected:(BOOL)selected
