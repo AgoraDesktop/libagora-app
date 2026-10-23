@@ -7,19 +7,19 @@ THIRTEENTH SLICE HAS LANDED SINCE, and §9 is its record.**
 file's §2 instrument rules and §4 traps are still the ones these sessions used most. **THIS FILE'S §2 NUMBERS SUPERSEDE
 `HANDOFF-4.md`'s**, which are twelve slices old.*
 
-*State at this handover: **seventeen slice commits** since the fourth handoff, tree clean, **159 tests passing in about
-83 s**, `api-ledger check` holding **375 metrics** — **131 of 168 classes (78%), 4474 of 4505 selectors (99%), 39 of 56
-protocols (70%), 86 of 86 functions**, 5001 methods declared with 8 having no body, **125 of the 129 classes with a surface
-at COMPLETE coverage** — refusal census **386**, owed census **19**. **The "120 of 129" this paragraph first carried was a
-recount error; §9 records it and the corrected 119 -> 121 movement, and §10–§13 take it to 125.***
+*State at this handover: **eighteen slice commits** since the fourth handoff, tree clean, **160 tests passing in about
+90 s**, `api-ledger check` holding **375 metrics** — **131 of 168 classes (78%), 4501 of 4505 selectors (99%), 39 of 56
+protocols (70%), 86 of 86 functions**, 5028 methods declared with 8 having no body, **127 of the 129 classes with a surface
+at COMPLETE coverage** — refusal census **387**, owed census **19**. **The "120 of 129" this paragraph first carried was a
+recount error; §9 records it and the corrected 119 -> 121 movement, and §10–§14 take it to 127.***
 
 ---
 
 ## 1. What these sessions did
 
 Twelve slices, in the order they landed. Each is a commit (plus, twice, a commit in the **workspace** repository and a
-gitlink advance in `$AGORA_ROOT`), and each ended green. **The thirteenth through seventeenth are `182bcd4`, `b0bd73c`,
-`1c4be0a`, `db418e3` and `1d1d7f4`, listed below and recorded in §9–§13.**
+gitlink advance in `$AGORA_ROOT`), and each ended green. **The thirteenth through eighteenth are `182bcd4`, `b0bd73c`,
+`1c4be0a`, `db418e3`, `1d1d7f4` and `47b090e`, listed below and recorded in §9–§14.**
 
 | Commit | What it landed |
 |---|---|
@@ -40,6 +40,7 @@ gitlink advance in `$AGORA_ROOT`), and each ended green. **The thirteenth throug
 | `1c4be0a` | **`NSControl` — COMPLETE** (65/65): the cell-class factory, the one-cell selection, the paint/invalidate quartet, the sender-value family, the formatter pair, the attributed value and writing direction, the keyboard refusal, and `-validateEditing` — which lands an editor's string without ending the session (§11). |
 | `db418e3` | **`NSView` — COMPLETE** (221/221): the forced display family, the frame/rotation setters, the subview list, autoscroll, the four named refusals (focus lock, layer, definition range) and the nine ruler client defaults — with `…inContext:` corrected to Apple's spelling (§12). |
 | `1d1d7f4` | **`NSWindow` — COMPLETE** (261/261): the mutable style mask, the three `is` aliases, the represented-filename setter, the default button/backing/order/colour state, the spaces flag, the screen initialiser, the direct animated frame set, and the local event queue's post/discard pair — plus a deferred window that can now drain its queue (§13). |
+| `47b090e` | **`NSDocument` and `NSDocumentController` — COMPLETE** (104/104 and 51/51): a separate autosave file with a `~/Library/Autosave` registry and timer, the asynchronous close review wired into `-performClose:`, the filename/save-panel state, page-layout hooks, the document→controller→application error chain (with `NSResponder`'s stale alert refusals replaced), and three named scripting refusals (§14). |
 
 Plus, in the **workspace** repository: `e31e44f` (the main-menu test's Print… case was asking a chain-routed row to resolve
 with no key window, and expecting the item's target to be the stand-in) and `47d9a0c` (the file window opens a document
@@ -57,13 +58,13 @@ claim; the recount is the measurement.**
 
 ```
 classes   131 of 168   (78%)    37 missing
-selectors 4474 of 4505 (99%)    31 missing   125 of 129 classes at COMPLETE coverage
+selectors 4501 of 4505 (99%)     4 missing   127 of 129 classes at COMPLETE coverage
 protocols  39 of  56   (70%)    17 missing
 functions  86 of  86  (100%)     0 missing    10 refuse by name
-methods   5001 declared on this tree's own classes, 8 with NO body on the chain (0.2%)
+methods   5028 declared on this tree's own classes, 8 with NO body on the chain (0.2%)
 ```
 
-**TWELVE CLASSES ARE COMPLETE FOR THE ERA, and every one of them finished with NAMED REFUSALS rather than a stub:**
+**FOURTEEN CLASSES ARE COMPLETE FOR THE ERA, and every one of them finished with NAMED REFUSALS rather than a stub:**
 
 | Class | Selectors | Refusing by name |
 |---|---|---|
@@ -79,11 +80,13 @@ methods   5001 declared on this tree's own classes, 8 with NO body on the chain 
 | `NSControl` | 65 of 65 | 0 (every door is a cell forward or a stated effect) |
 | `NSView` | 221 of 221 | 20 sites (printing, focus lock, layer, definition, file drag, full screen) |
 | `NSWindow` | 261 of 261 | 23 sites (server placement, DRM-less backings, the missing device/session pieces) |
+| `NSDocument` | 104 of 104 | 5 sites (the scripting suite and the print script command) |
+| `NSDocumentController` | 51 of 51 | 0 (the error chain forwards to the application) |
 
-**AND ONLY FOUR CLASSES STILL HAVE ANY DEBT** — the tail:
+**AND ONLY TWO CLASSES STILL HAVE ANY DEBT** — the tail:
 
 ```
-NSDocument 19    NSDocumentController 8   NSSavePanel 3   NSWorkspace 1    NSFont 0*
+NSSavePanel 3    NSWorkspace 1    NSFont 0*
 ```
 
 `*` `NSWorkspace`'s one is an INSTRUMENT quirk, not a door: the manifest's row is `selector NSWorkspace openTempFile:`
@@ -120,7 +123,7 @@ Four censuses and one ledger, all committed and all gated by `ctest`:
 | `api/10.6/appkit-manifest.txt` | The SDK's facts: 168 classes + superclasses, 56 protocols, 87 functions, 5208 selectors. |
 | `tests/api-10.6-census.txt` | **375** pinned metrics — eight aggregates, one `sel:` line per class (129 of them), one `proto:` line per protocol, `fn:`/`fndecl:` per function, `selphantom:` per class. |
 | `tests/api_census.cmake` | The gate: two-directional comparison, arithmetic check, two fault checks. |
-| `tests/refusal_census.txt` | **386** refusal sites, per FILE. |
+| `tests/refusal_census.txt` | **387** refusal sites, per FILE. |
 | `tests/owed_census.txt` | **19** headers' OWED notes, per file. |
 | `tools/api-ledger` | The parser: `manifest`, `census`, `check`, `missing`. |
 
@@ -133,7 +136,7 @@ Four censuses and one ledger, all committed and all gated by `ctest`:
 * **EVERY SLICE RE-PINS DELIBERATELY.** Let `ctest -R appkit-api-census` fail, recompute with `./tools/api-ledger census
   …`, write it in the same commit, and recompute the four hand-written summary lines from the numbers rather than editing
   them by eye.
-* **A REFUSAL CENSUS IS A CENSUS, NOT A RATCHET.** It went 292 → 386 across these sixteen slices, and almost every move was
+* **A REFUSAL CENSUS IS A CENSUS, NOT A RATCHET.** It went 292 → 387 across these eighteen slices, and almost every move was
   UP: a door that used to be absent is now a NAMED refusal, so a caller gets a reason instead of a link error. Downward
   moves happened too (the browser's matrix form, the print doors). The diff says why, every time.
 * **THE NEEDLE IS `(APPKIT-REFUSE|fn_refuse_[a-z]+)` NOW**, widened twice — the second time because a third helper
@@ -278,7 +281,7 @@ than four big slices — so the next session should pick a CLASS, not a subsyste
 2. **`NSTableView` 20** — the grid's own tail: `-columnsInRect:`, the two `dragImageForRows…` doors (the local drag exists
    and these are its image half), the selection-by-extending pair, the column/row enumerators, `-drawsGrid`, the focused
    column, the indicator images and `-verticalMotionCanBeginDrag`. Mostly arithmetic over machinery that exists.
-3. **`NSDocument` 19 and `NSDocumentController` 8** — the async-saving family
+3. **DONE in §14: `NSDocument` 104/104 and `NSDocumentController` 51/51.** The async-saving family
    (`-autosaveDocumentWithDelegate:didAutosaveSelector:contextInfo:`, the two autosave URLs and the file type), the script
    commands (which would REFUSE like every other script door), the page-layout pair, and the `-presentError:` family
    (`-willPresentError:` is real; the modal form refuses). The autosave family needs a decision about WHERE a document's
@@ -303,7 +306,7 @@ than four big slices — so the next session should pick a CLASS, not a subsyste
 
 ## 7. Things a reader should not have to rediscover
 
-* **THE TWELVE COMPLETE CLASSES ARE COMPLETE IN A SPECIFIC SENSE**: every selector Apple's 10.6 header declares for them is
+* **THE FOURTEEN COMPLETE CLASSES ARE COMPLETE IN A SPECIFIC SENSE**: every selector Apple's 10.6 header declares for them is
   DECLARED and ANSWERED, and a refused door is an ANSWERED door (it prints its reason and returns its type's empty value).
   `-respondsToSelector:` is YES for a refusal. That is the plan's own disposition rule, and it is why the ledger and the
   refusal census have to be read TOGETHER.
@@ -329,7 +332,7 @@ than four big slices — so the next session should pick a CLASS, not a subsyste
 * **THE BROWSER ADVERTISES THE 10.6 ITEM CONTRACT AND FALLS BACK TO THE NEXXT CELL ONE.** `-browser:numberOfChildrenOfItem:`
   is the test for which model a delegate speaks; the item walk starts at `nil`, retains nothing, and a delegate implements
   ONE contract (the one allowed overlap is a styling `-browser:willDisplayCell:atRow:column:`).
-* **THE SUITE IS 159 TESTS IN ABOUT 83 SECONDS, AND `ctest --test-dir build -j4` IS THE GATE.** The exit status is the
+* **THE SUITE IS 160 TESTS IN ABOUT 90 SECONDS, AND `ctest --test-dir build -j4` IS THE GATE.** The exit status is the
   witness, not the tail of the output. The workspace's suite is 14 tests and belongs in the same gate run.
 
 ---
@@ -621,3 +624,69 @@ on; that is a behaviour change for every caller that posts to an unordered windo
 document state lives, not a list of one-liners), `NSDocumentController` 8, `NSSavePanel` 3 (a flag and two lines), and
 `NSWorkspace` 1 (the `openTempFile:` instrument quirk that is off by construction). `NSSavePanel` and
 `NSDocumentController` are the small clean slices; `NSDocument` is the one to decide before typing.
+
+---
+
+## 14. The document pair complete: autosave as a separate file, an asynchronous close review, and an error chain that ends in an alert
+
+**Commit `47b090e`.** `NSDocument` and `NSDocumentController` are COMPLETE for the era — 104 of 104 and 51 of 51, the
+thirteenth and fourteenth classes to finish — and the change is 27 selector rows (4474 -> 4501 present, 31 -> 4
+missing), 27 declarations (5001 -> 5028), and two more classes at complete coverage (125 -> 127). The suite is 160 tests
+(about 90 s), the refusal census went 386 -> 387 (three document scripting refusals in, two stale responder refusals
+out), the owed census stayed 19, and `tests/document_tail.m` is the new probe (41 checks). The workspace's 14 tests
+were run too. **Only `NSSavePanel` (3) and `NSWorkspace` (1, the instrument quirk) still carry debt.**
+
+**AUTOSAVE IS A SEPARATE FILE, AND THE SAVE PATH NOW KNOWS IT.** `NSAutosaveOperation` sets
+`-autosavedContentsFileURL` and `NSChangeAutosaved`; it never touches `fileURL`, `fileType`, the modification date or
+the recent list. `-initForURL:withContentsOfURL:` records the contents URL; a real save, a revert or a close deletes the
+obsolete copy. `-hasUnautosavedChanges` is a history flag independent of `-isDocumentEdited` (NO after
+Cleared/Autosaved, YES after Done/Undone/Redone, unaffected by ReadOtherContents). The controller's
+`-autosavingDelay` (default 0) drives a timer that autosaves only documents with that flag and a non-nil
+`-autosavingFileType`.
+
+**THE LOCATION IS `~/Library/Autosave`, WITH A TEMP FALLBACK AND A PLIST REGISTRY.** The files are named
+`Agora-<process>-<index>.<ext>`; the registry records `documentURL` and `contentsURL`; `NSApplication -finishLaunching`
+asks a fresh controller to reopen the entries before the launch delegate runs, and a stale record is dropped. This is
+the crash-time reopen the SDK's `-setAutosavedContentsFileURL:` prose promises, not just a second file.
+
+**CLOSE IS THE ASYNCHRONOUS REVIEW APPLE DOCUMENTS.** Save/Cancel/Don't Save is a sheet when there is a window and the
+app is running, and application-modal otherwise; the delegate is messaged after the decision and any save. The context
+objects own themselves for the duration of a sheet. `NSWindow -performClose:` now asks
+`-shouldCloseWindowController:…` first, and `-closeAllDocuments…` walks the documents, closes the yeses and stops at the
+first no. **The existing close-all test was corrected: an unedited document before a refusal has already closed, because
+the walk is not a transaction.**
+
+**THE ERROR CHAIN ENDS IN AN ALERT NOW.** `NSDocument` and `NSDocumentController` implement `-willPresentError:` and
+both `-presentError:` forms; the document forwards to the controller, which forwards to the application.
+`NSResponder`'s two error refusals — whose reason was "NSAlert is not in this tier" — are replaced by real `NSAlert`
+presentation, so the refusal census lost two sites. The modal form uses a sheet when a window is available; the
+caller's `didPresentSelector` gets `didRecover:NO` because this tier has no recovery delegate.
+
+**THE REST IS SMALL AND HONEST.** `-preparePageLayout:`/`-runPageLayout:` reuse the existing panel and its callback;
+`-lastComponentOfFileName` is a stored display/save-name override that `-displayName` prefers; the two save-panel
+answers are recorded only after a panel runs; and the scripting trio refuses by name because there is no
+`NSScriptCommand` in this tree.
+
+**TRAPS THIS SLICE PAID FOR.**
+
+* **`NSTemporaryDirectory()` ANSWERS `/System/Temporary Files/`, WHICH NEED NOT EXIST OR BE WRITABLE.** The first probe's
+  autosave directory was created under it and every write failed; the test now uses `/tmp`. The controller's fallback
+  chain (`~/Library/Autosave`, then `NSTemporaryDirectory()`, then `/tmp`) is the production version of the same lesson.
+* **`-fileNameExtensionForType:saveOperation:` WAS DECLARED AND RETURNED NIL.** The base class never asked the
+  controller's type table, so the autosave name had no extension and the save-panel extension list fell back to the
+  document's type only. It now uses the controller's `-fileExtensionsFromType:`, which is what the SDK's prose says
+  the 10.4-compatibility path does.
+* **`NSSearchPathForDirectoriesInDomains` IS A NAMED REFUSAL IN THIS FOUNDATION.** `~/Library` is built from
+  `NSHomeDirectory()` and created; `NSColorList` already establishes that precedent for user state.
+* **A STALE REFUSAL IS A BUG WITH A SHELF LIFE.** `NSResponder -presentError:` still said NSAlert did not exist; it has
+  existed for slices. The document slice could not honestly forward errors through a chain that ended in that message,
+  so the two refusals became presentations.
+* **A CLOSE WALK IS NOT A TRANSACTION.** `-closeAllDocuments…` asks each document in order; an unedited document before
+  a refusal has already closed. The old test asserted "nothing was closed", which was the old refuse-everything rule.
+* **AN ASYNCHRONOUS CONTEXT HAS TO OWN ITSELF.** A sheet does not retain a `void *contextInfo`; the close and error
+  contexts retain the delegate and release themselves when the answer arrives.
+
+**WHERE THE NEXT HOUR GOES.** `NSSavePanel`'s three (`-isExpanded`, `-treatsFilePackagesAsDirectories:` and its getter)
+are a flag and two lines, and `NSWorkspace`'s one is the `openTempFile:` manifest quirk that is off by construction.
+After those, the debt list is empty and the next work is the absent classes: `NSImageView` is the most useful, the
+controllers are a KVO design question, and the plan's §A11 refusals stay refused.
