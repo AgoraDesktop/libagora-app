@@ -1588,3 +1588,13 @@ add_executable(rule_editor rule_editor.m)
 target_link_libraries(rule_editor PRIVATE App m)
 add_test(NAME appkit-rule-editor COMMAND rule_editor)
 set_tests_properties(appkit-rule-editor PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
+
+# **THE GENERIC BINDING LAYER: ONE OBJECT OBSERVES ANOTHER AND WRITES THE VALUE THROUGH KVC.** No view and no
+# controller: a target's `title` is bound to a source's `name`, and the probe reads the value the TARGET holds after each
+# write. It covers the Initial notification, the automatic setter's delivery, `-infoForBinding:`, unbind, rebind, the
+# NSNull placeholder, the marker pass-through and the raise option, `+exposeBinding:`/`-exposedBindings`, the
+# placeholder table, and the NSEditor defaults (including the delegate's `-editor:didCommit:contextInfo:`).
+add_executable(binding_base binding_base.m)
+target_link_libraries(binding_base PRIVATE App m)
+add_test(NAME appkit-binding-base COMMAND binding_base)
+set_tests_properties(appkit-binding-base PROPERTIES ENVIRONMENT "${_agora_app_test_env}")

@@ -1178,7 +1178,19 @@ the compositor is really gone.
   `NSPredicateEditorRowTemplate` therefore stay absent by design, not by omission.** **137 of 168 classes (81%), 135 of
   135 with a surface COMPLETE, 44 of 56 protocols, 31 absent classes.** `tests/rule_editor.m` measures it in 60 checks.
 
-- **`ctest`: 165 of 165 passed** (the keyboard and the seam, the AppKit and its input path, the controls and their
+- **And the GENERIC BINDING LAYER HAS ARRIVED: `NSKeyValueBinding` is real** (`ctest`, offscreen). The 26-line marker
+  stub is replaced by the layer Apple declares: the three marker singletons and `NSIsControllerMarker`, the three info
+  keys, `-bind:toObject:withKeyPath:options:` (one-way — the receiver observes the observable and writes the value
+  through KVC, with the Initial notification applied at bind time), `-unbind:`, `-infoForBinding:`,
+  `+exposeBinding:`/`-exposedBindings`, `-valueClassForBinding:`, the per-class placeholder table, and the NSEditor
+  defaults (`-commitEditing` YES and the delegate's `-editor:didCommit:contextInfo:`). All 78 binding names and 26
+  option keys are defined. **The options with readers HERE are `NSNullPlaceholderBindingOption` and
+  `NSRaisesForNotApplicableKeysBindingOption`**; the rest are stored and answered through `-infoForBinding:` and belong
+  to the controls and controllers that will act on them. A rebind replaces the old observation (one delivery per
+  write), and unbinding a never-bound name is a no-op. **`NSController` and `NSObjectController` are the next slice.**
+  `tests/binding_base.m` measures it in 26 checks.
+
+- **`ctest`: 166 of 166 passed** (the keyboard and the seam, the AppKit and its input path, the controls and their
   metrics, the field control and its cell and its bezel and its placeholder and what it may hold, the text path and its
   word granularity and the multi-line view and its wrapping and its scrolling and its READING OF THE STORE, the STORE
   the rich-text slice is built on and the REGION it is laid out in and the WEB that ties the three together and the
@@ -1196,8 +1208,9 @@ the compositor is really gone.
   forced display, frame and rotation setters, subview list, autoscroll, refusals and ruler client defaults, the token
   field's list, its three strings, its chips, its session, its completion and its pasteboard, the drawer's child
   window, four states, five edge geometries and reviewed user resize, the collection view's grid, pool, selection,
-  gradient backdrop and both drag halves, and the rule editor's criterion tree, four nesting modes, flat numbering,
-  adoption on removal and predicate refusals).
+  gradient backdrop and both drag halves, the rule editor's criterion tree, four nesting modes, flat numbering,
+  adoption on removal and predicate refusals, and the binding layer's markers, observe-and-write, options, placeholders
+  and NSEditor defaults).
 - **And the desktop's own text is SUB-PIXEL ANTIALIASED**, which is the AppKit's half of a renderer change in
   CoreGraphics: a window's surface is OPAQUE (`kCGImageAlphaNoneSkipFirst`), and the destination's opacity is
   exactly what decides whether a glyph is rasterised in colour. MEASURED on the live session: the window title's

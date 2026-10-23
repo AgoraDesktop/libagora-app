@@ -1739,6 +1739,42 @@ the four modes and `-addRow:`, the range exceptions, `-reloadCriteria`, adoption
 the click gated by editability, the accent band, the formatting dictionary's ink, a view display value in its band, the
 predicate doors' asking-then-refusal, and the rows-changed announcement.
 
+## 60. The generic binding layer arrives: markers, one observation per binding, and the NSEditor defaults
+
+**THE 26-LINE MARKER STUB IS REPLACED BY APPLE'S LAYER, MINUS THE PARTS THAT BELONG TO A CONTROL.** `NSKeyValueBinding`
+now has the three marker singletons (`NSMultipleValuesMarker`, `NSNoSelectionMarker`, `NSNotApplicableMarker`) and
+`NSIsControllerMarker`; the three `-infoForBinding:` keys; the binding-name and option constants (78 and 26, each its
+own name); the placeholder table; and the `NSObject` categories for creation, placeholders, editor registration and
+NSEditor.
+
+**A BINDING IS ONE OBSERVATION WITH A DESTINATION.** `-bind:toObject:withKeyPath:options:` stores a record (receiver,
+binding name, observable, key path, options, a private observer) and registers the observer on the observable with
+`New | Initial`. The observer writes the value to the receiver under the binding name through KVC — Apple's documented
+fallback — so a plain model object is bindable before any view or controller has an opinion. The Initial notification
+lands at bind time, a rebind removes the old observation first (one delivery per write), and `-unbind:` removes it; an
+unbound name is a no-op rather than an exception.
+
+**THE OPTIONS ARE STORED, AND TWO OF THEM ARE READ HERE.** `NSNullPlaceholderBindingOption` supplies the value written
+when the observed value is NSNull; `NSRaisesForNotApplicableKeysBindingOption` makes a marker raise instead of being
+written through. The rest — continuous updates, compound values, the editing-multiple-values family, transformers — are
+kept and answered through `-infoForBinding:` and have no reader until a control or controller acts on them; the header
+names each rather than implying the dictionary is live.
+
+**THE PLACEHOLDERS ARE CLASS-KEYED AND INHERITED.** `+setDefaultPlaceholder:forMarker:withBinding:` stores a rule for a
+class (marker and/or binding may be nil), and the lookup walks the class chain, which is what lets a subclass inherit a
+superclass's placeholder and override it. The NSEditor defaults are the honest ones for an object with no editors:
+`-commitEditing` is YES, `-discardEditing` does nothing, and the asynchronous form calls the delegate's
+`-editor:didCommit:contextInfo:` with YES and the caller's context.
+
+**THE CONTROLLER CLASSES THEMSELVES ARE THE NEXT SLICE.** This layer is what they will use: a controller's `content` is
+a binding destination like any other, its `selection` will be the proxy the plan calls for, and its Core Data doors will
+refuse by name.
+
+`tests/binding_base.m` measures it in **26 checks**: the three markers and `NSIsControllerMarker`, the Initial value and
+the automatic setter's delivery, `-infoForBinding:`, unbind and rebind, the NSNull placeholder, the marker pass-through
+and the raise option, `+exposeBinding:`/`-exposedBindings`, `-valueClassForBinding:` and the empty option descriptions,
+the placeholder table, the NSEditor defaults including the delegate callback, and the nil-argument raises.
+
 ## Keeping in sync
 
 The Fiwix AppKit is the origin and this repository has now diverged from it in the seam. A fix made there

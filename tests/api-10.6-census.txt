@@ -66,7 +66,7 @@
 #     protocols  44 of  56   (78%)    12 missing
 #     functions  86 of  86 (100%)     0 missing    10 of them REFUSE BY NAME, which this count does not distinguish
 #                86 declared, 0 declared-not-defined, 0 defined-not-declared
-#     methods   5186 declared on this tree's own classes, 8 with NO body on the chain (0.2%)
+#     methods   5200 declared on this tree's own classes, 8 with NO body on the chain (0.2%)
 #
 # **THE 121 IS A RECOUNT AND IT FOUND THE OLD PROSE ONE HIGH.** The previous block said "120 of 129"; recomputing
 # complete coverage from the OLD pin's own `sel:` lines gives 119, because `NSSlider` and `NSSliderCell` were both
@@ -129,6 +129,12 @@
 # that family (§63.161). `NSRuleEditor`'s own three predicate doors refuse by name (the +3 in the refusal census);
 # declaring the pair would be declaring a model the tier cannot represent. That is a recorded design decision, not an
 # omission — HANDOFF-6 §12 carries the reasoning.
+#
+# **AND THE BINDING BASE ADDED FOURTEEN DECLARATIONS AND NO MANIFEST SURFACE: `NSKeyValueBinding`'s categories on
+# `NSObject` (`-bind:toObject:withKeyPath:options:`, `-unbind:`, `-infoForBinding:`, `+exposeBinding:`,
+# `-exposedBindings`, `-valueClassForBinding:`, `-optionDescriptionsForBinding:`, the two placeholder doors, the two
+# editor-registration doors and the three NSEditor doors). `NSObject` is not one of the manifest's AppKit classes, so
+# the class/protocol/selector counts do not move; the method total does, which is the instrument working as designed.**
 #
 # **AND THE LAST FOUR CLOSED THE SURFACE OF EVERY CLASS THIS TREE HAD.** `NSSavePanel` is COMPLETE at 47 of 47
 # (`-isExpanded` answers NO for the unbuilt expanded layout, and `-treatsFilePackagesAsDirectories` now splits packages
@@ -409,7 +415,7 @@ functions-defined-not-declared 0
 functions-missing 0
 functions-offered 86
 functions-present 86
-methods-declared 5186
+methods-declared 5200
 methods-declared-not-implemented 8
 proto:NSAlertDelegate 1
 proto:NSAnimatablePropertyContainer 0
