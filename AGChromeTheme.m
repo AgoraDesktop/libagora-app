@@ -9,6 +9,7 @@
 #import "AGXPM.h"
 
 #import <AppKit/NSBitmapImageRep.h>
+#import <Foundation/NSArray.h>
 #import <Foundation/NSData.h>
 #import <Foundation/NSFileManager.h>
 #import <Foundation/NSString.h>
@@ -158,8 +159,6 @@ static NSString *fn_theme_root(NSString *root)
 static NSString *fn_resolve_directory(void)
 {
 	const char *env = getenv("AGORA_CHROME_THEME");
-	const char *xdg;
-	NSString *dataHome = nil;
 
 	if (env != NULL && *env != '\0') {
 		NSString *root = [NSString stringWithUTF8String:env];
@@ -169,18 +168,25 @@ static NSString *fn_resolve_directory(void)
 			return found;
 		}
 	}
-	xdg = getenv("XDG_DATA_HOME");
-	if (xdg != NULL && *xdg != '\0') {
-		dataHome = [NSString stringWithUTF8String:xdg];
-	} else {
-		const char *home = getenv("HOME");
+	/* **A THEME IS AN APPLICATION'S SUPPORT DATA, SO IT LIVES WHERE THE INSTALLATION PUTS THOSE.** The order
+	 * is the account's theme first and the machine's second — `~/Library/Application Support/agora/chrome`,
+	 * then `/Library/Application Support/agora/chrome` — and the directories are ASKED FOR rather than spelled:
+	 * this used to be `$XDG_DATA_HOME/agora/chrome`, which names a directory a complete Agora installation
+	 * does not carry. `AGORA_CHROME_THEME` above still wins, which is how a development tree points at its own
+	 * copy of a theme it does not ship. */
+	{
+		NSArray *directories = NSSearchPathForDirectoriesInDomains(NSApplicationSupportDirectory,
+									  NSUserDomainMask | NSLocalDomainMask, YES);
+		NSUInteger i;
 
-		if (home != NULL && *home != '\0') {
-			dataHome = [[NSString stringWithUTF8String:home] stringByAppendingPathComponent:@".local/share"];
+		for (i = 0; i < [directories count]; i++) {
+			NSString *root = [[directories objectAtIndex:i] stringByAppendingPathComponent:@"agora/chrome"];
+			NSString *found = fn_theme_root(root);
+
+			if (found != nil) {
+				return found;
+			}
 		}
-	}
-	if (dataHome != nil) {
-		return fn_theme_root([dataHome stringByAppendingPathComponent:@"agora/chrome"]);
 	}
 	return nil;
 }
