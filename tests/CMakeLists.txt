@@ -178,6 +178,14 @@ target_link_libraries(control_ink PRIVATE App)
 add_test(NAME appkit-control-ink COMMAND control_ink)
 set_tests_properties(appkit-control-ink PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
 
+# **THE CONTROL'S LAST TWENTY-EIGHT DOORS.** The class factory, the one-cell selection, the paint/invalidate quartet,
+# the sender-value family, the formatter pair and `-validateEditing`, measured by a counting cell and by a real field
+# editor session rather than by the forwards' return values.
+add_executable(control_tail control_tail.m)
+target_link_libraries(control_tail PRIVATE App m)
+add_test(NAME appkit-control-tail COMMAND control_tail)
+set_tests_properties(appkit-control-tail PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
+
 # THE NEXT CONTROL: a slider is the first whose VALUE is a position rather than a state, so its probe is the one that
 # has to measure the geometry's two directions and not just the ink.
 add_executable(slider_ink slider_ink.m)

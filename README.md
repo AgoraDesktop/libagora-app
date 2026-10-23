@@ -1052,7 +1052,18 @@ the compositor is really gone.
   The two drag-image doors return a snapshot of the named rows/columns at their union's size, with the offset left at
   Apple's zero. `tests/table_tail.m` measures it in 34 checks.
 
-- **`ctest`: 156 of 156 passed** (the keyboard and the seam, the AppKit and its input path, the controls and their
+- **And `NSControl` is COMPLETE — 65 of 65** (`ctest`, offscreen) — the last twenty-eight doors are the cell's,
+  spelled through the control. **The class factory is a class question**: `+cellClass` answers `NSCell` until
+  `+setCellClass:` names another (a subclass that makes a specific cell should override the getter, Apple's shape).
+  The one-cell selection is `-selectedCell`/`-selectedTag`/`-selectCell:`, the paint-and-invalidate quartet paints only
+  the control's own cell and marks the view, and `-calcSize` asks the cell to recalculate its drawing information.
+  The six `-take…ValueFrom:` doors take the sender's six answers through the control's own setters, `-formatter`,
+  `-setFloatingPointFormat:left:right:`, `-attributedStringValue` and `-baseWritingDirection` are the cell's state,
+  and `-refusesFirstResponder` is its keyboard flag. `-validateEditing` lands a running editor's string in the cell
+  WITHOUT ending the session; the probe measures it on a real field editor. `tests/control_tail.m` measures it in 32
+  checks.
+
+- **`ctest`: 157 of 157 passed** (the keyboard and the seam, the AppKit and its input path, the controls and their
   metrics, the field control and its cell and its bezel and its placeholder and what it may hold, the text path and its
   word granularity and the multi-line view and its wrapping and its scrolling and its READING OF THE STORE, the STORE
   the rich-text slice is built on and the REGION it is laid out in and the WEB that ties the three together and the
@@ -1065,8 +1076,8 @@ the compositor is really gone.
   drawn offset and the ruler it can wear and the TEXT RULER whose markers are tab stops and the block rects and
   attachment sizes the layout answers and the temporary-attribute table and the rect arrays, the chrome and what its
   buttons do, the chrome theme, the menus and activation, and the manager's own ensure/invalidate doors, the document family's file round trip and change count, the save and open panels, and the pop-up's items, a colour's space and the menu's flags, the slider's tick values, its title band and its two
-  no-argument ink doors, and the table's deprecated spellings, enumerators, drag images, focus ring and destination
-  feedback).
+  no-argument ink doors, the table's deprecated spellings, enumerators, drag images, focus ring and destination
+  feedback, and the control's cell factory, one-cell selection, sender values and validate-editing).
 - **And the desktop's own text is SUB-PIXEL ANTIALIASED**, which is the AppKit's half of a renderer change in
   CoreGraphics: a window's surface is OPAQUE (`kCGImageAlphaNoneSkipFirst`), and the destination's opacity is
   exactly what decides whether a glyph is rasterised in colour. MEASURED on the live session: the window title's

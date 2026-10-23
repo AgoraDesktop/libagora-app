@@ -1371,6 +1371,36 @@ through the index-set doors, which is Apple's own compatibility rule.
 by its colour's pixels, the focus ring and indicator image by theirs, the three feedback styles as three pictures, the
 drag image's union size, and the vertical-motion gate through a counted drag entry point.
 
+## 50. `NSControl` complete: the cell factory, the one-cell selection, and a validation that does not end the session
+
+**THE CLASS IS COMPLETE FOR THE ERA: 65 of 65, the tenth class to finish.** The tail is mostly forwards, because a
+control is a view with ONE cell and the cell already owns the value, the face and the action.
+
+**THE CLASS FACTORY IS THE ONE NEW STATIC.** `+cellClass` answers `NSCell` until `+setCellClass:` names another; the
+base's answer is process-wide, and a subclass that builds a specific cell should override the getter — Apple's own
+shape, stated at the door because this tier's subclasses do not override it yet.
+
+**THE ONE-CELL SELECTION AND THE PAINT QUARTET ARE SMALL AND REAL.** `-selectedCell` is the control's cell,
+`-selectedTag` its tag (or -1 without a cell), and `-selectCell:` puts the named cell in `NSOnState`. `-drawCell:` and
+`-drawCellInside:` paint that cell only when it IS the control's, so a stale pointer cannot draw over a replaced cell;
+`-updateCell:`, `-updateCellInside:` and the no-argument `-setNeedsDisplay` are invalidation. `-calcSize` reaches the
+cell's `-calcDrawInfo:` with the control's real bounds.
+
+**THE VALUE AND FORMATTER FAMILY IS THE CELL'S, INCLUDING ITS PRECEDENCE.** The six `-take…ValueFrom:` doors forward
+to the cell's own take doors and redisplay; `-formatter`, `-setFloatingPointFormat:left:right:`,
+`-attributedStringValue` and `-baseWritingDirection` are forwards. The probe set an `NSNumberFormatter` and then the
+deprecated float format, and saw "3.142" rather than "3.14" — the formatter supersedes the float format, exactly as
+`NSCell` documents. Clearing the formatter is what makes the deprecated door's reader visible, and the probe now asserts
+both sides of that precedence.
+
+**`-validateEditing` COPIES THE RUNNING EDITOR'S STRING INTO THE CELL AND DOES NOT END THE SESSION.** The editor owns
+the string while it runs; the cell is written through its own setter (which also tells the editor the value it shows),
+and ending remains the editor's or `-abortEditing`'s job. The probe opens a real field editor through `-selectText:`,
+sets the editor's string, validates, and checks both the cell's new value and that the session is still live.
+
+`tests/control_tail.m` measures it in **32 checks**: a counting cell for the four paint/calc doors, a six-answer sender
+for the take family, and a real field editor for the validation.
+
 ## Keeping in sync
 
 The Fiwix AppKit is the origin and this repository has now diverged from it in the seam. A fix made there

@@ -34,7 +34,24 @@ NSString *NSControlTextDidEndEditingNotification = @"NSControlTextDidEndEditingN
 NSString *NSControlTextDidChangeNotification = @"NSControlTextDidChangeNotification";
 NSString *NSFieldEditorUserInfoKey = @"NSFieldEditor";
 
+/* **THE PROCESS-WIDE FACTORY CLASS.** `+cellClass` answers `NSCell` until a subclass overrides it or a caller sets
+ * one through `+setCellClass:`; a subclass that makes its own cell should override the getter rather than mutate this
+ * one, which is Apple's own shape and the reason the setter is described as pre-10.0 nib machinery. */
+static Class sCellClass = Nil;
+
 @implementation NSControl
+
+/* ---- THE CELL CLASS, WHICH IS A CLASS QUESTION ------------------------------------------------ */
+
++ (Class)cellClass
+{
+	return (sCellClass != Nil) ? sCellClass : [NSCell class];
+}
+
++ (void)setCellClass:(Class)factoryId
+{
+	sCellClass = (factoryId != Nil) ? factoryId : [NSCell class];
+}
 
 /* ============================================================================================
  * ARCHIVING: THE CELL AND THE ONE FLAG THIS CLASS OWNS.
@@ -257,6 +274,50 @@ static NSString * const AGCoderIgnoresMultiClickKey = @"ignoresMultiClick";
 	[self setNeedsDisplay:YES];
 }
 
+- (NSWritingDirection)baseWritingDirection
+{
+	return (_cell != nil) ? [_cell baseWritingDirection] : NSWritingDirectionNatural;
+}
+
+- (void)setBaseWritingDirection:(NSWritingDirection)writingDirection
+{
+	[_cell setBaseWritingDirection:writingDirection];
+	[self setNeedsDisplay:YES];
+}
+
+/* **THE ATTRIBUTED VALUE IS THE CELL'S, INCLUDING ITS REFUSAL.** `NSCell -attributedStringValue` is the half of the
+ * pair that cannot be finished for a non-text cell (see its header); a control forwards the answer as it gets it rather
+ * than inventing an empty attributed string, because nil is this type's empty value and an empty string is not. */
+- (NSAttributedString *)attributedStringValue
+{
+	return [_cell attributedStringValue];
+}
+
+- (void)setAttributedStringValue:(NSAttributedString *)obj
+{
+	[_cell setAttributedStringValue:obj];
+	[self setNeedsDisplay:YES];
+}
+
+- (NSFormatter *)formatter
+{
+	return [_cell formatter];
+}
+
+- (void)setFormatter:(NSFormatter *)newFormatter
+{
+	[_cell setFormatter:newFormatter];
+	[self setNeedsDisplay:YES];
+}
+
+/* THE DEPRECATED FLOATING-POINT SPELLING IS THE CELL'S, not a second set of digits on the control: the cell's
+ * `-stringValue` is the reader, and its own note says a formatter supersedes it. */
+- (void)setFloatingPointFormat:(BOOL)autoRange left:(NSInteger)leftDigits right:(NSInteger)rightDigits
+{
+	[_cell setFloatingPointFormat:autoRange left:leftDigits right:rightDigits];
+	[self setNeedsDisplay:YES];
+}
+
 - (BOOL)isContinuous
 {
 	return _cell != nil ? [_cell isContinuous] : NO;
@@ -277,6 +338,34 @@ static NSString * const AGCoderIgnoresMultiClickKey = @"ignoresMultiClick";
 	_ignoresMultiClick = flag;
 }
 
+/* ---- THE ONE-CELL SELECTION FAMILY ------------------------------------------------------------- */
+
+/* **A CONTROL HAS ONE CELL, SO "THE SELECTED CELL" IS THAT CELL.** Apple's `NSMatrix` is the class with a selection of
+ * many; here the answer is the receiver's cell, and `-selectedTag` is its tag with -1 standing for "there is no cell" —
+ * the same empty value the GNUstep implementation and the era's own callers expect. */
+- (id)selectedCell
+{
+	return _cell;
+}
+
+- (NSInteger)selectedTag
+{
+	return (_cell != nil) ? [_cell tag] : -1;
+}
+
+- (void)selectCell:(NSCell *)aCell
+{
+	if (_cell != nil && aCell == _cell) {
+		[_cell setState:NSOnState];
+		[self setNeedsDisplay:YES];
+	}
+}
+
+- (NSInteger)sendActionOn:(NSInteger)mask
+{
+	return (_cell != nil) ? [_cell sendActionOn:mask] : 0;
+}
+
 /* ---- AND THE TWO DOORS A VIEW OWNS: THE FACE AND THE CLICK -------------------------------------- */
 
 - (void)drawRect:(NSRect)dirtyRect
@@ -288,6 +377,43 @@ static NSString * const AGCoderIgnoresMultiClickKey = @"ignoresMultiClick";
 	if (_cell != nil) {
 		[_cell drawWithFrame:[self bounds] inView:self];
 	}
+}
+
+/* **THE FOUR DOORS A SUBCLASS USES TO PAINT ONE CELL RATHER THAN THE WHOLE FACE.** They are named-cell doors: the one
+ * a subclass hands is painted only if it IS this control's cell, which is what keeps a stale pointer from drawing over
+ * a control that has replaced it. The `-update…` pair are invalidation, not ink, and they mark the control for
+ * display; the no-argument `-setNeedsDisplay` is the pre-10.3 spelling and means YES. */
+- (void)drawCell:(NSCell *)aCell
+{
+	if (_cell != nil && aCell == _cell) {
+		[_cell drawWithFrame:[self bounds] inView:self];
+	}
+}
+
+- (void)drawCellInside:(NSCell *)aCell
+{
+	if (_cell != nil && aCell == _cell) {
+		[_cell drawInteriorWithFrame:[self bounds] inView:self];
+	}
+}
+
+- (void)updateCell:(NSCell *)aCell
+{
+	if (aCell == nil || aCell == _cell) {
+		[self setNeedsDisplay:YES];
+	}
+}
+
+- (void)updateCellInside:(NSCell *)aCell
+{
+	if (aCell == nil || aCell == _cell) {
+		[self setNeedsDisplay:YES];
+	}
+}
+
+- (void)setNeedsDisplay
+{
+	[self setNeedsDisplay:YES];
 }
 
 - (BOOL)acceptsFirstResponder
@@ -501,6 +627,44 @@ static NSString * const AGCoderIgnoresMultiClickKey = @"ignoresMultiClick";
 	}
 }
 
+/* **THE SENDER'S VALUE INTO THIS CONTROL'S CELL.** Each forwards to the cell's own `-take…` door, which is the one
+ * that knows the coercion, and then redisplays: a value that arrived from another control is a face that changed. */
+- (void)takeIntValueFrom:(id)sender
+{
+	[_cell takeIntValueFrom:sender];
+	[self setNeedsDisplay:YES];
+}
+
+- (void)takeIntegerValueFrom:(id)sender
+{
+	[_cell takeIntegerValueFrom:sender];
+	[self setNeedsDisplay:YES];
+}
+
+- (void)takeFloatValueFrom:(id)sender
+{
+	[_cell takeFloatValueFrom:sender];
+	[self setNeedsDisplay:YES];
+}
+
+- (void)takeDoubleValueFrom:(id)sender
+{
+	[_cell takeDoubleValueFrom:sender];
+	[self setNeedsDisplay:YES];
+}
+
+- (void)takeStringValueFrom:(id)sender
+{
+	[_cell takeStringValueFrom:sender];
+	[self setNeedsDisplay:YES];
+}
+
+- (void)takeObjectValueFrom:(id)sender
+{
+	[_cell takeObjectValueFrom:sender];
+	[self setNeedsDisplay:YES];
+}
+
 - (BOOL)sendAction:(SEL)theAction to:(id)theTarget
 {
 	/* **A NIL TARGET MEANS THE RESPONDER CHAIN, AND THE APPLICATION OWNS THAT WALK** — the same door `NSMenu` uses one
@@ -524,6 +688,15 @@ static NSString * const AGCoderIgnoresMultiClickKey = @"ignoresMultiClick";
 		return;
 	}
 	[self setFrameSize:[_cell cellSize]];
+}
+
+/* THE DEPRECATED CACHE DOOR ASKS THE CELL TO RECALCULATE ITS DRAWING INFORMATION for this control's bounds. The cell
+ * computes its size on demand in this tier, so this is the door's own work rather than a second size. */
+- (void)calcSize
+{
+	if (_cell != nil) {
+		[_cell calcDrawInfo:[self bounds]];
+	}
 }
 
 /* **AND AUTO LAYOUT'S QUESTION IS THE SAME ANSWER WITHOUT THE FRAME SET.** A cell-based control's intrinsic size is
@@ -559,6 +732,32 @@ static NSString * const AGCoderIgnoresMultiClickKey = @"ignoresMultiClick";
 - (BOOL)abortEditing
 {
 	return [_cell cg_abortEditing];
+}
+
+/* **VALIDATION IS THE RUNNING EDITOR'S STRING LANDING IN THE CELL, WITHOUT ENDING THE SESSION.** The editor is the
+ * string's owner while it runs, so the cell is written through its own setter — which also tells the editor the value
+ * it now shows — and the face is marked. Ending the session stays the editor's or `-abortEditing`'s job; a caller that
+ * wants to end after validating asks for both. */
+- (void)validateEditing
+{
+	NSText *editor = [self currentEditor];
+
+	if (editor != nil && _cell != nil) {
+		[_cell setStringValue:[editor string]];
+		[self setNeedsDisplay:YES];
+	}
+}
+
+/* **AND THE KEYBOARD REFUSAL IS THE CELL'S FLAG.** A control whose cell refuses the first responder is a label or a
+ * non-editable control; the forward is here because Apple declares the pair in `NSKeyboardUI`. */
+- (BOOL)refusesFirstResponder
+{
+	return (_cell != nil) ? [_cell refusesFirstResponder] : NO;
+}
+
+- (void)setRefusesFirstResponder:(BOOL)flag
+{
+	[_cell setRefusesFirstResponder:flag];
 }
 
 @end
