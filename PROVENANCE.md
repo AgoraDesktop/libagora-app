@@ -1694,6 +1694,51 @@ both caps, the min/max clamps, recycling by identity, the selection set and four
 backdrop in pixels, the drag image and its delegate override, the masks, the source's two delegate doors with the real
 pasteboard, and the destination's proposal arithmetic and retargeting.
 
+## 59. `NSRuleEditor` arrives: the criterion tree, four nesting modes, and the predicate pair left absent on purpose
+
+**THE FIRST ABSENT RULE EDITOR IS PRESENT: `NSRuleEditor` at 42 of 42, the twenty-second complete class.** The class
+count is 137 of 168 and the absent list is 31; `NSRuleEditorDelegate` arrived with it, so the protocol count is 44 of 56.
+The declaration count is 5186, the census 381 metrics, the suite 165 tests, and the refusal census 387 -> 390: the class
+is complete, and three of its doors are named refusals.
+
+**A ROW IS A PATH THROUGH THE DELEGATE'S TREE, AND THE FLAT NUMBERING IS PRE-ORDER.** The delegate answers three
+required questions — how many children a criterion has, which child is at an index, and what to display for it — and the
+view walks first-root-then-first-child to a leaf for each new row's criteria. `-reloadCriteria` re-asks and keeps the
+longest prefix that is still a root-then-child chain, so a tree that moved takes the row with it instead of emptying it.
+The flat row number every door speaks is computed by flattening the tree on demand; nothing caches a second order, which
+is why an insertion cannot leave the numbering describing a tree that changed.
+
+**INSERTION IS A BOUNDARY RULE AND REMOVAL ADOPTS.** An insertion index must be the position before a parent's first
+child or after one of their subtrees; an index inside another row's subtree raises `NSInvalidArgumentException`, as does
+a nesting mode that forbids the row. The four modes are enforced: Single allows one row, List forbids compound rows and
+nesting, Simple allows one root with Simple subrows, Compound allows everything; `-addRow:` chooses what its mode can
+hold. Removing a row splices its children into its parent's list (or makes them roots); `-removeRowsAtIndexes:includeSubrows:YES`
+takes the subtree instead.
+
+**THE DRAWING IS BANDS, AND EVERY DISPLAY VALUE KIND HAS A PATH.** The view is flipped; each row is a `-rowHeight` band;
+a string is drawn through the formatting dictionary, a menu item's title is drawn, and an `NSView` is adopted as a
+subview of the band at the same x the strings advance through (one measurement serves the drawing and the layout). The
+selection fills the band with the platform accent, and `-isEditable` gates the pointer — Apple's own sentence is that
+users can only interact with editable rule editors, and this tier's only user gesture is selecting a row.
+
+**AND THE PREDICATE PAIR STAYS ABSENT ON PURPOSE.** `-predicate` and `-predicateForRow:` ask the delegate for its
+`NSRuleEditorPredicate…` parts (so the optional parts door has a sender) and then refuse to assemble, because this
+Foundation has no `NSPredicate`, `NSExpression` or `NSComparisonPredicate` (§63.161). `-setFormattingStringsFilename:`
+records the name and refuses the load, because the strings-file reader was withdrawn. **The decision recorded here is
+that `NSPredicateEditor` and `NSPredicateEditorRowTemplate` remain ABSENT**: their whole surface is the predicate family,
+so declaring them would be declaring a model the stack cannot represent. That is the design question `HANDOFF-6` §6 asked
+for, answered with a door rather than a stub.
+
+**THE BINDING SETTINGS ARE STORED AND NAMED AS UNREAD.** `-rowClass` and the four key paths are the "rows" binding's
+settings; this tier has no binding engine, so they are stored and answered and nothing reads them — a stated disposition,
+not an omission. `-canRemoveAllRows` limits the USER's deletion, and the plus/minus buttons that would be that user
+gesture are the missing half, so the programmatic removal doors are not gated by it, which is Apple's own distinction.
+
+`tests/rule_editor.m` measures it in **60 checks**: the defaults, the initial and caller-set paths, the boundary raise,
+the four modes and `-addRow:`, the range exceptions, `-reloadCriteria`, adoption and subtree removal, the selection and
+the click gated by editability, the accent band, the formatting dictionary's ink, a view display value in its band, the
+predicate doors' asking-then-refusal, and the rows-changed announcement.
+
 ## Keeping in sync
 
 The Fiwix AppKit is the origin and this repository has now diverged from it in the seam. A fix made there

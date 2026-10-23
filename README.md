@@ -1165,7 +1165,20 @@ the compositor is really gone.
   ask `validateDrop`/`acceptDrop`. **136 of 168 classes (80%), 134 of 134 with a surface COMPLETE, 43 of 56 protocols,
   32 absent classes.** `tests/collection_view.m` measures it in 68 checks.
 
-- **`ctest`: 164 of 164 passed** (the keyboard and the seam, the AppKit and its input path, the controls and their
+- **And the FIRST ABSENT RULE EDITOR HAS ARRIVED: `NSRuleEditor` — 42 of 42** (`ctest`, offscreen). It is the delegate's
+  criterion tree drawn as rows: the delegate says how many children a criterion has and what to show for it, the view
+  walks first-root-then-first-child to a leaf for each row's criteria, and `-reloadCriteria` re-asks while keeping the
+  longest valid prefix. The flat numbering is pre-order and computed on demand; an insertion index must be a BOUNDARY of
+  the parent's children or it raises, removal ADOPTS orphans (or takes the subtree), and the four nesting modes
+  (Single/List/Compound/Simple) are enforced at the insertion door and in `-addRow:`. The view is flipped and draws a
+  band per row: the display values as strings and menu-item titles, `NSView` values as subviews, the formatting
+  dictionary as a substitution, the selection in the platform accent, and `-isEditable` gating the pointer. **The three
+  PREDICATE doors refuse by name** (`-predicate`, `-predicateForRow:`, and the filename load) after asking the
+  delegate's parts door, because this Foundation has no `NSPredicate`; **`NSPredicateEditor` and
+  `NSPredicateEditorRowTemplate` therefore stay absent by design, not by omission.** **137 of 168 classes (81%), 135 of
+  135 with a surface COMPLETE, 44 of 56 protocols, 31 absent classes.** `tests/rule_editor.m` measures it in 60 checks.
+
+- **`ctest`: 165 of 165 passed** (the keyboard and the seam, the AppKit and its input path, the controls and their
   metrics, the field control and its cell and its bezel and its placeholder and what it may hold, the text path and its
   word granularity and the multi-line view and its wrapping and its scrolling and its READING OF THE STORE, the STORE
   the rich-text slice is built on and the REGION it is laid out in and the WEB that ties the three together and the
@@ -1182,8 +1195,9 @@ the compositor is really gone.
   feedback, the control's cell factory, one-cell selection, sender values and validate-editing, the view's
   forced display, frame and rotation setters, subview list, autoscroll, refusals and ruler client defaults, the token
   field's list, its three strings, its chips, its session, its completion and its pasteboard, the drawer's child
-  window, four states, five edge geometries and reviewed user resize, and the collection view's grid, pool, selection,
-  gradient backdrop and both drag halves).
+  window, four states, five edge geometries and reviewed user resize, the collection view's grid, pool, selection,
+  gradient backdrop and both drag halves, and the rule editor's criterion tree, four nesting modes, flat numbering,
+  adoption on removal and predicate refusals).
 - **And the desktop's own text is SUB-PIXEL ANTIALIASED**, which is the AppKit's half of a renderer change in
   CoreGraphics: a window's surface is OPAQUE (`kCGImageAlphaNoneSkipFirst`), and the destination's opacity is
   exactly what decides whether a glyph is rasterised in colour. MEASURED on the live session: the window title's

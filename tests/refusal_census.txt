@@ -112,6 +112,7 @@ NSPrintInfo.m                    6
 NSPrintOperation.m               6
 NSProgressIndicator.m            1
 NSResponder.m                    1
+NSRuleEditor.m                   3
 NSRulerView.m                    3
 NSScrollView.m                   1
 NSShadow.m                       1
@@ -147,4 +148,10 @@ NSWindow.m                       23
 # `fn_refuse_window` spelling was simply invisible to a census that counted the `APPKIT-REFUSE` literal, so every
 # refusal written the house way — which is the way the header asks for — moved no number.
 #
-# total: 387
+# AND IT ROSE BY THREE IN THE RULE EDITOR, ALL BY NAME AND ALL ABOUT THE PREDICATE FAMILY. `-predicate` and
+# `-predicateForRow:` ask the delegate for its predicate parts and then refuse to ASSEMBLE them, because this Foundation
+# has no `NSPredicate`/`NSExpression`/`NSComparisonPredicate` (§63.161); `-setFormattingStringsFilename:` records the
+# name and refuses the LOAD, because the strings-file reader was withdrawn. The class is COMPLETE (all 42 selectors have
+# bodies) and these are the three doors whose bodies say what the tier cannot do.
+#
+# total: 390

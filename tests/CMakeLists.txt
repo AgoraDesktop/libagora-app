@@ -1577,3 +1577,14 @@ add_executable(collection_view collection_view.m)
 target_link_libraries(collection_view PRIVATE App m)
 add_test(NAME appkit-collection-view COMMAND collection_view)
 set_tests_properties(appkit-collection-view PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
+
+# **THE RULE EDITOR: THE DELEGATE'S TREE, THE FLAT NUMBERING AND THE FOUR MODES.** The grid of checks is the row tree:
+# the initial path (first root, first child to a leaf), a caller-set path extended the same way, `-reloadCriteria` keeping
+# the longest valid prefix when the tree changes, the boundary rule that raises inside another subtree, and adoption on
+# removal. The pointer is measured through a click (and ignored when not editable), the drawing through the accent band,
+# the formatting dictionary's ink and a VIEW display value becoming a subview, and the predicate doors through the
+# delegate's parts method before the nil answer.
+add_executable(rule_editor rule_editor.m)
+target_link_libraries(rule_editor PRIVATE App m)
+add_test(NAME appkit-rule-editor COMMAND rule_editor)
+set_tests_properties(appkit-rule-editor PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
