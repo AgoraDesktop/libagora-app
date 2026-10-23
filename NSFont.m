@@ -960,6 +960,16 @@ static NSFont *apk_ui_font(CTFontUIFontType type, CGFloat size)
 	return NO;
 }
 
+- (BOOL)positionOfGlyph:(NSGlyph)glyph forCharacter:(unichar)aCharacter struckOverRect:(NSRect)overlayRect
+{
+	(void)glyph;
+	(void)aCharacter;
+	(void)overlayRect;
+	fn_refuse_workspace("NSFont -positionOfGlyph:forCharacter:struckOverRect:",
+			    "attachment metrics, which a laid-out line has and a face does not");
+	return NO;
+}
+
 - (BOOL)positionOfGlyph:(NSGlyph)glyph struckOverRect:(NSRect)overlayRect metricsExist:(BOOL *)exists
 {
 	(void)glyph;

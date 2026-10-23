@@ -828,7 +828,8 @@ written to disk for `-writeRTFDToFile:atomically:`, reopened through `NSFileWrap
 *Session of the sixteenth slice. Its commit is "AppKit: NSFont complete — metrics from the face, and the variants that are
 the font".*
 
-**`NSFont` IS COMPLETE: 70 of 70.** Every metric door asks the FACE, which is what this class is (a view of a
+**`NSFont` IS COMPLETE: 71 of 71** (a fifth attachment-position door was found by the handoff's own recount and refused in
+HANDOFF-5 §1). Every metric door asks the FACE, which is what this class is (a view of a
 `CTFontRef`): advances and bounding rects in single and batch form, the glyph by name, the line height as its own three
 metrics, the packing derived from the glyph count, and `-widthOfString:` through the AppKit's own `-sizeWithAttributes:`
 so the width told is the width drawn. **§4's caveat is GENERALISED here**: the descriptors carry no traits in this tree, so

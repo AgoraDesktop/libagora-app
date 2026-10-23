@@ -2566,7 +2566,7 @@ the RTFD file round trip, the font pasteboard, the spelling selection — and th
 
 ### `NSFont` complete: metrics from the face, and the variants that are the font
 
-**`NSFont` ANSWERS ALL 70 OF THE ERA'S SELECTORS NOW** — the fifth complete class. Every metric door asks the FACE, which is
+**`NSFont` ANSWERS ALL 71 OF THE ERA'S SELECTORS NOW** — the fifth complete class. Every metric door asks the FACE, which is
 what this class is (a view of a `CTFontRef`): `-advancementForGlyph:` and its batch forms, `-boundingRectForGlyph:` and
 its batch, `-defaultLineHeightForFont` (its own three metrics added), `-glyphWithName:`, `-glyphIsEncoded:` (a glyph past
 the face's count is one it cannot draw), `-glyphPacking` (derived from the glyph count, so it is always an integer width),

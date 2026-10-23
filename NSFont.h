@@ -349,6 +349,9 @@ typedef NSUInteger NSFontControlSize;
      struckOverGlyph:(NSGlyph)overlayGlyph
 	 metricsExist:(nullable BOOL *)exists;
 - (BOOL)positionOfGlyph:(NSGlyph)glyph
+	   forCharacter:(unichar)aCharacter
+	struckOverRect:(NSRect)overlayRect;
+- (BOOL)positionOfGlyph:(NSGlyph)glyph
       struckOverRect:(NSRect)overlayRect
 	 metricsExist:(nullable BOOL *)exists;
 - (NSInteger)positionOfGlyph:(NSGlyph)glyph
