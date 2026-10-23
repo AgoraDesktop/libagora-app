@@ -7,19 +7,19 @@ THIRTEENTH SLICE HAS LANDED SINCE, and §9 is its record.**
 file's §2 instrument rules and §4 traps are still the ones these sessions used most. **THIS FILE'S §2 NUMBERS SUPERSEDE
 `HANDOFF-4.md`'s**, which are twelve slices old.*
 
-*State at this handover: **fifteen slice commits** since the fourth handoff, tree clean, **157 tests passing in about
-88 s**, `api-ledger check` holding **375 metrics** — **131 of 168 classes (78%), 4428 of 4505 selectors (98%), 39 of 56
-protocols (70%), 86 of 86 functions**, 4957 methods declared with 8 having no body, **123 of the 129 classes with a surface
-at COMPLETE coverage** — refusal census **382**, owed census **19**. **The "120 of 129" this paragraph first carried was a
-recount error; §9 records it and the corrected 119 -> 121 movement, §10 takes it to 122, and §11 to 123.***
+*State at this handover: **sixteen slice commits** since the fourth handoff, tree clean, **158 tests passing in about
+82 s**, `api-ledger check` holding **375 metrics** — **131 of 168 classes (78%), 4456 of 4505 selectors (99%), 39 of 56
+protocols (70%), 86 of 86 functions**, 4983 methods declared with 8 having no body, **124 of the 129 classes with a surface
+at COMPLETE coverage** — refusal census **386**, owed census **19**. **The "120 of 129" this paragraph first carried was a
+recount error; §9 records it and the corrected 119 -> 121 movement, §10 takes it to 122, §11 to 123, and §12 to 124.***
 
 ---
 
 ## 1. What these sessions did
 
 Twelve slices, in the order they landed. Each is a commit (plus, twice, a commit in the **workspace** repository and a
-gitlink advance in `$AGORA_ROOT`), and each ended green. **The thirteenth, fourteenth and fifteenth are `182bcd4`,
-`b0bd73c` and `1c4be0a`, listed below and recorded in §9–§11.**
+gitlink advance in `$AGORA_ROOT`), and each ended green. **The thirteenth through sixteenth are `182bcd4`, `b0bd73c`,
+`1c4be0a` and `db418e3`, listed below and recorded in §9–§12.**
 
 | Commit | What it landed |
 |---|---|
@@ -38,6 +38,7 @@ gitlink advance in `$AGORA_ROOT`), and each ended green. **The thirteenth, fourt
 | `182bcd4` | **The slider pair — COMPLETE** (`NSSlider` 30/30, `NSSliderCell` 35/35): the tick marks as VALUES with a snap, the title as a CELL in a band taken off the top, the two no-argument ink doors answered from the control view, the background image drawn, and **a flipped vertical scale that was upside down** (§9). |
 | `b0bd73c` | **`NSTableView` — COMPLETE** (123/123): the deprecated spellings mapped to the modern state, the autoresizing styles actually applied by `-tile`, the selection enumerators, both drag-image doors, the focused column's ring, the header indicator image, the three destination-feedback drawings, the cell-click door, and the vertical-motion gate (§10). |
 | `1c4be0a` | **`NSControl` — COMPLETE** (65/65): the cell-class factory, the one-cell selection, the paint/invalidate quartet, the sender-value family, the formatter pair, the attributed value and writing direction, the keyboard refusal, and `-validateEditing` — which lands an editor's string without ending the session (§11). |
+| `db418e3` | **`NSView` — COMPLETE** (221/221): the forced display family, the frame/rotation setters, the subview list, autoscroll, the four named refusals (focus lock, layer, definition range) and the nine ruler client defaults — with `…inContext:` corrected to Apple's spelling (§12). |
 
 Plus, in the **workspace** repository: `e31e44f` (the main-menu test's Print… case was asking a chain-routed row to resolve
 with no key window, and expecting the item's target to be the stand-in) and `47d9a0c` (the file window opens a document
@@ -55,13 +56,13 @@ claim; the recount is the measurement.**
 
 ```
 classes   131 of 168   (78%)    37 missing
-selectors 4428 of 4505 (98%)    77 missing   123 of 129 classes at COMPLETE coverage
+selectors 4456 of 4505 (99%)    49 missing   124 of 129 classes at COMPLETE coverage
 protocols  39 of  56   (70%)    17 missing
 functions  86 of  86  (100%)     0 missing    10 refuse by name
-methods   4957 declared on this tree's own classes, 8 with NO body on the chain (0.2%)
+methods   4983 declared on this tree's own classes, 8 with NO body on the chain (0.2%)
 ```
 
-**TEN CLASSES ARE COMPLETE FOR THE ERA, and every one of them finished with NAMED REFUSALS rather than a stub:**
+**ELEVEN CLASSES ARE COMPLETE FOR THE ERA, and every one of them finished with NAMED REFUSALS rather than a stub:**
 
 | Class | Selectors | Refusing by name |
 |---|---|---|
@@ -75,11 +76,12 @@ methods   4957 declared on this tree's own classes, 8 with NO body on the chain 
 | `NSSliderCell` | 35 of 35 | 6 (five need a control view; one is the circular face) |
 | `NSTableView` | 123 of 123 | 0 (the deprecated doors are answered; the drag session is the tier's) |
 | `NSControl` | 65 of 65 | 0 (every door is a cell forward or a stated effect) |
+| `NSView` | 221 of 221 | 20 sites (printing, focus lock, layer, definition, file drag, full screen) |
 
-**AND ONLY SIX CLASSES STILL HAVE ANY DEBT** — the tail, not a subsystem:
+**AND ONLY FIVE CLASSES STILL HAVE ANY DEBT** — the tail, and no longer any of the deepest views:
 
 ```
-NSView 28        NSDocument 19    NSWindow 18
+NSDocument 19    NSWindow 18
 NSDocumentController 8   NSSavePanel 3   NSWorkspace 1    NSFont 0*
 ```
 
@@ -117,7 +119,7 @@ Four censuses and one ledger, all committed and all gated by `ctest`:
 | `api/10.6/appkit-manifest.txt` | The SDK's facts: 168 classes + superclasses, 56 protocols, 87 functions, 5208 selectors. |
 | `tests/api-10.6-census.txt` | **375** pinned metrics — eight aggregates, one `sel:` line per class (129 of them), one `proto:` line per protocol, `fn:`/`fndecl:` per function, `selphantom:` per class. |
 | `tests/api_census.cmake` | The gate: two-directional comparison, arithmetic check, two fault checks. |
-| `tests/refusal_census.txt` | **382** refusal sites, per FILE. |
+| `tests/refusal_census.txt` | **386** refusal sites, per FILE. |
 | `tests/owed_census.txt` | **19** headers' OWED notes, per file. |
 | `tools/api-ledger` | The parser: `manifest`, `census`, `check`, `missing`. |
 
@@ -130,7 +132,7 @@ Four censuses and one ledger, all committed and all gated by `ctest`:
 * **EVERY SLICE RE-PINS DELIBERATELY.** Let `ctest -R appkit-api-census` fail, recompute with `./tools/api-ledger census
   …`, write it in the same commit, and recompute the four hand-written summary lines from the numbers rather than editing
   them by eye.
-* **A REFUSAL CENSUS IS A CENSUS, NOT A RATCHET.** It went 292 → 382 across these thirteen slices, and almost every move was
+* **A REFUSAL CENSUS IS A CENSUS, NOT A RATCHET.** It went 292 → 386 across these sixteen slices, and almost every move was
   UP: a door that used to be absent is now a NAMED refusal, so a caller gets a reason instead of a link error. Downward
   moves happened too (the browser's matrix form, the print doors). The diff says why, every time.
 * **THE NEEDLE IS `(APPKIT-REFUSE|fn_refuse_[a-z]+)` NOW**, widened twice — the second time because a third helper
@@ -263,7 +265,7 @@ a library path rather than for want of the code.
 **THE SIX DEEPEST CLASSES OF THIS COMPONENT ARE DONE.** What is left is the long tail, and it is many small commits rather
 than four big slices — so the next session should pick a CLASS, not a subsystem.
 
-1. **DONE for `NSControl` in §11 (65/65). `NSView` 28 is what remains of this item, and it is SPREAD OUT.** The view's remainder is
+1. **DONE in §12: `NSView` 221/221 — and with it both of the two longest tails.** The view's last doors were
    `-display`/`-displayIfNeeded`/`-displayRectIgnoringOpacity:` and `-lockFocus`/`-unlockFocus` (which `NSView.h` says are
    ABSENT ON PURPOSE — "draw me where I live"), `-isHiddenOrHasHiddenAncestor`, the rotation queries and setters,
    `-addSubview:positioned:relativeTo:`, `-setSubviews:`, `-autoscroll:`, the layer pair, the definition-lookup door and
@@ -301,7 +303,7 @@ than four big slices — so the next session should pick a CLASS, not a subsyste
 
 ## 7. Things a reader should not have to rediscover
 
-* **THE TEN COMPLETE CLASSES ARE COMPLETE IN A SPECIFIC SENSE**: every selector Apple's 10.6 header declares for them is
+* **THE ELEVEN COMPLETE CLASSES ARE COMPLETE IN A SPECIFIC SENSE**: every selector Apple's 10.6 header declares for them is
   DECLARED and ANSWERED, and a refused door is an ANSWERED door (it prints its reason and returns its type's empty value).
   `-respondsToSelector:` is YES for a refusal. That is the plan's own disposition rule, and it is why the ledger and the
   refusal census have to be read TOGETHER.
@@ -327,7 +329,7 @@ than four big slices — so the next session should pick a CLASS, not a subsyste
 * **THE BROWSER ADVERTISES THE 10.6 ITEM CONTRACT AND FALLS BACK TO THE NEXXT CELL ONE.** `-browser:numberOfChildrenOfItem:`
   is the test for which model a delegate speaks; the item walk starts at `nil`, retains nothing, and a delegate implements
   ONE contract (the one allowed overlap is a styling `-browser:willDisplayCell:atRow:column:`).
-* **THE SUITE IS 157 TESTS IN ABOUT 88 SECONDS, AND `ctest --test-dir build -j4` IS THE GATE.** The exit status is the
+* **THE SUITE IS 158 TESTS IN ABOUT 82 SECONDS, AND `ctest --test-dir build -j4` IS THE GATE.** The exit status is the
   witness, not the tail of the output. The workspace's suite is 14 tests and belongs in the same gate run.
 
 ---
@@ -518,3 +520,58 @@ shows — and ending remains the editor's or `-abortEditing`'s job. The probe op
 layer pair, and the nine ruler-view client doors that `NSTextView` already implements. Then `NSDocument` 19,
 `NSWindow` 18, `NSDocumentController` 8, `NSSavePanel` 3 and `NSWorkspace` 1 (the instrument quirk). §6's ordering is
 otherwise unchanged.
+
+---
+
+## 12. `NSView` complete: forced display, one rotation record, and the ruler client defaults
+
+**Commit `db418e3`.** `NSView` is COMPLETE for the era — 221 of 221, the eleventh class to finish — and the change is 28
+selector rows (4428 -> 4456 present, 77 -> 49 missing), 26 declarations (4957 -> 4983), and one more class at complete
+coverage (123 -> 124). The suite is 158 tests (about 82 s), the refusal census went 382 -> 386 (four named refusals),
+the owed census stayed 19, and `tests/view_tail.m` is the new probe (33 checks). The workspace's 14 tests were run too.
+
+**THE DISPLAY FAMILY'S FORCED FORMS ARE THE `…InRect:` DOORS WITH THE BOUNDS SUPPLIED.** `-display` paints the tree now
+and clears the damage; `-displayIfNeeded` paints only the invalidated region; `-displayRectIgnoringOpacity:` is the
+context form with a nil context. The two-argument form's selector was `…context:` in this tree and is Apple's
+`…inContext:` now, with the internal callers and `NSPrintOperation` updated.
+
+**ONE STORED ROTATION, TWO SPELLINGS, AND AN IDENTITY SQUARE.** `-setFrameRotation:`/`-setBoundsRotation:` write the
+record `-rotateByAngle:` already keeps; both getters report it; `-isRotatedFromBase` is that record plus the frame-centre
+rotation, and `-isRotatedOrScaledFromBase` adds a unit square that is no longer 1,1. The identity square is set in both
+initialisers now — a zero there made the scaled query true for every fresh view, which the probe would have caught as a
+false positive rather than a false negative.
+
+**THE SUBVIEW LIST RUNS THE NOTICES.** `-addSubview:positioned:relativeTo:` is `-addSubview:` plus a reorder; a relative
+view that is not a child is treated as nil, which means top for Above and bottom for Below. `-setSubviews:` removes the
+old list through `-removeFromSuperview` and adds the new one through `-addSubview:`, so the window link and both move
+notices run exactly as they do for one view.
+
+**FOUR REFUSALS, EACH NAMING ITS SUBSTRATE.** `-lockFocus`/`-unlockFocus` need a lockable per-view graphics-state
+stack; `-setLayer:` needs a CALayer tree; and the range form of the definition look-up needs the same Dictionary
+substrate the at-point form already refuses for.
+
+**THE RULER CLIENT DEFAULTS ARE DECLARED ON `NSView` WHERE APPLE DECLARES THEM.** The nine doors allow every add, move
+and remove, keep the location asked for, and do nothing for the notice doors — the same behaviour the ruler's
+`-respondsToSelector:` guards assumed when nobody implemented anything, now checkable and overridable. `-setClientView:`
+tells the OLD client through `-rulerView:willSetClientView:` before the link changes; that door had no sender before.
+
+**TRAPS THIS SLICE PAID FOR.**
+
+* **THE LAST ROW WAS A SELECTOR SPELLING, NOT A MISSING BEHAVIOUR.** The tree's `-displayRectIgnoringOpacity:context:`
+  was implemented and called internally, but Apple's selector is `…inContext:`, so the ledger counted the door missing
+  while the behaviour was there. Renaming it (and the internal callers) closed the class. **A public selector is part of
+  the surface; an internal spelling is not the same door.**
+* **THE RULER CLIENT DOORS WERE IN A PRIVATE PROTOCOL, NOT THE HEADER.** `NSRulerView.m` declared them as
+  `AGRulerClient` so its sends type-checked, but the manifest attributes them to `NSView`; nothing counted until the
+  category reached `NSRulerView.h`. The private protocol stays for the typed sends; the header category is the surface.
+* **A ZERO UNIT SQUARE IS A LIE ABOUT SCALE.** `_cg_unitSquareSize` was nought until something scaled it, so a fresh
+  view answered "scaled from base". Both initialisers now set 1,1 before any query can run.
+* **THE SUBVIEW LIST HAS TO GO THROUGH THE DOORS.** Assigning the array directly would skip the window link and both
+  move notices; `-setSubviews:` removes and adds, which is slower and correct.
+* **AUTOSCROLL IS `-scrollRectToVisible:` WITH A ZERO-SIZE RECTANGLE.** One step per event, no invented speed, and it
+  answers NO with no clip view — which is what a drag loop asks.
+
+**WHERE THE NEXT HOUR GOES.** Five classes still carry debt: `NSDocument` 19 (the autosave family needs a decision about
+where document state lives), `NSWindow` 18, `NSDocumentController` 8, `NSSavePanel` 3, and `NSWorkspace` 1 (the
+instrument quirk). `NSWindow`'s list is mostly one-liners over the style mask and is the natural next slice; `NSDocument`
+is the one that is a design question first.
