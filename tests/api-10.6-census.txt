@@ -61,12 +61,12 @@
 #
 # **AND THE MEASURED NUMBERS, RECOMPUTED RATHER THAN EDITED**, so a reader can see the shape without running anything:
 #
-#     classes   132 of 168   (79%)    36 missing
-#     selectors 4519 of 4519 (100%)    0 missing   130 of 130 classes at COMPLETE coverage
-#     protocols  39 of  56   (70%)    17 missing
+#     classes   134 of 168   (80%)    34 missing
+#     selectors 4539 of 4539 (100%)    0 missing   132 of 132 classes at COMPLETE coverage
+#     protocols  41 of  56   (73%)    15 missing
 #     functions  86 of  86 (100%)     0 missing    10 of them REFUSE BY NAME, which this count does not distinguish
 #                86 declared, 0 declared-not-defined, 0 defined-not-declared
-#     methods   5051 declared on this tree's own classes, 8 with NO body on the chain (0.2%)
+#     methods   5083 declared on this tree's own classes, 8 with NO body on the chain (0.2%)
 #
 # **THE 121 IS A RECOUNT AND IT FOUND THE OLD PROSE ONE HIGH.** The previous block said "120 of 129"; recomputing
 # complete coverage from the OLD pin's own `sel:` lines gives 119, because `NSSlider` and `NSSliderCell` were both
@@ -90,6 +90,17 @@
 # It is a thin `NSControl` over the existing `NSImageCell`; its 14 manifest rows are the image and its three placement
 # facts, the two edit flags and the animation flag, and the view adds the standard cut/copy/paste/delete commands the
 # flags gate. The absent list is 36 now, not 37.
+#
+# **AND THE FIRST ABSENT EDITOR HAS ARRIVED: `NSTokenField` at 10 of 10 and `NSTokenFieldCell` at 10 of 10, so 130 -> 132
+# complete and 132 -> 134 present.** They are one class's two halves, exactly as the slider and the table are: the CELL
+# owns the list (the base's one object value), the three conversions (display, editing, represented object) and the chip
+# drawing, and the FIELD is the ten-selector forward plus a RELAY that turns the cell's `tokenFieldCell:` questions into
+# the caller's `tokenField:` ones. The two protocols arrived with them — `NSTokenFieldDelegate` and
+# `NSTokenFieldCellDelegate` — so 39 -> 41 protocols, and the absent list is 34 now, not 36. **THE SELECTOR FRACTION IS
+# STILL 100% OVER THE CLASSES THIS TREE HAS, and the offered denominator moved 4519 -> 4539 for the same reason the
+# present count did: a new class adds its rows to BOTH sides.** A base-class bug was found by the slice rather than
+# measured here (Foundation's `-componentsSeparatedByCharactersInSet:` hung on its first caller); it is recorded in that
+# component's own census of traps, not in this one.
 #
 # **AND THE LAST FOUR CLOSED THE SURFACE OF EVERY CLASS THIS TREE HAD.** `NSSavePanel` is COMPLETE at 47 of 47
 # (`-isExpanded` answers NO for the unbuilt expanded layout, and `-treatsFilePackagesAsDirectories` now splits packages
@@ -189,9 +200,9 @@
 # NOTE THE ONE DELIBERATE EXCLUSION. `NSFileWrapper` is declared by 10.6's AppKit (`AppKit/NSFileWrapper.h`) but is
 # Foundation's in this tree, so it is attributed to Foundation to avoid charging one class to two ledgers. The
 # manifest applies that rule at generation time via its second framework argument; the census never sees it.
-classes-missing 36
+classes-missing 34
 classes-offered 168
-classes-present 132
+classes-present 134
 fn:NSAccessibilityActionDescription 1
 fn:NSAccessibilityPostNotification 1
 fn:NSAccessibilityRaiseBadArgumentException 1
@@ -370,7 +381,7 @@ functions-defined-not-declared 0
 functions-missing 0
 functions-offered 86
 functions-present 86
-methods-declared 5051
+methods-declared 5083
 methods-declared-not-implemented 8
 proto:NSAlertDelegate 1
 proto:NSAnimatablePropertyContainer 0
@@ -421,16 +432,16 @@ proto:NSTextInput 1
 proto:NSTextInputClient 1
 proto:NSTextStorageDelegate 1
 proto:NSTextViewDelegate 0
-proto:NSTokenFieldCellDelegate 0
-proto:NSTokenFieldDelegate 0
+proto:NSTokenFieldCellDelegate 1
+proto:NSTokenFieldDelegate 1
 proto:NSToolbarDelegate 1
 proto:NSUserInterfaceItemSearching 0
 proto:NSUserInterfaceValidations 1
 proto:NSValidatedUserInterfaceItem 1
 proto:NSWindowDelegate 1
-protocols-missing 17
+protocols-missing 15
 protocols-offered 56
-protocols-present 39
+protocols-present 41
 sel:NSActionCell 6
 sel:NSAlert 27
 sel:NSAnimation 26
@@ -551,6 +562,8 @@ sel:NSTextTab 6
 sel:NSTextTable 11
 sel:NSTextTableBlock 6
 sel:NSTextView 186
+sel:NSTokenField 10
+sel:NSTokenFieldCell 10
 sel:NSToolbar 27
 sel:NSToolbarItem 33
 sel:NSToolbarItemGroup 2
@@ -562,6 +575,6 @@ sel:NSWindow 261
 sel:NSWindowController 26
 sel:NSWorkspace 58
 selectors-missing 0
-selectors-offered 4519
-selectors-present 4519
+selectors-offered 4539
+selectors-present 4539
 selphantom:NSObject 8

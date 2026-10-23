@@ -1122,7 +1122,23 @@ the compositor is really gone.
   clock here. **132 of 168 classes (79%) are present, 130 of 130 with a surface are COMPLETE, and 36 absent classes
   remain.** `tests/image_view.m` measures it in 22 checks.
 
-- **`ctest`: 161 of 161 passed** (the keyboard and the seam, the AppKit and its input path, the controls and their
+- **And the FIRST ABSENT EDITOR HAS ARRIVED: `NSTokenField` and `NSTokenFieldCell` — 10 of 10 each** (`ctest`, offscreen).
+  They are one class's two halves, the shape the slider and the table took. The CELL owns the list (the base's one object
+  value), the three conversions (display, editing, represented object) and the drawing: a token is a chip with a
+  control-grey fill and a border, or plain words with ", " between them, and the delegate may choose the style PER TOKEN.
+  The FIELD is the ten forwards plus a RELAY — it installs itself as the cell's delegate, so the cell's `tokenFieldCell:`
+  questions become the caller's `tokenField:` ones, and where the caller has no opinion the field answers the protocol's
+  default. The default separator is a COMMA AND A NEWLINE, never a space, because "John Smith" is one token. The
+  completion delay's SIGN is its switch: a unique offer is inserted with its appended letters selected, and a negative
+  delay asks nothing. Copy/cut/paste move the WHOLE list (this tier has no token selection) through the delegate's
+  pasteboard pair, and a right-click on a chip asks the delegate's menu pair. **134 of 168 classes (80%) are present,
+  132 of 132 with a surface are COMPLETE, 41 of 56 protocols, and 34 absent classes remain.** `tests/token_field.m`
+  measures it in 62 checks. **AND THE SLICE FOUND A FOUNDATION BUG WITH NO CALLER:**
+  `-[NSString componentsSeparatedByCharactersInSet:]` hung on its first use — its end case re-entered the loop without
+  advancing — and also mixed byte offsets with UTF-16 ranges. `libagora-base` fixes both and its own `string_split`
+  probe is the caller the door never had.
+
+- **`ctest`: 162 of 162 passed** (the keyboard and the seam, the AppKit and its input path, the controls and their
   metrics, the field control and its cell and its bezel and its placeholder and what it may hold, the text path and its
   word granularity and the multi-line view and its wrapping and its scrolling and its READING OF THE STORE, the STORE
   the rich-text slice is built on and the REGION it is laid out in and the WEB that ties the three together and the
@@ -1136,8 +1152,9 @@ the compositor is really gone.
   attachment sizes the layout answers and the temporary-attribute table and the rect arrays, the chrome and what its
   buttons do, the chrome theme, the menus and activation, and the manager's own ensure/invalidate doors, the document family's file round trip and change count, the save and open panels, and the pop-up's items, a colour's space and the menu's flags, the slider's tick values, its title band and its two
   no-argument ink doors, the table's deprecated spellings, enumerators, drag images, focus ring and destination
-  feedback, the control's cell factory, one-cell selection, sender values and validate-editing, and the view's
-  forced display, frame and rotation setters, subview list, autoscroll, refusals and ruler client defaults).
+  feedback, the control's cell factory, one-cell selection, sender values and validate-editing, the view's
+  forced display, frame and rotation setters, subview list, autoscroll, refusals and ruler client defaults, and the token
+  field's list, its three strings, its chips, its session, its completion and its pasteboard).
 - **And the desktop's own text is SUB-PIXEL ANTIALIASED**, which is the AppKit's half of a renderer change in
   CoreGraphics: a window's surface is OPAQUE (`kCGImageAlphaNoneSkipFirst`), and the destination's opacity is
   exactly what decides whether a glyph is rasterised in colour. MEASURED on the live session: the window title's

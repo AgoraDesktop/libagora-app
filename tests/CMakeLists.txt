@@ -1546,3 +1546,14 @@ target_link_libraries(popup_color_menu PRIVATE App)
 
 add_test(NAME appkit-popup-color-menu COMMAND popup_color_menu)
 set_tests_properties(appkit-popup-color-menu PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
+
+# **THE FIRST ABSENT EDITOR ARRIVES: THE TOKEN FIELD AND ITS CELL.** The list is the base cell's one value, and the probe
+# drives the four spellings of it: a typed string tokenized, an array set directly, an editor seeded with the EDITING
+# strings (which a delegate makes differ from the display strings), and the chip INK a per-token style changes. The
+# session's ending is where a typed run becomes a REVIEWED list, so the addition review is measured on both answers; the
+# completion's sign is the switch and a unique offer's appended letters are selected; the pasteboard pair is checked on
+# both sides of its gates; and the menu's hit test finds a chip without a window or an event.
+add_executable(token_field token_field.m)
+target_link_libraries(token_field PRIVATE App m)
+add_test(NAME appkit-token-field COMMAND token_field)
+set_tests_properties(appkit-token-field PROPERTIES ENVIRONMENT "${_agora_app_test_env}")

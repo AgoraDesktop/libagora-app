@@ -1551,6 +1551,67 @@ stored and answered, and the header says outright that no timer is made: this ti
 `tests/image_view.m` measures it in **22 checks**: the cell and defaults, the two alignments' pixels, the forwards
 against the cell, the two flags, and paste/cut/delete on both sides of their gates.
 
+## 56. `NSTokenField` and `NSTokenFieldCell` arrive: one list, four spellings, and a relay
+
+**THE FIRST ABSENT EDITOR IS PRESENT: `NSTokenField` at 10 of 10 and `NSTokenFieldCell` at 10 of 10 — the eighteenth and
+nineteenth complete classes.** The cell answers the era's ten rows (`-tokenStyle`, `-completionDelay`,
+`-tokenizingCharacterSet`, `-delegate` and their setters, plus `+defaultCompletionDelay` and
+`+defaultTokenizingCharacterSet`) and the field answers the same ten as forwards. The class count is 134 of 168 and the
+absent list is 34. The two protocols arrived with the classes — `NSTokenFieldDelegate` and
+`NSTokenFieldCellDelegate` — so the protocol count is 41 of 56.
+
+**THE MODEL IS THE BASE CELL'S ONE VALUE, SEEN FOUR WAYS.** A token cell's `-objectValue` IS the ordered list of
+represented objects (NSCell's own `-_objectValue`), so there is no second array. `-stringValue` is the DISPLAY strings
+joined by ", "; `-cg_editingText` is the EDITING strings joined the same way; and the drawing is the same list as chips.
+A string handed to `-setObjectValue:` is tokenized into the list, an array IS the list, a single object is a one-token
+list, and nil is an EMPTY list rather than a nil value.
+
+**THE THREE CONVERSIONS FALL BACK TO THE OBJECT, WHICH IS WHAT MAKES THE DELEGATE OPTIONAL.** Display, editing and
+represented-object each ask the delegate and, on nil or no implementation, use the object's own text — Apple's
+"editing string = display string = represented object" sentence made literal. The style is asked PER TOKEN and falls back
+to the cell's `-tokenStyle`; `NSDefaultTokenStyle` is drawn as the rounded chip this tier draws, and
+`NSPlainTextTokenStyle` as words with the ", " separator, so one list may mix badges and plain runs.
+
+**THE SEPARATOR IS A COMMA AND A NEWLINE, NEVER A SPACE.** The era's token field is an address field, and "John Smith" is
+one token; a whitespace separator would make the class's first use impossible. The set is copied in on the way in, and
+the copy is made with `-mutableCopy` because **`NSCharacterSet -copy` answers `[self retain]` in this Foundation** — a
+correct optimisation for an immutable set and a wrong one for a caller's mutable set, which would otherwise stay live
+under the cell's parsing.
+
+**ONE LAYOUT SERVES THE DRAWING, THE MEASUREMENT AND THE HIT TEST.** `-cg_tokenFramesInFrame:` is the only place a token's
+rectangle is computed: the drawing paints those rects, `-cellSizeForBounds:` takes the last one's right edge, and
+`-cg_tokenIndexAtPoint:inFrame:` contains a point in them, so a chip cannot be painted in one place and clicked in
+another. The baseline comes from `NSTextFieldCell`'s one centring door, so a flipped context moves a chip's words exactly
+as it moves a field's.
+
+**A SESSION OPENS ON THE EDITING STRINGS AND ITS END IS A REVIEWED LIST.** The base's session seeds its editor from
+`-stringValue:` (the display text); this cell replaces that seed with the editing text and selects the whole run, because
+a token's range is not a string's range. `-fn_finishEditing:keep:movement:` then tokenizes the editor's string and passes
+it through `-shouldAddObjects:atIndex:` before storing it, and asks the base to tear down WITHOUT a second write-back. An
+EMPTY answer rejects, a filtered array is what lands, and nil (Apple's error case) is treated as a rejection.
+
+**THE COMPLETION DELAY'S SIGN IS THE SWITCH.** A negative delay asks nothing; zero or positive asks the delegate on every
+change to the partial token after the last separator, flattens nested offer arrays, and inserts a UNIQUE offer longer
+than the substring with the appended letters selected — the combo box's measured selection rule. A list of several
+offers inserts nothing, because this tier has no pop-up list, and the header says so at the door. No timer is made: a
+positive delay round-trips and the question is asked at the change.
+
+**COPY/CUT/PASTE MOVE THE WHOLE LIST, AND A RIGHT-CLICK NAMES A CHIP.** There is no token selection in this tier, so the
+field's standard commands write every token (delegate first for a richer type, the editing-string join as the default,
+after which a NO clears the board) and paste appends through the same addition review. The delegate's menu pair is asked
+for the chip under the pointer through `-menuForEvent:`, and the `has` answer comes before the menu.
+
+**AND THE SLICE FOUND A FOUNDATION BUG WITH NO CALLER.** `-[NSString componentsSeparatedByCharactersInSet:]` hung on its
+first tokenize: its end case set the break flag without advancing, so `offset == size` re-entered the loop forever. The
+same loop also walked BYTES while indexing CHARACTERS and then handed byte offsets to `-substringWithRange:`, which reads
+UTF-16 code units. `libagora-base` fixes both — the loop is now over UTF-16 units and the end is a `break` — and
+`tests/string_split.m` is the caller the door never had.
+
+`tests/token_field.m` measures the pair in **62 checks**: the factory and defaults, the four forwards, tokenizing, the
+three conversions, the chip INK against a plain run and one per-token style, the session's seed and reviewed commit, the
+completion's four cases, the pasteboard pair on both sides of its gates, and the hit test with the delegate's two menu
+answers.
+
 ## Keeping in sync
 
 The Fiwix AppKit is the origin and this repository has now diverged from it in the seam. A fix made there
