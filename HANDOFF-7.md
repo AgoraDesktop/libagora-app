@@ -5,14 +5,14 @@ stopped — the substrate first, in `libagora-base`, and then the binding layer 
 still the long form of everything up to §12 (the rule editor); §1–§7 of that file remain worth reading, and its §4
 traps are still the ones these sessions used most. **THIS FILE'S §2 NUMBERS SUPERSEDE EVERY EARLIER HANDOFF'S.***
 
-*State at this handover: **four slice commits** since the sixth handoff — three in `libagora-base`, one here — tree clean,
-**166 tests passing in about 90 s**, `api-ledger check` holding **381 metrics** — **137 of 168 classes (81%), 4636 of
-4636 selectors (100%), 44 of 56 protocols (78%), 86 of 86 functions**, 5200 methods declared with 8 having no body,
-**all 135 classes with a surface at COMPLETE coverage** — refusal census **390**, owed census **19**. **The 31 absent
-classes and the 12 absent protocols are the remaining surface; the 100% on selectors is 100% of the classes this tree
-HAS, not of the 10.6 AppKit.** The three new probes hold the substrate: `libagora-base/tests/kvo_automatic.m` (34
-checks), `libagora-base/tests/kvo_tomany.m` (37), and `libagora-app/tests/binding_base.m` (26). The workspace's 14
-tests were run too.*
+*State at this handover: **five slice commits** since the sixth handoff — three in `libagora-base`, two here — tree
+clean, **176 tests passing in about 95 s**, `api-ledger check` holding **384 metrics** — **140 of 168 classes (83%),
+4682 of 4682 selectors (100%), 44 of 56 protocols (78%), 86 of 86 functions**, 5252 methods declared with 8 having no
+body, **all 140 classes with a surface at COMPLETE coverage** — refusal census **403**, owed census **19**. **The 28
+absent classes and the 12 absent protocols are the remaining surface; the 100% on selectors is 100% of the classes this
+tree HAS, not of the 10.6 AppKit.** The probes holding the substrate and its first client: `libagora-base/tests/kvo_automatic.m` (34
+checks), `libagora-base/tests/kvo_tomany.m` (37), `libagora-app/tests/binding_base.m` (26) and
+`libagora-app/tests/controller_base.m` (77). The workspace's 14 tests were run too.*
 
 ---
 
@@ -42,12 +42,17 @@ AppKit class belongs to this repository, and the base library owns only Foundati
 ## 2. The surface, measured
 
 ```
-classes   137 of 168   (81%)    31 missing
-selectors 4636 of 4636 (100%)    0 missing   135 of 135 classes at COMPLETE coverage
+classes   140 of 168   (83%)    28 missing
+selectors 4682 of 4682 (100%)    0 missing   140 of 140 classes at COMPLETE coverage
 protocols  44 of  56   (78%)    12 missing
 functions  86 of  86  (100%)     0 missing    10 refuse by name
-methods   5200 declared on this tree's own classes, 8 with NO body on the chain (0.2%)
+methods   5252 declared on this tree's own classes, 8 with NO body on the chain (0.2%)
 ```
+
+**THESE LINES MOVED TWICE: ONCE WITH THE COMMITS THAT LANDED AFTER THIS FILE WAS FIRST WRITTEN, AND ONCE WITH THE
+CONTROLLER SLICE (§9).** The tree reached the controller slice at 138 classes, 4645 selectors and 5214 declared methods,
+not the 137 / 4636 / 5200 the original paragraph above this block recorded; §9 recounts both movements rather than
+folding them into one.
 
 **NONE OF THE SUBSTRATE SLICES ADDED A MANIFEST CLASS OR SELECTOR, AND THAT IS THE POINT OF A FOUNDATION ROW.** The
 class, selector and protocol counts are unchanged since `HANDOFF-6` §12; what moved is `methods-declared`, 5186 ->
@@ -55,6 +60,11 @@ class, selector and protocol counts are unchanged since `HANDOFF-6` §12; what m
 pair, the value class, the option descriptions, the two placeholder doors, the two editor-registration doors and the
 three NSEditor doors). The census records that movement with its reason. **`NSObject` is not one of the manifest's AppKit
 classes**, so no `sel:` line changed and no denominator moved.
+
+**THE CONTROLLER SLICE THEN ADDED TWO CLASSES AND LEFT `NSObject`'S PHANTOMS ALONE.** `classes-present` 138 -> 140,
+`selectors-present`/`offered` 4645 -> 4682, `methods-declared` 5214 -> 5252, and two new per-class lines
+(`sel:NSController 6`, `sel:NSObjectController 31`); §9 says what landed and why `methods-declared` moved by 38 while
+the selector denominator moved by 37.
 
 **AND THE SEVEN CONTROLLER CLASSES ARE STILL THE HEADLINE GAP:** `NSController` (6 selectors), `NSObjectController`
 (31), `NSArrayController` (47), `NSDictionaryController` (13), `NSUserDefaultsController` (12), `NSTreeController` (45),
@@ -203,44 +213,31 @@ fails for want of a library path rather than for want of the code.
 
 ## 6. Where to spend the next hour
 
-**THE NEXT SLICE IS `NSController` AND `NSObjectController` — 37 selectors — AND THE DESIGN QUESTIONS ARE ALREADY
-ANSWERED.** The three Foundation rows and the binding layer exist so that this slice can be a controller, not a
-substrate:
+**THE BASE CONTROLLER LANDED (§9), SO THE NEXT SLICE IS `NSArrayController` — 47 SELECTORS — AND THE QUESTIONS ITS
+SUBSTRATE LEFT ARE THE ONLY ONES OPEN.** `NSObjectController` now answers `content`/`contentObject`/`selection`/
+`selectedObjects`/`canAdd`/`canRemove` over the three content kinds, announces the dependent keys by hand and the
+to-many pair on a collection mutation, and refuses the Core Data doors by name. The design questions §6 used to carry
+are answered in the headers; what remains is the ARRANGED view of a collection:
 
-1. **The layer is generic** (`NSObject`'s `-bind:`/`-unbind:`/`-infoForBinding:`), one-way observable -> receiver, with
-   the options this tier reads named in `NSKeyValueBinding.h`. A controller's `content` is a binding destination like
-   any other property.
-2. **Content is live** through the proxies and the to-many pair: an object controller can observe its content object's
-   properties, and an array controller can watch items arrive and leave instead of only whole-array replacement.
-3. **Core Data and `NSPredicate` doors refuse by name**: `managedObjectContext`, `entityName`, `fetchPredicate`,
-   `defaultFetchRequest`, `fetch:`, `fetchWithRequest:merge:error:`, `filterPredicate`, and their siblings. The useful
-   80% — content, selection, arranged objects, sorting, add/remove — is real.
-4. **`-selection` is a real proxy**: a singleton that forwards KVC to the selected object, with `NSNoSelectionMarker`
-   when there is none and `NSMultipleValuesMarker` when several. The markers and `NSIsControllerMarker` are already
-   there; the proxy class is the slice's own.
-5. **The order is the base first**, then `NSArrayController` (47), `NSUserDefaultsController` (12),
-   `NSDictionaryController` (13), `NSTreeController` + `NSTreeNode` (55).
+1. **`arrangedObjects`** is content after `sortDescriptors` and `filterPredicate` — the sorted array is real, the
+   predicate refuses by name (no `NSPredicate` family in this Foundation), so the slice should decide whether
+   `arrangedObjects` is the sorted content with no filter, or a named refusal until a predicate exists. Sorting is the
+   useful 80% and `NSSortDescriptor` is already in the tree.
+2. **`selectionIndexes`** indexes INTO `arrangedObjects`, and `selectedObjects` becomes a subset — `NSObjectController`'s
+   "every object of a collection is selected" is the fallback the subclass narrows. The `-selection` proxy inherited
+   from §9 needs no change; it asks `-selectedObjects`, which the subclass overrides.
+3. **The insertion doors** (`-insertObject:atArrangedObjectIndex:`, `-addObjects:`, `-addSelectedObjects:`) must translate
+   an arranged index back to a content index through the arrangement — the translation is the whole of the difficulty,
+   and it belongs in one helper rather than at each door.
+4. **`preservesSelection`, `selectsInsertedObjects`, `avoidsEmptySelection`** are policy stored and applied in one place:
+   `-rearrangeObjects` (or a private settle step) recomputes the arrangement and then restores a selection that still
+   has objects in it.
 
-**CONCRETELY, THE FIRST SLICE:**
-
-* `NSController` (6): `-objectDidBeginEditing:`/`-objectDidEndEditing:` maintain a set of editors;
-  `-isEditing` asks it; `-commitEditing`/`-discardEditing`/`-commitEditingWithDelegate:didCommitSelector:contextInfo:`
-  run over the registered editors (the `NSObject` defaults in `NSKeyValueBinding` are the no-editor case).
-* `NSObjectController` (31): `-content`/`-contentObject` (a single object; a collection content is the exception);
-  `-selection` (the proxy) and `-selectedObjects`; `-objectClass` (default `NSMutableDictionary`) and `-newObject`;
-  `-canAdd`/`-canRemove`; `-add:`/`-addObject:`/`-remove:`/`-removeObject:` against a mutable collection or the single
-  content; `-automaticallyPreparesContent`/`-prepareContent`; `-isEditable`; the Core Data doors refused; the exposed
-  bindings (`content`, `contentObject`, `selection`, `selectedObjects`, `editable`, `canAdd`, `canRemove`); and
-  `-validateUserInterfaceItem:` for the add/remove actions.
-* **AND THE ONE REAL DESIGN QUESTION LEFT IS THE MULTI-VALUE SELECTION.** `-selection` for one object is a forwarder;
-  for several, Apple answers values with `NSMultipleValuesMarker` and writes through only when the values agree. Decide
-  whether the first slice's proxy does that (the marker is already here) or returns the marker for the whole selection
-  and leaves agreement to a later row — either is a statement, and the header should make it.
-
-**THEN `NSArrayController`** is the one bindings actually use: `arrangedObjects` (the sorted/filtered array),
-`selectionIndexes` into it, `sortDescriptors` (the class exists), `add:`/`insertObject:atArrangedObjectIndex:`/
-`removeObjectAtArrangedObjectIndex:` over `content` with the proxies, and `preservesSelection`/`selectsInsertedObjects`/
-`avoidsEmptySelection`. `filterPredicate` refuses by name.
+**THEN `NSUserDefaultsController`** (12) is the small one, and it is a defaults wrapper rather than a selection one:
+`values` and `initialValues` over `NSUserDefaults`, `appliesImmediately`, `-save:`, `-revert:`, and one shared instance.
+**`NSDictionaryController`** (13) is a key/value projection with `includedKeys`/`excludedKeys`/`localizedKeyDictionary`,
+and **`NSTreeController` + `NSTreeNode`** (55) is the last and the largest: an arrangement over `NSIndexPath`s, which is
+`NSOutlineView`'s data source in controller form.
 
 ---
 
@@ -270,11 +267,13 @@ substrate:
   answered and wait for the controls/controllers that act on them; the header says which.
 * **`NSKeyValueBinding` IS APPKIT'S FILE**, and its three markers are initialised by a constructor so the first caller
   sees them. The constants' values are their own names.
-* **THE NUMBERS AND THE GATES.** 137 of 168 classes (81%), 4636 of 4636 selectors, 44 of 56 protocols, 86 of 86
-  functions, 5200 methods declared (8 without a body), 381 metrics, refusal 390, owed 19, 166 tests in this repository
-  (~90 s), 8 committed base suites, 14 workspace tests. `ctest --test-dir build -j4` is the gate; the exit status is the
+* **THE NUMBERS AND THE GATES.** 140 of 168 classes (83%), 4682 of 4682 selectors, 44 of 56 protocols, 86 of 86
+  functions, 5252 methods declared (8 without a body), 384 metrics, refusal 403, owed 19, 176 tests in this repository
+  (~95 s), 8 committed base suites, 14 workspace tests. `ctest --test-dir build -j4` is the gate; the exit status is the
   witness.
-* **THE ABSENT SURFACE.** 31 classes, 12 protocols: the seven controllers (164 selectors), the predicate pair (absent on
+* **THE ABSENT SURFACE.** 28 classes, 12 protocols: the five remaining controllers (`NSArrayController` 47,
+  `NSDictionaryController` 13, `NSUserDefaultsController` 12, `NSTreeController` 45 and `NSTreeNode` 10 — 127
+  selectors), the predicate pair (absent on
   purpose — no `NSPredicate` family), the Core Data doors inside the controllers (refused by name), and the plan's §A11
   refusals (OpenGL, QuickDraw, movies, the typesetters, speech, sound, the input-manager era, the Dock tile, the Help
   Viewer, `NSPersistentDocument`, `NSTouch`, and `NSFileWrapper`, which is Foundation's here).
@@ -297,3 +296,63 @@ before and after, the traps the slice paid for, and where the next hour went. A 
    PROVENANCE and gets its own commit; this file records only the AppKit side and the boundary.**
 4. Leave §1–§7 above ALONE unless a slice changes a number in them; when it does, change that number and say in the new
    section that it moved. A handoff that quietly drifts is the thing these files exist to prevent.
+
+---
+
+## 9. The first controllers: `NSController` and `NSObjectController`
+
+**THE SLICE THE LAST THREE COMMITS WERE BUILDING, IN COMMIT `7a727e9`; THIS SECTION IS THE COMMIT AFTER IT.**
+`NSController` (6 selectors) and `NSObjectController` (31, plus a `-contentObject` declaration the 10.6 manifest does
+not carry) are in `NSController.{h,m}` and `NSObjectController.{h,m}`; the selection proxy is a private class in the
+implementation file, the eleven Core Data and predicate doors refuse through a new `fn_refuse_controller` in
+`AppKitRefusal.h`, and `tests/controller_base.m` — with its `add_executable`/`add_test`/`ENVIRONMENT` triple in
+`tests/CMakeLists.txt` — measures the whole thing in **77 checks**. All 176 tests pass in about 95 s.
+
+**THE NUMBERS MOVED, AND BY EXACTLY THE ARITHMETIC THE SLICE PREDICTS.** `classes-present` 138 -> **140** of 168
+(`classes-missing` 30 -> 28), `selectors-present`/`selectors-offered` 4645 -> **4682**, `methods-declared` 5214 ->
+**5252**, and `sel:NSController 6` / `sel:NSObjectController 31` are two new pinned lines. Metrics 382 -> **384**.
+Refusal census 392 -> **403** (the eleven sites). Tests 175 -> **176**. **`methods-declared` moved by 38 while the
+selector denominator moved by 37, and the one is not a counting error: the 10.6 manifest carries no `-contentObject`
+row** (the binding name `NSContentObjectBinding` and the plan both name the door, and Apple's class answers it), so the
+declaration is real surface that the ledger's Apple side does not measure. `-contentObject` is kept, and this paragraph
+is why the two numbers differ.
+
+**TRAP: A SELECTOR FROM ANOTHER IMAGE IS NOT `==` ITS LITERAL, AND THIS RUNTIME MAKES THAT VISIBLE.** The first run of
+`-validateUserInterfaceItem:` enabled `remove:` with nothing to remove. `libagora-objc`'s selector table hands each
+compilation unit its own `objc_selector` struct for the same name — the INDEX inside it is shared, so dispatch is
+correct, but the `SEL` pointer is not — which means the item an APPLICATION built carries a different address from this
+library's `@selector(remove:)`. **MEASURED**: the test binary's `[item action]` and the library's literal printed
+different addresses with the same name and a null type encoding, and `==` answered NO for every action. The door uses
+`sel_isEqual`, the runtime's documented name-fallback comparison. **`NSDocument` and `NSDocumentController` still use
+`==`** and are the same hazard the day a toolbar or menu item built outside this library is validated against them;
+they are left alone in this slice and named here so the next reader does not have to rediscover it.
+
+**TRAP: ONE DEPENDENT-KEY PAIR TOO MANY IS A DOUBLE DELIVERY.** `-setContent:` announces `contentObject`, `selection`,
+`selectedObjects`, `canAdd` and `canRemove` by hand (this Foundation does not compute
+`+keyPathsForValuesAffectingValueForKey:`), and it deliberately does NOT announce `content`: KVO's automatic setter
+wrapper already brackets `-setContent:` once anyone observes `content`, so a manual pair inside the method would deliver
+the same write twice — the Foundation side's `fn_kvo_auto_notifies` trap, met from the AppKit side. The probe checks
+ONE notification with the right old and new values.
+
+**TRAP: A COMMIT THAT WALKS THE LIVE LIST MESSAGES AN EDITOR ANOTHER EDITOR JUST FINISHED WITH.** `-commitEditing`
+walks a COPY, and skips an editor that is no longer registered when its turn comes; the probe's editor A withdraws
+editor B during A's commit and B's commit count stays zero. The same non-retaining rule has a sharper edge the header
+states: an editor that dies without `-objectDidEndEditing:` leaves an address the next commit messages, which is the
+caller's contract, exactly as it is for a KVO observation.
+
+**TRAP: THE FIRST OBJECT INTO A nil CONTENT IS A SETTING CHANGE, NOT AN INSERTION.** There is no collection to insert
+into, so `-addObject:` on nil content makes a one-object array and writes it through `-setContent:`; only an EXISTING
+mutable array or set takes the to-many pair (with the index, or as a union/minus set mutation). A probe that expected
+an insertion on the nil-content path would be testing an arrangement the API does not have.
+
+**AND `NSNotApplicableMarker` IS DECLARED AND STILL UNUSED HERE, WHICH IS A STATEMENT RATHER THAN AN OVERSIGHT.** A key
+none of the selected objects answers makes this Foundation's KVC raise `NSInvalidArgumentException` (there is no
+`NSUnknownKeyException` to catch), so the proxy lets the exception propagate instead of answering the marker: the only
+ways to tell "no such key" from "the getter raised" would be to match on the diagnostic string or to duplicate KVC's
+private search order, and a duplicated rule drifts. The header says which marker the proxy does answer
+(`NSMultipleValuesMarker`, `NSNoSelectionMarker`) and why the third is absent.
+
+**WHERE THE NEXT HOUR GOES: `NSArrayController` (47), and §6 above has been rewritten to say what its four open
+questions are.** §2's measured block and §7's numbers/absent-surface bullets were updated in the same commit, and they
+record that the tree had already moved past this file's original numbers before this slice began (138 classes, 4645
+selectors, 5214 declared methods at the slice's start, not 137/4636/5200).

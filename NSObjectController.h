@@ -25,7 +25,10 @@
  *     `NSMultipleValuesMarker` when they do not; a write goes to every selected object;
  *   * none selected — a read answers `NSNoSelectionMarker`, and a write RAISES, because there is nothing to write to
  *     and a silent success would be a lie;
- *   * a key none of the selected objects has — `NSNotApplicableMarker`, which is what that marker is for.
+ *   * a key the selected objects do not answer — KVC's own exception PROPAGATES, and `NSNotApplicableMarker` is not
+ *     used. Apple's proxy answers the marker there; this tier cannot ask "is this key coding-compliant" without
+ *     either raising or duplicating KVC's private search order, and a duplicated rule is the kind that drifts, so a
+ *     mismatched selection is loud instead (`NSObjectController.m` says the same at the site).
  *
  * That is the multi-value question `HANDOFF-7.md` §6 left open, answered here: the first slice does the agreement
  * check rather than handing the whole selection one marker, because the check is four lines and a form bound to a
