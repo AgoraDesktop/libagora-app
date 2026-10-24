@@ -73,6 +73,10 @@ find_package(AgoraText CONFIG REQUIRED)
 # and the direction `WORKSPACE-PLAN.md` §2 and `COCOA-10.11-SURFACE-PLAN.md` §A6 already assign.
 find_package(AgoraLaunchServices CONFIG REQUIRED)
 find_package(AgoraIconServices CONFIG REQUIRED)
+# **CORE DATA, FOR THE ONE CLASS THAT IS THE APPkit'S** (§11): `NSPersistentDocument` names Core Data's types in its
+# header, so this is a PUBLIC dependency — a consumer of the AppKit reaches Core Data itself through it, exactly as it
+# reaches Foundation and Core Graphics.
+find_package(AgoraData CONFIG REQUIRED)
 
 # ---------------------------------------------------------------------------
 # xdg-shell: generated from the system's protocol XML
@@ -231,6 +235,7 @@ target_link_libraries(App
     Foundation::Foundation
     AgoraDrawing::Drawing
     AgoraText::Text
+    AgoraData::Data
   PRIVATE
     AgoraLaunchServices::LaunchServices
     AgoraIconServices::IconServices

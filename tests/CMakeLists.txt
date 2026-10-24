@@ -1684,3 +1684,10 @@ add_test(NAME appkit-hidpi-1-5
     "${_agora_api_python}" "${CMAKE_CURRENT_SOURCE_DIR}/check_hidpi.py" 1.5)
 set_tests_properties(appkit-hidpi-1-5 PROPERTIES SKIP_RETURN_CODE 77
   ENVIRONMENT "${_agora_app_test_env}")
+
+# §11 W8.1: the AppKit's one Core Data class, over a real file.
+add_executable(persistent_document persistent_document.m)
+target_link_libraries(persistent_document PRIVATE App)
+
+add_test(NAME appkit-persistent-document COMMAND persistent_document)
+set_tests_properties(appkit-persistent-document PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
