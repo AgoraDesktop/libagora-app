@@ -102,6 +102,7 @@ NSLayoutSolver.m                 1
 NSMenuView.m                      10
 NSMenu.m                         18
 NSMenuItemCell.m                 2
+NSObjectController.m              11
 NSNibConnector.m                 2
 NSOpenGL.m                       3
 NSPDFImageRep.m                  2
@@ -154,4 +155,11 @@ NSWindow.m                       23
 # name and refuses the LOAD, because the strings-file reader was withdrawn. The class is COMPLETE (all 42 selectors have
 # bodies) and these are the three doors whose bodies say what the tier cannot do.
 #
-# total: 392
+#
+# AND IT ROSE BY ELEVEN IN THE CONTROLLER SLICE, ALL IN `NSObjectController` AND ALL BY NAME: the Core Data doors
+# (`managedObjectContext`, `entityName`, `fetchPredicate`, `usesLazyFetching` and their setters, `defaultFetchRequest`,
+# `fetch:` and `fetchWithRequest:merge:error:`). The reason is a controller's FETCH LOOP, not the store this tier has:
+# `NSPersistentDocument` reads and writes a real file, and a controller that fetched once and called the result live
+# would be worse than a refusal. The shared wording lives in `AppKitRefusal.h` as `fn_refuse_controller`.
+
+# total: 403

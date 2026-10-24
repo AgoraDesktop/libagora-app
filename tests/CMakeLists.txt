@@ -1664,6 +1664,16 @@ target_link_libraries(binding_base PRIVATE App m)
 add_test(NAME appkit-binding-base COMMAND binding_base)
 set_tests_properties(appkit-binding-base PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
 
+# **THE FIRST CONTROLLER SLICE: `NSController`'S EDITING BOOKKEEPING AND `NSObjectController`'S CONTENT AND SELECTION.**
+# No view and no display: the editing half is a VALUE test of who was asked and in what order (including the editor
+# withdrawn by another editor's commit), the selection half is a value test of the proxy over nothing/one/several
+# objects, and the KVO half is a DELIVERY test of the dependent-key announcements the controller sends by hand. The
+# Core Data doors are read for their type's empty answers; the refusal itself is `appkit-refusal-census`'s to count.
+add_executable(controller_base controller_base.m)
+target_link_libraries(controller_base PRIVATE App m)
+add_test(NAME appkit-controller-base COMMAND controller_base)
+set_tests_properties(appkit-controller-base PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
+
 # **AND THE CLIENT HALF OF HIDPI, WHICH NEEDS BOTH HALVES OF THE STACK IN ONE TEST.** The compositor runs at `--scale 2`
 # and an AppKit window draws a shape at a known POINT; the checker measures where it landed in DEVICE pixels. A client
 # that ignored the scale would draw it half the size, half the distance from the corner — the whole UI shrunk.

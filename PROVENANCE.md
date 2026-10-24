@@ -1768,14 +1768,70 @@ superclass's placeholder and override it. The NSEditor defaults are the honest o
 `-commitEditing` is YES, `-discardEditing` does nothing, and the asynchronous form calls the delegate's
 `-editor:didCommit:contextInfo:` with YES and the caller's context.
 
-**THE CONTROLLER CLASSES THEMSELVES ARE THE NEXT SLICE.** This layer is what they will use: a controller's `content` is
-a binding destination like any other, its `selection` will be the proxy the plan calls for, and its Core Data doors will
-refuse by name.
+**THE CONTROLLER CLASSES THEMSELVES WERE THE NEXT SLICE, AND THEY HAVE ARRIVED (§61).** This layer is what they
+use: a controller's `content` is a binding destination like any other, its `selection` is the proxy, and its Core Data
+doors refuse by name.
 
 `tests/binding_base.m` measures it in **26 checks**: the three markers and `NSIsControllerMarker`, the Initial value and
 the automatic setter's delivery, `-infoForBinding:`, unbind and rebind, the NSNull placeholder, the marker pass-through
 and the raise option, `+exposeBinding:`/`-exposedBindings`, `-valueClassForBinding:` and the empty option descriptions,
 the placeholder table, the NSEditor defaults including the delegate callback, and the nil-argument raises.
+
+## 61. The first controllers: editing without ownership, and a selection that agrees
+
+**`NSController` IS THE EDITING BOOKKEEPING AND NOTHING ELSE.** `-objectDidBeginEditing:` and `-objectDidEndEditing:`
+keep the editors as `NSValue` boxes over their ADDRESSES — the controller does not retain an editor, because an editor
+is owned by the view or window that is editing and a retained field editor would keep that window alive after the edit
+ended. `-isEditing` asks the list; `-commitEditing` walks a SNAPSHOT, skips any editor that is no longer registered
+(another editor's commit may have withdrawn it — the case a live walk would message a stale address through), and
+answers NO if any editor refused; `-discardEditing` walks the same way. The delegate form sends
+`(controller, didCommit, contextInfo)` through an `objc_msgSend` cast, the same arity `NSKeyValueBinding`'s default
+uses.
+
+**`NSObjectController` IS CONTENT, SELECTION, AND THE TWO QUESTIONS A MENU ITEM ASKS.** The content's kind decides the
+controller: an `NSArray` or `NSSet` — mutable or not — is a collection whose every object is selected, and anything
+else is a single object that is the selection itself; nil is neither. `-contentObject` answers the content for a single
+object, the single selected object for a one-object collection, `NSMultipleValuesMarker` for several and
+`NSNoSelectionMarker` for an empty one. `-selection` is one proxy per controller, holding the controller WITHOUT
+retaining it: a read forwards to one object, or to several when they AGREE (identity first, then `-isEqual:`) and
+answers the multiple-values marker when they do not; a write goes to every selected object and RAISES with no
+selection. An unknown key propagates KVC's own exception rather than becoming `NSNotApplicableMarker`, because this
+Foundation has no non-raising way to ask that question — the header says so.
+
+**ADDING AND REMOVING ARE DEFINED AGAINST THE KIND.** nil content takes a first object by making a one-object mutable
+array; a mutable array takes an append; a mutable set takes a union through the SET-mutation pair; an immutable
+collection or a single object answers `-canAdd`/`-canRemove` NO and a door called anyway raises by name.
+`-objectClass` (default `NSMutableDictionary`) and `-newObject` make the objects `-add:` inserts, `-prepareContent`
+fills a nil content with one of them, and `-automaticallyPreparesContent` makes `-setContent:` do it.
+
+**THE DEPENDENT KEYS ARE ANNOUNCED BY HAND.** This Foundation does not compute
+`+keyPathsForValuesAffectingValueForKey:`, so `-setContent:` sends the will/did pair for `contentObject`, `selection`,
+`selectedObjects`, `canAdd` and `canRemove`; `content` itself is NOT announced there, because KVO's automatic setter
+wrapper already brackets `-setContent:` when anyone observes it and a second pair would deliver one write twice. A
+collection's add and remove announce the TO-MANY pair on `content` with the index (or as a set mutation), so a view
+bound to the content hears the row rather than the reload. The seven bindings a controller exposes are `content`,
+`contentObject`, `selection`, `selectedObjects`, `editable`, `canAdd` and `canRemove`.
+
+**ELEVEN CORE DATA AND PREDICATE DOORS REFUSE BY NAME.** `managedObjectContext`, `entityName`, `fetchPredicate`,
+`usesLazyFetching` and their setters, `defaultFetchRequest`, `fetch:` and `fetchWithRequest:merge:error:` answer their
+type's empty value and print `APPKIT-REFUSE` through `AppKitRefusal.h`'s `fn_refuse_controller`. The reason is the
+controller's FETCH LOOP — live result sets, lazy faults, a merge policy — which is not the store this tier has, and a
+one-shot fetch dressed as a live set would be worse than the refusal.
+
+**AND THE SLICE FOUND A PLATFORM FACT WORTH KNOWING: A SELECTOR IS NOT `==` ACROSS IMAGES IN THIS RUNTIME.** The first
+run of `-validateUserInterfaceItem:` enabled `remove:` with nothing to remove. The cause is `libagora-objc`'s selector
+table: every compilation unit gets its own `objc_selector` struct for the same NAME (sharing the index, so dispatch is
+right), so the `SEL` an application's menu item carries is a different ADDRESS from this library's `@selector(remove:)`.
+`sel_isEqual` is the runtime's documented comparison for exactly this — it falls back to the name — and the controller
+uses it. **`NSDocument` and `NSDocumentController` still compare with `==`; that is harmless only while every item they
+validate is built inside this library, and it is recorded here rather than changed in a controller slice.**
+
+`tests/controller_base.m` measures it in **77 checks**: registration and the single-registration rule, the commit order
+and the refusal answer, discard, the delegate's three arguments, the withdraw-during-commit skip, content and
+`contentObject` for nothing/one/several, the proxy's agreement and its raise with no selection, the add/remove rules for
+nil, an array, a set, an immutable array and a single object, `objectClass`/`newObject`/`prepareContent`, the
+dependent-key and to-many KVO deliveries, a binding writing `content`, the two validation answers, and the Core Data
+doors' empty values.
 
 ## Keeping in sync
 

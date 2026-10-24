@@ -1187,10 +1187,34 @@ the compositor is really gone.
   option keys are defined. **The options with readers HERE are `NSNullPlaceholderBindingOption` and
   `NSRaisesForNotApplicableKeysBindingOption`**; the rest are stored and answered through `-infoForBinding:` and belong
   to the controls and controllers that will act on them. A rebind replaces the old observation (one delivery per
-  write), and unbinding a never-bound name is a no-op. **`NSController` and `NSObjectController` are the next slice.**
-  `tests/binding_base.m` measures it in 26 checks.
+  write), and unbinding a never-bound name is a no-op. `tests/binding_base.m` measures it in 26 checks.
 
-- **`ctest`: 166 of 166 passed** (the keyboard and the seam, the AppKit and its input path, the controls and their
+- **And the FIRST CONTROLLER SLICE HAS ARRIVED: `NSController` and `NSObjectController` — 6 of 6 and 31 of 31**
+  (`ctest`, offscreen). `NSController` is the editing bookkeeping every controller shares: `-objectDidBeginEditing:`
+  and `-objectDidEndEditing:` hold the editors as BOXED ADDRESSES and do NOT retain them (an editor is owned by the
+  view that is editing), `-isEditing` asks the list, and the three commit doors walk a SNAPSHOT and SKIP an editor
+  another editor's commit has already withdrawn — the use-after-free a live walk would commit into. The delegate
+  form sends `(controller, didCommit, contextInfo)` through `objc_msgSend`.
+  `NSObjectController` is content and selection: `content` is one object, or an `NSArray`/`NSSet` (mutable or not)
+  whose every object is selected; `-contentObject` is the content for a single object and the single selected object,
+  `NSMultipleValuesMarker` or `NSNoSelectionMarker` for a collection; `-selectedObjects` is the array; and `-selection`
+  is a REAL proxy — one object forwards reads and writes, several answer the value they all agree on (else the
+  multiple-values marker) and a write goes to every one, none answers the no-selection marker and a write RAISES.
+  `-canAdd`/`-canRemove` and the add/remove pair are defined against the content's kind: nil or a mutable array/set
+  takes objects (a set through the set-mutation pair), a single object answers NO and a door called anyway raises by
+  name; `-remove:` removes every selected object. `-objectClass` (default `NSMutableDictionary`), `-newObject`,
+  `-prepareContent` and `-automaticallyPreparesContent` are real, and the seven bindings (`content`, `contentObject`,
+  `selection`, `selectedObjects`, `editable`, `canAdd`, `canRemove`) are exposed. **The dependent keys are announced BY
+  HAND**, because this Foundation does not compute `+keyPathsForValuesAffectingValueForKey:`, while `content` itself is
+  left to KVO's automatic setter wrapper so one write is one notification; a collection's add/remove announces the
+  TO-MANY pair on `content`, so a bound table hears the row and not the reload. **The Core Data and predicate doors
+  refuse by name** — eleven sites through `AppKitRefusal.h`'s `fn_refuse_controller`, because a controller's fetch loop
+  is not the store this tier has. **`-validateUserInterfaceItem:` compares with `sel_isEqual`, not `==`**: the runtime
+  gives each image its own selector struct for the same name, so an item an APPLICATION built is `==` to nothing this
+  library spells — measured, after `remove:` validated as enabled with nothing to remove. `tests/controller_base.m`
+  measures all of it in 77 checks.
+
+- **`ctest`: 176 of 176 passed** (the keyboard and the seam, the AppKit and its input path, the controls and their
   metrics, the field control and its cell and its bezel and its placeholder and what it may hold, the text path and its
   word granularity and the multi-line view and its wrapping and its scrolling and its READING OF THE STORE, the STORE
   the rich-text slice is built on and the REGION it is laid out in and the WEB that ties the three together and the
@@ -1210,7 +1234,8 @@ the compositor is really gone.
   window, four states, five edge geometries and reviewed user resize, the collection view's grid, pool, selection,
   gradient backdrop and both drag halves, the rule editor's criterion tree, four nesting modes, flat numbering,
   adoption on removal and predicate refusals, and the binding layer's markers, observe-and-write, options, placeholders
-  and NSEditor defaults).
+  and NSEditor defaults, the controller's editor list and its commit walk, its content and selection proxy and the
+  dependent-key announcements, and the Core Data doors' empty values).
 - **And the desktop's own text is SUB-PIXEL ANTIALIASED**, which is the AppKit's half of a renderer change in
   CoreGraphics: a window's surface is OPAQUE (`kCGImageAlphaNoneSkipFirst`), and the destination's opacity is
   exactly what decides whether a glyph is rasterised in colour. MEASURED on the live session: the window title's

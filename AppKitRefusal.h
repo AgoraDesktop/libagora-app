@@ -33,4 +33,14 @@ static inline void fn_refuse_workspace(const char *which, const char *needs)
 			"empty value rather than approximating the work\n", which, needs);
 }
 
+/* THE CONTROLLERS' REFUSAL, FOR THE CORE DATA AND PREDICATE DOORS `NSObjectController` DECLARES.** The family exists
+ * for a controller's FETCH LOOP — live result sets, lazy faults, a merge policy — which is not the same piece of work
+ * as the store this tier has, so the doors name the loop rather than pretending a one-shot fetch is it. Same wording,
+ * same contract: the getter answers its type's empty value and says which piece is missing. */
+static inline void fn_refuse_controller(const char *which, const char *needs)
+{
+	fprintf(stderr, "APPKIT-REFUSE: %s needs %s; this tier has not got it, so the door answers its type's "
+			"empty value rather than approximating the work\n", which, needs);
+}
+
 #endif
