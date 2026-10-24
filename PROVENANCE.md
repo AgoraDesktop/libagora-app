@@ -1833,6 +1833,46 @@ nil, an array, a set, an immutable array and a single object, `objectClass`/`new
 dependent-key and to-many KVO deliveries, a binding writing `content`, the two validation answers, and the Core Data
 doors' empty values.
 
+## 62. `NSArrayController`: an arrangement, an index translation, and a cache that fills itself back in
+
+**THE SUBCLASS ADDS ONE IDEA TO THE BASE CONTROLLER: THE ARRANGEMENT.** The content is a collection; `-arrangedObjects`
+is the content FILTERED by `filterPredicate` and then SORTED by `sortDescriptors`, cached, and the selection is
+`selectionIndexes` into that array rather than into the content. The filter is REAL rather than a refusal, because
+`libagora-base`'s restored predicate family ships `-filteredArrayUsingPredicate:` (declared in `NSPredicate.h`, not in
+`NSArray.h` — a detail that cost a wrong claim before this slice started); a nil predicate is no filter, and the header
+says so. An `NSArray` content is used as it stands, an `NSSet` contributes `-allObjects`, nil arranges to nothing, and
+a single object raises `NSInvalidArgumentException` naming the rule.
+
+**THE CACHE IS THE PART THAT NEEDS THE CARE.** Every mutation drops the arrangement in its WILL phase, so the Old side
+of the announcement is computed from the state that is still current; the DID phase rebuilds it, re-finds the selection
+and applies the empty-selection policy — and drops it a SECOND time, because the will phase's Old reads call
+`-arrangedObjects` and fill the cache back in. Without that second drop a re-sort announced the old arrangement as its
+new value while the content change had already happened underneath. The probe's KVO section is what catches it.
+
+**THE SELECTION IS STORED AND SETTLED IN ONE PLACE.** `_selectionIndexes` is copied (a caller's mutable set must not
+steer it) and validated on the way in (`NSRangeException` past the arrangement), clamped on the way out (an external
+content mutation must not raise through `-objectsAtIndexes:`), and re-founded by OBJECT IDENTITY in the settle step when
+`preservesSelection` is on — which is what keeps the same rows selected across a re-sort, where their indexes move. The
+arrow keys, the bulk doors and the five policy flags all funnel through the same key pair, so there is one announcer per
+key rather than one per door.
+
+**THE INDEX TRANSLATION IS POSITIONAL, NOT MERELY IDENTICAL.** An arranged index becomes a content index by counting the
+identical objects that come before it and finding that occurrence in the content, because an array may hold the same
+object twice and identity alone would send the second occurrence to the first one's position. The plural insertion door
+translates every anchor against the arrangement as it stands and then inserts from the highest CONTENT index down, so a
+lower insertion cannot move a higher one's anchor.
+
+**TWO DOORS ARE STORED AND ANSWERED WITH NO READER, AND THE HEADER SAYS SO.** `automaticallyRearrangesObjects` and
+`automaticRearrangementKeyPaths` are the live-rearrangement pair; the real implementation would observe every arranged
+object for those key paths and re-arrange when one changes, and **OWED: that observation half.** `-rearrangeObjects` and
+`-didChangeArrangementCriteria` are the doors a caller uses instead.
+
+`tests/array_controller.m` measures it in **76 checks**: the arrangement's order, the filter, the pure `-arrangeObjects:`,
+the three content kinds (including the raise), the KVO delivery of `arrangedObjects` and `selectedObjects`, the selection
+into the arrangement with markers and the proxy's agreement rule, each policy flag against the behaviour it changes, the
+appending and anchored insertions (including the repeated-object case), both arranged-removal doors, the attach/select
+doors, and a target bound to `arrangedObjects` receiving the re-arranged array.
+
 ## Keeping in sync
 
 The Fiwix AppKit is the origin and this repository has now diverged from it in the seam. A fix made there

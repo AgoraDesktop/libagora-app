@@ -38,9 +38,9 @@
 # "80 declared" for three slices after the number became 86 — the gate did not notice, because a comment is not a
 # metric. Recompute them when you re-pin, from `api-ledger census`, rather than editing the numbers by eye.
 #
-classes-missing 28
+classes-missing 27
 classes-offered 168
-classes-present 140
+classes-present 141
 fn:NSAccessibilityActionDescription 1
 fn:NSAccessibilityPostNotification 1
 fn:NSAccessibilityRaiseBadArgumentException 1
@@ -219,7 +219,7 @@ functions-defined-not-declared 0
 functions-missing 0
 functions-offered 86
 functions-present 86
-methods-declared 5252
+methods-declared 5303
 methods-declared-not-implemented 8
 proto:NSAlertDelegate 1
 proto:NSAnimatablePropertyContainer 0
@@ -285,6 +285,7 @@ sel:NSAlert 27
 sel:NSAnimation 26
 sel:NSAnimationContext 5
 sel:NSApplication 95
+sel:NSArrayController 47
 sel:NSBezierPath 72
 sel:NSBitmapImageRep 41
 sel:NSBox 30
@@ -419,6 +420,6 @@ sel:NSWindow 261
 sel:NSWindowController 26
 sel:NSWorkspace 58
 selectors-missing 0
-selectors-offered 4682
-selectors-present 4682
+selectors-offered 4729
+selectors-present 4729
 selphantom:NSObject 8

@@ -21,6 +21,7 @@
  * controller WITHOUT retaining it, or the pair would keep each other alive forever).
  */
 #import <AppKit/NSObjectController.h>
+#import <AppKit/NSObjectController_internal.h>
 #import <AppKit/NSKeyValueBinding.h>
 #import <AppKit/AppKitRefusal.h>
 #import <Foundation/NSArray.h>
@@ -73,6 +74,13 @@
 
 	if ([objects count] == 0) {
 		return NSNoSelectionMarker;
+	}
+	/* **`alwaysUsesMultipleValuesMarker` IS THE ONE THING A CONTROLLER CHANGES ABOUT THIS PROXY.** An array controller
+	 * whose flag is YES wants a form bound to `selection.name` to show the multiple-values state even when exactly
+	 * one object is selected, because the SELECTION is the thing being edited and a marker is how AppKit spells "do
+	 * not edit this here". The flag speaks for reads only: writes still go to every selected object. */
+	if ([_controller fn_selectionAlwaysUsesMultipleValuesMarker]) {
+		return NSMultipleValuesMarker;
 	}
 	for (i = 0; i < [objects count]; i++) {
 		id value = [[objects objectAtIndex:i] valueForKey:key];
@@ -194,6 +202,12 @@ static BOOL fn_content_is_mutable_collection(id content)
 	[self didChangeValueForKey:@"selectedObjects"];
 	[self didChangeValueForKey:@"selection"];
 	[self didChangeValueForKey:@"contentObject"];
+}
+
+/* THE PROXY'S QUESTION, ANSWERED NO: `NSObjectController` has no `alwaysUsesMultipleValuesMarker` flag. */
+- (BOOL)fn_selectionAlwaysUsesMultipleValuesMarker
+{
+	return NO;
 }
 
 /* ---- CONTENT ---------------------------------------------------------------------------------------- */
@@ -334,14 +348,7 @@ static BOOL fn_content_is_mutable_collection(id content)
 		return;
 	}
 	if ([_content isKindOfClass:[NSMutableArray class]]) {
-		NSMutableArray *array = (NSMutableArray *)_content;
-		NSIndexSet *indexes = [NSIndexSet indexSetWithIndex:[array count]];
-
-		[self willChange:NSKeyValueChangeInsertion valuesAtIndexes:indexes forKey:@"content"];
-		[self fn_willChangeDerivedKeys];
-		[array addObject:object];
-		[self fn_didChangeDerivedKeys];
-		[self didChange:NSKeyValueChangeInsertion valuesAtIndexes:indexes forKey:@"content"];
+		[self fn_insertObject:object atContentIndex:[(NSMutableArray *)_content count]];
 		return;
 	}
 	if ([_content isKindOfClass:[NSMutableSet class]]) {
@@ -358,6 +365,46 @@ static BOOL fn_content_is_mutable_collection(id content)
 	[NSException raise:NSInvalidArgumentException
 		    format:@"-addObject: needs a mutable array or set as content (or nil); this controller's content is "
 			   "a %@", [_content class]];
+}
+
+/* **THE INSERTION PRIMITIVE, WHICH IS THE ARRAY BRANCH `-addObject:` USES AT THE END.** An arranged index is
+ * translated to a CONTENT index and arrives here; a negative or past-the-end index is the caller's error and raises
+ * as `-insertObject:atIndex:` would. The set form ignores the index because a set has none. */
+- (void)fn_insertObject:(id)object atContentIndex:(NSUInteger)index
+{
+	if (object == nil) {
+		[NSException raise:NSInvalidArgumentException format:@"-fn_insertObject: needs an object; nil is not one"];
+	}
+	if ([_content isKindOfClass:[NSMutableArray class]]) {
+		NSMutableArray *array = (NSMutableArray *)_content;
+		NSIndexSet *indexes;
+
+		if (index > [array count]) {
+			[NSException raise:NSRangeException
+				    format:@"insertion at %lu is past the end of a %lu-object content",
+					   (unsigned long)index, (unsigned long)[array count]];
+		}
+		indexes = [NSIndexSet indexSetWithIndex:index];
+		[self willChange:NSKeyValueChangeInsertion valuesAtIndexes:indexes forKey:@"content"];
+		[self fn_willChangeDerivedKeys];
+		[array insertObject:object atIndex:index];
+		[self fn_didChangeDerivedKeys];
+		[self didChange:NSKeyValueChangeInsertion valuesAtIndexes:indexes forKey:@"content"];
+		return;
+	}
+	if ([_content isKindOfClass:[NSMutableSet class]]) {
+		NSSet *added = [NSSet setWithObject:object];
+
+		[self willChangeValueForKey:@"content" withSetMutation:NSKeyValueUnionSetMutation usingObjects:added];
+		[self fn_willChangeDerivedKeys];
+		[(NSMutableSet *)_content unionSet:added];
+		[self fn_didChangeDerivedKeys];
+		[self didChangeValueForKey:@"content" withSetMutation:NSKeyValueUnionSetMutation usingObjects:added];
+		return;
+	}
+	[NSException raise:NSInvalidArgumentException
+		    format:@"an insertion needs a mutable array or set as content; this controller's content is a %@",
+			   [_content class]];
 }
 
 - (void)remove:(id)sender

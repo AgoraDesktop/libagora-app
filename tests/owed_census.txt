@@ -27,6 +27,7 @@
 NSApplication.h                      1
 NSBezierPath.h                       3
 NSButtonCell.h                       1
+NSArrayController.h                  2
 NSCell.h                             3
 NSRunningApplication.h               2
 NSEvent.h                            1
@@ -36,4 +37,9 @@ NSPasteboard.h                       1
 NSResponder.h                        1
 NSSplitView.h                        1
 
-# total: 19
+#
+# AND IT ROSE BY TWO IN THE ARRAY-CONTROLLER SLICE, BOTH IN `NSArrayController.h`: the live-rearrangement pair
+# (`automaticallyRearrangesObjects` and `automaticRearrangementKeyPaths`) is stored and answered with no reader, and the
+# header says so twice — once in its block, once at the door.
+
+# total: 21

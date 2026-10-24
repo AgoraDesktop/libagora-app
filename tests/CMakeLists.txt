@@ -1674,6 +1674,16 @@ target_link_libraries(controller_base PRIVATE App m)
 add_test(NAME appkit-controller-base COMMAND controller_base)
 set_tests_properties(appkit-controller-base PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
 
+# **THE ARRAY CONTROLLER: THE ARRANGEMENT, THE SELECTION INTO IT, AND THE INDEX TRANSLATION.** No view: the arrangement
+# is measured by its ORDER and the filter by which objects survive, the insertion doors by where the object landed in
+# the CONTENT (the arranged index is the argument; the content is where the translation shows), and each policy flag
+# against the behaviour it changes. The KVO half is a delivery test of arrangedObjects/selectedObjects, and the binding
+# half checks that a target bound to arrangedObjects receives the re-arranged array.
+add_executable(array_controller array_controller.m)
+target_link_libraries(array_controller PRIVATE App m)
+add_test(NAME appkit-array-controller COMMAND array_controller)
+set_tests_properties(appkit-array-controller PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
+
 # **AND THE CLIENT HALF OF HIDPI, WHICH NEEDS BOTH HALVES OF THE STACK IN ONE TEST.** The compositor runs at `--scale 2`
 # and an AppKit window draws a shape at a known POINT; the checker measures where it landed in DEVICE pixels. A client
 # that ignored the scale would draw it half the size, half the distance from the corner — the whole UI shrunk.

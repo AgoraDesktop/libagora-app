@@ -1214,7 +1214,26 @@ the compositor is really gone.
   library spells — measured, after `remove:` validated as enabled with nothing to remove. `tests/controller_base.m`
   measures all of it in 77 checks.
 
-- **`ctest`: 176 of 176 passed** (the keyboard and the seam, the AppKit and its input path, the controls and their
+- **And the FIRST ARRANGED CONTROLLER HAS ARRIVED: `NSArrayController` — 47 of 47** (`ctest`, offscreen).
+  `NSObjectController`'s content and selection are now narrowed to a COLLECTION: the content is an array (or a set,
+  through `-allObjects`; a single object raises by name, at the door that set it), `arrangedObjects` is the content
+  FILTERED then SORTED and cached, and `selectionIndexes` index into THAT array rather than into the content.
+  **`filterPredicate` is REAL** — this Foundation's predicate family ships `-filteredArrayUsingPredicate:`, so the door
+  filters instead of refusing, and it is the first AppKit class to exercise the restored grammar. The insertion doors
+  translate an arranged index to a content index (by occurrence, so a content that holds the same object twice still
+  translates exactly) and insert from the highest content index down, so each object lands immediately before the
+  anchor it named. The arrow keys (`-selectNext:`/`-selectPrevious:` and their guarded questions), the bulk doors
+  (`-addObjects:`, `-addSelectedObjects:`, `-removeObjects:`, `-removeSelectedObjects:`, the two arranged-index removal
+  doors) and the five policy flags (`preservesSelection`, `selectsInsertedObjects`, `avoidsEmptySelection` — all YES by
+  default — `clearsFilterPredicateOnInsertion` YES and `alwaysUsesMultipleValuesMarker` NO) are real and applied in one
+  settle step after every arrangement change; the last of them is what makes the inherited selection proxy answer
+  `NSMultipleValuesMarker` even for one selected object, so a multi-selection form is read-only. **The live-rearrangement
+  pair (`automaticallyRearrangesObjects`, `automaticRearrangementKeyPaths`) is stored and answered with NO READER**, and
+  the header says so — watching the arranged objects' key paths is owed, and `-rearrangeObjects` is the door a caller
+  uses instead. **141 of 168 classes (84%), 141 of 141 with a surface COMPLETE, 44 of 56 protocols, 27 absent classes.**
+  `tests/array_controller.m` measures it in 76 checks.
+
+- **`ctest`: 177 of 177 passed** (the keyboard and the seam, the AppKit and its input path, the controls and their
   metrics, the field control and its cell and its bezel and its placeholder and what it may hold, the text path and its
   word granularity and the multi-line view and its wrapping and its scrolling and its READING OF THE STORE, the STORE
   the rich-text slice is built on and the REGION it is laid out in and the WEB that ties the three together and the
@@ -1235,7 +1254,8 @@ the compositor is really gone.
   gradient backdrop and both drag halves, the rule editor's criterion tree, four nesting modes, flat numbering,
   adoption on removal and predicate refusals, and the binding layer's markers, observe-and-write, options, placeholders
   and NSEditor defaults, the controller's editor list and its commit walk, its content and selection proxy and the
-  dependent-key announcements, and the Core Data doors' empty values).
+  dependent-key announcements, and the Core Data doors' empty values, and the array controller's arrangement,
+  its selection into it, the arranged-to-content translation and its five policy flags).
 - **And the desktop's own text is SUB-PIXEL ANTIALIASED**, which is the AppKit's half of a renderer change in
   CoreGraphics: a window's surface is OPAQUE (`kCGImageAlphaNoneSkipFirst`), and the destination's opacity is
   exactly what decides whether a glyph is rasterised in colour. MEASURED on the live session: the window title's
