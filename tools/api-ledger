@@ -124,6 +124,38 @@ def next_token(text, i):
     return (text[i] if i < n else ''), i
 
 
+def skip_angle_brackets(text):
+    """`<ObjectType> : NSArray<ObjectType>` -> `: NSArray<ObjectType>`.
+
+    **LIGHTWEIGHT GENERICS PUT A PARAMETER CLAUSE BETWEEN THE CLASS NAME AND ITS COLON**, and the superclass reader
+    matched `:` at offset zero, so `@interface NSMutableArray<ObjectType> : NSArray<ObjectType>` was recorded with
+    `super = None`. That is the same failure the header above records as bug 5 for the AppKit ledger — inheritance
+    silently disabled — arriving through a spelling the 10.6 SDK never used, which is why the first fix did not cover
+    it. Its effect is not confined to one row: `NSMutableArray` stopped inheriting `NSArray`'s BODIES, so eight doors
+    implemented in `NSPropertyListSerialization.m` were reported as phantom, and every closure over a generic class
+    stopped at that class.
+
+    The clause NESTS (`NSArray<NSArray<NSString *> *>`), so the skip is depth-counted rather than a regex. A class
+    with no parameter clause is returned unchanged, which is every 10.6 declaration."""
+    i = 0
+    n = len(text)
+    while True:
+        while i < n and text[i] in ' \t\r\n':
+            i += 1
+        if i >= n or text[i] != '<':
+            return text[i:]
+        depth = 0
+        while i < n:
+            if text[i] == '<':
+                depth += 1
+            elif text[i] == '>':
+                depth -= 1
+                if depth == 0:
+                    i += 1
+                    break
+            i += 1
+
+
 def block_properties(body):
     """A property's accessors — honouring `getter=`, which the first version ignored.
 
@@ -167,7 +199,7 @@ def logical_lines(text):
     return out
 
 
-def macro_accessors(text):
+def macro_accessors(text, sites=None):
     """The accessors an X-macro call generates, by inverting the macro's own definition.
 
     **THE TREE WRITES ITS BOOLEAN ACCESSORS AS MACRO PAIRS**, so a static method scan cannot see them:
@@ -179,6 +211,12 @@ def macro_accessors(text):
 
     Twenty-two such call sites across `NSWindow.m` and `NSView.m` account for forty of the forty-seven phantom
     selectors the third measurement reported — every one of them a door that answers perfectly well at runtime.
+
+    **THE DEFINITIONS AND THE CALL SITES ARE TWO TEXTS, AND CONFLATING THEM HID NSNumber.** A `#define` normally
+    sits ABOVE the `@implementation` whose body invokes it, so scanning only the block body found the call sites and
+    not the shapes: `macro_accessors(body)` returned nothing for the 44 doors `FN_NUMBER_NEW`/`FN_NUMBER_GET`
+    generate. `text` is the file (definitions), `sites` is the block (invocations); the call filter still runs over
+    the block, so a macro is only credited to the class that actually calls it.
 
     **THIS IS THE TARGETED INVERSE, NOT A PREPROCESSOR.** Running `clang -E` over the tree would be the general answer
     and is what the plan suggests for the eventual ledger; it also drags in the whole include graph. What is done here
@@ -196,28 +234,31 @@ def macro_accessors(text):
         name, params, body = m.group(1), [q.strip() for q in m.group(2).split(',')], m.group(3)
         if '- (' not in body and '+ (' not in body:
             continue
-        setters = set(k for k in re.findall(r'\([^)]*\)\s*(\w+)\s*:', body))
-        getters = set(re.findall(r'\([^)]*\)\s*(\w+)', body)) - setters
+        setters = re.findall(r'\([^)]*\)\s*([\w#]+)\s*:', body)
+        getters = [g for g in re.findall(r'\([^)]*\)\s*([\w#]+)(?!\s*:)', body) if g not in setters]
         if not setters and not getters:
             continue
-        shapes[name] = (params, setters, getters)
+        shapes[name] = (params, [(k, True) for k in setters] + [(k, False) for k in getters])
     if not shapes:
         return set()
 
     out = set()
-    for line in logical_lines(text):
-        for name, (params, setters, getters) in shapes.items():
+    for line in logical_lines(sites if sites is not None else text):
+        for name, (params, methods) in shapes.items():
             for m in re.finditer(r'\b' + name + r'\s*\(([^)]*)\)', line):
                 if re.match(r'\s*#define', line):
                     continue
                 args = [a.strip() for a in m.group(1).split(',')]
-                for position, param in enumerate(params):
-                    if position >= len(args):
-                        break
-                    if param in setters:
-                        out.add(args[position] + ':')
-                    elif param in getters:
-                        out.add(args[position])
+                values = dict((param, args[position]) for position, param in enumerate(params)
+                              if position < len(args))
+                for expression, is_setter in methods:
+                    # **THE NAME MAY BE TOKEN-PASTED.** `- (TYPE)NAME##Value` and `+ (id)numberWith##NAME:` are the
+                    # tree's shape, and reading the parameter as if it were the whole name produced `int` and
+                    # `numberWith` — 44 NSNumber doors that answer perfectly well and were counted as phantom. The
+                    # expression is split on `##` and every part that names a parameter is substituted; a part that
+                    # does not is a literal. It can only ADD implementations, never phantoms.
+                    pieces = [values.get(piece, piece) for piece in expression.split('##')]
+                    out.add(''.join(pieces) + (':' if is_setter else ''))
     return out
 
 
@@ -279,7 +320,7 @@ def parse_objc(text):
 
         if kind == 'implementation':
             selectors |= synthesised(body)
-            selectors |= macro_accessors(body)
+            selectors |= macro_accessors(text, body)
             impls.setdefault(name, set()).update(selectors)
         elif kind == 'protocol':
             protocols.setdefault(name, set()).update(selectors)
@@ -287,10 +328,10 @@ def parse_objc(text):
             entry = classes.setdefault(name, {'primary': False, 'super': None, 'selectors': set()})
             entry['primary'] = entry['primary'] or (token != '(')
             entry['selectors'] |= selectors
-            if token == ':':
-                sup = re.match(r'\s*:\s*(\w+)', text[m.end():end])
-                if sup:
-                    entry['super'] = sup.group(1)
+            # `skip_angle_brackets` first, because a lightweight-generic parameter clause sits BEFORE the colon.
+            sup = re.match(r'\s*:\s*(\w+)', skip_angle_brackets(text[m.end():end]))
+            if sup:
+                entry['super'] = sup.group(1)
         i = end + 4
     return classes, protocols, impls
 
@@ -335,42 +376,70 @@ def parse_tree(directory):
     return classes, protocols, impls
 
 
-def c_functions(directory):
-    """Objective-C is neither C nor not-C: the functions are the declarations that survive outside every block.
+def c_functions(directory, include_dirs=()):
+    """Objective-C is neither C nor not-C: the functions are the file-scope declarations, which a header may legally
+    write inside an `@interface` body as well as outside one.
 
-    Returns name -> {'inline': bool}, because whether a declaration must also be a symbol depends on that flag."""
+    Returns name -> {'inline': bool}, because whether a declaration must also be a symbol depends on that flag.
+
+    **A DIRECTORY IS NOT A SURFACE, AND FOR FOUNDATION THAT IS NOT A PEDANTRY.** `NSMakeRange` and `NSMaxRange` are
+    inline doors declared in `libagora-core/include/CFBridgingTypes.h` and reached through `NSObjCRuntime.h`, so a
+    caller of `Foundation.h` has them and this library does not declare them. Counting only this directory's headers
+    reported both as missing functions with no symbol — the same class of false negative the inline exemption was
+    added to stop, one include away. `include_dirs` is opt-in and empty by default, so the AppKit and Core Data
+    ledgers' numbers are unchanged by it."""
     out = {}
-    directory = headers_dir(directory)
-    for path in sorted(glob.glob(os.path.join(directory, '*.h'))):
-        text = strip_comments(open(path, errors='ignore').read())
-        text = re.sub(r'@(interface|protocol)\b.*?@end', lambda m: ' ' * len(m.group(0)), text, flags=re.S)
-        for m in re.finditer(
-                r'(?m)^[ \t]*(?:APPKIT_EXTERN|FOUNDATION_EXPORT|extern)?[ \t]*'
-                r'[A-Za-z_][\w \t\*]*?\b(NS[A-Z]\w*)\s*\(', text):
-            # **A NAME FOLLOWED BY `(*` IS A DECLARATOR, NOT A FUNCTION.** 10.6's
-            # NSSimpleHorizontalTypesetter.h carries `typedef NSPoint (*_NSPositionOfGlyphMethod)(...)`, where the last
-            # NS-prefixed token before the paren is the RETURN TYPE — so the naive pattern filed the type name
-            # `NSPoint` as a C function, and the census counted it as one more door the tree had failed to answer.
-            # A function-pointer declaration and a typedef are not functions and are skipped here.
-            if re.match(r'\s*\*', text[m.end():m.end() + 8]):
-                continue
-            # **THE PREFIX RUNS TO THE NAME, NOT TO `m.start()`.** `m.start()` is the START OF THE MATCH, which for a
-            # line-anchored pattern is the beginning of the line itself — so the prefix was the empty string every time,
-            # and BOTH tests that read it were dead: the `typedef` guard and, later, the inline exemption. The
-            # function-pointer guard caught the `typedef` case by luck (through its own `(*` test), which is why the bug
-            # hid until a metric started reading the same prefix for a second purpose.
-            line_start = text.rfind('\n', 0, m.start()) + 1
-            prefix = text[line_start:m.start(1)]
-            if 'typedef' in prefix:
-                continue
-            # **AN INLINE DEFINITION IS NOT A SYMBOL AND DOES NOT HAVE TO BE ONE.** The plan's S3 tier says
-            # "every NON-INLINE C function is an exported symbol", so an inline door is recorded and then exempted
-            # from the definition requirement rather than reported as a permanent false negative.
-            # `NS_INLINE` IS THE SPELLING THAT CAUGHT THE FIRST VERSION OUT. Apple's macro expands to `static inline`
-            # (NSObjCRuntime.h), so `NSEventMaskFromType` is a bodied door in the header and never a symbol — but the
-            # macro name carries no lowercase `inline`, so a keyword test reported it as a declaration with no
-            # definition and made this metric cry wolf on its first run.
-            out[m.group(1)] = {'inline': ('static' in prefix or 'inline' in prefix or 'NS_INLINE' in prefix)}
+    for root in [directory] + [d for d in include_dirs if d]:
+        root = headers_dir(root)
+        for path in sorted(glob.glob(os.path.join(root, '*.h'))):
+            out.update(_functions_in(path))
+    return out
+
+
+def _functions_in(path):
+    """The C functions one header declares, with the inline verdict. Split out so `c_functions` can walk more than
+    one directory without the scan being written twice."""
+    out = {}
+    text = strip_comments(open(path, errors='ignore').read())
+    # **THE BLOCK STRIP WAS HERE AND IT HID TWELVE DECLARATIONS.** It blanked every `@interface … @end` so that a
+    # method's `NS…(` could not be read as a C function — but C functions are legally declared INSIDE an
+    # `@interface` body, and libagora-base does exactly that: `NSStringFromClass`, `NSStringFromSelector`,
+    # `NSClassFromString`, `NSSelectorFromString`, `NSStringFromRange`, the object-allocation family and the
+    # zone/page primitives all sit inside `@interface NSObject … @end` in `NSObject.h`. The census therefore called
+    # them DEFINED and DECLARED NOWHERE, which it treats as a fault, and the fault was in the instrument.
+    # The line anchor is what actually excludes the block's members: a method or property begins with `-`, `+` or
+    # `@`, never with a type. `typedef` and function-pointer declarations are still guarded below.
+    # **`NS[A-Z]` IS NOT THE PREFIX RULE, AND IT COST THE SAME DOORS ONCE MORE.** `NSStringFromClass`,
+    # `NSStringFromSelector`, `NSStringFromRange` and their inverses have a lowercase third letter, so a pattern
+    # written for `NSMakePoint` and `NSLog` skipped every one of them. The rule is the identifier's own: `NS`
+    # followed by a letter, then anything.
+    for m in re.finditer(
+            r'(?m)^[ \t]*(?:APPKIT_EXTERN|FOUNDATION_EXPORT|extern)?[ \t]*'
+            r'[A-Za-z_][\w \t\*]*?\b(NS[A-Za-z]\w*)\s*\(', text):
+        # **A NAME FOLLOWED BY `(*` IS A DECLARATOR, NOT A FUNCTION.** 10.6's
+        # NSSimpleHorizontalTypesetter.h carries `typedef NSPoint (*_NSPositionOfGlyphMethod)(...)`, where the last
+        # NS-prefixed token before the paren is the RETURN TYPE — so the naive pattern filed the type name
+        # `NSPoint` as a C function, and the census counted it as one more door the tree had failed to answer.
+        # A function-pointer declaration and a typedef are not functions and are skipped here.
+        if re.match(r'\s*\*', text[m.end():m.end() + 8]):
+            continue
+        # **THE PREFIX RUNS TO THE NAME, NOT TO `m.start()`.** `m.start()` is the START OF THE MATCH, which for a
+        # line-anchored pattern is the beginning of the line itself — so the prefix was the empty string every time,
+        # and BOTH tests that read it were dead: the `typedef` guard and, later, the inline exemption. The
+        # function-pointer guard caught the `typedef` case by luck (through its own `(*` test), which is why the bug
+        # hid until a metric started reading the same prefix for a second purpose.
+        line_start = text.rfind('\n', 0, m.start()) + 1
+        prefix = text[line_start:m.start(1)]
+        if 'typedef' in prefix:
+            continue
+        # **AN INLINE DEFINITION IS NOT A SYMBOL AND DOES NOT HAVE TO BE ONE.** The plan's S3 tier says
+        # "every NON-INLINE C function is an exported symbol", so an inline door is recorded and then exempted
+        # from the definition requirement rather than reported as a permanent false negative.
+        # `NS_INLINE` IS THE SPELLING THAT CAUGHT THE FIRST VERSION OUT. Apple's macro expands to `static inline`
+        # (NSObjCRuntime.h), so `NSEventMaskFromType` is a bodied door in the header and never a symbol — but the
+        # macro name carries no lowercase `inline`, so a keyword test reported it as a declaration with no
+        # definition and made this metric cry wolf on its first run.
+        out[m.group(1)] = {'inline': ('static' in prefix or 'inline' in prefix or 'NS_INLINE' in prefix)}
     return out
 
 
@@ -468,10 +537,10 @@ def closure(tree, name, seen=None):
     return out
 
 
-def computed(local_dir, manifest_path, library=None):
+def computed(local_dir, manifest_path, library=None, include_dirs=()):
     sdk_classes, sdk_protocols, sdk_selectors, sdk_functions = load_manifest(manifest_path)
     classes, protocols, impls = parse_tree(local_dir)
-    declared = c_functions(local_dir)
+    declared = c_functions(local_dir, include_dirs)
     defined = exported_symbols(library)
 
     # the implemented set shares the superclass graph, so inherited bodies count
@@ -581,21 +650,21 @@ def command_manifest(argv):
 
 
 def command_census(argv):
-    argv, library = split_library(argv)
+    argv, library, includes = split_library(argv)
     if len(argv) != 2:
-        raise SystemExit('api-ledger census <manifest> <source-dir> [--library <path>]')
-    metrics, _ = computed(argv[1], argv[0], library)
+        raise SystemExit('api-ledger census <manifest> <source-dir> [--library <path>] [--include <dir>]')
+    metrics, _ = computed(argv[1], argv[0], library, includes)
     for name in sorted(metrics):
         sys.stdout.write('%s %d\n' % (name, metrics[name]))
     return 0
 
 
 def command_check(argv):
-    argv, library = split_library(argv)
+    argv, library, includes = split_library(argv)
     if len(argv) != 3:
-        raise SystemExit('api-ledger check <manifest> <source-dir> <census-file> [--library <path>]')
+        raise SystemExit('api-ledger check <manifest> <source-dir> <census-file> [--library <path>] [--include <dir>]')
     expected = parse_census(argv[2])
-    got, _ = computed(argv[1], argv[0], library)
+    got, _ = computed(argv[1], argv[0], library, includes)
 
     problems = []
     for name in sorted(set(expected) | set(got)):
@@ -621,11 +690,12 @@ def command_check(argv):
 
 
 def command_missing(argv):
-    argv, library = split_library(argv)
+    argv, library, includes = split_library(argv)
     if len(argv) != 2:
-        raise SystemExit('api-ledger missing <manifest> <source-dir> [--library <path>]')
+        raise SystemExit('api-ledger missing <manifest> <source-dir> [--library <path>] [--include <dir>]')
     metrics, (sdk_classes, sdk_protocols, sdk_selectors, sdk_functions,
-              classes, protocols, declared, defined, impl_tree, present) = computed(argv[1], argv[0], library)
+              classes, protocols, declared, defined, impl_tree, present) = computed(argv[1], argv[0], library,
+                                                                                   includes)
     functions = declared or {}
 
     def wrap(items, per=3, width=44):
@@ -672,8 +742,10 @@ def command_missing(argv):
 
 
 def split_library(argv):
-    """`--library <path>` anywhere on a command line; the rest keeps its positional order."""
+    """`--library <path>` and repeatable `--include <dir>` anywhere on a command line; the rest keeps its
+    positional order."""
     library = None
+    includes = []
     rest = []
     i = 0
     while i < len(argv):
@@ -685,10 +757,18 @@ def split_library(argv):
         elif argv[i].startswith('--library='):
             library = argv[i].split('=', 1)[1]
             i += 1
+        elif argv[i] == '--include':
+            if i + 1 >= len(argv):
+                raise SystemExit('api-ledger: --include needs a directory')
+            includes.append(argv[i + 1])
+            i += 2
+        elif argv[i].startswith('--include='):
+            includes.append(argv[i].split('=', 1)[1])
+            i += 1
         else:
             rest.append(argv[i])
             i += 1
-    return rest, library
+    return rest, library, includes
 
 
 COMMANDS = {'manifest': command_manifest, 'census': command_census,

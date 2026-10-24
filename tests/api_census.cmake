@@ -5,7 +5,13 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 #
 # usage: cmake -DPYTHON=<python3> -DLEDGER=<tools/api-ledger> -DMANIFEST=<manifest> -DLIBRARY=<built .so> \
-#              -DSOURCE_DIR=<libagora-app> -DCENSUS=<tests/api-10.6-census.txt> -P api_census.cmake
+#              -DSOURCE_DIR=<libagora-app> -DCENSUS=<tests/api-10.6-census.txt> [-DINCLUDES=<dir>[;<dir>...]] \
+#              -P api_census.cmake
+#
+# **`-DINCLUDES` IS FOR THE DOORS THAT LIVE ONE INCLUDE AWAY.** Foundation's `NSMakeRange`/`NSMaxRange` are inline
+# declarations in `libagora-core/include/CFBridgingTypes.h`, reached through `NSObjCRuntime.h`; a census that reads
+# only the measured directory's headers calls them missing functions with no symbol. It is optional and empty by
+# default, so this gate's existing pins are unchanged by it.
 #
 # **`-DLIBRARY` IS WHY THIS GATE EXISTS IN THE FORM IT DOES.** The first version counted a C function as present when a
 # header declared it, and that measurement was wrong in both directions inside a single afternoon: five declared depth
@@ -57,11 +63,21 @@ foreach(required IN ITEMS "${LEDGER}" "${MANIFEST}" "${CENSUS}" "${LIBRARY}")
   endif()
 endforeach()
 
+# An include directory that does not exist is a silent false negative — the ledger would simply not see the header,
+# and the function would be reported missing. Fail instead.
+set(include_args "")
+foreach(dir IN LISTS INCLUDES)
+  if(NOT IS_DIRECTORY "${dir}")
+    message(FATAL_ERROR "api_census.cmake: -DINCLUDES names `${dir}`, which is not a directory")
+  endif()
+  list(APPEND include_args "--include" "${dir}")
+endforeach()
+
 # ---------------------------------------------------------------------------
 # THE MEASUREMENT, from the ledger.
 # ---------------------------------------------------------------------------
 execute_process(
-  COMMAND "${PYTHON}" "${LEDGER}" census "${MANIFEST}" "${SOURCE_DIR}" --library "${LIBRARY}"
+  COMMAND "${PYTHON}" "${LEDGER}" census "${MANIFEST}" "${SOURCE_DIR}" --library "${LIBRARY}" ${include_args}
   OUTPUT_VARIABLE measured_text
   ERROR_VARIABLE measured_error
   RESULT_VARIABLE measured_status)
