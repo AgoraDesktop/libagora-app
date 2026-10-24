@@ -1983,6 +1983,53 @@ immutable-collection refusals, single and plural removal (descending), the four 
 announcement counts, the content-kind recovery, `countKeyPath`'s storage without a reader, the proxy's
 multiple-values flag, and the cyclic model's truncation.
 
+## 66. The predicate editor: the rule editor assembles, the template is the vocabulary
+
+**THE RULE EDITOR'S PREDICATE DOORS STOPPED REFUSING, AND THE ASSEMBLY IS THE POINT.** `-predicate` and
+`-predicateForRow:` always asked the delegate for a PARTS dictionary per criterion; until now they asked and answered nil
+because this Foundation had no predicate family. They build an `NSComparisonPredicate` from the parts now — left and right
+expressions, modifier, operator, options, and the custom-selector form — and a row's criteria combine with the compound
+type a parts dictionary names, or with AND when none does. A parts dictionary that cannot make a comparison (no left
+expression, or no right one and no custom selector) contributes NOTHING instead of a half-filled predicate, and the
+editor's predicate is the AND of its rows.
+
+**FOUNDATION'S OWN REFUSAL DECIDED ONE OF THE PARTS.** `NSComparisonPredicate` refuses the custom-selector operator by name
+(`-performSelector:withObject:` is not declared in this Foundation), so the rule editor REFUSES a custom-selector
+criterion rather than letting the exception out of a getter — it prints `APPKIT-REFUSE` and contributes no predicate. The
+refusal census rose by that one site and fell by the two predicate doors it replaced, so it went 405 -> 404: the first
+time in this arc that the number has fallen.
+
+**A TEMPLATE IS A ROW'S VOCABULARY, AND MATCHING IS ABOUT PARTS.** Left expressions, right expressions or an attribute
+type, the modifier, the operators, the options and the compound types; `-matchForPredicate:` accepts a comparison when its
+operator is allowed, its modifier and options are the template's and its left expression is one the template names (by
+key path where both are key paths), and a compound when its type is one the template lists. `-templateViews` builds the
+three controls ONCE from that vocabulary, and `-setPredicate:` selects the items and fills the field — a row's views
+survive a new predicate. `+templatesWithAttributeKeyPaths:inEntityDescription:` asks Core Data for the entity's
+attributes and gives each template the attribute's type and the operators that type can bear; a key path the entity does
+not describe is skipped rather than turned into a template that could never match.
+
+**THE EDITOR IS ITS OWN DELEGATE, AND THE CRITERION IS THE ROW'S MEMORY.** The rule editor does not retain its delegate,
+so the self-reference is not a cycle; the parts door answers from a private criterion dictionary (key path, operator,
+modifier, options) with the DISPLAY VALUE as the right-hand side, which is what lets a predicate with an operator other
+than "is" survive the round trip and lets editing a row change the predicate. A parallel array of templates-per-row would
+have been the obvious design and the wrong one: rows can be removed by the user, and a parallel array desynchronises. A
+predicate no template can represent builds no row, and an AND/OR compound's subpredicates become rows; a NOT compound is
+not representable in this tier and is stated rather than half-built.
+
+**TWO ORDINARY INITIALISERS DID NOT WORK, AND THE PROBE FOUND BOTH.** `[[NSRuleEditor alloc] init]` left its row list nil
+(inserting into nil is a message to nil: the row vanished and the selection then raised a range error about a row that was
+never there); `[[NSPopUpButton alloc] initWithFrame:]` left a plain button cell, so `-addItemsWithTitles:` reached a cell
+that had never heard of a menu. Both classes now answer the ordinary door by chaining to their designated initialiser —
+the same rule `[[NSSlider alloc] initWithFrame:]` already followed — because a class a caller builds with `-init` must
+not be a silently broken one.
+
+`tests/predicate_editor.m` measures it in **41 checks**: the parts assembled into comparisons that EVALUATE the way the
+delegate meant, a row's criteria as a compound, the custom-selector refusal, an empty editor's nil, a template's
+vocabulary and its three controls, matching and refusing predicates by parts, the compound template's construction and
+display, the attribute factory against a real `NSEntityDescription`, and the editor's round trip — including an operator
+other than "is", an AND becoming two rows, an unmatched predicate building none, and a user-added row starting from the
+first template.
+
 ## Keeping in sync
 
 The Fiwix AppKit is the origin and this repository has now diverged from it in the seam. A fix made there

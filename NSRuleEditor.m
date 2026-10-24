@@ -35,8 +35,12 @@
 #import <Foundation/NSException.h>
 #import <Foundation/NSIndexSet.h>
 #import <Foundation/NSNotification.h>
+#import <Foundation/NSComparisonPredicate.h>
+#import <Foundation/NSCompoundPredicate.h>
+#import <Foundation/NSExpression.h>
 #import <Foundation/NSNotificationCenter.h>
 #import <Foundation/NSNumber.h>
+#import <Foundation/NSPredicate.h>
 #import <Foundation/NSString.h>
 
 #import "AppKitRefusal.h"
@@ -133,6 +137,16 @@ static CGFloat fn_baseline_in_band(NSRect band, NSFont *font)
 /* ============================================================================================
  * INITIALISE: THE DEFAULTS APPLE NAMES, AND THIS TIER'S ROW HEIGHT.
  * ============================================================================================ */
+/* **THE DESIGNATED INITIALISER IS `-initWithFrame:`, AND `-init` MUST GO THROUGH IT.** An inherited `-init` leaves the row
+ * list nil, and an insertion into a nil container is a message to nil: the row vanishes, `-numberOfRows` stays zero, and
+ * the selection that follows raises a range error about a row that was never there. It is the ordinary door — a caller
+ * writing `[[NSPredicateEditor alloc] init]` gets it — so it answers an empty frame, which is what `NSSlider` does with
+ * its default and what Apple's own views do with theirs. */
+- (id)init
+{
+	return [self initWithFrame:NSZeroRect];
+}
+
 - (instancetype)initWithFrame:(NSRect)frameRect
 {
 	self = [super initWithFrame:frameRect];
@@ -906,17 +920,135 @@ static CGFloat fn_baseline_in_band(NSRect band, NSFont *font)
 	}
 }
 
+/* **A PARTS DICTIONARY IS A COMPARISON, OR NOTHING.** The delegate supplies the two expressions and, optionally, the
+ * modifier, the operator, the options and a custom selector; a dictionary with a left expression and a right one, or a
+ * left and a custom selector, is a comparison predicate. Anything less contributes nothing — the alternative is a
+ * predicate with a half-filled comparison, which evaluates to something nobody asked for. */
+- (NSPredicate *)cg_predicateForParts:(NSDictionary *)parts
+{
+	NSExpression *left = [parts objectForKey:NSRuleEditorPredicateLeftExpression];
+	NSExpression *right = [parts objectForKey:NSRuleEditorPredicateRightExpression];
+	id custom = [parts objectForKey:NSRuleEditorPredicateCustomSelector];
+	NSComparisonPredicateModifier modifier = NSDirectPredicateModifier;
+	NSPredicateOperatorType type = NSEqualToPredicateOperatorType;
+	NSUInteger options = 0;
+	NSNumber *number;
+
+	if (left == nil) {
+		return nil;
+	}
+	if ((number = [parts objectForKey:NSRuleEditorPredicateComparisonModifier]) != nil) {
+		modifier = (NSComparisonPredicateModifier)[number unsignedIntegerValue];
+	}
+	if ((number = [parts objectForKey:NSRuleEditorPredicateOperatorType]) != nil) {
+		type = (NSPredicateOperatorType)[number unsignedIntegerValue];
+	}
+	if ((number = [parts objectForKey:NSRuleEditorPredicateOptions]) != nil) {
+		options = [number unsignedIntegerValue];
+	}
+	if (custom != nil) {
+		/* A SELECTOR CANNOT CROSS A DICTIONARY AS ONE, so the part is its NAME (or an NSValue holding the pointer). */
+		SEL selector = NULL;
+
+		if ([custom isKindOfClass:[NSString class]]) {
+			selector = NSSelectorFromString((NSString *)custom);
+		} else if ([custom isKindOfClass:[NSValue class]]) {
+			selector = (SEL)[(NSValue *)custom pointerValue];
+		}
+		if (selector != NULL && right != nil) {
+			/* **FOUNDATION REFUSES THE CUSTOM-SELECTOR OPERATOR, SO THIS DOOR REFUSES IT TOO** — by name, and by
+			 * contributing nothing, rather than raising out of `-predicate`. `NSComparisonPredicate`'s own refusal says
+			 * why (`-performSelector:withObject:` is not declared in this Foundation), and a predicate that silently
+			 * answered NO would be worse than a part that is not there. */
+			fprintf(stderr, "APPKIT-REFUSE: NSRuleEditor: a custom-selector criterion cannot be assembled — "
+					"Foundation's NSComparisonPredicate does not implement the custom-selector operator\n");
+			return nil;
+		}
+	}
+	if (right == nil) {
+		return nil;
+	}
+	return [NSComparisonPredicate predicateWithLeftExpression:left
+							  rightExpression:right
+								 modifier:modifier
+								     type:type
+								  options:options];
+}
+
+/* **A ROW IS ITS CRITERIA COMBINED, AND THE COMPOUND TYPE COMES FROM THE PARTS.** The delegate says what each criterion
+ * contributes; a parts dictionary that names a compound type makes the row that compound over its criteria predicates,
+ * and a row that names none is their AND. That is the one place the compound key is read, and it is stated in the
+ * header rather than guessed at. */
+- (NSPredicate *)cg_predicateForRow:(NSInteger)row
+{
+	NSArray *criteria = [self criteriaForRow:row];
+	NSArray *values = [self displayValuesForRow:row];
+	NSMutableArray *predicates = [NSMutableArray array];
+	NSCompoundPredicateType compoundType = NSAndPredicateType;
+	BOOL sawCompound = NO;
+	NSUInteger i;
+
+	if (row < 0 || [self cg_rowAtIndex:row] == nil) {
+		return nil;
+	}
+	for (i = 0; i < [criteria count]; i++) {
+		id value = (i < [values count]) ? [values objectAtIndex:i] : nil;
+		NSDictionary *parts;
+		NSPredicate *predicate;
+		NSNumber *compound;
+
+		if (_delegate == nil ||
+		    ![_delegate respondsToSelector:@selector(ruleEditor:predicatePartsForCriterion:withDisplayValue:inRow:)]) {
+			continue;
+		}
+		parts = [_delegate ruleEditor:self
+		     predicatePartsForCriterion:[criteria objectAtIndex:i]
+			    withDisplayValue:value
+				     inRow:row];
+		if (parts == nil) {
+			continue;
+		}
+		if (!sawCompound && (compound = [parts objectForKey:NSRuleEditorPredicateCompoundType]) != nil) {
+			compoundType = (NSCompoundPredicateType)[compound unsignedIntegerValue];
+			sawCompound = YES;
+		}
+		predicate = [self cg_predicateForParts:parts];
+		if (predicate != nil) {
+			[predicates addObject:predicate];
+		}
+	}
+	if ([predicates count] == 0) {
+		return nil;
+	}
+	if ([predicates count] == 1) {
+		return [predicates objectAtIndex:0];
+	}
+	return [[[NSCompoundPredicate alloc] initWithType:compoundType subpredicates:predicates] autorelease];
+}
+
 - (id)predicate
 {
+	NSMutableArray *rows = [NSMutableArray array];
 	NSInteger count = [self numberOfRows];
 	NSInteger i;
 
+	/* EVERY ROW'S PARTS ARE ASKED FOR, which is what the door always did; the assembly is what is new. */
 	for (i = 0; i < count; i++) {
+		NSPredicate *predicate;
+
 		[self cg_askPredicatePartsForRow:i];
+		predicate = [self cg_predicateForRow:i];
+		if (predicate != nil) {
+			[rows addObject:predicate];
+		}
 	}
-	fn_refuse_window("-predicate", "NSPredicate and the expression grammar (Foundation's predicate family is not in "
-				       "this tier), so the parts were asked for and cannot be assembled");
-	return nil;
+	if ([rows count] == 0) {
+		return nil;
+	}
+	if ([rows count] == 1) {
+		return [rows objectAtIndex:0];
+	}
+	return [[[NSCompoundPredicate alloc] initWithType:NSAndPredicateType subpredicates:rows] autorelease];
 }
 
 - (void)reloadPredicate
@@ -936,9 +1068,7 @@ static CGFloat fn_baseline_in_band(NSRect band, NSFont *font)
 			(long)row, (long)[self numberOfRows] - 1];
 	}
 	[self cg_askPredicatePartsForRow:row];
-	fn_refuse_window("-predicateForRow:", "NSPredicate and the expression grammar (Foundation's predicate family "
-					      "is not in this tier), so the parts were asked for and cannot be assembled");
-	return nil;
+	return [self cg_predicateForRow:row];
 }
 
 /* ============================================================================================

@@ -29,14 +29,14 @@
  * gates the POINTER — Apple's own sentence is that users can only interact with editable rule editors, and this tier's
  * only user gesture is selecting a row.
  *
- * **THE PREDICATE DOORS REFUSE BY NAME, AND THAT IS THE DESIGN DECISION THIS SLICE OWES.** `-predicate`,
- * `-predicateForRow:` and `-reloadPredicate` are Apple's rule-editor-to-`NSPredicate` bridge, and this stack's Foundation
- * has NO predicate family (`NSPredicate`, `NSExpression`, `NSComparisonPredicate` are absent by §63.161). The two
- * getters therefore answer nil and say what is missing; `-reloadPredicate` still ASKS the delegate for its predicate
- * parts, so the optional `-ruleEditor:predicatePartsForCriterion:withDisplayValue:inRow:` door has a sender, and then
- * refuses to assemble what it cannot represent. **`NSPredicateEditor` and `NSPredicateEditorRowTemplate` stay ABSENT
- * with it**: their entire surface is predicates and expressions, so declaring them would be declaring a model this stack
- * does not have. That is recorded in `HANDOFF-6.md` §12 and in the plan, which is where the next reader will look.
+ * **THE PREDICATE DOORS ASSEMBLE, NOW THAT THE FOUNDATION HAS THE MODEL.** `-predicate`, `-predicateForRow:` and
+ * `-reloadPredicate` are Apple's rule-editor-to-`NSPredicate` bridge: the delegate answers a PARTS dictionary per
+ * criterion (the `NSRuleEditorPredicate…` keys), and the door builds an `NSComparisonPredicate` from the expressions,
+ * modifier, operator, options and custom selector it finds. A row's criteria are combined with the compound type a parts
+ * dictionary names, or with AND when none does; the editor's predicate is the AND of its rows. A parts dictionary with
+ * no left expression, or no right one and no custom selector, contributes nothing — a half-filled comparison is not a
+ * predicate. **This is the model `NSPredicateEditor` and `NSPredicateEditorRowTemplate` are built on**; the old note here
+ * said they would stay absent because the predicate family was, and `libagora-base` restored it (`d4e75ec`, `917c144`).
  *
  * **WHAT IS STORED AND NAMED AS HAVING NO READER.** The four key paths and `-rowClass` are the "rows" BINDING's
  * settings; this tier has no binding engine, so they are stored and answered and nothing reads them. `-canRemoveAllRows`
@@ -252,8 +252,8 @@ typedef NSUInteger NSRuleEditorRowType;
 
 @optional
 
-/* The pieces of the predicate this criterion contributes. ASKED by the three predicate doors before they refuse to
- * assemble; the keys are the `NSRuleEditorPredicate…` constants below. */
+/* The pieces of the predicate this criterion contributes. ASKED by `-predicate`/`-predicateForRow:` and assembled into
+ * an `NSComparisonPredicate`; the keys are the `NSRuleEditorPredicate…` constants below. */
 - (nullable NSDictionary *)ruleEditor:(NSRuleEditor *)editor
 	 predicatePartsForCriterion:(id)criterion
 		    withDisplayValue:(nullable id)value

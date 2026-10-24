@@ -113,7 +113,7 @@ NSPrintInfo.m                    6
 NSPrintOperation.m               6
 NSProgressIndicator.m            1
 NSResponder.m                    1
-NSRuleEditor.m                   3
+NSRuleEditor.m                   2
 NSTreeController.m               2
 NSRulerView.m                    3
 NSScrollView.m                   1
@@ -168,4 +168,10 @@ NSWindow.m                       23
 # array, and a model tree deeper than 512 levels (a cycle), are REFUSED at the build rather than thrown — the build runs
 # inside a KVO announcement, and an exception raised there would leave the will half's pending records open.
 
-# total: 405
+#
+# AND IT FELL BY ONE IN THE PREDICATE-EDITOR SLICE: `NSRuleEditor`'s `-predicate` and `-predicateForRow:` stopped refusing
+# when the predicate family came back (they assemble comparisons and compounds now), and ONE site was added in their
+# place — a custom-selector criterion, which Foundation's `NSComparisonPredicate` refuses to build, so the rule editor
+# refuses the part by name rather than raising out of a getter.
+
+# total: 404

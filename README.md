@@ -1285,9 +1285,31 @@ the compositor is really gone.
   announcement; and **`countKeyPath` is stored and nothing reads it**, because this Foundation's KVC has no
   `countOf`/`objectIn` synthesis, so children come from an array-valued key. **143 -> 145 of 168 classes (86%), 145 of
   145 with a surface COMPLETE, 44 of 56 protocols, 23 absent classes.** `tests/tree_controller.m` measures it in 55
+
+
+- **And the PREDICATE WORK THE RESTORED FAMILY UNBLOCKED HAS ARRIVED: `NSPredicateEditor` and
+  `NSPredicateEditorRowTemplate` — 2 of 2 and 16 of 16** (`ctest`, offscreen), with **`NSRuleEditor`'s two predicate
+  refusal sites now ASSEMBLING**. The rule editor's `-predicate`/`-predicateForRow:` build an `NSComparisonPredicate`
+  from the delegate's parts dictionary (the `NSRuleEditorPredicate…` keys: left/right expressions, modifier, operator,
+  options) — a row's criteria combine with the compound type a part names, or AND when none does, and the editor's
+  predicate is the AND of its rows; a part with no left expression, or no right one and no custom selector, contributes
+  nothing. **A custom-selector criterion is refused by name**, because Foundation's `NSComparisonPredicate` refuses the
+  custom-selector operator — the part is skipped rather than raising out of a getter. `NSPredicateEditorRowTemplate` is
+  the vocabulary of one row: left expressions, right expressions or an attribute type, modifier, operators, options and
+  compound types; `-matchForPredicate:` accepts a comparison by key path, operator, modifier and options (and a compound
+  by its type), `-predicateWithSubpredicates:` builds the row's compound, `-displayableSubpredicatesOfPredicate:` takes
+  a matching compound apart, and `-templateViews` answers the three controls (left popup, operator popup, right field)
+  that `-setPredicate:` fills in. **`+templatesWithAttributeKeyPaths:inEntityDescription:` is real and drives Core
+  Data**: the entity's attributes give each template its right-hand type and the operators that type can bear, and a key
+  path the entity does not describe is skipped. `NSPredicateEditor` is **its own delegate** (the rule editor does not
+  retain one, so it is not a cycle): the parts door answers from the row's criterion — a private dictionary of key path,
+  operator, modifier and options, with the display value as the right-hand side — which is what makes an operator other
+  than "is" survive the round trip, and `-setObjectValue:`/`-objectValue` take a predicate apart into rows and put it
+  back. **145 -> 147 of 168 classes (88%), 147 of 147 with a surface COMPLETE, 44 of 56 protocols, 21 absent classes**,
+  and the refusal census FELL for the first time in this arc, 405 -> 404. `tests/predicate_editor.m` measures it in 41
   checks.
 
-- **`ctest`: 180 of 180 passed** (the keyboard and the seam, the AppKit and its input path, the controls and their
+- **`ctest`: 181 of 181 passed** (the keyboard and the seam, the AppKit and its input path, the controls and their
   metrics, the field control and its cell and its bezel and its placeholder and what it may hold, the text path and its
   word granularity and the multi-line view and its wrapping and its scrolling and its READING OF THE STORE, the STORE
   the rich-text slice is built on and the REGION it is laid out in and the WEB that ties the three together and the
@@ -1312,7 +1334,8 @@ the compositor is really gone.
   its selection into it, the arranged-to-content translation and its five policy flags, and the defaults
   controller's values proxy, its three-level read and its pending store, and the dictionary controller's pairs,
   its visible-key rules and the identity of its rows, and the tree controller's paths, its node graph and the
-  model mutations behind it).
+  model mutations behind it, and the predicate editor's templates, the rule editor's assembly and the predicate
+  round trip).
 - **And the desktop's own text is SUB-PIXEL ANTIALIASED**, which is the AppKit's half of a renderer change in
   CoreGraphics: a window's surface is OPAQUE (`kCGImageAlphaNoneSkipFirst`), and the destination's opacity is
   exactly what decides whether a glyph is rasterised in colour. MEASURED on the live session: the window title's

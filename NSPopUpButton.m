@@ -28,6 +28,15 @@
 }
 
 
+/* **THE ORDINARY DOOR MAKES A POP-UP, NOT A PUSH BUTTON.** `-initWithFrame:pullsDown:` is the designated initialiser,
+ * but `-initWithFrame:` is inherited from `NSControl` and would leave the plain button cell a button installs — an
+ * `NSPopUpButton` whose `-addItemsWithTitles:` reaches a cell that has never heard of a menu. Every caller that writes
+ * the ordinary initialiser gets this door, so it chains to the designated one. */
+- (instancetype)initWithFrame:(NSRect)frameRect
+{
+	return [self initWithFrame:frameRect pullsDown:NO];
+}
+
 - (instancetype)initWithFrame:(NSRect)frameRect pullsDown:(BOOL)pullDown
 {
 	self = [super initWithFrame:frameRect];
