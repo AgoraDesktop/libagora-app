@@ -6,11 +6,11 @@ still the long form of everything up to §12 (the rule editor); §1–§7 of tha
 traps are still the ones these sessions used most. **THIS FILE'S §2 NUMBERS SUPERSEDE EVERY EARLIER HANDOFF'S.***
 
 *State at this handover: **eleven slice commits** since the sixth handoff — four in `libagora-base`, seven here — tree
-clean, **181 tests passing in about 98 s**, `api-ledger check` holding **391 metrics** — **147 of 168 classes (88%),
-4827 of 4827 selectors (100%), 44 of 56 protocols (78%), 86 of 86 functions**, 5406 methods declared with 8 having no
-body, **all 147 classes with a surface at COMPLETE coverage** — refusal census **404** (DOWN by one, the first fall in
-this arc), owed census **21**. **The 21 absent classes and the 12 absent protocols are the remaining surface; the 100%
-on selectors is 100% of the classes this tree HAS, not of the 10.6 AppKit.** The probes holding the substrate and its clients:
+clean, **183 tests passing in about 99 s**, `api-ledger check` holding **391 metrics** — **148 of 168 classes (88%),
+4836 of 4836 selectors (100%), 49 of 56 protocols (88%), 86 of 86 functions**, 5408 methods declared with **0** having
+no body, **all 148 classes with a surface at COMPLETE coverage** — refusal census **404**, owed census **23**. **The 20
+absent classes and the 7 absent protocols are the remaining surface; the 100% on selectors is 100% of the classes this
+tree HAS, not of the 10.6 AppKit.** The probes holding the substrate and its clients:
 `libagora-base/tests/kvo_automatic.m` (34 checks), `libagora-base/tests/kvo_tomany.m` (37),
 `libagora-base/tests/user_defaults_kvo.m` (25), `libagora-app/tests/binding_base.m` (26),
 `libagora-app/tests/controller_base.m` (77), `libagora-app/tests/array_controller.m` (77),
@@ -260,15 +260,17 @@ projection; `NSTreeController` + `NSTreeNode` the tree and its paths. What is le
   answered and wait for the controls/controllers that act on them; the header says which.
 * **`NSKeyValueBinding` IS APPKIT'S FILE**, and its three markers are initialised by a constructor so the first caller
   sees them. The constants' values are their own names.
-* **THE NUMBERS AND THE GATES.** 147 of 168 classes (88%), 4827 of 4827 selectors, 44 of 56 protocols, 86 of 86
-  functions, 5406 methods declared (8 without a body), 391 metrics, refusal 404, owed 21, 181 tests in this repository
+* **THE NUMBERS AND THE GATES.** 148 of 168 classes (88%), 4836 of 4836 selectors, 49 of 56 protocols, 86 of 86
+  functions, 5408 methods declared (0 without a body), 391 metrics, refusal 404, owed 23, 183 tests in this repository
   (~97 s), **12 committed base suites** (the Foundation's own count, corrected here — this bullet said 8 for three
   slices), 14 workspace tests, the workspace suite passing against the installed library. `ctest --test-dir build -j4`
   is the gate; the exit status is the witness.
-* **THE ABSENT SURFACE.** 21 classes, 12 protocols: **all of them the plan's §A11 refusals** — OpenGL (the context, pixel
-  format, view, layer and buffer), QuickDraw, the movies, the three typesetters, speech, sound, the input-manager era,
-  the Dock tile, the Help Viewer, `NSTouch`, and `NSFileWrapper` (Foundation's here). Nothing on the list is a
-  controller, an editor or a view this tier promised and did not build.
+* **THE ABSENT SURFACE.** 20 classes and 7 protocols. The classes are the plan's §A11 subsystems — OpenGL (the context,
+  pixel format, view, layer and buffer), QuickDraw, the movies, the three typesetters, speech, sound, the input-manager
+  era, `NSTouch`, and `NSFileWrapper` (Foundation's here). The protocols are `NSSoundDelegate`, the two speech delegates,
+  `NSGlyphStorage` and the two input-server era protocols — six with absent subsystems — plus `NSUserInterfaceItemSearching`,
+  DEFERRED with the Help system until a web engine exists (§16). Nothing on either list is a controller, an editor or a
+  view this tier promised and did not build.
 
 ---
 
@@ -650,7 +652,7 @@ protocol" or "another engine" rather than "another class".
 
 ## 17. The ledgers go green: 8 informal doors become protocols, and 5 protocols arrive
 
-**Commit `PLACEHOLDER_SLICE`, with this section in the commit after it.** The two things that were wrong in a way that
+**Commit `5ffd98e`, with this section in the commit after it.** The two things that were wrong in a way that
 was cheap to right, from the question "is all AppKit work done, deferred or refused?" — and the answer is now yes for
 every door that EXISTS.
 
