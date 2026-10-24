@@ -237,6 +237,30 @@ int main(void)
 		}
 
 		/* ============================================================================================
+		 * 5b. **THE MODIFIERS ARE ON THE EVENT, WHICH IS WHAT MAKES SHIFT-SCROLL THE APPLICATION'S DECISION.**
+		 *     The protocol keeps modifier state on the KEYBOARD, so a wheel event carries none of its own — the
+		 *     seam adds the current state, and without it an application has nothing to test: "Shift plus a wheel
+		 *     is a horizontal scroll" is a rule a client applies, and it can only apply it if the flags arrive.
+		 * ============================================================================================ */
+		{
+			AGEvent shifted = axis_event(AGAxisVertical, 15.0, AGAxisSourceWheel, 1, 120, 100,
+						     seam_y(window, 300.0));
+			NSEvent *built;
+
+			shifted.modifiers = AGModifierShift;
+			[window cg_handleSeamEvent:&shifted];
+			built = [application nextEventMatchingMask:NSScrollWheelMask
+							 untilDate:[NSDate dateWithTimeIntervalSinceNow:0.5]
+							    inMode:nil
+							   dequeue:YES];
+			check(built != nil, "a shifted scroll arrives as a scroll event");
+			check(built != nil && ([built modifierFlags] & NSShiftKeyMask) != 0,
+			      "AND CARRIES THE SHIFT FLAG, so an application can turn it into a horizontal scroll");
+			check(built != nil && ([built modifierFlags] & NSCommandKeyMask) == 0,
+			      "and only the flags that were down");
+		}
+
+		/* ============================================================================================
 		 * 6. AND A WHEEL IS NOT A PRESS: no activation, no key window, no raise.
 		 * ============================================================================================ */
 		{
