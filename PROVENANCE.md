@@ -1873,6 +1873,42 @@ into the arrangement with markers and the proxy's agreement rule, each policy fl
 appending and anchored insertions (including the repeated-object case), both arranged-removal doors, the attach/select
 doors, and a target bound to `arrangedObjects` receiving the re-arranged array.
 
+## 63. `NSUserDefaultsController`: a proxy with no storage, and a read with three fallbacks
+
+**THE STORE HAS NO PROPERTIES, SO THE CONTROLLER GIVES IT ONE.** `-values` answers a proxy whose KVC doors call the
+controller's own chain; the proxy holds NOTHING, because a proxy with its own copy of the settings would be a second
+source of truth and the first bug would be a stale one. A read walks three levels — the controller's UNAPPLIED writes,
+then the store, then `initialValues` — and `NSNull` in the pending dictionary means "remove this key", so a held removal
+does not fall through to the store's old value but past it to the fallback. `-valueForKey:`/`-setValue:forKey:` answer
+the `values.<key>` spelling directly, because this binding layer hands one string over; `-valueForKeyPath:` reaches the
+same chain through the proxy, since KVC splits a path and recurses.
+
+**THE OBSERVATION GOES TO THE STORE, AND THAT IS NOT A SHORTCUT.** The alternative — keeping the registration on the
+controller and relaying — cannot produce a correct OLD value: the relay runs after the store has already changed, so its
+`will` would read the new value. Registering on the store (which announces its keys, thanks to the `libagora-base` row
+this slice was built for) gives correct Old and New, at the price the header states: the change dictionary's object is
+the store and its path is the bare key rather than the controller and `values.<key>`. A binding reads New and is
+indifferent to both; anything that cares about the object is told.
+
+**THE POLICY IS WHERE THE WRITE LANDS, AND EACH MODE HAS ONE ANNOUNCER.** With `appliesImmediately` YES the store
+announces, which is why a write through the controller delivers exactly one change. With NO the store has not changed,
+so the only thing that moves is `-hasUnappliedChanges`, and it is announced when it CROSSES rather than on every held
+write; `-save:` then produces the store's notifications one key at a time. Turning the flag back ON flushes what was
+held — otherwise the pending store would be stranded forever, because it is only written while the flag is NO.
+
+**TRAP: `-revertToInitialValues:` MOVES A KEY FROM THE FALLBACK INTO THE STORE, AND THE PROBE FOUND IT.** The first
+version of the test asked a key from `initialValues`, called `-revertToInitialValues:`, replaced the dictionary, and
+expected the key to be gone. It was not: the revert had WRITTEN that key into the store, where it outlives the
+dictionary — which is the correct behaviour and the reason the probe now measures the two facts separately (a key the
+store has never had disappears with the dictionary; a key the revert wrote stays, and the store's value wins over the
+fallback by the read order).
+
+`tests/user_defaults_controller.m` measures it in **43 checks**: the shared singleton, the store it speaks to, the read
+chain in all three spellings with the fallback, writes through each spelling (including a nil that removes), the
+observation registered on the store with correct Old/New and the bare key, Initial delivery, the deeper-path refusal, a
+binding to `values.<key>`, the pending store with its crossing announcement and its silence towards the values observer,
+`-save:`/`-revert:`, the flag turned back on, `-revertToInitialValues:`, and `-setInitialValues:` replacing the fallback.
+
 ## Keeping in sync
 
 The Fiwix AppKit is the origin and this repository has now diverged from it in the seam. A fix made there

@@ -1233,7 +1233,25 @@ the compositor is really gone.
   uses instead. **141 of 168 classes (84%), 141 of 141 with a surface COMPLETE, 44 of 56 protocols, 27 absent classes.**
   `tests/array_controller.m` measures it in 76 checks.
 
-- **`ctest`: 177 of 177 passed** (the keyboard and the seam, the AppKit and its input path, the controls and their
+- **And the DEFAULTS CONTROLLER HAS ARRIVED: `NSUserDefaultsController` — 12 of 12** (`ctest`, offscreen). `NSController`'s
+  editing bookkeeping plus a store: `-values` is a proxy whose KVC doors are the controller's read/write chain, and a
+  read is a THREE-LEVEL fallback — the controller's unapplied writes, then the store, then `initialValues` — while
+  `-valueForKey:@"values.<key>"` and `-valueForKeyPath:@"values.<key>"` reach the same chain from the spellings a binding
+  layer has. `appliesImmediately` YES (the default) hands a write to `NSUserDefaults` at once; NO holds it in the
+  controller's pending dictionary, where a read sees it before it is committed, `-hasUnappliedChanges` answers YES (and
+  is announced when it CROSSES, not on every held write), `-save:` flushes the pending keys through the store one write
+  at a time, `-revert:` discards them, and turning the flag back ON applies what was held rather than stranding it.
+  `-revertToInitialValues:` writes the initial dictionary into the store, which is what makes a Reset button a store
+  write rather than private state. **The observation boundary is stated, because this Foundation's KVO does not
+  decompose key paths**: a `values.<key>` observation is registered on the STORE with the bare key, so the change
+  dictionary's object is the store and its path is the bare key (its Old and New are right, which is what a binding
+  reads); a pending write does not notify a `values.` observer, because the store has not changed; and a path deeper
+  than one segment under `values.` is refused by name rather than silently never firing. `+sharedUserDefaultsController`
+  is the process-wide one over `+standardUserDefaults`. `NSUserDefaults` itself announces its keys now (a
+  `libagora-base` row), and that is what makes the whole thing observable. **142 of 168 classes (85%), 142 of 142 with a
+  surface COMPLETE, 44 of 56 protocols, 26 absent classes.** `tests/user_defaults_controller.m` measures it in 43 checks.
+
+- **`ctest`: 178 of 178 passed** (the keyboard and the seam, the AppKit and its input path, the controls and their
   metrics, the field control and its cell and its bezel and its placeholder and what it may hold, the text path and its
   word granularity and the multi-line view and its wrapping and its scrolling and its READING OF THE STORE, the STORE
   the rich-text slice is built on and the REGION it is laid out in and the WEB that ties the three together and the
@@ -1255,7 +1273,8 @@ the compositor is really gone.
   adoption on removal and predicate refusals, and the binding layer's markers, observe-and-write, options, placeholders
   and NSEditor defaults, the controller's editor list and its commit walk, its content and selection proxy and the
   dependent-key announcements, and the Core Data doors' empty values, and the array controller's arrangement,
-  its selection into it, the arranged-to-content translation and its five policy flags).
+  its selection into it, the arranged-to-content translation and its five policy flags, and the defaults
+  controller's values proxy, its three-level read and its pending store).
 - **And the desktop's own text is SUB-PIXEL ANTIALIASED**, which is the AppKit's half of a renderer change in
   CoreGraphics: a window's surface is OPAQUE (`kCGImageAlphaNoneSkipFirst`), and the destination's opacity is
   exactly what decides whether a glyph is rasterised in colour. MEASURED on the live session: the window title's

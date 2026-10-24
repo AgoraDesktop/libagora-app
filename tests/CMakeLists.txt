@@ -1684,6 +1684,16 @@ target_link_libraries(array_controller PRIVATE App m)
 add_test(NAME appkit-array-controller COMMAND array_controller)
 set_tests_properties(appkit-array-controller PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
 
+# **THE DEFAULTS CONTROLLER: THE `values` PROXY, THE THREE-LEVEL READ, AND THE PENDING STORE.** The chain is asked in
+# all three spellings a caller has (the proxy, the `values.` key, the `values.` key path); the policy half is measured
+# by WHERE the value landed and by the two announcements that describe it — the store's own for a committed write and
+# `hasUnappliedChanges` for a held one. The observation boundary is pinned too: a `values.<key>` registration lives on
+# the store, so the change's object is the store and its path is the bare key.
+add_executable(user_defaults_controller user_defaults_controller.m)
+target_link_libraries(user_defaults_controller PRIVATE App m)
+add_test(NAME appkit-user-defaults-controller COMMAND user_defaults_controller)
+set_tests_properties(appkit-user-defaults-controller PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
+
 # **AND THE CLIENT HALF OF HIDPI, WHICH NEEDS BOTH HALVES OF THE STACK IN ONE TEST.** The compositor runs at `--scale 2`
 # and an AppKit window draws a shape at a known POINT; the checker measures where it landed in DEVICE pixels. A client
 # that ignored the scale would draw it half the size, half the distance from the corner — the whole UI shrunk.
