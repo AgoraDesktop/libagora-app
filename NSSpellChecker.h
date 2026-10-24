@@ -174,6 +174,19 @@ NS_ASSUME_NONNULL_BEGIN
 			    inView:(nullable NSView *)view;
 
 @end
+/* **THE TWO VERBS A SPELLING PANEL SENDS, WHICH ARE THE RECEIVER'S PROTOCOLS RATHER THAN THE PANEL'S.** `NSChangeSpelling`
+ * and `NSIgnoreMisspelledWords` have one method each: the receiver — `NSTextView` in Apple's world — is asked to take a
+ * correction or to stop marking a word. This tier has the checker and no spelling PANEL, so nothing sends them yet; the
+ * protocols are declared because a ported receiver conforms to them. When the panel lands, its two buttons are the
+ * senders and the header at that site says so.
+ */
+@protocol NSChangeSpelling <NSObject>
+- (void)changeSpelling:(nullable id)sender;
+@end
+
+@protocol NSIgnoreMisspelledWords <NSObject>
+- (void)ignoreSpelling:(nullable id)sender;
+@end
 
 NS_ASSUME_NONNULL_END
 

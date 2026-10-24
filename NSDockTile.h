@@ -37,6 +37,7 @@ NS_ASSUME_NONNULL_BEGIN
 
 @class NSApplication;
 @class NSDictionary;
+@class NSMenu;
 @class NSString;
 @class NSView;
 
@@ -74,6 +75,18 @@ NS_ASSUME_NONNULL_BEGIN
 /* **THE DOCK'S HALF: WHAT THE RUNNING APPLICATIONS HAVE PUBLISHED.** Keyed by bundle identifier; an application with no
  * badge is absent, and an empty answer (no compositor, or nothing published) is an empty dictionary, not nil. */
 + (NSDictionary *)badgeLabelsByApplicationIdentifier;
+
+@end
+/* **`NSDockTilePlugIn`: WHAT A PLUG-IN BUNDLE ANSWERS WHEN THE DOCK ADOPTS ITS TILE.** A Dock plug-in is a separate
+ * bundle — a principal class the Dock loads and hands an `NSDockTile` to, so a third party can draw a tile the
+ * application itself does not. **This tier does not load plug-in bundles** (there is no plug-in registry), so the
+ * protocol is declared for a ported plug-in's own conformance and nothing in this tree adopts it. `-setDockTile:` is the
+ * required door; `-dockMenu` is the optional one, and a plug-in's menu is the same round trip `NSDockMenu` already makes.
+ */
+@protocol NSDockTilePlugIn <NSObject>
+- (void)setDockTile:(nullable NSDockTile *)dockTile;
+@optional
+- (nullable NSMenu *)dockMenu;
 
 @end
 

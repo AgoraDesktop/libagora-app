@@ -1320,6 +1320,23 @@ the compositor is really gone.
   applications published, keyed by bundle identifier, because Agora's Dock is a program of its own and Apple's is
   private. **`-contentView` is stored and answered and NOT drawn** — compositing a view inside the Dock's tile needs the
   Dock to ask this process to render, a second protocol — and `-size` answers this tier's 48-point tile metric. **147 ->
+
+- **And THE LEDGERS ARE GREEN: 8 declared doors became 0, and 5 protocols arrived** (`ctest`, offscreen). The eight were
+  `NSObject` **informal-protocol categories** — three control-text notifications in `NSControl.h`, the four 10.2
+  path-based save-panel hooks in `NSSavePanel.h`, and `-validateToolbarItem:` in `NSToolbarItem.h` — and a category is a
+  declaration on a CLASS, so the census counted eight doors this tree declares and never implements. They live in their
+  protocols now (`NSControlTextEditingDelegate`, `NSOpenSavePanelDelegate`, and a formal `NSToolbarItemValidation`), which
+  is where the era's headers put them: a protocol is a promise about ADOPTERS, so `-respondsToSelector:` is unchanged —
+  and giving them `NSObject` bodies would have been the one wrong fix, because `NSToolbarItem` asks that question to
+  decide whether a target validates at all. **`methods-declared-not-implemented` is now 0**, and the phantom metric is
+  gone. Five of the six absent protocols are declared where Apple declares them — `NSTextViewDelegate` (the edit veto,
+  the command hook, the link click, the selection and completion pairs), `NSChangeSpelling` and
+  `NSIgnoreMisspelledWords` (the spelling panel's two verbs), `NSAnimatablePropertyContainer` (the `-animator` proxy,
+  deliberately not adopted — this tree has no Core Animation, which `NSAnimation.h` already says), and `NSDockTilePlugIn`
+  (a plug-in bundle this tier does not load) — each with the sentence that says who would send it.
+  **`NSUserInterfaceItemSearching` is DEFERRED WITH THE HELP SYSTEM**, because it is the Help menu's search provider and
+  help waits for a web engine. **44 -> 49 of 56 protocols (88%), 148 of 168 classes, 4836 of 4836 selectors, 0
+  declared-not-implemented, refusal 404, owed 23.**
   148 of 168 classes (88%), 148 of 148 with a surface COMPLETE, 44 of 56 protocols, 20 absent classes**; owed census
   21 -> 23 for the two stated boundaries. `tests/dock_tile.m` measures it in 12 checks.
 

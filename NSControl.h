@@ -213,11 +213,12 @@ NS_ASSUME_NONNULL_BEGIN
  * value; the field editor travels in the `userInfo` under the key below, because it is a DIFFERENT object from the
  * control and a listener that wants to reach the editor (to ask its selection, or to read what is half-typed) has no
  * other way to it. */
-@interface NSObject (NSControlSubclassNotifications)
-- (void)controlTextDidBeginEditing:(NSNotification *)obj;
-- (void)controlTextDidEndEditing:(NSNotification *)obj;
-- (void)controlTextDidChange:(NSNotification *)obj;
-@end
+/* **THE NOTIFICATION TRIO IS THE DELEGATE'S, NOT `NSObject`'S, AND THAT IS A LEDGER FIX RATHER THAN A MOVE.** These three
+ * were declared in an `NSObject` category — the era's INFORMAL protocol — and a category is a declaration on a CLASS, so
+ * the census counted three doors this tree declares and never implements. They belong in
+ * `NSControlTextEditingDelegate`, which is where Apple's 10.6 header puts them, and a protocol is a promise about
+ * ADOPTERS rather than a body on `NSObject`: nothing changes for `-respondsToSelector:`, which still answers NO for an
+ * object that has not adopted the protocol and implemented them. */
 
 /* **AND THE DELEGATE IS THE SAME THREE QUESTIONS ASKED AS METHODS, PLUS THE TWO THAT CAN REFUSE AND THE TWO THAT
  * REACH THE EDITOR'S OWN MACHINERY.** The five names below split three ways and it is worth saying which is which:
@@ -239,6 +240,9 @@ NS_ASSUME_NONNULL_BEGIN
  * one door it cares about and the control asks `-respondsToSelector:` for the rest. */
 @protocol NSControlTextEditingDelegate <NSObject>
 @optional
+- (void)controlTextDidBeginEditing:(NSNotification *)obj;
+- (void)controlTextDidEndEditing:(NSNotification *)obj;
+- (void)controlTextDidChange:(NSNotification *)obj;
 - (BOOL)control:(NSControl *)control textShouldBeginEditing:(NSText *)fieldEditor;
 - (BOOL)control:(NSControl *)control textShouldEndEditing:(NSText *)fieldEditor;
 - (BOOL)control:(NSControl *)control didFailToFormatString:(NSString *)string errorDescription:(nullable NSString *)error;

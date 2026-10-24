@@ -710,6 +710,41 @@ enum {
 - (void)toggleAutomaticTextReplacement:(nullable id)sender;
 
 @end
+/* **`NSTextViewDelegate`, THE ERA'S PROTOCOL FOR THE TEXT VIEW'S QUESTIONS.** It is `NSTextDelegate`'s successor, and the
+ * members below are the ten the 10.6 header names often enough to matter: the edit veto, the command hook, the link
+ * click, the selection and completion pairs, the tooltip, the tooltip's cell, and the dragging hook.
+ *
+ * **NOTHING SENDS THEM YET, AND THAT IS STATED RATHER THAN IMPLIED.** `NSText` owns the delegate slot and this tier sends
+ * it no message; the view's own edit path announces the change to the notification centre instead (see `NSTextView.m`).
+ * The protocol is declared here because a PORTED subclass conforms to it, and a conformance has to name a protocol that
+ * exists. When the view starts asking — the natural place is `-setString:` and `-keyDown:` — the doors are already
+ * named, and the header at that site says which ones it asks.
+ */
+@protocol NSTextAttachmentCell;
+
+@protocol NSTextViewDelegate <NSTextDelegate>
+@optional
+- (BOOL)textView:(NSTextView *)textView shouldChangeTextInRange:(NSRange)affectedCharRange
+						  replacementString:(nullable NSString *)replacementString;
+- (BOOL)textView:(NSTextView *)textView doCommandBySelector:(SEL)commandSelector;
+- (BOOL)textView:(NSTextView *)textView clickedOnLink:(id)link atIndex:(NSUInteger)charIndex;
+- (NSRange)textView:(NSTextView *)textView willChangeSelectionFromCharacterRange:(NSRange)oldSelectedCharRange
+						    toCharacterRange:(NSRange)newSelectedCharRange;
+- (void)textViewDidChangeSelection:(NSNotification *)notification;
+- (nullable NSString *)textView:(NSTextView *)textView willDisplayToolTip:(NSString *)tooltip
+							  forCharacterAtIndex:(NSUInteger)characterIndex;
+- (NSArray *)textView:(NSTextView *)textView completions:(NSArray *)words
+						    forPartialWordRange:(NSRange)charRange
+						    indexOfSelectedItem:(NSInteger *)index;
+- (NSArray *)textView:(NSTextView *)textView willChangeSelectionFromCharacterRanges:(NSArray *)oldSelectedCharRanges
+						     toCharacterRanges:(NSArray *)newSelectedCharRanges;
+- (void)textView:(NSTextView *)view draggedCell:(id <NSTextAttachmentCell>)cell
+						 inRect:(NSRect)rect event:(NSEvent *)event
+						atIndex:(NSUInteger)charIndex;
+- (BOOL)textView:(NSTextView *)textView shouldSetSpellingState:(NSInteger)value
+							range:(NSRange)affectedCharRange;
+
+@end
 
 NS_ASSUME_NONNULL_END
 

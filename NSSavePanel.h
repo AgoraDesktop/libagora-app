@@ -58,8 +58,18 @@ enum {
  * category below, because that is where Apple declares them.
  * ================================================================================================================ */
 
+/* **THE 10.2 PATH-BASED HOOKS ARE THE DELEGATE'S, AND THEY ARE DEPRECATED IN APPLE'S HEADER TOO.** They were declared in
+ * an `NSObject` category — the informal form — which made them four doors this tree declares on a class and never
+ * implements; they live in the protocol now, so an adopter is what answers them and `NSObject` promises nothing.
+ * `-panel:shouldShowFilename:` takes a PATH and is asked before `-panel:shouldEnableURL:`;
+ * `-panel:directoryDidChange:` takes the path and is asked beside the URL door. */
 @protocol NSOpenSavePanelDelegate <NSObject>
 @optional
+- (BOOL)panel:(id)sender shouldShowFilename:(NSString *)filename;
+- (void)panel:(id)sender directoryDidChange:(NSString *)path;
+- (NSComparisonResult)panel:(id)sender compareFilename:(NSString *)name1 with:(NSString *)name2
+	       caseSensitive:(BOOL)caseSensitive;
+- (BOOL)panel:(id)sender isValidFilename:(NSString *)filename;
 - (BOOL)panel:(id)sender shouldEnableURL:(NSURL *)url;
 - (BOOL)panel:(id)sender validateURL:(NSURL *)url error:(NSError * _Nullable * _Nullable)outError;
 - (void)panel:(id)sender didChangeToDirectoryURL:(NSURL *)url;
@@ -67,15 +77,6 @@ enum {
 - (void)panelSelectionDidChange:(id)sender;
 @end
 
-/* THE 10.2 INFORMAL HOOKS, declared where Apple declares them. `-panel:shouldShowFilename:` takes a PATH and is asked
- * before `-panel:shouldEnableURL:`; `-panel:directoryDidChange:` takes the path and is asked beside the URL door. */
-@interface NSObject (NSSavePanelDelegateDeprecated)
-- (BOOL)panel:(id)sender isValidFilename:(NSString *)filename;
-- (void)panel:(id)sender directoryDidChange:(NSString *)path;
-- (NSComparisonResult)panel:(id)sender compareFilename:(NSString *)name1 with:(NSString *)name2
-	       caseSensitive:(BOOL)caseSensitive;
-- (BOOL)panel:(id)sender shouldShowFilename:(NSString *)filename;
-@end
 
 @interface NSSavePanel : NSPanel
 {

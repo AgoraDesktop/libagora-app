@@ -175,6 +175,18 @@ extern NSString * const NSViewAnimationFadeOutEffect;
 - (void)setViewAnimations:(NSArray *)viewAnimations;
 
 @end
+/* **`NSAnimatablePropertyContainer`, DECLARED AND DELIBERATELY NOT ADOPTED.** Apple's protocol is the `-animator` proxy:
+ * `[view animator].frame = ...` animates the property through the layer tree. This tree has no Core Animation (the note
+ * above `NSAnimationContext` says what took its place — a stack of durations), so nothing conforms and nothing sends
+ * these; the protocol is here because a ported subclass may name it, and its three doors state what an adoption would
+ * cost: a proxy object per class, `+defaultAnimationForKey:` and `-animationForKey:` over the animation registry.
+ */
+@protocol NSAnimatablePropertyContainer <NSObject>
+- (id)animator;
++ (nullable id)defaultAnimationForKey:(NSString *)key;
+- (nullable id)animationForKey:(NSString *)key;
+
+@end
 
 NS_ASSUME_NONNULL_END
 

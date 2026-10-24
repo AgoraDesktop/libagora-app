@@ -645,3 +645,35 @@ before it was a help one. The decision is recorded here so the next reader does 
 reason is the missing engine rather than the missing class, and `NSHelpManager` is not a candidate slice until a web
 engine exists. `NSDockTile`'s content view and the deferred help are the two places where this tier's answer is "another
 protocol" or "another engine" rather than "another class".
+
+---
+
+## 17. The ledgers go green: 8 informal doors become protocols, and 5 protocols arrive
+
+**Commit `PLACEHOLDER_SLICE`, with this section in the commit after it.** The two things that were wrong in a way that
+was cheap to right, from the question "is all AppKit work done, deferred or refused?" — and the answer is now yes for
+every door that EXISTS.
+
+**EIGHT DECLARATIONS WITH NO BODY, AND THE FIX WAS WHERE THEY WERE WRITTEN.** `methods-declared-not-implemented` read 8,
+all on `NSObject`: three control-text notifications (`NSControl.h`), the four 10.2 path-based save-panel hooks
+(`NSSavePanel.h`), and `-validateToolbarItem:` (`NSToolbarItem.h`). They were the era's INFORMAL protocols as `NSObject`
+categories, and a category is a declaration on a CLASS — so the census was right to call them a contradiction. Each moved
+into its protocol (`NSControlTextEditingDelegate`, `NSOpenSavePanelDelegate`, a formal `NSToolbarItemValidation`), and
+**the fix must not be a body**: `NSToolbarItem` asks `-respondsToSelector:@selector(validateToolbarItem:)` to decide
+whether a target validates, so an `NSObject` implementation would make every target answer YES. A protocol is a promise
+about adopters, and `-respondsToSelector:` is unchanged. **8 -> 0, and the `selphantom:NSObject` metric is gone.**
+
+**FIVE PROTOCOLS ARRIVED WHERE APPLE DECLARES THEM, EACH WITH ITS SENDER NAMED.** `NSTextViewDelegate` (ten optional
+doors) in `NSTextView.h`, with the sentence that nothing sends them YET — `NSText` owns the delegate slot and sends it
+nothing — and the natural sender named for the day it lands. `NSChangeSpelling`/`NSIgnoreMisspelledWords` (the spelling
+panel's two verbs) with the absent panel as their sender. `NSAnimatablePropertyContainer` declared and deliberately NOT
+adopted, because `NSAnimation.h` already says the `animator` proxy became a stack of durations. `NSDockTilePlugIn` with
+the sentence that a plug-in bundle is not something this tier loads.
+
+**AND `NSUserInterfaceItemSearching` IS DEFERRED RATHER THAN DECLARED**, because it is the Help menu's search provider and
+help waits for a web engine (§16). A protocol whose only sender is an application that does not exist is the prose this
+tree's rules warn about.
+
+**MEASURED:** protocols 44 -> **49 of 56**, `methods-declared` 5416 -> **5408** (a protocol member is not a class
+declaration), `methods-declared-not-implemented` 8 -> **0**, classes 148, selectors 4836 (all present), refusal 404, owed
+23, tests **183**. The seven absent protocols are the six that belong to absent subsystems plus the deferred one.

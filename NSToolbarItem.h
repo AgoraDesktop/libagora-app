@@ -122,7 +122,12 @@ enum {
 /* THE INFORMAL PROTOCOL A VALIDATOR IMPLEMENTS. It is a category on NSObject rather than a protocol so that a target
  * written before the toolbar existed can answer it without declaring conformance — the shape `NSMenu.h` uses for
  * `-validateMenuItem:`. */
-@interface NSObject (NSToolbarItemValidation)
+/* **THE INFORMAL DOOR BECOMES THE FORMAL PROTOCOL, WHICH IS WHAT MODERN APPLE DECLARES.** An `NSObject` category is a
+ * declaration on a CLASS, so the census counted this door as one this tree declares and never implements — and
+ * implementing it on `NSObject` would be the one fix that is WRONG, because `NSToolbarItem` asks
+ * `-respondsToSelector:@selector(validateToolbarItem:)` and an `NSObject` body would make every target pass. A protocol
+ * is a promise about adopters, so the selector's answer is unchanged: an object that does not adopt it still says NO. */
+@protocol NSToolbarItemValidation <NSObject>
 - (BOOL)validateToolbarItem:(NSToolbarItem *)theItem;
 @end
 

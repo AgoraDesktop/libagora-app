@@ -2081,6 +2081,41 @@ lookup answering an empty dictionary rather than nil. THE TRAVEL is measured at 
 `tests/window_list.c` sets a badge on one window and asserts it arrives beside that window, and `dock`'s own drawing is
 its test.
 
+## 69. Turning the ledgers green: the informal categories become protocols
+
+**EIGHT DOORS WERE DECLARED ON A CLASS AND NEVER IMPLEMENTED, AND THE FIX WAS WHERE THEY WERE WRITTEN, NOT A BODY.** The
+census counts a declaration with no body anywhere on the chain as a contradiction — the header promises a page and
+`-respondsToSelector:` says NO. All eight were the era's INFORMAL protocols written as `NSObject` categories: three
+control-text notifications (`NSControl.h`), the four 10.2 path-based save-panel hooks (`NSSavePanel.h`), and
+`-validateToolbarItem:` (`NSToolbarItem.h`). Each belongs to a protocol — `NSControlTextEditingDelegate`,
+`NSOpenSavePanelDelegate`, and a formal `NSToolbarItemValidation` — and moving them there fixes the count without adding a
+body that would change what `-respondsToSelector:` answers.
+
+**AND THAT DIRECTION IS THE WHOLE POINT FOR ONE OF THEM.** `NSToolbarItem` decides whether a target validates by asking
+`-respondsToSelector:@selector(validateToolbarItem:)`; an `NSObject` implementation would make every target answer YES and
+silently change every toolbar in the tree. A protocol is a promise about adopters, so the selector keeps saying NO for an
+object that has not adopted it — which is why the fix is a move and not an implementation. The same reasoning holds for
+the notification trio and the panel hooks: AppKit asks `-respondsToSelector:` before sending them, so an `NSObject` body
+would have fired a delegate method on every object.
+
+**FIVE PROTOCOLS ARRIVED WHERE APPLE DECLARES THEM, EACH WITH ITS SENDER NAMED.** `NSTextViewDelegate` (ten optional
+doors: the edit veto, the command hook, the link click, both selection pairs, the tooltip, the completion trio and the
+spelling state) is declared in `NSTextView.h` with the sentence that nothing sends them YET — `NSText` owns the delegate
+slot and this tier sends it nothing, so the protocol exists for a ported subclass's conformance and the natural sender
+is named for the day it lands. `NSChangeSpelling`/`NSIgnoreMisspelledWords` are the spelling panel's two verbs, declared
+with the panel that is absent as their sender. `NSAnimatablePropertyContainer` is declared and deliberately NOT adopted —
+`NSAnimation.h` already says the `animator` proxy was replaced by a stack of durations. `NSDockTilePlugIn` is declared
+because a plug-in bundle is not something this tier loads, and `-setDockTile:` is where a Dock would hand a tile over.
+
+**`NSUserInterfaceItemSearching` IS DEFERRED RATHER THAN DECLARED, AND IT IS THE ONE PROTOCOL THAT DOES NOT BELONG HERE
+YET.** It is the Help menu's search-provider protocol; the Help system waits for a web engine (`HANDOFF-7` §16), and a
+protocol whose only sender is an application that does not exist would be the prose this tree's rules warn about.
+
+`methods-declared-not-implemented` went **8 -> 0**, the `selphantom:NSObject` metric disappeared (there is nothing
+phantom left to count), and the protocol count **44 -> 49 of 56**. The seven still absent are `NSSoundDelegate`, the two
+speech delegates, `NSGlyphStorage` (which the typesetter facade would adopt), the two input-server era protocols, and
+`NSUserInterfaceItemSearching` — six that go with absent subsystems and one that goes with the deferred Help system.
+
 ## Keeping in sync
 
 The Fiwix AppKit is the origin and this repository has now diverged from it in the seam. A fix made there
