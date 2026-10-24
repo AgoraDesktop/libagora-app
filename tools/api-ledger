@@ -98,8 +98,9 @@ def selector_of(head):
     return m.group(1) if m else None
 
 
-def read_method_head(text, i):
-    """`text[i]` is the `(` of the return type. Read to the depth-0 `{` or `;` and return the selector."""
+def read_method_span(text, i):
+    """`text[i]` is the `(` of the return type. Return the index of the depth-0 `{` or `;` that ends the
+    declaration — the boundary both the selector and the `FN_INFORMAL` marker are read from."""
     depth = 0
     j = i
     n = len(text)
@@ -110,9 +111,15 @@ def read_method_head(text, i):
         elif c == ')':
             depth -= 1
         elif depth == 0 and c in '{;':
-            return selector_of(text[i:j])
+            return j
         j += 1
-    return None
+    return n
+
+
+def read_method_head(text, i):
+    """`text[i]` is the `(` of the return type. Read to the depth-0 `{` or `;` and return the selector."""
+    j = read_method_span(text, i)
+    return selector_of(text[i:j])
 
 
 def next_token(text, i):
@@ -312,10 +319,21 @@ def parse_objc(text):
         body = text[m.end():end]
 
         selectors = set()
+        informal = set()
         for decl in re.finditer(r'(?m)^\s*[-+]\s*\(', body):
-            selector = read_method_head(body, decl.end() - 1)
+            start = decl.end() - 1
+            end_of_decl = read_method_span(body, start)
+            selector = selector_of(body[start:end_of_decl])
             if selector:
                 selectors.add(selector)
+                # **A DECLARATION THE CLIENT IMPLEMENTS IS NOT A BROKEN PROMISE.** An informal protocol is a
+                # category on NSObject whose members the SENDER asks `-respondsToSelector:` about; a default body
+                # would make every object appear to implement them and change the sender's behaviour. They are
+                # marked `FN_INFORMAL` in the header (an attribute that expands to nothing) and are exempt from
+                # `methods-declared-not-implemented`, which is about this tree's own promises rather than the
+                # caller's. The exemption is counted in `methods-informal` so it cannot be silent.
+                if re.search(r'\bFN_INFORMAL\b', body[start:end_of_decl]):
+                    informal.add(selector)
         selectors |= block_properties(body)
 
         if kind == 'implementation':
@@ -325,9 +343,11 @@ def parse_objc(text):
         elif kind == 'protocol':
             protocols.setdefault(name, set()).update(selectors)
         else:
-            entry = classes.setdefault(name, {'primary': False, 'super': None, 'selectors': set()})
+            entry = classes.setdefault(name, {'primary': False, 'super': None, 'selectors': set(),
+                                              'informal': set()})
             entry['primary'] = entry['primary'] or (token != '(')
             entry['selectors'] |= selectors
+            entry['informal'] |= informal
             # `skip_angle_brackets` first, because a lightweight-generic parameter clause sits BEFORE the colon.
             sup = re.match(r'\s*:\s*(\w+)', skip_angle_brackets(text[m.end():end]))
             if sup:
@@ -363,9 +383,11 @@ def parse_tree(directory):
     for path in headers:
         cls, prt, _ = parse_objc(strip_comments(open(path, errors='ignore').read()))
         for name, entry in cls.items():
-            into = classes.setdefault(name, {'primary': False, 'super': None, 'selectors': set()})
+            into = classes.setdefault(name, {'primary': False, 'super': None, 'selectors': set(),
+                                          'informal': set()})
             into['primary'] = into['primary'] or entry['primary']
             into['selectors'] |= entry['selectors']
+            into['informal'] |= entry.get('informal', set())
             if entry['super']:
                 into['super'] = entry['super']
         protocols |= set(prt)
@@ -598,18 +620,22 @@ def computed(local_dir, manifest_path, library=None, include_dirs=()):
     # the same twenty selectors repeated. A declaration lives where it is written.
     methods_declared = 0
     methods_phantom = 0
+    methods_informal = 0
     for name in classes:
         own = classes[name]['selectors']
         if not own:
             continue
+        informal = classes[name].get('informal', set())
         implemented = closure(impl_tree, name)
-        phantom = own - implemented
+        phantom = own - implemented - informal
         methods_declared += len(own)
         methods_phantom += len(phantom)
+        methods_informal += len(informal)
         if phantom:
             metrics['selphantom:' + name] = len(phantom)
     metrics['methods-declared'] = methods_declared
     metrics['methods-declared-not-implemented'] = methods_phantom
+    metrics['methods-informal'] = methods_informal
 
     for proto in sdk_protocols:
         metrics['proto:' + proto] = 1 if proto in protocols else 0
