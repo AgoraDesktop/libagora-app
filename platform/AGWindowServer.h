@@ -178,6 +178,51 @@ typedef void (*AGActivationFunction)(void *context, int active);
 
 typedef struct AGWindowServer AGWindowServer;
 
+/* ============================================================================================ *
+ * THE SELECTION, WHICH IS THE FIRST THING THIS SEAM CARRIES BETWEEN APPLICATIONS.                     *
+ *                                                                                                *
+ * The compositor owns the claim and never the data: a reader asks for a type and receives a FILE    *
+ * DESCRIPTOR that the owner writes into, so no bytes pass through the server. See                 *
+ * `window-server/CLIPBOARD-PLAN.md` for why, and `agora-shell.xml` version 7 for the wire.         *
+ *                                                                                                *
+ * **WHO CLOSES WHAT.** A descriptor handed to a handler is the handler's, in both directions: the  *
+ * owner writes and closes; the reader reads and closes. The seam never keeps one.                  *
+ * ============================================================================================ */
+enum {
+	/* Nothing is on the clipboard — the reader should paste nothing rather than an empty string it invented. */
+	AGSelectionRefusalNoOwner = 0,
+	/* An owner exists but cannot serve that type. A DIFFERENT answer from the one above, and the reason both exist. */
+	AGSelectionRefusalWrongType = 1,
+	/* The owner disappeared between the offer and the request; treat as `NoOwner`. */
+	AGSelectionRefusalOwnerGone = 2
+};
+
+typedef struct AGSelectionHandlers {
+	void *context;
+	/* The selection offers this type. Unsolicited: the compositor says so when it changes and when this client
+	 * binds, which is what lets a pasteboard answer `-types` without a round trip. */
+	void (*offer)(void *context, const char *mime_type);
+	/* There is no selection any more: the owner cleared it, was replaced, or went away. */
+	void (*lost)(void *context);
+	/* **TO THE OWNER: somebody wants this type.** Write it into `fd` and close it; the reader is already holding the
+	 * other end. */
+	void (*requested)(void *context, const char *mime_type, int fd);
+	/* **TO THE READER: here is the descriptor the owner will write into.** EOF is the end of the payload. */
+	void (*sent)(void *context, const char *mime_type, int fd);
+	/* The request produced no descriptor, and this is which of the three reasons it was. */
+	void (*refused)(void *context, const char *mime_type, uint32_t reason);
+} AGSelectionHandlers;
+
+/* Claim the selection with these types, in this order of preference. 0 on success, -1 when the compositor does not
+ * speak the selection (a server below `agora_shell` version 7). */
+int AGWindowServerSetSelection(AGWindowServer *server, const char *const *types, int count);
+void AGWindowServerClearSelection(AGWindowServer *server);
+/* Ask for one type. The answer arrives as `sent` (with a descriptor) or `refused` (with a reason), never as silence. */
+int AGWindowServerRequestSelection(AGWindowServer *server, const char *mime_type);
+/* Install the five callbacks. They are called from the dispatch, like every other handler here. */
+void AGWindowServerSetSelectionHandlers(AGWindowServer *server, const AGSelectionHandlers *handlers);
+
+
 /* Connect to the display named by $WAYLAND_DISPLAY, or the default one. NULL if there is none. **THIS MAKES A NEW,
  * INDEPENDENT CONNECTION** and the caller owns it — which is what a test or a probe wants. An application wants
  * the one below. */

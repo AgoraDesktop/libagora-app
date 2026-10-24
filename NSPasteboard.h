@@ -75,9 +75,25 @@ extern NSString *NSInkTextPboardType;
 	/* THE OWNER IS NOT RETAINED, which is Apple's contract: `-declareTypes:owner:` takes an object that is
 	 * told when the pasteboard changes, and a pasteboard that owned it would keep it alive forever. */
 	id _owner;
+	/* **AND WHAT ANOTHER APPLICATION IS OFFERING.** The general pasteboard reads the compositor's selection for
+	 * types this process has not declared itself: the offer arrives unsolicited, so `-types` answers from this cache
+	 * without a round trip, and `-dataForType:` is the only door that asks. A named or unique pasteboard is
+	 * process-local and never fills these in — `-name` is a Mac concept with application groups behind it. */
+	NSMutableArray *_remoteTypes;
+	/* The answer to a request, or how it was refused: see `NSPasteboardRemoteResult`. The poll is why this exists. */
+	int _remoteFd;
+	BOOL _remoteAnswered;
+	BOOL _remoteRefused;
+	int _remoteReason;
 }
 
 /* THE FIVE SHARED BOARDS BY NAME, and one unique to this process. */
+/* **THE GENERAL PASTEBOARD IS NOT PROCESS-LOCAL ANY MORE**, and the other names still are. `+generalPasteboard` carries
+ * a selection across applications through the compositor (see `window-server/CLIPBOARD-PLAN.md`): `-changeCount` moves
+ * when another application offers something, `-types` answers from that unsolicited offer without a round trip, and
+ * `-dataForType:` is the one door that asks — BOUNDED rather than indefinitely, because a pasteboard read that hangs a
+ * UI is worse than one that answers nil. `NSGeneralPboard` is the only name with a peer on the other side; the Mac has
+ * application groups behind the others and this tier has neither. */
 + (NSPasteboard *)generalPasteboard;
 + (nullable NSPasteboard *)pasteboardWithName:(NSString *)name;
 + (NSPasteboard *)pasteboardWithUniqueName;

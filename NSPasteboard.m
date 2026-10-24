@@ -25,6 +25,7 @@
  * file, which is what "shared" means.
  */
 #import <AppKit/NSPasteboard.h>
+#include "AGWindowServer.h"
 #import <Foundation/NSPropertyListSerialization.h>
 #import <Foundation/NSFileWrapper.h>
 #import <Foundation/NSKeyedArchiver.h>
@@ -114,6 +115,116 @@ static unsigned s_uniqueSerial;
 - (id)initWithPasteboardPropertyList:(id)propertyList ofType:(NSString *)type;
 @end
 
+/* ==================================================================================================
+ * THE OTHER APPLICATION'S HALF — see CLIPBOARD-PLAN.md in the window server.
+ *
+ * The compositor owns the claim and never the data: a request turns into a pipe whose ends go to the owner and to this
+ * process, so what arrives here is a descriptor rather than a copy the server made.
+ * ================================================================================================== */
+
+/* **ONE BOARD HOLDS THE REMOTE STATE, AND IT IS THE GENERAL ONE.** A named or unique pasteboard is this process's own
+ * namespace — the Mac has application groups behind those, and this tier has neither — so the cross-application half
+ * belongs to `+generalPasteboard` and nothing else.
+ *
+ * The seam is a single connection with single callbacks, so the board that registered them is a static: there is one
+ * general pasteboard per process, and a second one would be a second connection. */
+static NSPasteboard *s_remote_board;
+
+/* **THE CALLBACKS ARE C FUNCTIONS AND THE STATE IS AN OBJECT'S, SO THE STATE HAS PRIVATE DOORS.** An ivar is
+ * `@protected` by default — visible to this class and its subclasses, not to a plain function — and making it `@public`
+ * in the header would hand every client this pasteboard's innards to save five methods. */
+@interface NSPasteboard (AGRemote)
+- (NSData *)cg_remoteReadType:(NSString *)type;
+- (void)cg_remoteOfferType:(NSString *)type;
+- (void)cg_remoteLost;
+- (NSData *)cg_remoteDataForType:(NSString *)type;
+- (void)cg_remoteTakeFd:(int)fd;
+- (void)cg_remoteTakeRefusal:(int)reason;
+@end
+
+static void fn_remote_offer(void *context, const char *mime_type)
+{
+	NSPasteboard *board = (NSPasteboard *)context;
+	NSString *type;
+
+	if (board == nil || mime_type == NULL) {
+		return;
+	}
+	type = [NSString stringWithUTF8String:mime_type];
+	if (type != nil) {
+		[board cg_remoteOfferType:type];
+	}
+}
+
+static void fn_remote_lost(void *context)
+{
+	NSPasteboard *board = (NSPasteboard *)context;
+
+	if (board == nil) {
+		return;
+	}
+	[board cg_remoteLost];
+}
+
+/* **THE OWNER'S SIDE: WRITE, AND CLOSE.** The descriptor is the write end of a pipe whose reader is already holding the
+ * other end, so what is written here is what arrives there — no copy the seam could get wrong. */
+static void fn_remote_requested(void *context, const char *mime_type, int fd)
+{
+	NSPasteboard *board = (NSPasteboard *)context;
+	NSString *type;
+	NSData *data = nil;
+
+	if (fd < 0) {
+		return;
+	}
+	if (board == nil || mime_type == NULL) {
+		close(fd);
+		return;
+	}
+	type = [NSString stringWithUTF8String:mime_type];
+	if (type != nil) {
+		data = [board cg_remoteDataForType:type];
+	}
+	if (data != nil) {
+		const char *bytes = (const char *)[data bytes];
+		size_t length = [data length];
+		size_t written = 0;
+
+		while (written < length) {
+			ssize_t n = write(fd, bytes + written, length - written);
+
+			if (n <= 0) {
+				break;
+			}
+			written += (size_t)n;
+		}
+	}
+	close(fd);
+}
+
+static void fn_remote_sent(void *context, const char *mime_type, int fd)
+{
+	NSPasteboard *board = (NSPasteboard *)context;
+
+	(void)mime_type;
+	if (board == nil) {
+		close(fd);
+		return;
+	}
+	[board cg_remoteTakeFd:fd];
+}
+
+static void fn_remote_refused(void *context, const char *mime_type, uint32_t reason)
+{
+	NSPasteboard *board = (NSPasteboard *)context;
+
+	(void)mime_type;
+	if (board == nil) {
+		return;
+	}
+	[board cg_remoteTakeRefusal:(int)reason];
+}
+
 @implementation NSPasteboard
 
 + (NSPasteboard *)cg_boardNamed:(NSString *)name
@@ -133,7 +244,28 @@ static unsigned s_uniqueSerial;
 
 + (NSPasteboard *)generalPasteboard
 {
-	return [self cg_boardNamed:NSGeneralPboard];
+	NSPasteboard *board = [self cg_boardNamed:NSGeneralPboard];
+
+	/* **THE GENERAL BOARD IS THE ONE THAT CROSSES PROCESSES**, so it is the one that registers the seam's five
+	 * callbacks — once, because the seam is one connection with one set of them. A named or unique pasteboard stays
+	 * this process's own namespace: the Mac has application groups behind those, and this tier has neither. */
+	if (board != nil && s_remote_board == nil) {
+		AGWindowServer *server = AGWindowServerShared();
+		AGSelectionHandlers handlers;
+
+		if (server != NULL) {
+			memset(&handlers, 0, sizeof handlers);
+			handlers.context = board;
+			handlers.offer = fn_remote_offer;
+			handlers.lost = fn_remote_lost;
+			handlers.requested = fn_remote_requested;
+			handlers.sent = fn_remote_sent;
+			handlers.refused = fn_remote_refused;
+			AGWindowServerSetSelectionHandlers(server, &handlers);
+			s_remote_board = board;
+		}
+	}
+	return board;
 }
 
 + (NSPasteboard *)pasteboardWithName:(NSString *)name
@@ -156,6 +288,8 @@ static unsigned s_uniqueSerial;
 		_types = [[NSMutableArray alloc] init];
 		_data = [[NSMutableDictionary alloc] init];
 		_changeCount = 0;
+		_remoteTypes = [[NSMutableArray alloc] init];
+		_remoteFd = -1;
 		_owner = nil;
 	}
 	return self;
@@ -168,6 +302,7 @@ static unsigned s_uniqueSerial;
 
 - (void)dealloc
 {
+	[_remoteTypes release];
 	[_name release];
 	[_types release];
 	[_data release];
@@ -185,6 +320,51 @@ static unsigned s_uniqueSerial;
 	 * five named boards live as long as the process, which is the same lifetime Apple's have. */
 }
 
+/* ---- THE REMOTE STATE'S PRIVATE DOORS --------------------------------------------------------- */
+
+- (void)cg_remoteOfferType:(NSString *)type
+{
+	if (type != nil && ![_remoteTypes containsObject:type]) {
+		[_remoteTypes addObject:type];
+	}
+	/* **THE CHANGE COUNT MOVES**, because that is how a client here polls for a clipboard change — the same door it
+	 * uses for this process's own contents, which is what keeps the in-process idiom working across applications. */
+	_changeCount++;
+}
+
+- (void)cg_remoteLost
+{
+	[_remoteTypes removeAllObjects];
+	_changeCount++;
+}
+
+/* **WHAT THE OWNER WOULD SEND FOR THIS TYPE**, asked of it if it has not written it yet: `-declareTypes:owner:` names
+ * an object that is asked for a type it did not write up front, which is the older informal protocol and the one an
+ * `NSTextView` uses. */
+- (NSData *)cg_remoteDataForType:(NSString *)type
+{
+	NSData *data = (type != nil) ? [_data objectForKey:type] : nil;
+
+	if (data == nil && _owner != nil &&
+	    [_owner respondsToSelector:@selector(pasteboard:provideDataForType:)]) {
+		[_owner pasteboard:self provideDataForType:type];
+		data = [_data objectForKey:type];
+	}
+	return data;
+}
+
+- (void)cg_remoteTakeFd:(int)fd
+{
+	_remoteFd = fd;
+	_remoteAnswered = YES;
+}
+
+- (void)cg_remoteTakeRefusal:(int)reason
+{
+	_remoteRefused = YES;
+	_remoteReason = reason;
+}
+
 - (NSInteger)changeCount
 {
 	return _changeCount;
@@ -195,6 +375,10 @@ static unsigned s_uniqueSerial;
 	[_types removeAllObjects];
 	[_data removeAllObjects];
 	_owner = nil;
+	/* **AND THE OTHER APPLICATIONS ARE TOLD**, because a selection this process gave up is one they may not paste. */
+	if (self == s_remote_board) {
+		AGWindowServerClearSelection(AGWindowServerShared());
+	}
 	return ++_changeCount;
 }
 
@@ -220,13 +404,31 @@ static unsigned s_uniqueSerial;
 			[_types addObject:t];
 		}
 	}
+	/* **AND THE SELECTION IS CLAIMED WITH THEM.** The types are the offer; the data stays here and is produced when
+	 * somebody asks (`-pasteboard:provideDataForType:` or a value written with `-setData:forType:`). */
+	if (self == s_remote_board) {
+		const char *names[32];
+		int count = 0;
+		NSUInteger j;
+
+		for (j = 0; j < [_types count] && count < 32; j++) {
+			names[count++] = [[_types objectAtIndex:j] UTF8String];
+		}
+		AGWindowServerSetSelection(AGWindowServerShared(), names, count);
+	}
 	return ++_changeCount;
 }
 
 - (NSArray *)types
 {
-	/* A COPY, so that a client holding the answer is not holding the pasteboard's own array. */
-	return [[_types copy] autorelease];
+	/* **WHAT THIS PROCESS DECLARED, OR — WHEN IT DECLARED NOTHING — WHAT ANOTHER APPLICATION IS OFFERING.** The
+	 * remote list arrives unsolicited, so this answers without a round trip; only `-dataForType:` ever asks. A
+	 * pasteboard that owns types is the owner, and an owner's list is its own. */
+	if ([_types count] > 0 || _remoteTypes == nil) {
+		/* A COPY, so that a client holding the answer is not holding the pasteboard's own array. */
+		return [[_types copy] autorelease];
+	}
+	return [[_remoteTypes copy] autorelease];
 }
 
 - (NSString *)availableTypeFromArray:(NSArray *)candidates
@@ -258,9 +460,81 @@ static unsigned s_uniqueSerial;
 	return YES;
 }
 
+/* **THE ONE DOOR THAT ASKS ANOTHER APPLICATION, AND IT IS BOUNDED RATHER THAN BLOCKING.** A pasteboard read on the Mac
+ * can wait on a remote owner; this seam has no unbounded waits, so the wait here is a deadline: the request is sent, the
+ * connection is dispatched until the answer arrives or 250 ms pass, and a reader slower than that is answered `nil`
+ * rather than by hanging a UI. Callers that want the async shape take the descriptor through the private door and read
+ * it with `O_NONBLOCK`; this is the shape `NSTextView` and every existing caller already uses. */
+- (NSData *)cg_remoteReadType:(NSString *)dataType
+{
+	AGWindowServer *server = AGWindowServerShared();
+	NSMutableData *data;
+	long deadline_ms = 250;
+	char buffer[4096];
+	BOOL got;
+
+	if (server == NULL || dataType == nil || AGWindowServerRequestSelection(server, [dataType UTF8String]) != 0) {
+		return nil;
+	}
+	_remoteAnswered = NO;
+	_remoteRefused = NO;
+	_remoteFd = -1;
+	_remoteReason = -1;
+	/* DISPATCH UNTIL AN ANSWER OR THE DEADLINE. The answer is an event on the same connection every window uses, so
+	 * this pumps it rather than waiting on the descriptor alone — and the deadline is what keeps it bounded. */
+	while (!_remoteAnswered && !_remoteRefused && deadline_ms > 0) {
+		if (AGWindowServerDispatchTimeout(server, 1) < 0) {
+			break;
+		}
+		deadline_ms--;
+	}
+	got = _remoteAnswered;
+	if (!got || _remoteFd < 0) {
+		if (!_remoteAnswered && !_remoteRefused) {
+			/* **A TIMEOUT IS NOT A REFUSAL AND IS NOT AN EMPTY CLIPBOARD.** Said out loud in the diagnostic, because
+			 * "the paste came out empty" is the failure that is worst to debug by eye. */
+			if (getenv("AG_PASTEBOARD_DIAG") != NULL) {
+				fprintf(stderr, "  DIAG pasteboard: no answer for %s within the deadline\n",
+					[dataType UTF8String]);
+			}
+		} else if (_remoteRefused && getenv("AG_PASTEBOARD_DIAG") != NULL) {
+			fprintf(stderr, "  DIAG pasteboard: %s refused (reason %d)\n", [dataType UTF8String],
+				_remoteReason);
+		}
+		return nil;
+	}
+	data = [NSMutableData data];
+	for (;;) {
+		ssize_t got_bytes = read(_remoteFd, buffer, sizeof buffer);
+
+		if (got_bytes <= 0) {
+			break;
+		}
+		[data appendBytes:buffer length:(NSUInteger)got_bytes];
+	}
+	close(_remoteFd);
+	_remoteFd = -1;
+	return (NSData *)data;
+}
+
 - (NSData *)dataForType:(NSString *)dataType
 {
-	return (dataType == nil) ? nil : [_data objectForKey:dataType];
+	NSData *local;
+
+	if (dataType == nil) {
+		return nil;
+	}
+	local = [_data objectForKey:dataType];
+	if (local != nil) {
+		return local;
+	}
+	/* **THIS PROCESS'S OWN CONTENTS FIRST, THEN THE OTHER APPLICATION'S.** A pasteboard that declared types is the owner
+	 * and answers from its own store; one that declared nothing is a reader, and the only reader that has a
+	 * compositor to ask. */
+	if (self != s_remote_board || [_types count] > 0) {
+		return nil;
+	}
+	return [self cg_remoteReadType:dataType];
 }
 
 - (BOOL)setString:(NSString *)string forType:(NSString *)dataType

@@ -128,6 +128,9 @@ struct AGWindow {
 	 * for and the size the compositor places — and the buffer is `frame x scale`. Copied rather than read through
 	 * `server` so a buffer's dimensions are a fact about the window that owns it. */
 	int scale;
+	/* **THE SELECTION'S FIVE CALLBACKS AND THEIR CONTEXT**, installed by whoever wants the clipboard. Held here rather
+	 * than per-window because a selection belongs to the application, not to a surface. */
+	AGSelectionHandlers selection;
 	/* **ONE KEYBOARD TENURE AT A TIME, AND IT IS NUMBERED.** Raised on every `wl_keyboard.enter` and by nothing else,
 	 * so two events with the same number were delivered without the keyboard leaving this application in between. */
 	uint32_t focus_serial;
@@ -238,6 +241,9 @@ struct AGWindowServer {
 	 * upscales, and one that honours it renders at that resolution and asks for the buffer to be placed at the
 	 * logical size. It arrives with the output, before any window exists, so a window is created already knowing. */
 	int scale;
+	/* **THE SELECTION'S FIVE CALLBACKS AND THEIR CONTEXT**, installed by whoever wants the clipboard. Held here rather
+	 * than per-window because a selection belongs to the application, not to a surface. */
+	AGSelectionHandlers selection;
 	/* **ONE KEYBOARD TENURE AT A TIME, AND IT IS NUMBERED.** Raised on every `wl_keyboard.enter` and by nothing else,
 	 * so two events with the same number were delivered without the keyboard leaving this application in between. */
 	uint32_t focus_serial;
@@ -1952,10 +1958,80 @@ static void registry_global(void *data, struct wl_registry *registry, uint32_t n
 		 * requests matter now: `get_window_list`, `activate_window` and `close_window` arrived in 3, `set_activatable`
 		 * rides shell 4, `reopen_window` arrived in 5, and `get_dock_menu` and `dock_menu_action` arrived in 6 — and
 		 * a window made from a shell bound at 2 is a version 2 window whose `set_reserved` is the last thing it has. */
+		/* **SEVEN IS WHERE THE SELECTION IS.** Below it the shell is bound at what the compositor offers and the
+		 * clipboard doors answer -1 rather than pretending, which is the same pattern the window list uses. */
 		server->shell = wl_registry_bind(registry, name, &agora_shell_interface,
-						version < 6 ? version : 6);
+						version < 7 ? version : 7);
 	}
 }
+
+/* ==================================================================================================
+ * THE SELECTION — five events, five calls, and every descriptor handed straight on.
+ * ================================================================================================== */
+
+static void selection_offer(void *data, struct agora_shell *shell, const char *mime_type)
+{
+	AGWindowServer *server = data;
+
+	(void)shell;
+	if (server->selection.offer != NULL) {
+		server->selection.offer(server->selection.context, mime_type);
+	}
+}
+
+static void selection_lost(void *data, struct agora_shell *shell)
+{
+	AGWindowServer *server = data;
+
+	(void)shell;
+	if (server->selection.lost != NULL) {
+		server->selection.lost(server->selection.context);
+	}
+}
+
+/* **AND THE DESCRIPTOR GOES TO THE HANDLER, WHICH OWNS IT.** Closing it here would leave the owner writing into a pipe
+ * nobody is reading, and would make the handover a copy the seam had to manage. */
+static void selection_requested(void *data, struct agora_shell *shell, const char *mime_type, int32_t fd)
+{
+	AGWindowServer *server = data;
+
+	(void)shell;
+	if (server->selection.requested != NULL) {
+		server->selection.requested(server->selection.context, mime_type, (int)fd);
+		return;
+	}
+	close(fd);	/* nobody wanted it, so it is ours to close */
+}
+
+static void selection_sent(void *data, struct agora_shell *shell, const char *mime_type, int32_t fd)
+{
+	AGWindowServer *server = data;
+
+	(void)shell;
+	if (server->selection.sent != NULL) {
+		server->selection.sent(server->selection.context, mime_type, (int)fd);
+		return;
+	}
+	close(fd);
+}
+
+static void selection_refused(void *data, struct agora_shell *shell, const char *mime_type, uint32_t reason)
+{
+	AGWindowServer *server = data;
+
+	(void)shell;
+	if (server->selection.refused != NULL) {
+		server->selection.refused(server->selection.context, mime_type, reason);
+	}
+}
+
+static const struct agora_shell_listener shell_listener = {
+	selection_offer,
+	selection_lost,
+	selection_requested,
+	selection_sent,
+	selection_refused,
+};
 
 static void registry_global_remove(void *data, struct wl_registry *registry, uint32_t name)
 {
@@ -2278,6 +2354,79 @@ void AGWindowServerSetActivationHandler(AGWindowServer *server, AGActivationFunc
 	}
 	server->activation_fn = function;
 	server->activation_context = context;
+}
+
+/* ==================================================================================================
+ * THE SELECTION'S PUBLIC DOORS
+ * ================================================================================================== */
+
+void AGWindowServerSetSelectionHandlers(AGWindowServer *server, const AGSelectionHandlers *handlers)
+{
+	if (server == NULL) {
+		return;
+	}
+	/* **THE FIVE EVENTS ARE ONLY DELIVERED IF THE SHELL IS NEW ENOUGH TO SPEAK THEM**, and the listener is installed
+	 * here rather than at connect time so that a program that never touches the clipboard never hears about one —
+	 * the events are unsolicited, and a client that does not care should not pay for them. */
+	if (handlers != NULL && server->shell != NULL &&
+	    wl_proxy_get_version((struct wl_proxy *)server->shell) >= 7) {
+		server->selection = *handlers;
+		agora_shell_add_listener(server->shell, &shell_listener, server);
+	} else if (handlers == NULL) {
+		memset(&server->selection, 0, sizeof server->selection);
+	}
+}
+
+int AGWindowServerSetSelection(AGWindowServer *server, const char *const *types, int count)
+{
+	struct wl_array array;
+	int i;
+
+	if (server == NULL || server->shell == NULL || count <= 0 ||
+	    wl_proxy_get_version((struct wl_proxy *)server->shell) < 7) {
+		return -1;
+	}
+	/* **THE ARRAY IS THE STRINGS' BYTES, NOT A LIST OF POINTERS**: an `array` is opaque to Wayland, so each type is
+	 * copied with its NUL. Marshalling a `char **` sends this process's addresses, which the server cannot use and
+	 * must not trust. */
+	wl_array_init(&array);
+	for (i = 0; i < count; i++) {
+		size_t length;
+		char *slot;
+
+		if (types[i] == NULL) {
+			continue;
+		}
+		length = strlen(types[i]) + 1;
+		slot = (char *)wl_array_add(&array, length);
+		if (slot == NULL) {
+			wl_array_release(&array);
+			return -1;
+		}
+		memcpy(slot, types[i], length);
+	}
+	agora_shell_set_selection(server->shell, &array);
+	wl_array_release(&array);
+	return 0;
+}
+
+void AGWindowServerClearSelection(AGWindowServer *server)
+{
+	if (server == NULL || server->shell == NULL ||
+	    wl_proxy_get_version((struct wl_proxy *)server->shell) < 7) {
+		return;
+	}
+	agora_shell_clear_selection(server->shell);
+}
+
+int AGWindowServerRequestSelection(AGWindowServer *server, const char *mime_type)
+{
+	if (server == NULL || server->shell == NULL || mime_type == NULL ||
+	    wl_proxy_get_version((struct wl_proxy *)server->shell) < 7) {
+		return -1;
+	}
+	agora_shell_request_selection(server->shell, mime_type);
+	return 0;
 }
 
 uint32_t AGWindowServerFocusSerial(AGWindowServer *server)

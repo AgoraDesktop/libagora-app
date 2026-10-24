@@ -727,6 +727,18 @@ add_test(NAME appkit-scroll
 set_tests_properties(appkit-scroll PROPERTIES SKIP_RETURN_CODE 77
   ENVIRONMENT "${_agora_app_test_env}")
 
+# **AND THE GENERAL PASTEBOARD ACROSS A PROCESS BOUNDARY**, which is the one thing it could not do: the ordinary
+# `-declareTypes:owner:` / `-setData:forType:` / `-dataForType:` API, driven by two processes through the compositor's
+# selection (see window-server's CLIPBOARD-PLAN.md).
+add_executable(pasteboard_remote pasteboard_remote.m)
+target_link_libraries(pasteboard_remote PRIVATE App)
+
+add_test(NAME appkit-pasteboard-remote
+  COMMAND "${CMAKE_CURRENT_SOURCE_DIR}/run-pasteboard-remote.sh"
+    "${AGORA_WINDOW_SERVER_BINARY}" "$<TARGET_FILE:pasteboard_remote>")
+set_tests_properties(appkit-pasteboard-remote PROPERTIES SKIP_RETURN_CODE 77
+  ENVIRONMENT "${_agora_app_test_env}")
+
 add_executable(chrome_buttons chrome_buttons.m)
 target_link_libraries(chrome_buttons PRIVATE App)
 
