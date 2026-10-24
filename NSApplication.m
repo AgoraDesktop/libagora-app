@@ -28,7 +28,8 @@
  * the arithmetic rather than like a missing import. */
 #import "NSMenu.h"
 #import "NSMenuItem.h"
-#import "NSDockMenu.h"	/* the ids a tile's menu crosses by, and the tree they name */
+#import "NSDockMenu.h"
+#import "NSDockTile.h"	/* the ids a tile's menu crosses by, and the tree they name */
 #import "NSColor.h"
 #import "NSPrintInfo.h"
 #import "NSPageLayout.h"
@@ -323,6 +324,7 @@ BOOL NSApplicationLoad(void)
 	[_windows release];
 	[_eventQueue release];
 	[_cg_dockMenu release];
+	[_cgDockTile release];
 	[super dealloc];
 }
 
@@ -1279,8 +1281,13 @@ static double s_last_report;
 
 - (nullable id)dockTile
 {
-	/* NO `NSDockTile` IN THIS TIER AND NO DOCK TO OWN ONE, so nil is the whole answer. */
-	return nil;
+	/* **ONE TILE PER APPLICATION, MADE ON FIRST ASK.** Apple's contract: the tile belongs to the application and the
+	 * Dock draws it. This tier's Dock is a separate program, so what the tile changes travels `agora-shell` 8 (see
+	 * `NSDockTile.h`); the object itself is the application's, and `-owner` answers that. */
+	if (_cgDockTile == nil) {
+		_cgDockTile = [[NSDockTile alloc] init];
+	}
+	return _cgDockTile;
 }
 
 - (void)sendEvent:(NSEvent *)theEvent

@@ -455,6 +455,7 @@ typedef struct AGWindowInfo {
 	int level;			/* the integer level; a shell ignores menus and the bar by it */
 	int visible;
 	int active;			/* this window has the keyboard — the only "frontmost" there is */
+	char badge[64];			/* the Dock tile label the application set (agora-shell 8), empty when none */
 } AGWindowInfo;
 
 typedef void (*AGWindowListFunction)(void *context, const AGWindowInfo *windows, int count);
@@ -462,6 +463,15 @@ typedef void (*AGWindowListFunction)(void *context, const AGWindowInfo *windows,
 /* Ask to be told. Idempotent: the LAST handler wins, and a NULL handler stops the snapshots. A compositor that does
  * not speak `agora_shell` version 3 never calls it, which is the same silence every other Agora-only door has. */
 void AGWindowListSetHandler(AGWindowServer *server, AGWindowListFunction function, void *context);
+
+/* THE SNAPSHOT THE SERVER LAST SENT, without waiting for a new one. The rows are the seam's own storage and are only
+ * valid until the next dispatch; a caller copies what it needs. NULL when this compositor has no window list. */
+const AGWindowInfo *AGWindowListRows(AGWindowServer *server, int *count);
+
+/* **THE BADGE, SENT FROM ANY ONE OF THE APPLICATION'S WINDOWS.** `agora-shell` 8 carries it on the window list, and the
+ * server applies it to every window of the connection — the connection IS the application. Answers 1 when the request
+ * went out, 0 when this compositor cannot carry it (no `agora_shell`, an older one, or a window id it does not know). */
+int AGWindowSetDockBadge(AGWindowServer *server, unsigned int id, const char *label);
 
 /* **AND THE TWO THINGS A SHELL DOES TO SOMEBODY ELSE'S WINDOW.** `AGWindowActivate` is a click on a Dock tile: the
  * window is raised in its level AND takes the keyboard, which is what makes the application's own menu bar follow.

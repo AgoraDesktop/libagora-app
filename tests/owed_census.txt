@@ -28,6 +28,7 @@ NSApplication.h                      1
 NSBezierPath.h                       3
 NSButtonCell.h                       1
 NSArrayController.h                  2
+NSDockTile.h                         2
 NSCell.h                             3
 NSRunningApplication.h               2
 NSEvent.h                            1
@@ -42,4 +43,9 @@ NSSplitView.h                        1
 # (`automaticallyRearrangesObjects` and `automaticRearrangementKeyPaths`) is stored and answered with no reader, and the
 # header says so twice — once in its block, once at the door.
 
-# total: 21
+#
+# AND IT ROSE BY TWO IN THE DOCK-TILE SLICE, BOTH IN `NSDockTile.h`: `-contentView` is stored and answered and NOT
+# drawn (the Dock would have to ask this process to render into a surface of its own — a second protocol), and `-size`
+# answers this tier's fixed 48-point metric because no request carries the Dock's real one.
+
+# total: 23

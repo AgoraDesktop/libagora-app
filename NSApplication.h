@@ -241,6 +241,7 @@ typedef NSUInteger NSApplicationPresentationOptions;
 	 * may take its time and the menu must outlive the answer that described it. Replaced on every ask; see
 	 * `-cg_dockMenu`. */
 	id _cg_dockMenu;
+	id _cgDockTile;			/* RETAINED: the application's one NSDockTile, made on first ask */
 }
 
 /* THE ONE APPLICATION OBJECT. Apple's is made on first ask and lives for the process; `-run` refuses to do

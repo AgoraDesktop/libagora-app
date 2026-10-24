@@ -1727,9 +1727,27 @@ static void window_list_done(void *data, struct agora_window_list *list)
 	}
 }
 
+/* **THE BADGE ARRIVES BESIDE ITS WINDOW**, in its own event, so the row it belongs to is already in the snapshot; the id
+ * is what pairs them, and a list that predates version 2 simply never gets the event. */
+static void window_list_badge(void *data, struct agora_window_list *list, uint32_t id, const char *badge)
+{
+	AGWindowServer *server = data;
+	int i;
+
+	(void)list;
+	for (i = 0; i < server->list_count; i++) {
+		if (server->list_rows[i].id == id) {
+			snprintf(server->list_rows[i].badge, sizeof server->list_rows[i].badge, "%s",
+				 badge != NULL ? badge : "");
+			return;
+		}
+	}
+}
+
 static const struct agora_window_list_listener window_list_listener = {
 	window_list_begin,
 	window_list_window,
+	window_list_badge,
 	window_list_done,
 };
 
@@ -1755,6 +1773,53 @@ void AGWindowListSetHandler(AGWindowServer *server, AGWindowListFunction functio
 		agora_window_list_add_listener(server->window_list, &window_list_listener, server);
 	}
 	wl_display_flush(server->display);
+}
+
+const AGWindowInfo *AGWindowListRows(AGWindowServer *server, int *count)
+{
+	if (server == NULL) {
+		if (count != NULL) {
+			*count = 0;
+		}
+		return NULL;
+	}
+	if (count != NULL) {
+		*count = server->list_count;
+	}
+	return (server->list_count > 0) ? server->list_rows : NULL;
+}
+
+int AGWindowSetDockBadge(AGWindowServer *server, unsigned int id, const char *label)
+{
+	AGWindow *window;
+	const char *app_id = NULL;
+	int i;
+
+	if (server == NULL || server->shell == NULL || id == 0) {
+		return 0;
+	}
+	if (wl_proxy_get_version((struct wl_proxy *)server->shell) < 8) {
+		return 0;	/* an older compositor has no set_badge; nothing to report */
+	}
+	/* **THE ID IS THE SERVER'S, SO THE SNAPSHOT IS WHERE IT MEANS SOMETHING.** The row names the application, and the
+	 * application is what the badge belongs to; any window of it can carry the request. */
+	for (i = 0; i < server->list_count; i++) {
+		if (server->list_rows[i].id == id) {
+			app_id = server->list_rows[i].app_id;
+			break;
+		}
+	}
+	if (app_id == NULL) {
+		return 0;
+	}
+	for (window = server->windows; window != NULL; window = window->next) {
+		if (window->agora != NULL && strcmp(window->app_id, app_id) == 0 &&
+		    wl_proxy_get_version((struct wl_proxy *)window->agora) >= 8) {
+			agora_window_set_badge(window->agora, label != NULL ? label : "");
+			return 1;
+		}
+	}
+	return 0;
 }
 
 void AGWindowActivate(AGWindowServer *server, unsigned int id)

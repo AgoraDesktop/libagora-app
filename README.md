@@ -1309,7 +1309,21 @@ the compositor is really gone.
   and the refusal census FELL for the first time in this arc, 405 -> 404. `tests/predicate_editor.m` measures it in 41
   checks.
 
-- **`ctest`: 182 of 182 passed** (the keyboard and the seam, the AppKit and its input path, the controls and their
+- **And DESKTOP INTEGRATION HAS BEGUN: `NSDockTile` — 9 of 9** (`ctest`, offscreen), with **`agora-shell` version 8**
+  carrying the badge. `NSApplication -dockTile` now answers one real tile per application instead of nil, and setting
+  its `-badgeLabel` PUSHES the label: `agora_window.set_badge` (since 8) is a request on any one of the application's
+  windows, the server applies it to every window of the connection (the connection IS the application), and the Dock
+  reads it out of the window list it already takes as **`agora_window_list.badge`** — its own event rather than another
+  argument on `window`, because an older listener must not be handed a wire it cannot parse. `-showsApplicationBadge`
+  hides rather than forgets, `-display` re-sends (a badge set before the first window has nowhere to live until there
+  is one), and **the Dock's half is a class method**: `+badgeLabelsByApplicationIdentifier` answers what the running
+  applications published, keyed by bundle identifier, because Agora's Dock is a program of its own and Apple's is
+  private. **`-contentView` is stored and answered and NOT drawn** — compositing a view inside the Dock's tile needs the
+  Dock to ask this process to render, a second protocol — and `-size` answers this tier's 48-point tile metric. **147 ->
+  148 of 168 classes (88%), 148 of 148 with a surface COMPLETE, 44 of 56 protocols, 20 absent classes**; owed census
+  21 -> 23 for the two stated boundaries. `tests/dock_tile.m` measures it in 12 checks.
+
+- **`ctest`: 183 of 183 passed** (the keyboard and the seam, the AppKit and its input path, the controls and their
   metrics, the field control and its cell and its bezel and its placeholder and what it may hold, the text path and its
   word granularity and the multi-line view and its wrapping and its scrolling and its READING OF THE STORE, the STORE
   the rich-text slice is built on and the REGION it is laid out in and the WEB that ties the three together and the
@@ -1335,7 +1349,8 @@ the compositor is really gone.
   controller's values proxy, its three-level read and its pending store, and the dictionary controller's pairs,
   its visible-key rules and the identity of its rows, and the tree controller's paths, its node graph and the
   model mutations behind it, and the predicate editor's templates, the rule editor's assembly and the predicate
-  round trip, and the two validation doors' cross-image selector comparison).
+  round trip, the two validation doors' cross-image selector comparison, and the dock tile's badge, its owner
+  and the Dock's lookup).
 - **And the desktop's own text is SUB-PIXEL ANTIALIASED**, which is the AppKit's half of a renderer change in
   CoreGraphics: a window's surface is OPAQUE (`kCGImageAlphaNoneSkipFirst`), and the destination's opacity is
   exactly what decides whether a glyph is rasterised in colour. MEASURED on the live session: the window title's

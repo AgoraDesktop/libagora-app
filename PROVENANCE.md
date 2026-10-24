@@ -2047,6 +2047,40 @@ two document checks fail and nothing else changes, so the probe is not passing f
 `HANDOFF-7` §9 found this while measuring the first controller's own validation, and left it recorded rather than fixed
 in a controller slice; this is the commit that owed it.
 
+## 68. `NSDockTile`: a badge that is pushed, and a Dock that reads it in the list it already takes
+
+**THE BADGE IS THE APPLICATION'S ANSWER, SO IT IS PUSHED RATHER THAN ASKED FOR.** Apple's Dock draws a tile the
+application owns; Agora's Dock is a separate program, and a "tell me your badge" question per tile per refresh would
+spend a round trip to learn "nothing" from every application that has no badge — the ordinary case. So `agora-shell` 8
+adds `agora_window.set_badge`: the application sends the label, the server keeps it on every window of the CONNECTION
+(the connection is the application, and a per-window store is the only application state this server has), and the Dock
+reads it out of the window list it already takes.
+
+**THE BADGE IS ITS OWN EVENT, AND THAT IS THE COMPATIBILITY RULE RATHER THAN A STYLE CHOICE.** Appending an argument to
+an existing `window` event is the one change a versioned protocol cannot absorb: a client bound at version 1 would
+parse the old opcode with the new wire and read the wrong bytes. `agora_window_list.badge` is `since 2`, sent beside the
+window it belongs to and only to a list resource whose version is at least 2, so an older Dock is never handed it. The
+global moved to 8 and `agora_window` to 8 for the new request.
+
+**THE SEAM GAINED TWO THINGS AND NO NEW MODEL.** `AGWindowInfo` carries the badge (the window list already had a record
+per window), `AGWindowSetDockBadge` takes ANY of the application's window ids and resolves the application through the
+snapshot's `app_id`, and `AGWindowListRows` hands the cached snapshot to the one caller that needs to read it without
+waiting — the Dock's lookup. `NSDockTile` itself is thin: one object per application (`-owner` names it), a copied
+label, the `-showsApplicationBadge` flag (hiding hides, it does not forget), `-display` as the re-send door for a badge
+set before the first window existed, and the Dock's half as `+badgeLabelsByApplicationIdentifier`.
+
+**TWO BOUNDARIES ARE STATED AT THE DOOR AND COUNTED.** `-contentView` is stored and answered and NOT drawn: a view
+belongs to this process, and compositing it inside the Dock's tile needs the Dock to ask the application to render into
+a surface of the Dock's own — a second protocol, which is exactly what Apple's private Dock does. `-size` answers this
+tier's fixed 48-point tile metric because no request carries the Dock's real one. The owed census rose by two for those
+sentences rather than leaving them to be discovered.
+
+`tests/dock_tile.m` measures the application's half in **12 checks**: one tile per application, its owner, the label,
+the hide-and-show flag, the content view round trip, `-display` with no compositor, the 48-point size, and the Dock's
+lookup answering an empty dictionary rather than nil. THE TRAVEL is measured at its two own ends — the window server's
+`tests/window_list.c` sets a badge on one window and asserts it arrives beside that window, and `dock`'s own drawing is
+its test.
+
 ## Keeping in sync
 
 The Fiwix AppKit is the origin and this repository has now diverged from it in the seam. A fix made there

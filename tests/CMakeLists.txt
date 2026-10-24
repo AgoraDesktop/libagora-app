@@ -1732,6 +1732,14 @@ target_link_libraries(validation_selectors PRIVATE App m)
 add_test(NAME appkit-validation-selectors COMMAND validation_selectors)
 set_tests_properties(appkit-validation-selectors PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
 
+# **THE DOCK TILE: one object per application, a badge that is kept and pushed, and the Dock's lookup.** With no
+# compositor there is nowhere for the label to go, so this measures the APPLICATION's contract; the travel is the window
+# server's `window_list` probe (a badge arrives beside its window) and `dock`'s own drawing.
+add_executable(dock_tile dock_tile.m)
+target_link_libraries(dock_tile PRIVATE App m)
+add_test(NAME appkit-dock-tile COMMAND dock_tile)
+set_tests_properties(appkit-dock-tile PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
+
 # **AND THE CLIENT HALF OF HIDPI, WHICH NEEDS BOTH HALVES OF THE STACK IN ONE TEST.** The compositor runs at `--scale 2`
 # and an AppKit window draws a shape at a known POINT; the checker measures where it landed in DEVICE pixels. A client
 # that ignored the scale would draw it half the size, half the distance from the corner — the whole UI shrunk.
