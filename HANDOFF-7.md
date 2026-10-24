@@ -5,15 +5,16 @@ stopped — the substrate first, in `libagora-base`, and then the binding layer 
 still the long form of everything up to §12 (the rule editor); §1–§7 of that file remain worth reading, and its §4
 traps are still the ones these sessions used most. **THIS FILE'S §2 NUMBERS SUPERSEDE EVERY EARLIER HANDOFF'S.***
 
-*State at this handover: **six slice commits** since the sixth handoff — three in `libagora-base`, three here — tree
-clean, **177 tests passing in about 96 s**, `api-ledger check` holding **385 metrics** — **141 of 168 classes (84%),
-4729 of 4729 selectors (100%), 44 of 56 protocols (78%), 86 of 86 functions**, 5303 methods declared with 8 having no
-body, **all 141 classes with a surface at COMPLETE coverage** — refusal census **403**, owed census **21**. **The 27
+*State at this handover: **eight slice commits** since the sixth handoff — four in `libagora-base`, four here — tree
+clean, **178 tests passing in about 97 s**, `api-ledger check` holding **386 metrics** — **142 of 168 classes (85%),
+4741 of 4741 selectors (100%), 44 of 56 protocols (78%), 86 of 86 functions**, 5315 methods declared with 8 having no
+body, **all 142 classes with a surface at COMPLETE coverage** — refusal census **403**, owed census **21**. **The 26
 absent classes and the 12 absent protocols are the remaining surface; the 100% on selectors is 100% of the classes this
-tree HAS, not of the 10.6 AppKit.** The probes holding the substrate and its clients: `libagora-base/tests/kvo_automatic.m` (34
-checks), `libagora-base/tests/kvo_tomany.m` (37), `libagora-app/tests/binding_base.m` (26),
-`libagora-app/tests/controller_base.m` (77) and `libagora-app/tests/array_controller.m` (76). The workspace's 14 tests
-were run too.*
+tree HAS, not of the 10.6 AppKit.** The probes holding the substrate and its clients:
+`libagora-base/tests/kvo_automatic.m` (34 checks), `libagora-base/tests/kvo_tomany.m` (37),
+`libagora-base/tests/user_defaults_kvo.m` (25), `libagora-app/tests/binding_base.m` (26),
+`libagora-app/tests/controller_base.m` (77), `libagora-app/tests/array_controller.m` (76) and
+`libagora-app/tests/user_defaults_controller.m` (43). The workspace's 14 tests were run too.*
 
 ---
 
@@ -43,17 +44,17 @@ AppKit class belongs to this repository, and the base library owns only Foundati
 ## 2. The surface, measured
 
 ```
-classes   141 of 168   (84%)    27 missing
-selectors 4729 of 4729 (100%)    0 missing   141 of 141 classes at COMPLETE coverage
+classes   142 of 168   (85%)    26 missing
+selectors 4741 of 4741 (100%)    0 missing   142 of 142 classes at COMPLETE coverage
 protocols  44 of  56   (78%)    12 missing
 functions  86 of  86  (100%)     0 missing    10 refuse by name
-methods   5303 declared on this tree's own classes, 8 with NO body on the chain (0.2%)
+methods   5315 declared on this tree's own classes, 8 with NO body on the chain (0.2%)
 ```
 
-**THESE LINES HAVE MOVED THREE TIMES: WITH THE COMMITS THAT LANDED AFTER THIS FILE WAS FIRST WRITTEN, WITH THE
-CONTROLLER SLICE (§9), AND WITH THE ARRANGED CONTROLLER (§10).** The tree reached the controller slice at 138 classes,
-4645 selectors and 5214 declared methods, not the 137 / 4636 / 5200 the original paragraph above this block recorded;
-§9 and §10 recount the movements rather than folding them into one.
+**THESE LINES HAVE MOVED FOUR TIMES: WITH THE COMMITS THAT LANDED AFTER THIS FILE WAS FIRST WRITTEN, WITH THE
+CONTROLLER SLICE (§9), WITH THE ARRANGED CONTROLLER (§10), AND WITH THE DEFAULTS CONTROLLER (§11).** The tree reached
+the controller slice at 138 classes, 4645 selectors and 5214 declared methods, not the 137 / 4636 / 5200 the original
+paragraph above this block recorded; §9, §10 and §11 recount the movements rather than folding them into one.
 
 **NONE OF THE SUBSTRATE SLICES ADDED A MANIFEST CLASS OR SELECTOR, AND THAT IS THE POINT OF A FOUNDATION ROW.** The
 class, selector and protocol counts are unchanged since `HANDOFF-6` §12; what moved is `methods-declared`, 5186 ->
@@ -215,22 +216,22 @@ fails for want of a library path rather than for want of the code.
 
 ## 6. Where to spend the next hour
 
-**BOTH CONTROLLER SLICES LANDED (§9, §10), SO THE NEXT HOUR IS THE REMAINING CONTROLLERS AND THE PREDICATE WORK THE
+**THREE CONTROLLERS HAVE LANDED (§9, §10, §11), SO THE NEXT HOUR IS THE REMAINING TWO AND THE PREDICATE WORK THE
 RESTORED FAMILY UNBLOCKED.** `NSObjectController` is content and selection; `NSArrayController` is the arrangement, the
 selection into it, the index translation and the five policy flags. What is left is smaller and better defined:
 
-1. **`NSUserDefaultsController` (12 selectors) is the small one, and it is a defaults wrapper rather than a selection
-   one:** `values`/`initialValues` over `NSUserDefaults` (which this Foundation has), `appliesImmediately`, `-save:`,
-   `-revert:`, and one shared instance. It is the natural next slice: no arrangement, no translation, and it exercises
-   `NSUserDefaults`' KVO-observable dictionary through the binding layer.
-2. **`NSDictionaryController` (13)** is a key/value projection over an array controller: `includedKeys`,
-   `excludedKeys`, `initialKey`/`initialValue`, `localizedKeyDictionary`/`localizedKeyTable`, and a `-newObject` that
-   fills the inserted dictionary with those keys. The arrangement machinery it needs is already here.
-3. **`NSTreeController` + `NSTreeNode` (55)** is the last and the largest: an arrangement over `NSIndexPath`s, which is
+1. **`NSDictionaryController` (13) is the next small one, and it is a projection rather than a selection:** it is an
+   `NSArrayController` subclass whose ARRANGED OBJECTS are key/value pairs over a dictionary content. The one real
+   decision is what a pair IS — Apple's pair class is private, so this tier picks either a small private class with
+   `-key`/`-value`/`-localizedKey` or a two-key dictionary, and `includedKeys`/`excludedKeys`/`initialKey`/
+   `initialValue`/`localizedKeyDictionary` all hang off that choice. `-newObject` then fills the inserted pair with the
+   initial key/value, and the arrangement machinery it needs is already in §10's class.
+2. **`NSTreeController` + `NSTreeNode` (55)** is the last and the largest: an arrangement over `NSIndexPath`s, which is
    `NSOutlineView`'s data source in controller form. `NSIndexPath` is in this Foundation, `NSOutlineView` is in this
    tree, and the tree controller's selection is `selectionIndexPaths` rather than indexes — the same settle-and-translate
-   shape §10 already built, one level deeper.
-4. **AND `NSPredicateEditor` + `NSPredicateEditorRowTemplate` (2 + 16) ARE NO LONGER BLOCKED.** `HANDOFF-6` §12 and
+   shape §10 already built, one level deeper. `childrenKeyPath`/`countKeyPath`/`leafKeyPath` decide the tree's shape,
+   and `-moveNode:toIndexPath:` is the one door with no array-controller analogue.
+3. **AND `NSPredicateEditor` + `NSPredicateEditorRowTemplate` (2 + 16) ARE NO LONGER BLOCKED.** `HANDOFF-6` §12 and
    `NSRuleEditor.h` both say they stay absent because this Foundation has no predicate family "(`NSPredicate`,
    `NSExpression`, `NSComparisonPredicate` are absent by §63.161)". **THAT IS NO LONGER TRUE**: `libagora-base` restored
    the family (`d4e75ec`, with the grammar extended by `917c144`), and `-filteredArrayUsingPredicate:` is what §10's
@@ -268,12 +269,13 @@ selection into it, the index translation and the five policy flags. What is left
   answered and wait for the controls/controllers that act on them; the header says which.
 * **`NSKeyValueBinding` IS APPKIT'S FILE**, and its three markers are initialised by a constructor so the first caller
   sees them. The constants' values are their own names.
-* **THE NUMBERS AND THE GATES.** 141 of 168 classes (84%), 4729 of 4729 selectors, 44 of 56 protocols, 86 of 86
-  functions, 5303 methods declared (8 without a body), 385 metrics, refusal 403, owed 21, 177 tests in this repository
-  (~96 s), 8 committed base suites, 14 workspace tests, the workspace suite passing against the installed library.
-  `ctest --test-dir build -j4` is the gate; the exit status is the witness.
-* **THE ABSENT SURFACE.** 27 classes, 12 protocols: the four remaining controllers (`NSDictionaryController` 13,
-  `NSUserDefaultsController` 12, `NSTreeController` 45 and `NSTreeNode` 10 — 80 selectors), the predicate editor pair
+* **THE NUMBERS AND THE GATES.** 142 of 168 classes (85%), 4741 of 4741 selectors, 44 of 56 protocols, 86 of 86
+  functions, 5315 methods declared (8 without a body), 386 metrics, refusal 403, owed 21, 178 tests in this repository
+  (~97 s), **12 committed base suites** (the Foundation's own count, corrected here — this bullet said 8 for three
+  slices), 14 workspace tests, the workspace suite passing against the installed library. `ctest --test-dir build -j4`
+  is the gate; the exit status is the witness.
+* **THE ABSENT SURFACE.** 26 classes, 12 protocols: the two remaining controllers (`NSDictionaryController` 13 and
+  `NSTreeController` 45 + `NSTreeNode` 10 — 68 selectors), the predicate editor pair
   (2 + 16, **no longer blocked**: the predicate family is back, see §6 item 4), the Core Data doors inside the
   controllers (refused by name), and the plan's §A11 refusals (OpenGL, QuickDraw, movies, the typesetters, speech,
   sound, the input-manager era, the Dock tile, the Help Viewer, `NSTouch`, and `NSFileWrapper`, which is Foundation's
@@ -406,3 +408,50 @@ owed census rose by two for that statement, which is the census doing what it ex
 **WHERE THE NEXT HOUR GOES:** §6 has been rewritten for it. `NSUserDefaultsController` (12) first — a defaults wrapper
 with no arrangement at all — then `NSDictionaryController` (13), then `NSTreeController` + `NSTreeNode` (55), and the
 predicate editor pair (18) with the rule editor's three refusals as the slice that makes a census fall.
+
+---
+
+## 11. The defaults controller: a proxy with no storage, and a read with three fallbacks
+
+**Commit `06a92d1`, with this section in the commit after it.** `NSUserDefaultsController` is present and
+COMPLETE at 12 of 12 — the class count 141 -> **142** of 168, the offered and present selectors 4729 -> **4741**, the
+declaration count 5303 -> **5315**, complete coverage 142 of 142, the metrics 385 -> **386**, and the tests 177 -> **178**
+with `tests/user_defaults_controller.m` at **43 checks**. The refusal census and the owed census did not move.
+
+**THIS SLICE WAS BLOCKED ON A FOUNDATION ROW, AND THE ROW WAS LANDED FIRST.** `NSUserDefaults` had no KVO at all: its
+write door is `-setObject:forKey:`, so KVO's automatic setter wrapping — which brackets `-setFoo:` — had nothing to
+wrap. `libagora-base` `cb9e146` made the per-key doors send the manual pair themselves (outside the non-recursive lock,
+in a `@finally`), added `-valueForKey:`/`-setValue:forKey:` because KVO fills the change dictionary through the read
+door, and made `-registerDefaults:` announce only when a key's EFFECTIVE value moves. **`-valueForKey:` was not optional
+and is the part a reader would skip**: without it an observation of an arbitrary key raises from `-valueForUndefinedKey:`
+while the dictionary is being built.
+
+**THE CONTROLLER'S THREE LEVELS ARE THE DESIGN.** A read is the pending store, then the store, then `initialValues`, and
+`NSNull` in the pending dictionary means "remove this key" — so a held removal does not fall through to the store's OLD
+value but past it to the fallback. `-valueForKey:`/`-setValue:forKey:` answer the `values.<key>` spelling directly,
+because the binding layer hands over ONE string; `-valueForKeyPath:` reaches the same chain through the proxy, because
+KVC splits a path and recurses.
+
+**TRAP: A RELAY ON THE CONTROLLER CANNOT PRODUCE A CORRECT OLD VALUE, SO THE OBSERVATION GOES TO THE STORE.** The
+tempting shape — keep the registration on the controller and forward from a private observer — runs AFTER the store has
+changed, so its `will` half reads the new value and the change dictionary's Old is a lie. Registering on the store gives
+correct Old and New at the price the header states: the change's object is the store and its path is the bare key. A
+binding reads New; anything that cares about the object is told.
+
+**TRAP: A PENDING WRITE MUST NOT BE ANNOUNCED AS A STORE CHANGE.** With `appliesImmediately` NO the store has not
+changed, so a `values.` observer is correctly silent and the only key that moves is `-hasUnappliedChanges` — announced
+when it CROSSES, not on every held write. `-save:` is what produces the store's notifications, one key at a time.
+Turning the flag back ON flushes what was held, because the pending store is only ever written while the flag is NO and
+would otherwise be stranded forever.
+
+**TRAP THE PROBE FOUND: `-revertToInitialValues:` MOVES A KEY FROM THE FALLBACK INTO THE STORE.** The first version of
+the test asked a key from `initialValues`, called `-revertToInitialValues:`, replaced the dictionary and expected the key
+to be gone. It was not — the revert had WRITTEN it into the store, where it outlives the dictionary. That is the correct
+behaviour (a Reset button is a store write), and the probe now measures the two facts separately: a key the store has
+never had disappears with the dictionary, and a key the revert wrote stays with the store's value winning over the
+fallback by the read order.
+
+**WHERE THE NEXT HOUR GOES:** §6 has been rewritten for it. `NSDictionaryController` (13) first — an `NSArrayController`
+subclass whose arranged objects are key/value pairs, so the one decision is what a pair is — then `NSTreeController` +
+`NSTreeNode` (55), then the predicate editor pair (18) with `NSRuleEditor`'s two refusal sites as the slice that makes a
+census fall.
