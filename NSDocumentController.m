@@ -27,6 +27,8 @@
 #import <Foundation/NSString.h>
 #import <Foundation/NSURL.h>
 
+#import <objc/runtime.h>
+
 #include <stdio.h>
 
 static NSString *const AGDocumentControllerErrorDomain = @"com.agora.appkit.documentcontroller";
@@ -778,10 +780,12 @@ static NSDocumentController *s_sharedDocumentController = nil;
 {
 	SEL action = [anItem action];
 
-	return action == @selector(newDocument:)
-		|| action == @selector(openDocument:)
-		|| action == @selector(saveAllDocuments:)
-		|| action == @selector(clearRecentDocuments:);
+	/* `sel_isEqual`, for the reason `NSDocument`'s door states: a selector from another image is not `==` this
+	 * library's literal, and a toolbar item an application built is from another image. */
+	return sel_isEqual(action, @selector(newDocument:))
+		|| sel_isEqual(action, @selector(openDocument:))
+		|| sel_isEqual(action, @selector(saveAllDocuments:))
+		|| sel_isEqual(action, @selector(clearRecentDocuments:));
 }
 
 

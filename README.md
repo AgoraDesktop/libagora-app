@@ -1309,7 +1309,7 @@ the compositor is really gone.
   and the refusal census FELL for the first time in this arc, 405 -> 404. `tests/predicate_editor.m` measures it in 41
   checks.
 
-- **`ctest`: 181 of 181 passed** (the keyboard and the seam, the AppKit and its input path, the controls and their
+- **`ctest`: 182 of 182 passed** (the keyboard and the seam, the AppKit and its input path, the controls and their
   metrics, the field control and its cell and its bezel and its placeholder and what it may hold, the text path and its
   word granularity and the multi-line view and its wrapping and its scrolling and its READING OF THE STORE, the STORE
   the rich-text slice is built on and the REGION it is laid out in and the WEB that ties the three together and the
@@ -1335,7 +1335,7 @@ the compositor is really gone.
   controller's values proxy, its three-level read and its pending store, and the dictionary controller's pairs,
   its visible-key rules and the identity of its rows, and the tree controller's paths, its node graph and the
   model mutations behind it, and the predicate editor's templates, the rule editor's assembly and the predicate
-  round trip).
+  round trip, and the two validation doors' cross-image selector comparison).
 - **And the desktop's own text is SUB-PIXEL ANTIALIASED**, which is the AppKit's half of a renderer change in
   CoreGraphics: a window's surface is OPAQUE (`kCGImageAlphaNoneSkipFirst`), and the destination's opacity is
   exactly what decides whether a glyph is rasterised in colour. MEASURED on the live session: the window title's

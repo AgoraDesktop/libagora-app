@@ -2030,6 +2030,23 @@ display, the attribute factory against a real `NSEntityDescription`, and the edi
 other than "is", an AND becoming two rows, an unmatched predicate building none, and a user-added row starting from the
 first template.
 
+## 67. A validating item from another image compares by name
+
+**THE BUG §9 OF THE HANDOFF RECORDED, AND THE PROBE THAT PROVES THE FIX.** `NSDocument`'s and `NSDocumentController`'s
+`-validateUserInterfaceItem:` compared `[item action]` with `==`. This runtime gives each compilation unit its own
+`objc_selector` struct for the same name — only the index inside it is shared, so dispatch works — which means the
+selector an APPLICATION's toolbar item carries is a different ADDRESS from the library's `@selector(saveDocument:)`.
+`==` therefore answered NO for every action, and Save and Revert were disabled for every caller outside this library.
+
+**THE COMPARISON IS `sel_isEqual`, WHICH THE RUNTIME DOCUMENTS FOR EXACTLY THIS:** it falls back to the name when the two
+selectors are not the same struct. The probe (`tests/validation_selectors.m`) builds its item in the TEST BINARY, which is
+what an application's item is, and asserts that a titled document says yes to Save and to Revert and that the controller
+says yes to its four. **It was run against the old code to prove it measures the fix**: with `==` restored, exactly those
+two document checks fail and nothing else changes, so the probe is not passing for a reason of its own.
+
+`HANDOFF-7` §9 found this while measuring the first controller's own validation, and left it recorded rather than fixed
+in a controller slice; this is the commit that owed it.
+
 ## Keeping in sync
 
 The Fiwix AppKit is the origin and this repository has now diverged from it in the seam. A fix made there

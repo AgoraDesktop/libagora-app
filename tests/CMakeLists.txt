@@ -1723,6 +1723,15 @@ target_link_libraries(predicate_editor PRIVATE App AgoraData::Data m)
 add_test(NAME appkit-predicate-editor COMMAND predicate_editor)
 set_tests_properties(appkit-predicate-editor PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
 
+# **THE CROSS-IMAGE SELECTOR FIX: an item built HERE validates against a document and its controller.** This runtime
+# gives each image its own selector struct for the same name, so the item's `-action` is a different address from the
+# library's `@selector(saveDocument:)`; the two `validateUserInterfaceItem:` doors compare with `sel_isEqual` now, and a
+# fix that went back to `==` fails here.
+add_executable(validation_selectors validation_selectors.m)
+target_link_libraries(validation_selectors PRIVATE App m)
+add_test(NAME appkit-validation-selectors COMMAND validation_selectors)
+set_tests_properties(appkit-validation-selectors PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
+
 # **AND THE CLIENT HALF OF HIDPI, WHICH NEEDS BOTH HALVES OF THE STACK IN ONE TEST.** The compositor runs at `--scale 2`
 # and an AppKit window draws a shape at a known POINT; the checker measures where it landed in DEVICE pixels. A client
 # that ignored the scale would draw it half the size, half the distance from the corner — the whole UI shrunk.

@@ -20,6 +20,8 @@
 #import "NSWindowController.h"
 #import "NSWindow.h"
 #import "AppKitRefusal.h"
+
+#import <objc/runtime.h>
 #import "NSApplication.h"
 #import "NSPrintInfo.h"
 #import "NSPrintOperation.h"
@@ -1413,7 +1415,12 @@ originalContentsURL:(NSURL *)absoluteOriginalContentsURL
 {
 	SEL action = [anItem action];
 
-	if (action == @selector(saveDocument:) || action == @selector(revertDocumentToSaved:)) {
+	/* **`sel_isEqual`, NOT `==`, AND THIS IS THE FIX §9 OF THE HANDOFF OWED.** This runtime gives each image its own
+	 * `objc_selector` struct for the same name (only the index inside it is shared), so the selector an APPLICATION's
+	 * toolbar item carries is a different ADDRESS from this library's `@selector(saveDocument:)`. `==` answered NO for
+	 * every action, which disabled Save and Revert for every caller outside this library; `sel_isEqual` falls back to the
+	 * name, which is the comparison the runtime documents for exactly this. */
+	if (sel_isEqual(action, @selector(saveDocument:)) || sel_isEqual(action, @selector(revertDocumentToSaved:))) {
 		return _fileURL != nil && _fileType != nil;
 	}
 	/* SAVE AS AND EXPORT NEED THE PANEL, so they are honestly disabled until it exists. */
