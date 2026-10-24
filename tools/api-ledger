@@ -320,6 +320,7 @@ def parse_objc(text):
 
         selectors = set()
         informal = set()
+        external = set()
         for decl in re.finditer(r'(?m)^\s*[-+]\s*\(', body):
             start = decl.end() - 1
             end_of_decl = read_method_span(body, start)
@@ -334,6 +335,13 @@ def parse_objc(text):
                 # caller's. The exemption is counted in `methods-informal` so it cannot be silent.
                 if re.search(r'\bFN_INFORMAL\b', body[start:end_of_decl]):
                     informal.add(selector)
+                # **AND A DECLARATION THE COMPANION FRAMEWORK IMPLEMENTS IS NOT THIS TREE'S PROMISE EITHER.** Apple
+                # declares NSAffineTransform's -set/-concat/-transformBezierPath: in Foundation and implements them
+                # in AppKit; this tree does the same (libagora-app's NSAffineTransformAdditions.m), and Foundation
+                # must not import the drawing API to duplicate it. `FN_COMPANION` marks that split, is counted in
+                # `methods-external`, and is exempt from the phantom count for the same reason as FN_INFORMAL.
+                if re.search(r'\bFN_COMPANION\b', body[start:end_of_decl]):
+                    external.add(selector)
         selectors |= block_properties(body)
 
         if kind == 'implementation':
@@ -344,10 +352,11 @@ def parse_objc(text):
             protocols.setdefault(name, set()).update(selectors)
         else:
             entry = classes.setdefault(name, {'primary': False, 'super': None, 'selectors': set(),
-                                              'informal': set()})
+                                              'informal': set(), 'external': set()})
             entry['primary'] = entry['primary'] or (token != '(')
             entry['selectors'] |= selectors
             entry['informal'] |= informal
+            entry['external'] |= external
             # `skip_angle_brackets` first, because a lightweight-generic parameter clause sits BEFORE the colon.
             sup = re.match(r'\s*:\s*(\w+)', skip_angle_brackets(text[m.end():end]))
             if sup:
@@ -384,10 +393,11 @@ def parse_tree(directory):
         cls, prt, _ = parse_objc(strip_comments(open(path, errors='ignore').read()))
         for name, entry in cls.items():
             into = classes.setdefault(name, {'primary': False, 'super': None, 'selectors': set(),
-                                          'informal': set()})
+                                          'informal': set(), 'external': set()})
             into['primary'] = into['primary'] or entry['primary']
             into['selectors'] |= entry['selectors']
             into['informal'] |= entry.get('informal', set())
+            into['external'] |= entry.get('external', set())
             if entry['super']:
                 into['super'] = entry['super']
         protocols |= set(prt)
@@ -621,21 +631,25 @@ def computed(local_dir, manifest_path, library=None, include_dirs=()):
     methods_declared = 0
     methods_phantom = 0
     methods_informal = 0
+    methods_external = 0
     for name in classes:
         own = classes[name]['selectors']
         if not own:
             continue
         informal = classes[name].get('informal', set())
+        external = classes[name].get('external', set())
         implemented = closure(impl_tree, name)
-        phantom = own - implemented - informal
+        phantom = own - implemented - informal - external
         methods_declared += len(own)
         methods_phantom += len(phantom)
         methods_informal += len(informal)
+        methods_external += len(external)
         if phantom:
             metrics['selphantom:' + name] = len(phantom)
     metrics['methods-declared'] = methods_declared
     metrics['methods-declared-not-implemented'] = methods_phantom
     metrics['methods-informal'] = methods_informal
+    metrics['methods-external'] = methods_external
 
     for proto in sdk_protocols:
         metrics['proto:' + proto] = 1 if proto in protocols else 0

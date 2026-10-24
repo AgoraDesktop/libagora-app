@@ -222,6 +222,7 @@ functions-present 86
 methods-declared 5408
 methods-declared-not-implemented 0
 methods-informal 0
+methods-external 0
 proto:NSAlertDelegate 1
 proto:NSAnimatablePropertyContainer 1
 proto:NSAnimationDelegate 1
