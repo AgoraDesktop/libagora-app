@@ -1867,7 +1867,7 @@ lower insertion cannot move a higher one's anchor.
 object for those key paths and re-arrange when one changes, and **OWED: that observation half.** `-rearrangeObjects` and
 `-didChangeArrangementCriteria` are the doors a caller uses instead.
 
-`tests/array_controller.m` measures it in **76 checks**: the arrangement's order, the filter, the pure `-arrangeObjects:`,
+`tests/array_controller.m` measures it in **77 checks**: the arrangement's order, the filter, the pure `-arrangeObjects:`,
 the three content kinds (including the raise), the KVO delivery of `arrangedObjects` and `selectedObjects`, the selection
 into the arrangement with markers and the proxy's agreement rule, each policy flag against the behaviour it changes, the
 appending and anchored insertions (including the repeated-object case), both arranged-removal doors, the attach/select
@@ -1908,6 +1908,40 @@ chain in all three spellings with the fallback, writes through each spelling (in
 observation registered on the store with correct Old/New and the bare key, Initial delivery, the deeper-path refusal, a
 binding to `values.<key>`, the pending store with its crossing announcement and its silence towards the values observer,
 `-save:`/`-revert:`, the flag turned back on, `-revertToInitialValues:`, and `-setInitialValues:` replacing the fallback.
+
+## 64. `NSDictionaryController`: a projection over a dictionary, and one live pair per key
+
+**THE ARRANGEMENT'S INPUT IS THE ONE DOOR THE SUBCLASS CHANGES.** Everything else — the filtered and sorted
+`arrangedObjects`, the selection into it, the arrow keys, the policy flags — is `NSArrayController`'s, and it works
+unchanged because a pair is an object like any other. `-fn_contentObjects` answers the pairs for the visible keys, from a
+cache, and the base class does the rest. That is why the seam is a small internal header (`NSArrayController_internal.h`),
+not a second implementation of the arrangement beside the first.
+
+**ONE PAIR PER KEY, KEPT, AND THE REASON IS THE SETTLE STEP.** The base class re-finds the selection by IDENTITY
+(`-indexOfObjectIdenticalTo:`), because two equal model objects are two rows. A dictionary controller that minted a fresh
+pair per rebuild would pass every value test in a probe and lose the selection on every content change, and
+`-setSelectedObjects:` could never find the row a caller is holding. The cache makes the row object stable, and the probe
+checks the identity across a replacement content explicitly, because no value assertion would catch it.
+
+**A PAIR IS LIVE.** Attached to its controller it reads and writes the content dictionary through it — `-setValue:`
+changes the entry and announces, `-setKey:` renames (a remove and an insert, announced once, with the value read before
+the removal) — and only a DETACHED pair (`-newObject`'s answer) keeps a value of its own. Adding a detached pair moves the
+cache entry FIRST and attaches it second, so the arrangement the assignment rebuilds already holds that object and
+`selectsInsertedObjects` can select it by identity; the value is read while the pair is still detached, because an
+attached pair reads the content, which does not have the key yet.
+
+**TRAP THE DICTIONARY PROBE FOUND, AND IT WAS THE ARRAY CONTROLLER'S BUG.** `-setContent:` stored the content and then
+announced the arrangement, so a WRONG-KIND content raised out of the did phase AFTER it had been assigned — leaving the
+controller holding a content it could never arrange again, and the next `-setContent:` raised from the will phase while
+re-reading it. The probe aborted there. Both controllers now ask a VIRTUAL question (`-fn_acceptsContent:`, with
+`-fn_contentRule` for the refusal's wording) BEFORE storing, so a refused content leaves the previous one in place and
+the controller usable; the array controller's probe gained the recovery case along with the fix.
+
+`tests/dictionary_controller.m` measures it in **40 checks**: the one-pair-per-key projection, the arrangement's sort and
+filter over the pairs, included/excluded (including the both-lists rule), the localized name and the stored table, a
+pair's live read and its two writes, the new pair and both arranged-index insertion doors, removal through the pair and
+through the selection, the row's identity across a replacement content, the content-kind rules for a mutable dictionary,
+an immutable one and nil, and the two binding/announcement facts.
 
 ## Keeping in sync
 

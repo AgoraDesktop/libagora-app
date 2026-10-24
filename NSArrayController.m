@@ -17,6 +17,7 @@
  * `preservesSelection` is on. Every door that changes the arrangement calls the settle through the same key pair.
  */
 #import <AppKit/NSArrayController.h>
+#import <AppKit/NSArrayController_internal.h>
 #import <AppKit/NSObjectController_internal.h>
 #import <Foundation/NSArray.h>
 #import <Foundation/NSDictionary.h>
@@ -236,6 +237,31 @@ static NSString * const kCriteriaKeys[] = {
 		    format:@"NSArrayController content must be an array or a set; this controller's content is a %@",
 			   [content class]];
 	return nil;
+}
+
+/* **THE WRONG KIND IS REFUSED BEFORE THE CONTENT MOVES.** `-fn_contentObjects` raises for a content it cannot arrange,
+ * and that is the guard for a content that got in some other way; but a content change ANNOUNCES the arrangement, so a
+ * setter that stored first and arranged second would raise out of its own did phase and leave the controller holding a
+ * content it can never arrange again. The door asks the VIRTUAL question first (a dictionary controller answers
+ * differently), then hands the content to the base class. */
+- (BOOL)fn_acceptsContent:(id)content
+{
+	return (content == nil || [content isKindOfClass:[NSArray class]] || [content isKindOfClass:[NSSet class]]);
+}
+
+- (NSString *)fn_contentRule
+{
+	return @"an array or a set";
+}
+
+- (void)setContent:(id)content
+{
+	if (![self fn_acceptsContent:content]) {
+		[NSException raise:NSInvalidArgumentException
+			    format:@"%@ content must be %@; %@ is not", [self class], [self fn_contentRule],
+				   [content class]];
+	}
+	[super setContent:content];
 }
 
 - (NSArray *)arrangeObjects:(NSArray *)objects

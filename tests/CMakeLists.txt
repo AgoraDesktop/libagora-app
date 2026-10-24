@@ -1694,6 +1694,15 @@ target_link_libraries(user_defaults_controller PRIVATE App m)
 add_test(NAME appkit-user-defaults-controller COMMAND user_defaults_controller)
 set_tests_properties(appkit-user-defaults-controller PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
 
+# **THE DICTIONARY CONTROLLER: A KEY/VALUE PROJECTION WHOSE ARRANGED OBJECTS ARE LIVE PAIRS.** The probe measures the
+# three KVC names a column binds to, the visible-key rules (included then excluded), the arrangement over the pairs, a
+# pair's writes landing in the dictionary, and — the part a value test would miss — that the pair for a key is the SAME
+# OBJECT across a content replacement, which is what lets the inherited settle step keep the selection.
+add_executable(dictionary_controller dictionary_controller.m)
+target_link_libraries(dictionary_controller PRIVATE App m)
+add_test(NAME appkit-dictionary-controller COMMAND dictionary_controller)
+set_tests_properties(appkit-dictionary-controller PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
+
 # **AND THE CLIENT HALF OF HIDPI, WHICH NEEDS BOTH HALVES OF THE STACK IN ONE TEST.** The compositor runs at `--scale 2`
 # and an AppKit window draws a shape at a known POINT; the checker measures where it landed in DEVICE pixels. A client
 # that ignored the scale would draw it half the size, half the distance from the corner — the whole UI shrunk.

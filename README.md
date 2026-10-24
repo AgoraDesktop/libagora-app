@@ -1231,7 +1231,7 @@ the compositor is really gone.
   pair (`automaticallyRearrangesObjects`, `automaticRearrangementKeyPaths`) is stored and answered with NO READER**, and
   the header says so — watching the arranged objects' key paths is owed, and `-rearrangeObjects` is the door a caller
   uses instead. **141 of 168 classes (84%), 141 of 141 with a surface COMPLETE, 44 of 56 protocols, 27 absent classes.**
-  `tests/array_controller.m` measures it in 76 checks.
+  `tests/array_controller.m` measures it in 77 checks.
 
 - **And the DEFAULTS CONTROLLER HAS ARRIVED: `NSUserDefaultsController` — 12 of 12** (`ctest`, offscreen). `NSController`'s
   editing bookkeeping plus a store: `-values` is a proxy whose KVC doors are the controller's read/write chain, and a
@@ -1251,7 +1251,24 @@ the compositor is really gone.
   `libagora-base` row), and that is what makes the whole thing observable. **142 of 168 classes (85%), 142 of 142 with a
   surface COMPLETE, 44 of 56 protocols, 26 absent classes.** `tests/user_defaults_controller.m` measures it in 43 checks.
 
-- **`ctest`: 178 of 178 passed** (the keyboard and the seam, the AppKit and its input path, the controls and their
+- **And the DICTIONARY CONTROLLER HAS ARRIVED: `NSDictionaryController` — 13 of 13** (`ctest`, offscreen). An
+  `NSArrayController` over a DICTIONARY, and the projection is the whole class: `arrangedObjects` are key/value PAIRS
+  over the content's visible keys, and a pair's three KVC names — `key`, `value`, `localizedKey` — are what a column
+  binds to (**the pair class is private because Apple's is**). A pair is LIVE and there is **one per key**: it reads and
+  writes the content dictionary through the controller (`-setValue:` changes the entry and announces the arrangement,
+  `-setKey:` renames it), and the cache is not an optimisation — the inherited settle step re-finds the selection by
+  IDENTITY, so a controller that minted a fresh pair per rebuild would pass every value test and lose every selection.
+  `includedKeys`/`excludedKeys` decide visibility (included first, excluded subtracts, so a key in both is hidden) and
+  are arrangement CRITERIA, announced through the same pair the sort and filter setters use; the sort descriptors and
+  the `filterPredicate` run after them, over the pairs. `-newObject` answers a DETACHED pair carrying
+  `initialKey`/`initialValue`, and adding it writes the entry and selects it; adding a pair with no key raises by name.
+  **A dictionary has no order, so the two arranged-index insertion doors accept the index and ignore it**, and
+  **`localizedKeyTable` is stored and nothing loads it** — this Foundation withdrew its `.strings` reader (the same
+  withdrawal `NSRuleEditor` refuses by name), so `localizedKeyDictionary` is the only source of a displayed name.
+  **142 -> 143 of 168 classes (85%), 143 of 143 with a surface COMPLETE, 44 of 56 protocols, 25 absent classes.**
+  `tests/dictionary_controller.m` measures it in 40 checks.
+
+- **`ctest`: 179 of 179 passed** (the keyboard and the seam, the AppKit and its input path, the controls and their
   metrics, the field control and its cell and its bezel and its placeholder and what it may hold, the text path and its
   word granularity and the multi-line view and its wrapping and its scrolling and its READING OF THE STORE, the STORE
   the rich-text slice is built on and the REGION it is laid out in and the WEB that ties the three together and the
@@ -1274,7 +1291,8 @@ the compositor is really gone.
   and NSEditor defaults, the controller's editor list and its commit walk, its content and selection proxy and the
   dependent-key announcements, and the Core Data doors' empty values, and the array controller's arrangement,
   its selection into it, the arranged-to-content translation and its five policy flags, and the defaults
-  controller's values proxy, its three-level read and its pending store).
+  controller's values proxy, its three-level read and its pending store, and the dictionary controller's pairs,
+  its visible-key rules and the identity of its rows).
 - **And the desktop's own text is SUB-PIXEL ANTIALIASED**, which is the AppKit's half of a renderer change in
   CoreGraphics: a window's surface is OPAQUE (`kCGImageAlphaNoneSkipFirst`), and the destination's opacity is
   exactly what decides whether a glyph is rasterised in colour. MEASURED on the live session: the window title's

@@ -184,6 +184,11 @@ int main(void)
 					raised = [[exception name] isEqual:NSInvalidArgumentException];
 				}
 				check(raised, "a single object as content raises rather than arranging as nothing");
+				/* **THE REFUSAL LEAVES THE CONTROLLER USABLE**: the setter validates before it stores, so the
+				 * rejected content was never assigned and the next arrangement is the old one, not a raise. */
+				[controller setContent:content];
+				check([[controller arrangedObjects] count] == 3,
+				      "and a refused content leaves the controller able to arrange the next one");
 			}
 
 			[controller release];
