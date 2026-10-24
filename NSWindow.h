@@ -1061,7 +1061,10 @@ typedef NSUInteger NSWindowSharingType;
 
 /* **THE WINDOW'S DEVICE AND COLOUR FACTS.** `-deviceDescription` is the SCREEN's description (the keys live in
  * `NSScreen.h`); `-colorSpace` is the caller's choice, or the screen's when none was made; and the deprecated
- * `-userSpaceScaleFactor` is 1.0 because this tier has no backing scale. */
+ * `-userSpaceScaleFactor` is THE OUTPUT SCALE THE SEAM REPORTED — 1.0 on an ordinary screen, 2.0 on a HiDPI one —
+ * which is the factor between a point and a device pixel on this window's surface. It used to answer 1.0
+ * unconditionally, with the note that a backing scale was a screen fact this tier had not got; the compositor sends
+ * one now (`wl_output.scale`), the window renders at it, and `NSScreen` answers the same number. */
 - (nullable NSDictionary *)deviceDescription;
 - (nullable NSColorSpace *)colorSpace;
 - (void)setColorSpace:(nullable NSColorSpace *)colorSpace;
