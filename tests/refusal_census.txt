@@ -114,6 +114,7 @@ NSPrintOperation.m               6
 NSProgressIndicator.m            1
 NSResponder.m                    1
 NSRuleEditor.m                   3
+NSTreeController.m               2
 NSRulerView.m                    3
 NSScrollView.m                   1
 NSShadow.m                       1
@@ -162,4 +163,9 @@ NSWindow.m                       23
 # `NSPersistentDocument` reads and writes a real file, and a controller that fetched once and called the result live
 # would be worse than a refusal. The shared wording lives in `AppKitRefusal.h` as `fn_refuse_controller`.
 
-# total: 403
+#
+# AND IT ROSE BY TWO IN THE TREE CONTROLLER SLICE, BOTH IN `NSTreeController.m`: a children key whose value is not an
+# array, and a model tree deeper than 512 levels (a cycle), are REFUSED at the build rather than thrown — the build runs
+# inside a KVO announcement, and an exception raised there would leave the will half's pending records open.
+
+# total: 405

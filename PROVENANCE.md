@@ -1943,6 +1943,46 @@ pair's live read and its two writes, the new pair and both arranged-index insert
 through the selection, the row's identity across a replacement content, the content-kind rules for a mutable dictionary,
 an immutable one and nil, and the two binding/announcement facts.
 
+## 65. `NSTreeController` and `NSTreeNode`: an invisible root, and a build that must not throw
+
+**THE ROOTS HANG FROM A NODE NOBODY SEES, AND THAT IS WHAT MAKES A ROOT A POSITION.** `NSTreeNode -indexPath` walks the
+parent links to the node whose parent is nil and answers the indexes below it — so with the roots as the top of the
+graph every root's path would be the EMPTY path, and no door could tell them apart. The controller therefore keeps one
+private root node whose children are `-arrangedObjects`; each root's path is `{i}` and every child's is `{i, j, …}`.
+
+**THE NODES ARE REBUILT FROM THE MODEL ON EVERY CHANGE, AND THE SELECTION IS WHAT CROSSES.** The build reads
+`childrenKeyPath` (array-valued KVC) and stops at `leafKeyPath`; a rebuild replaces the graph, so the old selection is
+re-found by represented-object IDENTITY in the settle step — the same rule the array controller uses for rows, one level
+deeper — and the paths are recomputed because a rebuild renumbers them. A criteria change (the key paths, the sort
+descriptors) uses the same shape.
+
+**ONE KEY IN THE SELECTION PAIR IS KVO'S, NOT OURS.** An observer of `selectionIndexPaths` makes KVO wrap
+`-setSelectionIndexPaths:`, so the wrapper announces that key; the manual pair announces only the DEPENDENTS
+(`selectionIndexPath`, `selectedNodes`, `selectedObjects`, `contentObject`, `selection`). Announcing all six delivered
+every selection change twice — measured by the probe, and the same "one write, one notification" rule the controllers'
+`content` follows. The settle step, which changes the selection without going through that setter, announces
+`selectionIndexPaths` in its criteria/derived list instead.
+
+**TRAP: THE DEPTH REFUSAL RETURNED AN UNINITIALISED NODE, AND A CYCLE BECAME A SEGFAULT.** The build's cap reads
+`if (depth > MAX) { print; return node; }` — and in the first version `node` had not been assigned yet, so the parent
+added a GARBAGE POINTER as its child and the next tree walk followed it into nothing (131,000 stack frames in the
+debugger). The fix is one line moved (assign the node, then check the depth) and the lesson is the shape: an early return
+of a local that is assigned further down is invisible in review and fatal in a walk. The probe now builds a cyclic model
+and asserts the tree is truncated.
+
+**AND A MODEL ERROR IS REFUSED RATHER THAN THROWN, BECAUSE OF WHERE THE BUILD RUNS.** The build happens in the DID half
+of an announcement; an exception raised there would leave the will half's pending change records open for the life of the
+object — the KVO equivalent of a leaked lock. So a children key whose value is not an array, and the depth cap, print
+`APPKIT-REFUSE` and build the node without the children they cannot represent. The refusal census rose by two for those
+sites, deliberately.
+
+`tests/tree_controller.m` measures it in **55 checks**: roots and the hidden root's paths, children and grandchildren,
+parent links and `isLeaf`, `leafKeyPath` short-circuiting the build, sorting each level by the model's keys, the
+selection in all its readings with a re-sort that renumbers it, insertion at a child path and a root path, the range and
+immutable-collection refusals, single and plural removal (descending), the four actions, both move doors, the two
+announcement counts, the content-kind recovery, `countKeyPath`'s storage without a reader, the proxy's
+multiple-values flag, and the cyclic model's truncation.
+
 ## Keeping in sync
 
 The Fiwix AppKit is the origin and this repository has now diverged from it in the seam. A fix made there

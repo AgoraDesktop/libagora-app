@@ -1703,6 +1703,16 @@ target_link_libraries(dictionary_controller PRIVATE App m)
 add_test(NAME appkit-dictionary-controller COMMAND dictionary_controller)
 set_tests_properties(appkit-dictionary-controller PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
 
+# **THE TREE CONTROLLER: A MODEL TREE, A REBUILT NODE GRAPH, AND PATHS IN BETWEEN.** The probe measures the shape as
+# `indexPath`s and every mutation against the MODEL's arrays, because the node graph is the controller's reading and the
+# model is what a caller owns; the selection is measured by OBJECT across a rebuild that renumbers it. The two model
+# errors are measured by their REFUSAL (a truncated node) — the build runs inside a KVO announcement, so an exception
+# there would leave the will half's records open.
+add_executable(tree_controller tree_controller.m)
+target_link_libraries(tree_controller PRIVATE App m)
+add_test(NAME appkit-tree-controller COMMAND tree_controller)
+set_tests_properties(appkit-tree-controller PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
+
 # **AND THE CLIENT HALF OF HIDPI, WHICH NEEDS BOTH HALVES OF THE STACK IN ONE TEST.** The compositor runs at `--scale 2`
 # and an AppKit window draws a shape at a known POINT; the checker measures where it landed in DEVICE pixels. A client
 # that ignored the scale would draw it half the size, half the distance from the corner — the whole UI shrunk.

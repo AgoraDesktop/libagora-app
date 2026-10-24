@@ -1268,7 +1268,26 @@ the compositor is really gone.
   **142 -> 143 of 168 classes (85%), 143 of 143 with a surface COMPLETE, 44 of 56 protocols, 25 absent classes.**
   `tests/dictionary_controller.m` measures it in 40 checks.
 
-- **`ctest`: 179 of 179 passed** (the keyboard and the seam, the AppKit and its input path, the controls and their
+- **And the TREE HAS ARRIVED: `NSTreeController` + `NSTreeNode` — 45 of 45 and 10 of 10** (`ctest`, offscreen). The last
+  controller family: a model tree read through `childrenKeyPath` (array-valued KVC) and stopped early by `leafKeyPath`,
+  rebuilt as an `NSTreeNode` graph on every change and handed out as `-arrangedObjects`. **The roots hang from an
+  INVISIBLE root node**, which is what makes a root's path `{i}` instead of the empty path every root would otherwise
+  share. The selection is `selectionIndexPaths`; `-selectedNodes` and `-selectedObjects` are the two readings of it, and
+  the inherited selection proxy needs no change. `-preservesSelection` re-finds the old selection by represented-object
+  IDENTITY across a rebuild that renumbers every path — the array controller's rule, one level deeper.
+  `NSTreeNode` is a represented object, its children and its position: `-indexPath` walks the parent links, and
+  `-mutableChildNodes` is an `NSMutableArray` SUBCLASS that maintains those links on insert, add, replace, the three
+  removals and `-setArray:`, so a tree built by hand still answers positions. The mutation doors
+  (`-insertObject:atArrangedObjectIndexPath:`, the two removals, `-moveNode:toIndexPath:` and the plural, `-add:`/
+  `-addChild:`/`-insert:`/`-insertChild:`/`-remove:`) write the MODEL's arrays, and a destination path is read after the
+  removal, which is why a same-parent move lands in the gap. **Two model errors are REFUSED, not thrown** — a children
+  key that is not array-valued, and a tree deeper than 512 levels (a cycle) — because the build runs inside a KVO
+  announcement; and **`countKeyPath` is stored and nothing reads it**, because this Foundation's KVC has no
+  `countOf`/`objectIn` synthesis, so children come from an array-valued key. **143 -> 145 of 168 classes (86%), 145 of
+  145 with a surface COMPLETE, 44 of 56 protocols, 23 absent classes.** `tests/tree_controller.m` measures it in 55
+  checks.
+
+- **`ctest`: 180 of 180 passed** (the keyboard and the seam, the AppKit and its input path, the controls and their
   metrics, the field control and its cell and its bezel and its placeholder and what it may hold, the text path and its
   word granularity and the multi-line view and its wrapping and its scrolling and its READING OF THE STORE, the STORE
   the rich-text slice is built on and the REGION it is laid out in and the WEB that ties the three together and the
@@ -1292,7 +1311,8 @@ the compositor is really gone.
   dependent-key announcements, and the Core Data doors' empty values, and the array controller's arrangement,
   its selection into it, the arranged-to-content translation and its five policy flags, and the defaults
   controller's values proxy, its three-level read and its pending store, and the dictionary controller's pairs,
-  its visible-key rules and the identity of its rows).
+  its visible-key rules and the identity of its rows, and the tree controller's paths, its node graph and the
+  model mutations behind it).
 - **And the desktop's own text is SUB-PIXEL ANTIALIASED**, which is the AppKit's half of a renderer change in
   CoreGraphics: a window's surface is OPAQUE (`kCGImageAlphaNoneSkipFirst`), and the destination's opacity is
   exactly what decides whether a glyph is rasterised in colour. MEASURED on the live session: the window title's
