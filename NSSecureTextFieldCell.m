@@ -26,9 +26,10 @@
 	return self;
 }
 
-- (id)copy
+- (id)copyWithZone:(NSZone *)zone
 {
-	NSSecureTextFieldCell *copy = [super copy];
+	(void)zone;
+	NSSecureTextFieldCell *copy = [super copyWithZone:zone];
 
 	copy->_echosBullets = _echosBullets;
 	return copy;

@@ -86,9 +86,10 @@ static NSColor *fn_colour_from_components(id stored)
 
 /* **AN IMMUTABLE COPY OF THE LEDGER**, which is what a value in a store wants: a paragraph style that carries a block
  * must not see it change under it. */
-- (id)copy
+- (id)copyWithZone:(NSZone *)zone
 {
-	NSTextBlock *copy = [[[self class] alloc] init];
+	(void)zone;
+	NSTextBlock *copy = [[[self class] allocWithZone:zone] init];
 	NSUInteger i, j;
 
 	copy->_backgroundColor = [_backgroundColor retain];

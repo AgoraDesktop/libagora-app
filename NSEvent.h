@@ -342,6 +342,12 @@ NS_ASSUME_NONNULL_BEGIN
 	 * RECT's event has no area and answers nil here, which is the same nil Apple's own header documents for it. */
 	NSTrackingArea *_trackingArea;
 	float _pressure;
+	/* **THE SEAM'S THREE, KEPT ON THE EVENT RATHER THAN IN A SIDE TABLE.** A timestamp's ORIGIN and the keyboard tenure
+	 * an event arrived under are facts about the event, and a lookup keyed by event would be a second source of truth
+	 * for something the event already is. */
+	BOOL _cg_hasSourceTimestamp;
+	unsigned int _cg_sourceTimestamp;
+	unsigned int _cg_focusSerial;
 	CGFloat _deltaX;
 	CGFloat _deltaY;
 	CGFloat _deltaZ;
@@ -457,6 +463,23 @@ NS_ASSUME_NONNULL_BEGIN
  * fraction of a notch is a fraction of a line, and the SIGN is Cocoa's — positive is a scroll UP and to the LEFT.
  * Normalizing the protocol's opposite sense is the caller's job and happens once, at the seam, so nothing above it
  * has to know which direction the compositor counted in. */
+/* **THE SOURCE'S OWN CHRONOLOGY, AND WHOSE FOCUS IT ARRIVED UNDER — the two facts `-timestamp` cannot carry.**
+ *
+ * `-timestamp` is a TRANSLATION time: when this process turned the event into an object. A nonblocking confirmation
+ * needs the opposite question answered — "was this keystroke generated before my dialog appeared?" — and a client's own
+ * clock cannot answer it, because the event may have been queued before the client looked.
+ *
+ * `-cg_sourceTimestamp` is the compositor's clock, in milliseconds, as it came off the wire; `-cg_hasSourceTimestamp`
+ * says whether a compositor sent one at all (a stock `xdg-shell` compositor need not). `-cg_focusSerial` is the
+ * KEYBOARD TENURE the event was delivered under: two events with the same serial were not interrupted by the keyboard
+ * leaving this application and coming back, and a higher serial means they were. That distinction is a fact about
+ * focus, not about elapsed time, which is why a timestamp cannot stand in for it.
+ *
+ * Agora extensions; neither is in Apple's 10.6 surface. */
+@property (readonly) BOOL cg_hasSourceTimestamp;
+@property (readonly) unsigned int cg_sourceTimestamp;
+@property (readonly) unsigned int cg_focusSerial;
+
 + (nullable NSEvent *)cg_scrollEventWithDeltaX:(CGFloat)dx
 				  deltaY:(CGFloat)dy
 				location:(NSPoint)location

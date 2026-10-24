@@ -202,9 +202,10 @@
 
 /* **AND A CELL'S COPY CARRIES ITS PLACE ACROSS, which the base's `-copy` cannot know about.** The block's own ledger
  * is copied by the superclass; the table and the four integers are this class's addition. */
-- (id)copy
+- (id)copyWithZone:(NSZone *)zone
 {
-	NSTextTableBlock *copy = [[[self class] alloc] initWithTable:_table startingRow:_startingRow
+	(void)zone;
+	NSTextTableBlock *copy = [[[self class] allocWithZone:zone] initWithTable:_table startingRow:_startingRow
 				  rowSpan:_rowSpan startingColumn:_startingColumn columnSpan:_columnSpan];
 	NSInteger layer;
 

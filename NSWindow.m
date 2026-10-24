@@ -90,6 +90,12 @@
 - (NSUInteger)cg_cursorRectCount;
 @end
 
+/* **THE SEAM'S STAMP ON AN EVENT: WHERE ITS TIMESTAMP CAME FROM, AND WHOSE KEYBOARD TENURE IT BELONGS TO.** A
+ * category rather than three public setters — the values are the compositor's, and this file is the one that has them. */
+@interface NSEvent (AGSeamStamp)
+- (void)cg_setSourceTimestamp:(unsigned int)source_time hasSourceTimestamp:(BOOL)has focusSerial:(unsigned int)serial;
+@end
+
 @interface NSWindow ()
 - (NSInteger)cg_clickCountFor:(NSPoint)p at:(NSTimeInterval)now;
 - (NSInteger)currentClickCount;
@@ -628,13 +634,24 @@ static NSEvent *fn_translate(NSWindow *w, const AGEvent *e, NSTimeInterval now)
 		 * line used to hard-code NO, which made every generated repeat look like a fresh press: `-isARepeat` would
 		 * answer NO for all of them, which is the difference between a key being held and a key being typed twice,
 		 * and is what a find panel or a nudge-with-arrows control checks. */
-		return [NSEvent keyEventWithType:(e->modifier ? NSFlagsChanged : (e->pressed ? NSKeyDown : NSKeyUp))
-					location:where modifierFlags:flags
-				       timestamp:now windowNumber:win context:nil
-				      characters:chars
-			 charactersIgnoringModifiers:chars
-				     isARepeat:(e->repeat ? YES : NO)
-				       keyCode:(unsigned short)e->keycode];
+		{
+			NSEvent *key = [NSEvent keyEventWithType:(e->modifier ? NSFlagsChanged
+									 : (e->pressed ? NSKeyDown : NSKeyUp))
+						 location:where modifierFlags:flags
+						timestamp:now windowNumber:win context:nil
+					       characters:chars
+				  charactersIgnoringModifiers:chars
+					      isARepeat:(e->repeat ? YES : NO)
+						keyCode:(unsigned short)e->keycode];
+
+			/* **AND THE TWO FACTS `-timestamp` CANNOT CARRY.** The translation time above is this process's; the
+			 * source time and the keyboard tenure are the compositor's, and they are what a nonblocking
+			 * confirmation asks about — "was this queued before my dialog appeared?", "was this pair interrupted by
+			 * the keyboard leaving?". */
+			[key cg_setSourceTimestamp:e->source_time_ms hasSourceTimestamp:(e->has_source_time ? YES : NO)
+				       focusSerial:e->focus_serial];
+			return key;
+		}
 	}
 	default:
 		return nil;

@@ -295,8 +295,27 @@ def parse_objc(text):
     return classes, protocols, impls
 
 
+def headers_dir(directory):
+    """**A FRAMEWORK IS A BUNDLE, AND ITS HEADERS ARE TWO LEVELS DOWN.** `manifest` was first pointed at
+    AppKit.framework and worked, because in that SDK `AppKit.framework/Headers` is a SYMLINK to
+    `Versions/C/Headers`. Pointed at CoreData.framework it failed with "no headers", because there
+    `Headers` is a real directory of the bundle's CURRENT version and the symlink is elsewhere -- so the
+    same command worked on one framework and refused the next one for a reason that had nothing to do with
+    either framework. The rule is the SDK's own layout, tried in the order a bundle resolves it.
+
+    A source directory is returned unchanged, which is what every existing caller passes."""
+    for candidate in (directory,
+                      os.path.join(directory, 'Headers'),
+                      os.path.join(directory, 'Versions', 'A', 'Headers'),
+                      os.path.join(directory, 'Versions', 'C', 'Headers')):
+        if glob.glob(os.path.join(candidate, '*.h')):
+            return candidate
+    return directory
+
+
 def parse_tree(directory):
     classes, protocols, impls = {}, set(), {}
+    directory = headers_dir(directory)
     headers = sorted(glob.glob(os.path.join(directory, '*.h')))
     if not headers:
         raise SystemExit('api-ledger: no headers in %s' % directory)
@@ -321,6 +340,7 @@ def c_functions(directory):
 
     Returns name -> {'inline': bool}, because whether a declaration must also be a symbol depends on that flag."""
     out = {}
+    directory = headers_dir(directory)
     for path in sorted(glob.glob(os.path.join(directory, '*.h'))):
         text = strip_comments(open(path, errors='ignore').read())
         text = re.sub(r'@(interface|protocol)\b.*?@end', lambda m: ' ' * len(m.group(0)), text, flags=re.S)

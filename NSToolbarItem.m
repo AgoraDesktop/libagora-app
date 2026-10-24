@@ -351,13 +351,12 @@ NSString *NSToolbarPrintItemIdentifier = @"NSToolbarPrintItem";
 
 /* ---- COPYING ------------------------------------------------------------------------------------ */
 
-/* **`-copy` AND NOT `-copyWithZone:`, BECAUSE THIS TREE HAS NO ZONES** — `NSZone` is deliberately absent and
- * `NSCopying`'s only member is `-copy` (NSObject.h states the decision), so a Cocoa class spelling the zone door
- * would not conform. The copy is a NEW ITEM, not a retain: an item is mutable, and the palette Apple describes is
- * the reason a copy has to be independent. */
-- (id)copy
+/* COCOA'S COPY DOOR. The copy is a NEW ITEM, not a retain: an item is mutable, and the palette Apple describes
+ * is the reason a copy has to be independent. */
+- (id)copyWithZone:(NSZone *)zone
 {
-	NSToolbarItem *copy = [[[self class] alloc] initWithItemIdentifier:_itemIdentifier];
+	(void)zone;
+	NSToolbarItem *copy = [[[self class] allocWithZone:zone] initWithItemIdentifier:_itemIdentifier];
 
 	[copy setLabel:_label];
 	[copy setPaletteLabel:_paletteLabel];

@@ -39,9 +39,10 @@
 }
 
 /* A SHADOW IS A VALUE, so its copy is a second object with the same three facts and a retained colour. */
-- (id)copy
+- (id)copyWithZone:(NSZone *)zone
 {
-	NSShadow *copy = [[NSShadow alloc] init];
+	(void)zone;
+	NSShadow *copy = [[NSShadow allocWithZone:zone] init];
 
 	copy->_shadowOffset = _shadowOffset;
 	copy->_shadowBlurRadius = _shadowBlurRadius;

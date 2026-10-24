@@ -75,6 +75,9 @@ static void check(int ok, const char *what)
 	NSString *lastCharacters;
 	NSUInteger lastModifiers;
 	BOOL lastWasRepeat;
+	BOOL lastHadSourceTime;
+	unsigned int lastSourceTime;
+	unsigned int lastFocusSerial;
 	NSPoint lastPoint;
 }
 @end
@@ -93,6 +96,9 @@ static void check(int ok, const char *what)
 	lastCharacters = [[event characters] copy];
 	lastModifiers = [event modifierFlags];
 	lastWasRepeat = [event isARepeat];
+	lastHadSourceTime = [event cg_hasSourceTimestamp];
+	lastSourceTime = [event cg_sourceTimestamp];
+	lastFocusSerial = [event cg_focusSerial];
 }
 
 - (void)keyUp:(NSEvent *)event
@@ -303,6 +309,38 @@ int main(void)
 		event = evdev_key(30, "a", 1, 0, 0);
 		deliver(application, window, &event);
 		check(!content->lastWasRepeat, "while an ordinary press still answers NO");
+
+		/* **2c. THE SOURCE'S OWN CHRONOLOGY, AND WHOSE FOCUS IT ARRIVED UNDER.** `-timestamp` is a TRANSLATION time —
+		 * when this process made the object — and a confirmation that has to say "this keystroke was queued before
+		 * my dialog appeared" cannot use it. The compositor's millisecond and the keyboard tenure travel separately,
+		 * and an event with no source time says so instead of quietly carrying the translation time. */
+		event = evdev_key(30 /* KEY_A */, "a", 1, 0, 0);
+		event.source_time_ms = 4242;
+		event.has_source_time = 1;
+		event.focus_serial = 7;
+		deliver(application, window, &event);
+		check(content->lastHadSourceTime, "a key event says whether it HAS a source timestamp");
+		check(content->lastSourceTime == 4242, "and carries the compositor's millisecond, not this process's");
+		check(content->lastFocusSerial == 7, "and the keyboard tenure it arrived under");
+
+		/* A PRESS WITH NO SOURCE TIME — the shape a compositor that sends zero produces. (A RELEASE would record
+		 * nothing here: the probe counts `-keyDown:`, which is exactly why the check above used a press.) */
+		event = evdev_key(30, "a", 1, 0, 0);
+		event.source_time_ms = 0;
+		event.has_source_time = 0;
+		event.focus_serial = 7;
+		deliver(application, window, &event);
+		check(!content->lastHadSourceTime,
+		      "an event a compositor sent no time for says it has NONE, rather than passing a translation time "
+		      "off as one");
+		check(content->lastFocusSerial == 7, "and it still says which keyboard tenure it belongs to");
+
+		event = evdev_key(30, "a", 1, 0, 0);
+		event.focus_serial = 8;			/* the keyboard left and came back */
+		deliver(application, window, &event);
+		check(content->lastFocusSerial == 8,
+		      "and a press after a focus return carries a HIGHER tenure, which is how a pair is known to be "
+		      "uninterrupted");
 
 		/* **3. A CLICK IS ALSO WINDOW MANAGEMENT: it activates the application, makes the clicked window key and
 		 * main, and asks for it to be frontmost.** Deactivating first makes the activation half observable even in

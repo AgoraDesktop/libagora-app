@@ -285,6 +285,30 @@ static NSMutableArray *s_monitors;
 	return [e autorelease];
 }
 
+/* **THE SEAM'S STAMP, APPLIED BY THE ONE FILE THAT CONVERTS ITS EVENTS.** A private door rather than three public
+ * setters: the values are the compositor's, and only the translation path knows them. */
+- (void)cg_setSourceTimestamp:(unsigned int)source_time hasSourceTimestamp:(BOOL)has focusSerial:(unsigned int)serial
+{
+	_cg_sourceTimestamp = source_time;
+	_cg_hasSourceTimestamp = has;
+	_cg_focusSerial = serial;
+}
+
+- (BOOL)cg_hasSourceTimestamp
+{
+	return _cg_hasSourceTimestamp;
+}
+
+- (unsigned int)cg_sourceTimestamp
+{
+	return _cg_sourceTimestamp;
+}
+
+- (unsigned int)cg_focusSerial
+{
+	return _cg_focusSerial;
+}
+
 + (nullable NSEvent *)cg_scrollEventWithDeltaX:(CGFloat)dx
 				  deltaY:(CGFloat)dy
 				location:(NSPoint)location

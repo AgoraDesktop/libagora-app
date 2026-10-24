@@ -256,10 +256,11 @@ static NSColor *fn_color_from(NSColorSpaceModel model, const CGFloat c[4])
 	[super dealloc];
 }
 
-- (id)copy
+- (id)copyWithZone:(NSZone *)zone
 {
+	(void)zone;
 	/* A GRADIENT IS A VALUE: the copy is a second object with the same stops and its own engine ramp. */
-	return [[NSGradient alloc] initWithColors:_colors atLocations:_locations colorSpace:_colorSpace];
+	return [[NSGradient allocWithZone:zone] initWithColors:_colors atLocations:_locations colorSpace:_colorSpace];
 }
 
 /* ---- THE STOPS ------------------------------------------------------------------------------------ */

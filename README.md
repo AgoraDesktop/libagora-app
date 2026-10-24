@@ -2270,8 +2270,8 @@ The grid, the drawing and the session are identical in all four.
 **AND THE FIRST CLEAN-UP THE SLICE NEEDED WAS IN A CLASS ONE LEVEL DOWN.** `NSMatrix -setPrototype:` promises Apple's
 contract — every position gets a COPY of the prototype — and `NSCell` had declared `<NSCopying>` since its first slice
 with no method behind it, so `-copy` was a `doesNotRecognizeSelector:`. `-copy` is now the coding pair taken one step
-further (encode, decode), which means it cannot drift from the archive; and because this Foundation removed every
-`NSZone`-taking method, the door is `-copy` rather than Cocoa's `-copyWithZone:`.
+further (encode, decode), which means it cannot drift from the archive; the door is Cocoa's `-copyWithZone:`, so
+`-copy` supplies the NULL zone and a caller that names a zone gets a copy in it.
 
 **TWO MORE TRAPS THE PROBE FOUND, EACH ONE ALREADY IN THE HANDOFFS' SHAPE.** The sort door shuffled RETained pointers
 and released the grid's own references afterwards, freeing cells that were still in it — a crash in the first check

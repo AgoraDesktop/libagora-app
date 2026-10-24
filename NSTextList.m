@@ -255,12 +255,12 @@ static NSString *fn_marker_body(NSString *markerFormat, NSInteger itemNum)
 	return list;
 }
 
-/* **`-copy` AND NOT `-copyWithZone:`, BECAUSE THIS TREE HAS NO ZONES** — `NSZone` is deliberately absent, exactly as
- * `NSColor.m` records for its own copy, so the door a caller uses is the one Cocoa spells `-copy`. The list is a value:
- * the format is immutable, so the copy shares nothing that could change under it. */
-- (id)copy
+/* COCOA'S COPY DOOR: the copy is allocated in the caller's zone. The list is a value: the format is immutable,
+ * so the copy shares nothing that could change under it. */
+- (id)copyWithZone:(NSZone *)zone
 {
-	NSTextList *copy = [[NSTextList alloc] initWithMarkerFormat:_markerFormat options:_listOptions];
+	(void)zone;
+	NSTextList *copy = [[NSTextList allocWithZone:zone] initWithMarkerFormat:_markerFormat options:_listOptions];
 
 	[copy setStartingItemNumber:_startingItemNumber];
 	return copy;

@@ -232,8 +232,9 @@ static const AGPaperRow *fn_paper_for_name(const char *name)
 }
 
 /* A PRINTER IS A VALUE, so its copy is itself with one more owner — which is what `-copy` answering `-retain` means. */
-- (id)copy
+- (id)copyWithZone:(NSZone *)zone
 {
+	(void)zone;
 	return [self retain];
 }
 

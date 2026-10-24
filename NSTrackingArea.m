@@ -88,12 +88,11 @@
  * pointer inside" bit and two names for one area would share one verdict, so one of them would never see its own
  * enter. The userInfo is shared, because the dictionary describes the region rather than the area's walk.
  *
- * AND THE DOOR IS SPELLED `-copy` RATHER THAN `-copyWithZone:,` BECAUSE THIS TREE HAS NO ZONES** — `NSZone` is
- * deliberately undeclared and `NSCopying`'s only member is `-copy` (`NSObject.h` states the decision and its cost: a
- * Cocoa class that spelled `-copyWithZone:` would not conform, which is the error this line used to be). */
-- (id)copy
+ * COCOA'S COPY DOOR, with the copy allocated in the caller's zone. */
+- (id)copyWithZone:(NSZone *)zone
 {
-	return [[NSTrackingArea alloc] initWithRect:_rect
+	(void)zone;
+	return [[NSTrackingArea allocWithZone:zone] initWithRect:_rect
 					    options:_options
 					      owner:_owner
 					   userInfo:_userInfo];

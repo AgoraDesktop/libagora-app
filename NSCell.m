@@ -319,11 +319,11 @@ static NSString * const AGCoderCellActionKey = @"action";
  * retain below is the difference. A subclass that declares extra state gets a correct copy for free as long as that
  * state is coded, which is the same requirement its archive already has.
  *
- * **THE DOOR IS `-copy` RATHER THAN COCOA'S `-copyWithZone:`** because THIS FOUNDATION REMOVED EVERY `NSZone`-TAKING
- * METHOD: `NSCopying` here declares `-copy` and the override point is the entry point (see `libagora-base/NSObject.h`).
- * A class written against Apple's spelling would not conform on this stack, which is the cost that header records. */
-- (id)copy
+ * COCOA'S COPY DOOR: `-copy` delegates here with a NULL zone, and the copy is allocated in the zone the caller
+ * supplied. */
+- (id)copyWithZone:(NSZone *)zone
 {
+	(void)zone;
 	NSData *data;
 	id copy;
 
@@ -2088,11 +2088,9 @@ static const NSSize FN_CELL_NO_OPINION = { 10000.0, 10000.0 };
 
 - (void)setAttributedStringValue:(NSAttributedString *)obj
 {
-	/* **THE COPY IS MADE WITH `-initWithAttributedString:` RATHER THAN `-copy`, AND THAT IS A MEASURED FACT ABOUT THIS
-	 * TREE RATHER THAN A PREFERENCE**: `NSAttributedString` DECLARES `<NSCopying>` and DOES NOT IMPLEMENT
-	 * `-copyWithZone:`, so `-copy` on this runtime would raise `doesNotRecognizeSelector:` — a crash where a copy was
-	 * meant. Apple declares the property `@NSCopying`, so a copy is what this door owes, and the initialiser that takes
-	 * an attributed string is how this tier makes one. */
+	/* **THE COPY IS MADE WITH `-initWithAttributedString:`**, which is the immutable snapshot this property needs.
+	 * `NSAttributedString` implements `-copyWithZone:` too, so either door would work; the initialiser states the
+	 * resulting class and keeps the copy independent of a caller's mutable string. */
 	NSAttributedString *held = [[NSAttributedString alloc] initWithAttributedString:obj];
 
 	[self setObjectValue:held];

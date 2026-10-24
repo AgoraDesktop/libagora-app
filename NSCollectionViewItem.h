@@ -13,8 +13,8 @@
  * **`NSCollectionView` HAS ARRIVED, AND IT COPIES THIS CLASS TO MAKE ITS TILES.** The view's default factory copies the
  * prototype item, which is why this class conforms to `NSCopying`: the copy carries the item's CLASS, its view's class and
  * frame, the represented object and the selected bit. **IT DOES NOT CARRY A SUBCLASS'S OWN IVARS** — this tier has no
- * archiving copy of a controller — so a prototype with state either overrides `-copy` or a caller overrides
- * `-newItemForRepresentedObject:` on the view. That is named here because it is the difference between a prototype that is a
+ * archiving copy of a controller — so a prototype with state either overrides `-copyWithZone:` or a caller
+ * overrides `-newItemForRepresentedObject:` on the view. That is named here because it is the difference between a prototype that is a
  * template and one that is a bag of state.
  */
 #ifndef APPKIT_NSCOLLECTIONVIEWITEM_H
@@ -50,7 +50,7 @@ NS_ASSUME_NONNULL_BEGIN
 
 /* AND THE COPY'S CONTRACT IS `NSCOPYING`'S: a +1 object of the same class, with the view's class and frame, the
  * represented object and the selected bit. See the header for what it does not carry. */
-- (id)copy;
+- (id)copyWithZone:(nullable NSZone *)zone;
 
 @end
 

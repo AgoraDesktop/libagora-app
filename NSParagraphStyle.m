@@ -10,8 +10,7 @@
  * IS WHY THE MUTABLE CLASS IS A SUBCLASS and not a flag: a caller holding an `NSParagraphStyle *` has a value it can
  * hand to a store and trust, and a caller that wants to change one asks for `-mutableCopy` in as many words.
  *
- * AND `-copy`, NOT `-copyWithZone:`, BECAUSE THIS TREE HAS NO ZONES: `NSCopying`'s only member is `-copy` (NSObject.h
- * states the decision and its cost), so a zone-taking door here would be a second copy protocol nobody conforms to.
+ * COCOA'S COPY DOORS, with the zone supplied by the caller.
  */
 #import <AppKit/NSParagraphStyle.h>
 #import "NSTextList_internal.h"
@@ -131,15 +130,17 @@ static NSParagraphStyle *fn_defaultParagraphStyle = nil;
 
 /* AN IMMUTABLE STYLE HAS NOTHING TO COPY: the object cannot have changed since it was made, so the copy IS the
  * original and the retain is the whole implementation — the same answer `NSColor -copy` gives. */
-- (id)copy
+- (id)copyWithZone:(NSZone *)zone
 {
+	(void)zone;
 	return [self retain];
 }
 
 /* AND THE MUTABLE COPY IS A SECOND LEDGER FILLED FROM THIS ONE. */
-- (id)mutableCopy
+- (id)mutableCopyWithZone:(NSZone *)zone
 {
-	return [[NSMutableParagraphStyle alloc] initWithParagraphStyle:self];
+	(void)zone;
+	return [[NSMutableParagraphStyle allocWithZone:zone] initWithParagraphStyle:self];
 }
 
 - (NSTextAlignment)alignment
@@ -357,9 +358,10 @@ static NSParagraphStyle *fn_defaultParagraphStyle = nil;
 
 /* **AND A MUTABLE STYLE'S `-copy` IS AN IMMUTABLE ONE**, which is the door that lets a builder be frozen before it goes
  * into a store. It is the same ledger copy the superclass's `-mutableCopy` writes, into the immutable class. */
-- (id)copy
+- (id)copyWithZone:(NSZone *)zone
 {
-	return [[NSParagraphStyle alloc] initWithParagraphStyle:self];
+	(void)zone;
+	return [[NSParagraphStyle allocWithZone:zone] initWithParagraphStyle:self];
 }
 
 @end

@@ -246,9 +246,10 @@ const NSBezierPathElement NSLineToBezierPathElement = NSBezierPathElementLineTo;
 	[super dealloc];
 }
 
-- (id)copy
+- (id)copyWithZone:(NSZone *)zone
 {
-	NSBezierPath *c = [[[self class] alloc] init];
+	(void)zone;
+	NSBezierPath *c = [[[self class] allocWithZone:zone] init];
 	NSUInteger i;
 
 	if (c == nil) {

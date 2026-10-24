@@ -74,9 +74,10 @@
 
 /* A CONNECTION IS A VALUE IN A NIB'S RECORD, and its copy is a second object with the same ends (borrowed) and its own copy
  * of the label. */
-- (id)copy
+- (id)copyWithZone:(NSZone *)zone
 {
-	NSNibConnector *copy = [[[self class] alloc] init];
+	(void)zone;
+	NSNibConnector *copy = [[[self class] allocWithZone:zone] init];
 
 	copy->_source = _source;
 	copy->_destination = _destination;

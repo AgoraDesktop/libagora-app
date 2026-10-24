@@ -413,11 +413,9 @@ static NSString * const AGCoderButtonGradientKey = @"gradientType";
 	_imageScaling = scaling;
 }
 
-/* **AN ATTRIBUTED STRING IS COPIED WITH `-initWithAttributedString:` RATHER THAN `-copy`,** for the measured reason
- * `NSCell -setAttributedStringValue:` records one class up: this tree's `NSAttributedString` declares `<NSCopying>`
- * and does NOT implement `-copyWithZone:`, so `-copy` would raise. A NIL IS THE QUIET CASE — "no attributed title,
- * fall back to the plain one" — so it is stored as nil rather than making an empty string that would win over a
- * perfectly good plain title. */
+/* **AN ATTRIBUTED STRING IS COPIED WITH `-initWithAttributedString:`**, which is the immutable snapshot the
+ * property promises. A NIL IS THE QUIET CASE — "no attributed title, fall back to the plain one" — so it is stored
+ * as nil rather than making an empty string that would win over a perfectly good plain title. */
 - (NSAttributedString *)attributedTitle
 {
 	return _attributedTitle;

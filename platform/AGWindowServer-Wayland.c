@@ -128,6 +128,9 @@ struct AGWindow {
 	 * for and the size the compositor places — and the buffer is `frame x scale`. Copied rather than read through
 	 * `server` so a buffer's dimensions are a fact about the window that owns it. */
 	int scale;
+	/* **ONE KEYBOARD TENURE AT A TIME, AND IT IS NUMBERED.** Raised on every `wl_keyboard.enter` and by nothing else,
+	 * so two events with the same number were delivered without the keyboard leaving this application in between. */
+	uint32_t focus_serial;
 	int level;
 	/* **WHICH APPLICATION THIS WINDOW BELONGS TO.** The bundle identifier, empty until the owner says otherwise —
 	 * it used to be the constant "org.agora.AppKit" written into `AGWindowCreate`, which made every Agora
@@ -235,6 +238,9 @@ struct AGWindowServer {
 	 * upscales, and one that honours it renders at that resolution and asks for the buffer to be placed at the
 	 * logical size. It arrives with the output, before any window exists, so a window is created already knowing. */
 	int scale;
+	/* **ONE KEYBOARD TENURE AT A TIME, AND IT IS NUMBERED.** Raised on every `wl_keyboard.enter` and by nothing else,
+	 * so two events with the same number were delivered without the keyboard leaving this application in between. */
+	uint32_t focus_serial;
 	int have_screen;
 	char screen_name[128];
 
@@ -1089,6 +1095,9 @@ static void keyboard_enter(void *data, struct wl_keyboard *keyboard, uint32_t se
 			break;
 		}
 	}
+	/* THE TENURE BEGINS HERE, AND ONLY HERE. A repeat keeps the serial it was armed under, so a generated repeat is
+	 * never mistaken for a press after a focus return. */
+	server->focus_serial++;
 	/* **AND A FOCUS CHANGE ENDS THE HELD KEY**, because the keys the compositor had down were released for us the
 	 * moment it looked away — a repeat that continued would type into the window that now has the keyboard. */
 	ag_repeat_cancel(server);
@@ -1119,6 +1128,12 @@ static void keyboard_key(void *data, struct wl_keyboard *keyboard, uint32_t seri
 	memset(&event, 0, sizeof event);
 	event.type = AGEventKey;
 	event.time_ms = time != 0 ? time : ag_now_ms();
+	/* **THE ORIGIN OF THE TIMESTAMP, SAID OUT LOUD.** `wl_keyboard.key` carries the compositor's millisecond; a
+	 * compositor that sends zero has told us nothing, and this process's clock is then the only time there is — a
+	 * different fact, and one the caller has to be able to tell apart. */
+	event.source_time_ms = time;
+	event.has_source_time = (time != 0);
+	event.focus_serial = server->focus_serial;
 	event.keycode = key;
 	event.pressed = state == WL_KEYBOARD_KEY_STATE_PRESSED;
 	/* THE TRANSLATION IS UNCONDITIONAL, even on release: the caller may want the text of the key that went
@@ -2263,6 +2278,11 @@ void AGWindowServerSetActivationHandler(AGWindowServer *server, AGActivationFunc
 	}
 	server->activation_fn = function;
 	server->activation_context = context;
+}
+
+uint32_t AGWindowServerFocusSerial(AGWindowServer *server)
+{
+	return (server != NULL) ? server->focus_serial : 0;
 }
 
 int AGWindowServerScale(AGWindowServer *server)

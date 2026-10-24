@@ -1104,9 +1104,7 @@ enum {
  * (Foundation, with `-string`, `-length`, `-initWithString:attributes:`, `-initWithAttributedString:` and
  * `-isEqualToAttributedString:`), so a cell can hold one and hand it back. Apple declares the property `@NSCopying`,
  * which is why the setter stores a COPY rather than the caller's object — and it makes that copy through
- * `-initWithAttributedString:` because THIS TREE'S `NSAttributedString` DECLARES `<NSCopying>` AND DOES NOT IMPLEMENT
- * `-copyWithZone:`, so `-copy` would be a `doesNotRecognizeSelector:` at runtime rather than a copy. That is a measured
- * fact about the tier and not a preference, and it is recorded where the setter uses it.
+ * `-initWithAttributedString:`, which names the immutable class the property promises.
  *
  * `-setAttributedStringValue:` HAS TWO DOCUMENTED CLAUSES AND BOTH ARE IMPLEMENTABLE: "if the receiver is not a
  * text-type cell, IT IS CONVERTED TO ONE before the value is set" — the SAME conversion §A10bj's `-setStringValue:`
@@ -1176,10 +1174,9 @@ enum {
 /* AND THE COPY, WHICH APPLE DECLARES AND THIS TREE HAD DECLARED ONLY THE CONFORMANCE FOR. `-copy` was a
  * `doesNotRecognizeSelector:` — measured by `NSMatrix -setPrototype:`, whose whole contract is that every position gets
  * a copy of the prototype. The implementation is the archiving pair taken one step further (encode, decode), so the
- * copy cannot drift from the coding; see `NSCell.m` for that argument and for the ownership of the answer. **AND IT
- * IS `-copy` RATHER THAN COCOA'S `-copyWithZone:`** because this Foundation removed every `NSZone`-taking method: the
- * protocol's member here IS `-copy`, and the override point is the entry point (see `libagora-base/NSObject.h`). */
-- (id)copy;
+ * copy cannot drift from the coding; see `NSCell.m` for that argument and for the ownership of the answer. The zone
+ * is the caller's, and the copy is allocated in it. */
+- (id)copyWithZone:(nullable NSZone *)zone;
 
 @end
 

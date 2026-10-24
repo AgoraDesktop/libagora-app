@@ -190,16 +190,12 @@ static NSDictionary *fn_core_text_attributes(NSDictionary *appkitAttributes)
 
 @implementation NSFontDescriptor
 
-/* **`-copy` AND NOT `-copyWithZone:`, BECAUSE THIS TREE HAS NO ZONES** — the rule `NSColor.h` states and this
- * file follows: `NSZone` is deliberately undeclared here and `NSCopying`'s only member is `-copy` (`NSObject.h`
- * states the decision and its copyright). A Cocoa class that spelled `-copyWithZone:` would need a type this
- * tree does not have.
- *
- * AND THE COPY IS A RETAIN, which is what a `NSCopying` VALUE class should do: the attributes dictionary cannot
- * change — every door that would change one answers a NEW descriptor — so an independent copy would be
- * indistinguishable from this object. */
-- (id)copy
+/* COCOA'S COPY DOOR. The copy is a RETAIN, which is what an immutable `NSCopying` value should do: the
+ * attributes dictionary cannot change — every door that would change one answers a NEW descriptor — so an
+ * independent copy would be indistinguishable from this object. */
+- (id)copyWithZone:(NSZone *)zone
 {
+	(void)zone;
 	return [self retain];
 }
 

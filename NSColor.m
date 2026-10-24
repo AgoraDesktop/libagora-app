@@ -629,12 +629,11 @@ static void fn_cmyk_of(NSColor *self, CGFloat cmyk[4])
 	return (NSUInteger)h;
 }
 
-/* `-copy` AND NOT `-copyWithZone:`, BECAUSE THIS TREE HAS NO ZONES: `NSZone` is deliberately
- * undeclared here and `NSCopying`'s only member is `-copy` (NSObject.h states the decision and its
- * cost — a Cocoa class implementing `-copyWithZone:` would not conform). A colour is immutable, so
- * the copy IS a retain, which is what a `NSCopying` value class should do. */
-- (id)copy
+/* COCOA'S COPY DOOR. A colour is immutable, so the copy IS a retain, which is what an `NSCopying` value
+ * class should do, and it reports the caller's zone through the copy. */
+- (id)copyWithZone:(NSZone *)zone
 {
+	(void)zone;
 	return [self retain];
 }
 

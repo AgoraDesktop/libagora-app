@@ -83,8 +83,9 @@ NSString *const NSTabColumnTerminatorsAttributeName = @"NSTabColumnTerminators";
 
 /* IMMUTABLE, SO THE COPY IS THE ORIGINAL — the answer `NSColor -copy` gives, and the reason a tab can be handed to a
  * store and trusted. */
-- (id)copy
+- (id)copyWithZone:(NSZone *)zone
 {
+	(void)zone;
 	return [self retain];
 }
 

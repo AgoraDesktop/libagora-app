@@ -146,9 +146,10 @@ static NSPrinter *s_defaultPrinter = nil;
 }
 
 /* A TICKET COPIES AS A TICKET: the dictionary is copied and the queue is the same object (a printer is a value here). */
-- (id)copy
+- (id)copyWithZone:(NSZone *)zone
 {
-	NSPrintInfo *copy = [[NSPrintInfo alloc] init];
+	(void)zone;
+	NSPrintInfo *copy = [[NSPrintInfo allocWithZone:zone] init];
 
 	[copy->_dictionary setDictionary:_dictionary];
 	[copy setPrinter:_printer];

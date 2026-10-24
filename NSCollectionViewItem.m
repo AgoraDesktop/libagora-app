@@ -40,9 +40,10 @@
 /* **THE COPY A PROTOTYPE IS FOR: THE CLASS, THE VIEW'S CLASS AND FRAME, THE OBJECT AND THE SELECTED BIT.** Apple's own
  * item copies through an archive; this tier has no controller archive, so the copy is written out rather than implied —
  * and the header names what a subclass with its own ivars must do to keep them. */
-- (id)copy
+- (id)copyWithZone:(NSZone *)zone
 {
-	NSCollectionViewItem *copy = [[[self class] alloc] initWithNibName:nil bundle:nil];
+	(void)zone;
+	NSCollectionViewItem *copy = [[[self class] allocWithZone:zone] initWithNibName:nil bundle:nil];
 
 	if (_view != nil) {
 		NSView *viewCopy = [[[_view class] alloc] initWithFrame:[_view frame]];

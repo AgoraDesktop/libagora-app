@@ -42,9 +42,10 @@
 
 /* A CELL IS COPIED AS A VALUE, so the copy carries the four facts and the value; the pressed ink is a gesture's state and
  * is not copied. */
-- (id)copy
+- (id)copyWithZone:(NSZone *)zone
 {
-	NSStepperCell *copy = [super copy];
+	(void)zone;
+	NSStepperCell *copy = [super copyWithZone:zone];
 
 	copy->_minValue = _minValue;
 	copy->_maxValue = _maxValue;

@@ -139,6 +139,23 @@ typedef struct AGEvent {
 	int32_t discrete;		/* whole notches, when the device has them */
 	int32_t value120;		/* the same, in 120ths */
 	int has_discrete;
+	/* ============================================================================================ *
+	 * THE SOURCE'S OWN CHRONOLOGY, AND WHOSE FOCUS IT ARRIVED UNDER.                                     *
+	 *                                                                                                    *
+	 * `time_ms` HAS ALWAYS BEEN EITHER NUMBER: the compositor's wire millisecond when it sent one and this
+	 * process's clock when it did not, with nothing saying which. That is not enough to answer a question a
+	 * nonblocking confirmation has to answer — "is this a fresh press or one that was queued before the
+	 * dialog appeared?" — because a client's own clock cannot tell it. So the origin is now explicit, and an
+	 * event that has no source time says so rather than quietly carrying a translation time in its place. *
+	 * ============================================================================================ */
+	uint32_t source_time_ms;	/* the compositor's clock, valid only when `has_source_time` */
+	int has_source_time;		/* nonzero when the timestamp above came off the wire */
+	/* **AND WHOSE KEYBOARD FOCUS IT ARRIVED UNDER.** `wl_keyboard.enter` starts a tenure and `leave` ends
+	 * it; every key event carries the serial of the tenure it was delivered in. Two presses with the same
+	 * serial were uninterrupted; a HIGHER serial means the keyboard left this application and came back in
+	 * between — which is a different question from "how much time passed", and the one a chord, a double
+	 * click or a held key actually needs answered. 0 on a machine with no compositor to ask. */
+	uint32_t focus_serial;
 	/* **A REPEAT THE CLIENT GENERATED, NOT ONE THAT ARRIVED.** A held key produces more key events than the
 	 * hardware sent; a client that could not tell them apart would let a repeat pass for a fresh press — which is
 	 * what `NSEvent -isARepeat` exists to prevent, and what a double-typed keystroke would mean. */
@@ -249,6 +266,11 @@ typedef struct AGWindow AGWindow;
  * before drawing: a context over a buffer of `frame x scale` pixels must be scaled by this or every view draws into
  * the top-left corner of a window twice its size. */
 int AGWindowBufferScale(AGWindow *window);
+
+/* **THE KEYBOARD'S CURRENT TENURE**, which is the serial the next key event will carry: raised by every
+ * `wl_keyboard.enter` and by nothing else. A caller that wants to know whether a focus change happened between two
+ * events compares their `focus_serial`; this is what it is compared against for "has it changed since?". */
+uint32_t AGWindowServerFocusSerial(AGWindowServer *server);
 
 /* Ask for a window of this size. The compositor may choose another, in which case AGEventConfigure says
  * so — a window is not its requested size until it is configured. */

@@ -29,9 +29,10 @@
 	return self;
 }
 
-- (id)copy
+- (id)copyWithZone:(NSZone *)zone
 {
-	NSImageCell *copy = [super copy];
+	(void)zone;
+	NSImageCell *copy = [super copyWithZone:zone];
 
 	copy->_imageAlignment = _imageAlignment;
 	copy->_imageScaling = _imageScaling;
