@@ -43,9 +43,11 @@ def main():
         print("usage: check_hidpi.py SHOT SCALE X Y W H", file=sys.stderr)
         return 2
     shot = sys.argv[1]
-    # **THE OUTPUT SCALE MAY BE A FRACTION.** 1.5 is what most HiDPI laptops actually ship with, and the client on such
-    # an output renders at 2x — the integer `wl_output.scale` rounds UP — while the compositor downsamples 2 -> 1.5.
-    # So the arithmetic here is in device pixels and the scale enters as a number, not as a multiplier.
+    # **THE OUTPUT SCALE MAY BE A FRACTION, AND THE CLIENT RENDERS AT IT.** 1.5 is what most HiDPI laptops actually
+    # ship with. A resolution-independent client hears the real fraction (`agora_output.preferred_scale`), rasterises
+    # a 200x100-point window into a 300x150 buffer at 1.5, and the compositor places it 1:1; an older client hears
+    # the integer ceiling (2) and the compositor downsamples 2 -> 1.5. Either way the arithmetic here is in device
+    # pixels and the scale enters as a number, not as a multiplier.
     scale = float(sys.argv[2])
     wx, wy, ww, wh = (int(v) for v in sys.argv[3:7])
 

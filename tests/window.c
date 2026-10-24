@@ -230,12 +230,12 @@ int main(int argc, char **argv)
 		fprintf(stderr, "window: A RESIZE WAS ASKED FOR AND NO FRAME FOLLOWED IT\n");
 		return 1;
 	}
-	if (app.answered && app.answered_width != app.want_width * AGWindowBufferScale(app.window)) {
-		fprintf(stderr, "window: the frame after the resize is %d device pixels wide, want %d x %d\n",
+	if (app.answered && app.answered_width != (int)((double)app.want_width * AGWindowBufferScale(app.window) + 0.5)) {
+		fprintf(stderr, "window: the frame after the resize is %d device pixels wide, want %d x %g\n",
 			app.answered_width, app.want_width, AGWindowBufferScale(app.window));
 		return 1;
 	}
-	fprintf(stderr, "window: the frame after a resize to %dx%d points is %d device pixels wide (scale %d)\n",
+	fprintf(stderr, "window: the frame after a resize to %dx%d points is %d device pixels wide (scale %g)\n",
 		app.want_width, app.want_height, app.answered_width, AGWindowBufferScale(app.window));
 	return 0;
 }

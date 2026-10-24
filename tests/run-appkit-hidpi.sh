@@ -3,12 +3,14 @@
 # SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
 # SPDX-License-Identifier: LGPL-3.0-or-later
 
-# The AppKit against OUR window server on a 2x output, photographed.
+# The AppKit against OUR window server on a scaled output, photographed.
 #
-# This is the client half of HiDPI and it needs both halves of the stack in the same test: the compositor has to report
-# `wl_output.scale`, the client has to render at that resolution and ask for its buffer to be placed at the logical
-# size, and the compositor then has to composite it 1:1. A synthetic event fixture cannot show any of that, so the
-# server runs at `--scale 2` and the checker measures where a shape drawn at a known POINT actually landed.
+# This is the client half of resolution independence and it needs both halves of the stack in the same test: the
+# compositor has to report the output scale (fractional since protocol 9, via `agora_output.preferred_scale`), the
+# client has to rasterise at that scale and declare the same fraction back, and the compositor then has to composite
+# it 1:1. A synthetic event fixture cannot show any of that, so the server runs at a known `--scale` and the checker
+# measures where a shape drawn at a known POINT actually landed. 2 and 1 exercise the integer path; 1.5 is the
+# fractional one.
 set -u
 
 SERVER="${1:?usage: run-appkit-hidpi.sh SERVER BINARY PYTHON CHECKER}"

@@ -295,11 +295,12 @@ void AGWindowServerMenuBarColour(AGWindowServer *server, unsigned int *rgb);
  * described yet, which is a state and not an error. */
 void AGWindowServerScreenSize(AGWindowServer *server, int *width, int *height, const char **name);
 
-/* **THE OUTPUT'S DEVICE PIXELS PER LOGICAL PIXEL — the number a HiDPI client renders by.** It is `wl_output.scale`,
- * which the compositor sends when the output is bound: 1 on an ordinary screen, 2 on a HiDPI one. A window's frame
- * stays in logical pixels; its BUFFER is `frame x this`, and `AGWindowBufferScale` is what a caller needs to build a
- * graphics context over those pixels that still works in points. */
-int AGWindowServerScale(AGWindowServer *server);
+/* **THE OUTPUT'S DEVICE PIXELS PER LOGICAL PIXEL — the number a resolution-independent client renders by.** It is
+ * `agora_output.preferred_scale`, the display's real fraction (1.333…, 0.805…), and falls back to `wl_output.scale`'s
+ * integer ceiling on a compositor that does not speak the extension. A window's frame stays in logical pixels; its
+ * BUFFER is `round(frame x this)`, and `AGWindowBufferScale` is what a caller needs to build a graphics context over
+ * those pixels that still works in points. */
+double AGWindowServerScale(AGWindowServer *server);
 
 /* ---------------------------------------------------------------------------------------------------
  * windows
@@ -308,9 +309,10 @@ int AGWindowServerScale(AGWindowServer *server);
 typedef struct AGWindow AGWindow;
 
 /* **THE SCALE THIS WINDOW'S BUFFERS ARE MADE AT**, which is the server's until an output says otherwise. Read it
- * before drawing: a context over a buffer of `frame x scale` pixels must be scaled by this or every view draws into
- * the top-left corner of a window twice its size. */
-int AGWindowBufferScale(AGWindow *window);
+ * before drawing: a context over a buffer of `round(frame x scale)` pixels must be scaled by this or every view draws
+ * into the top-left corner of a window twice its size. It is a fraction on a real display — 1.333 at 96 dpi, 0.805
+ * at 57.97 — so a caller must not round it before scaling the context. */
+double AGWindowBufferScale(AGWindow *window);
 
 /* **THE KEYBOARD'S CURRENT TENURE**, which is the serial the next key event will carry: raised by every
  * `wl_keyboard.enter` and by nothing else. A caller that wants to know whether a focus change happened between two

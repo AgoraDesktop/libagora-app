@@ -94,7 +94,7 @@ int main(int argc, char **argv)
 
 		/* THE SCALE THIS CLIENT DECIDED ON, printed so a failure says whether the window was told the right number or
 		 * drew the right number. */
-		printf("appkit_hidpi: window %dx%d points at (%d,%d), output scale %d, userSpaceScaleFactor %g\n",
+		printf("appkit_hidpi: window %dx%d points at (%d,%d), output scale %g, userSpaceScaleFactor %g\n",
 		       width, height, x, y, AGWindowServerScale(AGWindowServerShared()),
 		       (double)[window userSpaceScaleFactor]);
 

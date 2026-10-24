@@ -3711,7 +3711,8 @@ static CGFloat fn_clamp_axis(CGFloat v, CGFloat lo, CGFloat hi)
 
 /* THE SURFACE IS THE CONTENT RECT'S, MADE ON DEMAND AND REMADE WHEN THAT RECT CHANGES SIZE — the size is
  * read back off the context rather than kept in a second ivar, so the two cannot disagree about it. */
-- (BOOL)cg_ensureSurfaceWithPixels:(unsigned char *)pixels stride:(int)stride
+- (BOOL)cg_ensureSurfaceWithPixels:(unsigned char *)pixels stride:(int)stride width:(int)bufferWidth
+			   height:(int)bufferHeight
 {
 	NSInteger w, h;
 	CGColorSpaceRef cs;
@@ -3729,16 +3730,25 @@ static CGFloat fn_clamp_axis(CGFloat v, CGFloat lo, CGFloat hi)
 	 * POINTS, so every view in this tree keeps drawing in points and the scale is applied exactly once — to the
 	 * context's transform. That is the whole of the drawing half of HiDPI: Core Text rasterises at whatever the CTM
 	 * says, so text comes out sharp with no change to a single view. */
+	/* **THE BUFFER IS THE FRAME TIMES THE OUTPUT SCALE, AND THE CONTEXT IS TOLD SO.** A HiDPI client renders at the
+	 * resolution the screen has and asks the compositor to place the buffer at the logical size; the frame stays in
+	 * POINTS, so every view in this tree keeps drawing in points and the scale is applied exactly once — to the
+	 * context's transform. That is the whole of the drawing half of HiDPI: Core Text rasterises at whatever the CTM
+	 * says, so text comes out sharp with no change to a single view. */
 	{
-		int scale = AGWindowBufferScale(_agwindow);
+		double scale = AGWindowBufferScale(_agwindow);
 
-		if (scale < 1) {
-			scale = 1;
+		if (!(scale > 0.0)) {
+			scale = 1.0;
 		}
 		_deviceScale = (CGFloat)scale;
 	}
-	w = (NSInteger)(_frame.size.width * _deviceScale);
-	h = (NSInteger)(_frame.size.height * _deviceScale);
+	/* **THE BITMAP IS THE BUFFER THE SEAM ACTUALLY MADE, NOT THIS WINDOW'S ARITHMETIC ABOUT IT.** The platform sizes
+	 * it at `round(frame x scale)`, and a frame with a fractional edge would round differently here; the refused
+	 * context that produced — "a row shorter than its width" — is exactly a 159-column bitmap in a 158-pixel stride.
+	 * The dimensions therefore come back from `AGWindowBeginFrameSized` and are used as they are. */
+	w = (NSInteger)bufferWidth;
+	h = (NSInteger)bufferHeight;
 	if (w <= 0 || h <= 0) {
 		return NO;
 	}
@@ -4131,6 +4141,7 @@ static CGFloat fn_clamp_axis(CGFloat v, CGFloat lo, CGFloat hi)
 	CGContextRef c;
 	uint32_t *frame;
 	int stride = 0;
+	int buffer_w = 0, buffer_h = 0;
 	NSInteger slot;
 	NSTimeInterval started = [NSDate timeIntervalSinceReferenceDate];
 
@@ -4143,11 +4154,12 @@ static CGFloat fn_clamp_axis(CGFloat v, CGFloat lo, CGFloat hi)
 	/* **THE FRAME IS ASKED FOR BEFORE THE SURFACE IS CHOSEN, BECAUSE THE FRAME IS THE SURFACE.** Drawing used to
 	 * happen first and be copied after; now the buffer the compositor will sample is the context's pixels, so a
 	 * refused frame is refused before a single pixel is drawn. */
-	frame = AGWindowBeginFrame(_agwindow, &stride);
+	frame = AGWindowBeginFrameSized(_agwindow, &stride, &buffer_w, &buffer_h);
 	if (frame == NULL) {
 		return;
 	}
-	if (![self cg_ensureSurfaceWithPixels:(unsigned char *)frame stride:stride]) {
+	if (![self cg_ensureSurfaceWithPixels:(unsigned char *)frame stride:stride width:buffer_w
+					       height:buffer_h]) {
 		return;
 	}
 	/* **AND THE DAMAGE BECOMES WHAT THIS BUFFER IS MISSING, NOT ONLY WHAT THE VIEWS CHANGED.** A partial paint
@@ -4162,8 +4174,27 @@ static CGFloat fn_clamp_axis(CGFloat v, CGFloat lo, CGFloat hi)
 	}
 	c = (CGContextRef)_surface;
 	if (_opaque) {
+		/* **THE BACKGROUND IS AN AREA, NOT A SHAPE, SO IT MUST NOT BE ANTIALIASED.** A window's background covers
+		 * its surface edge to edge, but at a fractional scale `content.width x scale` lands mid-pixel — 400 points at
+		 * 1.332 is 532.8 — and an antialiased fill blends the last column with whatever was in the buffer, which is
+		 * black. MEASURED: a 194,194,194 column down the right edge of the menu bar window, exactly the 82% of 235
+		 * the fill covered. Turning antialiasing off snaps the area's edges to whole device pixels, which is what an
+		 * area fill wants and what makes a client surface meet the server's strip with no seam. */
+		CGContextSetShouldAntialias(c, 0);
 		CGContextSetFillColorWithColor(c, [[self backgroundColor] CGColor]);
 		CGContextFillRect(c, CGRectMake(dirty.origin.x, dirty.origin.y, dirty.size.width, dirty.size.height));
+		/* And the chrome's share of this paint gets the face colour underneath it for the same reason the whole-frame
+		 * path fills the strip: the two band fills must not meet over uninitialised pixels at a fractional scale. */
+		{
+			NSRect chrome = NSIntersectionRect([self cg_chromeRect], dirty);
+
+			if (!NSIsEmptyRect(chrome)) {
+				CGContextSetFillColorWithColor(c, [[NSColor cg_chromeFaceColor] CGColor]);
+				CGContextFillRect(c, CGRectMake(chrome.origin.x, chrome.origin.y, chrome.size.width,
+								chrome.size.height));
+			}
+		}
+		CGContextSetShouldAntialias(c, 1);
 	} else {
 		CGContextClearRect(c, CGRectMake(dirty.origin.x, dirty.origin.y, dirty.size.width, dirty.size.height));
 	}
@@ -4222,6 +4253,7 @@ static CGFloat fn_clamp_axis(CGFloat v, CGFloat lo, CGFloat hi)
 	CGContextRef c;
 	uint32_t *frame;
 	int stride = 0;
+	int buffer_w = 0, buffer_h = 0;
 	NSInteger slot;
 
 	if (_agwindow == NULL) {
@@ -4242,7 +4274,7 @@ static CGFloat fn_clamp_axis(CGFloat v, CGFloat lo, CGFloat hi)
 	 * was never going to happen — and then the next turn drew and threw away the same again. IT IS NOT A FAILURE
 	 * EITHER WAY: the seam calls the frame handler again when the buffer comes back, and there is no Expose to wait
 	 * for because the client owns the pixels. LEAVING THE WINDOW STALE is what makes that retry happen. */
-	frame = AGWindowBeginFrame(_agwindow, &stride);
+	frame = AGWindowBeginFrameSized(_agwindow, &stride, &buffer_w, &buffer_h);
 	if (frame == NULL) {
 		/* **A REFUSED PAINT, NAMED.** The compositor still holds this window's previous buffer, so this pass draws
 		 * nothing — and the retry is the run loop's `-displayIfNeeded`, which only happens if the flag is still set.
@@ -4257,7 +4289,8 @@ static CGFloat fn_clamp_axis(CGFloat v, CGFloat lo, CGFloat hi)
 		}
 		return;
 	}
-	if (![self cg_ensureSurfaceWithPixels:(unsigned char *)frame stride:stride]) {
+	if (![self cg_ensureSurfaceWithPixels:(unsigned char *)frame stride:stride width:buffer_w
+					       height:buffer_h]) {
 		return;
 	}
 	/* **AND THE BUFFER THIS FRAME LANDS IN IS NOW CURRENT EVERYWHERE**, which is what the ledger is told at the end:
@@ -4274,8 +4307,23 @@ static CGFloat fn_clamp_axis(CGFloat v, CGFloat lo, CGFloat hi)
 	 * the strip above them — which this method paints because nothing else will (appkit-plan §6 D6). There are no
 	 * rows without an author, which is what the white stripe this file once carried was. */
 	if (_opaque) {
+		/* **THE CHROME IS ONE SURFACE, SO IT IS FILLED AS ONE BEFORE ANYBODY DRAWS ON IT.** The toolbar band and the
+		 * title bar are painted by two different authors — `NSToolbar` and the chrome painter — each filling only its
+		 * own rectangle. At a fractional output scale those rectangles meet between two device rows: each fill covers
+		 * part of the row, and because both are antialiased and the row underneath a FRESH buffer is black, the two
+		 * partial coverages compose to a DARK LINE — MEASURED at 187 where the face is 222. It was visible only on a
+		 * window's first paint, because every later paint blended the same two fills over an existing face and the
+		 * row came out at 222. One aliased prefill of the whole strip makes both edges blend with the face instead of
+		 * with nothing, and a move (which repaints the whole buffer) is no longer what makes it go away. */
+		NSRect chrome = [self cg_chromeRect];
+
+		CGContextSetShouldAntialias(c, 0);
+		CGContextSetFillColorWithColor(c, [[NSColor cg_chromeFaceColor] CGColor]);
+		CGContextFillRect(c, CGRectMake(chrome.origin.x, chrome.origin.y, chrome.size.width, chrome.size.height));
+		/* THE CONTENT'S AREA FILL, WITH THE SAME REASON TO BE ALIASED — see `-cg_drawFrameDirty:`. */
 		CGContextSetFillColorWithColor(c, [[self backgroundColor] CGColor]);
 		CGContextFillRect(c, CGRectMake(0.0, 0.0, content.size.width, content.size.height));
+		CGContextSetShouldAntialias(c, 1);
 	} else {
 		/* **A TRANSPARENT WINDOW'S PIXELS START AT ALPHA ZERO.** Filling them with the background colour would paint
 		 * OVER what is behind the window, which is the one thing a transparent window must not do. */

@@ -125,9 +125,10 @@ struct AGWindow {
 	int frame_height;
 	int has_frame;
 	/* **THE OUTPUT SCALE THIS WINDOW'S BUFFERS ARE MADE AT.** The frame is LOGICAL — the size the application asked
-	 * for and the size the compositor places — and the buffer is `frame x scale`. Copied rather than read through
-	 * `server` so a buffer's dimensions are a fact about the window that owns it. */
-	int scale;
+	 * for and the size the compositor places — and the buffer is `frame x scale`, rounded to whole device pixels.
+	 * Copied rather than read through `server` so a buffer's dimensions are a fact about the window that owns it.
+	 * A double, because a point is 1/72 inch and a 57.97-dpi panel's scale is 0.805. */
+	double scale;
 	/* **THE SELECTION'S FIVE CALLBACKS AND THEIR CONTEXT**, installed by whoever wants the clipboard. Held here rather
 	 * than per-window because a selection belongs to the application, not to a surface. */
 	AGSelectionHandlers selection;
@@ -239,8 +240,12 @@ struct AGWindowServer {
 	/* **THE OUTPUT'S DEVICE PIXELS PER LOGICAL PIXEL, WHICH THIS CLIENT HAS TO RENDER AT.** `wl_output.scale` is how
 	 * a compositor says "this screen is HiDPI"; a client that ignores it draws soft pixels that the compositor
 	 * upscales, and one that honours it renders at that resolution and asks for the buffer to be placed at the
-	 * logical size. It arrives with the output, before any window exists, so a window is created already knowing. */
-	int scale;
+	 * logical size. It arrives with the output, before any window exists, so a window is created already knowing.
+	 * **AND IT IS A DOUBLE, BECAUSE THE PROTOCOL'S INTEGER IS ONLY A CEILING**: `agora_output.preferred_scale`
+	 * carries the display's real fraction (1.333, 0.805) and, when it arrives, replaces the integer — that is what
+	 * lets the client rasterise on the device grid instead of at 2x and let the compositor resample. */
+	double scale;
+	int have_fractional_scale;	/* the preferred_scale event has arrived; the wl_output ceiling is ignored */
 	/* **THE SELECTION'S FIVE CALLBACKS AND THEIR CONTEXT**, installed by whoever wants the clipboard. Held here rather
 	 * than per-window because a selection belongs to the application, not to a surface. */
 	AGSelectionHandlers selection;
@@ -721,9 +726,11 @@ static void ag_window_resize(AGWindow *window, int width, int height)
 		return;
 	}
 	if (window->spare.buffer != NULL) {
-		int scale = window->scale > 0 ? window->scale : 1;
+		double scale = window->scale > 0.0 ? window->scale : 1.0;
+		int pixels_w = (int)((double)width * scale + 0.5);
+		int pixels_h = (int)((double)height * scale + 0.5);
 
-		if (window->spare.width == width * scale && window->spare.height == height * scale) {
+		if (window->spare.width == pixels_w && window->spare.height == pixels_h) {
 			return;
 		}
 		ag_buffer_dispose(&window->spare);
@@ -763,12 +770,14 @@ static void ag_window_apply_pending_resize(AGWindow *window)
 static int ag_buffer_make(AGWindow *window, struct AGBuffer *slot, int width, int height)
 {
 	/* **THE PARAMETERS ARE LOGICAL AND THE ALLOCATION IS NOT.** Every caller above this line thinks in points — the
-	 * frame, the resize, the tests — so the multiplication happens exactly once, here, where pixels are made. */
-	int scale = window->scale > 0 ? window->scale : 1;
+	 * frame, the resize, the tests — so the multiplication happens exactly once, here, where pixels are made. It
+	 * ROUNDS, because a point is 1/72 inch and 23 points at 57.97 dpi is 18.5 pixels: the client's buffer and the
+	 * compositor's placement must agree on the integer that becomes, or the blit is a resample of a rounding error. */
+	double scale = window->scale > 0.0 ? window->scale : 1.0;
 	int stride;
 
-	width *= scale;
-	height *= scale;
+	width = (int)((double)width * scale + 0.5);
+	height = (int)((double)height * scale + 0.5);
 	stride = width * 4;
 	size_t size = (size_t)stride * (size_t)height;
 	struct wl_shm_pool *pool;
@@ -1520,10 +1529,32 @@ static void output_done(void *data, struct wl_output *output)
 	(void)data; (void)output;
 }
 
+/* **THE SCALE A WINDOW IS DRAWN AT, SENT THE WAY THIS COMPOSITOR UNDERSTANDS.** A server that speaks
+ * `agora_window.set_buffer_scale_fixed` takes the real fraction, so the buffer is rasterised on the device grid and
+ * placed 1:1; an older one (or a stock compositor) takes the rounded-up integer and resamples. The window object's
+ * version is the test, because the request is `since="9"` and Wayland gives a child the parent's version. */
+static void ag_window_send_scale(AGWindow *window)
+{
+	double scale;
+
+	if (window == NULL || window->surface == NULL) {
+		return;
+	}
+	scale = window->scale > 0.0 ? window->scale : 1.0;
+	if (window->agora != NULL && agora_window_get_version(window->agora) >= 9) {
+		agora_window_set_buffer_scale_fixed(window->agora, wl_fixed_from_double(scale));
+	} else if (scale > 1.0) {
+		wl_surface_set_buffer_scale(window->surface, (int32_t)(scale + 0.5));
+	}
+}
+
 /* **"THIS SCREEN IS HiDPI", AND THE CLIENT'S HALF OF IT IS TO RENDER AT THAT RESOLUTION.** The factor is device pixels
  * per logical pixel: at 2, a 640x400 window is a 1280x800 buffer that the compositor places as 640x400. A client that
  * ignored this would still be the right SIZE — the compositor upscales — but every glyph would be drawn at half the
  * resolution the screen has, which is the difference between HiDPI and a magnifying glass.
+ *
+ * **IT IS THE FALLBACK NOW, NOT THE ANSWER.** `agora_output.preferred_scale` carries the display's real fraction and
+ * arrives later in the connection; once it has, this integer ceiling is ignored rather than allowed to overwrite it.
  *
  * A TIGHTER FACTOR MAY ARRIVE WITH A TIGHTER WINDOW: the compositor sends it when the output is bound, which is before
  * this process has made a surface, but the protocol allows a change and the surfaces under it have to follow. */
@@ -1533,7 +1564,10 @@ static void output_scale(void *data, struct wl_output *output, int32_t factor)
 	AGWindow *window;
 
 	(void)output;
-	server->scale = (factor > 0) ? factor : 1;
+	if (server->have_fractional_scale) {
+		return;
+	}
+	server->scale = (factor > 0) ? (double)factor : 1.0;
 	for (window = server->windows; window != NULL; window = window->next) {
 		if (window->scale != server->scale) {
 			/* THE NEXT BUFFER IS THE ONE THAT MOVES: the buffer on the glass is not ours to free, and the one being
@@ -1542,9 +1576,7 @@ static void output_scale(void *data, struct wl_output *output, int32_t factor)
 			if (!window->spare.busy && window->spare.buffer != NULL) {
 				ag_buffer_dispose(&window->spare);
 			}
-			if (window->surface != NULL) {
-				wl_surface_set_buffer_scale(window->surface, window->scale);
-			}
+			ag_window_send_scale(window);
 		}
 	}
 }
@@ -1584,13 +1616,45 @@ static void agora_output_work_area(void *data, struct agora_output *output, int3
 	server->have_work_area = 1;
 }
 
+/* **THE REAL SCALE, WHICH IS THE WHOLE POINT OF `preferred_scale`.** The integer `wl_output.scale` can only say 2 for
+ * a 1.333 output, and a client that renders at 2 is then resampled by the compositor — the soft picture this event
+ * exists to remove. Here the client is told 1.333 (quantised to the 1/256 the wire carries), sizes its buffers at
+ * `round(points * scale)`, and declares that same fraction back with `set_buffer_scale_fixed`; the compositor places
+ * the result 1:1. */
+static void agora_output_preferred_scale(void *data, struct agora_output *output, wl_fixed_t scale)
+{
+	AGWindowServer *server = data;
+	AGWindow *window;
+	double value = wl_fixed_to_double(scale);
+
+	(void)output;
+	if (!(value > 0.0)) {
+		return;
+	}
+	server->scale = value;
+	server->have_fractional_scale = 1;
+	for (window = server->windows; window != NULL; window = window->next) {
+		if (window->scale == value) {
+			continue;
+		}
+		/* The drawing buffer is rebuilt at the new factor; the one on the glass is not ours to free. */
+		window->scale = value;
+		if (!window->spare.busy && window->spare.buffer != NULL) {
+			ag_buffer_dispose(&window->spare);
+		}
+		ag_window_send_scale(window);
+	}
+}
+
 static const struct agora_output_listener agora_output_listener = {
-	/* **IN THE PROTOCOL'S OWN ORDER, WHICH IS WHAT A POSITIONAL INITIALISER MEANS.** `work_area` is declared
-	 * before `menu_bar_area` in `agora-shell.xml`, so these two lines cannot be swapped — MEASURED: swapped, a
-	 * client reads the bar's region as the work area and vice versa, and every consequence of that looks like the
-	 * SERVER lying rather than like a struct in the wrong order. */
+	/* **IN THE PROTOCOL'S OWN ORDER, WHICH IS WHAT A POSITIONAL INITIALISER MEANS.** `work_area`, `menu_bar_area` and
+	 * `preferred_scale` (since version 2) are declared in that order, so these lines cannot be swapped — MEASURED:
+	 * swapped, a client reads the bar's region as the work area and vice versa, and every consequence of that looks
+	 * like the SERVER lying rather than like a struct in the wrong order. Every slot is filled because every event is
+	 * sent: libwayland aborts on a NULL one. */
 	agora_output_work_area,
 	agora_output_menu_bar_area,
+	agora_output_preferred_scale,
 };
 
 /* ============================================================================================ *
@@ -2023,10 +2087,11 @@ static void registry_global(void *data, struct wl_registry *registry, uint32_t n
 		 * requests matter now: `get_window_list`, `activate_window` and `close_window` arrived in 3, `set_activatable`
 		 * rides shell 4, `reopen_window` arrived in 5, and `get_dock_menu` and `dock_menu_action` arrived in 6 — and
 		 * a window made from a shell bound at 2 is a version 2 window whose `set_reserved` is the last thing it has. */
-		/* **SEVEN IS WHERE THE SELECTION IS.** Below it the shell is bound at what the compositor offers and the
-		 * clipboard doors answer -1 rather than pretending, which is the same pattern the window list uses. */
+		/* **NINE IS WHERE THE FRACTIONAL SCALE IS.** Below it the shell is bound at what the compositor offers and
+		 * windows keep the integer `wl_output.scale` path — a little soft on a fractional output, but correct. The
+		 * clipboard's seven and the fractional scale's nine are the two fences this seam knows about. */
 		server->shell = wl_registry_bind(registry, name, &agora_shell_interface,
-						version < 7 ? version : 7);
+						version < 9 ? version : 9);
 	}
 }
 
@@ -2499,14 +2564,14 @@ uint32_t AGWindowServerFocusSerial(AGWindowServer *server)
 	return (server != NULL) ? server->focus_serial : 0;
 }
 
-int AGWindowServerScale(AGWindowServer *server)
+double AGWindowServerScale(AGWindowServer *server)
 {
-	return (server != NULL && server->scale > 0) ? server->scale : 1;
+	return (server != NULL && server->scale > 0.0) ? server->scale : 1.0;
 }
 
-int AGWindowBufferScale(AGWindow *window)
+double AGWindowBufferScale(AGWindow *window)
 {
-	return (window != NULL && window->scale > 0) ? window->scale : 1;
+	return (window != NULL && window->scale > 0.0) ? window->scale : 1.0;
 }
 
 void AGWindowServerScreenSize(AGWindowServer *server, int *width, int *height, const char **name)
@@ -2542,10 +2607,7 @@ AGWindow *AGWindowCreate(AGWindowServer *server, int width, int height, const ch
 	 * double-buffered, so it has to be said before the commit that attaches a buffer at that scale — and the output
 	 * has already told this process what the screen is. A window made on a 2x output therefore renders at 2x from its
 	 * very first frame, rather than for one frame at 1x and then again. */
-	window->scale = server->scale > 0 ? server->scale : 1;
-	if (window->surface != NULL && window->scale > 1) {
-		wl_surface_set_buffer_scale(window->surface, window->scale);
-	}
+	window->scale = server->scale > 0.0 ? server->scale : 1.0;
 	window->next = server->windows;
 	server->windows = window;
 
@@ -2562,6 +2624,9 @@ AGWindow *AGWindowCreate(AGWindowServer *server, int width, int height, const ch
 		/* **AND THE WINDOW'S OWN EVENTS ARE LISTENED FOR, WHICH IS WHAT CARRIES THE POINTER'S ABSOLUTE POSITION.**
 		 * Without this the `pointer_global` events go nowhere and a drag is back to the moving target. */
 		agora_window_add_listener(window->agora, &agora_window_listener, window);
+		/* **THE SCALE GOES OUT BEFORE THE FIRST BUFFER IS COMMITTED**, exactly like `wl_surface.set_buffer_scale`:
+		 * a fractional declaration that arrived after the attach would composite one frame at the wrong divisor. */
+		ag_window_send_scale(window);
 		if (title != NULL) {
 			agora_window_set_title(window->agora, title);
 		}
@@ -2583,6 +2648,9 @@ AGWindow *AGWindowCreate(AGWindowServer *server, int width, int height, const ch
 		if (window->app_id[0] != '\0') {
 			xdg_toplevel_set_app_id(window->toplevel, window->app_id);
 		}
+		/* A stock compositor has no fractional request, so this is the integer path — and it still has to be said
+		 * before the commit that gives the surface its role. */
+		ag_window_send_scale(window);
 		/* AN EMPTY COMMIT GIVES THE SURFACE ITS ROLE and is what asks for the first configure. The window has
 		 * no size until that arrives. */
 		wl_surface_commit(window->surface);
