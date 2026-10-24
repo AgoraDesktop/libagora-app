@@ -233,11 +233,22 @@ void AGWindowServerMenuBarColour(AGWindowServer *server, unsigned int *rgb);
  * described yet, which is a state and not an error. */
 void AGWindowServerScreenSize(AGWindowServer *server, int *width, int *height, const char **name);
 
+/* **THE OUTPUT'S DEVICE PIXELS PER LOGICAL PIXEL — the number a HiDPI client renders by.** It is `wl_output.scale`,
+ * which the compositor sends when the output is bound: 1 on an ordinary screen, 2 on a HiDPI one. A window's frame
+ * stays in logical pixels; its BUFFER is `frame x this`, and `AGWindowBufferScale` is what a caller needs to build a
+ * graphics context over those pixels that still works in points. */
+int AGWindowServerScale(AGWindowServer *server);
+
 /* ---------------------------------------------------------------------------------------------------
  * windows
  * --------------------------------------------------------------------------------------------------- */
 
 typedef struct AGWindow AGWindow;
+
+/* **THE SCALE THIS WINDOW'S BUFFERS ARE MADE AT**, which is the server's until an output says otherwise. Read it
+ * before drawing: a context over a buffer of `frame x scale` pixels must be scaled by this or every view draws into
+ * the top-left corner of a window twice its size. */
+int AGWindowBufferScale(AGWindow *window);
 
 /* Ask for a window of this size. The compositor may choose another, in which case AGEventConfigure says
  * so — a window is not its requested size until it is configured. */

@@ -1651,3 +1651,26 @@ add_executable(binding_base binding_base.m)
 target_link_libraries(binding_base PRIVATE App m)
 add_test(NAME appkit-binding-base COMMAND binding_base)
 set_tests_properties(appkit-binding-base PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
+
+# **AND THE CLIENT HALF OF HIDPI, WHICH NEEDS BOTH HALVES OF THE STACK IN ONE TEST.** The compositor runs at `--scale 2`
+# and an AppKit window draws a shape at a known POINT; the checker measures where it landed in DEVICE pixels. A client
+# that ignored the scale would draw it half the size, half the distance from the corner — the whole UI shrunk.
+add_executable(appkit_hidpi appkit_hidpi.m)
+target_link_libraries(appkit_hidpi PRIVATE App)
+
+add_test(NAME appkit-hidpi
+  COMMAND "${CMAKE_CURRENT_SOURCE_DIR}/run-appkit-hidpi.sh"
+    "${AGORA_WINDOW_SERVER_BINARY}" "$<TARGET_FILE:appkit_hidpi>"
+    "${_agora_api_python}" "${CMAKE_CURRENT_SOURCE_DIR}/check_hidpi.py")
+set_tests_properties(appkit-hidpi PROPERTIES SKIP_RETURN_CODE 77
+  ENVIRONMENT "${_agora_app_test_env}")
+
+# **AND THE SAME CASE ON AN ORDINARY SCREEN, because the assertions must hold at BOTH.** A test that passes only at 2x
+# could be measuring "a shape twice the size" rather than "a shape the size the output says" — the pair is what makes
+# the SCALE the variable, with the layout, the window's placement and the square's size in points unchanged.
+add_test(NAME appkit-hidpi-scale1
+  COMMAND "${CMAKE_CURRENT_SOURCE_DIR}/run-appkit-hidpi.sh"
+    "${AGORA_WINDOW_SERVER_BINARY}" "$<TARGET_FILE:appkit_hidpi>"
+    "${_agora_api_python}" "${CMAKE_CURRENT_SOURCE_DIR}/check_hidpi.py" 1)
+set_tests_properties(appkit-hidpi-scale1 PROPERTIES SKIP_RETURN_CODE 77
+  ENVIRONMENT "${_agora_app_test_env}")

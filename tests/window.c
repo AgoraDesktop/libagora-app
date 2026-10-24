@@ -113,6 +113,10 @@ static void on_frame(void *context, uint32_t time_ms)
 		app->asked = 1;
 	} else if (!app->answered) {
 		app->answered = 1;
+		/* **THE STRIDE IS DEVICE PIXELS, so the comparison below is against the asked-for width times the
+		 * output scale.** On an ordinary screen those are the same number; on a HiDPI one the buffer is twice as
+		 * wide as the window is, which is the whole point — so a test that compared them directly would be
+		 * asserting that HiDPI does not work. */
 		app->answered_width = stride / 4;
 		/* AND THE RUN CARRIES ON: this client's contract is a frame count, and one that stopped here would be
 		 * presenting two of the sixty the runner asks for. The answer is checked at the end. */
@@ -226,12 +230,12 @@ int main(int argc, char **argv)
 		fprintf(stderr, "window: A RESIZE WAS ASKED FOR AND NO FRAME FOLLOWED IT\n");
 		return 1;
 	}
-	if (app.answered && app.answered_width != app.want_width) {
-		fprintf(stderr, "window: the frame after the resize is %d wide, want %d\n", app.answered_width,
-			app.want_width);
+	if (app.answered && app.answered_width != app.want_width * AGWindowBufferScale(app.window)) {
+		fprintf(stderr, "window: the frame after the resize is %d device pixels wide, want %d x %d\n",
+			app.answered_width, app.want_width, AGWindowBufferScale(app.window));
 		return 1;
 	}
-	fprintf(stderr, "window: the frame after a resize to %dx%d is %d wide\n", app.want_width, app.want_height,
-		app.answered_width);
+	fprintf(stderr, "window: the frame after a resize to %dx%d points is %d device pixels wide (scale %d)\n",
+		app.want_width, app.want_height, app.answered_width, AGWindowBufferScale(app.window));
 	return 0;
 }

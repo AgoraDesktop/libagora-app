@@ -181,9 +181,12 @@ static AGWindowServer *fn_screen_server(void)
 
 - (CGFloat)userSpaceScaleFactor
 {
-	/* ONE, BECAUSE NOTHING SCALES HERE: this tree's windows are in pixels and the compositor has one coordinate
-	 * space. A Retina-shaped factor would be a promise about a backing store that does not exist yet. */
-	return 1.0;
+	/* **THE SCREEN'S OWN FACTOR, WHICH IS THE COMPOSITOR'S `wl_output.scale`.** The frame and `-visibleFrame` stay in
+	 * points — that is what a caller lays out with — and this is how many device pixels a point is worth. A screen with
+	 * no compositor behind it (a test, a machine with no display) answers 1. */
+	AGWindowServer *server = AGWindowServerShared();
+
+	return (CGFloat)AGWindowServerScale(server);
 }
 
 /* **THE MAPPING FROM THE ERA'S SPACE NAMES TO THE OBJECTS.** The depth is the statement — this tier's surface is

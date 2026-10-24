@@ -124,6 +124,10 @@ struct AGWindow {
 	int frame_width;
 	int frame_height;
 	int has_frame;
+	/* **THE OUTPUT SCALE THIS WINDOW'S BUFFERS ARE MADE AT.** The frame is LOGICAL — the size the application asked
+	 * for and the size the compositor places — and the buffer is `frame x scale`. Copied rather than read through
+	 * `server` so a buffer's dimensions are a fact about the window that owns it. */
+	int scale;
 	int level;
 	/* **WHICH APPLICATION THIS WINDOW BELONGS TO.** The bundle identifier, empty until the owner says otherwise —
 	 * it used to be the constant "org.agora.AppKit" written into `AGWindowCreate`, which made every Agora
@@ -226,6 +230,11 @@ struct AGWindowServer {
 	 * separates "no output has described itself yet" from "the output is zero-sized", which are different. */
 	int screen_width;
 	int screen_height;
+	/* **THE OUTPUT'S DEVICE PIXELS PER LOGICAL PIXEL, WHICH THIS CLIENT HAS TO RENDER AT.** `wl_output.scale` is how
+	 * a compositor says "this screen is HiDPI"; a client that ignores it draws soft pixels that the compositor
+	 * upscales, and one that honours it renders at that resolution and asks for the buffer to be placed at the
+	 * logical size. It arrives with the output, before any window exists, so a window is created already knowing. */
+	int scale;
 	int have_screen;
 	char screen_name[128];
 
@@ -700,7 +709,9 @@ static void ag_window_resize(AGWindow *window, int width, int height)
 		return;
 	}
 	if (window->spare.buffer != NULL) {
-		if (window->spare.width == width && window->spare.height == height) {
+		int scale = window->scale > 0 ? window->scale : 1;
+
+		if (window->spare.width == width * scale && window->spare.height == height * scale) {
 			return;
 		}
 		ag_buffer_dispose(&window->spare);
@@ -739,7 +750,14 @@ static void ag_window_apply_pending_resize(AGWindow *window)
  * thing; what differs is only who owns them at a given moment, and that is `busy`. */
 static int ag_buffer_make(AGWindow *window, struct AGBuffer *slot, int width, int height)
 {
-	int stride = width * 4;
+	/* **THE PARAMETERS ARE LOGICAL AND THE ALLOCATION IS NOT.** Every caller above this line thinks in points — the
+	 * frame, the resize, the tests — so the multiplication happens exactly once, here, where pixels are made. */
+	int scale = window->scale > 0 ? window->scale : 1;
+	int stride;
+
+	width *= scale;
+	height *= scale;
+	stride = width * 4;
 	size_t size = (size_t)stride * (size_t)height;
 	struct wl_shm_pool *pool;
 	int fd;
@@ -1481,9 +1499,33 @@ static void output_done(void *data, struct wl_output *output)
 	(void)data; (void)output;
 }
 
+/* **"THIS SCREEN IS HiDPI", AND THE CLIENT'S HALF OF IT IS TO RENDER AT THAT RESOLUTION.** The factor is device pixels
+ * per logical pixel: at 2, a 640x400 window is a 1280x800 buffer that the compositor places as 640x400. A client that
+ * ignored this would still be the right SIZE — the compositor upscales — but every glyph would be drawn at half the
+ * resolution the screen has, which is the difference between HiDPI and a magnifying glass.
+ *
+ * A TIGHTER FACTOR MAY ARRIVE WITH A TIGHTER WINDOW: the compositor sends it when the output is bound, which is before
+ * this process has made a surface, but the protocol allows a change and the surfaces under it have to follow. */
 static void output_scale(void *data, struct wl_output *output, int32_t factor)
 {
-	(void)data; (void)output; (void)factor;
+	AGWindowServer *server = data;
+	AGWindow *window;
+
+	(void)output;
+	server->scale = (factor > 0) ? factor : 1;
+	for (window = server->windows; window != NULL; window = window->next) {
+		if (window->scale != server->scale) {
+			/* THE NEXT BUFFER IS THE ONE THAT MOVES: the buffer on the glass is not ours to free, and the one being
+			 * drawn into is disposed here so that `AGWindowBeginFrameSized` rebuilds it at the new factor. */
+			window->scale = server->scale;
+			if (!window->spare.busy && window->spare.buffer != NULL) {
+				ag_buffer_dispose(&window->spare);
+			}
+			if (window->surface != NULL) {
+				wl_surface_set_buffer_scale(window->surface, window->scale);
+			}
+		}
+	}
 }
 
 static const struct wl_output_listener output_listener = {
@@ -2223,6 +2265,16 @@ void AGWindowServerSetActivationHandler(AGWindowServer *server, AGActivationFunc
 	server->activation_context = context;
 }
 
+int AGWindowServerScale(AGWindowServer *server)
+{
+	return (server != NULL && server->scale > 0) ? server->scale : 1;
+}
+
+int AGWindowBufferScale(AGWindow *window)
+{
+	return (window != NULL && window->scale > 0) ? window->scale : 1;
+}
+
 void AGWindowServerScreenSize(AGWindowServer *server, int *width, int *height, const char **name)
 {
 	if (width != NULL) {
@@ -2252,6 +2304,14 @@ AGWindow *AGWindowCreate(AGWindowServer *server, int width, int height, const ch
 	window->height = height > 0 ? height : 400;
 
 	window->surface = wl_compositor_create_surface(server->compositor);
+	/* **THE SCALE IS TAKEN BEFORE THE FIRST BUFFER AND ANNOUNCED BEFORE THE FIRST COMMIT.** `set_buffer_scale` is
+	 * double-buffered, so it has to be said before the commit that attaches a buffer at that scale — and the output
+	 * has already told this process what the screen is. A window made on a 2x output therefore renders at 2x from its
+	 * very first frame, rather than for one frame at 1x and then again. */
+	window->scale = server->scale > 0 ? server->scale : 1;
+	if (window->surface != NULL && window->scale > 1) {
+		wl_surface_set_buffer_scale(window->surface, window->scale);
+	}
 	window->next = server->windows;
 	server->windows = window;
 

@@ -383,6 +383,10 @@ typedef NSUInteger NSWindowSharingType;
 	 * that closes the window there would destroy the surface whose callbacks are still on the stack. Coalescing is
 	 * what the flag buys — a batch of configures asks for ONE layout and ONE notification, at the final size. */
 	BOOL _cg_configurePending;
+	/* **THE OUTPUT'S DEVICE PIXELS PER POINT, AS THE SEAM REPORTED IT WHEN THE SURFACE WAS MADE.** The frame and every
+	 * view coordinate stay in points; this is what the bitmap context is `frame x scale` pixels of, and what its CTM is
+	 * scaled by. Kept on the window because the context, the pixel count and the resize test all have to agree on it. */
+	CGFloat _deviceScale;
 	/* THE SIZE THE DELEGATE WAS LAST TOLD ABOUT, so a configure that settles on the size it started from is not a
 	 * resize and is not announced as one. */
 	NSSize _cg_configuredSize;

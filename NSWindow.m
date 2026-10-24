@@ -3707,8 +3707,21 @@ static CGFloat fn_clamp_axis(CGFloat v, CGFloat lo, CGFloat hi)
 	 * (0,0) rather than skipping the chrome rows. THE CONTENT IS UNMOVED inside it: Cocoa's frame puts the chrome at
 	 * the TOP, so the content still begins at the surface's origin and every view coordinate in this tree is what it
 	 * was. */
-	w = (NSInteger)_frame.size.width;
-	h = (NSInteger)_frame.size.height;
+	/* **THE BUFFER IS THE FRAME TIMES THE OUTPUT SCALE, AND THE CONTEXT IS TOLD SO.** A HiDPI client renders at the
+	 * resolution the screen has and asks the compositor to place the buffer at the logical size; the frame stays in
+	 * POINTS, so every view in this tree keeps drawing in points and the scale is applied exactly once — to the
+	 * context's transform. That is the whole of the drawing half of HiDPI: Core Text rasterises at whatever the CTM
+	 * says, so text comes out sharp with no change to a single view. */
+	{
+		int scale = AGWindowBufferScale(_agwindow);
+
+		if (scale < 1) {
+			scale = 1;
+		}
+		_deviceScale = (CGFloat)scale;
+	}
+	w = (NSInteger)(_frame.size.width * _deviceScale);
+	h = (NSInteger)(_frame.size.height * _deviceScale);
 	if (w <= 0 || h <= 0) {
 		return NO;
 	}
@@ -3763,6 +3776,21 @@ static CGFloat fn_clamp_axis(CGFloat v, CGFloat lo, CGFloat hi)
 	}
 	_surfaceWidth = (int)w;
 	_surfaceHeight = (int)h;
+	/* **AND EVERYTHING FROM HERE DOWN DRAWS IN POINTS.** The bitmap is `w x h` DEVICE pixels; scaling the CTM by the
+	 * same factor means a view that says `NSMakeRect(0, 0, 100, 40)` still covers a hundred points — a hundred device
+	 * pixels at 1x and two hundred at 2x — and no drawing code anywhere has to know which screen it is on. */
+	if (_deviceScale != 1.0) {
+		CGContextScaleCTM(_surface, _deviceScale, _deviceScale);
+	}
+	if (getenv("AG_SCALE_DIAG") != NULL) {
+		CGAffineTransform t = CGContextGetCTM(_surface);
+
+		fprintf(stderr, "  DIAG scale: frame %gx%g deviceScale %g -> bitmap %ldx%ld stride %d, "
+				"ctm a=%g d=%g tx=%g ty=%g\n", (double)_frame.size.width, (double)_frame.size.height,
+			(double)_deviceScale, (long)CGBitmapContextGetWidth(_surface),
+			(long)CGBitmapContextGetHeight(_surface), stride, (double)t.a, (double)t.d, (double)t.tx,
+			(double)t.ty);
+	}
 	return YES;
 }
 
@@ -6363,7 +6391,11 @@ static void fn_announce(NSWindow *w, NSString *name, SEL delegateSelector)
 
 - (CGFloat)userSpaceScaleFactor
 {
-	return 1.0;	/* one point is one pixel in this tier; a backing scale is a screen fact it has not got */
+	/* **THE FACTOR BETWEEN A POINT AND A DEVICE PIXEL ON THIS WINDOW'S SURFACE.** It used to answer 1.0 with the note
+	 * that "a backing scale is a screen fact it has not got" — the screen has one now, the compositor sends it, and a
+	 * caller that asks before drawing gets the number the context was made with. 10.6's name for it; a 10.7 caller
+	 * would ask `-backingScaleFactor`, which this tier does not declare. */
+	return _deviceScale > 0.0 ? _deviceScale : 1.0;
 }
 
 /* **THE SPACES FLAG IS STORED AND ANSWERED.** This tier has one space, so a window is always on the active one and
