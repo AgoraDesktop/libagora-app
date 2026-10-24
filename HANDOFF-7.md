@@ -5,12 +5,12 @@ stopped — the substrate first, in `libagora-base`, and then the binding layer 
 still the long form of everything up to §12 (the rule editor); §1–§7 of that file remain worth reading, and its §4
 traps are still the ones these sessions used most. **THIS FILE'S §2 NUMBERS SUPERSEDE EVERY EARLIER HANDOFF'S.***
 
-*State at this handover: **ten slice commits** since the sixth handoff — four in `libagora-base`, six here — tree
-clean, **180 tests passing in about 97 s**, `api-ledger check` holding **389 metrics** — **145 of 168 classes (86%),
-4809 of 4809 selectors (100%), 44 of 56 protocols (78%), 86 of 86 functions**, 5386 methods declared with 8 having no
-body, **all 145 classes with a surface at COMPLETE coverage** — refusal census **405**, owed census **21**. **The 23
-absent classes and the 12 absent protocols are the remaining surface; the 100% on selectors is 100% of the classes this
-tree HAS, not of the 10.6 AppKit.** The probes holding the substrate and its clients:
+*State at this handover: **eleven slice commits** since the sixth handoff — four in `libagora-base`, seven here — tree
+clean, **181 tests passing in about 98 s**, `api-ledger check` holding **391 metrics** — **147 of 168 classes (88%),
+4827 of 4827 selectors (100%), 44 of 56 protocols (78%), 86 of 86 functions**, 5406 methods declared with 8 having no
+body, **all 147 classes with a surface at COMPLETE coverage** — refusal census **404** (DOWN by one, the first fall in
+this arc), owed census **21**. **The 21 absent classes and the 12 absent protocols are the remaining surface; the 100%
+on selectors is 100% of the classes this tree HAS, not of the 10.6 AppKit.** The probes holding the substrate and its clients:
 `libagora-base/tests/kvo_automatic.m` (34 checks), `libagora-base/tests/kvo_tomany.m` (37),
 `libagora-base/tests/user_defaults_kvo.m` (25), `libagora-app/tests/binding_base.m` (26),
 `libagora-app/tests/controller_base.m` (77), `libagora-app/tests/array_controller.m` (77),
@@ -45,17 +45,17 @@ AppKit class belongs to this repository, and the base library owns only Foundati
 ## 2. The surface, measured
 
 ```
-classes   145 of 168   (86%)    23 missing
-selectors 4809 of 4809 (100%)    0 missing   145 of 145 classes at COMPLETE coverage
+classes   147 of 168   (88%)    21 missing
+selectors 4827 of 4827 (100%)    0 missing   147 of 147 classes at COMPLETE coverage
 protocols  44 of  56   (78%)    12 missing
 functions  86 of  86  (100%)     0 missing    10 refuse by name
-methods   5386 declared on this tree's own classes, 8 with NO body on the chain (0.2%)
+methods   5406 declared on this tree's own classes, 8 with NO body on the chain (0.2%)
 ```
 
-**THESE LINES HAVE MOVED SIX TIMES: WITH THE COMMITS THAT LANDED AFTER THIS FILE WAS FIRST WRITTEN, AND THEN WITH EACH
-OF THE CONTROLLER SLICES (§9–§13).** The tree reached the controller slice at 138 classes, 4645 selectors and 5214
-declared methods, not the 137 / 4636 / 5200 the original paragraph above this block recorded; §9–§13 recount the
-movements rather than folding them into one.
+**THESE LINES HAVE MOVED SEVEN TIMES: WITH THE COMMITS THAT LANDED AFTER THIS FILE WAS FIRST WRITTEN, WITH EACH OF THE
+CONTROLLER SLICES (§9–§13), AND WITH THE PREDICATE EDITOR (§14).** The tree reached the controller slice at 138 classes,
+4645 selectors and 5214 declared methods, not the 137 / 4636 / 5200 the original paragraph above this block recorded;
+§9–§14 recount the movements rather than folding them into one.
 
 **NONE OF THE SUBSTRATE SLICES ADDED A MANIFEST CLASS OR SELECTOR, AND THAT IS THE POINT OF A FOUNDATION ROW.** The
 class, selector and protocol counts are unchanged since `HANDOFF-6` §12; what moved is `methods-declared`, 5186 ->
@@ -217,23 +217,20 @@ fails for want of a library path rather than for want of the code.
 
 ## 6. Where to spend the next hour
 
-**EVERY CONTROLLER HAS LANDED (§9–§13), SO THE NEXT HOUR IS THE PREDICATE WORK THE RESTORED FAMILY UNBLOCKED — AND
-THE SMALL FIX THE FIRST SLICE OWED.** `NSObjectController` is content and selection; `NSArrayController` the arrangement
+**EVERY CONTROLLER AND THE PREDICATE PAIR HAVE LANDED (§9–§14), SO THE NEXT HOUR IS THE SMALL FIX THE FIRST SLICE
+OWED — AND THEN THE REMAINING ABSENT CLASSES, WHICH ARE ALL THE PLAN'S §A11 REFUSALS.** `NSObjectController` is content and selection; `NSArrayController` the arrangement
 and its policy; `NSUserDefaultsController` the settings store and its proxy; `NSDictionaryController` the key/value
 projection; `NSTreeController` + `NSTreeNode` the tree and its paths. What is left:
 
-1. **`NSPredicateEditor` + `NSPredicateEditorRowTemplate` (2 + 16) ARE NO LONGER BLOCKED.** `HANDOFF-6` §12 and
-   `NSRuleEditor.h` both say they stay absent because this Foundation has no predicate family "(`NSPredicate`,
-   `NSExpression`, `NSComparisonPredicate` are absent by §63.161)". **THAT IS NO LONGER TRUE**: `libagora-base` restored
-   the family (`d4e75ec`, with the grammar extended by `917c144`), and `-filteredArrayUsingPredicate:` is what §10's
-   filter runs on. So `NSRuleEditor`'s two predicate REFUSAL SITES (`-predicate` and `-predicateForRow:`; the third
-   door, `-reloadPredicate`, already asks the delegate and refuses nothing) now have their model, and the predicate
-   editor pair has one too. That is an 18-selector slice and a refusal census that FALLS by two — the first time this
-   tree has been able to say that about a predicate door. **THE COUNT IS TWO, NOT THREE: the file's third refusal is
-   `-setFormattingStringsFilename:`, a `.strings` reader, and it stays a refusal whatever the predicate family does.**
-2. **AND THEN THE `==` SELECTOR FIX `HANDOFF-7` §9 RECORDED**: `NSDocument` and `NSDocumentController` still compare
-   `[item action]` with `==`, which the cross-image selector identity makes wrong the day an application-built toolbar
-   item is validated against a document. Two files, `sel_isEqual`, one probe with an item built outside the library.
+1. **THE `==` SELECTOR FIX `HANDOFF-7` §9 RECORDED, WHICH IS THE LAST KNOWN LATENT BUG IN THIS TREE'S OWN CODE**:
+   `NSDocument` and `NSDocumentController` still compare `[item action]` with `==`, which the cross-image selector
+   identity makes wrong the day an application-built toolbar item is validated against a document. Two files,
+   `sel_isEqual`, one probe with an item built outside the library.
+2. **THE 21 ABSENT CLASSES ARE ALL THE PLAN'S §A11 REFUSALS** — OpenGL (the context, pixel format, view, layer and
+   buffer), QuickDraw, the movies, the three typesetters, speech (recogniser and synthesiser), sound, the
+   input-manager era (`NSInputManager`, `NSInputServer`), the Dock tile, the Help Viewer, `NSTouch`, and
+   `NSFileWrapper` (Foundation's here). They are absent because the subsystems they wrap are, and the header of each
+   one is where that reason belongs when it is written.
 
 ---
 
@@ -263,16 +260,15 @@ projection; `NSTreeController` + `NSTreeNode` the tree and its paths. What is le
   answered and wait for the controls/controllers that act on them; the header says which.
 * **`NSKeyValueBinding` IS APPKIT'S FILE**, and its three markers are initialised by a constructor so the first caller
   sees them. The constants' values are their own names.
-* **THE NUMBERS AND THE GATES.** 145 of 168 classes (86%), 4809 of 4809 selectors, 44 of 56 protocols, 86 of 86
-  functions, 5386 methods declared (8 without a body), 389 metrics, refusal 405, owed 21, 180 tests in this repository
+* **THE NUMBERS AND THE GATES.** 147 of 168 classes (88%), 4827 of 4827 selectors, 44 of 56 protocols, 86 of 86
+  functions, 5406 methods declared (8 without a body), 391 metrics, refusal 404, owed 21, 181 tests in this repository
   (~97 s), **12 committed base suites** (the Foundation's own count, corrected here — this bullet said 8 for three
   slices), 14 workspace tests, the workspace suite passing against the installed library. `ctest --test-dir build -j4`
   is the gate; the exit status is the witness.
-* **THE ABSENT SURFACE.** 23 classes, 12 protocols: the predicate editor pair
-  (2 + 16, **no longer blocked**: the predicate family is back, see §6 item 4), the Core Data doors inside the
-  controllers (refused by name), and the plan's §A11 refusals (OpenGL, QuickDraw, movies, the typesetters, speech,
-  sound, the input-manager era, the Dock tile, the Help Viewer, `NSTouch`, and `NSFileWrapper`, which is Foundation's
-  here).
+* **THE ABSENT SURFACE.** 21 classes, 12 protocols: **all of them the plan's §A11 refusals** — OpenGL (the context, pixel
+  format, view, layer and buffer), QuickDraw, the movies, the three typesetters, speech, sound, the input-manager era,
+  the Dock tile, the Help Viewer, `NSTouch`, and `NSFileWrapper` (Foundation's here). Nothing on the list is a
+  controller, an editor or a view this tier promised and did not build.
 
 ---
 
@@ -546,3 +542,42 @@ reading that makes `-moveNode:toIndexPath:` and `-moveNodes:toIndexPath:` mean t
 `NSPredicateEditor` + `NSPredicateEditorRowTemplate` (18 selectors) with `NSRuleEditor`'s two predicate refusal sites, the
 slice that makes the refusal census fall — and then the small `==`-selector fix in `NSDocument`/`NSDocumentController`
 that §9 recorded.
+
+---
+
+## 14. The predicate editor: the rule editor assembles, and the refusal census falls
+
+**Commit `8fc6cfd`, with this section in the commit after it.** `NSPredicateEditor` (2) and
+`NSPredicateEditorRowTemplate` (16) are present and COMPLETE — `NSRuleEditor`'s two predicate refusal sites now ASSEMBLE —
+and **the refusal census FELL, 405 -> 404, for the first time in this arc**. The class count 145 -> **147** of 168, the
+offered and present selectors 4809 -> **4827**, the declaration count 5386 -> **5406**, complete coverage 147 of 147,
+the metrics 389 -> **391**, and the tests 180 -> **181** with `tests/predicate_editor.m` at **41 checks**.
+
+**THE SLICE §6 PREDICTED, AND THE PREDICTION WAS MOSTLY RIGHT.** `NSRuleEditor`'s `-predicate`/`-predicateForRow:` always
+asked the delegate for a parts dictionary per criterion and then refused because this Foundation had no predicate family;
+`libagora-base` restored it, and the doors build `NSComparisonPredicate`s from the parts now — a row's criteria combine
+with the compound type a part names, or AND when none does, and the editor's predicate is the AND of its rows. A part
+that cannot make a comparison contributes NOTHING rather than a half-filled predicate.
+
+**FOUNDATION DECIDED ONE OF THE PARTS, AND THE CENSUS RECORDS IT.** `NSComparisonPredicate` refuses the custom-selector
+operator by name (there is no `-performSelector:withObject:` here), so a custom-selector criterion is refused by the rule
+editor — printed, and contributing no predicate — instead of the exception coming out of a getter. That is one new site
+where the two old ones were, which is why the census fell by one rather than two.
+
+**THE EDITOR IS ITS OWN DELEGATE, AND THE CRITERION IS THE ROW'S MEMORY.** The rule editor does not retain its delegate
+(this tree's rule for every delegate), so the self-reference is not a cycle; the parts door answers from a private
+criterion dictionary (key path, operator, modifier, options) with the display value as the right-hand side. That is what
+lets an operator other than "is" survive the round trip — a parallel array of templates-per-row would desynchronise the
+moment a user removed a row, which is exactly the kind of second source of truth §12's pair cache avoids by being the
+only one.
+
+**TRAP: TWO ORDINARY INITIALISERS DID NOT WORK, AND THE PROBE FOUND BOTH.** `[[NSRuleEditor alloc] init]` left its row
+list nil, so an insertion was a message to nil — the row vanished and the selection then raised a range error about a row
+that was never there, several lines away from the cause. `[[NSPopUpButton alloc] initWithFrame:]` left a plain button
+cell, so `-addItemsWithTitles:` reached a cell that has never heard of a menu. Both now chain to their designated
+initialisers, the rule `[[NSSlider alloc] initWithFrame:]` already followed: **a class a caller builds with `-init` must
+not be a silently broken one**, and a template that builds its own views is a caller.
+
+**WHERE THE NEXT HOUR GOES:** §6 has been rewritten. The only known latent bug left in this tree's own code is the
+`==`-selector comparison in `NSDocument`/`NSDocumentController` that §9 recorded, and after that the 21 absent classes
+are all the plan's §A11 refusals — subsystems this tier never promised, not surface it forgot.
