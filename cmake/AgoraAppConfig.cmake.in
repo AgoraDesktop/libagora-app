@@ -22,6 +22,11 @@ find_dependency(libobjc CONFIG)
 find_dependency(Foundation CONFIG)
 find_dependency(AgoraDrawing CONFIG)
 find_dependency(AgoraText CONFIG)
+# **AND CORE DATA, WHICH THIS LIBRARY'S INTERFACE NOW NAMES.** `NSPersistentDocument` carries Core Data's types in its
+# header, so `AgoraApp::App`'s link interface mentions `AgoraData::Data` — and a consumer that includes this file without
+# the package loaded fails at CONFIGURE time with "the target was not found", a long way from the missing line. Every
+# public dependency of the interface belongs here, not only the ones that were here first.
+find_dependency(AgoraData CONFIG)
 
 if(CMAKE_C_COMPILER_ID STREQUAL "GNU")
   message(FATAL_ERROR
