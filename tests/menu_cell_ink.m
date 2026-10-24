@@ -23,6 +23,8 @@
 #import <AppKit/NSColor.h>
 #import <AppKit/NSBezierPath.h>
 #import <AppKit/NSImage.h>
+#import <AppKit/NSFont.h>
+#import <AppKit/NSStringDrawing.h>
 
 #include <stdio.h>
 #include <string.h>
@@ -87,6 +89,100 @@ int main(void)
 	check(ink > 0, "the door DREW: a menu title is ink on a surface, where it used to refuse by name");
 	check(outside_frame == 0, "and every ink pixel is INSIDE the column `-titleRectForBounds:` named");
 	printf("  (note: %d ink pixel(s), in a %g-wide column)\n", ink, (double)[cell titleWidth]);
+
+	/* ================================================================================================
+	 * **AND THE SHORTCUT, WHICH IS THE HALF NOTHING CHECKED.** `menu_cell_ink`, `menu_view_ink` and
+	 * `menu_validation` all passed while every key equivalent in the tree drew NOTHING: this case drew the
+	 * title and stopped, so a door that produced no ink at all was invisible to it. A key equivalent is not
+	 * always set in the row's own face — `⌘O` mixes the Command symbol with a Latin letter, and the shaped
+	 * line takes its metrics from whichever faces covered both glyphs — so the ink is MEASURED here, not
+	 * assumed, and the column the geometry names is where it has to land.
+	 * ================================================================================================ */
+	{
+		NSBitmapImageRep *krep = [[NSBitmapImageRep alloc] initWithBitmapDataPlanes:NULL
+			pixelsWide:INK_W pixelsHigh:INK_H bitsPerSample:8 samplesPerPixel:4 hasAlpha:YES isPlanar:NO
+			colorSpaceName:NSCalibratedRGBColorSpace bytesPerRow:INK_W * 4 bitsPerPixel:32];
+		NSRect keyRect = [cell keyEquivalentRectForBounds:frame];
+		int kx, ky, key_ink = 0, outside_column = 0, in_title_column = 0;
+
+		[NSGraphicsContext setCurrentContext:[NSGraphicsContext graphicsContextWithBitmapImageRep:krep]];
+		[[NSColor whiteColor] setFill];
+		[[NSBezierPath bezierPathWithRect:frame] fill];
+
+		[cell setMenuItem:item];
+		[cell setNeedsSizing:YES];
+		[cell calcSize];
+		[cell drawKeyEquivalentWithFrame:frame inView:nil];
+
+		for (ky = 0; ky < INK_H; ky++) {
+			for (kx = 0; kx < INK_W; kx++) {
+				NSColor *c = [krep colorAtX:kx y:ky];
+
+				if (c == nil || [c redComponent] >= 0.5) {
+					continue;	/* the white the test filled with */
+				}
+				key_ink++;
+				if ((CGFloat)kx < keyRect.origin.x - 1.0
+				    || (CGFloat)kx > keyRect.origin.x + keyRect.size.width + 1.0) {
+					outside_column++;
+					if ((CGFloat)kx <= title.origin.x + title.size.width) {
+						in_title_column++;
+					}
+				}
+			}
+		}
+		printf("  (note: shortcut ink %d pixel(s) in a %g-wide column at x=%g)\n", key_ink,
+		       (double)keyRect.size.width, (double)keyRect.origin.x);
+		check(key_ink > 0, "the KEY EQUIVALENT door DREW: `\u2318O` is ink on the surface, where it drew none");
+		check(outside_column == 0, "and every shortcut pixel is inside `-keyEquivalentRectForBounds:`");
+		check(in_title_column == 0, "and NONE of it bleeds into the title's column");
+
+		/* **AND IT DRAWS THE WHOLE LINE, MEASURED AGAINST THE SAME LINE DRAWN DIRECTLY.** A door that clipped its
+		 * frame — the reported failure, where a 16.25-point shaped line was laid into a 16-point frame and produced
+		 * "zero lines" — draws LESS than the string does. The reference is the same attributed string at the same
+		 * baseline through the same single-line door, so any clipping, scaling or truncation the cell applies shows
+		 * up as a different pixel count. This is the "complete symbol+letter ink against a shaped-line reference"
+		 * the report asks for, and it does not depend on which font the machine resolves. */
+		{
+			NSBitmapImageRep *ref = [[NSBitmapImageRep alloc] initWithBitmapDataPlanes:NULL
+				pixelsWide:INK_W pixelsHigh:INK_H bitsPerSample:8 samplesPerPixel:4 hasAlpha:YES
+				isPlanar:NO colorSpaceName:NSCalibratedRGBColorSpace bytesPerRow:INK_W * 4
+				bitsPerPixel:32];
+			NSFont *kfont = [NSFont systemFontOfSize:[NSFont systemFontSize]];
+			NSDictionary *kattrs = [NSDictionary dictionaryWithObjectsAndKeys:
+				kfont, NSFontAttributeName,
+				[NSColor colorWithCalibratedRed:0.36 green:0.36 blue:0.36 alpha:1.0],
+				NSForegroundColorAttributeName, nil];
+			NSSize ksize = [@"\u2318O" sizeWithAttributes:kattrs];
+			CGFloat kband = ceil((CGFloat)[kfont ascender] + (CGFloat)fabs((double)[kfont descender]));
+			CGFloat kbaseline = frame.origin.y + (frame.size.height - kband) / 2.0
+				+ (CGFloat)fabs((double)[kfont descender]);
+			CGFloat kx0 = keyRect.origin.x + keyRect.size.width - ksize.width;
+			int rx, ry, ref_ink = 0;
+
+			if (kx0 < keyRect.origin.x) {
+				kx0 = keyRect.origin.x;
+			}
+			[NSGraphicsContext setCurrentContext:[NSGraphicsContext graphicsContextWithBitmapImageRep:ref]];
+			[[NSColor whiteColor] setFill];
+			[[NSBezierPath bezierPathWithRect:frame] fill];
+			[@"\u2318O" drawAtPoint:NSMakePoint(kx0, kbaseline) withAttributes:kattrs];
+			for (ry = 0; ry < INK_H; ry++) {
+				for (rx = 0; rx < INK_W; rx++) {
+					NSColor *c = [ref colorAtX:rx y:ry];
+
+					if (c != nil && [c redComponent] < 0.5) {
+						ref_ink++;
+					}
+				}
+			}
+			printf("  (note: door %d pixel(s), the same line drawn directly %d)\n", key_ink, ref_ink);
+			check(ref_ink > 0 && key_ink == ref_ink,
+			      "and it draws the WHOLE line: the same ink as that line drawn directly");
+		}
+
+		[NSGraphicsContext setCurrentContext:[NSGraphicsContext graphicsContextWithBitmapImageRep:rep]];
+	}
 
 	/* ---- AND AN ITEM THAT HAS AN IMAGE: THE OTHER DOOR THAT REFUSED FOR "THE INK" ------------------
 	 * An item's icon goes in its OWN column, between the state image's empty strip and the title — and the

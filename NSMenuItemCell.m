@@ -664,7 +664,29 @@ static NSColor *fn_item_ink(BOOL enabled, BOOL highlighted)
 		CGFloat band = ceil(ascent + descent);
 		CGFloat baseline = cellFrame.origin.y + (cellFrame.size.height - band) / 2.0 + descent;
 
-		[key drawInRect:NSMakeRect(x, baseline - descent, ceil(text.width), band) withAttributes:attributes];
+		/* **A SHORTCUT IS ONE SHAPED LINE, SO IT IS DRAWN AS ONE — AT A POINT, NOT INTO A FRAME.**
+		 *
+		 * This handed `-drawInRect:` a frame whose HEIGHT came from the BASE FONT's band, and that height is where
+		 * the ink went missing. A key equivalent is not always set in the row's own face: `⌘N` mixes the Command
+		 * symbol with a Latin letter, and the line that comes back takes its metrics from whichever faces covered
+		 * both glyphs — MEASURED on the report's own default face, shaped ascent 12.545 and descent 3.705 against a
+		 * base band of `ceil(12.35 + 3.25) = 16`. A 16.25-point line laid into a 16-point frame is a line with
+		 * nothing left to draw: "actual frame: zero lines", and zero shortcut ink for Command-N, -W, -C and -V
+		 * alike.
+		 *
+		 * ROUNDING THE BAND UP DOES NOT FIX IT, which is the report's own observation and is what the arithmetic
+		 * shows: the discrepancy is the SHAPED line's, and any number derived from the font object is a guess about
+		 * a different line. `-drawAtPoint:withAttributes:` is the single-line door that exists for exactly this —
+		 * it shapes the string, sets the text position to the point, and draws; there is no frame for a line to
+		 * fail to fit into. The point IS the baseline, which is the same place the frame's own arithmetic was
+		 * aiming at.
+		 *
+		 * THE COLUMN STILL SPEAKS, and by geometry rather than by clipping: the x is right-aligned on the column's
+		 * trailing edge and the column is measured with the same attributes the line is shaped with, so what is
+		 * drawn and what was reserved agree. `tests/menu_cell_ink.m` measures that agreement — ink inside
+		 * `-keyEquivalentRectForBounds:` and none of it in the title's column — which is the check the suite was
+		 * missing while every shortcut in the tree drew nothing. */
+		[key drawAtPoint:NSMakePoint(x, baseline) withAttributes:attributes];
 	}
 }
 

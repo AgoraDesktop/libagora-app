@@ -54,7 +54,15 @@ static void scan(NSBitmapImageRep *rep, int top_row, int *ink, int *highlight)
 			if (c == nil) {
 				continue;
 			}
-			if ([c blueComponent] > 0.6 && [c redComponent] < 0.4) {
+			/* **THE CHIP IS THE ACCENT COLOUR, WHICH IS (0.64, 0.60, 1.00) — NOT SOMETHING RED CAN BE
+			 * EXCLUDED BY.** This test counted a pixel as highlight when its blue was above 0.6 AND its red below
+			 * 0.4, which the accent's own red of 0.64 fails: the criterion could never match the chip it was
+			 * looking for. It passed anyway, on TWO stray pixels in the title's antialiasing — MEASURED, by
+			 * dumping the row: the chip reads (0.64, 0.60, 1.00) at every sample and the count was 2. So the
+			 * count is now taken against the accent the view actually fills with, and the assertion below asks for
+			 * a STRIP worth of it rather than for a non-zero number, because a stray pixel is exactly what the old
+			 * one was measuring. */
+			if ([c blueComponent] > 0.90 && [c blueComponent] - [c redComponent] > 0.20) {
 				(*highlight)++;
 			} else if ([c redComponent] < 0.5) {
 				(*ink)++;
@@ -99,7 +107,9 @@ int main(void)
 	}
 	check(ink[0] > 0 && ink[1] > 0 && ink[2] > 0,
 	      "every row was DRAWN: three items, three rows with their own titles in them");
-	check(hi[1] > 0, "and the HIGHLIGHTED row carries the highlight");
+	/* A CHIP IS A BAND ACROSS THE ROW, so the count is a fraction of it: a handful of pixels would be a stray
+	 * antialiased pixel wearing the accent's clothes, which is what the old `> 0` was in fact accepting. */
+	check(hi[1] > 200, "and the HIGHLIGHTED row carries the highlight — a CHIP, not a stray pixel");
 	check(hi[0] == 0 && hi[2] == 0, "and its neighbours do not");
 	printf("  (note: ink %d/%d/%d, highlight %d/%d/%d, rows top to bottom)\n",
 	       ink[0], ink[1], ink[2], hi[0], hi[1], hi[2]);
