@@ -599,3 +599,49 @@ four, and the runtime fact the fix rests on.
 
 **WHERE THE NEXT HOUR GOES:** §6 has been rewritten. There is no known latent bug left in this tree's own code; the 21
 absent classes are all the plan's §A11 refusals, and the next slice is whichever subsystem one of them would bring.
+
+---
+
+## 16. Desktop integration: `NSDockTile`, and a badge that is pushed through `agora-shell` 8
+
+**Three commits, three components: `window-server` `6a0cc4c`, this repository `e3398ec`, `dock` `34ef3b3`.** Desktop
+integration begins with the one absent class whose cost is mostly in the OTHER components: `NSDockTile` (9 of 9) is
+thin, and the work is a protocol version, a seam function and a chip in the Dock's drawing.
+
+**THE BADGE IS PUSHED, NOT ASKED FOR.** A Dock that asked each tile each refresh would spend a round trip to learn
+"nothing" from every application without a badge — the ordinary case. So `agora-shell` 8 adds
+`agora_window.set_badge`: the application sends the label, the server keeps it on every window of the CONNECTION (the
+connection is the application, and a per-window store is the only application state this server has), and the Dock reads
+it out of the window list it already takes.
+
+**TRAP: THE BADGE IS ITS OWN EVENT, AND THAT IS COMPATIBILITY RATHER THAN STYLE.** Appending an argument to the existing
+`window` event would hand a client bound at version 1 an opcode whose wire it parses with the old field list — the one
+change a versioned protocol cannot absorb. `agora_window_list.badge` is `since 2`, sent beside its window and only to a
+list resource at version 2 or above, so an older Dock is never handed it. The global moved to 8 and `agora_window` to 8
+for the request; the list moved to 2 for the event.
+
+**TRAP: THE SEAM'S VERSION IS `wl_proxy_get_version`, NOT `wl_resource_get_version`.** The client side has proxies, not
+resources; the resource call is a server-side function and does not link here. The first version of `AGWindowSetDockBadge`
+used it and the compiler said so, which is the cheaper of the two ways to learn it.
+
+**AND TWO ORDINARY DOORS IN THE SEAM DID WHAT THEY SAID.** `AGWindowSetDockBadge` takes ANY of the application's window
+ids and resolves the application through the snapshot's `app_id` — the ids are the only names the two sides share, which
+is the same choice `NSDockMenu` makes — and `AGWindowListRows` hands the cached snapshot to the one caller that must read
+it without waiting.
+
+**TWO BOUNDARIES ARE STATED AND COUNTED.** `-contentView` is stored and answered and NOT drawn: a view belongs to this
+process, and compositing it inside the Dock's tile needs the Dock to ask the application to render into a surface of the
+Dock's own — a second protocol, which is what Apple's private Dock does. `-size` answers this tier's 48-point tile metric
+because no request carries the Dock's real one. The owed census rose 21 -> 23 for those two sentences.
+
+**MEASURED:** classes 147 -> **148** of 168, selectors 4827 -> **4836**, methods-declared 5406 -> **5416**, complete
+coverage 148 of 148, owed 21 -> **23**, refusal unchanged at 404, and the tests 182 -> **183** with `tests/dock_tile.m` at
+12 checks — plus the window server's `window_list` probe asserting a badge arrives beside its window, and the Dock's
+`tests/dock_badge.m` counting the chip's ink in an offscreen draw.
+
+**AND THE HELP SYSTEM IS DEFERRED BY DECISION.** `NSHelpManager` (10 selectors) waits for a WEB ENGINE: its help books
+are HTML in Apple's world, and this tree has no HTML renderer at all, so a Help Viewer would be a rendering project
+before it was a help one. The decision is recorded here so the next reader does not re-derive it: help stays absent, the
+reason is the missing engine rather than the missing class, and `NSHelpManager` is not a candidate slice until a web
+engine exists. `NSDockTile`'s content view and the deferred help are the two places where this tier's answer is "another
+protocol" or "another engine" rather than "another class".
