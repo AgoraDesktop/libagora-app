@@ -581,3 +581,21 @@ not be a silently broken one**, and a template that builds its own views is a ca
 **WHERE THE NEXT HOUR GOES:** §6 has been rewritten. The only known latent bug left in this tree's own code is the
 `==`-selector comparison in `NSDocument`/`NSDocumentController` that §9 recorded, and after that the 21 absent classes
 are all the plan's §A11 refusals — subsystems this tier never promised, not surface it forgot.
+
+---
+
+## 15. The `==`-selector fix §9 owed: a validating item from another image
+
+**Commit `15c19e0`, and it is the fix §9 recorded rather than a slice.** `NSDocument` and `NSDocumentController`
+compared `[item action]` with `==`; this runtime gives each image its own selector struct for the same name, so an
+application's toolbar item was never `==` the library's literal and Save, Revert and the controller's four were disabled
+for every caller outside this library. Both doors use `sel_isEqual` now, which falls back to the name.
+
+**THE PROBE RUNS AGAINST THE OLD CODE TO PROVE IT MEASURES THE FIX.** `tests/validation_selectors.m` builds its item in
+the test binary — another image, which is the whole point — and with `==` restored exactly two checks fail: the titled
+document's Save and its Revert. Nothing else in the suite moved, so the probe is not passing for a reason of its own.
+Eleven checks: the untitled document's no, the titled one's two yeses, an action the class does not own, the controller's
+four, and the runtime fact the fix rests on.
+
+**WHERE THE NEXT HOUR GOES:** §6 has been rewritten. There is no known latent bug left in this tree's own code; the 21
+absent classes are all the plan's §A11 refusals, and the next slice is whichever subsystem one of them would bring.
