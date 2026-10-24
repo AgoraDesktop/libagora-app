@@ -43,7 +43,14 @@ def main():
         print("usage: check_hidpi.py SHOT SCALE X Y W H", file=sys.stderr)
         return 2
     shot = sys.argv[1]
-    scale, wx, wy, ww, wh = (int(v) for v in sys.argv[2:7])
+    # **THE OUTPUT SCALE MAY BE A FRACTION.** 1.5 is what most HiDPI laptops actually ship with, and the client on such
+    # an output renders at 2x — the integer `wl_output.scale` rounds UP — while the compositor downsamples 2 -> 1.5.
+    # So the arithmetic here is in device pixels and the scale enters as a number, not as a multiplier.
+    scale = float(sys.argv[2])
+    wx, wy, ww, wh = (int(v) for v in sys.argv[3:7])
+
+    def dev(v):
+        return int(v * scale + 0.5)
     width, height, pixels = read_ppm(shot)
     failures = 0
 
@@ -77,12 +84,13 @@ def main():
     ys = [p[1] for p in red]
     left, right = min(xs), max(xs)
     top, bottom = min(ys), max(ys)
-    side = 20 * scale
+    side = dev(20)
 
     print("  (note: red spans device x %d..%d, y %d..%d)" % (left, right, top, bottom))
-    check(abs((right - left + 1) - side) <= 2,
-          "the 20-point square is %d DEVICE pixels across (measured %d)" % (side, right - left + 1))
-    check(abs((bottom - top + 1) - side) <= 2,
+    check(abs((right - left + 1) - side) <= 3,
+          "the 20-point square is %d DEVICE pixels across at scale %g (measured %d)"
+          % (side, scale, right - left + 1))
+    check(abs((bottom - top + 1) - side) <= 3,
           "and %d device pixels tall (measured %d)" % (side, bottom - top + 1))
 
     # ONE SQUARE, NOT TWO: a client that drew at both scales would leave a second, and a client that ignored the scale
@@ -92,8 +100,8 @@ def main():
     # **AND ITS DISTANCE FROM THE WINDOW'S OWN EDGES IS THE SAME 20 POINTS.** The left edge is at 20*scale to the left
     # of the square and the bottom edge 20*scale below it, so the window's corner can be found from the square alone —
     # which is what makes this a test of the SCALE rather than of the title bar's height.
-    win_left = left - 20 * scale
-    win_bottom = bottom + 20 * scale
+    win_left = left - dev(20)
+    win_bottom = bottom + dev(20)
     check(is_white(at(win_left + 2, (top + bottom) // 2)),
           "the window's left edge is 20 points left of the square, at device x %d" % win_left)
     check(not is_white(at(win_left - 3, (top + bottom) // 2)),
@@ -102,9 +110,9 @@ def main():
           "the window's bottom edge is 20 points below it, at device y %d" % win_bottom)
 
     # AND THE WINDOW IS WHERE IT WAS ASKED TO BE: its left edge is WIN_X points from the output's left, x scale.
-    check(abs(win_left - wx * scale) <= 3,
+    check(abs(win_left - dev(wx)) <= 3,
           "the window is at WIN_X=%d points from the left, which is device x %d (measured %d)"
-          % (wx, wx * scale, win_left))
+          % (wx, dev(wx), win_left))
 
     print("check_hidpi: %d failure(s)" % failures)
     return 1 if failures else 0

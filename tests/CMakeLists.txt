@@ -1674,3 +1674,13 @@ add_test(NAME appkit-hidpi-scale1
     "${_agora_api_python}" "${CMAKE_CURRENT_SOURCE_DIR}/check_hidpi.py" 1)
 set_tests_properties(appkit-hidpi-scale1 PROPERTIES SKIP_RETURN_CODE 77
   ENVIRONMENT "${_agora_app_test_env}")
+
+# **AND AT 1.5, WHICH IS THE CASE THE TWO HALVES HAVE TO DISAGREE ABOUT ON PURPOSE.** The compositor draws 1.5 device
+# pixels per logical one, and `wl_output.scale` can only say 2 — so the client renders at 2x and the compositor
+# downsamples 2 -> 1.5. A 20-point square must therefore measure 30 device pixels, not 20 and not 40.
+add_test(NAME appkit-hidpi-1-5
+  COMMAND "${CMAKE_CURRENT_SOURCE_DIR}/run-appkit-hidpi.sh"
+    "${AGORA_WINDOW_SERVER_BINARY}" "$<TARGET_FILE:appkit_hidpi>"
+    "${_agora_api_python}" "${CMAKE_CURRENT_SOURCE_DIR}/check_hidpi.py" 1.5)
+set_tests_properties(appkit-hidpi-1-5 PROPERTIES SKIP_RETURN_CODE 77
+  ENVIRONMENT "${_agora_app_test_env}")
