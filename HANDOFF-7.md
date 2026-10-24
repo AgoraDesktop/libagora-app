@@ -5,17 +5,17 @@ stopped — the substrate first, in `libagora-base`, and then the binding layer 
 still the long form of everything up to §12 (the rule editor); §1–§7 of that file remain worth reading, and its §4
 traps are still the ones these sessions used most. **THIS FILE'S §2 NUMBERS SUPERSEDE EVERY EARLIER HANDOFF'S.***
 
-*State at this handover: **nine slice commits** since the sixth handoff — four in `libagora-base`, five here — tree
-clean, **179 tests passing in about 95 s**, `api-ledger check` holding **387 metrics** — **143 of 168 classes (85%),
-4754 of 4754 selectors (100%), 44 of 56 protocols (78%), 86 of 86 functions**, 5333 methods declared with 8 having no
-body, **all 143 classes with a surface at COMPLETE coverage** — refusal census **403**, owed census **21**. **The 25
+*State at this handover: **ten slice commits** since the sixth handoff — four in `libagora-base`, six here — tree
+clean, **180 tests passing in about 97 s**, `api-ledger check` holding **389 metrics** — **145 of 168 classes (86%),
+4809 of 4809 selectors (100%), 44 of 56 protocols (78%), 86 of 86 functions**, 5386 methods declared with 8 having no
+body, **all 145 classes with a surface at COMPLETE coverage** — refusal census **405**, owed census **21**. **The 23
 absent classes and the 12 absent protocols are the remaining surface; the 100% on selectors is 100% of the classes this
 tree HAS, not of the 10.6 AppKit.** The probes holding the substrate and its clients:
 `libagora-base/tests/kvo_automatic.m` (34 checks), `libagora-base/tests/kvo_tomany.m` (37),
 `libagora-base/tests/user_defaults_kvo.m` (25), `libagora-app/tests/binding_base.m` (26),
 `libagora-app/tests/controller_base.m` (77), `libagora-app/tests/array_controller.m` (77),
-`libagora-app/tests/user_defaults_controller.m` (43) and `libagora-app/tests/dictionary_controller.m` (40). The
-workspace's 14 tests were run too.*
+`libagora-app/tests/user_defaults_controller.m` (43), `libagora-app/tests/dictionary_controller.m` (40) and
+`libagora-app/tests/tree_controller.m` (55). The workspace's 14 tests were run too.*
 
 ---
 
@@ -45,18 +45,17 @@ AppKit class belongs to this repository, and the base library owns only Foundati
 ## 2. The surface, measured
 
 ```
-classes   143 of 168   (85%)    25 missing
-selectors 4754 of 4754 (100%)    0 missing   143 of 143 classes at COMPLETE coverage
+classes   145 of 168   (86%)    23 missing
+selectors 4809 of 4809 (100%)    0 missing   145 of 145 classes at COMPLETE coverage
 protocols  44 of  56   (78%)    12 missing
 functions  86 of  86  (100%)     0 missing    10 refuse by name
-methods   5333 declared on this tree's own classes, 8 with NO body on the chain (0.2%)
+methods   5386 declared on this tree's own classes, 8 with NO body on the chain (0.2%)
 ```
 
-**THESE LINES HAVE MOVED FIVE TIMES: WITH THE COMMITS THAT LANDED AFTER THIS FILE WAS FIRST WRITTEN, WITH THE
-CONTROLLER SLICE (§9), THE ARRANGED CONTROLLER (§10), THE DEFAULTS CONTROLLER (§11) AND THE DICTIONARY CONTROLLER
-(§12).** The tree reached the controller slice at 138 classes, 4645 selectors and 5214 declared methods, not the
-137 / 4636 / 5200 the original paragraph above this block recorded; §9–§12 recount the movements rather than folding
-them into one.
+**THESE LINES HAVE MOVED SIX TIMES: WITH THE COMMITS THAT LANDED AFTER THIS FILE WAS FIRST WRITTEN, AND THEN WITH EACH
+OF THE CONTROLLER SLICES (§9–§13).** The tree reached the controller slice at 138 classes, 4645 selectors and 5214
+declared methods, not the 137 / 4636 / 5200 the original paragraph above this block recorded; §9–§13 recount the
+movements rather than folding them into one.
 
 **NONE OF THE SUBSTRATE SLICES ADDED A MANIFEST CLASS OR SELECTOR, AND THAT IS THE POINT OF A FOUNDATION ROW.** The
 class, selector and protocol counts are unchanged since `HANDOFF-6` §12; what moved is `methods-declared`, 5186 ->
@@ -218,17 +217,12 @@ fails for want of a library path rather than for want of the code.
 
 ## 6. Where to spend the next hour
 
-**FOUR CONTROLLERS HAVE LANDED (§9–§12), SO THE NEXT HOUR IS THE TREE PAIR AND THE PREDICATE WORK THE RESTORED FAMILY
-UNBLOCKED.** `NSObjectController` is content and selection; `NSArrayController` is the arrangement, the selection into
-it, the index translation and the five policy flags; `NSUserDefaultsController` is the settings store and its proxy;
-`NSDictionaryController` is the key/value projection. What is left is two slices:
+**EVERY CONTROLLER HAS LANDED (§9–§13), SO THE NEXT HOUR IS THE PREDICATE WORK THE RESTORED FAMILY UNBLOCKED — AND
+THE SMALL FIX THE FIRST SLICE OWED.** `NSObjectController` is content and selection; `NSArrayController` the arrangement
+and its policy; `NSUserDefaultsController` the settings store and its proxy; `NSDictionaryController` the key/value
+projection; `NSTreeController` + `NSTreeNode` the tree and its paths. What is left:
 
-1. **`NSTreeController` + `NSTreeNode` (55)** is the last and the largest: an arrangement over `NSIndexPath`s, which is
-   `NSOutlineView`'s data source in controller form. `NSIndexPath` is in this Foundation, `NSOutlineView` is in this
-   tree, and the tree controller's selection is `selectionIndexPaths` rather than indexes — the same settle-and-translate
-   shape §10 already built, one level deeper. `childrenKeyPath`/`countKeyPath`/`leafKeyPath` decide the tree's shape,
-   and `-moveNode:toIndexPath:` is the one door with no array-controller analogue.
-2. **AND `NSPredicateEditor` + `NSPredicateEditorRowTemplate` (2 + 16) ARE NO LONGER BLOCKED.** `HANDOFF-6` §12 and
+1. **`NSPredicateEditor` + `NSPredicateEditorRowTemplate` (2 + 16) ARE NO LONGER BLOCKED.** `HANDOFF-6` §12 and
    `NSRuleEditor.h` both say they stay absent because this Foundation has no predicate family "(`NSPredicate`,
    `NSExpression`, `NSComparisonPredicate` are absent by §63.161)". **THAT IS NO LONGER TRUE**: `libagora-base` restored
    the family (`d4e75ec`, with the grammar extended by `917c144`), and `-filteredArrayUsingPredicate:` is what §10's
@@ -237,6 +231,9 @@ it, the index translation and the five policy flags; `NSUserDefaultsController` 
    editor pair has one too. That is an 18-selector slice and a refusal census that FALLS by two — the first time this
    tree has been able to say that about a predicate door. **THE COUNT IS TWO, NOT THREE: the file's third refusal is
    `-setFormattingStringsFilename:`, a `.strings` reader, and it stays a refusal whatever the predicate family does.**
+2. **AND THEN THE `==` SELECTOR FIX `HANDOFF-7` §9 RECORDED**: `NSDocument` and `NSDocumentController` still compare
+   `[item action]` with `==`, which the cross-image selector identity makes wrong the day an application-built toolbar
+   item is validated against a document. Two files, `sel_isEqual`, one probe with an item built outside the library.
 
 ---
 
@@ -266,13 +263,12 @@ it, the index translation and the five policy flags; `NSUserDefaultsController` 
   answered and wait for the controls/controllers that act on them; the header says which.
 * **`NSKeyValueBinding` IS APPKIT'S FILE**, and its three markers are initialised by a constructor so the first caller
   sees them. The constants' values are their own names.
-* **THE NUMBERS AND THE GATES.** 143 of 168 classes (85%), 4754 of 4754 selectors, 44 of 56 protocols, 86 of 86
-  functions, 5333 methods declared (8 without a body), 387 metrics, refusal 403, owed 21, 179 tests in this repository
+* **THE NUMBERS AND THE GATES.** 145 of 168 classes (86%), 4809 of 4809 selectors, 44 of 56 protocols, 86 of 86
+  functions, 5386 methods declared (8 without a body), 389 metrics, refusal 405, owed 21, 180 tests in this repository
   (~97 s), **12 committed base suites** (the Foundation's own count, corrected here — this bullet said 8 for three
   slices), 14 workspace tests, the workspace suite passing against the installed library. `ctest --test-dir build -j4`
   is the gate; the exit status is the witness.
-* **THE ABSENT SURFACE.** 25 classes, 12 protocols: the last controller family (`NSTreeController` 45 + `NSTreeNode`
-  10 — 55 selectors), the predicate editor pair
+* **THE ABSENT SURFACE.** 23 classes, 12 protocols: the predicate editor pair
   (2 + 16, **no longer blocked**: the predicate family is back, see §6 item 4), the Core Data doors inside the
   controllers (refused by name), and the plan's §A11 refusals (OpenGL, QuickDraw, movies, the typesetters, speech,
   sound, the input-manager era, the Dock tile, the Help Viewer, `NSTouch`, and `NSFileWrapper`, which is Foundation's
@@ -500,3 +496,53 @@ refuses by name — so `localizedKeyDictionary` is the only source of a displaye
 `NSTreeNode` (10) — and it is the arrangement over `NSIndexPath`s, which is `NSOutlineView`'s data source in controller
 form; then the predicate editor pair (18) with `NSRuleEditor`'s two refusal sites, the slice that makes the refusal
 census fall.
+
+---
+
+## 13. The tree: an invisible root, a child array that keeps its links, and a build that must not throw
+
+**Commit `fd4881b`, with this section in the commit after it.** `NSTreeController` and `NSTreeNode` are present
+and COMPLETE at 45 of 45 and 10 of 10 — the class count 143 -> **145** of 168, the offered and present selectors
+4754 -> **4809**, the declaration count 5333 -> **5386**, complete coverage 145 of 145, the metrics 387 -> **389**, the
+refusal census 403 -> **405** (two deliberate model refusals), and the tests 179 -> **180** with
+`tests/tree_controller.m` at **55 checks**. The owed census did not move.
+
+**THE ROOTS HANG FROM A NODE NOBODY SEES.** `NSTreeNode -indexPath` walks to the node whose parent is nil, so with the
+roots as the top of the graph every root's path would be the EMPTY path and no door could tell two roots apart. The
+controller keeps one private root node whose children are `-arrangedObjects`; a root's path is `{i}`. That is the whole
+of why `-insertObject:atArrangedObjectIndexPath:{2}` appends a root.
+
+**`-mutableChildNodes` IS AN `NSMutableArray` SUBCLASS, BECAUSE THE PARENT LINKS ARE THE ARRAY'S JOB.** `-indexPath` walks
+upward, so a child added to a node must learn who its parent is; the proxy overrides insert/add/replace, the three
+removals, `-setArray:` and `-insertObjects:atIndexes:` and maintains the link, and `-setArray:` goes through the other
+doors so "a child in this array has this node as its parent" is true at every moment. The node does not own its parent
+(a cycle that never frees) and does not reach into another object's storage: the proxy asks through a private
+`-fn_setParent:`/`-fn_clearParentIf:` pair.
+
+**TRAP: AN EARLY RETURN OF AN UNINITIALISED NODE TURNED A CYCLE INTO A SEGFAULT.** The build's depth cap read
+`if (depth > MAX) { print; return node; }` — and `node` was assigned FURTHER DOWN. The parent therefore added a garbage
+pointer as a child, and the next walk followed it into nothing: 131,000 stack frames in gdb, `findNodeForObject:` all the
+way down. The fix is the one line moved (assign, then check), and the shape is worth remembering because review cannot
+see it: **every early return must come after the local it returns is assigned.**
+
+**AND THE BUILD MUST NOT THROW, BECAUSE OF WHERE IT RUNS.** It happens in the DID half of an announcement; an exception
+there leaves the will half's pending change records open for the life of the object — the KVO analogue of a leaked
+lock. So a children key whose value is not an array, and the 512-level depth cap, print `APPKIT-REFUSE` and build the
+node without the children they cannot represent. The refusal census rose by two, deliberately, and the probe asserts a
+cyclic model is truncated rather than thrown.
+
+**ONE KEY IN THE SELECTION PAIR BELONGS TO KVO.** An observer of `selectionIndexPaths` makes KVO wrap
+`-setSelectionIndexPaths:`, so the wrapper announces that key; the manual pair announces only the five DEPENDENTS.
+Announcing all six delivered every selection change twice — the probe measured `calls == 2` — which is the same "one
+write, one notification" rule the controllers' `content` follows. The settle step announces `selectionIndexPaths` in the
+criteria/derived list instead, because it changes the selection without going through that setter.
+
+**TWO MORE THINGS SAID AT THE DOOR.** `countKeyPath` is stored and answered and builds nothing: this Foundation's KVC has
+no `countOf<Key>`/`objectIn<Key>AtIndex:` synthesis, so children come from an array-valued `childrenKeyPath`. And a
+destination path is read AFTER the removal, which is why a same-parent move lands in the gap the removal left — the
+reading that makes `-moveNode:toIndexPath:` and `-moveNodes:toIndexPath:` mean the same thing.
+
+**WHERE THE NEXT HOUR GOES:** §6 has been rewritten for it. One slice remains on the controller front —
+`NSPredicateEditor` + `NSPredicateEditorRowTemplate` (18 selectors) with `NSRuleEditor`'s two predicate refusal sites, the
+slice that makes the refusal census fall — and then the small `==`-selector fix in `NSDocument`/`NSDocumentController`
+that §9 recorded.
