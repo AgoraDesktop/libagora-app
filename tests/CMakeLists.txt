@@ -572,6 +572,14 @@ target_link_libraries(combo_box PRIVATE App)
 add_test(NAME appkit-combo-box COMMAND combo_box)
 set_tests_properties(appkit-combo-box PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
 
+# **AND A PICK FROM THE LIST WHILE SOMEBODY IS TYPING ELSEWHERE.** A combo box's list is a menu session; the pick is
+# sound, but the cell's value setter also pushes its string into whatever editor the cell holds. This asserts that a
+# box which is NOT being edited cannot write into the window's shared editor, which belongs to the focused field.
+add_executable(combo_pick_focus combo_pick_focus.m)
+target_link_libraries(combo_pick_focus PRIVATE App)
+add_test(NAME appkit-combo-pick-focus COMMAND combo_pick_focus)
+set_tests_properties(appkit-combo-pick-focus PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
+
 # **AND THE EDIT SESSION ITSELF.** A window lends an editor, a cell begins a session with it, a string is EDITED through
 # the primitive a keystroke uses, and the cell takes it back — the round trip that makes a field a field, driven
 # offscreen with no event loop.

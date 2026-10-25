@@ -147,8 +147,14 @@ static NSString * const AGCoderFieldPlaceholderAttributedKey = @"placeholderAttr
 	 * is the field and the model disagreeing about what the field says.
 	 *
 	 * `-setString:` is the whole of the write because that door is documented as replacing the string AND putting the
-	 * insertion point at its end, which is exactly where a person who has just been given a value wants to be. */
-	if (_cg_editor != nil) {
+	 * insertion point at its end, which is exactly where a person who has just been given a value wants to be.
+	 *
+	 * **AND ONLY THE CELL THE EDITOR IS STANDING IN MAY WRITE INTO IT.** The window lends ONE field editor, and a
+	 * session can outlive its turn: a stale `_cg_editor` points at an object now standing in another field. Writing
+	 * the cell's value there is how a combo box's list pick once landed in the search field beside it — the editor's
+	 * delegate is the cell currently using it, so that is the fact this write is allowed to trust. The window's
+	 * handoff ends the old session as well; this guard is the second lock on the same door. */
+	if (_cg_editor != nil && [_cg_editor delegate] == self) {
 		[_cg_editor setString:(aString != nil ? aString : @"")];
 	}
 }

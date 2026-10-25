@@ -5778,7 +5778,6 @@ static NSUInteger fn_edge_index(NSRectEdge edge)
  * is editing, at the field's own rect, and takes it out again when the session ends. */
 - (id)fieldEditor:(BOOL)createFlag forObject:(id)anObject
 {
-	(void)anObject;
 	if (_fieldEditor == nil && createFlag) {
 		NSText *editor = [[NSText alloc] initWithFrame:NSMakeRect(0.0, 0.0, 0.0, 0.0)];
 
@@ -5786,6 +5785,18 @@ static NSUInteger fn_edge_index(NSRectEdge edge)
 		[editor setEditable:YES];
 		[editor setSelectable:YES];
 		_fieldEditor = editor;
+	}
+	/* **ONE EDITOR, ONE SESSION.** The window owns a single field editor and lends it to whichever field is being
+	 * typed into. A second field asking for it while the first still has it used to get the editor back with the first
+	 * session STILL LIVE: `-makeFirstResponder:` sees the editor is already the first responder and returns without
+	 * resigning it, so the first cell keeps `_cg_editor` — and its next `-setStringValue:`, which is what a combo box's
+	 * list pick does, writes into the editor that now stands in the SECOND field. Ending the old session first is the
+	 * handoff Apple's door performs and the reason `-fieldEditor:forObject:` names the object at all. */
+	if (createFlag && anObject != nil) {
+		if (_fieldEditorOwner != nil && _fieldEditorOwner != anObject) {
+			[self endEditingFor:_fieldEditorOwner];
+		}
+		_fieldEditorOwner = anObject;
 	}
 	return _fieldEditor;
 }
@@ -5811,6 +5822,7 @@ static NSUInteger fn_edge_index(NSRectEdge edge)
 	if (_fieldEditor != nil && _firstResponder == (NSResponder *)_fieldEditor) {
 		[self makeFirstResponder:nil];
 	}
+	_fieldEditorOwner = nil;
 }
 
 - (void)useOptimizedDrawing:(BOOL)flag

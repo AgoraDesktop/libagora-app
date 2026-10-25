@@ -253,6 +253,12 @@ typedef NSUInteger NSWindowSharingType;
 	 * typed into — which is why a cell's edit session asks the WINDOW for an editor rather than making one. RETAINED,
 	 * because the window owns it and nothing else does. */
 	id _fieldEditor;
+	/* **AND WHO IT IS LENT TO, WHICH IS HOW A SECOND FIELD ENDS THE FIRST SESSION.** The editor is the window's and
+	 * only one field edits at a time, so lending it to a DIFFERENT object while a session is live would leave the first
+	 * cell holding a pointer into text that now belongs to the second — the cell would still push its value into the
+	 * shared editor after the caret had moved. `-fieldEditor:forObject:` ends the old session before lending. NOT
+	 * RETAINED: the control owns itself and a stale pointer here is only ever pointer-compared, never messaged. */
+	id _fieldEditorOwner;
 	BOOL _ignoresMouseEvents;
 	/* **THE CONTENT BORDER, ONE VALUE PER EDGE** — indexed by `NSRectEdge`, which this tree's geometry declares as
 	 * NSRectEdgeMinX/MinY/MaxX/MaxY in that order. Apple's automatic thickness is computed from the toolbar and
@@ -936,9 +942,10 @@ typedef NSUInteger NSWindowSharingType;
  * `-endEditingFor:` ENDS THE WINDOW'S EDITING SESSION, WHICH IS A THING THAT NOW EXISTS. It used to be a no-op whose
  * reason was "this tier has no field editor to end anything in", and a window lends one now, so the reason is gone and
  * the door does the work: the editor resigns, the cell takes the string back, and the control it was lent to decides
- * whether its action fires — the same ending a click into another view performs. `anObject` is not consulted, and that
- * is stated rather than pretended: a window owns exactly ONE field editor, so "the session this window is in" is the
- * whole of what a caller could name.
+ * whether its action fires — the same ending a click into another view performs. `anObject` is still not consulted by
+ * the ending itself: a window owns exactly ONE field editor, so "the session this window is in" is the whole of what a
+ * caller could name. `-fieldEditor:forObject:` is the door that DOES consult the object it is asked for, and it calls
+ * this one when the editor is being handed to a different field.
 
  * `-useOptimizedDrawing:` IS RECORDED, with the effect named: it let a window promise that its views do not
  * overlap, and this tier's drawing does not consult such a promise, so the flag is kept for a caller that reads

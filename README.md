@@ -1973,6 +1973,17 @@ record untouched. `-fieldEditorForView:` asks the window for the editor it lends
 is `NSControl -mouseDown:`'s loop without the control (the cell's three hooks, the highlight, the answer "did the button
 come up inside"), which is what lets a cell in a TABLE ROW be tracked.
 
+**AND THE ONE EDITOR IS LENT TO ONE FIELD AT A TIME.** `NSWindow -fieldEditor:forObject:` now records the object it is
+lent to, and a second field that asks for it while the first session is live ends that session first. The door used to
+return the editor while the first session was still standing: `-makeFirstResponder:` saw the editor was already the first
+responder and returned without resigning it, so the first cell kept `_cg_editor` — a pointer into the editor that now
+stood in the second field. MEASURED as a combo box pick with the caret in the search field beside it: the chosen row was
+written into the SEARCH FIELD, because the combo's cell still thought it was editing the shared editor. The first cell
+now lets go at the handoff, which is the ending a click into another field is supposed to perform; `tests/combo_pick_focus.m`
+drives the two-field case and asserts both the box and the live editor. `NSTextFieldCell -setStringValue:` is the
+second lock on the same door: it writes into an editor only while that editor's delegate IS the cell, so a stale
+pointer can never reach another field's live text even if a session outlives its turn.
+
 **AND TWO SMALLER DOORS FOUND THEIR GROUND.** `-drawWithExpansionFrame:inView:`'s published default is "simply calls
 `-drawWithFrame:inView:`", which it could not be until the ink family landed — now it is. `-highlightColorWithFrame:inView:`
 answers the selection colour when the cell is highlighted and the text colour when it is not, so a table, a browser and a
