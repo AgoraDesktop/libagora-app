@@ -1144,6 +1144,14 @@ target_link_libraries(menu_placement PRIVATE App)
 add_test(NAME appkit-menu-placement COMMAND menu_placement)
 set_tests_properties(appkit-menu-placement PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
 
+# **AND THE TWO CONTROLS THAT RAISE ONE, WHICH SHARE AN ANCHOR.** `NSMenu` takes the point in the VIEW's coordinates;
+# the pop-up button and the combo box both used to carry it into the window first, so their menus opened one
+# window-origin too far right and up. This asserts the shared anchor and the panel each cell raises.
+add_executable(popup_anchor popup_anchor.m)
+target_link_libraries(popup_anchor PRIVATE App)
+add_test(NAME appkit-popup-anchor COMMAND popup_anchor)
+set_tests_properties(appkit-popup-anchor PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
+
 # **AND THE FORMAT A TILE'S MENU CROSSES BY.** The Dock is another process, so an application's dock menu travels as
 # a JSON description and comes back as ids: this asserts that the round trip is a FIXED POINT, that only the rows a
 # person can choose are numbered, that the numbering runs across submenus, and that an id finds its own row again.

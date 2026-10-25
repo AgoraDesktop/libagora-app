@@ -11,11 +11,11 @@
  * in a menu.
  *
  * **AND THE ONE THING THAT IS NOT SMALL IS WHERE IT OPENS.** `NSMenuView`'s note on the click records the rule and
- * this is its second reader: `-popUpMenuPositioningItem:` takes a point in the space a WINDOW FRAME lives in and
- * hangs the menu BELOW it, so the anchor is the button's BOTTOM-LEFT CORNER carried from the view's coordinates
- * into the window's and then into that space — which is the window's frame origin plus the corner. Handing it the
- * view's own point puts the menu at the screen's top-left, which is what a coordinate-space mistake always looks
- * like.
+ * this is its second reader: `-popUpMenuPositioningItem:` takes a point in the VIEW's coordinates, carries it through
+ * the window and onto the screen, and hangs the menu BELOW the result. The anchor is therefore the button's
+ * BOTTOM-LEFT CORNER in the control's own space — `-cg_popUpAnchorForFrame:inView:` — and the FORWARD CONVERSIONS
+ * BELONG TO THE MENU. Carrying the point into window coordinates here as well was a second conversion, and it put
+ * every pop-up's menu one window-origin too far right and up.
  */
 #import <AppKit/NSPopUpButtonCell.h>
 #import <AppKit/NSMenu.h>

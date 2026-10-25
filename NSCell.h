@@ -1147,17 +1147,16 @@ enum {
 - (NSRect)drawingRectForBounds:(NSRect)theRect;
 
 /* **AND WHERE A MENU OR A LIST RAISED BY THIS CELL IS ANCHORED, WHICH IS THE CONTROL'S OWN LEFT EDGE.** `NSMenu`'s
- * placement puts the menu's window at `location.x` — MEASURED, `_trackingFrame = NSMakeRect(location.x, …)` — so the
- * point a cell hands over IS the menu's left edge, and "line the menu up with the control" is a statement about this
+ * placement takes the point in the VIEW's coordinates and carries it to the screen, so the point a cell hands over IS
+ * the menu's left edge once that conversion has run, and "line the menu up with the control" is a statement about this
  * one number.
  *
  * IT LIVES HERE BECAUSE TWO CONTROLS RAISE THINGS AND BOTH MUST AGREE. The pop-up button raises a menu and the combo
  * box raises its list, and they were each doing this arithmetic in their own file — which is how the combo box came to
  * anchor at its CHIP rather than at its field, so its list hung under the arrow instead of under the control. The point
- * is the frame's bottom-left corner carried into the space a window frame lives in: the CELL's frame is in the view's
- * coordinates, `-convertPoint:toView:` with a nil view reaches the window's, and the window's own origin is where the
- * raised window will be placed. A control at its window's own origin hides the middle step, which is exactly the bug
- * that step exists to stop. */
+ * is the frame's bottom-left corner IN THE CONTROL VIEW'S COORDINATES, which is the space the menu's door names; the
+ * MENU does the window and screen conversions, and doing them here as well is what put every raised window one
+ * window-origin too far right and up. */
 - (NSPoint)cg_popUpAnchorForFrame:(NSRect)cellFrame inView:(nullable id)controlView;
 - (NSRect)titleRectForBounds:(NSRect)theRect;
 - (NSRect)imageRectForBounds:(NSRect)theRect;

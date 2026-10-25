@@ -513,9 +513,14 @@ int main(void)
 
 	/* 9. **AND BOTH CONTROLS ANCHOR THEIR RAISED WINDOW AT THE SAME PLACE: THE CONTROL'S OWN LEFT EDGE.** This is the
 	 * claim "line the menu up with the control" makes, and it is ONE NUMBER, because `NSMenu` places its window at
-	 * `location.x` — MEASURED in its own placement (`_trackingFrame = NSMakeRect(location.x, …)`). The two controls
-	 * used to do this arithmetic separately and the combo box anchored at its CHIP, so its list hung under the arrow
-	 * while the pop-up's hung under the button; a probe that checked either control ALONE would have passed on both. */
+	 * `location.x` after carrying the point through the window — MEASURED in its own placement
+	 * (`_trackingFrame = NSMakeRect(location.x, …)`). The two controls used to do this arithmetic separately and the
+	 * combo box anchored at its CHIP, so its list hung under the arrow while the pop-up's hung under the button; a
+	 * probe that checked either control ALONE would have passed on both.
+	 *
+	 * **THE POINT IS IN THE VIEW'S COORDINATES, NOT THE WINDOW'S.** `NSMenu` does the carrying now, so a door that
+	 * carried it too put every panel one window-origin too far right and up — the bug this section's numbers caught
+	 * only after the fact. `popup_anchor.m` is where the raised panel itself is checked. */
 	{
 		NSWindow *w = [[NSWindow alloc] initWithContentRect:NSMakeRect(0.0, 0.0, 400.0, 200.0)
 							  styleMask:NSBorderlessWindowMask
@@ -531,13 +536,13 @@ int main(void)
 		[content addSubview:holder];
 		comboAnchor = [combo cg_popUpAnchorForFrame:inner inView:holder];
 		popupAnchor = [popup cg_popUpAnchorForFrame:inner inView:holder];
-		want = [w frame].origin.x + 60.0;
+		want = NSMinX(inner);
 		printf("  (note: the combo box anchors at x=%.1f and the pop-up at x=%.1f; the control's left edge is %.1f)\n",
 		       (double)comboAnchor.x, (double)popupAnchor.x, (double)want);
 		check(fabs(comboAnchor.x - popupAnchor.x) < 0.01,
 		      "both controls anchor at the SAME x — one rule, so the pair cannot disagree");
 		check(fabs(comboAnchor.x - want) < 0.01,
-		      "and that x IS the control's own left edge, carried into the space a window frame lives in");
+		      "and that x IS the control's own left edge IN THE VIEW's coordinates — the menu does the carrying");
 		check(fabs(comboAnchor.y - popupAnchor.y) < 0.01,
 		      "and at the same y, which is the control's bottom edge");
 		/* AND THE CHIP IS NOT IT, which is the specific defect this was: a control 140 points wide whose chip starts

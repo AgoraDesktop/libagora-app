@@ -442,7 +442,12 @@ extern NSString *NSMenuDidEndTrackingNotification;
 - (NSPoint)locationForSubmenu:(nullable id)aSubmenu;
 - (void)helpRequested:(nullable id)event;
 - (void)submenuAction:(nullable id)sender;
-/* AND THE TWO THAT OPEN ONE, the instance door and the class one a context menu comes through. */
+/* AND THE TWO THAT OPEN ONE, the instance door and the class one a context menu comes through.
+ *
+ * **THE POINT IS IN `view`'S COORDINATES, AND THIS DOOR CARRIES IT TO THE SCREEN.** With a nil view it is already in
+ * screen coordinates. The menu's frame hangs below-left of the result. A caller that has already converted the point
+ * — the pop-up button's and combo box's shared cell anchor once did — is a second conversion, and its panel opens one
+ * window-origin too far right and up. */
 - (void)popUpMenuPositioningItem:(nullable NSMenuItem *)item
 		      atLocation:(NSPoint)location
 			  inView:(nullable id)view;

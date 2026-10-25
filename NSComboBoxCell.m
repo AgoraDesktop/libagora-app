@@ -794,8 +794,9 @@ static NSString * const AGCoderComboButtonBorderedKey = @"buttonBordered";
  * right way round for this tier: the session is two hundred lines of window and event handling that has now been
  * written once, and what a list and a menu actually disagree about is the row.
  *
- * THE ANCHOR IS THE CONTROL'S OWN LEFT EDGE, the same place the pop-up's menu opens; `NSMenu` places its window at
- * `location.x`, so that one number IS the alignment. */
+ * THE ANCHOR IS THE CONTROL'S OWN LEFT EDGE, in the control view's coordinates — the same place the pop-up's menu
+ * opens. `NSMenu` carries the point to the screen and places its window at the resulting x, so that one number IS the
+ * alignment; carrying it here as well is the double conversion `popup_anchor.m` measures. */
 - (void)cg_attachListWithFrame:(NSRect)cellFrame inView:(id)controlView
 {
 	NSMenu *list;

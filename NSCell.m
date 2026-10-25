@@ -2143,24 +2143,19 @@ static const NSSize FN_CELL_NO_OPINION = { 10000.0, 10000.0 };
 
 /* ---- THE THREE RECTS, WITH THIS TIER'S NUMBERS ------------------------------------------------ */
 
-/* **AND THE ANCHOR IS THE FRAME'S BOTTOM-LEFT CORNER IN THE SPACE A WINDOW FRAME LIVES IN.** Three spaces are in play
- * and only one arithmetic gets them in the right order; the header carries why it is one door rather than two copies.
+/* **AND THE ANCHOR IS THE FRAME'S BOTTOM-LEFT CORNER IN THE CONTROL VIEW'S OWN COORDINATES.** That is the space
+ * `NSMenu -popUpMenuPositioningItem:atLocation:inView:` takes a point in, and it is the menu that carries the point
+ * through the window and onto the screen. This door used to do that carrying itself, back when the menu took a point
+ * as if it were already on the screen — and the two conversions together put every pop-up's menu one window-origin
+ * too far right and up. THE SAME MISTAKE IN THE OTHER DIRECTION is what the path bar and the search field fixed by
+ * handing the menu a point in their own view's space; this is the shared door the pop-up and the combo box use.
+ *
  * NO WINDOW IS NOT A REFUSAL: `NSMenu`'s own note says a session with no reachable display is still a session — its
- * state is real and only its ink is missing — so the point falls back to the frame's own corner and every behaviour
- * above this stays testable offscreen. */
+ * state is real and only its ink is missing — so the point is still the frame's corner and every behaviour above this
+ * stays testable offscreen. */
 - (NSPoint)cg_popUpAnchorForFrame:(NSRect)cellFrame inView:(id)controlView
 {
-	id window = nil;
-
-	if (controlView != nil && [controlView respondsToSelector:@selector(window)]) {
-		window = [controlView window];
-	}
-	if (window != nil && [controlView respondsToSelector:@selector(convertPoint:toView:)]) {
-		NSRect frame = [window frame];
-		NSPoint corner = [controlView convertPoint:NSMakePoint(NSMinX(cellFrame), NSMinY(cellFrame)) toView:nil];
-
-		return NSMakePoint(frame.origin.x + corner.x, frame.origin.y + corner.y);
-	}
+	(void)controlView;
 	return NSMakePoint(NSMinX(cellFrame), NSMinY(cellFrame));
 }
 

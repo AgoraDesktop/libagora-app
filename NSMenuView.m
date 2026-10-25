@@ -272,12 +272,11 @@ static void apk_fill_vertical_gradient(NSRect rect, CGFloat radius,
 	return NSMakeRect(offset, 0.0, [self widthForItemAtIndex:index], bounds.size.height);
 }
 
-/* **THE CLICK, AND THE ONE ARITHMETIC THAT IS NOT OBVIOUS: WHERE THE MENU GOES.** `-popUpMenuPositioningItem:`
- * takes a point in the space a WINDOW FRAME lives in — the space the popped-up menu's own window is placed in —
- * and hangs the menu BELOW that point. So the point to give it is the clicked item's BOTTOM-LEFT CORNER carried
- * from this view's coordinates into the window's, which is this window's frame origin plus the corner. Handing it
- * the view's own point instead would put every menu at the screen's top-left, which is what a coordinate-space
- * mistake always looks like.
+/* **THE CLICK, AND THE ONE ARITHMETIC THIS VIEW DOES ITSELF: WHERE THE MENU GOES.** The bar starts its session with
+ * `-cg_beginSessionAt:`, which has no view parameter — so the point it is handed is already in SCREEN coordinates,
+ * and the clicked item's BOTTOM-LEFT CORNER is carried there ONCE, as this window's frame origin plus the item's box.
+ * (A pop-up or a combo box hands `-popUpMenuPositioningItem:…` a point in its CONTROL's coordinates and lets the menu
+ * do that carrying; doing it in both places is the second conversion `popup_anchor.m` measures.)
  *
  * AND IT IS THE ITEM'S BOTTOM, NOT ITS TOP: a bar's items run the height of the bar, so their bottom edge IS the
  * bar's bottom edge, and a menu hung below that hangs below the bar rather than over it. */

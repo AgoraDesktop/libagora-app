@@ -579,7 +579,12 @@ the compositor is really gone.
   session this tier reuses clamps itself to the screen and has no scroll offset, while `-deselectItemAtIndex:` is real
   without one. And `NSComboBoxDelegate` sends ALL FOUR of its messages: the two around the list's
   session, the selection-changed one when a row is picked, and — since the menu session grew a delegate — the
-  selection-is-CHANGING one when the pointer moves over a row.
+  selection-is-CHANGING one when the pointer moves over a row. **AND THE LIST AND THE MENU OPEN WHERE THE CONTROL IS,
+  NOT ONE WINDOW-ORIGIN AWAY**: `-cg_popUpAnchorForFrame:inView:` answers the cell's bottom-left in the CONTROL VIEW's
+  coordinates, because `NSMenu -popUpMenuPositioningItem:atLocation:inView:` does the window-and-screen conversion
+  itself. Carrying the point into the window in both places was a second conversion, and every pop-up's menu and combo
+  box's list opened one window-origin too far right and up; `tests/popup_anchor.m` measures both anchors and the
+  panels the two cells raise.
 - **And the field's delegate family** (`ctest`, offscreen): a control that edits text owes the THREE things Apple
   declares in `NSControl.h` — the `NSControlTextEditingDelegate` protocol (seven optional methods), the
   `NSControlSubclassNotifications` category that an object preferring to LISTEN is declared on, and three published
