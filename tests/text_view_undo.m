@@ -120,9 +120,9 @@ static NSTextView *make_view(NSWindow *window, NSString *text)
 	[view setFont:[NSFont systemFontOfSize:14.0]];
 	[view setEditable:YES];
 	[view setString:text];
+	/* THE TYPED REFERENCE IS THE OWNING ONE; `-contentView` answers NSView *, which is the wrong class here. */
 	[window setContentView:view];
-	[view release];
-	return [[window contentView] retain];
+	return view;
 }
 
 int main(void)

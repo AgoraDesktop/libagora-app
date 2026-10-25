@@ -567,7 +567,15 @@ static NSPrintOperation *s_currentOperation = nil;
 		_cgData = data;
 		return YES;
 	}
-	_cgContext = [self fn_createPDFContext:mediaBox into:&_cgData];
+	/* THE IVAR IS void * SO ITS ADDRESS IS void **, WHICH IS NOT A CFMutableDataRef * EVEN THOUGH THE TWO HOLD THE SAME
+	 * OPAQUE POINTER. The output goes through a correctly typed temporary and is copied back, so the ivar's storage
+	 * class is unchanged and no pointer-to-pointer cast is needed. */
+	{
+		CFMutableDataRef data = _cgData;
+
+		_cgContext = [self fn_createPDFContext:mediaBox into:&data];
+		_cgData = data;
+	}
 	return _cgContext != NULL;
 }
 

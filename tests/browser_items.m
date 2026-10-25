@@ -164,9 +164,8 @@ static NSBrowser *browserInWindow(NSWindow *window, id delegate)
 {
 	NSBrowser *browser = [[NSBrowser alloc] initWithFrame:NSMakeRect(0.0, 0.0, 600.0, 300.0)];
 
+	/* THE TYPED REFERENCE IS THE OWNING ONE; `-contentView` answers NSView *, which is the wrong class here. */
 	[window setContentView:browser];
-	[browser release];
-	browser = [[window contentView] retain];
 	[browser setDelegate:delegate];
 	return browser;
 }

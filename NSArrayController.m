@@ -673,7 +673,7 @@ static NSString * const kCriteriaKeys[] = {
 {
 	NSArray *arranged = [self arrangedObjects];
 	NSMutableDictionary *byContentIndex = [NSMutableDictionary dictionary];
-	NSMutableArray *sortedKeys;
+	NSArray *sortedKeys;
 	NSUInteger arrangedIndex;
 	NSUInteger count = 0;
 	NSUInteger i;

@@ -145,9 +145,9 @@ int main(void)
 	NSBrowser *browser = [[NSBrowser alloc] initWithFrame:NSMakeRect(0.0, 0.0, (CGFloat)W, (CGFloat)H)];
 
 	setvbuf(stdout, NULL, _IONBF, 0);
+	/* THE TYPED REFERENCE IS THE OWNING ONE: `-setContentView:` retains, and reacquiring the same object
+	 * through `-contentView` would only narrow NSView * back to NSBrowser * by hand. */
 	[window setContentView:browser];
-	[browser release];
-	browser = [[window contentView] retain];
 	[browser setDelegate:probe];
 	[browser setTarget:probe];
 	[browser setAction:@selector(clicked:)];

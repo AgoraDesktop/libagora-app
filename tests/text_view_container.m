@@ -211,9 +211,9 @@ static NSTextView *make_view(NSWindow *window, NSString *text)
 	[view setSelectable:YES];
 	[view setDrawsBackground:NO];
 	[view setString:text];
+	/* THE TYPED REFERENCE IS THE OWNING ONE; `-contentView` answers NSView *, which is the wrong class here. */
 	[window setContentView:view];
-	[view release];
-	return [[window contentView] retain];
+	return view;
 }
 
 /* ============================================================================================ *
