@@ -4538,6 +4538,13 @@ static CGFloat fn_clamp_axis(CGFloat v, CGFloat lo, CGFloat hi)
 		paint[0] = [self cg_wholeFrameRect];
 		paintCount = 1;
 		dirty = [self cg_wholeFrameRect];
+		/* **AND A BUFFER NOBODY HAS DESCRIBED HAS A CHROME NOBODY HAS PAINTED EITHER.** The whole-frame branch below
+		 * fills and walks the CONTENT over this buffer; the strip above it is this window's own ink, and it is only
+		 * drawn when `_cg_chromeDirty` says so. A resize hands out fresh buffers (`ag_window_resize`), so without this
+		 * line each step painted the content over undescribed pixels and left the title bar — and the toolbar band's
+		 * face — as whatever the new allocation held: MEASURED as a title bar that glitched and blinked while a window
+		 * was dragged or resized, because the flag had been consumed by the last ordinary paint. */
+		_cg_chromeDirty = YES;
 	} else if (!NSIsEmptyRect(_cg_paintMissing[slot])) {
 		if (!canCopy || ![self cg_copyRect:_cg_paintMissing[slot] from:previous stride:previousStrideForCopy
 					    delta:NSZeroSize]) {
