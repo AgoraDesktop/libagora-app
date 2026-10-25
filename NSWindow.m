@@ -102,7 +102,7 @@
 /* THE SEAM'S DOORS AND THE STATE THEY KEEP, declared here for the same reason. */
 - (void)cg_handleSeamEvent:(const AGEvent *)event;
 - (void)cg_drawFrame;
-- (void)cg_drawFrameDirty:(NSRect)dirty;
+- (void)cg_drawFrameDirty:(const NSRect *)damage count:(NSUInteger)count;
 - (void)cg_drawDragGuideInContext:(CGContextRef)c;
 /* **WHAT THE COMPOSITOR'S FRAME CALLBACK ASKS FOR — AND WHY IT IS NOT JUST `-cg_drawFrame`.** The callback says
  * the last frame was taken; it is an INVITATION to draw again, not an instruction. A window with nothing new to
@@ -160,8 +160,19 @@
 - (NSInteger)cg_paintSlotForPixels:(void *)pixels;
 - (NSInteger)cg_claimPaintSlotForPixels:(void *)pixels;
 - (void)cg_recordPaintInSlot:(NSInteger)slot rect:(NSRect)painted;
+- (void)cg_addPaintRect:(NSRect)rect to:(NSRect *)out count:(NSUInteger *)count;
+- (NSRect)cg_deviceOutward:(NSRect)rect;
 - (NSRect)cg_wholeFrameRect;
 - (NSRect)cg_chromeRect;
+- (NSRect)cg_titleBarRect;
+/* **AND THE ONE THING THAT MARKS THE CHROME'S INK STALE.** `-setNeedsDisplay:` is the general door (the window itself
+ * changed); the setters that change a title or an edited dot call this one because they used to change the state and
+ * mark NOTHING, which left the old title on the bar until an unrelated repaint. */
+- (void)cg_invalidateChrome;
+/* **AND THE ONE COPY THE TWO-BUFFER SEAM MAKES WORTH TAKING.** The frame on the glass holds the pixels for everything a
+ * scroll did not change, so a scrolled region is moved rather than drawn: see `-cg_scrollContentInRect:inView:by:` in
+ * `NSWindow.m` for what is recorded and `AGWindowPreviousFrameSized` for the read. */
+- (BOOL)cg_copyRect:(NSRect)rect from:(const uint32_t *)previous stride:(int)previousStride delta:(NSSize)delta;
 /* **AND WHERE A CHROME BUTTON IS, in WINDOW coordinates.** The painter and the pointer ask the one function, so
  * a hovered button cannot be a different rectangle from a drawn one. */
 - (NSInteger)cg_chromeButtonAtPoint:(NSPoint)windowPoint;
@@ -178,6 +189,10 @@
 @interface NSView (AGDirtyUnion)
 - (NSRect)cg_dirtyUnion;
 - (void)cg_clearDirtyRegionRecursive;
+/* **AND THE SAME DAMAGE AS A LIST, WHICH IS WHAT THE PAINT CONSUMES.** The union above is the bounding box and is still
+ * what the ledger and the machinery's "is anything dirty" questions use; the list is what gets DRAWN, so a strip at one
+ * edge and a knob beside it are two small pieces rather than the area between them. */
+- (void)cg_dirtyRegionRecursive:(NSRect *)out max:(NSUInteger)max count:(NSUInteger *)outCount;
 @end
 
 @interface NSTrackingArea (APPKITTrackingEngine)
@@ -1039,6 +1054,17 @@ static NSString * const AGCoderWindowContentViewKey = @"contentView";
 - (void)setNeedsDisplay:(BOOL)flag
 {
 	_viewsNeedDisplay = flag ? YES : NO;
+	/* **AND IT DELIBERATELY DOES NOT TOUCH THE CHROME'S FLAG.** This door is "the whole window may be stale" — a
+	 * background colour, a theme, anything a caller cannot name more precisely — and it must keep meaning that: with no
+	 * view damage it lands on the whole-frame path, which paints the chrome too. The chrome-specific cases are the ones
+	 * that call `-cg_invalidateChrome`, so the strip is repainted when its ink changed and NOT on every content pass,
+	 * which is the whole point of owning the flag. */
+}
+
+- (void)cg_invalidateChrome
+{
+	_cg_chromeDirty = YES;
+	_viewsNeedDisplay = YES;
 }
 
 /* **THE WINDOW'S BACKGROUND COLOUR.** Apple's door, and the reason it is needed here is the menu bar: an
@@ -2338,6 +2364,9 @@ static CGFloat fn_clamp_axis(CGFloat v, CGFloat lo, CGFloat hi)
 	if (_agwindow != NULL && _title != nil) {
 		AGWindowSetTitle(_agwindow, [_title UTF8String]);
 	}
+	/* **AND THE BAR REPAINTS, WHICH IT DID NOT BEFORE**: a title is chrome ink and nothing here marked anything, so a
+	 * renamed window kept its old title until an unrelated repaint — a focus change, a resize — happened to cover it. */
+	[self cg_invalidateChrome];
 }
 
 - (id)delegate
@@ -3672,7 +3701,10 @@ static CGFloat fn_clamp_axis(CGFloat v, CGFloat lo, CGFloat hi)
 
 		if (hover != _cg_hoverChrome) {
 			_cg_hoverChrome = hover;
-			[self setNeedsDisplay:YES];
+			/* **AND ONLY THE STRIP REPAINTS.** A prelight is chrome ink and nothing else: asking for a whole-window
+			 * repaint here is what a pointer crossing a stoplight used to cost, and a change of hovered BUTTON does not
+			 * change a single content pixel. */
+			[self cg_invalidateChrome];
 		}
 	}
 	[hits release];
@@ -4113,14 +4145,258 @@ static CGFloat fn_clamp_axis(CGFloat v, CGFloat lo, CGFloat hi)
 	_cg_paintMissing[other] = NSUnionRect(_cg_paintMissing[other], painted);
 }
 
+/* **A PIECE ROUNDED OUT TO WHOLE DEVICE PIXELS, AT THE MOMENT IT IS PAINTED.** A view's damage lands on point
+ * boundaries and at a fractional scale those are not pixel boundaries: painting a band whose edge falls between two
+ * pixels makes CoreGraphics CLIP it with partial coverage, so the last row is composited at 30-70% over the old content
+ * instead of being replaced — MEASURED as the faint washed line a person saw through the demo's buttons and captions,
+ * which was each scroll strip's own edge. Rounding OUTWARD paints at most one extra pixel per edge, and that pixel is
+ * drawn with the content that belongs there, so over-paint is the only cost. IT IS DONE HERE AND NOT WHEN THE PIECES
+ * ARE COLLECTED, because two pieces that are merely ADJACENT (a strip and the scroller beside it) would then intersect
+ * and the merge rule would union them into the bounding box — the whole visible area, which is the cost this region
+ * exists to avoid. */
+- (NSRect)cg_deviceOutward:(NSRect)rect
+{
+	CGFloat scale = [self userSpaceScaleFactor];
+	CGFloat x0, y0, x1, y1;
+
+	if (!(scale > 0.0) || scale == 1.0) {
+		return rect;
+	}
+	x0 = (CGFloat)(floor((double)(rect.origin.x * scale)) / (double)scale);
+	y0 = (CGFloat)(floor((double)(rect.origin.y * scale)) / (double)scale);
+	x1 = (CGFloat)(ceil((double)((rect.origin.x + rect.size.width) * scale)) / (double)scale);
+	y1 = (CGFloat)(ceil((double)((rect.origin.y + rect.size.height) * scale)) / (double)scale);
+	return NSMakeRect(x0, y0, x1 - x0, y1 - y0);
+}
+
+/* **ONE MORE PIECE TO DRAW, WITH THE MERGE RULE THE VIEW TREE USES.** Overlapping pieces are unioned, separate ones are
+ * kept apart, and a full budget collapses to the bounding box — over-paint and never a miss, for the same reason as
+ * `-cg_addToDirtyRegion:` (which cannot be reused: this list is the window's and that one is a view's). */
+- (void)cg_addPaintRect:(NSRect)rect to:(NSRect *)out count:(NSUInteger *)count
+{
+	NSUInteger i;
+
+	if (NSIsEmptyRect(rect)) {
+		return;
+	}
+	for (i = 0; i < *count; i++) {
+		if (NSIntersectsRect(out[i], rect)) {
+			out[i] = NSUnionRect(out[i], rect);
+			return;
+		}
+	}
+	if (*count < APPKIT_DAMAGE_RECTS) {
+		out[*count] = rect;
+		(*count)++;
+		return;
+	}
+	for (i = 1; i < *count; i++) {
+		out[0] = NSUnionRect(out[0], out[i]);
+	}
+	out[0] = NSUnionRect(out[0], rect);
+	*count = 1;
+}
+
 /* THE WHOLE FRAME, in the space these rectangles live in (see `+cg_bufferRowsForDirtyRect:` for the mirroring). */
 - (NSRect)cg_wholeFrameRect
 {
 	return NSMakeRect(0.0, 0.0, _frame.size.width, _frame.size.height);
 }
 
+/* **MOVE PIXELS INSTEAD OF DRAWING THEM.** `rect` is in this window's drawing space (content points, y UP, the space
+ * `-cg_drawFrameDirty:` fills); `delta` is how far the content moved in those points. Every destination pixel asks for
+ * the source pixel at `destination - delta` — which is the same sentence as "the picture slid by delta" — and the rows
+ * are mirrored once on the way in, because the surface is top down and the rectangle is not.
+ *
+ * PIXELS THAT HAVE NO SOURCE ARE LEFT ALONE, and that is the contract rather than an omission: they are the strip
+ * that scrolled into view, and the caller has already marked it for drawing. Rows or columns whose source falls
+ * outside the buffer are skipped by the same rule, so a scroll to the end of a document copies what overlaps and draws
+ * the rest. */
+- (BOOL)cg_copyRect:(NSRect)rect from:(const uint32_t *)previous stride:(int)previousStride delta:(NSSize)delta
+{
+	NSInteger surfaceHeight;
+	NSInteger surfaceWidth;
+	NSInteger left, right;
+	NSInteger dy, dx;
+	NSInteger row;
+	NSInteger rowEnd;
+	NSInteger destinationStride;
+	NSInteger columnLow, columnHigh;
+	unsigned char *destination;
+	const unsigned char *source;
+	NSRange rows;
+	CGFloat scale;
+
+	if (_surface == NULL || _pixels == NULL || previous == NULL || previousStride <= 0) {
+		return NO;
+	}
+	destinationStride = (NSInteger)CGBitmapContextGetBytesPerRow(_surface);
+	if (destinationStride != (NSInteger)previousStride) {
+		return NO;
+	}
+	surfaceWidth = (NSInteger)CGBitmapContextGetWidth(_surface);
+	surfaceHeight = (NSInteger)CGBitmapContextGetHeight(_surface);
+	/* **THE RECTANGLE IS IN POINTS, THE BUFFER IS IN DEVICE PIXELS, AND THE EDGES ARE ROUNDED TO THE NEAREST PIXEL.**
+	 * Every rectangle that reaches this door is on the device grid already — `-scrollToPoint:` snaps the position and
+	 * `-tile` puts the clip view itself on whole pixels — so nearest is the exact answer, and rounding OUTWARD was
+	 * MEASURED wrong: a point divided by the scale and multiplied back does not always land on the integer it started
+	 * from (11.261 x 1.33203 = 14.999...), so `floor` copied one row too many and left a one-pixel line along the clip
+	 * view's top edge — content where a repaint draws the border. */
+	scale = [self userSpaceScaleFactor];
+	/* **INWARD, SO A COPY NEVER TOUCHES A PIXEL ITS RECTANGLE DOES NOT OWN.** The rectangle handed here is a clip view's
+	 * visible area, and it need not sit on the device grid (this tier lays views out in points at a fractional scale,
+	 * deliberately: snapping the layout to whole pixels is what MEASURED a one-pixel seam through the demo's controls).
+	 * Rounding OUTWARD escapes by a fraction of a pixel into the enclosing view's border, where a copy is a smear;
+	 * rounding inward leaves that sliver to the repaint, which the caller has already marked. The cost is a sub-pixel
+	 * edge row/column that is one scroll step behind — invisible at a fractional scale, and never a wrong region. */
+	{
+		NSInteger deviceLeft = (NSInteger)ceil((double)(rect.origin.x * scale));
+		NSInteger deviceRight = (NSInteger)floor((double)((rect.origin.x + rect.size.width) * scale));
+		NSInteger deviceTop = (NSInteger)ceil((double)(rect.origin.y * scale));
+		NSInteger deviceBottom = (NSInteger)floor((double)((rect.origin.y + rect.size.height) * scale));
+
+		if (deviceLeft < 0) {
+			deviceLeft = 0;
+		}
+		if (deviceRight > surfaceWidth) {
+			deviceRight = surfaceWidth;
+		}
+		if (deviceRight <= deviceLeft || deviceBottom <= deviceTop) {
+			return NO;
+		}
+		left = deviceLeft;
+		right = deviceRight;
+		rows = [[self class] cg_bufferRowsForDirtyRect:
+				NSMakeRect((CGFloat)deviceLeft, (CGFloat)deviceTop,
+					   (CGFloat)(deviceRight - deviceLeft), (CGFloat)(deviceBottom - deviceTop))
+						     surfaceHeight:surfaceHeight];
+	}
+	if (rows.length == 0 || right <= left) {
+		return NO;
+	}
+	dy = (NSInteger)llround((double)(delta.height * scale));
+	dx = (NSInteger)llround((double)(delta.width * scale));
+	/* DESTINATION row r takes SOURCE row r + dy, because a row's index grows DOWNWARD while the delta is stated
+	 * upward: content that moved up the window has its pixels at a HIGHER row number than it did. */
+	row = (NSInteger)rows.location;
+	rowEnd = (NSInteger)(rows.location + rows.length);
+	/* AND THE COLUMNS ARE THE SAME ARITHMETIC UNMIRRORED: destination column c takes source column c - dx. */
+	columnLow = (dx > left) ? dx : left;
+	columnHigh = (surfaceWidth + dx < right) ? (surfaceWidth + dx) : right;
+	if (columnHigh <= columnLow) {
+		return NO;
+	}
+	destination = (unsigned char *)_pixels;
+	source = (const unsigned char *)previous;
+	for (; row < rowEnd; row++) {
+		NSInteger sourceRow = row + dy;
+
+		if (sourceRow < 0 || sourceRow >= surfaceHeight) {
+			continue;	/* the strip: drawn, not copied */
+		}
+		memcpy(destination + (size_t)row * (size_t)destinationStride + (size_t)columnLow * 4u,
+		       source + (size_t)sourceRow * (size_t)previousStride + (size_t)(columnLow - dx) * 4u,
+		       (size_t)(columnHigh - columnLow) * 4u);
+	}
+	return YES;
+}
+
+/* **WHAT A SCROLL REQUESTS, AND WHEN IT HAS TO GIVE UP.** Recorded rather than copied, because the frame to copy from
+ * is the compositor's and the paint is what owns the begin/end pair. Two rules make it safe:
+ *
+ *   1. A SECOND MOVE BEFORE THE PAINT COULD NOT BE ONE TRANSFORM unless it is the same rectangle moving the same way
+ *      again — which is a scroller being dragged — and then the deltas add. Anything else drops the copy and marks
+ *      both buffers for a repaint of the two rectangles, which is what the caller would have got without this door.
+ *   2. IT IS CLEARED BY THE PAINT THAT APPLIES IT, because a committed frame already has the translation in its
+ *      pixels; a paint that is REFUSED leaves it, which is right — no frame was committed, so the same delta still
+ *      describes the move from the frame on the glass.
+ *
+ * The answer is whether the fast path was taken: NO means "leave your whole bounds dirty", which is a repaint and
+ * never a wrong picture. */
+- (BOOL)cg_scrollContentInRect:(NSRect)rect inView:(NSView *)view by:(NSSize)delta
+{
+	NSRect inWindow;
+
+
+	if (_agwindow == NULL || view == nil || _contentView == nil) {
+		return NO;
+	}
+	if (delta.width == 0.0 && delta.height == 0.0) {
+		return NO;
+	}
+	/* **A COPY MOVES WHOLE PIXELS, SO A FRACTIONAL MOVEMENT IS NOT ONE.** `-scrollToPoint:` snaps a scroll position to
+	 * the device grid, which is what makes this true for every scroll the tier performs; a caller that moved the origin
+	 * off the grid by hand gets a repaint, and a repaint is only slower. */
+	{
+		CGFloat scale = [self userSpaceScaleFactor];
+		double dx = (double)(delta.width * scale);
+		double dy = (double)(delta.height * scale);
+
+		if (fabs(dx - floor(dx + 0.5)) > 0.01 || fabs(dy - floor(dy + 0.5)) > 0.01) {
+			return NO;
+		}
+	}
+	/* **AND THERE HAS TO BE A FRAME TO READ BEFORE THE REQUEST IS WORTH RECORDING.** The seam refuses when nothing has
+	 * been committed yet (the first paint) or when the buffer is a GPU one; the paint path asks again, because the size
+	 * has to match too and only it knows the geometry being drawn. */
+	if (AGWindowPreviousFrameSized(_agwindow, NULL, NULL, NULL) == NULL) {
+		return NO;
+	}
+	/* THE RECTANGLE IS TAKEN INTO THE WINDOW'S OWN DRAWING SPACE — the space `dirty` rects are in — by converting
+	 * rather than by arithmetic on frames, because a clip view inside a flipped document is not a translation of its
+	 * superview. */
+	inWindow = [view convertRect:rect toView:nil];
+	if (NSIsEmptyRect(inWindow)) {
+		return NO;
+	}
+	if (_cg_scrollPending) {
+		if (NSEqualRects(_cg_scrollRect, inWindow)) {
+			_cg_scrollDelta.width += delta.width;
+			_cg_scrollDelta.height += delta.height;
+			[self setViewsNeedDisplay:YES];
+			return YES;
+		}
+		/* A DIFFERENT REGION MOVED: two translations are not one. Both regions are repainted by the next pass. */
+		_cg_paintMissing[0] = NSUnionRect(_cg_paintMissing[0], _cg_scrollRect);
+		_cg_paintMissing[1] = NSUnionRect(_cg_paintMissing[1], _cg_scrollRect);
+		_cg_paintMissing[0] = NSUnionRect(_cg_paintMissing[0], inWindow);
+		_cg_paintMissing[1] = NSUnionRect(_cg_paintMissing[1], inWindow);
+		_cg_scrollPending = NO;
+		_cg_scrollRect = NSZeroRect;
+		_cg_scrollDelta = NSZeroSize;
+		return NO;
+	}
+	_cg_scrollRect = inWindow;
+	_cg_scrollDelta = delta;
+	_cg_scrollPending = YES;
+	[self setViewsNeedDisplay:YES];
+	return YES;
+}
+
+/* **THE STRIP THE CHROME PAINTER FILLS, WHICH IS THE TITLE BAR AND NOT THE TOOLBAR BAND UNDER IT.** The toolbar is a
+ * VIEW in the band above the content, and it fills that band with the same face colour itself (`fn_draw_chrome` says so
+ * where it draws); a face fill over the whole strip erases the view's items and, on a chrome-only pass, nothing puts them
+ * back — MEASURED as a toolbar whose icons blinked with the pointer, because a hover repainted the chrome and wiped
+ * them. So the fill covers what the painter draws and stops where the toolbar's own author starts. */
+- (NSRect)cg_titleBarRect
+{
+	NSRect whole = [self cg_wholeFrameRect];
+	NSRect content = [self contentRectForFrameRect:_frame];
+	CGFloat bottom = content.size.height + fn_toolbar_height(self);
+	CGFloat top = whole.size.height;
+
+	if (bottom < 0.0) {
+		bottom = 0.0;
+	}
+	if (bottom > top) {
+		bottom = top;
+	}
+	return NSMakeRect(0.0, bottom, whole.size.width, top - bottom);
+}
+
 /* AND THE STRIP THE DIRTY PATH PAINTS WHATEVER THE CONTENT'S DAMAGE WAS, because the chrome is above the content and
- * is not part of that union. */
+ * is not part of that union. THIS IS THE WHOLE STRIP, TOOLBAR BAND INCLUDED, because it is what the other buffer's
+ * record needs: the band's ink is part of the chrome's frame even though the band's author is a view. */
 - (NSRect)cg_chromeRect
 {
 	NSRect whole = [self cg_wholeFrameRect];
@@ -4136,17 +4412,32 @@ static CGFloat fn_clamp_axis(CGFloat v, CGFloat lo, CGFloat hi)
 	return NSMakeRect(0.0, bottom, whole.size.width, whole.size.height - bottom);
 }
 
-- (void)cg_drawFrameDirty:(NSRect)dirty
+- (void)cg_drawFrameDirty:(const NSRect *)damage count:(NSUInteger)count
 {
 	CGContextRef c;
 	uint32_t *frame;
+	uint32_t *previous = NULL;
 	int stride = 0;
 	int buffer_w = 0, buffer_h = 0;
+	int previousStrideForCopy = 0;
+	BOOL canCopy = NO;
+	BOOL scrolled = NO;
 	NSInteger slot;
+	NSRect changed;
+	NSRect dirty = NSZeroRect;
+	NSRect paint[APPKIT_DAMAGE_RECTS];
+	NSUInteger paintCount = 0;
+	NSUInteger i;
 	NSTimeInterval started = [NSDate timeIntervalSinceReferenceDate];
 
-	if (_agwindow == NULL || NSIsEmptyRect(dirty)) {
+	if (_agwindow == NULL || (count == 0 && !_cg_chromeDirty)) {
 		return;
+	}
+	/* **THE BOX IS KEPT BESIDE THE PIECES, FOR THE THREE QUESTIONS THAT WANT ONE RECTANGLE**: what the buffer ledger
+	 * records, what the diagnostic prints, and what the fallback paints when a copy has no source. The PIECES are what
+	 * the background and the view walk use, which is the whole point of the list — see `NSView.h`. */
+	for (i = 0; i < count; i++) {
+		dirty = NSIsEmptyRect(dirty) ? damage[i] : NSUnionRect(dirty, damage[i]);
 	}
 	if (!AGWindowServerCanWrite(fn_server())) {
 		return;
@@ -4164,13 +4455,79 @@ static CGFloat fn_clamp_axis(CGFloat v, CGFloat lo, CGFloat hi)
 	}
 	/* **AND THE DAMAGE BECOMES WHAT THIS BUFFER IS MISSING, NOT ONLY WHAT THE VIEWS CHANGED.** A partial paint
 	 * keeps every pixel outside its rectangle, which is right for the buffer that was on the glass and wrong for
-	 * this one: see the note above this method. A buffer nobody has described is painted whole. */
+	 * this one: see the note above this method. A buffer nobody has described is painted whole.
+	 *
+	 * **AND WHAT THE VIEWS CHANGED IS KEPT SEPARATELY, BECAUSE IT IS THE ONLY PART THE OTHER BUFFER LACKS.** The
+	 * rectangle below grows to include `_cg_paintMissing[slot]` — the pixels THIS buffer was behind on — and those
+	 * are pixels the other buffer already has, by definition. Recording the widened rectangle as the other buffer's
+	 * damage therefore claims it is stale exactly where it is current, and the pair then ping-pongs: each paint
+	 * tells the other it is missing everything it just caught up on. MEASURED before this line existed: 243 of 245
+	 * paints in one scroller drag were the whole 700x522 frame at 110-215 ms each, so the knob crawled behind the
+	 * pointer. With the views' own damage recorded, the third paint onwards is that damage and nothing else. */
+	changed = dirty;
+	/* **AND WHAT THIS BUFFER IS MISSING IS COPIED RATHER THAN DRAWN, WHICH IS THE OTHER HALF OF THE SAME IDEA.** The
+	 * frame on the glass is this process's own mapping (`AGWindowPreviousFrameSized`), so the region a partial paint
+	 * would have to repaint is already in front of the eye: copying it costs a memcpy and, unlike drawing it, needs no
+	 * knowledge of what is in it. A fast window's typing, a dragged slider, a selection wash — none of them drawn
+	 * twice. When the seam refuses the read (no committed frame, a GPU buffer, a resize in flight) the old answer
+	 * stands: the missing region joins the damage and is drawn. */
+	{
+		int previousStride = 0, previousWidth = 0, previousHeight = 0;
+
+		previous = AGWindowPreviousFrameSized(_agwindow, &previousStride, &previousWidth, &previousHeight);
+		if (previous != NULL && previousStride == stride && previousWidth == buffer_w &&
+		    previousHeight == buffer_h) {
+			canCopy = YES;
+			previousStrideForCopy = previousStride;
+		} else {
+			previous = NULL;
+		}
+	}
+	/* **THE DAMAGE THE PASS WILL PAINT, AS PIECES: the caller's, plus whatever could not be copied.** It starts as the
+	 * caller's list and a failed copy appends or merges (the merge rule is `NSView`'s, borrowed through the same helper,
+	 * so a full budget collapses to the box rather than dropping anything).
+	 *
+	 * **AND EVERY PIECE IS ROUNDED OUT TO WHOLE DEVICE PIXELS BEFORE IT IS PAINTED.** A view's damage lands on point
+	 * boundaries, and at a fractional scale those are not pixel boundaries: painting a band whose edge falls between two
+	 * pixels makes CoreGraphics CLIP it with partial coverage, so the last row is composited at 30-70% over whatever was
+	 * there — the old content — instead of being replaced. MEASURED as the faint washed line a person saw through the
+	 * demo's buttons and captions: the row was each scroll strip's own edge. Rounding outward paints at most one extra
+	 * pixel per edge, and that pixel is drawn with the content that actually belongs there, so over-paint is the only
+	 * cost. The copy in `-cg_copyRect:...` rounds INWARD for the opposite reason: it must never write a pixel the
+	 * rectangle does not own. */
+	{
+		NSUInteger j;
+
+		for (j = 0; j < count && j < APPKIT_DAMAGE_RECTS; j++) {
+			[self cg_addPaintRect:damage[j] to:paint count:&paintCount];
+		}
+	}
 	slot = [self cg_paintSlotForPixels:frame];
 	if (slot < 0) {
 		slot = [self cg_claimPaintSlotForPixels:frame];
+		paint[0] = [self cg_wholeFrameRect];
+		paintCount = 1;
 		dirty = [self cg_wholeFrameRect];
 	} else if (!NSIsEmptyRect(_cg_paintMissing[slot])) {
-		dirty = NSUnionRect(dirty, _cg_paintMissing[slot]);
+		if (!canCopy || ![self cg_copyRect:_cg_paintMissing[slot] from:previous stride:previousStrideForCopy
+					    delta:NSZeroSize]) {
+			[self cg_addPaintRect:_cg_paintMissing[slot] to:paint count:&paintCount];
+			dirty = NSUnionRect(dirty, _cg_paintMissing[slot]);
+		}
+	}
+	/* **AND THE SCROLL'S TRANSLATION IS THE ONE COPY THAT IS NOT A DAMAGE RECT.** The content moved, so the buffer's
+	 * pixels for the whole scrolled region are stale — but they are stale in a way that is already known, and the
+	 * frame on the glass has the answer one offset away. Copying it leaves only the strip that came into view to be
+	 * drawn, which the scrolled view has already marked dirty. */
+	if (_cg_scrollPending) {
+		if (canCopy && [self cg_copyRect:_cg_scrollRect from:previous stride:previousStrideForCopy
+					   delta:_cg_scrollDelta]) {
+			scrolled = YES;
+		} else {
+			/* no source, or nothing of the region overlapped it: draw the lot */
+			[self cg_addPaintRect:_cg_scrollRect to:paint count:&paintCount];
+			dirty = NSUnionRect(dirty, _cg_scrollRect);
+		}
 	}
 	c = (CGContextRef)_surface;
 	if (_opaque) {
@@ -4182,35 +4539,64 @@ static CGFloat fn_clamp_axis(CGFloat v, CGFloat lo, CGFloat hi)
 		 * area fill wants and what makes a client surface meet the server's strip with no seam. */
 		CGContextSetShouldAntialias(c, 0);
 		CGContextSetFillColorWithColor(c, [[self backgroundColor] CGColor]);
-		CGContextFillRect(c, CGRectMake(dirty.origin.x, dirty.origin.y, dirty.size.width, dirty.size.height));
-		/* And the chrome's share of this paint gets the face colour underneath it for the same reason the whole-frame
-		 * path fills the strip: the two band fills must not meet over uninitialised pixels at a fractional scale. */
-		{
-			NSRect chrome = NSIntersectionRect([self cg_chromeRect], dirty);
+		/* **ONE FILL AND ONE WALK PER PIECE, WHICH IS WHAT KEEPS AN UNRELATED SECOND DAMAGE FROM COSTING THE GAP.** The
+		 * fill is per piece for the same reason the walk is: a background over the bounding box would erase pixels this
+		 * pass has no intention of drawing. */
+		for (i = 0; i < paintCount; i++) {
+			NSRect piece = [self cg_deviceOutward:paint[i]];
 
-			if (!NSIsEmptyRect(chrome)) {
-				CGContextSetFillColorWithColor(c, [[NSColor cg_chromeFaceColor] CGColor]);
-				CGContextFillRect(c, CGRectMake(chrome.origin.x, chrome.origin.y, chrome.size.width,
-								chrome.size.height));
-			}
+			CGContextFillRect(c, CGRectMake(piece.origin.x, piece.origin.y,
+							piece.size.width, piece.size.height));
+		}
+		/* **THE CHROME'S FACE GOES DOWN BEFORE THE CONTENT, BECAUSE THE TOOLBAR IS PART OF THE CONTENT'S WALK.** A
+		 * window with a toolbar has a view in the band above its content, and that view draws the items; filling the
+		 * strip afterwards erases them. MEASURED as the intermittent toolbar the moment this fill moved below the walk:
+		 * the bar repainted on a hover, wiped the items, and the next full repaint brought them back — a toolbar that
+		 * blinked with the pointer. The whole-frame path has always drawn in this order (face, content, chrome). */
+		if (_cg_chromeDirty) {
+			NSRect bar = [self cg_titleBarRect];
+
+			CGContextSetFillColorWithColor(c, [[NSColor cg_chromeFaceColor] CGColor]);
+			CGContextFillRect(c, CGRectMake(bar.origin.x, bar.origin.y,
+							bar.size.width, bar.size.height));
 		}
 		CGContextSetShouldAntialias(c, 1);
 	} else {
-		CGContextClearRect(c, CGRectMake(dirty.origin.x, dirty.origin.y, dirty.size.width, dirty.size.height));
+		for (i = 0; i < paintCount; i++) {
+			NSRect piece = [self cg_deviceOutward:paint[i]];
+
+			CGContextClearRect(c, CGRectMake(piece.origin.x, piece.origin.y,
+							 piece.size.width, piece.size.height));
+		}
+		if (_cg_chromeDirty) {
+			NSRect bar = [self cg_titleBarRect];
+
+			CGContextClearRect(c, CGRectMake(bar.origin.x, bar.origin.y,
+							 bar.size.width, bar.size.height));
+		}
 	}
 	if (_contentView != nil) {
 		NSGraphicsContext *g = [NSGraphicsContext graphicsContextWithCGContext:_surface flipped:NO];
 		NSGraphicsContext *previous = [[NSGraphicsContext currentContext] retain];
 
 		[NSGraphicsContext setCurrentContext:g];
-		[_contentView displayRect:dirty];
+		for (i = 0; i < paintCount; i++) {
+			[_contentView displayRect:[self cg_deviceOutward:paint[i]]];
+		}
 		[self cg_drawDragGuideInContext:c];
 		[NSGraphicsContext setCurrentContext:previous];
 		[previous release];
 	}
-	/* The chrome is a thin strip and is not part of the content's dirty union: paint it, but do not walk the
-	 * content a second time. */
-	[self cg_drawChromeInContext:[NSGraphicsContext graphicsContextWithCGContext:c flipped:NO]];
+	/* **AND THE CHROME PAINTER GOES ON TOP OF WHATEVER THE CONTENT WALK PUT IN THE STRIP.** That walk includes the
+	 * TOOLBAR VIEW, which draws its items into the band above the content, so the bar's edges and marks must not be
+	 * painted before it — and the FACE under them must be, which is why the fill is with the background above. See
+	 * `-cg_chromeRect`'s note for the order: face, content, chrome. */
+	if (_cg_chromeDirty) {
+		NSRect chrome = [self cg_chromeRect];
+
+		[self cg_drawChromeInContext:[NSGraphicsContext graphicsContextWithCGContext:c flipped:NO]];
+		dirty = NSIsEmptyRect(dirty) ? chrome : NSUnionRect(dirty, chrome);
+	}
 	/* **AND THERE IS NO COPY ANY MORE, WHICH IS THE WHOLE OF THIS CHANGE.** The cells above drew straight into the
 	 * seam's buffer, so the pixels the compositor samples are the pixels CoreGraphics just wrote. The old block
 	 * here mirrored y-up rectangles into top-down rows and ORed in an opaque alpha — both jobs that were needed
@@ -4222,7 +4608,9 @@ static CGFloat fn_clamp_axis(CGFloat v, CGFloat lo, CGFloat hi)
 	/* **WHAT A PARTIAL PAINT ACTUALLY COSTS, WHICH IS THE NUMBER "DRAW ONLY WHAT CHANGED" IS JUDGED BY.** The
 	 * rectangle, the milliseconds and the frames per second it implies, because a damage rectangle that is right
 	 * and a paint that is still slow is a different bug from a damage rectangle that is the whole window — and the
-	 * two are indistinguishable from the outside. See APPKIT_LOOP_DIAG for the other half (the pass rate). */
+	 * two are indistinguishable from the outside. THE VIEWS' OWN DAMAGE IS PRINTED BESIDE THE PAINTED RECTANGLE for
+	 * the same reason: a paint that is wider than the damage is the buffer ledger's doing, and one that is exactly
+	 * as wide is a view asking for that much. See APPKIT_LOOP_DIAG for the other half (the pass rate). */
 	if (getenv("APPKIT_DRAW_DIAG") != NULL) {
 		static int s_paints;
 		static NSTimeInterval s_last;
@@ -4231,16 +4619,39 @@ static CGFloat fn_clamp_axis(CGFloat v, CGFloat lo, CGFloat hi)
 		if (s_last == 0.0) {
 			s_last = started;
 		}
-		fprintf(stderr, "  DIAG paint: window %ld dirty %ldx%ld at (%ld,%ld) %.1f ms\n",
+		fprintf(stderr, "  DIAG paint: window %ld damage %ldx%ld at (%ld,%ld) in %lu piece(s)",
 			(long)[self windowNumber], (long)dirty.size.width, (long)dirty.size.height,
-			(long)dirty.origin.x, (long)dirty.origin.y,
+			(long)dirty.origin.x, (long)dirty.origin.y, (unsigned long)paintCount);
+		for (i = 0; i < paintCount; i++) {
+			fprintf(stderr, " %ldx%ld", (long)paint[i].size.width, (long)paint[i].size.height);
+		}
+		fprintf(stderr, ", view damage %ldx%ld, %.1f ms\n",
+			(long)changed.size.width, (long)changed.size.height,
 			([NSDate timeIntervalSinceReferenceDate] - started) * 1000.0);
 		if ([NSDate timeIntervalSinceReferenceDate] - s_last >= 1.0) {
 			s_last = [NSDate timeIntervalSinceReferenceDate];
 			s_paints = 0;
 		}
 	}
-	[self cg_recordPaintInSlot:slot rect:NSUnionRect(dirty, [self cg_chromeRect])];
+	/* **AND THE LEDGER RECORDS WHAT THE OTHER BUFFER IS NOW MISSING, WHICH IS WHAT CHANGED — NOT WHAT WAS PAINTED.**
+	 * The view damage is what changed; a scrolled region the copy moved is changed too, because the other buffer's
+	 * pixels for it are at the OLD offset. The region copied from the missing ledger is deliberately not in here: the
+	 * other buffer is exactly the source of that copy, so it already had those pixels. Choosing this rectangle wrongly
+	 * is the difference between a knob that tracks the hand and one that crawls (see the note above). */
+	{
+		NSRect recorded = scrolled ? NSUnionRect(changed, _cg_scrollRect) : changed;
+
+		/* and the strip only if this pass painted it, because otherwise the other buffer's copy of it is still true */
+		[self cg_recordPaintInSlot:slot rect:(_cg_chromeDirty ? NSUnionRect(recorded, [self cg_chromeRect])
+								      : recorded)];
+		if (_cg_chromeDirty) {
+			_cg_chromeDirty = NO;
+		}
+	}
+	/* THE TRANSLATION IS IN THE PIXELS NOW, whichever way it got there: copied, or drawn when the copy was refused. */
+	_cg_scrollPending = NO;
+	_cg_scrollRect = NSZeroRect;
+	_cg_scrollDelta = NSZeroSize;
 	_viewsNeedDisplay = NO;
 	if (_contentView != nil) {
 		[_contentView cg_clearDirtyRegionRecursive];
@@ -4340,6 +4751,12 @@ static CGFloat fn_clamp_axis(CGFloat v, CGFloat lo, CGFloat hi)
 	 * window's buffer is XRGB8888 (the fourth byte is not read) and a transparent one's is ARGB8888 (CoreGraphics
 	 * wrote the alpha), so neither needs the fix-up the block above used to perform. */
 	AGWindowEndFrame(_agwindow);
+	/* **A WHOLE-FRAME PAINT ANSWERS EVERY TRANSLATION THERE WAS.** The content is drawn at its current offset into
+	 * every pixel, so a scroll the dirty path never got to apply would be applied twice if it were kept. */
+	_cg_chromeDirty = NO;
+	_cg_scrollPending = NO;
+	_cg_scrollRect = NSZeroRect;
+	_cg_scrollDelta = NSZeroSize;
 	[self cg_recordPaintInSlot:slot rect:[self cg_wholeFrameRect]];
 	if (getenv("APPKIT_DRAW_DIAG") != NULL) {
 		fprintf(stderr, "  DIAG paint: window %ld WHOLE FRAME %ldx%ld\n", (long)[self windowNumber],
@@ -4382,10 +4799,16 @@ static CGFloat fn_clamp_axis(CGFloat v, CGFloat lo, CGFloat hi)
 - (void)displayIfNeeded
 {
 	if (_viewsNeedDisplay) {
-		NSRect dirty = (_contentView != nil) ? [_contentView cg_dirtyUnion] : NSZeroRect;
+		NSRect damage[APPKIT_DAMAGE_RECTS];
+		NSUInteger count = 0;
 
-		if (!NSIsEmptyRect(dirty)) {
-			[self cg_drawFrameDirty:dirty];
+		if (_contentView != nil) {
+			[_contentView cg_dirtyRegionRecursive:damage max:APPKIT_DAMAGE_RECTS count:&count];
+		}
+		/* **A CHROME-ONLY PASS IS STILL A PARTIAL ONE.** A title change, a key change, a hovered button: 700x22 of ink,
+		 * and it used to fall through to `-display` — a whole-frame repaint of every view for a new title. */
+		if (count > 0 || _cg_chromeDirty) {
+			[self cg_drawFrameDirty:damage count:count];
 		} else {
 			[self display];
 		}
@@ -4819,7 +5242,8 @@ static NSWindow *fn_main_window(NSWindow *except)
 	_visible = YES;
 	[[NSApplication sharedApplication] cg_addWindow:self];
 	/* **AND NOTHING ELSE HAPPENS.** "Regardless" means the window comes forward WITHOUT the application's key
-	 * or main state changing — a caller that wanted those sent `-makeKeyAndOrderFront:`. */
+	 * or main state changing — a caller that wanted those sent `-makeKeyAndOrderFront:`. The drawers still hear
+	 * that a window became visible. */
 }
 
 /* ---- BECOMING AND RESIGNING ---------------------------------------------------------------- */
@@ -6507,7 +6931,12 @@ static void fn_announce(NSWindow *w, NSString *name, SEL delegateSelector)
 
 - (void)setDocumentEdited:(BOOL)flag
 {
+	if (_documentEdited == (flag ? YES : NO)) {
+		return;
+	}
 	_documentEdited = flag ? YES : NO;
+	/* the edited dot is chrome ink, and it was the same silent change a title was */
+	[self cg_invalidateChrome];
 }
 
 - (BOOL)isDocumentEdited

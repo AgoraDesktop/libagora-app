@@ -156,6 +156,10 @@ static NSRect fn_intersect(NSRect a, NSRect b)
 - (void)cg_runLayoutPass;
 - (void)cg_callLayoutHooks;
 - (void)cg_requestLayout;
+/* **AND THE DAMAGE REGION'S THREE.** A piece is added to a view's own list, the whole tree's pieces are collected for the
+ * window, and one helper adds a piece to either — so the merge rule and the behaviour on a full budget exist once. */
+- (void)cg_addToDirtyRegion:(NSRect)rect;
+- (void)cg_regionAdd:(NSRect)rect to:(NSRect *)out max:(NSUInteger)max count:(NSUInteger *)count;
 @end
 
 /* **THE TRACKING ENGINE'S DOOR INTO AN AREA, declared here because this is the file that writes the verdict.** The
@@ -1986,6 +1990,8 @@ NSString *NSDefinitionPresentationTypeOverlay = @"Overlay";
 	if (flag) {
 		_dirtyRect = _bounds;
 		_hasDirtyRect = YES;
+		_dirtyRects[0] = _bounds;
+		_dirtyCount = 1;
 		/* **AND THE WINDOW IS TOLD, WHICH IS THE LINE WHOSE ABSENCE MADE A CONTROL'S VALUE INVISIBLE.**
 		 * `NSWindow -displayIfNeeded` gates on the WINDOW's `-viewsNeedDisplay`; a view marking ITSELF dirty used to
 		 * leave that flag alone, so `[window displayIfNeeded]` — the door a tracking loop calls to make what it just
@@ -2425,11 +2431,15 @@ const CGFloat NSFullScreenModeWindowLevel = 100.0;
 	if (!_hasDirtyRect) {
 		_dirtyRect = invalidRect;
 		_hasDirtyRect = YES;
+		_dirtyRects[0] = invalidRect;
+		_dirtyCount = 1;
 	} else {
-		/* THE UNION, because two invalidations that do not touch are still two reasons to draw and the region
-		 * this view keeps is one rect — Apple's own simplification, and the reason a view that invalidates two
-		 * opposite corners draws their bounding box. */
+		/* **THE BOX IS THE UNION AND THE REGION KEEPS THE PARTS.** Apple's `-dirtyRect` is one rectangle and stays
+		 * one here, because every caller that asks "is any of this dirty" wants the box; but the DISPLAY pass paints
+		 * what the region names rather than the box, or a scroll's strip and a scroller's knob would be painted as the
+		 * whole area between them. See `-cg_addToDirtyRegion:` for what happens when the list fills. */
 		_dirtyRect = NSUnionRect(_dirtyRect, invalidRect);
+		[self cg_addToDirtyRegion:invalidRect];
 	}
 	/* AND THE WINDOW IS TOLD HERE TOO, for the same reason `-setNeedsDisplay:` does it: a cell that invalidates a
 	 * STRIP — which is every cell, because `-highlight:withFrame:inView:` names the one rect it repainted — is
@@ -2489,6 +2499,7 @@ const CGFloat NSFullScreenModeWindowLevel = 100.0;
 - (void)cg_clearDirtyRegion
 {
 	_hasDirtyRect = NO;
+	_dirtyCount = 0;
 	_needsDisplay = NO;
 	{
 		NSUInteger i;
@@ -2497,6 +2508,106 @@ const CGFloat NSFullScreenModeWindowLevel = 100.0;
 			[[_subviews objectAtIndex:i] cg_clearDirtyRegion];
 		}
 	}
+}
+
+/* **AND THE NARROWING, WHICH IS WHAT MAKES A SCROLL CHEAP.** A view that invalidates all of itself and then discovers
+ * that only a strip really changed has one legitimate way to say so; replacing the record rather than intersecting it
+ * is the difference between "the whole bounds" and "the strip". `NSClipView` is the caller — its bounds-origin door
+ * has to mark everything first, because a plain `NSView` scroll has nothing to copy from, and only then can it ask the
+ * window to move the pixels and keep the strip. */
+- (void)cg_setDirtyRect:(NSRect)rect
+{
+	_needsDisplay = YES;
+	if (NSIsEmptyRect(rect)) {
+		_hasDirtyRect = NO;
+		return;
+	}
+	_dirtyRect = rect;
+	_hasDirtyRect = YES;
+	_dirtyRects[0] = rect;
+	_dirtyCount = 1;
+	[[self window] setViewsNeedDisplay:YES];
+}
+
+/* **ONE MORE PIECE OF DAMAGE, MERGED WHEN IT TOUCHES WHAT IS ALREADY THERE.** A rectangle that overlaps one already on the
+ * list is unioned into it, which is what keeps a dragged cell's series of strips from filling the budget; a rectangle that
+ * overlaps nothing is kept beside the others, which is what keeps a scroll's strip from absorbing a scroller's knob. When
+ * the list is full every entry collapses into the bounding box — the answer this class gave before the region existed, and
+ * a superset of the truth by construction. */
+- (void)cg_addToDirtyRegion:(NSRect)rect
+{
+	NSUInteger i;
+
+	if (NSIsEmptyRect(rect)) {
+		return;
+	}
+	for (i = 0; i < _dirtyCount; i++) {
+		if (NSIntersectsRect(_dirtyRects[i], rect)) {
+			_dirtyRects[i] = NSUnionRect(_dirtyRects[i], rect);
+			return;
+		}
+	}
+	if (_dirtyCount < APPKIT_DAMAGE_RECTS) {
+		_dirtyRects[_dirtyCount] = rect;
+		_dirtyCount++;
+		return;
+	}
+	for (i = 1; i < _dirtyCount; i++) {
+		_dirtyRects[0] = NSUnionRect(_dirtyRects[0], _dirtyRects[i]);
+	}
+	_dirtyRects[0] = NSUnionRect(_dirtyRects[0], rect);
+	_dirtyCount = 1;
+}
+
+/* **AND THE TREE'S DAMAGE, IN THE RECEIVER'S COORDINATES, AS A LIST.** The window asks its content view for this and
+ * paints each rectangle; a child's pieces are converted on the way up, so the answer is in the space `-displayRect:` and
+ * the paint both speak. `max` is the caller's budget: when the collected list would exceed it, everything collapses to the
+ * box of what has been gathered, which is the one degenerate answer that is still correct. */
+- (void)cg_dirtyRegionRecursive:(NSRect *)out max:(NSUInteger)max count:(NSUInteger *)outCount
+{
+	NSUInteger i;
+
+	for (i = 0; i < _dirtyCount; i++) {
+		[self cg_regionAdd:_dirtyRects[i] to:out max:max count:outCount];
+	}
+	for (i = 0; i < [_subviews count]; i++) {
+		NSView *child = [_subviews objectAtIndex:i];
+		NSRect pieces[APPKIT_DAMAGE_RECTS];
+		NSUInteger pieceCount = 0;
+		NSUInteger j;
+
+		[child cg_dirtyRegionRecursive:pieces max:APPKIT_DAMAGE_RECTS count:&pieceCount];
+		for (j = 0; j < pieceCount; j++) {
+			[self cg_regionAdd:[self convertRect:pieces[j] fromView:child] to:out max:max count:outCount];
+		}
+	}
+}
+
+/* THE ONE PLACE A RECTANGLE IS ADDED TO A REGION ARRAY, so the tree's collection and this class's own bookkeeping cannot
+ * disagree about merging or about what happens when the budget runs out. */
+- (void)cg_regionAdd:(NSRect)rect to:(NSRect *)out max:(NSUInteger)max count:(NSUInteger *)count
+{
+	NSUInteger i;
+
+	if (NSIsEmptyRect(rect)) {
+		return;
+	}
+	for (i = 0; i < *count; i++) {
+		if (NSIntersectsRect(out[i], rect)) {
+			out[i] = NSUnionRect(out[i], rect);
+			return;
+		}
+	}
+	if (*count < max) {
+		out[*count] = rect;
+		(*count)++;
+		return;
+	}
+	for (i = 1; i < *count; i++) {
+		out[0] = NSUnionRect(out[0], out[i]);
+	}
+	out[0] = NSUnionRect(out[0], rect);
+	*count = 1;
 }
 
 /* ---- DRAWING A TREE ------------------------------------------------------------------------ */

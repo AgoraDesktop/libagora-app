@@ -685,6 +685,19 @@ the compositor is really gone.
   **A PARTIAL PAINT THEREFORE HAS TO KNOW WHAT ITS BUFFER IS MISSING**, because the buffer it lands in is one frame
   behind the visible one; `_cg_paintMissing` widens the damage to the region that changed since, and a buffer with
   no record at all (the first frame, a resize) is painted whole.
+  **AND WHAT THE RECORD KEEPS IS THE VIEWS' DAMAGE, NOT THE RECTANGLE THE PASS PAINTED.** The painted rectangle is
+  widened with what this buffer was missing — and those are pixels the OTHER buffer already has, by definition, so
+  recording them there says it is stale exactly where it is current. The pair then keeps telling each other they are
+  missing everything they just caught up on, and every paint is the whole frame: MEASURED before the correction, 243
+  of 245 paints in one scroller drag were 700x522 at 110-215 ms each, and a 40x40 invalidation cost the same. The
+  record is the content damage now: that invalidation paints its own 40x40 in 4.6 ms. **AND THE REGION A BUFFER IS
+  MISSING IS COPIED FROM THE GLASS RATHER THAN REDRAWN**, which needs no knowledge of what is in it:
+  `-cg_drawFrameDirty:` reads the last committed frame with `AGWindowPreviousFrameSized` and memcpys the rects the
+  ledger records, so the drawing left in a paint is exactly what the views asked for. `APPKIT_DRAW_DIAG` prints the painted pieces, the ledger's box and the views' damage, so a paint
+  that is wider than the views asked for is visible as the ledger's doing.
+  **AND THE BUFFERS ARE SHARED MEMORY, NOT GPU MEMORY, WHICH IS THE LARGER HALF OF THE SAME PERFORMANCE STORY.** See
+  `AGWindowBeginFrame` in `platform/AGWindowServer.h`: drawing with the CPU into a dma-buf reads uncached memory, so
+  the same gallery repaint cost 150-215 ms against 21 ms in shm. `AG_WINDOW_DMABUF=1` opts back in.
 - **The inside of a scroll view** (`ctest`, offscreen): `NSClipView`'s arithmetic in exact points — a short
   document is CENTRED rather than pinned (a 40-wide document in a 100-wide clip sits at -30), a long one stops at
   the far edge (300-100 by 200-100) and never shows blank space, `-documentVisibleRect` answers in the DOCUMENT's
@@ -2150,8 +2163,52 @@ things were missing, and each cost a full repaint on its own:
   was already on screen, and the show path marked it stale by design. It marks stale only on the transition from
   hidden to shown now; the raise still happens, which is what the click wanted.
 
-`APPKIT_DRAW_DIAG` prints what each paint was: the dirty rectangle and its milliseconds, or `WHOLE FRAME` for the
-fallback, which is the number a damaged repaint is judged by.
+`APPKIT_DRAW_DIAG` prints what each paint was: the painted rectangle, the views' own damage beside it (a paint that
+is wider than the damage is the buffer ledger's doing), and its milliseconds, or `WHOLE FRAME` for the fallback —
+which is the number a damaged repaint is judged by.
+
+**AND EVERY PARTIAL PAINT IS ROUNDED OUT TO WHOLE DEVICE PIXELS.** A view's damage lands on point boundaries, and at a
+fractional scale those are not pixel boundaries: CoreGraphics then CLIPS the band with partial coverage, so its edge row
+is composited at 30-70% over the old content instead of being replaced — MEASURED as the faint white line a person saw
+through the demo's panel buttons and the caption above them, one per scroll step, because that was each strip's own edge.
+`-cg_deviceOutward:` rounds each painted piece outward (at paint time, not when the pieces are collected, or two merely
+adjacent pieces would merge into their bounding box and the region would be wasted). The COPY rounds INWARD, for the
+opposite reason: it must never write a pixel its rectangle does not own.
+
+**AND A SCROLL MOVES PIXELS INSTEAD OF REDRAWING THEM, WHICH NEEDED THREE PIECES AND NOW HAS ALL THREE.** The content a
+scroll brings into view is one strip; everything else in the visible area is already in the frame the compositor is
+showing. So `AGWindowPreviousFrameSized` hands a client that frame (`buffer`, the last commit — the process's own
+mapping, refused for a GPU buffer, whose CPU reads are uncached), `NSClipView -setBoundsOrigin:` asks the window to copy
+it by the scroll's translation and keeps only the strip dirty, and `-copiesOnScroll` finally means something. THE
+TRANSLATION HAS TO BE WHOLE PIXELS, so `-scrollToPoint:` snaps the position to the device grid (half a pixel of fidelity
+nobody can see). THE LAYOUT IS NOT SNAPPED, and that is a measurement rather than an omission: snapping the clip view's
+frame to the grid made the copy exact, but it moves every control by up to a pixel, and at 1.332 that MEASURED a
+one-pixel white line through the demo's panel buttons — a latent sub-pixel artefact of the drawing layer that the shift
+walked into. So the copy takes the fractional rectangle it is given, rounds inward, and leaves the sub-pixel sliver at
+each edge one scroll step behind: invisible at a fractional scale, and never a wrong region.
+
+**THE REGION IS THE OTHER HALF.** `NSView` keeps its damage as up to eight rectangles (`APPKIT_DAMAGE_RECTS`) with
+`_dirtyRect` still the bounding box every "is any of this dirty" caller wants; the window collects the tree's pieces and
+paints each. Without that, a scroll's strip and the scroller's knob beside it collapsed into the box around them and the
+whole visible area was redrawn — MEASURED at 22 ms a scroll step against 9 ms with the region. The list costs 256 bytes a
+view and collapses to the box when it fills, so the worst case is the old behaviour.
+
+**AND THE CHROME IS PAINTED WHEN ITS INK IS STALE, NOT ON EVERY PASS.** The title bar has no view to speak for it — the
+title, the key state, the hovered button, the edited dot, the toolbar pill are all state the window owns — so
+`_cg_chromeDirty` is set by the doors that change that state (`-setTitle:`, `-setDocumentEdited:`, the pointer's hover,
+and `-cg_invalidateChrome` for anything else) and the strip is drawn only when it is set. Two of those doors marked
+NOTHING before, which is the bug a person saw as a renamed window keeping its old title until an unrelated repaint; both
+are fixed and MEASURED: a title change now repaints 700x22 (the strip, verified by photographing both titles) instead of
+the whole frame, and a scroll step does not draw the bar at all — an A/B on the demo's gallery, 13.1 ms a step with the
+bar always drawn against 11.9 ms with it skipped. `-setNeedsDisplay:` deliberately keeps its old meaning — "the whole
+window may be stale" — so a background colour or a theme still lands on the whole-frame path.
+
+**AND WHAT IT DOES NOT DO: TEXT IS DRAWN, NOT CACHED, AND THAT IS THE REMAINDER.** MEASURED on one 45-character label at
+12 points: 0.10 ms to shape, 0.21 ms to lay out a wrapped frame, 0.60 ms to put the ink down. Caching the first two was
+BUILT AND REFUTED — a 256-entry cache of lines and frames keyed by string, face and rectangle reached only 44% hits over
+a gallery session (the tree draws ~745 distinct string/face/rectangle triples) and moved no measurement outside its noise,
+so it is not here. The 0.60 ms is glyph rasterisation in `CGContextShowGlyphsAtPositions` — one FreeType render per glyph
+per draw — and a glyph-mask cache there is where the next order of magnitude is.
 
 ### Auto Layout, and the equations a frame can come from
 

@@ -77,6 +77,13 @@
 #import <Foundation/NSGeometry.h>
 #import <Foundation/NSObject.h>
 
+/* **HOW MANY PIECES A VIEW'S DAMAGE IS KEPT IN, WHICH IS A BUDGET RATHER THAN A LIMIT ON WHAT CAN BE DRAWN.** A view
+ * that invalidates more than this many separate places collapses the whole set to its bounding box — over-paint, never a
+ * miss — so the number trades a little wasted drawing on a pathological view against the region the ordinary ones keep:
+ * a clip view's strip, a scroller's knob, a cell's highlight, a typed character, all at once. Eight rectangles is three
+ * times what the demo's busiest window uses and 256 bytes per view. */
+#define APPKIT_DAMAGE_RECTS 8
+
 NS_ASSUME_NONNULL_BEGIN
 
 /* FORWARDED: both are pointer parameters or return types here, and neither header is owed — a `@class` is a
@@ -226,6 +233,15 @@ extern NSString *NSDefinitionPresentationTypeOverlay;
 	 * as the coarse "something needs display" because that is what the ledger's `-needsDisplay` answers. */
 	NSRect _dirtyRect;
 	BOOL _hasDirtyRect;
+	/* **AND THE PARTS THEMSELVES, BECAUSE A BOUNDING BOX IS NOT A REGION.** `_dirtyRect` above is the bounding box and
+	 * stays one — every caller that asks "is any of this dirty" wants it — but two invalidations that do not touch are
+	 * TWO reasons to draw in two places, and collapsing them to their box paints the gap. That gap is not hypothetical:
+	 * a scroll marks a strip at the edge of a clip view and the scroller beside it marks the moving knob, and the box
+	 * around those two is the whole visible area — MEASURED at 22 ms a scroll step against 4.5 ms for the strip alone.
+	 * A view keeps its own damage here and the window collects the tree's into a region of its own; when the list fills,
+	 * everything collapses to its bounding box, which over-paints and never misses. */
+	NSRect _dirtyRects[APPKIT_DAMAGE_RECTS];
+	NSUInteger _dirtyCount;
 	/* THE SET `-registerForDraggedTypes:` KEEPS: see the doors. */
 	NSMutableArray *_cg_registeredDraggedTypes;
 	CGFloat _alphaValue;

@@ -17,6 +17,7 @@
 #import <AppKit/NSRulerView.h>
 #import <AppKit/NSBezierPath.h>
 #import <AppKit/NSGraphicsContext.h>
+#import <AppKit/NSWindow.h>
 #import <Foundation/NSGeometry.h>
 #import "AppKitRefusal.h"
 
@@ -665,6 +666,13 @@ static Class gRulerViewClass = Nil;
 	if (content.size.height < 0.0) {
 		content.size.height = 0.0;
 	}
+	/* **AND THE CLIP VIEW IS LAID OUT WHERE THE LAYOUT SAYS, NOT SNAPPED TO THE DEVICE GRID.** Snapping the content
+	 * view's rectangle to whole device pixels made a scroll's copy exact — its edges became whole columns and rows — but
+	 * it MOVES EVERY CONTROL in the document by up to one pixel, and MEASURED that is not free: at 1.332 the demo's
+	 * gallery grew a one-pixel white line through the panel buttons and the caption above them, a latent sub-pixel
+	 * artefact of the drawing layer that the shift walked into. A rendering fix is not this change's to make, so the
+	 * layout is untouched and the copy takes the fractional edges it is given — see `-cg_copyRect:from:stride:delta:`,
+	 * which rounds INWARD for that reason and leaves the sub-pixel sliver to the repaint. */
 	[_contentView setFrame:content];
 	/* **THE CORNER SQUARE BELONGS TO THE VERTICAL RULER.** It runs the full height of the content area — including the
 	 * strip the horizontal ruler takes — so the two never overlap and there is no fourth view to draw the corner. The

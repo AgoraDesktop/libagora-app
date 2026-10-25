@@ -75,6 +75,13 @@ NS_ASSUME_NONNULL_BEGIN
 - (void)viewBoundsChanged:(nullable NSNotification *)notification;
 
 - (void)setCopiesOnScroll:(BOOL)flag;
+/* **WHETHER A SCROLL MOVES THE PIXELS IT ALREADY HAS OR REDRAWS THEM.** YES, the default: a scroll hands its translation to
+ * the window, which copies the frame on the glass (`AGWindowPreviousFrameSized`) and leaves this class only the strip that
+ * came into view to draw — plus the view's edges, where an antialiased boundary of an ancestor lives and a copy cannot
+ * reproduce a blend. NO makes every scroll mark the whole bounds dirty, which is what this class did unconditionally
+ * before the copy existed and what it still does when the window refuses: no committed frame, a GPU buffer, a scroll
+ * position off the device grid. MEASURED on the demo's gallery, a 14-point step: 22 ms redrawn against about 9 ms
+ * copied, and the copied result is pixel-identical to a repaint of the same state. */
 - (BOOL)copiesOnScroll;
 
 @end

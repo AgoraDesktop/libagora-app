@@ -12,8 +12,28 @@
 #import <AppKit/NSCursor.h>
 #import <AppKit/NSEvent.h>
 #import <AppKit/NSGraphicsContext.h>
+#import <AppKit/NSWindow.h>
 #import <Foundation/NSNotification.h>
 #import <Foundation/NSNotificationCenter.h>
+
+#import "NSWindow_internal.h"
+
+/* **THE TWO PRIVATE DOORS THIS CLASS NEEDS FROM ITS SUPERCLASS AND ITS WINDOW.** The dirty record is `NSView`'s and is
+ * narrowed rather than cleared (`-cg_clearDirtyRegion` also walks the SUBVIEWS, which here is the document — its own
+ * damage is not the clip view's to throw away), and the copy itself is the window's, because the window is what holds
+ * the frame on the glass. */
+@interface NSView (AGClipViewDamage)
+- (void)cg_setDirtyRect:(NSRect)rect;
+@end
+
+/* **AND THE WINDOW'S DOOR, DECLARED WHERE IT IS CALLED RATHER THAN IN A HEADER.** The window is the only object that can
+ * move pixels — it owns the frame on the glass and the surface being drawn — and this is the one call that asks it to.
+ * `rect` is in the clip view's coordinates, `delta` is what the content moved in points, and NO means the copy cannot be
+ * taken (no committed frame, a GPU buffer, another scroll already pending), which leaves this class's whole bounds dirty:
+ * the repaint the door exists to avoid, and never a wrong picture. */
+@interface NSWindow (AGScrollCopy)
+- (BOOL)cg_scrollContentInRect:(NSRect)rect inView:(NSView *)view by:(NSSize)delta;
+@end
 
 @implementation NSClipView
 
@@ -194,15 +214,126 @@
 	return p;
 }
 
+/* **A SCROLL POSITION IS A WHOLE NUMBER OF DEVICE PIXELS, ON PURPOSE.** `NSClipView`'s origin is in points, but a
+ * scroll is a TRANSLATION OF PIXELS and the two only agree on a device grid: at this machine's 1.332 the demo's
+ * 17.58-point step is 23.4 pixels, and a copy that has to move by whole pixels would leave the content 0.4 px out of
+ * place — once, and then again on the next step, until a full repaint snapped it back. MEASURED before this rounding:
+ * an incremental scroll to the bottom differed from a full repaint of the same state along the outline of every glyph.
+ * Snapping costs at most half a pixel of scroll fidelity, which no eye resolves, and buys an exact translation, which
+ * is what makes the copy in `-setBoundsOrigin:` pixel-for-pixel the same picture a repaint would produce. */
+static CGFloat ag_snap_to_device(CGFloat value, CGFloat scale)
+{
+	if (!(scale > 0.0)) {
+		return value;
+	}
+	return (CGFloat)(floor((double)(value * scale) + 0.5) / (double)scale);
+}
+
 - (void)scrollToPoint:(NSPoint)newOrigin
 {
-	/* CONSTRAINED FIRST, WHICH IS THE WHOLE REASON THIS DOOR EXISTS RATHER THAN A BARE `-setBoundsOrigin:`. */
-	[self setBoundsOrigin:[self constrainScrollPoint:newOrigin]];
+	NSPoint constrained = [self constrainScrollPoint:newOrigin];
+	CGFloat scale = [[self window] userSpaceScaleFactor];
+
+	/* CONSTRAINED FIRST, WHICH IS THE WHOLE REASON THIS DOOR EXISTS RATHER THAN A BARE `-setBoundsOrigin:`, and then
+	 * snapped: the constraint decides WHERE, and the grid decides which pixel that is. */
+	constrained.x = ag_snap_to_device(constrained.x, scale);
+	constrained.y = ag_snap_to_device(constrained.y, scale);
+	[self setBoundsOrigin:constrained];
 	/* AND THE ENCLOSING VIEW IS TOLD, which is Apple's contract: a scroller draws the knob from this, so a scroll
 	 * that nobody was told about would leave the knob where it was. */
 	if ([[self superview] respondsToSelector:@selector(reflectScrolledClipView:)]) {
 		[[self superview] reflectScrolledClipView:self];
 	}
+}
+
+/* **A SCROLL MOVES PIXELS; IT DOES NOT REDRAW THEM, AND THAT IS WHAT `-copiesOnScroll` HAS ALWAYS MEANT.** The flag has
+ * been stored by this class and read by nothing: every scroll marked the whole clip view dirty, so the window redrew the
+ * entire visible area — every label, every glyph, every image — to slide the content up sixteen points. MEASURED on the
+ * demo's gallery: 22 ms a step, which is a scroller knob that trails the hand.
+ *
+ * The pixels for everything but the strip that came into view are already on the glass, in the frame this window last
+ * committed, and the window can read them (`AGWindowPreviousFrameSized`). So the window is handed the translation and
+ * this class keeps only the strip dirty: one copy plus one small draw, and the content is pixel-identical to a full
+ * repaint (the screenshot comparison in the notes at the end of this file's README section holds it).
+ *
+ * **IT IS `-setBoundsOrigin:` RATHER THAN `-scrollToPoint:` BECAUSE EVERY SCROLL GOES THROUGH IT** — a scroller's
+ * action, `-autoscroll:`, a document's own frame change, a caller's direct `-setBoundsOrigin:`. A plain `NSView` has
+ * nothing better to offer here, so the superclass's answer (mark everything) is taken first and then narrowed; that
+ * order is what keeps this class correct when the window declines the copy. */
+- (void)setBoundsOrigin:(NSPoint)newOrigin
+{
+	NSRect oldVisible;
+	NSRect newVisible;
+	NSRect oldFrame;
+	NSRect exposed;
+	NSPoint before;
+	NSPoint after;
+	NSSize movement;
+
+	oldVisible = [self bounds];
+	oldFrame = [self frame];
+	before = [self convertPoint:NSMakePoint(0.0, 0.0) toView:nil];
+	[super setBoundsOrigin:newOrigin];
+	/* **NOTHING TO COPY IS NOT A FAILURE: IT IS A REPAINT.** `-copiesOnScroll` off, no document, no window (the
+	 * offscreen probes), a scroll that did not move (a re-constrain after a document resize): super's whole-bounds
+	 * damage is the answer in every one of them. */
+	if (!_copiesOnScroll || _docView == nil || [self window] == nil) {
+		return;
+	}
+	newVisible = [self bounds];
+	if (NSEqualPoints(oldVisible.origin, newVisible.origin)) {
+		return;
+	}
+	/* **AND A CLIP VIEW THAT CHANGED SHAPE IS NOT A SCROLL.** A scroller appearing or leaving re-tiles this view, and the
+	 * strip arithmetic below describes a translation of unchanged geometry: narrowing the damage after a resize would
+	 * leave the pixels the new size uncovered. The frame-change mark `-setFrame:` made stands. */
+	if (!NSEqualSizes(oldFrame.size, [self frame].size)) {
+		return;
+	}
+	/* THE MOVEMENT IS MEASURED, NOT DERIVED: the same content point in window space before and after the origin change, so
+	 * the answer is right for a flipped clip view inside a flipped document and inside an unflipped one alike. */
+	after = [self convertPoint:NSMakePoint(0.0, 0.0) toView:nil];
+	movement = NSMakeSize(after.x - before.x, after.y - before.y);
+	if (movement.width == 0.0 && movement.height == 0.0) {
+		return;
+	}
+	/* **THE WINDOW IS ASKED BEFORE THE DAMAGE IS NARROWED.** Its NO means the pixels are not going to move — no committed
+	 * frame, a GPU buffer, another scroll already pending — and then the whole visible area must still be drawn. */
+	if (![[self window] cg_scrollContentInRect:newVisible inView:self by:movement]) {
+		return;
+	}
+	/* **THE BANDS THE NEW RANGE HAS AND THE OLD ONE DID NOT, IN THIS VIEW'S OWN (BOUNDS) SPACE** — which is the space
+	 * `-drawRect:` is handed, and the space the damage record lives in. The vertical pair is the common case (one strip,
+	 * either at the bottom when scrolled down or at the top when scrolled up); the horizontal pair is unioned with it
+	 * when both axes moved. */
+	exposed = NSZeroRect;
+	if (newVisible.origin.y > oldVisible.origin.y) {
+		exposed = NSMakeRect(newVisible.origin.x, oldVisible.origin.y + oldVisible.size.height,
+				     newVisible.size.width, newVisible.origin.y - oldVisible.origin.y);
+	} else if (newVisible.origin.y < oldVisible.origin.y) {
+		exposed = NSMakeRect(newVisible.origin.x, newVisible.origin.y, newVisible.size.width,
+				     oldVisible.origin.y - newVisible.origin.y);
+	}
+	if (newVisible.origin.x != oldVisible.origin.x) {
+		BOOL rightward = newVisible.origin.x > oldVisible.origin.x;
+		NSRect column = NSMakeRect(rightward ? oldVisible.origin.x + oldVisible.size.width : newVisible.origin.x,
+					   newVisible.origin.y,
+					   rightward ? newVisible.origin.x - oldVisible.origin.x
+						     : oldVisible.origin.x - newVisible.origin.x,
+					   newVisible.size.height);
+
+		exposed = NSIsEmptyRect(exposed) ? column : NSUnionRect(exposed, column);
+	}
+	/* A scroll longer than the view is a page: the bands then cover everything, which is the same answer as before. */
+	[self cg_setDirtyRect:NSIntersectionRect(exposed, newVisible)];
+	/* **AND THE SUB-PIXEL SLIVERS AT THE EDGES ARE LEFT TO THE COPY, WHICH DELIBERATELY DOES NOT TAKE THEM.** They are
+	 * the pixels between the visible rect's fractional device edge and the nearest whole row/column — a clip view is laid
+	 * out in points and at a fractional scale its edges are not on the pixel grid. A copy cannot move a fraction of a
+	 * pixel, and PAINTING them is worse than leaving them: a repaint of a 1-point band whose edges are fractional
+	 * composites the new ink over the old at partial coverage, which is a WASHED ROW rather than the right picture —
+	 * MEASURED as the faint white line a person saw through the demo's buttons. So those pixels keep the previous
+	 * step's content, a sub-pixel sliver one scroll step behind, at the very edge of the visible area. Exactness there
+	 * would require a layout on the device grid, and that is a rendering question this door must not decide. */
 }
 
 - (BOOL)autoscroll:(NSEvent *)theEvent
