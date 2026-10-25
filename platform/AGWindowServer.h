@@ -559,7 +559,18 @@ void AGWindowServerSetActivationHandler(AGWindowServer *server, AGActivationFunc
  * changed since that buffer was last painted — see `_cg_paintMissing` in `NSWindow.h` for the ledger AppKit keeps,
  * and the note at the top of `AGWindowServer-Wayland.c` for why one buffer is a blink a person can see. A pointer
  * that stays the same from one frame to the next is not promised, and a caller that caches it across frames is
- * caching something the seam may have replaced. */
+ * caching something the seam may have replaced.
+ *
+ * **THE BUFFER IS SHARED MEMORY BY DEFAULT, AND A GPU BUFFER IS OPT-IN.** Every caller of this door draws with the
+ * CPU (that is what an AppKit does), and a `zwp_linux_dmabuf_v1` buffer is the CPU's view of a GPU allocation whose
+ * reads are UNCACHED: blending into one, which every antialiased edge, glyph and image does, costs two orders of
+ * magnitude more per pixel than the same blend in RAM. MEASURED here (nested x11, scale 1.332): a destination
+ * read-modify-write is about 2.4 us a pixel through a GPU buffer and about 2 ns through shm, and the demo's gallery
+ * window — 700x522 — repainted in 150-215 ms with the former and 21 ms with the latter, once per scroller step. The
+ * compositor's GL renderer is the only half that gains from the GPU buffer (it imports one instead of uploading shm
+ * every frame, which is about a millisecond a window), so the trade is a hundredfold loss on the client for a
+ * millisecond on the server. `AG_WINDOW_DMABUF=1` asks for the GPU buffer, for a client whose frames are UPLOADED
+ * rather than drawn; the shared-memory buffer is what a caller gets otherwise. */
 uint32_t *AGWindowBeginFrame(AGWindow *window, int *stride);
 
 /* **THE SAME DOOR, WITH THE BUFFER'S OWN SIZE AS WELL AS ITS PITCH.** The drawing surface IS the frame now — the
@@ -567,6 +578,22 @@ uint32_t *AGWindowBeginFrame(AGWindow *window, int *stride);
  * buffer rather than the window: a resize the compositor is still holding leaves the two momentarily different, and
  * the window's number would be the wrong one. */
 uint32_t *AGWindowBeginFrameSized(AGWindow *window, int *stride, int *width, int *height);
+
+/* **THE FRAME ON THE GLASS, READ-ONLY, FOR A CLIENT THAT CAN MOVE PIXELS INSTEAD OF DRAWING THEM.** `buffer` holds
+ * the last frame this window COMMITTED — the one the compositor is sampling — and it is this process's own mapping,
+ * so a caller may read it. That is what a scroll needs: the content translated by the scroll delta, with only the
+ * strip that came into view freshly drawn, instead of the whole visible area repainted (a scroll step of the demo's
+ * gallery: about 2 ms against 22).
+ *
+ * IT ANSWERS NULL WHEN THERE IS NOTHING SAFE TO COPY. No committed frame yet (the first paint), a size that does not
+ * match the buffer being drawn into (a resize in flight), or a GPU buffer — whose CPU reads are uncached, which is
+ * the same reason the drawing buffer is shared memory by default, and whose contents need a `DMA_BUF_IOCTL_SYNC` this
+ * door does not perform. A caller that gets NULL simply draws what it would have drawn; nothing about the frame is
+ * wrong, only less cheap.
+ *
+ * THE PIXELS ARE NOT YOURS TO WRITE. The compositor is sampling them, so a write here is the blink the two-buffer
+ * swap exists to prevent. */
+uint32_t *AGWindowPreviousFrameSized(AGWindow *window, int *stride, int *width, int *height);
 
 /* Hand the frame to the compositor and ask for the next one. Does nothing when no frame is begun. */
 void AGWindowEndFrame(AGWindow *window);

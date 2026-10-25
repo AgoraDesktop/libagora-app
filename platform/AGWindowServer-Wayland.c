@@ -603,11 +603,24 @@ static int ag_buffer_create_dmabuf(AGWindow *window, struct AGBuffer *slot, int 
 	if (server->dmabuf == NULL || server->dmabuf_format_count == 0) {
 		return -1;
 	}
-	/* **AN ESCAPE HATCH FOR A DRIVER BUG, AND FOR A/B TESTING.** The path is new enough that "does it happen
-	 * without the GPU buffer?" is the first question anyone will ask, and it should be answerable without a
-	 * rebuild. */
-	if (getenv("AG_NO_DMABUF") != NULL) {
-		return -1;
+	/* **A CLIENT THAT DRAWS WITH THE CPU BELONGS IN RAM, NOT IN DEVICE MEMORY, AND THAT IS NOW THE DEFAULT.** Every
+	 * Agora client paints its frame with CoreGraphics into the pointer `AGWindowBeginFrame` hands back, and this
+	 * mapping is the CPU's view of a GPU allocation: writing through it is ordinary speed, but READING IT BACK — which
+	 * every blend, every antialiased edge and every glyph does — is an uncached round trip. MEASURED on this machine
+	 * (nested x11, 1.332 scale), a destination read-modify-write through this mapping costs about 2.4 us a pixel
+	 * against about 2 ns for the same access in shared memory, and the difference is the whole of one defect: the
+	 * gallery window's 700x522 repaint took 150-215 ms with a GPU buffer and 21 ms with shm, at one repaint per
+	 * scroller step. The compositor's GL renderer is the only half that gains from this path — it imports the buffer
+	 * rather than uploading shm every frame — and an upload of one window is about a millisecond, so the trade is a
+	 * hundredfold loss on the client for a millisecond gained on the server. The GPU buffer is therefore OPT-IN, for a
+	 * client whose frames are UPLOADED rather than drawn: `AG_WINDOW_DMABUF=1` asks for it. This supersedes the old
+	 * `AG_NO_DMABUF` escape hatch, which is what the default now says always. */
+	{
+		const char *want = getenv("AG_WINDOW_DMABUF");
+
+		if (want == NULL || want[0] == '\0' || strcmp(want, "0") == 0) {
+			return -1;
+		}
 	}
 	if (getenv("AG_WINDOW_DIAG") != NULL) {
 		fprintf(stderr, "  DIAG dmabuf: trying %dx%d, %d format(s) advertised\n",
@@ -919,6 +932,31 @@ uint32_t *AGWindowBeginFrameSized(AGWindow *window, int *stride, int *width, int
 		*height = window->spare.height;
 	}
 	return window->spare.pixels;
+}
+
+uint32_t *AGWindowPreviousFrameSized(AGWindow *window, int *stride, int *width, int *height)
+{
+	if (window == NULL) {
+		return NULL;
+	}
+	/* **A GPU BUFFER IS REFUSED, AND FOR TWO SEPARATE REASONS.** Its CPU reads are uncached — the same measurement
+	 * that made shared memory the drawing default (see `ag_buffer_create_dmabuf`) — and its contents are only
+	 * valid for the CPU after a `DMA_BUF_IOCTL_SYNC` read begin/end, which this door does not perform and must not
+	 * perform behind a caller's back: a sync is a driver command with a cost, and a caller that is not going to read
+	 * the pixels has no business paying it. A NULL here costs that caller a repaint and nothing else. */
+	if (window->buffer.buffer == NULL || window->buffer.pixels == NULL || window->buffer.bo != NULL) {
+		return NULL;
+	}
+	if (stride != NULL) {
+		*stride = window->buffer.stride;
+	}
+	if (width != NULL) {
+		*width = window->buffer.width;
+	}
+	if (height != NULL) {
+		*height = window->buffer.height;
+	}
+	return window->buffer.pixels;
 }
 
 /* THE UNCHANGED DOOR, AND ITS THREE CALLERS KEEP IT.** The sized variant exists because the drawing surface IS the
