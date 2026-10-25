@@ -299,7 +299,13 @@ void AGWindowServerScreenSize(AGWindowServer *server, int *width, int *height, c
  * `agora_output.preferred_scale`, the display's real fraction (1.333…, 0.805…), and falls back to `wl_output.scale`'s
  * integer ceiling on a compositor that does not speak the extension. A window's frame stays in logical pixels; its
  * BUFFER is `round(frame x this)`, and `AGWindowBufferScale` is what a caller needs to build a graphics context over
- * those pixels that still works in points. */
+ * those pixels that still works in points.
+ *
+ * **IT IS THE COMPOSITED NUMBER, SO IT MAY INCLUDE THE USER'S OWN COMFORT FACTOR.** The compositor multiplies a
+ * `--ui-scale`/`AGORA_UI_SCALE` factor onto whatever its display measured, and this is the product — 1.664 on a
+ * 96-dpi panel at 1.25. A client must not try to undo or re-apply that: the factor is the compositor's decision,
+ * made once for every client at once, and the number here is the whole of it. It is fixed for the life of the
+ * output; changing it begins a new session. */
 double AGWindowServerScale(AGWindowServer *server);
 
 /* ---------------------------------------------------------------------------------------------------

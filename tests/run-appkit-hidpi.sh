@@ -10,7 +10,8 @@
 # client has to rasterise at that scale and declare the same fraction back, and the compositor then has to composite
 # it 1:1. A synthetic event fixture cannot show any of that, so the server runs at a known `--scale` and the checker
 # measures where a shape drawn at a known POINT actually landed. 2 and 1 exercise the integer path; 1.5 is the
-# fractional one.
+# fractional one; and an optional sixth argument is a UI COMFORT FACTOR, which the compositor multiplies onto `--scale`
+# — the case where the scale the client follows was decided partly by the person rather than wholly by the panel.
 set -u
 
 SERVER="${1:?usage: run-appkit-hidpi.sh SERVER BINARY PYTHON CHECKER}"
@@ -24,6 +25,17 @@ SHOT="/tmp/agora-hidpi-$$.ppm"
 LOGICAL_W=800
 LOGICAL_H=600
 SCALE="${5:-2}"
+# **AND THE USER'S COMFORT FACTOR, WHEN THE CASE IS ABOUT THAT.** The server multiplies it onto SCALE, so the client is
+# told the PRODUCT and the checker measures against the product; empty means "nobody asked for one" and the server is
+# left alone, which is every case that existed before the factor did.
+UI="${6:-}"
+if [ -n "${UI}" ]; then
+	DEVICE_SCALE="$(awk "BEGIN { print ${SCALE} * ${UI} }")"
+	UI_ARGS=(--ui-scale "${UI}")
+else
+	DEVICE_SCALE="${SCALE}"
+	UI_ARGS=()
+fi
 WIN_X=50
 WIN_Y=40
 WIN_W=200
@@ -38,7 +50,7 @@ trap cleanup EXIT
 rm -f "${RUNTIME}/${SOCK}" "${RUNTIME}/${SOCK}.lock" "${SHOT}"
 
 "${SERVER}" --backend headless --input none --socket "${SOCK}" \
-	--width "${LOGICAL_W}" --height "${LOGICAL_H}" --scale "${SCALE}" \
+	--width "${LOGICAL_W}" --height "${LOGICAL_H}" --scale "${SCALE}" "${UI_ARGS[@]}" \
 	--frames 1000000 --screenshot "${SHOT}" >/dev/null 2>/tmp/agora-hidpi.log &
 SPID=$!
 for _ in $(seq 1 50); do
@@ -69,4 +81,4 @@ if [ ! -f "${SHOT}" ]; then
 	exit 1
 fi
 
-"${PYTHON}" "${CHECKER}" "${SHOT}" "${SCALE}" "${WIN_X}" "${WIN_Y}" "${WIN_W}" "${WIN_H}"
+"${PYTHON}" "${CHECKER}" "${SHOT}" "${DEVICE_SCALE}" "${WIN_X}" "${WIN_Y}" "${WIN_W}" "${WIN_H}"

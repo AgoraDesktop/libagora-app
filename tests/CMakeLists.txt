@@ -1800,6 +1800,18 @@ add_test(NAME appkit-hidpi-1-5
 set_tests_properties(appkit-hidpi-1-5 PROPERTIES SKIP_RETURN_CODE 77
   ENVIRONMENT "${_agora_app_test_env}")
 
+# **AND A SCALE THAT IS PARTLY THE PERSON'S, BECAUSE THAT IS ONE NUMBER TOO.** The compositor is told `--scale 2` and
+# `--ui-scale 0.75`, so the output it composites at is 1.5 — and the client is told 1.5 through the same
+# `agora_output.preferred_scale` it was always told, rasterises at it, and is placed 1:1. Nothing on the client side
+# knows the factor exists; a 20-point square still measures 30 device pixels. This is the proof that the comfort
+# factor is a compositor decision rather than a second scaling system in the toolkit.
+add_test(NAME appkit-hidpi-ui-scale
+  COMMAND "${CMAKE_CURRENT_SOURCE_DIR}/run-appkit-hidpi.sh"
+    "${AGORA_WINDOW_SERVER_BINARY}" "$<TARGET_FILE:appkit_hidpi>"
+    "${_agora_api_python}" "${CMAKE_CURRENT_SOURCE_DIR}/check_hidpi.py" 2 0.75)
+set_tests_properties(appkit-hidpi-ui-scale PROPERTIES SKIP_RETURN_CODE 77
+  ENVIRONMENT "${_agora_app_test_env}")
+
 # §11 W8.1: the AppKit's one Core Data class, over a real file.
 add_executable(persistent_document persistent_document.m)
 target_link_libraries(persistent_document PRIVATE App)
