@@ -484,6 +484,7 @@ def availability_facts(directory):
     """
     ios, unavailable = set(), {}
     class_eras, selector_eras = {}, {}
+    designated = set()
     directory = headers_dir(directory)
     for path in sorted(glob.glob(os.path.join(directory, '*.h'))):
         text = strip_comments(open(path, errors='ignore').read())
@@ -525,6 +526,12 @@ def availability_facts(directory):
                 era = era_of(span)
                 if selector and era:
                     selector_eras[(name, selector)] = era
+                # **A DESIGNATED INITIALIZER IS A FACT TOO, AND A DIFFERENT KIND OF ONE.** It carries no version: it
+                # says which initializer defines the class's state, so a subclass must funnel through it. Apple marks
+                # 182 of them in Foundation; committing the set lets the sweep state them and lets the gate count what
+                # is left, without a version token to remember wrongly.
+                if selector and 'NS_DESIGNATED_INITIALIZER' in span:
+                    designated.add((name, selector))
                 if 'NS_UNAVAILABLE' in span or re.search(r'API_UNAVAILABLE\([^)]*macos', span):
                     if selector:
                         unavailable.setdefault(name, set()).add(selector)
@@ -537,7 +544,7 @@ def availability_facts(directory):
                 if 'NS_UNAVAILABLE' in span or re.search(r'API_UNAVAILABLE\([^)]*macos', span):
                     for selector in block_properties('@property %s;' % span):
                         unavailable.setdefault(name, set()).add(selector)
-    return ios, unavailable, class_eras, selector_eras
+    return ios, unavailable, class_eras, selector_eras, designated
 
 
 def c_functions(directory, include_dirs=()):
@@ -645,7 +652,7 @@ def emit_manifest(directories):
             classes = cls
             protocols = set(prt)
             functions = c_functions(directory)
-            ios_classes, unavailable, class_eras, selector_eras = availability_facts(directory)
+            ios_classes, unavailable, class_eras, selector_eras, designated = availability_facts(directory)
         else:
             test = lambda t: t[0]
             owned_elsewhere |= set(n for n, e in cls.items() if e['primary'])
@@ -680,6 +687,12 @@ def emit_manifest(directories):
         if selector not in classes[name]['selectors']:
             continue
         lines.append('selector-era %s %s %s %s' % ((name, selector) + selector_eras[(name, selector)]))
+    for (name, selector) in sorted(designated):
+        if name not in classes or name in owned_elsewhere:
+            continue
+        if selector not in classes[name]['selectors']:
+            continue
+        lines.append('designated-init %s %s' % (name, selector))
     for name in sorted(functions):
         lines.append('function %s' % name)
     lines.sort()
@@ -700,6 +713,7 @@ def load_manifest(path):
     """
     classes, protocols, selectors, functions = {}, set(), {}, set()
     ios_classes, unavailable, eras = set(), {}, {}
+    designated = set()
     for line in open(path, errors='ignore'):
         line = line.strip()
         if not line or line.startswith('#'):
@@ -722,13 +736,16 @@ def load_manifest(path):
         elif kind == 'selector-era':
             name, selector, introduced, deprecated = rest.split(' ')
             eras[('selector', name, selector)] = (introduced, deprecated)
+        elif kind == 'designated-init':
+            name, selector = rest.split(' ')
+            designated.add((name, selector))
         elif kind == 'protocol':
             protocols.add(rest)
         elif kind == 'function':
             functions.add(rest)
         else:
             raise SystemExit('api-ledger: unknown manifest fact `%s`' % kind)
-    return classes, protocols, selectors, functions, ios_classes, unavailable, eras
+    return classes, protocols, selectors, functions, ios_classes, unavailable, eras, designated
 
 # ------------------------------------------------------------------------------------------------------------------
 # The census: what this tree answers, with inheritance resolved.
@@ -748,7 +765,7 @@ def closure(tree, name, seen=None):
 
 def computed(local_dir, manifest_path, library=None, include_dirs=()):
     (sdk_classes, sdk_protocols, sdk_selectors, sdk_functions,
-     ios_classes, unavailable, _) = load_manifest(manifest_path)
+     ios_classes, unavailable, _, _) = load_manifest(manifest_path)
     # **THE DENOMINATOR IS WHAT A macOS CALLER CAN REACH.** An iOS-only class and a door Apple marks unavailable are
     # removed before anything is counted, so "missing" is a gap rather than a disposal. Both sets come from the
     # manifest, not from a list in this file, so adding one is a manifest edit with a diff.
@@ -1030,6 +1047,7 @@ NS_CLASS_AVAILABLE(NA, 9_0)
 
 NS_CLASS_AVAILABLE(10_9, 7_0)
 @interface FNEra : NSObject
+- (instancetype)initWithValue:(int)value NS_DESIGNATED_INITIALIZER;
 - (void)go NS_AVAILABLE(10_6, 4_0);
 - (void)old NS_DEPRECATED_MAC(10_0, 10_8, "use go");
 @property (readonly) BOOL flag NS_AVAILABLE(10_7, 5_0);
@@ -1076,17 +1094,20 @@ def availability_metrics(manifest, directories):
     declaration site: an annotation lives where the header writes it, so the comparison uses the class's own selector
     set rather than its closure. That is why this walks `parse_tree` instead of `closure`.
     """
-    classes, protocols, selectors, functions, ios, unavailable, eras = load_manifest(manifest)
-    local_classes, local_eras = {}, {}
+    classes, protocols, selectors, functions, ios, unavailable, eras, designated = load_manifest(manifest)
+    local_classes, local_eras, local_designated = {}, {}, set()
     for directory in directories:
         cls, _, _ = parse_tree(directory)
         local_classes.update(cls)
-        _, _, class_eras, selector_eras = availability_facts(directory)
+        _, _, class_eras, selector_eras, here = availability_facts(directory)
+        local_designated |= here
         local_eras.update({('class', k): v for k, v in class_eras.items()})
         local_eras.update({('selector', k[0], k[1]): v for k, v in selector_eras.items()})
 
     metrics = {'annotations-candidates': 0, 'annotations-present': 0, 'annotations-missing': 0,
-               'annotations-wrong': 0, 'annotations-extra': 0}
+               'annotations-wrong': 0, 'annotations-extra': 0,
+               'designated-candidates': 0, 'designated-present': 0, 'designated-missing': 0,
+               'designated-extra': 0}
     wrong, missing_examples = [], []
     for key, reference in sorted(eras.items()):
         if key[0] == 'class':
@@ -1107,6 +1128,18 @@ def availability_metrics(manifest, directories):
             if found != reference:
                 metrics['annotations-wrong'] += 1
                 wrong.append((key, reference, found))
+    for (name, selector) in sorted(designated):
+        if name not in local_classes or selector not in local_classes[name]['selectors']:
+            continue
+        metrics['designated-candidates'] += 1
+        if (name, selector) in local_designated:
+            metrics['designated-present'] += 1
+        else:
+            metrics['designated-missing'] += 1
+            missing_examples.append(('designated', name, selector))
+    for key in local_designated:
+        if key not in designated and key[1] in selectors.get(key[0], set()):
+            metrics['designated-extra'] += 1
     for key in local_eras:
         if key in eras:
             continue
@@ -1205,7 +1238,7 @@ def annotation_for(key, era):
     return 'NS_CLASS_AVAILABLE_MAC(%s)' % introduced if key[0] == 'class' else 'NS_AVAILABLE_MAC(%s)' % introduced
 
 
-def annotation_edits(path, eras):
+def annotation_edits(path, eras, designated=frozenset()):
     """`(offset, text)` insertions that state the reference's availability, for one header.
 
     Every insertion is placed at a declaration's terminator (`;`) or at the start of a class's line, so a declaration
@@ -1233,11 +1266,16 @@ def annotation_edits(path, eras):
             span = body[start:stop]
             selector = selector_of(span)
             key = ('selector', name, selector)
-            if not selector or key not in eras or stop >= len(body):
+            if not selector or stop >= len(body):
                 continue
-            if re.search(r'NS_(CLASS_)?(AVAILABLE|DEPRECATED)|API_AVAILABLE', span):
-                continue
-            edits.append((block.end() + stop, ' ' + annotation_for(key, eras[key])))
+            already = re.search(r'NS_(CLASS_)?(AVAILABLE|DEPRECATED)|API_AVAILABLE', span)
+            suffix = ''
+            if key in eras and not already:
+                suffix += ' ' + annotation_for(key, eras[key])
+            if (name, selector) in designated and 'NS_DESIGNATED_INITIALIZER' not in span:
+                suffix += ' NS_DESIGNATED_INITIALIZER'
+            if suffix:
+                edits.append((block.end() + stop, suffix))
         for prop in re.finditer(r'@property\s*([^;{]*);', body):
             span = prop.group(1)
             if re.search(r'NS_(CLASS_)?(AVAILABLE|DEPRECATED)|API_AVAILABLE', span):
@@ -1266,11 +1304,11 @@ def command_annotate(argv):
     if len(rest) != 2:
         raise SystemExit('api-ledger annotate <manifest> <source-dir> [--apply] [--quiet]')
     manifest, directory = rest
-    _, _, _, _, _, _, eras = load_manifest(manifest)
+    _, _, _, _, _, _, eras, designated = load_manifest(manifest)
     total = 0
     files = 0
     for path in sorted(glob.glob(os.path.join(headers_dir(directory), '*.h'))):
-        edits = annotation_edits(path, eras)
+        edits = annotation_edits(path, eras, designated)
         if not edits:
             continue
         files += 1
@@ -1320,7 +1358,7 @@ def command_selftest(argv):
         check(selectors == {'bytes', 'UTF8String', 'sendAsynchronousRequest:queue:completionHandler:', 'extra'},
               'the class declares exactly four doors (%s)' % ', '.join(sorted(selectors)))
 
-        ios, unavailable, class_eras, selector_eras = availability_facts(root)
+        ios, unavailable, class_eras, selector_eras, designated = availability_facts(root)
         check(ios == {'FNPhoneOnly'}, 'NS_CLASS_AVAILABLE(NA, …) is an iOS-only class, not a macOS gap')
         check(unavailable.get('FNProxy') == {'allowsWeakReference', 'retainWeakReference'},
               'NS_UNAVAILABLE methods are recorded against their class')
@@ -1329,6 +1367,7 @@ def command_selftest(argv):
         check(selector_eras.get(('FNEra', 'go')) == ('10_6', '-'), 'so is an introduction version')
         check(selector_eras.get(('FNEra', 'old')) == ('10_0', '10_8'), 'and a deprecation carries both tokens')
         check(selector_eras.get(('FNEra', 'flag')) == ('10_7', '-'), 'a property annotation is its accessor\'s fact')
+        check(('FNEra', 'initWithValue:') in designated, 'a designated initializer is a fact with no version')
         check(selector_eras.get(('FNSample', 'sendAsynchronousRequest:queue:completionHandler:')) == ('10_7', '10_11'),
               'a wrapped declaration\'s NS_DEPRECATED supplies the era')
         check('FNSample' not in class_eras,
@@ -1344,6 +1383,7 @@ def command_selftest(argv):
               'the manifest carries the unavailable-selector fact')
         check('class-era FNEra 10_9 -' in lines, 'the manifest carries the class era')
         check('selector-era FNEra old 10_0 10_8' in lines, 'the manifest carries the selector eras')
+        check('designated-init FNEra initWithValue:' in lines, 'and the designated initializers')
 
         manifest = os.path.join(root, 'manifest.txt')
         with open(manifest, 'w') as handle:
@@ -1358,6 +1398,9 @@ def command_selftest(argv):
               'a tree annotated like the reference reports nothing wrong (%s)' % metrics)
         check(metrics['annotations-present'] == metrics['annotations-candidates'],
               'and nothing missing')
+        check(metrics['designated-missing'] == 0 and metrics['designated-present'] == metrics['designated-candidates'],
+              'the designated-initializer facts round-trip too (%s)' %
+              {k: v for k, v in metrics.items() if k.startswith('designated')})
         check(annotation_edits(os.path.join(root, 'FNSample.h'), loaded[6]) == [],
               'the sweep is idempotent: an annotated declaration gets no second annotation')
 
