@@ -489,20 +489,34 @@ def availability_facts(directory):
         text = strip_comments(open(path, errors='ignore').read())
         for m in re.finditer(r'@(interface|protocol)\s+(\w+)', text):
             kind, name = m.groups()
+            # **A FORWARD DECLARATION IS NOT A BLOCK.** `@protocol NSXMLParserDelegate;` at the top of a header is
+            # followed by `@interface NSXMLParser` — so a naive `find('@end')` attributed every one of the parser's
+            # doors to the DELEGATE, annotation and all. `parse_objc` has skipped this shape since the first bug list
+            # in this file; this walk did not, and the manifest carried the result.
+            token, _ = next_token(text, m.end())
+            if token in ';,':
+                continue
             end = text.find('@end', m.end())
             if end == -1:
                 continue
-            preceding = [line for line in text[:m.start()].splitlines() if line.strip()][-2:]
+            preceding = [line for line in text[:m.start()].splitlines() if line.strip()][-1:]
             for line in preceding:
                 mac = re.search(r'\((?:\s*([A-Za-z_0-9]+)\s*,|macos\s*\(\s*([A-Za-z_0-9]+))', line)
                 if mac and (mac.group(1) or mac.group(2)) == 'NA' and kind == 'interface':
                     ios.add(name)
             if kind == 'interface':
-                for line in preceding:
-                    era = era_of(line, kinds=('DEPRECATED', 'AVAILABLE'))
-                    if era:
-                        class_eras[name] = era
-                        break
+                # **A CATEGORY IS NOT THE CLASS'S AVAILABILITY.** `@interface NSArray (NSExtendedArray)` is preceded by
+                # `NS_AVAILABLE_MAC(10_6)` in Apple's headers, so a lookback that ignored the block kind recorded
+                # NSArray as a 10.6 class — and it IS not: NSArray carries no class annotation at all, it is available
+                # from 10.0. Only a definition (`@interface X : Super`, generics allowed before the colon) can state a
+                # class's era, and the first one found wins so a later category cannot overwrite it.
+                after = skip_angle_brackets(text[m.end():])
+                if after.lstrip().startswith(':'):
+                    for line in preceding:
+                        era = era_of(line, kinds=('DEPRECATED', 'AVAILABLE'))
+                        if era:
+                            class_eras.setdefault(name, era)
+                            break
             body = text[m.end():end]
             for decl in re.finditer(r'(?m)^\s*[-+]\s*\(', body):
                 start = decl.end() - 1
@@ -1021,6 +1035,23 @@ NS_CLASS_AVAILABLE(10_9, 7_0)
 @property (readonly) BOOL flag NS_AVAILABLE(10_7, 5_0);
 @end
 
+/* a CATEGORY is not its class's availability */
+NS_AVAILABLE_MAC(10_9)
+@interface FNSample (More)
+- (void)extra NS_AVAILABLE_MAC(10_9);
+@end
+
+@protocol FNForward;
+
+@interface FNParse : NSObject
+- (void)start NS_AVAILABLE_MAC(10_7);
+@end
+
+/* a forward declaration must not swallow the block that follows it */
+@protocol FNForward <NSObject>
+- (void)late;
+@end
+
 @interface FNProxy : NSObject
 - (BOOL)allowsWeakReference NS_UNAVAILABLE;
 - (BOOL)retainWeakReference NS_UNAVAILABLE;
@@ -1077,8 +1108,17 @@ def availability_metrics(manifest, directories):
                 metrics['annotations-wrong'] += 1
                 wrong.append((key, reference, found))
     for key in local_eras:
-        if key not in eras:
-            metrics['annotations-extra'] += 1
+        if key in eras:
+            continue
+        # **A DERIVED ACCESSOR IS NOT AN EXTRA FACT.** Apple declares `@property (readonly) BOOL requiresSecureCoding`
+        # and this tree declares it readwrite, so the local setter carries the property's era while the reference has
+        # no such door at all. Comparing keys the reference never declares would count this tree's own surface against
+        # it; an extra is a fact about a door Apple DOES declare and does not annotate.
+        if key[0] == 'selector' and key[2] not in selectors.get(key[1], set()):
+            continue
+        if key[0] == 'class' and key[1] not in classes:
+            continue
+        metrics['annotations-extra'] += 1
     return metrics, wrong, missing_examples
 
 
@@ -1136,6 +1176,117 @@ def command_availability(argv):
     return 1 if metrics['annotations-wrong'] else 0
 
 
+def mask_in_place(text):
+    """Comments and string literals blanked to SPACES of the same length, so an offset in the masked text is the same
+    offset in the original.
+
+    `strip_comments` cannot be used for an edit: it replaces a comment with one space plus its newlines, which shifts
+    every later declaration. An instrument that only READS can afford that; one that writes cannot.
+    """
+    def blank(match):
+        return ''.join('\n' if c == '\n' else ' ' for c in match.group(0))
+    text = re.sub(r'/\*.*?\*/', blank, text, flags=re.S)
+    text = re.sub(r'//[^\n]*', blank, text)
+    return re.sub(r'"(?:[^"\\\n]|\\.)*"', blank, text)
+
+
+def annotation_for(key, era):
+    """The spelling for a fact: the macOS-only macro, because the macOS fact is the one this tree has.
+
+    **NOT `NS_AVAILABLE(10_6, 4_0)`.** The two-argument form states an iOS introduction too, and the manifest commits
+    only the macOS token — inventing the other would be exactly the memory-written annotation §4.12 forbids. The
+    tree targets one platform, so `NS_AVAILABLE_MAC` states the fact and nothing more, and it is Apple's own spelling
+    for Mac-only API.
+    """
+    introduced, deprecated = era
+    if deprecated and deprecated != '-':
+        return 'NS_CLASS_DEPRECATED_MAC(%s, %s)' % (introduced, deprecated) if key[0] == 'class' \
+            else 'NS_DEPRECATED_MAC(%s, %s)' % (introduced, deprecated)
+    return 'NS_CLASS_AVAILABLE_MAC(%s)' % introduced if key[0] == 'class' else 'NS_AVAILABLE_MAC(%s)' % introduced
+
+
+def annotation_edits(path, eras):
+    """`(offset, text)` insertions that state the reference's availability, for one header.
+
+    Every insertion is placed at a declaration's terminator (`;`) or at the start of a class's line, so a declaration
+    wrapped over several lines is annotated where its author would put it. `mask_in_place` is what makes the offsets
+    usable: the scan runs over body text with comments and messages blanked, and the splice lands in the original.
+    """
+    original = open(path, errors='ignore').read()
+    masked = mask_in_place(original)
+    edits = []
+    for block in re.finditer(r'@(interface|protocol)\s+(\w+)', masked):
+        kind, name = block.groups()
+        end = masked.find('@end', block.end())
+        if end == -1:
+            continue
+        body = masked[block.end():end]
+        key = ('class', name)
+        if kind == 'interface' and key in eras:
+            line_start = masked.rfind('\n', 0, block.start()) + 1
+            preceding = [line for line in masked[:line_start].splitlines() if line.strip()][-2:]
+            if not any(re.search(r'NS_(CLASS_)?(AVAILABLE|DEPRECATED)|API_AVAILABLE', line) for line in preceding):
+                edits.append((line_start, annotation_for(key, eras[key]) + '\n'))
+        for decl in re.finditer(r'(?m)^\s*[-+]\s*\(', body):
+            start = decl.end() - 1
+            stop = read_method_span(body, start)
+            span = body[start:stop]
+            selector = selector_of(span)
+            key = ('selector', name, selector)
+            if not selector or key not in eras or stop >= len(body):
+                continue
+            if re.search(r'NS_(CLASS_)?(AVAILABLE|DEPRECATED)|API_AVAILABLE', span):
+                continue
+            edits.append((block.end() + stop, ' ' + annotation_for(key, eras[key])))
+        for prop in re.finditer(r'@property\s*([^;{]*);', body):
+            span = prop.group(1)
+            if re.search(r'NS_(CLASS_)?(AVAILABLE|DEPRECATED)|API_AVAILABLE', span):
+                continue
+            accessors = block_properties('@property %s;' % span)
+            era = None
+            for accessor in accessors:
+                era = eras.get(('selector', name, accessor)) or era
+            if not era:
+                continue
+            edits.append((block.end() + prop.end() - 1, ' ' + annotation_for(('selector', name, None), era)))
+    return edits
+
+
+def command_annotate(argv):
+    """`annotate <manifest> <source-dir> [--apply] [--quiet]` — the W1 sweep, reproducibly.
+
+    The plan calls the sweep "mechanical but ... derived from the 10.11 headers, not from memory". This is the
+    mechanical part: for every declaration this tree makes and Apple annotates, insert the reference's version. It is
+    idempotent (a declaration that already states an availability is left alone), it inserts only at terminators, and
+    it is a DRY RUN unless `--apply` is given — because a tool that rewrites 122 headers should be read before it runs.
+    """
+    apply_changes = '--apply' in argv
+    quiet = '--quiet' in argv
+    rest = [a for a in argv if a not in ('--apply', '--quiet')]
+    if len(rest) != 2:
+        raise SystemExit('api-ledger annotate <manifest> <source-dir> [--apply] [--quiet]')
+    manifest, directory = rest
+    _, _, _, _, _, _, eras = load_manifest(manifest)
+    total = 0
+    files = 0
+    for path in sorted(glob.glob(os.path.join(headers_dir(directory), '*.h'))):
+        edits = annotation_edits(path, eras)
+        if not edits:
+            continue
+        files += 1
+        total += len(edits)
+        if not quiet:
+            print('%-34s %3d' % (os.path.basename(path), len(edits)))
+        if apply_changes:
+            text = open(path, errors='ignore').read()
+            for offset, insertion in sorted(edits, reverse=True):
+                text = text[:offset] + insertion + text[offset:]
+            open(path, 'w').write(text)
+    print('%s %d declaration(s) in %d header(s)' % ('annotated' if apply_changes else 'would annotate',
+                                                    total, files))
+    return 0
+
+
 def command_selftest(argv):
     """Regression cases for the faults this reader has produced, run without an SDK.
 
@@ -1166,8 +1317,8 @@ def command_selftest(argv):
               'a declaration wrapped over three lines yields its whole selector')
         check(not any('dataTaskWithRequest' in s for s in selectors),
               'the NS_DEPRECATED message contributes no selector')
-        check(selectors == {'bytes', 'UTF8String', 'sendAsynchronousRequest:queue:completionHandler:'},
-              'the class declares exactly three doors (%s)' % ', '.join(sorted(selectors)))
+        check(selectors == {'bytes', 'UTF8String', 'sendAsynchronousRequest:queue:completionHandler:', 'extra'},
+              'the class declares exactly four doors (%s)' % ', '.join(sorted(selectors)))
 
         ios, unavailable, class_eras, selector_eras = availability_facts(root)
         check(ios == {'FNPhoneOnly'}, 'NS_CLASS_AVAILABLE(NA, …) is an iOS-only class, not a macOS gap')
@@ -1180,6 +1331,11 @@ def command_selftest(argv):
         check(selector_eras.get(('FNEra', 'flag')) == ('10_7', '-'), 'a property annotation is its accessor\'s fact')
         check(selector_eras.get(('FNSample', 'sendAsynchronousRequest:queue:completionHandler:')) == ('10_7', '10_11'),
               'a wrapped declaration\'s NS_DEPRECATED supplies the era')
+        check('FNSample' not in class_eras,
+              'a category\'s availability is not recorded as its class\'s (NSArray is not a 10.6 class)')
+        check(selector_eras.get(('FNParse', 'start')) == ('10_7', '-'),
+              'a forward @protocol does not swallow the block after it')
+        check('FNForward' not in selector_eras, 'and that block\'s doors stay with their own class')
 
         lines = emit_manifest([root])
         check(lines == emit_manifest([root]), 'the manifest is deterministic')
@@ -1202,6 +1358,8 @@ def command_selftest(argv):
               'a tree annotated like the reference reports nothing wrong (%s)' % metrics)
         check(metrics['annotations-present'] == metrics['annotations-candidates'],
               'and nothing missing')
+        check(annotation_edits(os.path.join(root, 'FNSample.h'), loaded[6]) == [],
+              'the sweep is idempotent: an annotated declaration gets no second annotation')
 
         legacy = os.path.join(root, 'legacy.txt')
         with open(legacy, 'w') as handle:
@@ -1221,7 +1379,8 @@ def command_selftest(argv):
 
 COMMANDS = {'manifest': command_manifest, 'census': command_census,
             'check': command_check, 'missing': command_missing,
-            'availability': command_availability, 'selftest': command_selftest}
+            'availability': command_availability, 'annotate': command_annotate,
+            'selftest': command_selftest}
 
 
 def main(argv):
