@@ -435,6 +435,33 @@ def parse_tree(directory):
     return classes, protocols, impls
 
 
+AVAILABILITY_CALL = re.compile(
+    r'\b(NS_CLASS_AVAILABLE|NS_CLASS_AVAILABLE_MAC|NS_AVAILABLE|NS_AVAILABLE_MAC|API_AVAILABLE)'
+    r'\(\s*([A-Za-z_0-9]+)(?:\s*,\s*([A-Za-z_0-9]+))?')
+DEPRECATION_CALL = re.compile(
+    r'\b(NS_CLASS_DEPRECATED|NS_CLASS_DEPRECATED_MAC|NS_DEPRECATED|NS_DEPRECATED_MAC)'
+    r'\(\s*([A-Za-z_0-9]+)\s*,\s*([A-Za-z_0-9]+)')
+
+
+def era_of(text, kinds=('DEPRECATED', 'AVAILABLE')):
+    """(introduced, deprecated) from the availability macro in a declaration, or None.
+
+    A deprecation carries both facts and wins over an introduction, because Apple writes them on the same line and
+    `NS_DEPRECATED(10_7, 10_11, …)` says both. `-` is the absent deprecation, so every fact line has the same shape.
+    The VERSION TOKENS ARE APPLE'S (`10_6`), kept verbatim: a version is a fact, and normalising it would make the
+    manifest disagree with the header a reader is checking it against.
+    """
+    if 'DEPRECATED' in kinds:
+        m = DEPRECATION_CALL.search(text)
+        if m:
+            return m.group(2), m.group(3)
+    if 'AVAILABLE' in kinds:
+        m = AVAILABILITY_CALL.search(text)
+        if m and m.group(2) not in ('NA',):
+            return m.group(2), '-'
+    return None
+
+
 def availability_facts(directory):
     """The two facts the census cannot infer from a name: what is iOS-only, and what Apple forbids calling.
 
@@ -444,15 +471,19 @@ def availability_facts(directory):
     class gap by one and the second read as two unfinished doors, which is how "27 classes, 86 selectors" survived a
     first measurement. They are facts about Apple's surface, so they belong in the manifest with the names.
 
-    Returns `(ios_classes, unavailable_selectors)` — the classes whose macOS availability is `NA`, and a mapping of
-    class to the selectors its own block marks unavailable. A protocol carries no availability in the 10.11 headers
-    (Apple annotates the classes and lets conformance inherit the era), so protocols contribute no facts here.
+    Returns `(ios_classes, unavailable_selectors, class_eras, selector_eras)`. The eras are the reference's own
+    introduction/deprecation facts, keyed by name, because the sweep (W1) must copy Apple's version rather than guess
+    one — and because the check has to work without an SDK checkout, so the versions are committed with the names.
+
+    A protocol carries no availability in the 10.11 headers (Apple annotates the classes and lets conformance inherit
+    the era), so protocols contribute no facts here.
 
     The macOS slot is what decides, and it is read from the availability macro on the declaration's own line or the
     one immediately above it — two non-blank lines back, which is how every class in these headers is spelled. A
     wilder lookback would let one class's macro annotate the next one.
     """
     ios, unavailable = set(), {}
+    class_eras, selector_eras = {}, {}
     directory = headers_dir(directory)
     for path in sorted(glob.glob(os.path.join(directory, '*.h'))):
         text = strip_comments(open(path, errors='ignore').read())
@@ -466,20 +497,33 @@ def availability_facts(directory):
                 mac = re.search(r'\((?:\s*([A-Za-z_0-9]+)\s*,|macos\s*\(\s*([A-Za-z_0-9]+))', line)
                 if mac and (mac.group(1) or mac.group(2)) == 'NA' and kind == 'interface':
                     ios.add(name)
+            if kind == 'interface':
+                for line in preceding:
+                    era = era_of(line, kinds=('DEPRECATED', 'AVAILABLE'))
+                    if era:
+                        class_eras[name] = era
+                        break
             body = text[m.end():end]
             for decl in re.finditer(r'(?m)^\s*[-+]\s*\(', body):
                 start = decl.end() - 1
                 span = body[start:read_method_span(body, start)]
+                selector = selector_of(span)
+                era = era_of(span)
+                if selector and era:
+                    selector_eras[(name, selector)] = era
                 if 'NS_UNAVAILABLE' in span or re.search(r'API_UNAVAILABLE\([^)]*macos', span):
-                    selector = selector_of(span)
                     if selector:
                         unavailable.setdefault(name, set()).add(selector)
             for prop in re.finditer(r'@property\s*([^;{]*);', body):
                 span = prop.group(1)
+                era = era_of(span)
+                if era:
+                    for selector in block_properties('@property %s;' % span):
+                        selector_eras[(name, selector)] = era
                 if 'NS_UNAVAILABLE' in span or re.search(r'API_UNAVAILABLE\([^)]*macos', span):
                     for selector in block_properties('@property %s;' % span):
                         unavailable.setdefault(name, set()).add(selector)
-    return ios, unavailable
+    return ios, unavailable, class_eras, selector_eras
 
 
 def c_functions(directory, include_dirs=()):
@@ -587,7 +631,7 @@ def emit_manifest(directories):
             classes = cls
             protocols = set(prt)
             functions = c_functions(directory)
-            ios_classes, unavailable = availability_facts(directory)
+            ios_classes, unavailable, class_eras, selector_eras = availability_facts(directory)
         else:
             test = lambda t: t[0]
             owned_elsewhere |= set(n for n, e in cls.items() if e['primary'])
@@ -610,6 +654,18 @@ def emit_manifest(directories):
             lines.append('unavailable-selector %s %s' % (name, selector))
     for name in sorted(protocols):
         lines.append('protocol %s' % name)
+    # **AND THE VERSIONS, WHICH ARE FACTS OF THE SAME KIND.** The sweep (W1) must annotate with Apple's introduction
+    # and deprecation versions rather than a remembered one, and the check has to run without an SDK checkout, so the
+    # tokens are committed beside the names: `10_6` verbatim, and `-` for "no deprecation".
+    for name in sorted(class_eras):
+        if name in classes and name not in owned_elsewhere:
+            lines.append('class-era %s %s %s' % ((name,) + class_eras[name]))
+    for (name, selector) in sorted(selector_eras):
+        if name not in classes or name in owned_elsewhere:
+            continue
+        if selector not in classes[name]['selectors']:
+            continue
+        lines.append('selector-era %s %s %s %s' % ((name, selector) + selector_eras[(name, selector)]))
     for name in sorted(functions):
         lines.append('function %s' % name)
     lines.sort()
@@ -617,14 +673,19 @@ def emit_manifest(directories):
 
 
 def load_manifest(path):
-    """The facts, and the two exemption sets they carry.
+    """The facts, the two exemption sets they carry, and the era table.
 
     `ios-class` and `unavailable-selector` are REMOVED FROM THE DENOMINATOR rather than reported missing: they are
-    disposals, and the 10.11 manifest says so on a line a reader can grep. Earlier manifests carry neither kind and
-    load exactly as before, which is why the 10.6 pins did not move when this grammar grew.
+    disposals, and the 10.11 manifest says so on a line a reader can grep. Earlier manifests carry neither kind — nor
+    the `class-era`/`selector-era` versions — and load exactly as before, which is why the 10.6 pins did not move when
+    this grammar grew twice.
+
+    The era table is keyed `('class', name)` or `('selector', class, selector)` and holds Apple's
+    `(introduced, deprecated)` tokens; `-` means no deprecation. Nothing counts it: it is the reference the W1 sweep
+    annotates from and the `availability` command checks against.
     """
     classes, protocols, selectors, functions = {}, set(), {}, set()
-    ios_classes, unavailable = set(), {}
+    ios_classes, unavailable, eras = set(), {}, {}
     for line in open(path, errors='ignore'):
         line = line.strip()
         if not line or line.startswith('#'):
@@ -641,13 +702,19 @@ def load_manifest(path):
         elif kind == 'unavailable-selector':
             name, _, selector = rest.partition(' ')
             unavailable.setdefault(name, set()).add(selector)
+        elif kind == 'class-era':
+            name, introduced, deprecated = rest.split(' ')
+            eras[('class', name)] = (introduced, deprecated)
+        elif kind == 'selector-era':
+            name, selector, introduced, deprecated = rest.split(' ')
+            eras[('selector', name, selector)] = (introduced, deprecated)
         elif kind == 'protocol':
             protocols.add(rest)
         elif kind == 'function':
             functions.add(rest)
         else:
             raise SystemExit('api-ledger: unknown manifest fact `%s`' % kind)
-    return classes, protocols, selectors, functions, ios_classes, unavailable
+    return classes, protocols, selectors, functions, ios_classes, unavailable, eras
 
 # ------------------------------------------------------------------------------------------------------------------
 # The census: what this tree answers, with inheritance resolved.
@@ -667,7 +734,7 @@ def closure(tree, name, seen=None):
 
 def computed(local_dir, manifest_path, library=None, include_dirs=()):
     (sdk_classes, sdk_protocols, sdk_selectors, sdk_functions,
-     ios_classes, unavailable) = load_manifest(manifest_path)
+     ios_classes, unavailable, _) = load_manifest(manifest_path)
     # **THE DENOMINATOR IS WHAT A macOS CALLER CAN REACH.** An iOS-only class and a door Apple marks unavailable are
     # removed before anything is counted, so "missing" is a gap rather than a disposal. Both sets come from the
     # manifest, not from a list in this file, so adding one is a manifest edit with a diff.
@@ -947,12 +1014,126 @@ NS_CLASS_AVAILABLE(NA, 9_0)
 @interface FNPhoneOnly : NSObject
 @end
 
+NS_CLASS_AVAILABLE(10_9, 7_0)
+@interface FNEra : NSObject
+- (void)go NS_AVAILABLE(10_6, 4_0);
+- (void)old NS_DEPRECATED_MAC(10_0, 10_8, "use go");
+@property (readonly) BOOL flag NS_AVAILABLE(10_7, 5_0);
+@end
+
 @interface FNProxy : NSObject
 - (BOOL)allowsWeakReference NS_UNAVAILABLE;
 - (BOOL)retainWeakReference NS_UNAVAILABLE;
 @property (readonly) BOOL resolved;
 @end
 '''
+
+
+def availability_metrics(manifest, directories):
+    """How much of the reference's availability this tree states, and how much of it is wrong.
+
+    **THE SWEEP NEEDS A MEASUREMENT, OR IT IS 1,290 HAND EDITS WITH NO WAY TO KNOW WHEN IT IS DONE.** Apple annotates
+    1,290 declarations with an introduction version and 213 with a deprecation in the 10.11 Foundation. This counts,
+    for the declarations the tree ACTUALLY DECLARES (a declaration it does not have cannot be annotated), how many
+    state the reference's version, how many state none, and how many state a different one.
+
+    **AN ANNOTATED DOOR APPLE DOES NOT ANNOTATE IS COUNTED, NOT CONDEMNED.** This tree ships API that postdates 10.11
+    (a `NSDateInterval`, a `NSRelativeDateTimeFormatter`), and §4.13 of the plan says such a door is annotated with the
+    version it really arrived in. So `annotations-extra` is a number to read, not a failure.
+
+    **AND A DECLARATION IS MATCHED AT THE CLASS THAT DECLARES IT.** Inheriting `-bytes` from `NSData` is not a
+    declaration site: an annotation lives where the header writes it, so the comparison uses the class's own selector
+    set rather than its closure. That is why this walks `parse_tree` instead of `closure`.
+    """
+    classes, protocols, selectors, functions, ios, unavailable, eras = load_manifest(manifest)
+    local_classes, local_eras = {}, {}
+    for directory in directories:
+        cls, _, _ = parse_tree(directory)
+        local_classes.update(cls)
+        _, _, class_eras, selector_eras = availability_facts(directory)
+        local_eras.update({('class', k): v for k, v in class_eras.items()})
+        local_eras.update({('selector', k[0], k[1]): v for k, v in selector_eras.items()})
+
+    metrics = {'annotations-candidates': 0, 'annotations-present': 0, 'annotations-missing': 0,
+               'annotations-wrong': 0, 'annotations-extra': 0}
+    wrong, missing_examples = [], []
+    for key, reference in sorted(eras.items()):
+        if key[0] == 'class':
+            name = key[1]
+            if name not in local_classes or not local_classes[name].get('primary', True):
+                continue
+        else:
+            _, name, selector = key
+            if name not in local_classes or selector not in local_classes[name]['selectors']:
+                continue
+        metrics['annotations-candidates'] += 1
+        found = local_eras.get(key)
+        if not found:
+            metrics['annotations-missing'] += 1
+            missing_examples.append(key)
+        else:
+            metrics['annotations-present'] += 1
+            if found != reference:
+                metrics['annotations-wrong'] += 1
+                wrong.append((key, reference, found))
+    for key in local_eras:
+        if key not in eras:
+            metrics['annotations-extra'] += 1
+    return metrics, wrong, missing_examples
+
+
+def command_availability(argv):
+    """`availability <manifest> <source-dir> [<source-dir> ...] [--pin <file>]` — the S2 gate.
+
+    Without `--pin` it reports; with one it compares both ways like `check`, so the sweep's progress is a deliberate
+    edit rather than a side effect. It fails outright on a WRONG version in either mode: a declaration that states a
+    version Apple does not is worse than one that states none, because it looks finished.
+    """
+    pin, rest, i = None, [], 0
+    while i < len(argv):
+        if argv[i] == '--pin':
+            if i + 1 >= len(argv):
+                raise SystemExit('api-ledger: --pin needs a file')
+            pin = argv[i + 1]
+            i += 2
+        else:
+            rest.append(argv[i])
+            i += 1
+    rest, _, _ = split_library(rest)
+    if len(rest) < 2:
+        raise SystemExit('api-ledger availability <manifest> <source-dir> [<source-dir> ...] [--pin <file>]')
+    manifest, directories = rest[0], rest[1:]
+    metrics, wrong, missing = availability_metrics(manifest, directories)
+
+    if pin:
+        expected = parse_census(pin)
+        problems = []
+        for name in sorted(set(expected) | set(metrics)):
+            if name not in metrics:
+                problems.append('  %-28s pinned; the tree does not measure it any more' % name)
+            elif name not in expected:
+                problems.append('  %-28s measured %d; the pin does not name it' % (name, metrics[name]))
+            elif expected[name] != metrics[name]:
+                problems.append('  %-28s pin %d, measured %d' % (name, expected[name], metrics[name]))
+        if problems:
+            sys.stderr.write('api-ledger: the availability census has drifted, in %d place(s).\n'
+                             '  reference: %s\n  pin:       %s\n%s\n' %
+                             (len(problems), manifest, pin, '\n'.join(problems)))
+            return 1
+
+    for name in sorted(metrics):
+        print('%s %d' % (name, metrics[name]))
+    if wrong:
+        sys.stderr.write('\nDECLARATIONS THAT STATE THE WRONG VERSION (%d)\n' % len(wrong))
+        for key, reference, found in wrong[:20]:
+            what = key[1] if key[0] == 'class' else '%s %s' % (key[1], key[2])
+            sys.stderr.write('  %-52s reference %s %s, local %s %s\n' %
+                             (what, reference[0], reference[1], found[0], found[1]))
+    if missing[:3] and not wrong:
+        sys.stderr.write('\n(annotations-missing is the sweep\'s work list: %d declarations Apple annotates and this\n'
+                         'tree declares without a version. `api-ledger census`\'s companion listing names them; the pin\n'
+                         'moves only when one is annotated.)\n' % metrics['annotations-missing'])
+    return 1 if metrics['annotations-wrong'] else 0
 
 
 def command_selftest(argv):
@@ -988,17 +1169,25 @@ def command_selftest(argv):
         check(selectors == {'bytes', 'UTF8String', 'sendAsynchronousRequest:queue:completionHandler:'},
               'the class declares exactly three doors (%s)' % ', '.join(sorted(selectors)))
 
-        ios, unavailable = availability_facts(root)
+        ios, unavailable, class_eras, selector_eras = availability_facts(root)
         check(ios == {'FNPhoneOnly'}, 'NS_CLASS_AVAILABLE(NA, …) is an iOS-only class, not a macOS gap')
         check(unavailable.get('FNProxy') == {'allowsWeakReference', 'retainWeakReference'},
               'NS_UNAVAILABLE methods are recorded against their class')
         check('FNPhoneOnly' not in unavailable, 'an exempt class is not also a selector disposition')
+        check(class_eras.get('FNEra') == ('10_9', '-'), 'a class availability is a committed fact')
+        check(selector_eras.get(('FNEra', 'go')) == ('10_6', '-'), 'so is an introduction version')
+        check(selector_eras.get(('FNEra', 'old')) == ('10_0', '10_8'), 'and a deprecation carries both tokens')
+        check(selector_eras.get(('FNEra', 'flag')) == ('10_7', '-'), 'a property annotation is its accessor\'s fact')
+        check(selector_eras.get(('FNSample', 'sendAsynchronousRequest:queue:completionHandler:')) == ('10_7', '10_11'),
+              'a wrapped declaration\'s NS_DEPRECATED supplies the era')
 
         lines = emit_manifest([root])
         check(lines == emit_manifest([root]), 'the manifest is deterministic')
         check('ios-class FNPhoneOnly' in lines, 'the manifest carries the iOS-only fact')
         check('unavailable-selector FNProxy allowsWeakReference' in lines,
               'the manifest carries the unavailable-selector fact')
+        check('class-era FNEra 10_9 -' in lines, 'the manifest carries the class era')
+        check('selector-era FNEra old 10_0 10_8' in lines, 'the manifest carries the selector eras')
 
         manifest = os.path.join(root, 'manifest.txt')
         with open(manifest, 'w') as handle:
@@ -1007,6 +1196,12 @@ def command_selftest(argv):
         check(loaded[4] == {'FNPhoneOnly'} and loaded[5].get('FNProxy') == {'allowsWeakReference',
                                                                           'retainWeakReference'},
               'the manifest loads its exemptions back')
+        check(loaded[6].get(('selector', 'FNEra', 'old')) == ('10_0', '10_8'), 'and its era table back')
+        metrics, wrong, missing = availability_metrics(manifest, [root])
+        check(wrong == [] and missing == [] and metrics['annotations-wrong'] == 0,
+              'a tree annotated like the reference reports nothing wrong (%s)' % metrics)
+        check(metrics['annotations-present'] == metrics['annotations-candidates'],
+              'and nothing missing')
 
         legacy = os.path.join(root, 'legacy.txt')
         with open(legacy, 'w') as handle:
@@ -1025,7 +1220,8 @@ def command_selftest(argv):
 
 
 COMMANDS = {'manifest': command_manifest, 'census': command_census,
-            'check': command_check, 'missing': command_missing, 'selftest': command_selftest}
+            'check': command_check, 'missing': command_missing,
+            'availability': command_availability, 'selftest': command_selftest}
 
 
 def main(argv):
