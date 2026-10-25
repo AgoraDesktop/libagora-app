@@ -18,6 +18,9 @@
 #
 # Usage: run-controls.sh [WINDOW-SERVER] [WIDTHxHEIGHT] [DEMO-ARG...]
 #        run-controls.sh --data          # the Table & Outline window at startup
+#        run-controls.sh --gallery       # the GUI gallery (every remaining view and control class) at startup
+#        run-controls.sh --gallery-bottom # the gallery scrolled to the drawer and the panel buttons
+#        run-controls.sh --gallery-drawer # the gallery with its NSDrawer open
 #        run-controls.sh --no-playground # the Controls window itself, without the text window on top
 #        run-controls.sh "" 1200x820 --data
 #

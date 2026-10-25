@@ -135,7 +135,9 @@ tests/
                                 plus the responder-chain target, the Help search and the hide flag
   appkit_controls_draw.m        a window full of controls (and the NEW-CONTROLS strip: stepper, level indicator,
                                 secure/search field, progress, date picker, box, tab view), a SCROLL PANEL, a TEXT
-                                PLAYGROUND and a TABLE & OUTLINE window
+                                PLAYGROUND, a TABLE & OUTLINE window, and a GUI GALLERY (matrix, form, image view,
+                                colour well, bare scroller, browser, token field, rule/predicate editors, collection
+                                view, ruler, drawer, and the alert/save/open/colour/font/print panels)
   chrome_theme.m                the THEME: an XFWM `.xpm` set becomes the chrome's buttons, 1:1
   chrome_buttons.m              and what a chrome button DOES: a click through the seam, and what happened
   toolbar.m                     the TOOLBAR: the delegate's items, the band, the ink and the click

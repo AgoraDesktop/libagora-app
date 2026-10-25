@@ -28,7 +28,17 @@
  * `NSTableView` with three columns, a header and alternating rows. Both are the real classes from the last two
  * slices, not painted pictures of them.
  *
- * **AND THE NEW-CONTROLS STRIP, WHICH IS WHAT THIS REVISION ADDS.** The window's right column now carries every control
+ * **AND A GUI GALLERY, WHICH IS WHAT THIS REVISION ADDS.** The Controls window shows the control layer; the Gallery
+ * menu item (or the toolbar item of the same name, or `--gallery`) opens a second, scrollable window holding every
+ * remaining view and control class this AppKit implements: `NSMatrix`, `NSForm`, `NSImageView`, `NSColorWell`,
+ * `NSScroller`, `NSBrowser`, `NSTokenField`, `NSRuleEditor`, `NSPredicateEditor`, `NSCollectionView`, `NSRulerView`
+ * and `NSDrawer`, with buttons for `NSAlert`, `NSSavePanel`, `NSOpenPanel`, `NSColorPanel`, `NSFontPanel` and
+ * `NSPrintPanel` below them. The same acts are in the Gallery menu. `--gallery-bottom` opens scrolled to the
+ * drawer and the panel buttons; `--gallery-drawer` opens the drawer with the window. Each control is a real
+ * instance: the matrix chooses, the form takes typing, the browser loads a column, the tokens chip, the rule
+ * editors show their rows, the tiles select.
+ *
+ * **AND THE NEW-CONTROLS STRIP.** The window's right column now carries every control
  * class the later slices landed, in two columns where the scroll panel used to have the whole height: a
  * continuous `NSLevelIndicator` above the warning threshold and a RATING one, an `NSStepper` with its value beside it,
  * an `NSSecureTextField` and an `NSSearchField`, an `NSDatePicker` in the text-and-stepper style, an `NSProgressIndicator`
@@ -65,6 +75,33 @@
 #import <AppKit/NSDatePicker.h>	/* a formatted date, and the three frames it can wear */
 #import <AppKit/NSBox.h>		/* the titled frame around other views */
 #import <AppKit/NSTabView.h>	/* the selection over views, used here to swap two date-picker styles */
+#import <AppKit/NSMatrix.h>	/* a face that is a GRID of cells, and the radio group that needs one */
+#import <AppKit/NSForm.h>	/* the matrix with a label band in each row */
+#import <AppKit/NSFormCell.h>
+#import <AppKit/NSImageView.h>	/* a control whose face is a picture */
+#import <AppKit/NSImageCell.h>
+#import <AppKit/NSColorWell.h>	/* a control with no cell whose face is a colour */
+#import <AppKit/NSColorPanel.h>	/* the shared colour picker the well opens */
+#import <AppKit/NSFontPanel.h>	/* the shared font picker */
+#import <AppKit/NSScroller.h>	/* the bar on its own, outside a scroll view */
+#import <AppKit/NSBrowser.h>	/* Finder's columns, each a table */
+#import <AppKit/NSBrowserCell.h>
+#import <AppKit/NSTokenField.h>	/* a field whose value is a list of chips */
+#import <AppKit/NSTokenFieldCell.h>
+#import <AppKit/NSRuleEditor.h>	/* a delegate's criterion tree, as rows */
+#import <AppKit/NSPredicateEditor.h>	/* the rule editor whose rows are predicate templates */
+#import <AppKit/NSPredicateEditorRowTemplate.h>
+#import <AppKit/NSCollectionView.h>	/* the recycled grid of tile controllers */
+#import <AppKit/NSCollectionViewItem.h>
+#import <AppKit/NSDrawer.h>		/* a child window hinged to the parent's edge */
+#import <AppKit/NSRulerView.h>	/* the strip that measures a scroll view's document */
+#import <AppKit/NSAlert.h>		/* a question with buttons */
+#import <AppKit/NSSavePanel.h>
+#import <AppKit/NSOpenPanel.h>
+#import <AppKit/NSPrintPanel.h>
+#import <AppKit/NSPrintInfo.h>
+#import <AppKit/NSPanel.h>
+#import <AppKit/NSDockTile.h>	/* the Dock's face for this application */
 #import <AppKit/AGSwitch.h>	/* the tier's own control: a track and a knob, 32 x 20 */
 #import <AppKit/NSToolbar.h>	/* the band above the content, and the items in it */
 #import <AppKit/NSToolbarItem.h>
@@ -217,11 +254,21 @@
 	NSImage *playgroundIcon;
 	NSImage *actionIcon;
 	NSImage *tableIcon;
+	/* AND THE GALLERY'S PICTURE, which is a fourth tile rather than a reuse of one of the three: a toolbar item
+	 * whose picture is another item's picture is the sort of ambiguity a demonstration should not teach. */
+	NSImage *galleryIcon;
 	/* THE TABLE & OUTLINE WINDOW AND THE OBJECTS THAT FEED IT. The table and outline do not retain their data
 	 * sources, so the controller keeps them for as long as the window lives. */
 	NSWindow *_dataWindow;
 	id _tableSource;
 	id _outlineSource;
+	/* **THE GUI GALLERY, WHICH IS THE WINDOW THIS REVISION ADDS.** It is kept so a second choice brings it forward,
+	 * and its delegate/source objects are kept because the views borrow their delegates rather than retaining them. */
+	NSWindow *_galleryWindow;
+	NSDrawer *_galleryDrawer;
+	NSScrollView *_galleryScroll;	/* borrowed: the window's content view owns it */
+	id _galleryBrowserSource;
+	id _galleryRuleSource;
 }
 - (BOOL)validateMenuItem:(NSMenuItem *)item;
 - (void)toggleCheckbox:(id)sender;
@@ -232,6 +279,19 @@
 - (void)choiceMade:(id)sender;
 - (void)showPlayground:(id)sender;
 - (void)showDataViews:(id)sender;
+- (void)showGallery:(id)sender;
+- (void)scrollGalleryToBottom;
+- (void)toggleDrawer:(id)sender;
+- (void)showAlert:(id)sender;
+- (void)showColorPanel:(id)sender;
+- (void)showFontPanel:(id)sender;
+- (void)showSavePanel:(id)sender;
+- (void)showOpenPanel:(id)sender;
+- (void)showPrintPanel:(id)sender;
+- (void)toggleDockBadge:(id)sender;
+- (void)colorWellChanged:(id)sender;
+- (void)alertDidEnd:(NSAlert *)alert returnCode:(NSInteger)code contextInfo:(void *)info;
+- (void)printPanelDidEnd:(NSPrintPanel *)panel returnCode:(NSInteger)code contextInfo:(void *)info;
 - (NSToolbarItem *)toolbar:(NSToolbar *)toolbar
      itemForItemIdentifier:(NSString *)itemIdentifier
  willBeInsertedIntoToolbar:(BOOL)flag;
@@ -290,6 +350,9 @@ static NSImage *fn_toolbar_icon(int kind)
 		[[NSColor colorWithCalibratedRed:0.85 green:0.42 blue:0.20 alpha:1.0] setFill];
 	} else if (kind == 3) {
 		[[NSColor colorWithCalibratedRed:0.45 green:0.32 blue:0.72 alpha:1.0] setFill];
+	} else if (kind == 4) {
+		/* THE GALLERY'S TILE IS A BROWN WINDOW WITH FOUR PANES IN IT. */
+		[[NSColor colorWithCalibratedRed:0.56 green:0.40 blue:0.22 alpha:1.0] setFill];
 	} else {
 		[[NSColor colorWithCalibratedRed:0.22 green:0.60 blue:0.35 alpha:1.0] setFill];
 	}
@@ -315,6 +378,12 @@ static NSImage *fn_toolbar_icon(int kind)
 		[[NSBezierPath bezierPathWithRect:NSMakeRect(5.0, 6.5, 8.0, 1.0)] fill];
 		[[NSBezierPath bezierPathWithRect:NSMakeRect(5.0, 9.5, 8.0, 1.0)] fill];
 		[[NSBezierPath bezierPathWithRect:NSMakeRect(8.0, 5.0, 1.0, 8.0)] fill];
+	} else if (kind == 4) {
+		/* FOUR TILES, WHICH IS WHAT A GALLERY IS: the same rounded face, small, in a 2 x 2 arrangement. */
+		[[NSBezierPath bezierPathWithRoundedRect:NSMakeRect(4.0, 10.0, 4.0, 4.0) xRadius:1.0 yRadius:1.0] fill];
+		[[NSBezierPath bezierPathWithRoundedRect:NSMakeRect(10.0, 10.0, 4.0, 4.0) xRadius:1.0 yRadius:1.0] fill];
+		[[NSBezierPath bezierPathWithRoundedRect:NSMakeRect(4.0, 4.0, 4.0, 4.0) xRadius:1.0 yRadius:1.0] fill];
+		[[NSBezierPath bezierPathWithRoundedRect:NSMakeRect(10.0, 4.0, 4.0, 4.0) xRadius:1.0 yRadius:1.0] fill];
 	} else {
 		NSBezierPath *play = [NSBezierPath bezierPath];
 
@@ -652,6 +721,414 @@ static void fn_playground_fill(NSTextView *view)
 
 @end
 
+/* ============================================================================================ *
+ * THE GUI GALLERY: EVERY REMAINING VIEW AND CONTROL CLASS, IN ONE SCROLLABLE WINDOW.            *
+ *                                                                                               *
+ * **THE CONTROLS WINDOW SHOWS THE CONTROL LAYER; THIS SHOWS WHAT LANDED AFTER IT.** `NSMatrix`,  *
+ * `NSForm`, `NSImageView`, `NSColorWell`, `NSScroller`, `NSBrowser`, `NSTokenField`,             *
+ * `NSRuleEditor`, `NSPredicateEditor`, `NSCollectionView`, `NSRulerView` and `NSDrawer` are all *
+ * real classes here and all have their own windows in the tests; a demonstration is where they  *
+ * can be LOOKED at instead, and where a click means something. The window scrolls because a     *
+ * 900-point screen cannot hold a gallery, and the sections are labelled so a screenshot can be   *
+ * read against the class it shows.                                                               *
+ *                                                                                               *
+ * **THE DOCUMENT IS FLIPPED, WHICH IS THE ONE LAYOUT DECISION WORTH NAMING.** Its y axis runs   *
+ * downward, so the section list reads top-to-bottom in the source and in the window — the same   *
+ * choice `NSTableView` and `NSRuleEditor` make. The clip view is flipped too, so dragging the    *
+ * knob moves the same way as the content.                                                        *
+ * ============================================================================================ */
+#define AG_GALLERY_W 650.0
+#define AG_GALLERY_H 900.0
+
+/* **A FLIPPED DOCUMENT WITH SECTION RULES.** The white ground is what makes the bordered controls *
+ * readable; the five hairlines are the only drawing it does itself, so there is no text here to  *
+ * come out upside down. The captions and every control are subviews, which the drawing layer      *
+ * places through the ordinary subview path.                                                      */
+@interface AGGalleryDocument : NSView
+@end
+
+@implementation AGGalleryDocument
+
+- (void)drawRect:(NSRect)rect
+{
+	static const CGFloat rules[] = {178.0, 382.0, 580.0, 774.0};
+	NSUInteger i;
+
+	(void)rect;
+	[[NSColor whiteColor] setFill];
+	[[NSBezierPath bezierPathWithRect:[self bounds]] fill];
+	[[NSColor colorWithCalibratedWhite:0.86 alpha:1.0] setFill];
+	for (i = 0; i < sizeof(rules) / sizeof(rules[0]); i++) {
+		[[NSBezierPath bezierPathWithRect:NSMakeRect(20.0, rules[i], AG_GALLERY_W - 40.0, 1.0)] fill];
+	}
+}
+
+@end
+
+/* **A CAPTION IS A FIELD WITH ITS DOORS TURNED OFF**, the shape the data window and the controls strip
+ * already use. It is returned autoreleased so a caller can hand it straight to `-addSubview:` and forget it. */
+static NSTextField *fn_gallery_label(NSString *text, NSRect frame, BOOL bold, CGFloat size)
+{
+	NSTextField *label = [[NSTextField alloc] initWithFrame:frame];
+
+	[label setStringValue:text];
+	[label setEditable:NO];
+	[label setSelectable:NO];
+	[label setBordered:NO];
+	[label setBezeled:NO];
+	[label setDrawsBackground:NO];
+	[label setFont:bold ? [NSFont boldSystemFontOfSize:size] : [NSFont systemFontOfSize:size]];
+	if (!bold) {
+		[label setTextColor:[NSColor darkGrayColor]];
+	}
+	return [label autorelease];
+}
+
+/* A BUTTON IN THE GALLERY'S BUTTON ROWS, wired to the controller and answered autoreleased. */
+static NSButton *fn_gallery_button(NSString *title, NSRect frame, id target, SEL action)
+{
+	NSButton *button = [[NSButton alloc] initWithFrame:frame];
+
+	[button setTitle:title];
+	[button setTarget:target];
+	[button setAction:action];
+	return [button autorelease];
+}
+
+/* **THE BROWSER'S TREE IS DICTIONARIES, NOT A MODEL CLASS.** A node is its name and its children, which
+ * is exactly the two questions `NSBrowserDelegate` asks; a class would be three more lines of the same
+ * thing. The delegate retains the roots because a browser borrows its delegate. */
+static NSDictionary *fn_gallery_node(NSString *name, NSArray *children)
+{
+	if (children == nil) {
+		children = [NSArray array];
+	}
+	return [NSDictionary dictionaryWithObjectsAndKeys:name, @"name", children, @"children", nil];
+}
+
+@interface AGGalleryBrowserSource : NSObject <NSBrowserDelegate>
+{
+	NSArray *_roots;	/* RETAINED: the dictionary tree */
+}
+- (instancetype)initWithRoots:(NSArray *)roots;
+@end
+
+@implementation AGGalleryBrowserSource
+
+- (instancetype)initWithRoots:(NSArray *)roots
+{
+	self = [super init];
+	if (self != nil) {
+		_roots = [roots retain];
+	}
+	return self;
+}
+
+- (void)dealloc
+{
+	[_roots release];
+	[super dealloc];
+}
+
+- (NSInteger)browser:(NSBrowser *)browser numberOfChildrenOfItem:(id)item
+{
+	(void)browser;
+	if (item == nil) {
+		return (NSInteger)[_roots count];
+	}
+	return (NSInteger)[[item objectForKey:@"children"] count];
+}
+
+- (id)browser:(NSBrowser *)browser child:(NSInteger)index ofItem:(id)item
+{
+	NSArray *children = (item == nil) ? _roots : [item objectForKey:@"children"];
+
+	(void)browser;
+	if (index < 0 || (NSUInteger)index >= [children count]) {
+		return nil;
+	}
+	return [children objectAtIndex:(NSUInteger)index];
+}
+
+- (BOOL)browser:(NSBrowser *)browser isLeafItem:(id)item
+{
+	(void)browser;
+	return [[item objectForKey:@"children"] count] == 0;
+}
+
+- (id)browser:(NSBrowser *)browser objectValueForItem:(id)item
+{
+	(void)browser;
+	return [item objectForKey:@"name"];
+}
+
+@end
+
+/* **THE RULE EDITOR'S DELEGATE IS A TREE OF WORDS.** Two roots — Kind and Date — and two leaves under
+ * each, so each row is a three-step path and the flat list is four simple rows. The display value is the
+ * criterion itself, which makes the path legible without a formatting dictionary. */
+@interface AGGalleryRuleSource : NSObject <NSRuleEditorDelegate>
+{
+	NSArray *_roots;		/* RETAINED */
+	NSDictionary *_children;	/* RETAINED: criterion -> its children */
+}
+- (instancetype)init;
+@end
+
+@implementation AGGalleryRuleSource
+
+- (instancetype)init
+{
+	self = [super init];
+	if (self != nil) {
+		_roots = [[NSArray alloc] initWithObjects:@"Kind", @"Date", nil];
+		_children = [[NSDictionary alloc] initWithObjectsAndKeys:
+			[NSArray arrayWithObjects:@"is Photo", @"is Movie", nil], @"Kind",
+			[NSArray arrayWithObjects:@"is Today", @"is Yesterday", nil], @"Date",
+			nil];
+	}
+	return self;
+}
+
+- (void)dealloc
+{
+	[_roots release];
+	[_children release];
+	[super dealloc];
+}
+
+- (NSInteger)ruleEditor:(NSRuleEditor *)editor
+  numberOfChildrenForCriterion:(id)criterion
+	     withRowType:(NSRuleEditorRowType)rowType
+{
+	(void)editor;
+	if (rowType != NSRuleEditorRowTypeSimple) {
+		return 0;
+	}
+	if (criterion == nil) {
+		return (NSInteger)[_roots count];
+	}
+	return (NSInteger)[[_children objectForKey:criterion] count];
+}
+
+- (id)ruleEditor:(NSRuleEditor *)editor
+	    child:(NSInteger)index
+     forCriterion:(id)criterion
+      withRowType:(NSRuleEditorRowType)rowType
+{
+	NSArray *list = (criterion == nil) ? _roots : [_children objectForKey:criterion];
+
+	(void)editor;
+	(void)rowType;
+	if (index < 0 || (NSUInteger)index >= [list count]) {
+		return nil;
+	}
+	return [list objectAtIndex:(NSUInteger)index];
+}
+
+- (id)ruleEditor:(NSRuleEditor *)editor
+  displayValueForCriterion:(id)criterion
+		    inRow:(NSInteger)row
+{
+	(void)editor;
+	(void)row;
+	return criterion;
+}
+
+@end
+
+/* **A TILE DRAWS ITS OWN STATE, WHICH ITS ITEM PUSHES IN — IT HOLDS NO POINTER BACK TO THE ITEM.** The first
+ * version kept a borrowed `NSCollectionViewItem *` and asked it `-isSelected` while drawing. A borrowed pointer is
+ * only sound while the object outlives it, and MEASURED it did not always: the abort a person saw was
+ * `-[NSDate isSelected] is not implemented`, which is this tile sending that message into memory an `NSDate` had
+ * since been allocated in. The item OWNS this view, so the dependency runs the other way — the item writes the two
+ * things the tile draws (the text, and the selection bit) whenever either changes, and the tile cannot reach a
+ * dead object because it holds no reference to one. It also fixes the recycling the demonstration is about: a
+ * reused item sets its text again and the tile draws the NEW object. */
+@interface AGGalleryTileView : NSView
+{
+	NSString *_text;	/* RETAINED: what the tile shows, copied from the represented object */
+	BOOL _selected;
+}
+- (void)setText:(id)value;
+- (void)setTileSelected:(BOOL)selected;
+@end
+
+@implementation AGGalleryTileView
+
+- (void)dealloc
+{
+	[_text release];
+	[super dealloc];
+}
+
+- (void)setText:(id)value
+{
+	NSString *copy = [value isKindOfClass:[NSString class]] ? [(NSString *)value copy] : nil;
+
+	[copy autorelease];
+	if (copy != _text) {
+		[_text release];
+		_text = [copy retain];
+		[self setNeedsDisplay:YES];
+	}
+}
+
+- (void)setTileSelected:(BOOL)selected
+{
+	if (_selected != (selected ? YES : NO)) {
+		_selected = selected ? YES : NO;
+		[self setNeedsDisplay:YES];
+	}
+}
+
+- (void)drawRect:(NSRect)rect
+{
+	NSRect b = [self bounds];
+	NSBezierPath *face = [NSBezierPath bezierPathWithRoundedRect:NSInsetRect(b, 3.0, 3.0) xRadius:5.0 yRadius:5.0];
+	BOOL selected = _selected;
+
+	(void)rect;
+	if (selected) {
+		[[NSColor colorWithCalibratedRed:0.36 green:0.54 blue:0.86 alpha:1.0] setFill];
+	} else {
+		[[NSColor colorWithCalibratedRed:0.93 green:0.95 blue:0.99 alpha:1.0] setFill];
+	}
+	[face fill];
+	[[NSColor colorWithCalibratedWhite:selected ? 0.35 : 0.72 alpha:1.0] setStroke];
+	[face setLineWidth:1.0];
+	[face stroke];
+	if ([_text length] > 0) {
+		NSMutableDictionary *attrs = [NSMutableDictionary dictionary];
+		NSFont *font = [NSFont systemFontOfSize:10.0];
+		NSSize size;
+		CGFloat baseline;
+
+		[attrs setObject:(selected ? [NSColor whiteColor] : [NSColor blackColor])
+			  forKey:NSForegroundColorAttributeName];
+		if (font != nil) {
+			[attrs setObject:font forKey:NSFontAttributeName];
+			size = [_text sizeWithAttributes:attrs];
+			baseline = (NSHeight(b) - (CGFloat)([font ascender] - [font descender])) / 2.0
+				+ (CGFloat)fabs((double)[font descender]);
+			[_text drawAtPoint:NSMakePoint((NSWidth(b) - size.width) / 2.0, baseline)
+				withAttributes:attrs];
+		}
+	}
+}
+
+@end
+
+/* **THE ITEM PUSHES ITS TWO FACTS INTO THE TILE, WHICH IS THE ONLY LINK BETWEEN THEM.** The collection view sets the
+ * represented object (a fresh one when it recycles an item) and the selected bit; both land here and go straight to the
+ * view, so the tile never has to ask the item anything. */
+@interface AGGalleryItem : NSCollectionViewItem
+@end
+
+@implementation AGGalleryItem
+
+- (AGGalleryTileView *)fn_tile
+{
+	NSView *view = [self cg_viewIfLoaded];
+
+	return [view isKindOfClass:[AGGalleryTileView class]] ? (AGGalleryTileView *)view : nil;
+}
+
+- (void)setRepresentedObject:(id)object
+{
+	[super setRepresentedObject:object];
+	[[self fn_tile] setText:object];
+}
+
+- (void)setSelected:(BOOL)flag
+{
+	[super setSelected:flag];
+	[[self fn_tile] setTileSelected:flag];
+}
+
+@end
+
+/* **THE FACTORY IS OVERRIDDEN BECAUSE THE TILE OWNS THE DRAWING.** `-newItemForRepresentedObject:` is
+ * Apple's door for a subclass that wants its own item, and it is the only place a tile can be told which
+ * item it belongs to. The prototype is still set (a collection view with none would be a view with no
+ * stated cell size), but this factory is what makes the tiles.
+ *
+ * **AND THE ANSWER IS +1, WHICH IS THE ONE THING A FACTORY OVERRIDE MUST NOT GET WRONG.** Apple's sentence is
+ * "the returned object should not be autoreleased", and the collection view balances the +1 against the retain its
+ * own array takes (`NSCollectionView.m`, `-cg_itemAtIndex:create:`). THIS FACTORY USED TO AUTORELEASE IT — one
+ * extra word — so the item was deallocated when the pool drained while the view tree still held its TILE (the
+ * collection view retains its subviews), and the tile's borrowed `-item` pointer went into freed memory. MEASURED
+ * as the abort a person saw: `-[NSDate isSelected] is not implemented`, because the recycled address had become an
+ * `NSDate` by the time the next paint asked a tile to draw. A borrowed pointer is only sound while the object
+ * outlives it, and the ownership contract above is what makes the item outlive the tile. */
+@interface AGGalleryCollectionView : NSCollectionView
+@end
+
+@implementation AGGalleryCollectionView
+
+- (NSCollectionViewItem *)newItemForRepresentedObject:(id)object
+{
+	/* +1, NOT AUTORELEASED: see the note above. `-itemAtIndex:` releases it after storing it. */
+	AGGalleryItem *item = [[AGGalleryItem alloc] initWithNibName:nil bundle:nil];
+	AGGalleryTileView *tile = [[AGGalleryTileView alloc] initWithFrame:NSMakeRect(0.0, 0.0, 88.0, 52.0)];
+
+	[item setView:tile];		/* the item owns the tile; the tile holds no pointer back */
+	[tile release];
+	[item setRepresentedObject:object];	/* pushes the text into the tile */
+	[item setSelected:NO];
+	return item;
+}
+
+@end
+
+/* **THE RULER'S CLIENT DRAWS RULES, NOT TEXT.** NSRulerView draws its own ticks and numbers; the client
+ * only has to have marks for them to line up with, so this paints a grid and nothing else. */
+@interface AGGalleryRulerDoc : NSView
+@end
+
+@implementation AGGalleryRulerDoc
+
+- (void)drawRect:(NSRect)rect
+{
+	NSRect b = [self bounds];
+	NSBezierPath *lines = [NSBezierPath bezierPath];
+	CGFloat x;
+
+	(void)rect;
+	[[NSColor whiteColor] setFill];
+	[[NSBezierPath bezierPathWithRect:b] fill];
+	for (x = 0.0; x <= NSWidth(b); x += 50.0) {
+		[lines moveToPoint:NSMakePoint(x, 0.0)];
+		[lines lineToPoint:NSMakePoint(x, NSHeight(b))];
+	}
+	[lines setLineWidth:1.0];
+	[[NSColor colorWithCalibratedWhite:0.78 alpha:1.0] setStroke];
+	[lines stroke];
+}
+
+@end
+
+/* A 9 x 8 TAB, drawn rather than found, for the ruler's markers. */
+static NSImage *fn_gallery_marker_image(void)
+{
+	NSBitmapImageRep *rep = [[NSBitmapImageRep alloc] initWithBitmapDataPlanes:NULL pixelsWide:9 pixelsHigh:8
+		bitsPerSample:8 samplesPerPixel:4 hasAlpha:YES isPlanar:NO
+		colorSpaceName:NSCalibratedRGBColorSpace bytesPerRow:9 * 4 bitsPerPixel:32];
+	NSImage *image = [[NSImage alloc] initWithSize:NSMakeSize(9.0, 8.0)];
+	NSBezierPath *mark = [NSBezierPath bezierPath];
+
+	[NSGraphicsContext setCurrentContext:[NSGraphicsContext graphicsContextWithBitmapImageRep:rep]];
+	[[NSColor colorWithCalibratedRed:0.36 green:0.54 blue:0.86 alpha:1.0] setFill];
+	[mark moveToPoint:NSMakePoint(0.0, 8.0)];
+	[mark lineToPoint:NSMakePoint(9.0, 8.0)];
+	[mark lineToPoint:NSMakePoint(4.5, 0.0)];
+	[mark closePath];
+	[mark fill];
+	[image addRepresentation:rep];
+	[rep release];
+	return [image autorelease];
+}
+
 @implementation AGControlsController
 
 - (BOOL)validateMenuItem:(NSMenuItem *)item
@@ -709,6 +1186,14 @@ static void fn_playground_fill(NSTextView *view)
 		[item setAction:@selector(showDataViews:)];
 		return item;
 	}
+	if ([itemIdentifier isEqualToString:@"gallery"]) {
+		[item setLabel:@"Gallery"];
+		[item setPaletteLabel:@"GUI Gallery"];
+		[item setImage:galleryIcon];
+		[item setTarget:self];
+		[item setAction:@selector(showGallery:)];
+		return item;
+	}
 	if ([itemIdentifier isEqualToString:@"action"]) {
 		[item setLabel:@"Action"];
 		[item setPaletteLabel:@"Action"];
@@ -733,14 +1218,15 @@ static void fn_playground_fill(NSTextView *view)
 - (NSArray *)toolbarDefaultItemIdentifiers:(NSToolbar *)toolbar
 {
 	(void)toolbar;
-	return [NSArray arrayWithObjects:@"grid", @"playground", @"table", NSToolbarSeparatorItemIdentifier,
-					 @"action", NSToolbarFlexibleSpaceItemIdentifier, @"disabled", nil];
+	return [NSArray arrayWithObjects:@"grid", @"playground", @"table", @"gallery",
+					 NSToolbarSeparatorItemIdentifier, @"action",
+					 NSToolbarFlexibleSpaceItemIdentifier, @"disabled", nil];
 }
 
 - (NSArray *)toolbarAllowedItemIdentifiers:(NSToolbar *)toolbar
 {
 	(void)toolbar;
-	return [NSArray arrayWithObjects:@"grid", @"playground", @"table", @"action", @"disabled",
+	return [NSArray arrayWithObjects:@"grid", @"playground", @"table", @"gallery", @"action", @"disabled",
 					 NSToolbarSeparatorItemIdentifier, NSToolbarSpaceItemIdentifier,
 					 NSToolbarFlexibleSpaceItemIdentifier, nil];
 }
@@ -1102,6 +1588,517 @@ static void fn_playground_fill(NSTextView *view)
 	[root release];
 }
 
+/* ============================================================================================ *
+ * THE GUI GALLERY                                                                               *
+ *                                                                                               *
+ * **EVERY CLASS THE CONTROLS WINDOW DOES NOT SHOW IS HERE, AND EACH ONE IS LIVE.** A matrix that  *
+ * answers a click, a form to type in, an image view with a picture, a colour well that opens the *
+ * shared panel, a bare scroller, a browser with three columns, a token field, two rule editors,  *
+ * a collection view of tiles, a ruler over a document, and a drawer hinged to this window. The   *
+ * panel buttons below them open the real panels, and the menu carries the same acts.             *
+ * ============================================================================================ */
+- (void)showGallery:(id)sender
+{
+	NSWindow *w;
+	NSView *root;
+	NSScrollView *scroll;
+	AGGalleryDocument *doc;
+	NSMatrix *matrix;
+	NSForm *form;
+	NSImageView *imageView;
+	NSColorWell *well;
+	NSScroller *scroller;
+	NSBrowser *browser;
+	NSTokenField *tokens;
+	NSRuleEditor *rules;
+	NSPredicateEditor *predicates;
+	NSPredicateEditorRowTemplate *nameTemplate;
+	NSPredicateEditorRowTemplate *ageTemplate;
+	AGGalleryCollectionView *collection;
+	NSCollectionViewItem *prototypeItem;
+	NSView *prototypeView;
+	NSScrollView *rulerScroll;
+	AGGalleryRulerDoc *rulerDoc;
+	NSArray *browserRoots;
+	NSRulerView *ruler;
+	NSImage *markerImage;
+	NSArray *markerLocations;
+	NSUInteger i;
+
+	(void)sender;
+	if (_galleryWindow != nil) {
+		[_galleryWindow makeKeyAndOrderFront:nil];
+		return;
+	}
+
+	w = [[NSWindow alloc] initWithContentRect:NSMakeRect(40.0, 40.0, 700.0, 500.0)
+		styleMask:(NSTitledWindowMask | NSClosableWindowMask | NSMiniaturizableWindowMask | NSResizableWindowMask)
+		backing:NSBackingStoreBuffered defer:NO];
+	root = [[NSView alloc] initWithFrame:NSMakeRect(0.0, 0.0, 700.0, 500.0)];
+	scroll = [[NSScrollView alloc] initWithFrame:NSMakeRect(10.0, 10.0, 680.0, 480.0)];
+	[scroll setBorderType:NSLineBorder];
+	[scroll setHasVerticalScroller:YES];
+	[scroll setHasHorizontalScroller:NO];
+	doc = [[AGGalleryDocument alloc] initWithFrame:NSMakeRect(0.0, 0.0, AG_GALLERY_W, AG_GALLERY_H)];
+	[doc setFlipped:YES];
+	[doc addSubview:fn_gallery_label(@"The AppKit's views and controls, all live", NSMakeRect(20.0, 10.0, 610.0, 20.0),
+		YES, 13.0)];
+	[doc addSubview:fn_gallery_label(@"Scroll for every section; each control below is a real instance you can use.",
+		NSMakeRect(20.0, 32.0, 610.0, 16.0), NO, 10.0)];
+
+	/* ---- 1. THE GRID, THE FORM, THE PICTURE, THE WELL AND THE BARE BAR. ---------------------- */
+	[doc addSubview:fn_gallery_label(@"NSMatrix \u00b7 NSForm \u00b7 NSImageView \u00b7 NSColorWell \u00b7 NSScroller",
+		NSMakeRect(20.0, 58.0, 610.0, 18.0), YES, 12.0)];
+
+	/* A RADIO MATRIX: one cell on, the others off, and a click moves the choice. The grid is 2 x 2 so
+	 * the matrix's own arithmetic -- a point becomes a row and a column -- is visible rather than implied. */
+	matrix = [[NSMatrix alloc] initWithFrame:NSMakeRect(20.0, 82.0, 190.0, 84.0)
+					 mode:NSRadioModeMatrix cellClass:[NSButtonCell class]
+				  numberOfRows:2 numberOfColumns:2];
+	[matrix setCellSize:NSMakeSize(86.0, 24.0)];
+	[matrix setIntercellSpacing:NSMakeSize(4.0, 4.0)];
+	[matrix setAllowsEmptySelection:NO];
+	{
+		NSArray *titles = [NSArray arrayWithObjects:@"Alpha", @"Beta", @"Gamma", @"Delta", nil];
+		NSInteger r, c;
+
+		for (r = 0; r < 2; r++) {
+			for (c = 0; c < 2; c++) {
+				NSCell *cell = [matrix cellAtRow:r column:c];
+
+				[(NSButtonCell *)cell setButtonType:NSRadioButton];
+				[cell setTitle:[titles objectAtIndex:(NSUInteger)(r * 2 + c)]];
+			}
+		}
+	}
+	[matrix selectCellAtRow:0 column:0];
+	[matrix setTarget:self];
+	[matrix setAction:@selector(noop:)];
+	[doc addSubview:matrix];
+	[matrix release];
+
+	/* THE FORM IS THE MATRIX'S OTHER FACE: one column, a label band per row, and an editable value. */
+	form = [[NSForm alloc] initWithFrame:NSMakeRect(222.0, 82.0, 210.0, 96.0)];
+	[form addEntry:@"Name"];
+	[form addEntry:@"Host"];
+	[form addEntry:@"Port"];
+	[form setEntryWidth:130.0];
+	[form setInterlineSpacing:4.0];
+	/* **THE FORM SIZES ITSELF TO ITS ROWS WHEN AN ENTRY IS ADDED, AND ITS ROWS ARE 22 POINTS PLUS THE
+	 * INTERLINE SPACING** — so -addEntry: leaves it eight points short of the three rows it now holds. The
+	 * frame is put back AFTER the last entry for that reason, not before the first. */
+	[form setFrameSize:NSMakeSize(210.0, 84.0)];
+	/* **THE ENTRIES START EMPTY, WHICH IS WHAT A FORM IS FOR.** They are where a person types; a value put
+	 * in by the demonstration would only be a value the demonstration chose. */
+	[doc addSubview:form];
+	[form release];
+
+	/* THE PICTURE IS DRAWN BY THIS FILE, so the demonstration still needs no image file on a search path. */
+	imageView = [[NSImageView alloc] initWithFrame:NSMakeRect(444.0, 82.0, 80.0, 84.0)];
+	[imageView setImage:fn_playground_picture(64.0, 48.0)];
+	[imageView setImageAlignment:NSImageAlignCenter];
+	[imageView setImageScaling:NSImageScaleProportionallyUpOrDown];
+	[imageView setImageFrameStyle:NSImageFramePhoto];
+	[doc addSubview:imageView];
+	[imageView release];
+
+	/* A CLICK ON THE WELL ACTIVATES IT, AND THE SHARED PANEL OPENS AS THE WELL'S TARGET. */
+	well = [[NSColorWell alloc] initWithFrame:NSMakeRect(536.0, 96.0, 48.0, 26.0)];
+	[well setColor:[NSColor colorWithCalibratedRed:0.85 green:0.42 blue:0.20 alpha:1.0]];
+	[well setTarget:self];
+	[well setAction:@selector(colorWellChanged:)];
+	[doc addSubview:well];
+	[well release];
+	[doc addSubview:fn_gallery_label(@"click", NSMakeRect(536.0, 126.0, 60.0, 14.0), NO, 9.0)];
+
+	/* AND THE SCROLLER ON ITS OWN, OUTSIDE ANY SCROLL VIEW: a float value and a knob proportion. */
+	scroller = [[NSScroller alloc] initWithFrame:NSMakeRect(594.0, 82.0, 15.0, 84.0)];
+	[scroller setFloatValue:0.35 knobProportion:0.4];
+	[doc addSubview:scroller];
+	[scroller release];
+
+	/* ---- 2. THE BROWSER. ---------------------------------------------------------------------- */
+	[doc addSubview:fn_gallery_label(@"NSBrowser -- columns of rows, each column a table",
+		NSMakeRect(20.0, 188.0, 610.0, 18.0), YES, 12.0)];
+	browserRoots = [NSArray arrayWithObjects:
+		fn_gallery_node(@"AppKit", [NSArray arrayWithObjects:
+			fn_gallery_node(@"Controls", [NSArray arrayWithObjects:
+				fn_gallery_node(@"Buttons", nil),
+				fn_gallery_node(@"Sliders", nil),
+				fn_gallery_node(@"Matrix", nil), nil]),
+			fn_gallery_node(@"Views", [NSArray arrayWithObjects:
+				fn_gallery_node(@"Table", nil),
+				fn_gallery_node(@"Outline", nil),
+				fn_gallery_node(@"Browser", nil), nil]),
+			nil]),
+		fn_gallery_node(@"Foundation", [NSArray arrayWithObjects:
+			fn_gallery_node(@"Strings", nil),
+			fn_gallery_node(@"Collections", nil), nil]),
+		fn_gallery_node(@"Agora", [NSArray arrayWithObjects:
+			fn_gallery_node(@"Window server", nil),
+			fn_gallery_node(@"Workspace", nil), nil]),
+		nil];
+	_galleryBrowserSource = [[AGGalleryBrowserSource alloc] initWithRoots:browserRoots];
+	browser = [[NSBrowser alloc] initWithFrame:NSMakeRect(20.0, 210.0, 610.0, 160.0)];
+	[browser setColumnWidth:190.0];
+	[browser setDelegate:_galleryBrowserSource];
+	[browser loadColumnZero];
+	[doc addSubview:browser];
+	[browser release];
+
+	/* ---- 3. THE TOKEN FIELD, THE RULE EDITOR AND THE PREDICATE EDITOR. ----------------------- */
+	[doc addSubview:fn_gallery_label(@"NSTokenField \u00b7 NSRuleEditor \u00b7 NSPredicateEditor",
+		NSMakeRect(20.0, 392.0, 610.0, 18.0), YES, 12.0)];
+	tokens = [[NSTokenField alloc] initWithFrame:NSMakeRect(20.0, 414.0, 280.0, 24.0)];
+	[tokens setTokenStyle:NSRoundedTokenStyle];
+	[tokens setStringValue:@"Agora, Cocoa, Wayland"];
+	[doc addSubview:tokens];
+	[tokens release];
+
+	_galleryRuleSource = [[AGGalleryRuleSource alloc] init];
+	rules = [[NSRuleEditor alloc] initWithFrame:NSMakeRect(20.0, 448.0, 280.0, 116.0)];
+	[rules setDelegate:_galleryRuleSource];
+	[rules setNestingMode:NSRuleEditorNestingModeList];
+	[rules addRow:nil];
+	[rules addRow:nil];
+	[rules addRow:nil];
+	[rules addRow:nil];
+	/* **AND EACH ROW IS TOLD A DIFFERENT PATH, BECAUSE `-addRow:` ALWAYS TAKES THE FIRST ONE.** The delegate's
+	 * tree gives the words; these three calls are what make the four rows say four different things. */
+	[rules setCriteria:[NSArray arrayWithObjects:@"Kind", @"is Movie", nil]
+	   andDisplayValues:[NSArray array] forRowAtIndex:1];
+	[rules setCriteria:[NSArray arrayWithObjects:@"Date", @"is Today", nil]
+	   andDisplayValues:[NSArray array] forRowAtIndex:2];
+	[rules setCriteria:[NSArray arrayWithObjects:@"Date", @"is Yesterday", nil]
+	   andDisplayValues:[NSArray array] forRowAtIndex:3];
+	[doc addSubview:rules];
+	[rules release];
+
+	/* THE PREDICATE EDITOR IS ITS OWN DELEGATE, so it needs no source here -- only the templates that
+	 * name what its rows may compare. Two templates: a string and an integer. */
+	predicates = [[NSPredicateEditor alloc] initWithFrame:NSMakeRect(320.0, 414.0, 310.0, 150.0)];
+	nameTemplate = [[NSPredicateEditorRowTemplate alloc]
+		initWithLeftExpressions:[NSArray arrayWithObject:[NSExpression expressionForKeyPath:@"name"]]
+		rightExpressionAttributeType:NSStringAttributeType
+		modifier:NSDirectPredicateModifier
+		operators:[NSArray arrayWithObjects:
+			[NSNumber numberWithUnsignedInteger:NSEqualToPredicateOperatorType],
+			[NSNumber numberWithUnsignedInteger:NSBeginsWithPredicateOperatorType], nil]
+		options:0];
+	ageTemplate = [[NSPredicateEditorRowTemplate alloc]
+		initWithLeftExpressions:[NSArray arrayWithObject:[NSExpression expressionForKeyPath:@"age"]]
+		rightExpressionAttributeType:NSInteger32AttributeType
+		modifier:NSDirectPredicateModifier
+		operators:[NSArray arrayWithObject:[NSNumber numberWithUnsignedInteger:NSEqualToPredicateOperatorType]]
+		options:0];
+	[predicates setRowTemplates:[NSArray arrayWithObjects:nameTemplate, ageTemplate, nil]];
+	[nameTemplate release];
+	[ageTemplate release];
+	[predicates setObjectValue:[NSPredicate predicateWithFormat:@"name BEGINSWITH \"Ag\""]];
+	[doc addSubview:predicates];
+	[predicates release];
+
+	/* ---- 4. THE COLLECTION VIEW AND THE RULER. ----------------------------------------------- */
+	[doc addSubview:fn_gallery_label(@"NSCollectionView -- recycled tiles",
+		NSMakeRect(20.0, 590.0, 280.0, 18.0), YES, 12.0)];
+	[doc addSubview:fn_gallery_label(@"NSScrollView + NSRulerView -- markers on a document",
+		NSMakeRect(320.0, 590.0, 310.0, 18.0), YES, 12.0)];
+	collection = [[AGGalleryCollectionView alloc] initWithFrame:NSMakeRect(20.0, 612.0, 280.0, 150.0)];
+	prototypeItem = [[NSCollectionViewItem alloc] initWithNibName:nil bundle:nil];
+	prototypeView = [[NSView alloc] initWithFrame:NSMakeRect(0.0, 0.0, 88.0, 52.0)];
+	[prototypeItem setView:prototypeView];
+	[prototypeView release];
+	[collection setItemPrototype:prototypeItem];
+	[prototypeItem release];
+	[collection setMinItemSize:NSMakeSize(88.0, 52.0)];
+	[collection setMaxItemSize:NSMakeSize(88.0, 52.0)];
+	[collection setMaxNumberOfColumns:3];
+	[collection setSelectable:YES];
+	[collection setAllowsMultipleSelection:YES];
+	[collection setBackgroundColors:[NSArray arrayWithObject:[NSColor whiteColor]]];
+	[collection setContent:[NSArray arrayWithObjects:@"Matrix", @"Form", @"Image", @"Colour", @"Browser",
+		@"Drawer", nil]];
+	[collection setSelectionIndexes:[NSIndexSet indexSetWithIndex:0]];
+	[doc addSubview:collection];
+	[collection release];
+
+	rulerScroll = [[NSScrollView alloc] initWithFrame:NSMakeRect(320.0, 612.0, 310.0, 150.0)];
+	[rulerScroll setBorderType:NSLineBorder];
+	[rulerScroll setHasHorizontalScroller:YES];
+	[rulerScroll setHasVerticalScroller:YES];
+	rulerDoc = [[AGGalleryRulerDoc alloc] initWithFrame:NSMakeRect(0.0, 0.0, 700.0, 110.0)];
+	[rulerScroll setDocumentView:rulerDoc];
+	[rulerDoc release];
+	[rulerScroll setHasHorizontalRuler:YES];
+	[rulerScroll setRulersVisible:YES];
+	ruler = [rulerScroll horizontalRulerView];
+	markerImage = fn_gallery_marker_image();
+	markerLocations = [NSArray arrayWithObjects:[NSNumber numberWithDouble:40.0],
+		[NSNumber numberWithDouble:160.0], [NSNumber numberWithDouble:320.0],
+		[NSNumber numberWithDouble:480.0], nil];
+	for (i = 0; i < [markerLocations count]; i++) {
+		NSRulerMarker *marker = [[NSRulerMarker alloc] initWithRulerView:ruler
+			markerLocation:(CGFloat)[[markerLocations objectAtIndex:i] doubleValue]
+			image:markerImage imageOrigin:NSZeroPoint];
+
+		[ruler addMarker:marker];
+		[marker release];
+	}
+	[doc addSubview:rulerScroll];
+	[rulerScroll release];
+
+	/* ---- 5. THE PANEL BUTTONS, AND THE DRAWER THAT HANGS OFF THIS WINDOW. -------------------- */
+	[doc addSubview:fn_gallery_label(@"NSDrawer \u00b7 NSAlert \u00b7 NSSavePanel \u00b7 NSOpenPanel \u00b7 NSColorPanel \u00b7 NSFontPanel \u00b7 NSPrintPanel",
+		NSMakeRect(20.0, 784.0, 610.0, 18.0), YES, 12.0)];
+	[doc addSubview:fn_gallery_button(@"Open the Drawer", NSMakeRect(20.0, 808.0, 130.0, 23.0), self,
+		@selector(toggleDrawer:))];
+	[doc addSubview:fn_gallery_button(@"Alert\u2026", NSMakeRect(158.0, 808.0, 80.0, 23.0), self,
+		@selector(showAlert:))];
+	[doc addSubview:fn_gallery_button(@"Save Panel\u2026", NSMakeRect(246.0, 808.0, 110.0, 23.0), self,
+		@selector(showSavePanel:))];
+	[doc addSubview:fn_gallery_button(@"Open Panel\u2026", NSMakeRect(364.0, 808.0, 110.0, 23.0), self,
+		@selector(showOpenPanel:))];
+	[doc addSubview:fn_gallery_button(@"Colour Panel\u2026", NSMakeRect(482.0, 808.0, 130.0, 23.0), self,
+		@selector(showColorPanel:))];
+	[doc addSubview:fn_gallery_button(@"Font Panel\u2026", NSMakeRect(20.0, 840.0, 120.0, 23.0), self,
+		@selector(showFontPanel:))];
+	[doc addSubview:fn_gallery_button(@"Print Panel\u2026", NSMakeRect(148.0, 840.0, 120.0, 23.0), self,
+		@selector(showPrintPanel:))];
+	[doc addSubview:fn_gallery_button(@"Dock Badge", NSMakeRect(276.0, 840.0, 110.0, 23.0), self,
+		@selector(toggleDockBadge:))];
+
+	[scroll setDocumentView:doc];
+	[doc release];
+	_galleryScroll = scroll;
+	[root addSubview:scroll];
+	[scroll release];
+	[w setContentView:root];
+	[root release];
+	[w setTitle:@"GUI Gallery"];
+	[w setReleasedWhenClosed:NO];
+
+	/* **THE DRAWER IS A CHILD WINDOW, AND THE PARENT RETAINS IT.** Its content is the same kind of ordinary
+	 * view an application would hand it; the button that closes it is this controller's action. */
+	_galleryDrawer = [[NSDrawer alloc] initWithContentSize:NSMakeSize(140.0, 180.0) preferredEdge:NSMaxXEdge];
+	[_galleryDrawer setParentWindow:w];
+	{
+		NSView *drawerContent = [[NSView alloc] initWithFrame:NSMakeRect(0.0, 0.0, 140.0, 180.0)];
+
+		[drawerContent addSubview:fn_gallery_label(@"NSDrawer", NSMakeRect(12.0, 140.0, 116.0, 18.0), YES, 12.0)];
+		[drawerContent addSubview:fn_gallery_label(@"Hinged to the edge.",
+			NSMakeRect(12.0, 100.0, 116.0, 28.0), NO, 10.0)];
+		[drawerContent addSubview:fn_gallery_button(@"Close", NSMakeRect(12.0, 12.0, 116.0, 23.0), self,
+			@selector(toggleDrawer:))];
+		[_galleryDrawer setContentView:drawerContent];
+		[drawerContent release];
+	}
+
+	_galleryWindow = w;
+	[w makeKeyAndOrderFront:nil];
+	fprintf(stderr, "controls: gallery window = %.0f,%.0f %.0fx%.0f, visible %d\n",
+		[w frame].origin.x, [w frame].origin.y, [w frame].size.width, [w frame].size.height,
+		(int)[w isVisible]);
+	fflush(stderr);
+	fprintf(stderr, "controls: gallery -- document %.0fx%.0f, %lu browser roots, %lu rules, %lu tiles, "
+		"%lu rulers' markers\n",
+		AG_GALLERY_W, AG_GALLERY_H, (unsigned long)[browserRoots count],
+		(unsigned long)[rules numberOfRows],
+		(unsigned long)[[collection content] count], (unsigned long)[[ruler markers] count]);
+}
+
+/* **THE DOCK'S BADGE IS A REQUEST ON ANY WINDOW OF THE CONNECTION**, which is the application; the Dock reads it
+ * out of the window list it already has. A demonstration without the Dock running still exercises the door. */
+- (void)toggleDockBadge:(id)sender
+{
+	NSDockTile *tile = (NSDockTile *)[[NSApplication sharedApplication] dockTile];
+
+	(void)sender;
+	if (tile == nil) {
+		fprintf(stderr, "controls: this application has no dock tile\n");
+		return;
+	}
+	if ([[tile badgeLabel] length] > 0) {
+		[tile setBadgeLabel:nil];
+	} else {
+		[tile setBadgeLabel:@"7"];
+	}
+	[tile display];
+	fprintf(stderr, "controls: dock badge = %s\n",
+		[[tile badgeLabel] length] > 0 ? [[tile badgeLabel] UTF8String] : "(none)");
+}
+
+/* **THE BOTTOM OF THE GALLERY IS THE PANEL BUTTONS, AND `--gallery-bottom` OPENS THERE** — a person
+ * looking at the drawer and the panels should not have to scroll to find them. The clip view scrolls in
+ * document coordinates, so the point is the document's height less the clip's. */
+- (void)scrollGalleryToBottom
+{
+	NSClipView *clip;
+	NSPoint point;
+
+	if (_galleryScroll == nil) {
+		return;
+	}
+	/* **THE SCROLL VIEW IS TILED FIRST, BECAUSE A CLIP VIEW THAT HAS NOT BEEN SIZED IS AS TALL AS ITS DOCUMENT**
+	 * — and then there is no travel to ask for. `-tile` gives the clip its real height, which is what the sum
+	 * below subtracts. */
+	[_galleryScroll tile];
+	clip = [_galleryScroll contentView];
+	point = NSMakePoint(0.0, AG_GALLERY_H - NSHeight([clip bounds]));
+	if (point.y < 0.0) {
+		point.y = 0.0;
+	}
+	[clip scrollToPoint:point];
+	[_galleryScroll reflectScrolledClipView:clip];
+}
+
+- (void)toggleDrawer:(id)sender
+{
+	(void)sender;
+	if (_galleryWindow == nil) {
+		[self showGallery:nil];
+	}
+	if (_galleryDrawer == nil) {
+		return;
+	}
+	if ([_galleryDrawer state] == NSDrawerOpenState || [_galleryDrawer state] == NSDrawerOpeningState) {
+		[_galleryDrawer close];
+	} else {
+		[_galleryDrawer open];
+	}
+}
+
+- (void)showAlert:(id)sender
+{
+	NSWindow *parent = [[NSApplication sharedApplication] keyWindow];
+	NSAlert *alert;
+
+	(void)sender;
+	if (parent == nil) {
+		parent = _galleryWindow;
+	}
+	if (parent == nil) {
+		return;
+	}
+	alert = [NSAlert alertWithMessageText:@"Agora's alert"
+				title:@"GUI Gallery"
+			defaultButton:@"OK"
+		      alternateButton:@"Cancel"
+			  otherButton:@"Tell Me More"];
+	[alert setInformativeText:@"This is an NSAlert attached to this window as a sheet. Every button answers with Apple's code."];
+	[alert setAlertStyle:NSInformationalAlertStyle];
+	[alert beginSheetModalForWindow:parent modalDelegate:self
+			 didEndSelector:@selector(alertDidEnd:returnCode:contextInfo:) contextInfo:NULL];
+}
+
+- (void)alertDidEnd:(NSAlert *)alert returnCode:(NSInteger)code contextInfo:(void *)info
+{
+	(void)alert;
+	(void)info;
+	fprintf(stderr, "controls: alert ended with %ld\n", (long)code);
+}
+
+- (void)showColorPanel:(id)sender
+{
+	NSColorPanel *panel = [NSColorPanel sharedColorPanel];
+
+	(void)sender;
+	[panel setColor:[NSColor colorWithCalibratedRed:0.36 green:0.54 blue:0.86 alpha:1.0]];
+	[panel setShowsAlpha:YES];
+	[panel orderFront:nil];
+}
+
+- (void)showFontPanel:(id)sender
+{
+	NSFontPanel *panel = [NSFontPanel sharedFontPanel];
+
+	(void)sender;
+	[panel setPanelFont:[NSFont systemFontOfSize:13.0] isMultiple:NO];
+	[panel orderFront:nil];
+}
+
+/* **THE SAVE AND OPEN PANELS ARE SHEETS ON THE KEY WINDOW.** The completion handler is the panel's own contract:
+ * `NSOKButton` or `NSCancelButton`, and the URL is only meaningful on OK. */
+- (void)showSavePanel:(id)sender
+{
+	NSSavePanel *panel = [NSSavePanel savePanel];
+	NSWindow *parent = [[NSApplication sharedApplication] keyWindow];
+
+	(void)sender;
+	if (parent == nil) {
+		parent = _galleryWindow;
+	}
+	[panel setTitle:@"A Save Panel"];
+	[panel setNameFieldStringValue:@"gallery.txt"];
+	if (parent == nil) {
+		return;
+	}
+	[panel beginSheetModalForWindow:parent completionHandler:^(NSInteger result) {
+		NSString *path = [[panel URL] path];
+
+		fprintf(stderr, "controls: save panel finished %ld, %s\n", (long)result,
+			path != nil ? [path UTF8String] : "(no URL)");
+	}];
+}
+
+- (void)showOpenPanel:(id)sender
+{
+	NSOpenPanel *panel = [NSOpenPanel openPanel];
+	NSWindow *parent = [[NSApplication sharedApplication] keyWindow];
+
+	(void)sender;
+	if (parent == nil) {
+		parent = _galleryWindow;
+	}
+	[panel setTitle:@"An Open Panel"];
+	[panel setCanChooseFiles:YES];
+	[panel setCanChooseDirectories:YES];
+	[panel setAllowsMultipleSelection:YES];
+	if (parent == nil) {
+		return;
+	}
+	[panel beginSheetModalForWindow:parent completionHandler:^(NSInteger result) {
+		fprintf(stderr, "controls: open panel finished %ld, %lu URL(s)\n", (long)result,
+			(unsigned long)[[panel URLs] count]);
+	}];
+}
+
+- (void)showPrintPanel:(id)sender
+{
+	NSPrintPanel *panel = [NSPrintPanel printPanel];
+	NSPrintInfo *info = [[NSPrintInfo alloc] init];
+	NSWindow *parent = [[NSApplication sharedApplication] keyWindow];
+
+	(void)sender;
+	if (parent == nil) {
+		parent = _galleryWindow;
+	}
+	[info setJobDisposition:NSPrintPreviewJob];
+	[panel setOptions:(NSPrintPanelShowsCopies | NSPrintPanelShowsPageRange)];
+	if (parent == nil) {
+		[info release];
+		return;
+	}
+	[panel beginSheetWithPrintInfo:info modalForWindow:parent delegate:self
+			 didEndSelector:@selector(printPanelDidEnd:returnCode:contextInfo:) contextInfo:NULL];
+	[info release];
+}
+
+- (void)printPanelDidEnd:(NSPrintPanel *)panel returnCode:(NSInteger)code contextInfo:(void *)info
+{
+	(void)panel;
+	(void)info;
+	fprintf(stderr, "controls: print panel ended with %ld\n", (long)code);
+}
+
+- (void)colorWellChanged:(id)sender
+{
+	NSColor *color = [sender color];
+
+	fprintf(stderr, "controls: colour well = %.2f, %.2f, %.2f, %.2f\n",
+		(double)[color redComponent], (double)[color greenComponent],
+		(double)[color blueComponent], (double)[color alphaComponent]);
+}
+
 @end
 
 /* ONE TITLE, ITS ITEMS, AND WHOSE ACTION THEY CARRY. Written as a helper because the bar below makes four of them and
@@ -1150,6 +2147,23 @@ static NSMenuItem *add_menu(NSMenu *bar, NSString *title, NSArray *itemTitles, N
 	[titleItem setSubmenu:contents];
 	[contents release];
 	[bar addItem:titleItem];
+	return titleItem;
+}
+
+/* **ONE MENU, ONE ACTION PER ITEM.** The helper above gives a menu a single selector, which is the shape
+ * File and Edit have; the Gallery menu is a list of nine different acts, so the titles are made by
+ * `add_menu` with no action and the selectors are then set one by one from a parallel array of names. A
+ * selector cannot live in an `NSArray`, and its name can, which is why the array is strings. */
+static NSMenuItem *add_action_menu(NSMenu *bar, NSString *title, NSArray *itemTitles, NSArray *keys,
+				   NSArray *actionNames, id target)
+{
+	NSMenuItem *titleItem = add_menu(bar, title, itemTitles, keys, target, NULL);
+	NSMenu *contents = [titleItem submenu];
+	NSUInteger i;
+
+	for (i = 0; i < [actionNames count] && i < [itemTitles count]; i++) {
+		[[contents itemAtIndex:(NSInteger)i] setAction:NSSelectorFromString([actionNames objectAtIndex:i])];
+	}
 	return titleItem;
 }
 
@@ -1233,6 +2247,9 @@ int main(int argc, char **argv)
 {
 	int seconds = 0;
 	int showData = 0;
+	int showGalleryWindow = 0;
+	int showGalleryBottom = 0;
+	int showGalleryDrawer = 0;
 	int showPlaygroundWindow = 1;
 	int i;
 
@@ -1247,6 +2264,18 @@ int main(int argc, char **argv)
 			seconds = atoi(argv[++i]);
 		} else if (strcmp(argv[i], "--data") == 0) {
 			showData = 1;
+		} else if (strcmp(argv[i], "--gallery") == 0) {
+			/* **THE GALLERY AT STARTUP, SO `run-controls.sh --gallery` OPENS ON IT.** It is otherwise one menu
+			 * item or toolbar item away, which is right for the controls window and slower for looking at this one. */
+			showGalleryWindow = 1;
+		} else if (strcmp(argv[i], "--gallery-bottom") == 0) {
+			/* AND THE BOTTOM OF IT, WHERE THE DRAWER AND THE PANEL BUTTONS ARE. */
+			showGalleryWindow = 1;
+			showGalleryBottom = 1;
+		} else if (strcmp(argv[i], "--gallery-drawer") == 0) {
+			/* AND WITH THE DRAWER OPEN, WHICH IS OTHERWISE A BUTTON PRESS AWAY. */
+			showGalleryWindow = 1;
+			showGalleryDrawer = 1;
 		} else if (strcmp(argv[i], "--no-playground") == 0) {
 			/* **THE PLAYGROUND IS MAPPED LAST SO IT IS IN FRONT, WHICH IS RIGHT FOR LOOKING AT THE TEXT AND WRONG FOR
 			 * LOOKING AT THE CONTROLS** — it covers the right column, which is where the newest controls are. This flag
@@ -1640,6 +2669,7 @@ int main(int argc, char **argv)
 		controller->playgroundIcon = fn_toolbar_icon(1);
 		controller->actionIcon = fn_toolbar_icon(2);
 		controller->tableIcon = fn_toolbar_icon(3);
+		controller->galleryIcon = fn_toolbar_icon(4);
 		toolbar = [[NSToolbar alloc] initWithIdentifier:@"AGControlsToolbar"];
 		[toolbar setDelegate:controller];
 		[toolbar setDisplayMode:NSToolbarDisplayModeIconAndLabel];
@@ -1664,6 +2694,19 @@ int main(int argc, char **argv)
 			 [NSArray arrayWithObjects:@"t", nil], controller, @selector(showPlayground:));
 		add_menu(bar, @"Data", [NSArray arrayWithObjects:@"Table & Outline", nil],
 			 [NSArray arrayWithObjects:@"d", nil], controller, @selector(showDataViews:));
+		/* **AND A GALLERY MENU, WHERE THE REST OF THE CLASSES LIVE.** Each item is a different act, so this is the
+		 * one menu whose items do not share a selector; `add_action_menu` carries the parallel list. The panels are
+		 * here rather than in the gallery window as well because a panel is an act a person reaches for from the
+		 * menu bar, and the window's buttons are the same acts in reach of the scroll. */
+		add_action_menu(bar, @"Gallery",
+			[NSArray arrayWithObjects:@"All Classes", @"Drawer", @"Alert\u2026", @"Colour Panel\u2026",
+				@"Font Panel\u2026", @"Save Panel\u2026", @"Open Panel\u2026", @"Print Panel\u2026",
+				@"Dock Badge", nil],
+			[NSArray arrayWithObjects:@"G", @"", @"", @"", @"", @"", @"", @"", nil],
+			[NSArray arrayWithObjects:@"showGallery:", @"toggleDrawer:", @"showAlert:", @"showColorPanel:",
+				@"showFontPanel:", @"showSavePanel:", @"showOpenPanel:", @"showPrintPanel:",
+				@"toggleDockBadge:", nil],
+			controller);
 		add_menu(bar, @"Edit", [NSArray arrayWithObjects:@"Undo", @"Redo", nil],
 			 [NSArray arrayWithObjects:@"z", @"Z", nil], controller, @selector(noop:));
 		add_menu(bar, @"View", [NSArray arrayWithObjects:@"Show Grid", @"Show Ruler", nil],
@@ -1690,6 +2733,21 @@ int main(int argc, char **argv)
 		}
 		if (showData) {
 			[controller showDataViews:nil];
+		}
+		if (showGalleryWindow) {
+			[controller showGallery:nil];
+			if (showGalleryBottom) {
+				[controller scrollGalleryToBottom];
+			}
+			if (showGalleryDrawer) {
+				/* **THE FLAG IS FOR LOOKING AT THE DRAWER, SO THE DEMONSTRATION TAKES THE FRONTMOST STATE.** In a
+				 * real session a click has already activated the application; a launcher that opens straight into the
+				 * gallery has not asked the compositor for the keyboard, and the drawer's visibility rule (parent
+				 * visible, key, and the application active) would honestly keep it hidden. `-activate` is the same door
+				 * a click reaches, not a second activation rule. */
+				[app activate];
+				[controller toggleDrawer:nil];
+			}
 		}
 		/* ONE LINE OF GEOMETRY, so that a screenshot can be READ against the numbers the application believes rather
 		 * than against a guess about where a window landed. */
