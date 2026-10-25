@@ -58,6 +58,16 @@
 #import <AppKit/NSWindow.h>
 #import <AppKit/NSPrintOperation.h>
 #import <AppKit/NSTrackingArea.h>
+
+/* **THE DRAWER SYNC IS DECLARED HERE RATHER THAN IN THE PUBLIC HEADER.** It is the window's half of a relationship
+ * `NSDrawer` owns — the layout rule and the list live in `NSDrawer.m` — and the doors below are the only callers. A
+ * `cg_` selector in the header would be a third party's business with a class it does not own, and it would move the
+ * 10.6 census for an internal seam. */
+@interface NSWindow (AGDrawerUpdates)
+- (void)cg_updateDrawers;
+- (void)cg_raiseForDrawer;
+- (BOOL)cg_isDrawerWindow;
+@end
 #import <AppKit/NSColor.h>
 #import <AppKit/NSColorSpace.h>
 #import <AppKit/NSCursor.h>
@@ -2270,6 +2280,11 @@ static CGFloat fn_clamp_axis(CGFloat v, CGFloat lo, CGFloat hi)
 		[self cg_layoutForResize];
 		fn_announce(self, NSWindowDidResizeNotification, @selector(windowDidResize:));
 	}
+	/* **A MOVE OR A RESIZE RE-PINS EVERY DRAWER.** A child window is moved by the child loop above, but its own frame
+	 * is computed from the parent's, so a drawer that is vertically centred has to be re-centred when the parent's
+	 * height changes — and a tucked side drawer has to keep its tuck when the parent moves. The copy the drawer list
+	 * answers is stable across a drawer hiding itself and re-making its child link. */
+	[self cg_updateDrawers];
 	(void)flag;
 }
 
@@ -2299,6 +2314,7 @@ static CGFloat fn_clamp_axis(CGFloat v, CGFloat lo, CGFloat hi)
 	if (previous.width != _frame.size.width || previous.height != _frame.size.height) {
 		fn_announce(self, NSWindowDidResizeNotification, @selector(windowDidResize:));
 	}
+	[self cg_updateDrawers];
 }
 
 /* **THE ANIMATED SPELLING HAS NO FRAMES IN BETWEEN.** The geometry is the direct set's and the redraw is the direct
@@ -2602,6 +2618,13 @@ static CGFloat fn_clamp_axis(CGFloat v, CGFloat lo, CGFloat hi)
 	 * window, while `-orderBack:` sent `raise` and therefore did the opposite of its name. A click in another window
 	 * calls this door, so the raise is what makes "clicking brings it frontmost" true. */
 	AGWindowRaise(_agwindow);
+	/* **A DRAWER NEVER STAYS OVER ITS PARENT, EVEN FOR ONE FRAME.** A click on a control INSIDE the drawer is a
+	 * `-orderFront:` on the drawer's own window; raising it alone would put it over the parent until the button's action
+	 * ran. The drawer is marked, and the parent is raised again in the same call, so the compositor never sees the pair
+	 * in that order. */
+	if ([self cg_isDrawerWindow] && _cg_parentWindow != nil) {
+		[_cg_parentWindow cg_raiseForDrawer];
+	}
 	_visible = YES;
 	/* A WINDOW THAT IS ON THE SCREEN IS ONE THE RUN LOOP MUST DRAIN, so it joins the registry here
 	 * rather than being polled for: the loop has no way to ask a server which windows are ours. */
@@ -2616,6 +2639,9 @@ static CGFloat fn_clamp_axis(CGFloat v, CGFloat lo, CGFloat hi)
 			[self makeFirstResponder:_initialFirstResponder];
 		}
 	}
+	/* **AND THE DRAWERS FOLLOW THE PIXELS, NOT A NOTIFICATION.** Ordering is the moment a window becomes "frontmost",
+	 * and there is no ordering notification in this tier's surface; the list this window owns is the direct half. */
+	[self cg_updateDrawers];
 }
 
 - (void)orderOut:(id)sender
@@ -2638,6 +2664,9 @@ static CGFloat fn_clamp_axis(CGFloat v, CGFloat lo, CGFloat hi)
 	if (_agwindow != NULL) {
 		AGWindowHide(_agwindow);
 	}
+	/* A HIDDEN WINDOW IS NOT FRONTMOST, whatever its key flag still says. The drawers ask the same question the
+	 * visibility rule does, through the same door. */
+	[self cg_updateDrawers];
 }
 
 /* THE ORDERING MODE IS THE RELATIVE ONE, and X has no `relativeTo` for a bare map: this tree runs one
@@ -2762,6 +2791,7 @@ static CGFloat fn_clamp_axis(CGFloat v, CGFloat lo, CGFloat hi)
 	 * exits the owners are owed. */
 	[self cg_updateTrackingForPoint:[self mouseLocationOutsideOfEventStream]];
 	fn_announce(self, NSWindowDidResignKeyNotification, @selector(windowDidResignKey:));
+	[self cg_updateDrawers];
 }
 
 - (void)close
@@ -5244,6 +5274,7 @@ static NSWindow *fn_main_window(NSWindow *except)
 	/* **AND NOTHING ELSE HAPPENS.** "Regardless" means the window comes forward WITHOUT the application's key
 	 * or main state changing — a caller that wanted those sent `-makeKeyAndOrderFront:`. The drawers still hear
 	 * that a window became visible. */
+	[self cg_updateDrawers];
 }
 
 /* ---- BECOMING AND RESIGNING ---------------------------------------------------------------- */
@@ -5283,6 +5314,7 @@ static NSWindow *fn_main_window(NSWindow *except)
 	 * pointer is already resting on lights up without waiting for the hand to move. */
 	[self cg_updateTrackingForPoint:[self mouseLocationOutsideOfEventStream]];
 	fn_announce(self, NSWindowDidBecomeKeyNotification, @selector(windowDidBecomeKey:));
+	[self cg_updateDrawers];
 }
 
 - (void)becomeMainWindow
@@ -6175,6 +6207,16 @@ static NSMutableArray *fn_window_drawers(NSWindow *window, BOOL create)
 	}
 }
 
+/* **THE PARENT'S HALF OF "ONE LAYER UNDER IT".** A drawer is put on the level's tail and the parent then raised over it;
+ * this is that raise without the public ordering door, which would call back into every drawer's sync while the sync is
+ * what asked. The parent must be on the glass for a raise to mean anything; a window with no seam has no stack. */
+- (void)cg_raiseForDrawer
+{
+	if (_visible && _agwindow != NULL) {
+		AGWindowRaise(_agwindow);
+	}
+}
+
 - (nullable id)defaultButtonCell
 {
 	return _defaultButtonCell;
@@ -6311,6 +6353,9 @@ FN_FLAG_PAIR(setPreservesContentDuringLiveResize, preservesContentDuringLiveResi
 	if (_agwindow != NULL) {
 		AGWindowSetLevel(_agwindow, (int)level);
 	}
+	/* **LEVEL IS THE DRAWER'S PIN, SO A PARENT THAT MOVES IN THE STACK MOVES ITS DRAWERS WITH IT.** One below the
+	 * parent is the rule; this is where a caller's `-setLevel:` reaches it. */
+	[self cg_updateDrawers];
 }
 
 - (NSURL *)representedURL

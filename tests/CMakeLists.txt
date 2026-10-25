@@ -1649,6 +1649,17 @@ target_link_libraries(drawer PRIVATE App m)
 add_test(NAME appkit-drawer COMMAND drawer)
 set_tests_properties(appkit-drawer PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
 
+# **AND THE VISIBILITY RULE NEEDS GLASS.** A drawer is shown only while its parent is visible, key and in an active
+# application; key alone is not enough because deactivation keeps the key flag, and visible alone is not enough
+# because ordering out does not resign it. This runs under the headless compositor and skips (77) when none starts.
+add_executable(drawer_visibility drawer_visibility.m)
+target_link_libraries(drawer_visibility PRIVATE App)
+add_test(NAME appkit-drawer-visibility
+  COMMAND "${CMAKE_CURRENT_SOURCE_DIR}/run-appkit-headless.sh"
+    "$<TARGET_FILE:drawer_visibility>" 2 "drawer_visibility: ok")
+set_tests_properties(appkit-drawer-visibility PROPERTIES SKIP_RETURN_CODE 77
+  ENVIRONMENT "${_agora_app_test_env}")
+
 # **THE FIRST ABSENT COLLECTION: THE GRID, THE ITEM POOL AND THE TWO DRAG HALVES.** The layout is measured through
 # `-frameForItemAtIndex:` and the tiles' own frames, the selection through both the index set and the items, and the
 # backdrop through pixels (one colour flat, two a gradient). The item pool is checked by identity across a content

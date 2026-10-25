@@ -8,9 +8,22 @@
  * **A DRAWER IS A CHILD WINDOW, AND THAT IS APPLE'S MODEL RATHER THAN A CONVENIENCE.** `NSDrawer` is an
  * `NSResponder`, not a view: it owns a WINDOW (borderless, the size of the drawer), that window is attached to the
  * parent as a CHILD WINDOW, and `-contentView` is that window's content view. The drawer's geometry is therefore in
- * SCREEN coordinates, computed from the parent's frame, and "sliding out" means the child window sits just beyond the
- * parent's edge — left, right, bottom or top. This tier already has child windows (`-addChildWindow:ordered:` and the
- * move propagation that goes with them), so the class is built on that machinery instead of inventing a second one.
+ * SCREEN coordinates, computed from the parent's frame, and "sliding out" means the child window sits at the parent's
+ * edge — left, right, bottom or top — with the edge that touches the parent TUCKED UNDER IT. This tier already has
+ * child windows (`-addChildWindow:ordered:` and the move propagation that goes with them), so the class is built on
+ * that machinery instead of inventing a second one.
+ *
+ * **A DRAWER IS PINNED TO ITS PARENT, IN THREE WAYS.** Its window SHARES THE PARENT'S LEVEL and is ordered as the
+ * LAYER IMMEDIATELY BELOW it — the drawer is raised, then the parent over it, so the tucked edge disappears under the
+ * window it belongs to while the panel stays above every window below the parent. (A numeric level one lower would sit
+ * under every window at the parent's level, which is the bug the gallery showed.) A click INSIDE the drawer is an
+ * ordering of the drawer's own window; the drawer's marker makes that ordering re-raise the parent in the same call, so
+ * the panel cannot be above it even for one frame — the flash a close button used to produce. It is on the glass only
+ * while the parent is VISIBLE, KEY and in an ACTIVE application; focusing another window or another application takes it down,
+ * and bringing the parent back brings it up. And its frame follows every move, resize and level change of the parent,
+ * so the centring and the tuck are properties of the pair rather than a position captured once at `-open`. A hidden
+ * drawer keeps its child link (the window is un-ordered and re-attached behind the parent), so the relationship is
+ * stable across the hides.
  *
  * **THE TRANSITION IS SYNCHRONOUS, AND THAT IS THE ONE STATED DEVIATION.** Apple's drawer slides: `-open` sets
  * `NSDrawerOpeningState`, animates over some frames, then `NSDrawerOpenState`. This tier has no drawer animation clock,
@@ -25,10 +38,13 @@
  * it; `-parentWindow` is a BORROWED back-pointer, which is what keeps the pair from retaining each other. Releasing a
  * drawer that is still attached therefore does not destroy it: detach it with `-setParentWindow:nil` first.
  *
- * **THE SIZE HAS TWO AXES AND THEY ARE NOT SYMMETRIC.** In the direction of the drawer's motion the size is its
- * CONTENT SIZE — the thickness of the panel. Across that direction it is the PARENT'S SIZE minus `-leadingOffset` and
- * `-trailingOffset`, so a drawer whose parent grows grows with it. The one overriding restriction is Apple's: **a
- * drawer can never be larger than its parent**, in either axis, so every layout clamps both.
+ * **THE SIZE HAS TWO AXES AND THEY ARE NOT SYMMETRIC.** In the direction of the drawer's motion the VISIBLE size is its
+ * CONTENT SIZE; a side drawer's WINDOW is that width PLUS the tucked strip on the parent's side, and its content view is
+ * inset by the strip so the tuck costs empty panel rather than the first 20 points of the content. A SIDE DRAWER'S
+ * HEIGHT IS 90% OF THE PARENT'S, CENTRED on the parent's vertical axis inside the `-leadingOffset`/`-trailingOffset`
+ * inset: the remaining tenth is the air above and below that makes the panel read as a drawer rather than a second
+ * window. A top or bottom drawer keeps the older span across the parent, because a bottom drawer that did not span is
+ * not a bottom drawer; its thickness is the content height capped by the same 20-point inset.
  *
  * **AND THE MINIMUM AND MAXIMUM CONTENT SIZES LIMIT THE USER'S RESIZE, NOT THE PROGRAMMER'S.** Apple says so in as
  * many words ("programmatic changes are not so limited"), and it is why `-setContentSize:` is plain storage while the

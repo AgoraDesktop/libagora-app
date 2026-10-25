@@ -149,11 +149,18 @@ tests/
   split_view.m                  the SPLIT VIEW: panes, divider positions, the drag, the collapse and the ink
   browser.m                     the BROWSER: columns, the delegate's cells, the selection, the path and the width —
                                 and a branch's chevron drawn where a leaf draws nothing
+  drawer.m                      the DRAWER: the child window's edge geometry, its level, the four states and the resize
+  drawer_visibility.m           and WHEN it is on the glass: parent visible + key + active application, through every
+                                handoff — another key window, an order-out, and application deactivation
   document.m                    the DOCUMENT family: a file, its change count, its undo and its windows, around a temp file
   save_panel.m                  the SAVE and OPEN PANELS: the listing, the filters, the accept, sheets and modeless runs
   popup_color_menu.m            the POP-UP's items, a COLOUR's space and -set, and the MENU's two flags
+  menu_placement.m              WHERE A POPPED-UP MENU GOES: the view's coordinates, the window's origin, the screen edge
+  popup_anchor.m                and WHERE THE TWO CONTROLS THAT RAISE ONE GO: the pop-up's menu and the combo box's list
   combo_box.m                   the COMBO BOX: one triangle rather than two, the chip's geometry, a picked row, and
                                 now the DATA SOURCE, the completion of a prefix, and a list with its own row shape
+  combo_pick_focus.m            and a picked row while SOME OTHER field has the caret: one window, one field editor,
+                                one session — the picked value must not land in the editor somebody is typing into
   progress_indicator.m          the PROGRESS INDICATOR: range, clamp, the spinner's FRAMES, its size, its tint
                                 and the recess `-isBezeled` decides
   panel_alert.m                 the PANEL and the ALERT: the click-to-key rule, the content, the two ways to run it,
@@ -1158,16 +1165,26 @@ the compositor is really gone.
 
 - **And the FIRST ABSENT CONTAINER HAS ARRIVED: `NSDrawer` — 27 of 27** (`ctest`, offscreen). It is an `NSResponder`
   whose content is a CHILD WINDOW, which is Apple's model: the drawer's own borderless window is attached to the parent
-  and sits immediately beyond the edge it opens on, and `-contentView` is that window's content view. The four states
-  are real but SYNCHRONOUS — `-open` sets OPENING, announces WillOpen, lays out, sets OPEN and announces DidOpen, so a
-  handler sees the middle from inside — and the one stated deviation is that no slide is animated. The size has two
-  axes: the content size is the thickness in the motion direction, the transverse extent is the parent's minus the
-  leading and trailing offsets, and both clamp to the parent. `-setContentSize:` is programmatic and therefore NOT
-  limited by the min/max (Apple's rule); the user path is `-cg_resizeContentByUserToSize:`, which clamps first and then
-  asks `-drawerWillResizeContents:toSize:`. The parent RETAINS the drawer through `-drawers` (an associated list on the
-  window), a parent swap moves the child, and a parent's deallocation clears the back-pointers — which also fixed two
-  leaks in `NSWindow`'s child-window teardown. **135 of 168 classes (80%), 133 of 133 with a surface COMPLETE, 42 of 56
-  protocols, 33 absent classes.** `tests/drawer.m` measures it in 57 checks.
+  at the edge it opens on, and `-contentView` is that window's content view. The four states are real but SYNCHRONOUS —
+  `-open` sets OPENING, announces WillOpen, lays out, sets OPEN and announces DidOpen, so a handler sees the middle from
+  inside — and the one stated deviation is that no slide is animated. **THE PANEL IS PINNED, NOT PARKED:** its window
+  SHARES THE PARENT'S LEVEL and is ordered as the LAYER IMMEDIATELY BELOW it — the drawer is raised, then the parent
+  over it, so it is one layer under the parent and above every window below it (a numeric level one lower put it under
+  every window at the parent's level, which the gallery showed); a click inside the drawer re-raises the parent in the
+  same ordering call, so even a close button cannot flash the panel over it. A side drawer is 90% of the parent's height, centred,
+  with a 20-point strip on the parent's side tucked under it AND ADDED TO THE WINDOW, so the content is inset past the
+  hidden strip and the visible panel is the full content width; a top or bottom drawer keeps the spanning width across
+  the parent's minus its offsets. It is on the glass only while the parent is VISIBLE, KEY and in an ACTIVE application,
+  and every move, resize, level, ordering and key change re-lays and re-shows it — a hidden drawer keeps its child link
+  while its window is taken out and re-attached behind the parent.
+  `-setContentSize:` is programmatic and therefore NOT limited by the min/max (Apple's rule); the user path is
+  `-cg_resizeContentByUserToSize:`, which clamps first and then asks `-drawerWillResizeContents:toSize:`. The parent
+  RETAINS the drawer through `-drawers` (an associated list on the window), a parent swap moves the child, and a
+  parent's deallocation clears the back-pointers — which also fixed two leaks in `NSWindow`'s child-window teardown.
+  **135 of 168 classes (80%), 133 of 133 with a surface COMPLETE, 42 of 56 protocols, 33 absent classes.**
+  `tests/drawer.m` measures the child window's edge geometry and levels, and `tests/drawer_visibility.m` (run through
+  the headless compositor) drives every part of the visibility rule: another key window, an order-out, and application
+  deactivation.
 
 - **And the FIRST ABSENT COLLECTION HAS ARRIVED: `NSCollectionView` — 28 of 28** (`ctest`, offscreen). It is the other
   half of the `NSCollectionViewItem` that has been here since an earlier slice: the grid, the item factory and pool, the

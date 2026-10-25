@@ -20,8 +20,11 @@
  *      drawer is still listed and still usable), and detaching unregisters.
  *   4. Open: the states are observably OPENING inside the Will announcement and OPEN inside the Did one; both the
  *      notification center and the delegate are told; the child is attached to the parent.
- *   5. Geometry: left/right/bottom/top frames are computed from the parent's frame, the content size and the two
- *      offsets; the transverse extent is the parent's minus both offsets; and both axes clamp to the parent.
+ *   5. Geometry and pin: a side drawer is 90% of the parent's height, centred on its vertical axis, with the edge
+ *      against the parent tucked 20 points under it AND ADDED TO THE WINDOW, so the content view is inset by the strip
+ *      and the visible panel is the full content width; a top/bottom drawer keeps the spanning width; the window shares
+ *      the parent's level (the layer ordering is the compositor's, so this probe checks the level and the frame); and a
+ *      drawer of an offscreen, non-key parent is attached but not visible.
  *   6. The permission doors: `-drawerShouldOpen:` NO changes nothing; `-drawerShouldClose:` NO leaves it open.
  *   7. Close: the reverse states, the child detached, and `-toggle:`/`-open:`/`-close:` as the action spellings.
  *   8. The edge preference: a closed drawer's edge follows the preference, an open one's does not.
@@ -29,6 +32,9 @@
  *      delegate's answer is what lands, and a programmatic `-setContentSize:` is NOT limited by either.
  *  10. A drawer with no parent refuses to open, a parent swap moves the child, and a close attempted from inside
  *      `-drawerWillOpen:` is ignored because a transition owns itself.
+ *
+ * The VISIBILITY rule — parent visible, key and in an active application — needs glass, so it lives in
+ * `tests/drawer_visibility.m` and runs under the headless compositor.
  */
 #import <AppKit/NSDrawer.h>
 #import <AppKit/NSWindow.h>
@@ -256,26 +262,38 @@ int main(void)
 		      "and the notification center sees the same pair");
 		check(observer->lastObject == drawer, "whose object is the drawer");
 
-		/* 5. THE GEOMETRY, ONE EDGE AT A TIME. */
+		/* 5. THE GEOMETRY, ONE EDGE AT A TIME. The inset is 20 points: a side drawer's edge against the
+		 * parent is tucked under it by that much, and the content is inset past the strip; its 90% height
+		 * leaves the air above and below. */
 		check([[content window] parentWindow] == parent,
 		      "the child window is attached to the parent");
 		check([[parent childWindows] containsObject:[content window]],
 		      "and is in the parent's child list");
-		check(rect_equal([[content window] frame], NSMakeRect(-20.0, 100.0, 120.0, 300.0)),
-		      "a left drawer sits immediately to the left, full height");
+		check([[content window] level] == [parent level],
+		      "the drawer shares the parent's LEVEL, so it sits over the windows below the parent rather than under all of them");
+		check(![[content window] isVisible],
+		      "and a drawer of an offscreen, non-key parent is attached but NOT on the glass");
+		check(rect_equal([[content window] frame], NSMakeRect(-20.0, 115.0, 140.0, 270.0)),
+		      "a left drawer is 90% of the parent's height and a content width PLUS the tucked strip");
 		check([[content window] contentView] == content
-		      && rect_equal([content frame], NSMakeRect(0.0, 0.0, 120.0, 300.0)),
+		      && rect_equal([content frame], NSMakeRect(0.0, 0.0, 120.0, 270.0)),
 		      "and its content view fills the panel");
 
 		[drawer setLeadingOffset:10.0];
 		[drawer setTrailingOffset:20.0];
-		check(rect_equal([[content window] frame], NSMakeRect(-20.0, 110.0, 120.0, 270.0)),
-		      "the offsets inset the transverse extent and move its origin");
+		check(rect_equal([[content window] frame], NSMakeRect(-20.0, 110.0, 140.0, 270.0)),
+		      "the offsets inset the area the panel is centred in");
+		[parent setLevel:NSFloatingWindowLevel];
+		check([[content window] level] == [parent level],
+		      "a parent that changes level takes its drawer with it");
+		[parent setLevel:NSNormalWindowLevel];
 
 		[drawer openOnEdge:NSMaxXEdge];
 		check([drawer edge] == NSMaxXEdge, "`-openOnEdge:` moves the edge");
-		check(rect_equal([[content window] frame], NSMakeRect(500.0, 110.0, 120.0, 270.0)),
-		      "a right drawer sits immediately to the right");
+		check(rect_equal([[content window] frame], NSMakeRect(480.0, 110.0, 140.0, 270.0)),
+		      "a right drawer adds the 20-point tuck on its LEFT side, under the parent's right edge");
+		check(rect_equal([content frame], NSMakeRect(20.0, 0.0, 120.0, 270.0)),
+		      "and the content is inset by the tuck, so the visible panel is the full content width");
 
 		[drawer setContentSize:NSMakeSize(120.0, 80.0)];
 		[drawer openOnEdge:NSMaxYEdge];
@@ -291,8 +309,8 @@ int main(void)
 		[drawer setTrailingOffset:0.0];
 		[drawer setContentSize:NSMakeSize(500.0, 500.0)];
 		[drawer openOnEdge:NSMaxXEdge];
-		check(rect_equal([[content window] frame], NSMakeRect(500.0, 100.0, 400.0, 300.0)),
-		      "a drawer larger than its parent is clamped to it on both axes");
+		check(rect_equal([[content window] frame], NSMakeRect(480.0, 115.0, 420.0, 270.0)),
+		      "a drawer larger than its parent keeps the 90% height and adds the tuck to its width");
 		[drawer setLeadingOffset:200.0];
 		[drawer setTrailingOffset:200.0];
 		check(NSHeight([[content window] frame]) == 0.0,
@@ -394,8 +412,8 @@ int main(void)
 			      "a parent swap unregisters from the old window and registers with the new");
 			check([[content window] parentWindow] == other,
 			      "and the attached child moves to the new parent");
-			check(rect_equal([[content window] frame], NSMakeRect(480.0, 200.0, 120.0, 100.0)),
-			      "with its frame recomputed from the new parent's");
+			check(rect_equal([[content window] frame], NSMakeRect(480.0, 205.0, 140.0, 90.0)),
+			      "with its frame recomputed from the new parent's, centred and inset");
 			[drawer close];
 			[other release];
 			/* **THE PARENT'S DEALLOCATION CLEARS THE BORROWED BACK-POINTER AND DETACHES THE CHILD.** The drawer is
