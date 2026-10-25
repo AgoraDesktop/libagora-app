@@ -923,9 +923,9 @@ def command_check(argv):
         sys.stderr.write('api-ledger: the API census has drifted, in %d place(s).\n' % len(problems))
         sys.stderr.write('\n'.join(problems) + '\n')
         sys.stderr.write(
-            '\nThis census is a CLAIM about how much of the 10.6 AppKit this tree answers, so changing the\n'
-            'number is a deliberate act, not a side effect: if the movement is intended, edit\n'
-            'tests/api-10.6-census.txt in the same commit and say why in the message.\n')
+            '\nThis census is a CLAIM about how much of the manifest above this tree answers, so changing the\n'
+            'number is a deliberate act, not a side effect: if the movement is intended, edit the pin in the\n'
+            'same commit and say why in the message.\n')
         return 1
     sys.stdout.write('api-ledger: %d metrics hold (%d classes, %d selectors of %d, %d protocols, %d functions).\n'
                      % (len(got), got['classes-present'], got['selectors-present'], got['selectors-offered'],
