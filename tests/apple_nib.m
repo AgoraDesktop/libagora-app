@@ -26,6 +26,8 @@
 #import <AppKit/NSImage.h>
 #import <AppKit/NSImageCell.h>
 #import <AppKit/NSImageView.h>
+#import <AppKit/NSKeyValueBinding.h>
+#import <AppKit/NSLayoutConstraint.h>
 #import <AppKit/NSTextView.h>
 #import <AppKit/NSMatrix.h>
 #import <AppKit/NSMenu.h>
@@ -326,6 +328,7 @@ build_layout_archive(void)
 	NSUInteger cTextContainer = add_class(objects, @"NSTextContainer");
 	NSUInteger cLayoutManager = add_class(objects, @"NSLayoutManager");
 	NSUInteger cTextStorage = add_class(objects, @"NSTextStorage");
+	NSUInteger cConstraint = add_class(objects, @"NSLayoutConstraint");
 	NSUInteger root;
 	NSUInteger font;
 	NSUInteger textColor;
@@ -341,6 +344,8 @@ build_layout_archive(void)
 	NSUInteger layoutManager;
 	NSUInteger textContainer;
 	NSUInteger textView;
+	NSUInteger constraint;
+	NSUInteger constraintsArray;
 	NSUInteger cellA;
 	NSUInteger cellB;
 	NSUInteger cellsArray;
@@ -544,6 +549,19 @@ build_layout_archive(void)
 			[NSNumber numberWithUnsignedInt:3u], @"NSTVFlags",
 			nil]);
 
+	constraint = add_object(objects, cConstraint,
+		[NSDictionary dictionaryWithObjectsAndKeys:
+			uid(box), @"NSFirstItem",
+			[NSNumber numberWithInt:7], @"NSFirstAttribute",	/* width */
+			uid(slider), @"NSSecondItem",
+			[NSNumber numberWithInt:7], @"NSSecondAttribute",
+			[NSNumber numberWithInt:0], @"NSRelation",
+			[NSNumber numberWithDouble:1.0], @"NSMultiplier",
+			[NSNumber numberWithDouble:0.0], @"NSConstant",
+			[NSNumber numberWithDouble:1000.0], @"NSPriority",
+			nil]);
+	constraintsArray = add_array(objects, cArray, [NSArray arrayWithObject:uid(constraint)]);
+
 	subviewsArray = add_array(objects, cArray,
 		[NSArray arrayWithObjects:uid(box), uid(scroll), uid(slider), uid(imageView),
 					  uid(swapper), uid(textView), nil]);
@@ -552,6 +570,7 @@ build_layout_archive(void)
 			@"{{0, 0}, {200, 384}}", @"NSFrame",
 			[NSNumber numberWithUnsignedInt:0x100u], @"NSvFlags",
 			uid(subviewsArray), @"NSSubviews",
+			uid(constraintsArray), @"NSConstraints",
 			nil]);
 
 	[keys addObjectsFromArray:[NSArray arrayWithObjects:
@@ -559,12 +578,13 @@ build_layout_archive(void)
 		uid(scroll), uid(clip), uid(matrix), uid(cellA), uid(cellB),
 		uid(slider), uid(sliderCell), uid(imageView), uid(imageCell), uid(resource),
 		uid(swapper), uid(textView), uid(textContainer), uid(layoutManager),
-		uid(textStorage), nil]];
+		uid(textStorage), uid(constraint), nil]];
 	[owners addObjectsFromArray:[NSArray arrayWithObjects:
 		uid(root), uid(root), uid(view), uid(box), uid(box), uid(titleCell),
 		uid(view), uid(scroll), uid(clip), uid(matrix), uid(matrix),
 		uid(view), uid(slider), uid(view), uid(imageView), uid(imageCell),
-		uid(view), uid(view), uid(textView), uid(textContainer), uid(layoutManager), nil]];
+		uid(view), uid(view), uid(textView), uid(textContainer), uid(layoutManager),
+		uid(view), nil]];
 
 	keysArray = add_array(objects, cArray, keys);
 	valuesArray = add_array(objects, cArray, owners);
@@ -594,6 +614,7 @@ test_layout_translation(void)
 	NSView *view;
 	NSArray *subviews;
 	NSView *swapper;
+	NSLayoutConstraint *constraintObject;
 	NSTextView *textViewObject;
 	NSBox *box;
 	NSScrollView *scroll;
@@ -694,6 +715,13 @@ test_layout_translation(void)
 	      "the string is read through NSTextContainer -> NSLayoutManager -> NSTextStorage");
 	check([textViewObject isHorizontallyResizable] && [textViewObject isVerticallyResizable],
 	      "NSTVFlags' two resizable bits travel");
+	check([[view constraints] count] == 1, "NSConstraints become one constraint");
+	constraintObject = [[view constraints] count] == 1 ? [[view constraints] objectAtIndex:0] : nil;
+	check([constraintObject isKindOfClass:[NSLayoutConstraint class]] &&
+	      [constraintObject firstItem] == (id)box && [constraintObject secondItem] == (id)slider &&
+	      [constraintObject firstAttribute] == 7 && [constraintObject multiplier] == 1.0,
+	      "the constraint's items and attributes travel");
+	check([constraintObject isActive], "the view's addConstraint: makes the constraint active");
 
 	[nib release];
 }
@@ -963,6 +991,107 @@ test_browser_translation(void)
 	[nib release];
 }
 
+
+/* **A BINDING IS THE THIRD CONNECTOR KIND.** Apple's `NSNibBindingConnector` adds `NSBinding`, `NSKeyPath` and
+ * `NSOptions` to the connector's `NSSource`/`NSDestination`; the translator turns it into this tree's binding
+ * connection record, which NSNib applies with `-bind:toObject:withKeyPath:options:`. The options are not translated
+ * (a transformer or formatter is not an object this translator builds), but the binding itself is established. */
+static NSDictionary *
+build_binding_archive(void)
+{
+	NSMutableArray *objects = [NSMutableArray arrayWithObject:@"$null"];
+	NSUInteger cObjectData = add_class(objects, @"NSIBObjectData");
+	NSUInteger cArray = add_class(objects, @"NSArray");
+	NSUInteger cCustom = add_class(objects, @"NSCustomObject");
+	NSUInteger cField = add_class(objects, @"NSTextField");
+	NSUInteger cFieldCell = add_class(objects, @"NSTextFieldCell");
+	NSUInteger cConnector = add_class(objects, @"NSNibBindingConnector");
+	NSUInteger root;
+	NSUInteger cell;
+	NSUInteger field;
+	NSUInteger connector;
+	NSUInteger connectionsArray;
+	NSUInteger keysArray;
+	NSUInteger valuesArray;
+	NSUInteger objectData;
+	NSMutableArray *keys = [NSMutableArray array];
+	NSMutableArray *owners = [NSMutableArray array];
+	NSDictionary *properties;
+
+	root = add_object(objects, cCustom,
+			  [NSDictionary dictionaryWithObject:@"Owner" forKey:@"NSClassName"]);
+	cell = add_object(objects, cFieldCell,
+		[NSDictionary dictionaryWithObjectsAndKeys:
+			[NSNumber numberWithUnsignedInt:0x04000000u], @"NSCellFlags",
+			@"bound", @"NSContents",
+			nil]);
+	field = add_object(objects, cField,
+		[NSDictionary dictionaryWithObjectsAndKeys:
+			@"{{0, 0}, {120, 24}}", @"NSFrame",
+			[NSNumber numberWithUnsignedInt:0x100u], @"NSvFlags",
+			uid(cell), @"NSCell",
+			nil]);
+	connector = add_object(objects, cConnector,
+		[NSDictionary dictionaryWithObjectsAndKeys:
+			uid(field), @"NSSource",
+			uid(root), @"NSDestination",
+			@"stringValue", @"NSBinding",
+			@"content", @"NSKeyPath",
+			[NSNumber numberWithInt:2], @"NSNibBindingConnectorVersion",
+			nil]);
+	connectionsArray = add_array(objects, cArray, [NSArray arrayWithObject:uid(connector)]);
+
+	[keys addObjectsFromArray:[NSArray arrayWithObjects:uid(root), uid(field), uid(cell), nil]];
+	[owners addObjectsFromArray:[NSArray arrayWithObjects:uid(root), uid(root), uid(field), nil]];
+	keysArray = add_array(objects, cArray, keys);
+	valuesArray = add_array(objects, cArray, owners);
+	objectData = add_object(objects, cObjectData,
+		[NSDictionary dictionaryWithObjectsAndKeys:
+			uid(keysArray), @"NSObjectsKeys",
+			uid(valuesArray), @"NSObjectsValues",
+			uid(connectionsArray), @"NSConnections",
+			uid(root), @"NSRoot",
+			nil]);
+	properties = [NSMutableDictionary dictionaryWithObjectsAndKeys:
+		[NSNumber numberWithInt:100000], @"$version",
+		@"NSKeyedArchiver", @"$archiver",
+		objects, @"$objects",
+		[NSDictionary dictionaryWithObject:uid(objectData) forKey:@"IB.objectdata"], @"$top",
+		nil];
+	return properties;
+}
+
+static void
+test_binding_translation(void)
+{
+	NSDictionary *plist = build_binding_archive();
+	NSData *data = archive_data(plist);
+	NSString *path;
+	NSNib *nib;
+	AppleNibOwner *owner = [[AppleNibOwner alloc] init];
+	NSArray *top = nil;
+	NSTextField *field;
+	NSDictionary *info;
+
+	check([AGAppleNib validateAppleNibArchive:plist reason:NULL], "a binding archive validates");
+	[owner setContent:@"from owner"];
+	path = [NSTemporaryDirectory() stringByAppendingPathComponent:@"agora-apple-nib-binding.nib"];
+	[data writeToFile:path atomically:YES];
+	nib = [[NSNib alloc] initWithContentsOfURL:[NSURL fileURLWithPath:path]];
+	check([nib instantiateNibWithOwner:owner topLevelObjects:&top], "a binding nib instantiates");
+	field = ([top count] == 1 && [[top objectAtIndex:0] isKindOfClass:[NSTextField class]])
+		? [top objectAtIndex:0] : nil;
+	check(field != nil, "the bound field is the top-level object");
+	info = [field infoForBinding:@"stringValue"];
+	check(info != nil && [info objectForKey:NSObservedObjectKey] == owner &&
+	      [[info objectForKey:NSObservedKeyPathKey] isEqualToString:@"content"],
+	      "NSNibBindingConnector becomes a binding on the field");
+	check([[field stringValue] isEqualToString:@"from owner"],
+	      "the binding's initial value reaches the field");
+	[nib release];
+	[owner release];
+}
+
 /* ============================== THE TESTS ======================================================= */
 
 static void
@@ -1104,6 +1233,7 @@ main(void)
 	test_layout_translation();
 	test_menu_translation();
 	test_browser_translation();
+	test_binding_translation();
 
 	[pool drain];
 	printf(g_fail ? "apple_nib: FAIL\n" : "apple_nib: all checks passed\n");

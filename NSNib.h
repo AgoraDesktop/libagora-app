@@ -42,7 +42,7 @@
  *
  *   * A TOP-LEVEL OBJECT is a window or a view that the nib owns: the objects a caller receives in the
  *     `topLevelObjects` out-parameter, in the order the file lists them.
- *   * A CONNECTION is one of two dictionaries, and this is the whole connection vocabulary:
+ *   * A CONNECTION is one of THREE dictionaries, and this is the whole connection vocabulary:
  *
  *       OUTLET  { "AGNibConnectionSource"      : <object>,
  *                 "AGNibConnectionKeyPath"     : "delegate",
@@ -52,10 +52,20 @@
  *                 "AGNibConnectionAction"      : "doTheThing:",
  *                 "AGNibConnectionDestination" : <object> | "NSNibFileOwner" }
  *
+ *       BINDING { "AGNibConnectionSource"      : <object>,
+ *                 "AGNibConnectionBinding"     : "stringValue",
+ *                 "AGNibConnectionKeyPath"     : "content",
+ *                 "AGNibConnectionDestination" : <object> | "NSNibFileOwner",
+ *                 "AGNibConnectionOptions"     : <dictionary> }        (optional)
+ *
  *     An OUTLET is applied with `-setValue:forKeyPath:` on the source. An ACTION is applied as the pair
- *     `-setTarget:`/`-setAction:` on the source, the destination being the target. `"NSNibFileOwner"` is the
+ *     `-setTarget:`/`-setAction:` on the source, the destination being the target. A BINDING is applied with
+ *     `-bind:toObject:withKeyPath:options:` on the source, the destination being the observed object; it is the
+ *     third kind because Apple's `NSNibBindingConnector` is a kind of its own, not an outlet. `"NSNibFileOwner"` is the
  *     PLACEHOLDER for the owner handed to `-instantiateNibWithOwner:topLevelObjects:` — the owner is not in the
- *     archive, so it is named rather than encoded, which is the same reason Apple's nib has a file's owner.
+ *     archive, so it is named rather than encoded, which is the same reason Apple's nib has a file's owner. A binding
+ *     connection without `AGNibConnectionOptions` binds without options, which is what the translator emits when the
+ *     Apple archive's `NSOptions` names a transformer or formatter this tree cannot build.
  *
  * **IDENTITY IS THE REASON CONNECTIONS ARE SEPARATE FROM THE OBJECTS RATHER THAN A PROPERTY ON THEM.** A connection
  * names two objects, and `NSKeyedArchiver` writes an object reachable twice ONCE; so a connection's source and
@@ -109,6 +119,11 @@ extern NSString * const NSNibConnectionSourceKey;	/* "AGNibConnectionSource" */
 extern NSString * const NSNibConnectionKeyPathKey;	/* "AGNibConnectionKeyPath" */
 extern NSString * const NSNibConnectionActionKey;	/* "AGNibConnectionAction" */
 extern NSString * const NSNibConnectionDestinationKey;	/* "AGNibConnectionDestination" */
+/* AND THE BINDING'S TWO: a binding connection names the binding, the observed key path (the shared key above) and the
+ * options dictionary. It is the third kind, added for Apple's `NSNibBindingConnector`; an archive without one reads
+ * exactly as before. */
+extern NSString * const NSNibConnectionBindingKey;	/* "AGNibConnectionBinding" */
+extern NSString * const NSNibConnectionOptionsKey;	/* "AGNibConnectionOptions" */
 
 /* THE OWNER'S PLACEHOLDER. A file that wires a control's action to its owner writes this where the target would be,
  * because the owner is the caller's object and not the archive's. Its value is a string rather than an object so that
@@ -200,6 +215,14 @@ extern NSString *NSNibTopLevelObjects;
 + (NSDictionary *)actionConnectionFrom:(id)source
 				    to:(nullable id)destination
 				action:(NSString *)selectorName;
+/* AND THE BINDING BUILDER: `source` is the bound object, `destination` the observed object, `binding` the binding name
+ * and `keyPath` the observed path. `options` is stored as-is (this tier's binding stores its options but reads only the
+ * three generic ones); nil is a binding without options. */
++ (NSDictionary *)bindingConnectionFrom:(id)source
+				     to:(nullable id)destination
+				binding:(NSString *)bindingName
+				keyPath:(NSString *)keyPath
+				options:(nullable NSDictionary *)options;
 
 @end
 

@@ -509,7 +509,8 @@ static BOOL fn_is_translated_cell_class(NSString *name)
 {
 	NSUInteger index;
 
-	if (value == nil) {
+	if (value == nil || ([value isKindOfClass:[NSString class]] &&
+			      [(NSString *)value isEqualToString:@"$null"])) {
 		return YES;
 	}
 	if (!fn_uid_index(value, &index)) {
@@ -935,7 +936,9 @@ static BOOL fn_parse_color_components(NSData *data, CGFloat *values, NSUInteger 
 	if (translated != NULL) {
 		*translated = NO;
 	}
-	if (value == nil || !fn_uid_index(value, &index)) {
+	if (value == nil || ([value isKindOfClass:[NSString class]] &&
+			      [(NSString *)value isEqualToString:@"$null"]) ||
+	    !fn_uid_index(value, &index)) {
 		return YES;
 	}
 	if (![[self fnClassNameAt:index] isEqualToString:@"NSColor"]) {
@@ -1053,6 +1056,128 @@ static BOOL fn_parse_color_components(NSData *data, CGFloat *values, NSUInteger 
 	return YES;
 }
 
+
+/* **A CONSTRAINT IS AN EQUATION BETWEEN TWO OBJECTS, AND ITS OWNER IS THE VIEW THAT INSTALLS IT.** Apple archives it as
+ * `NSConstant`/`NSMultiplier`/`NSPriority` floats, the two items and their attributes, and the relation; this tree's
+ * NSLayoutConstraint codes the same six values under its own names. A `$null` second item is a single-item equation.
+ * The owner is NOT one of the constraint's keys: it is the object map's owner of the constraint, and the translator
+ * attaches the record to that view's `constraints` array so the view's own `-addConstraint:` establishes the owner and
+ * the active flag. (A `NSConstraints` array on the view is honoured too, and the two are de-duplicated.) */
+- (BOOL)fnBuildLayoutConstraintRecordAtIndex:(NSUInteger)index record:(NSMutableDictionary *)record
+{
+	NSDictionary *entry = [_objects objectAtIndex:index];
+	NSNumber *number;
+	NSString *value;
+
+	[record setObject:@"NSLayoutConstraint" forKey:AGAppleClassKey];
+	if (![self fnSetRefFrom:[entry objectForKey:@"NSFirstItem"] key:@"NSFirstItem"
+		       inRecord:record as:@"firstItem"]) {
+		return NO;
+	}
+	if (![self fnSetRefFrom:[entry objectForKey:@"NSSecondItem"] key:@"NSSecondItem"
+		       inRecord:record as:@"secondItem"]) {
+		return NO;
+	}
+	if ((number = [self fnNumberValue:[entry objectForKey:@"NSFirstAttribute"]]) != nil) {
+		[record setObject:number forKey:@"firstAttribute"];
+	}
+	if ((number = [self fnNumberValue:[entry objectForKey:@"NSSecondAttribute"]]) != nil) {
+		[record setObject:number forKey:@"secondAttribute"];
+	}
+	if ((number = [self fnNumberValue:[entry objectForKey:@"NSRelation"]]) != nil) {
+		[record setObject:number forKey:@"relation"];
+	}
+	if ((number = [self fnNumberValue:[entry objectForKey:@"NSMultiplier"]]) != nil) {
+		[record setObject:number forKey:@"multiplier"];
+	}
+	if ((number = [self fnNumberValue:[entry objectForKey:@"NSConstant"]]) != nil) {
+		[record setObject:number forKey:@"constant"];
+	}
+	if ((number = [self fnNumberValue:[entry objectForKey:@"NSPriority"]]) != nil) {
+		[record setObject:number forKey:@"priority"];
+	}
+	if ((value = [self fnStringValue:[entry objectForKey:@"NSIdentifier"]]) != nil) {
+		[record setObject:value forKey:@"identifier"];
+	}
+	[self fnNoteUnmappedForEntry:entry className:@"NSLayoutConstraint"
+			    consumed:[NSSet setWithObjects:
+				@"NSFirstItem", @"NSSecondItem", @"NSFirstAttribute",
+				@"NSSecondAttribute", @"NSRelation", @"NSMultiplier",
+				@"NSConstant", @"NSPriority", @"NSIdentifier", nil]];
+	return YES;
+}
+
+/* THE OWNER MAP IS APPLE'S `NSObjectsKeys`/`NSObjectsValues`, AND IT IS THE ONLY PLACE A CONSTRAINT'S VIEW IS NAMED.
+ * Every constraint record that is not already in its owner's `constraints` array is appended there, so the view's own
+ * decode installs it. A constraint whose owner is not a translated view is refused by name rather than left inert. */
+- (BOOL)fnAttachOwnedConstraints
+{
+	NSDictionary *rootData = [_objects objectAtIndex:_objectDataIndex];
+	NSArray *keys = [self fnArrayValue:[rootData objectForKey:@"NSObjectsKeys"]];
+	NSArray *owners = [self fnArrayValue:[rootData objectForKey:@"NSObjectsValues"]];
+	NSMutableArray *constraintIndexes = [NSMutableArray array];
+	NSEnumerator *e = [_records keyEnumerator];
+	NSNumber *recordIndex;
+
+	if (keys == nil || owners == nil || [keys count] != [owners count]) {
+		return YES;		/* the top-level walk already refuses a broken map */
+	}
+	while ((recordIndex = [e nextObject]) != nil) {
+		NSDictionary *record = [_records objectForKey:recordIndex];
+
+		if ([[record objectForKey:AGAppleClassKey] isEqualToString:@"NSLayoutConstraint"]) {
+			[constraintIndexes addObject:recordIndex];
+		}
+	}
+	for (NSUInteger c = 0; c < [constraintIndexes count]; c++) {
+		NSUInteger constraintIndex = [[constraintIndexes objectAtIndex:c] unsignedIntegerValue];
+		NSUInteger ownerIndex = NSNotFound;
+		NSUInteger i;
+
+		for (i = 0; i < [keys count]; i++) {
+			NSUInteger keyIndex;
+
+			if (fn_uid_index([keys objectAtIndex:i], &keyIndex) && keyIndex == constraintIndex) {
+				if (fn_uid_index([owners objectAtIndex:i], &ownerIndex)) {
+					break;
+				}
+			}
+		}
+		if (ownerIndex == NSNotFound) {
+			return [self fnFail:@"a layout constraint has no owning object"];
+		}
+		{
+			NSDictionary *ownerRecord = [_records objectForKey:
+				[NSNumber numberWithUnsignedInteger:ownerIndex]];
+			NSString *ownerClass = [ownerRecord objectForKey:AGAppleClassKey];
+			NSMutableArray *constraints;
+			BOOL present = NO;
+
+			if (!fn_is_translated_view_class(ownerClass)) {
+				return [self fnFail:[NSString stringWithFormat:
+					@"a layout constraint is owned by %@, which is not a translated view",
+					(ownerClass != nil) ? ownerClass : @"an object"]];
+			}
+			if ([[ownerRecord objectForKey:@"constraints"] isKindOfClass:[NSArray class]]) {
+				constraints = [NSMutableArray arrayWithArray:[ownerRecord objectForKey:@"constraints"]];
+			} else {
+				constraints = [NSMutableArray array];
+			}
+			for (i = 0; i < [constraints count]; i++) {
+				if ([(AGAppleNibRef *)[constraints objectAtIndex:i] index] == constraintIndex) {
+					present = YES;
+					break;
+				}
+			}
+			if (!present) {
+				[constraints addObject:[AGAppleNibRef refWithIndex:constraintIndex]];
+				[ownerRecord setObject:constraints forKey:@"constraints"];
+			}
+		}
+	}
+	return YES;
+}
+
 - (BOOL)fnBuildViewRecordAtIndex:(NSUInteger)index
 			  appleClass:(NSString *)appleClass
 			      record:(NSMutableDictionary *)record
@@ -1115,8 +1240,20 @@ static BOOL fn_parse_color_components(NSData *data, CGFloat *values, NSUInteger 
 		[record setObject:value forKey:@"toolTip"];
 	}
 	if ([entry objectForKey:@"NSConstraints"] != nil) {
-		return [self fnFail:[NSString stringWithFormat:
-			@"%@ carries autolayout constraints, which this translator does not map yet", appleClass]];
+		items = [self fnArrayValue:[entry objectForKey:@"NSConstraints"]];
+		if (items != nil) {
+			refs = [NSMutableArray arrayWithCapacity:[items count]];
+			for (i = 0; i < [items count]; i++) {
+				NSUInteger constraintIndex;
+
+				if (!fn_uid_index([items objectAtIndex:i], &constraintIndex)) {
+					return [self fnFail:[NSString stringWithFormat:
+						@"%@'s NSConstraints holds an entry that is not an object", appleClass]];
+				}
+				[refs addObject:[AGAppleNibRef refWithIndex:constraintIndex]];
+			}
+			[record setObject:refs forKey:@"constraints"];
+		}
 	}
 	/* **A BROWSER'S CONFIGURATION IS ITS OWN KEYS PLUS ONE FLAG WORD.** Apple's NSBrFlags carries the scroller, the
 	 * two selection rules, the arrow-key pair and the column separators; the rest are scalar properties. The MASKS are
@@ -1242,7 +1379,7 @@ static BOOL fn_parse_color_components(NSData *data, CGFloat *values, NSUInteger 
 	{
 		NSMutableSet *consumed = [NSMutableSet setWithObjects:
 			@"NSFrame", @"NSFrameSize", @"NSvFlags", @"NSToolTip", @"NSSubviews",
-			@"NSCell", @"NSEnabled", @"NSAllowsLogicalLayoutDirection", @"NSNextKeyView",
+			@"NSConstraints", @"NSCell", @"NSEnabled", @"NSAllowsLogicalLayoutDirection", @"NSNextKeyView",
 			@"NSPreviousKeyView", nil];
 
 		if ([appleClass isEqualToString:@"NSBox"]) {
@@ -1730,6 +1867,10 @@ static BOOL fn_parse_color_components(NSData *data, CGFloat *values, NSUInteger 
 			if (![self fnBuildCellRecordAtIndex:i appleClass:name record:record]) {
 				return NO;
 			}
+		} else if ([name isEqualToString:@"NSLayoutConstraint"]) {
+			if (![self fnBuildLayoutConstraintRecordAtIndex:i record:record]) {
+				return NO;
+			}
 		} else if ([name isEqualToString:@"NSMenu"]) {
 			if (![self fnBuildMenuRecordAtIndex:i record:record]) {
 				return NO;
@@ -1747,6 +1888,9 @@ static BOOL fn_parse_color_components(NSData *data, CGFloat *values, NSUInteger 
 		}
 	}
 
+	if (![self fnAttachOwnedConstraints]) {
+		return NO;
+	}
 	if (![self fnCalibrateRecords]) {
 		return NO;
 	}
@@ -1892,6 +2036,17 @@ static BOOL fn_parse_color_components(NSData *data, CGFloat *values, NSUInteger 
 		NSString *name = [self fnClassNameAt:connectorIndex];
 		NSString *label = [self fnStringValue:[entry objectForKey:@"NSLabel"]];
 
+		if ([name isEqualToString:@"NSNibBindingConnector"]) {
+			if ([self fnStringValue:[entry objectForKey:@"NSBinding"]] == nil ||
+			    [self fnStringValue:[entry objectForKey:@"NSKeyPath"]] == nil) {
+				return [self fnFail:@"an NSNibBindingConnector has no binding or key path"];
+			}
+			if (![self fnValidateConnectionEndpoint:[entry objectForKey:@"NSSource"] what:@"source"] ||
+			    ![self fnValidateConnectionEndpoint:[entry objectForKey:@"NSDestination"] what:@"destination"]) {
+				return NO;
+			}
+			continue;
+		}
 		if (![name isEqualToString:@"NSNibOutletConnector"] &&
 		    ![name isEqualToString:@"NSNibControlConnector"]) {
 			return [self fnFail:[NSString stringWithFormat:
@@ -1939,7 +2094,15 @@ static BOOL fn_parse_color_components(NSData *data, CGFloat *values, NSUInteger 
 		if (source == nil || destination == nil) {
 			return NO;
 		}
-		if ([name isEqualToString:@"NSNibOutletConnector"]) {
+		if ([name isEqualToString:@"NSNibBindingConnector"]) {
+			NSString *bindingName = [self fnStringValue:[entry objectForKey:@"NSBinding"]];
+			NSString *keyPath = [self fnStringValue:[entry objectForKey:@"NSKeyPath"]];
+
+			/* NSOptions IS NOT TRANSLATED (a transformer or a formatter is not an object this translator builds);
+			 * the binding is still established without it and the omission is stated in AGAppleNib.h. */
+			record = [NSNib bindingConnectionFrom:source to:destination binding:bindingName
+						       keyPath:keyPath options:nil];
+		} else if ([name isEqualToString:@"NSNibOutletConnector"]) {
 			record = [NSNib outletConnectionFrom:source to:destination keyPath:label];
 		} else {
 			record = [NSNib actionConnectionFrom:source to:destination action:label];

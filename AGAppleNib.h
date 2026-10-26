@@ -25,17 +25,20 @@
  * calibrated RGBA); `NSMenu`/`NSMenuItem` (the item tree, titles, key equivalents, actions, tags, state, mnemonics,
  * separators and submenus); `NSImageView`/`NSImageCell` and named images (`NSCustomResource` → an NSImage with a
  * name); `NSBrowser`/`NSBrowserCell`; `NSClassSwapper`; `NSTextView` (its string followed through
- * `NSTextContainer` → `NSLayoutManager` → `NSTextStorage`, plus its min/max sizes and two resizable bits); `NSCell`,
- * `NSActionCell`, `NSButtonCell`, `NSTextFieldCell`; `NSCustomObject` (the file's owner becomes
+ * `NSTextContainer` → `NSLayoutManager` → `NSTextStorage`, plus its min/max sizes and two resizable bits);
+ * `NSLayoutConstraint` (the equation, attached to the view the object map names as its owner); `NSNibBindingConnector`
+ * (a binding connection — its options are not translated, so a transformer or formatter is named in the ledger);
+ * `NSCell`, `NSActionCell`, `NSButtonCell`, `NSTextFieldCell`; `NSCustomObject` (the file's owner becomes
  * `NSNibFileOwner` in connections, and a top-level custom object must be a class registered with
  * `+[NSNib registerDesignClass:]`); `NSNibOutletConnector` and `NSNibControlConnector`. Geometry strings become
  * `NSValue`s, `NSvFlags`/`NSCellFlags`/`NSCellFlags2` become the properties this tree archives separately, and
  * `NSSuperview`/`NSWindow`/`NSNextResponder`/`NSControlView` are DROPPED — they are live-graph state, which is
  * this tree's existing nib rule.
  *
- * **WHAT IS NOT TRANSLATED IS REFUSED BY NAME.** Toolbars, autolayout constraints and bindings are the next slices; a
- * nib that contains one is refused with the class that stopped it rather than loaded into a window that is missing a
- * piece. A text view's private `NSSharedData` (typing attributes and selection) is left to defaults and named in the
+ * **WHAT IS NOT TRANSLATED IS REFUSED BY NAME.** Toolbars are the last slice: this tree's NSToolbar is delegate-driven
+ * and does not code items, while Apple's archive carries item objects, so the model has to be decided rather than
+ * guessed. A nib that contains one is refused with the class that stopped it rather than loaded into a window that is
+ * missing a piece. A text view's private `NSSharedData` (typing attributes and selection) is left to defaults and named in the
  * ledger; the text system's container, layout manager and storage are followed for the STRING and built fresh by the
  * view's own initialiser. A `DIRECT` `NSImage` (one carrying representations rather than a resource name) has no
  * translated record either, because this tree's NSImage codes a name and not image data. A key that this table does

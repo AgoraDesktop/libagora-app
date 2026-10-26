@@ -80,7 +80,7 @@ maps, and translates the classes it states — `NSWindowTemplate`; `NSView`/`NSC
 (flat cells regrouped into rows); `NSSlider`/`NSSliderCell`; `NSFont`; `NSColor` (white, RGB and catalog
 fallbacks); `NSMenu`/`NSMenuItem`; `NSImageView`/`NSImageCell` and named images; `NSBrowser`/`NSBrowserCell`;
 `NSClassSwapper`; `NSTextView` (string through its text-system chain, sizes and resizable bits);
-`NSCell`/`NSActionCell`/`NSButtonCell`/`NSTextFieldCell`; `NSCustomObject` and the
+`NSLayoutConstraint`; `NSNibBindingConnector`; `NSCell`/`NSActionCell`/`NSButtonCell`/`NSTextFieldCell`; `NSCustomObject` and the
 two `NSNib*Connector`s — into this tree's coding keys before the same connection pass runs. `NSFrame` strings become
 `NSValue`s, `NSvFlags`/`NSCellFlags`/`NSCellFlags2` become the properties this tree archives separately, and a class
 outside that table (a toolbar, a modern autolayout nib) refuses the file BY NAME rather than loading it without a

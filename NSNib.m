@@ -97,6 +97,8 @@ NSString * const NSNibConnectionSourceKey      = @"AGNibConnectionSource";
 NSString * const NSNibConnectionKeyPathKey     = @"AGNibConnectionKeyPath";
 NSString * const NSNibConnectionActionKey      = @"AGNibConnectionAction";
 NSString * const NSNibConnectionDestinationKey = @"AGNibConnectionDestination";
+NSString * const NSNibConnectionBindingKey     = @"AGNibConnectionBinding";
+NSString * const NSNibConnectionOptionsKey     = @"AGNibConnectionOptions";
 
 /* THE OWNER'S PLACEHOLDER, and the two name-table keys Apple has always had. */
 NSString * const NSNibFileOwner = @"NSNibFileOwner";
@@ -636,7 +638,6 @@ static NSMutableSet *g_registered_class_names = nil;
 		destination = [(NSDictionary *)record objectForKey:NSNibConnectionDestinationKey];
 		keyPath = [(NSDictionary *)record objectForKey:NSNibConnectionKeyPathKey];
 		actionName = [(NSDictionary *)record objectForKey:NSNibConnectionActionKey];
-
 		/* **THE PLACEHOLDER IS SUBSTITUTED ON EITHER SIDE, BECAUSE THE FILE'S OWNER IS BOTH KINDS OF ENDPOINT.** An OUTLET
 		 * has the owner as its SOURCE ("the owner's `titleField` is this view") and an ACTION has it as the DESTINATION
 		 * ("this control's target is the owner"), so a reader that only resolved one side would be unable to express the
@@ -655,6 +656,35 @@ static NSMutableSet *g_registered_class_names = nil;
 				(owner == nil) ? " (the file's owner is nil)" : "");
 			return NO;
 		}
+		{
+			NSString *bindingName = [(NSDictionary *)record objectForKey:NSNibConnectionBindingKey];
+
+			if (bindingName != nil) {
+				NSDictionary *options = [(NSDictionary *)record objectForKey:NSNibConnectionOptionsKey];
+
+				if (source == nil || destination == nil || keyPath == nil) {
+					fprintf(stderr, "NSNib: binding connection %lu is missing its source, destination or key path\n",
+						(unsigned long)i);
+					return NO;
+				}
+				if (![source respondsToSelector:@selector(bind:toObject:withKeyPath:options:)]) {
+					fprintf(stderr, "NSNib: binding %s on %s has no bind door\n",
+						[bindingName UTF8String], [NSStringFromClass([source class]) UTF8String]);
+					return NO;
+				}
+				@try {
+					[source bind:bindingName toObject:destination withKeyPath:keyPath
+					      options:([options isKindOfClass:[NSDictionary class]] ? options : nil)];
+				} @catch (NSException *exception) {
+					fprintf(stderr, "NSNib: binding %s on %s could not be established: %s\n",
+						[bindingName UTF8String], [NSStringFromClass([source class]) UTF8String],
+						[[exception reason] UTF8String]);
+					return NO;
+				}
+				continue;
+			}
+		}
+
 		if (keyPath != nil) {
 			@try {
 				[source setValue:destination forKeyPath:keyPath];
@@ -853,6 +883,26 @@ static NSMutableSet *g_registered_class_names = nil;
 		[record setObject:selectorName forKey:NSNibConnectionActionKey];
 	}
 	return [record autorelease];
+}
+
++ (NSDictionary *)bindingConnectionFrom:(id)source
+				     to:(id)destination
+				binding:(NSString *)bindingName
+				keyPath:(NSString *)keyPath
+				options:(NSDictionary *)options
+{
+	NSMutableDictionary *record = [NSMutableDictionary dictionary];
+
+	[record setObject:source forKey:NSNibConnectionSourceKey];
+	if (destination != nil) {
+		[record setObject:destination forKey:NSNibConnectionDestinationKey];
+	}
+	[record setObject:bindingName forKey:NSNibConnectionBindingKey];
+	[record setObject:keyPath forKey:NSNibConnectionKeyPathKey];
+	if (options != nil) {
+		[record setObject:options forKey:NSNibConnectionOptionsKey];
+	}
+	return record;
 }
 
 @end
