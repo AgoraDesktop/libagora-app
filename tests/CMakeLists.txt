@@ -1069,6 +1069,16 @@ target_link_libraries(nib_roundtrip PRIVATE App)
 add_test(NAME appkit-nib-roundtrip COMMAND nib_roundtrip)
 set_tests_properties(appkit-nib-roundtrip PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
 
+# **APPLE'S COMPILED NIB (.nib) IS A COMPATIBILITY DOOR, not a second spelling of this tree's keys.** The fixture is
+# built the way Apple builds one -- binary property list, CF$UID references, NSObjectsKeys/NSObjectsValues,
+# NSNib*Connector records -- and translated into live objects. The test asserts both halves: the view tree and the
+# outlet/action connections. No compositor is needed because the fixture's top level is a view; the window-template
+# check validates rather than instantiates.
+add_executable(apple_nib apple_nib.m)
+target_link_libraries(apple_nib PRIVATE App)
+add_test(NAME appkit-apple-nib COMMAND apple_nib)
+set_tests_properties(appkit-apple-nib PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
+
 # **THE TEXT SOURCE, AND THE COMPILER THAT MAKES THE ARCHIVE FROM IT.** `NSNibSource` parses the OpenStep-shaped source
 # (dictionaries, arrays, quoted strings, and bare words TYPED as numbers or booleans) and compiles it into a nib — the
 # same split as `.xib` and `.nib`, and the one that makes a design something git can review. `nib_compile` asserts the

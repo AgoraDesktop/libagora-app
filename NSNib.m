@@ -60,6 +60,7 @@
 #import <AppKit/NSFont.h>
 #import <AppKit/NSColor.h>
 #import <AppKit/NSImage.h>
+#import "AGAppleNib.h"
 
 #import <Foundation/NSArray.h>
 #import <Foundation/NSData.h>
@@ -487,6 +488,14 @@ static NSMutableSet *g_registered_class_names = nil;
 							  options:NSPropertyListImmutable
 							   format:NULL
 							    error:&error];
+	if ([AGAppleNib isAppleNibArchive:plist]) {
+		NSString *appleReason = nil;
+
+		if ([AGAppleNib validateAppleNibArchive:plist reason:&appleReason]) {
+			return nil;
+		}
+		return (appleReason != nil) ? appleReason : @"its Apple archive could not be translated";
+	}
 	if (![plist isKindOfClass:[NSDictionary class]]) {
 		return [NSString stringWithFormat:@"not a property list%@%@",
 			(error != nil) ? @": " : @"",
@@ -686,6 +695,30 @@ static NSMutableSet *g_registered_class_names = nil;
 							  options:NSPropertyListImmutable
 							   format:NULL
 							    error:&error];
+	/* **APPLE'S COMPILED NIB IS A COMPATIBILITY DOOR, AND IT IS A DIFFERENT READER RATHER THAN A SECOND
+	 * SPELLING OF THE KEYS.** Its objects carry Apple's coding keys, so it is translated by `AGAppleNib` into
+	 * live objects and the connection records this class already applies; the AGNib path below is untouched. */
+	if ([AGAppleNib isAppleNibArchive:plist]) {
+		NSString *appleReason = nil;
+		NSArray *appleObjects = nil;
+		NSArray *appleConnections = nil;
+
+		if (![AGAppleNib instantiateAppleNibArchive:plist
+						   topLevelObjects:&appleObjects
+						       connections:&appleConnections
+							    reason:&appleReason]) {
+			fprintf(stderr, "NSNib: refusing this Apple nib — %s\n",
+				(appleReason != nil) ? [appleReason UTF8String] : "it could not be translated");
+			return NO;
+		}
+		if (![self cg_applyConnections:appleConnections owner:owner]) {
+			return NO;
+		}
+		if (topLevelObjects != NULL) {
+			*topLevelObjects = appleObjects;
+		}
+		return YES;
+	}
 	refused = fn_first_refused_class_name(plist);
 	if (refused != nil) {
 		fprintf(stderr, "NSNib: refusing this archive — it names %s, which is not a class this reader "

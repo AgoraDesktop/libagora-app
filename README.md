@@ -71,6 +71,18 @@ unknown key, an unknown class, an undeclared reference or a bad geometry string 
 cell, an outlet, an action and constraints that decode and then LAY OUT), `tests/nib_compile.m` (a source compiled and
 six ways it must not compile) and `tests/ibtool_test.m` (the tool run for real).
 
+**AND APPLE'S COMPILED `.nib` IS READ THROUGH A TRANSLATOR, NOT A SECOND KEY SPELLING.** `AGAppleNib.h` recognises the
+`IB.objectdata` keyed archive Apple's `ibtool` writes, walks its `NSObjectsKeys`/`NSObjectsValues`/`NSConnections`
+maps, and translates the classes it states — `NSWindowTemplate`, `NSView`/`NSControl`/`NSButton`/`NSTextField`/
+`NSSplitView`, `NSCell`/`NSActionCell`/`NSButtonCell`/`NSTextFieldCell`, `NSCustomObject` and the two
+`NSNib*Connector`s — into this tree's coding keys before the same connection pass runs. `NSFrame` strings become
+`NSValue`s, `NSvFlags`/`NSCellFlags`/`NSCellFlags2` become the properties this tree archives separately, and a class
+outside that table (an `NSBox`, an `NSScrollView`'s `NSClipView`, an `NSMatrix`, a modern autolayout nib) refuses
+the file BY NAME rather than loading it without a piece. `tests/apple_nib.m` builds the fixture the way Apple builds
+one — a binary property list with `CF$UID` references — and asserts both the object tree and the two connection
+kinds; `+[AGAppleNib unmappedKeysForAppleNibArchive:]` is the ledger of the Apple keys this slice leaves at the
+class's defaults.
+
 The classes here come from the Fiwix AppKit (same author, same licence — see `PROVENANCE.md`), and they
 talked to an X server: `NSWindow.m` called `XOpenDisplay`, `XCreateSimpleWindow`, `XMapWindow`, `XPutImage`
 and `XNextEvent` directly, and `NSScreen.m` opened the display for its own size. Agora's display target is

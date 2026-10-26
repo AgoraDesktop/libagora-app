@@ -10,9 +10,17 @@
  * OVERRIDDEN.** What it said was that a nib is an archived object graph in Apple's own unpublished schema, that a
  * guessed schema would be a WRONG VALUE rather than an unfinished feature, and that closing the gap needed "a
  * first-party interface format for THIS AppKit — an emitter and a reader this tree owns". That format now exists,
- * and it is described in full below. What is still refused, deliberately and for the original reason, is APPLE'S
- * schema: `-initWithContentsOfURL:` reads a file in the format below and no other, and a file that is not one is
- * reported as such rather than misinterpreted.
+ * and it is described in full below.
+ *
+ * **AND APPLE'S COMPILED FORMAT IS A COMPATIBILITY DOOR, TRANSLATED RATHER THAN DECODED.** A file whose `$top`
+ * names `IB.objectdata` is handed to `AGAppleNib`, which maps the classes and keys it states (AGAppleNib.h) into
+ * THIS tree's coding keys and then runs the same connection pass below. It is deliberately NOT decoded by
+ * `NSKeyedUnarchiver`: Apple's keys and this tree's keys are different (`NSFrame` vs `frame`, `NSContents` vs
+ * `objectValue`, flag bitfields vs separate booleans), so a direct decode would answer every
+ * `-containsValueForKey:` with NO and build default-valued objects — the wrong value this header has always
+ * refused. A class outside the translator's table refuses the WHOLE file by name; an unmapped key stays at the
+ * class's default and is reported by `+[AGAppleNib unmappedKeysForAppleNibArchive:]`. AGNib is still the format
+ * this tree WRITES, and it is read first.
  *
  * ============================ THE FORMAT: "AGNib", version 1 ============================
  *
@@ -170,7 +178,8 @@ extern NSString *NSNibTopLevelObjects;
  * WITHOUT building anything — and a command-line validator wants exactly that: an answer of "this file would be refused,
  * and here is the name" with nothing instantiated and no owner required. Answers nil when the file would be accepted, and
  * a sentence naming the first problem when it would not (a class outside the allow-list, a class that would lose state, a
- * root of the wrong shape, or bytes that are not a property list at all). */
+ * root of the wrong shape, or bytes that are not a property list at all). **AN APPLE ARCHIVE IS VALIDATED BY ITS
+ * TRANSLATOR**, so the same door answers "it names NSBox, which this translator does not map" without building a view. */
 + (nullable NSString *)refusalReasonForArchiveData:(NSData *)data;
 
 /* **THE CENSUS THAT KEEPS RULE 3 HONEST.** Answers the classes on the allow-list that add instance storage of their own
