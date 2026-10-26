@@ -49,6 +49,8 @@
 #include <CoreFoundation/ForFoundationOnly.h>
 
 #include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 
 /* The record's class, and the key Apple's root uses for `NSIBObjectData`. */
 static NSString * const AGAppleClassKey = @"AGAppleNibClass";
@@ -165,7 +167,7 @@ static BOOL fn_is_auxiliary_class(NSString *name)
 			@"NSArray", @"NSMutableArray", @"NSSet", @"NSMutableSet",
 			@"NSDictionary", @"NSMutableDictionary", @"NSNull",
 			@"NSString", @"NSMutableString", @"NSNumber", @"NSDate", @"NSData", @"NSValue",
-			@"NSFontManager", @"NSColor", @"NSImage", @"NSCustomResource",
+			@"NSFontManager", @"NSImage", @"NSCustomResource",
 			@"NSAttributedString", @"NSMutableAttributedString", @"NSParagraphStyle",
 			nil];
 	}
@@ -572,6 +574,10 @@ static BOOL fn_is_translated_cell_class(NSString *name)
 		[record setObject:[NSNumber numberWithBool:((flags & 512u) != 0)]
 			   forKey:@"autohidesScrollers"];
 	}
+	[self fnSetColorRef:[entry objectForKey:@"NSBackgroundColor"] key:@"NSBackgroundColor"
+		   inRecord:record as:@"backgroundColor" translated:NULL];
+	[self fnSetColorRef:[entry objectForKey:@"NSBGColor"] key:@"NSBGColor"
+		   inRecord:record as:@"backgroundColor" translated:NULL];
 	return YES;
 }
 
@@ -600,6 +606,8 @@ static BOOL fn_is_translated_cell_class(NSString *name)
 		[record setObject:[NSNumber numberWithBool:((flags & 4u) != 0)] forKey:@"drawsBackground"];
 		[record setObject:[NSNumber numberWithBool:((flags & 2u) == 0)] forKey:@"copiesOnScroll"];
 	}
+	[self fnSetColorRef:[entry objectForKey:@"NSBGColor"] key:@"NSBGColor" inRecord:record
+			 as:@"backgroundColor" translated:NULL];
 	return YES;
 }
 
@@ -667,6 +675,10 @@ static BOOL fn_is_translated_cell_class(NSString *name)
 		[record setObject:[NSValue valueWithSize:NSSizeFromString(value)]
 			   forKey:@"NSMatrixIntercellSpacing"];
 	}
+	[self fnSetColorRef:[entry objectForKey:@"NSBackgroundColor"] key:@"NSBackgroundColor"
+		   inRecord:record as:@"NSMatrixBackgroundColor" translated:NULL];
+	[self fnSetColorRef:[entry objectForKey:@"NSCellBackgroundColor"] key:@"NSCellBackgroundColor"
+		   inRecord:record as:@"NSMatrixCellBackgroundColor" translated:NULL];
 	return YES;
 }
 
@@ -676,6 +688,150 @@ static BOOL fn_is_translated_cell_class(NSString *name)
  * system font when the name is missing (a design written on another machine), so the translation states the two
  * keys that matter and leaves `NSfFlags` to the ledger — the face's name already carries the family, and guessing a
  * trait mask is the wrong value `NSNib.h` refuses. */
+
+/* **A COLOUR IS A LEAF, AND APPLE'S THREE SPELLINGS ARE ALL COMPONENT TEXT.** `NSWhite` is "w" or "w a", `NSRGB` is
+ * "r g b" or "r g b a" in an NSData whose bytes are an ASCII C string (MEASURED across the corpus: `b'1\0'`,
+ * `b'0 0.80000001\0'`, `b'0 0 1\0'`), and a catalog colour (`NSColorSpace` 6) carries a FALLBACK NSColor that resolves
+ * the same way. This tree's NSColor codes calibrated RGBA, so all three become those four numbers; a space with none
+ * of them (a pattern or CMYK colour) is refused by name rather than guessed. */
+static BOOL fn_parse_color_components(NSData *data, CGFloat *values, NSUInteger maximum, NSUInteger *count)
+{
+	char buffer[128];
+	NSUInteger length;
+	char *cursor;
+	NSUInteger n = 0;
+
+	if (![data isKindOfClass:[NSData class]]) {
+		return NO;
+	}
+	length = [data length];
+	if (length >= sizeof(buffer)) {
+		length = sizeof(buffer) - 1;
+	}
+	memcpy(buffer, [data bytes], length);
+	buffer[length] = '\0';
+	cursor = buffer;
+	while (n < maximum) {
+		char *end = NULL;
+		double number;
+
+		while (*cursor == ' ' || *cursor == '\t' || *cursor == '\n') {
+			cursor++;
+		}
+		if (*cursor == '\0') {
+			break;
+		}
+		number = strtod(cursor, &end);
+		if (end == cursor) {
+			break;
+		}
+		values[n++] = (CGFloat)number;
+		cursor = end;
+	}
+	if (count != NULL) {
+		*count = n;
+	}
+	return n > 0;
+}
+
+- (BOOL)fnColorComponentsFromEntry:(NSDictionary *)entry
+			       red:(CGFloat *)red
+			     green:(CGFloat *)green
+			      blue:(CGFloat *)blue
+			     alpha:(CGFloat *)alpha
+			     depth:(NSUInteger)depth
+{
+	CGFloat values[4] = { 0.0, 0.0, 0.0, 1.0 };
+	NSUInteger count = 0;
+	id value;
+
+	if (depth > 4) {
+		return [self fnFail:@"a catalog colour's fallback chain does not end"];
+	}
+	value = [entry objectForKey:@"NSWhite"];
+	if (value != nil) {
+		if (!fn_parse_color_components([self fnResolvedValue:value], values, 2, &count)) {
+			return [self fnFail:@"an NSWhite colour carries no values"];
+		}
+		values[1] = (count > 1) ? values[1] : 1.0;
+		*red = *green = *blue = values[0];
+		*alpha = values[1];
+		return YES;
+	}
+	value = [entry objectForKey:@"NSRGB"];
+	if (value != nil) {
+		if (!fn_parse_color_components([self fnResolvedValue:value], values, 4, &count) || count < 3) {
+			return [self fnFail:@"an NSRGB colour carries fewer than three values"];
+		}
+		*red = values[0];
+		*green = values[1];
+		*blue = values[2];
+		*alpha = (count > 3) ? values[3] : 1.0;
+		return YES;
+	}
+	/* THE CATALOG COLOUR: `NSColor` is the resolved fallback. */
+	value = [entry objectForKey:@"NSColor"];
+	if (value != nil) {
+		id fallback = [self fnResolvedValue:value];
+
+		if ([fallback isKindOfClass:[NSDictionary class]]) {
+			return [self fnColorComponentsFromEntry:fallback red:red green:green blue:blue
+							alpha:alpha depth:depth + 1];
+		}
+	}
+	{
+		NSNumber *space = [self fnNumberValue:[entry objectForKey:@"NSColorSpace"]];
+
+		return [self fnFail:[NSString stringWithFormat:
+			@"an NSColor in space %ld has no white, RGB or catalog fallback this translator can read",
+			(space != nil) ? (long)[space integerValue] : -1L]];
+	}
+}
+
+- (BOOL)fnBuildColorRecordAtIndex:(NSUInteger)index record:(NSMutableDictionary *)record
+{
+	NSDictionary *entry = [_objects objectAtIndex:index];
+	CGFloat red = 0.0, green = 0.0, blue = 0.0, alpha = 1.0;
+
+	if (![self fnColorComponentsFromEntry:entry red:&red green:&green blue:&blue alpha:&alpha depth:0]) {
+		return NO;
+	}
+	[record setObject:@"NSColor" forKey:AGAppleClassKey];
+	[record setObject:[NSNumber numberWithDouble:(double)red] forKey:@"redComponent"];
+	[record setObject:[NSNumber numberWithDouble:(double)green] forKey:@"greenComponent"];
+	[record setObject:[NSNumber numberWithDouble:(double)blue] forKey:@"blueComponent"];
+	[record setObject:[NSNumber numberWithDouble:(double)alpha] forKey:@"alphaComponent"];
+	[self fnNoteUnmappedForEntry:entry className:@"NSColor"
+			    consumed:[NSSet setWithObjects:
+				@"NSWhite", @"NSRGB", @"NSColorSpace", @"NSCatalogName",
+				@"NSColorName", @"NSColor", nil]];
+	return YES;
+}
+
+
+/* A COLOUR REFERENCE, WHEN THE VALUE NAMES A TRANSLATED NSColor. Anything else (an image, or no value) is left alone
+ * so the ledger can name the key; `translated` says whether the caller may mark it consumed. */
+- (BOOL)fnSetColorRef:(id)value key:(NSString *)key inRecord:(NSMutableDictionary *)record
+		   as:(NSString *)agnibKey translated:(BOOL *)translated
+{
+	NSUInteger index;
+
+	if (translated != NULL) {
+		*translated = NO;
+	}
+	if (value == nil || !fn_uid_index(value, &index)) {
+		return YES;
+	}
+	if (![[self fnClassNameAt:index] isEqualToString:@"NSColor"]) {
+		return YES;
+	}
+	[record setObject:[AGAppleNibRef refWithIndex:index] forKey:agnibKey];
+	if (translated != NULL) {
+		*translated = YES;
+	}
+	return YES;
+}
+
 - (BOOL)fnBuildFontRecordAtIndex:(NSUInteger)index record:(NSMutableDictionary *)record
 {
 	NSDictionary *entry = [_objects objectAtIndex:index];
@@ -816,15 +972,17 @@ static BOOL fn_is_translated_cell_class(NSString *name)
 				@"NSBorderType", @"NSTitlePosition", @"NSTransparent", nil]];
 		} else if ([appleClass isEqualToString:@"NSScrollView"]) {
 			[consumed addObjectsFromArray:[NSArray arrayWithObjects:
-				@"NSContentView", @"NSsFlags", @"NSVScroller", @"NSHScroller", nil]];
+				@"NSContentView", @"NSsFlags", @"NSVScroller", @"NSHScroller",
+				@"NSBackgroundColor", @"NSBGColor", nil]];
 		} else if ([appleClass isEqualToString:@"NSClipView"]) {
 			[consumed addObjectsFromArray:[NSArray arrayWithObjects:
-				@"NSDocView", @"NScvFlags", nil]];
+				@"NSDocView", @"NScvFlags", @"NSBGColor", nil]];
 		} else if ([appleClass isEqualToString:@"NSMatrix"]) {
 			[consumed addObjectsFromArray:[NSArray arrayWithObjects:
 				@"NSCells", @"NSNumRows", @"NSNumCols", @"NSCellSize",
 				@"NSIntercellSpacing", @"NSSelectedCell", @"NSMatrixFlags",
-				@"NSCellClass", @"NSProtoCell", @"NSEnabled", nil]];
+				@"NSCellClass", @"NSProtoCell", @"NSEnabled",
+				@"NSBackgroundColor", @"NSCellBackgroundColor", nil]];
 		}
 		[self fnNoteUnmappedForEntry:entry className:appleClass consumed:consumed];
 	}
@@ -839,6 +997,9 @@ static BOOL fn_is_translated_cell_class(NSString *name)
 	Class cls = NSClassFromString(appleClass);
 	NSNumber *number;
 	NSString *value;
+	BOOL textColorTranslated = NO;
+	BOOL backgroundColorTranslated = NO;
+	BOOL drawsBackgroundTranslated = NO;
 
 	if (cls == Nil) {
 		return [self fnFail:[NSString stringWithFormat:@"it names the cell class %@, which is not in this process",
@@ -916,6 +1077,15 @@ static BOOL fn_is_translated_cell_class(NSString *name)
 			[record setObject:[AGAppleNibRef refWithIndex:supportIndex] forKey:@"font"];
 		}
 	}
+	[self fnSetColorRef:[entry objectForKey:@"NSTextColor"] key:@"NSTextColor" inRecord:record
+			 as:@"textColor" translated:&textColorTranslated];
+	[self fnSetColorRef:[entry objectForKey:@"NSBackgroundColor"] key:@"NSBackgroundColor"
+		   inRecord:record as:@"backgroundColor" translated:&backgroundColorTranslated];
+	number = [self fnNumberValue:[entry objectForKey:@"NSDrawsBackground"]];
+	if (number != nil) {
+		[record setObject:number forKey:@"drawsBackground"];
+		drawsBackgroundTranslated = YES;
+	}
 
 	/* **THE SLIDER'S OWN NUMBERS.** `NSVertical` is deliberately not one of them: this tree derives the orientation
 	 * from the frame (and says so at `-_vertical`), so the flag is a rendering fact rather than a property. */
@@ -977,6 +1147,15 @@ static BOOL fn_is_translated_cell_class(NSString *name)
 				@"NSMinValue", @"NSMaxValue", @"NSValue", @"NSNumberOfTickMarks",
 				@"NSTickMarkPosition", @"NSAltIncValue", @"NSAllowsTickMarkValuesOnly",
 				@"NSKnobThickness", @"NSSliderType", @"NSVertical", nil]];
+		}
+		if (textColorTranslated) {
+			[consumed addObject:@"NSTextColor"];
+		}
+		if (backgroundColorTranslated) {
+			[consumed addObject:@"NSBackgroundColor"];
+		}
+		if (drawsBackgroundTranslated) {
+			[consumed addObject:@"NSDrawsBackground"];
 		}
 		[self fnNoteUnmappedForEntry:entry className:appleClass consumed:consumed];
 	}
@@ -1179,6 +1358,13 @@ static BOOL fn_is_translated_cell_class(NSString *name)
 		}
 		if ([name isEqualToString:@"NSFont"]) {
 			if (![self fnBuildFontRecordAtIndex:i record:record]) {
+				return NO;
+			}
+			[_records setObject:record forKey:[NSNumber numberWithUnsignedInteger:i]];
+			continue;
+		}
+		if ([name isEqualToString:@"NSColor"]) {
+			if (![self fnBuildColorRecordAtIndex:i record:record]) {
 				return NO;
 			}
 			[_records setObject:record forKey:[NSNumber numberWithUnsignedInteger:i]];

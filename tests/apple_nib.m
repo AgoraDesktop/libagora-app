@@ -19,6 +19,7 @@
 #import <AppKit/NSBox.h>
 #import <AppKit/NSButton.h>
 #import <AppKit/NSClipView.h>
+#import <AppKit/NSColor.h>
 #import <AppKit/NSFont.h>
 #import <AppKit/NSMatrix.h>
 #import <AppKit/NSSlider.h>
@@ -35,8 +36,21 @@
 #include <CoreFoundation/ForFoundationOnly.h>
 
 #include <stdio.h>
+#include <math.h>
 
 static int g_fail;
+
+static void check(int condition, const char *what);
+
+static void
+check_color(NSColor *color, CGFloat red, CGFloat green, CGFloat blue, const char *what)
+{
+	check(color != nil &&
+	      fabs((double)[color redComponent] - (double)red) < 0.01 &&
+	      fabs((double)[color greenComponent] - (double)green) < 0.01 &&
+	      fabs((double)[color blueComponent] - (double)blue) < 0.01,
+	      what);
+}
 
 static void
 check(int condition, const char *what)
@@ -295,8 +309,14 @@ build_layout_archive(void)
 	NSUInteger cFont = add_class(objects, @"NSFont");
 	NSUInteger cSlider = add_class(objects, @"NSSlider");
 	NSUInteger cSliderCell = add_class(objects, @"NSSliderCell");
+	NSUInteger cColor = add_class(objects, @"NSColor");
 	NSUInteger root;
 	NSUInteger font;
+	NSUInteger textColor;
+	NSUInteger fieldBackground;
+	NSUInteger catalogBackground;
+	NSUInteger matrixBackground;
+	NSUInteger matrixCellBackground;
 	NSUInteger cellA;
 	NSUInteger cellB;
 	NSUInteger cellsArray;
@@ -325,6 +345,34 @@ build_layout_archive(void)
 			[NSNumber numberWithDouble:13.0], @"NSSize",
 			[NSNumber numberWithUnsignedInt:16u], @"NSfFlags",
 			nil]);
+	textColor = add_object(objects, cColor,
+		[NSDictionary dictionaryWithObjectsAndKeys:
+			[NSNumber numberWithInt:1], @"NSColorSpace",
+			[NSData dataWithBytes:"0 0 1" length:5], @"NSRGB",
+			nil]);
+	fieldBackground = add_object(objects, cColor,
+		[NSDictionary dictionaryWithObjectsAndKeys:
+			[NSNumber numberWithInt:3], @"NSColorSpace",
+			[NSData dataWithBytes:"0.8" length:3], @"NSWhite",
+			nil]);
+	/* A CATALOG COLOUR WITH ITS RESOLVED FALLBACK, which is Apple's own shape for a system colour. */
+	catalogBackground = add_object(objects, cColor,
+		[NSDictionary dictionaryWithObjectsAndKeys:
+			@"System", @"NSCatalogName",
+			@"textBackgroundColor", @"NSColorName",
+			[NSNumber numberWithInt:6], @"NSColorSpace",
+			uid(fieldBackground), @"NSColor",
+			nil]);
+	matrixBackground = add_object(objects, cColor,
+		[NSDictionary dictionaryWithObjectsAndKeys:
+			[NSNumber numberWithInt:1], @"NSColorSpace",
+			[NSData dataWithBytes:"1 0 0" length:5], @"NSRGB",
+			nil]);
+	matrixCellBackground = add_object(objects, cColor,
+		[NSDictionary dictionaryWithObjectsAndKeys:
+			[NSNumber numberWithInt:3], @"NSColorSpace",
+			[NSData dataWithBytes:"0.25" length:4], @"NSWhite",
+			nil]);
 
 	cellA = add_object(objects, cButtonCell,
 		[NSDictionary dictionaryWithObjectsAndKeys:
@@ -350,6 +398,8 @@ build_layout_archive(void)
 			@"{100, 20}", @"NSCellSize",
 			@"{0, 0}", @"NSIntercellSpacing",
 			uid(cellA), @"NSSelectedCell",
+			uid(matrixBackground), @"NSBackgroundColor",
+			uid(matrixCellBackground), @"NSCellBackgroundColor",
 			nil]);
 
 	titleCell = add_object(objects, cFieldCell,
@@ -357,6 +407,9 @@ build_layout_archive(void)
 			[NSNumber numberWithUnsignedInt:0u], @"NSCellFlags",
 			@"Group", @"NSContents",
 			uid(font), @"NSSupport",
+			uid(textColor), @"NSTextColor",
+			uid(fieldBackground), @"NSBackgroundColor",
+			[NSNumber numberWithBool:YES], @"NSDrawsBackground",
 			nil]);
 
 	inner = add_object(objects, cView,
@@ -387,6 +440,7 @@ build_layout_archive(void)
 			uid(matrix), @"NSDocView",
 			[NSNumber numberWithUnsignedInt:4u], @"NScvFlags",
 			uid(matrix), @"NSSubviews",
+			uid(catalogBackground), @"NSBGColor",
 			nil]);
 
 	/* NSsFlags: border 0, vertical 16, horizontal 32, autohide 512. */
@@ -495,10 +549,17 @@ test_layout_translation(void)
 	titleFont = [[box titleCell] font];
 	check([titleFont isKindOfClass:[NSFont class]] && [titleFont pointSize] == 13.0,
 	      "NSSupport becomes the title cell's font");
+	check_color([[box titleCell] textColor], 0.0, 0.0, 1.0,
+		    "NSTextColor becomes the cell's text colour");
+	check_color([[box titleCell] backgroundColor], 0.8, 0.8, 0.8,
+		    "NSBackgroundColor becomes the cell's background");
+	check([[box titleCell] drawsBackground], "NSDrawsBackground is translated");
 
 	check([scroll isKindOfClass:[NSScrollView class]], "NSScrollView becomes an NSScrollView");
 	check([scroll hasVerticalScroller] && [scroll hasHorizontalScroller],
 	      "NSsFlags creates both scrollers");
+	check_color([(NSClipView *)[scroll contentView] backgroundColor], 0.8, 0.8, 0.8,
+		    "a catalog NSBGColor resolves through its fallback");
 	check([[scroll contentView] isKindOfClass:[NSClipView class]],
 	      "NSContentView becomes the clip view");
 	matrix = (NSMatrix *)[scroll documentView];
@@ -510,6 +571,10 @@ test_layout_translation(void)
 	      "the matrix's cell titles travel");
 	check([matrix selectedRow] == 0 && [matrix selectedColumn] == 0,
 	      "NSSelectedCell becomes the selected slot");
+	check_color([matrix backgroundColor], 1.0, 0.0, 0.0,
+		    "NSMatrix NSBackgroundColor is translated");
+	check_color([matrix cellBackgroundColor], 0.25, 0.25, 0.25,
+		    "NSMatrix NSCellBackgroundColor is translated");
 
 	check([slider isKindOfClass:[NSSlider class]], "NSSlider becomes an NSSlider");
 	check([[[slider cell] class] isSubclassOfClass:[NSSliderCell class]],
