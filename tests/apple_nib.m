@@ -19,7 +19,9 @@
 #import <AppKit/NSBox.h>
 #import <AppKit/NSButton.h>
 #import <AppKit/NSClipView.h>
+#import <AppKit/NSFont.h>
 #import <AppKit/NSMatrix.h>
+#import <AppKit/NSSlider.h>
 #import <AppKit/NSScrollView.h>
 #import <AppKit/NSCell.h>
 #import <AppKit/NSControl.h>
@@ -290,7 +292,11 @@ build_layout_archive(void)
 	NSUInteger cMatrix = add_class(objects, @"NSMatrix");
 	NSUInteger cButtonCell = add_class(objects, @"NSButtonCell");
 	NSUInteger cFieldCell = add_class(objects, @"NSTextFieldCell");
+	NSUInteger cFont = add_class(objects, @"NSFont");
+	NSUInteger cSlider = add_class(objects, @"NSSlider");
+	NSUInteger cSliderCell = add_class(objects, @"NSSliderCell");
 	NSUInteger root;
+	NSUInteger font;
 	NSUInteger cellA;
 	NSUInteger cellB;
 	NSUInteger cellsArray;
@@ -298,6 +304,8 @@ build_layout_archive(void)
 	NSUInteger clip;
 	NSUInteger scroll;
 	NSUInteger titleCell;
+	NSUInteger sliderCell;
+	NSUInteger slider;
 	NSUInteger inner;
 	NSUInteger box;
 	NSUInteger view;
@@ -311,6 +319,12 @@ build_layout_archive(void)
 
 	root = add_object(objects, cCustom,
 			  [NSDictionary dictionaryWithObject:@"Owner" forKey:@"NSClassName"]);
+	font = add_object(objects, cFont,
+		[NSDictionary dictionaryWithObjectsAndKeys:
+			@"Helvetica", @"NSName",
+			[NSNumber numberWithDouble:13.0], @"NSSize",
+			[NSNumber numberWithUnsignedInt:16u], @"NSfFlags",
+			nil]);
 
 	cellA = add_object(objects, cButtonCell,
 		[NSDictionary dictionaryWithObjectsAndKeys:
@@ -342,6 +356,7 @@ build_layout_archive(void)
 		[NSDictionary dictionaryWithObjectsAndKeys:
 			[NSNumber numberWithUnsignedInt:0u], @"NSCellFlags",
 			@"Group", @"NSContents",
+			uid(font), @"NSSupport",
 			nil]);
 
 	inner = add_object(objects, cView,
@@ -383,21 +398,41 @@ build_layout_archive(void)
 			[NSNumber numberWithUnsignedInt:560u], @"NSsFlags",
 			nil]);
 
+	sliderCell = add_object(objects, cSliderCell,
+		[NSDictionary dictionaryWithObjectsAndKeys:
+			[NSNumber numberWithUnsignedInt:0x04000000u], @"NSCellFlags",
+			[NSNumber numberWithDouble:0.0], @"NSMinValue",
+			[NSNumber numberWithDouble:10.0], @"NSMaxValue",
+			[NSNumber numberWithDouble:4.0], @"NSValue",
+			[NSNumber numberWithInt:3], @"NSNumberOfTickMarks",
+			[NSNumber numberWithInt:1], @"NSTickMarkPosition",
+			[NSNumber numberWithBool:YES], @"NSAllowsTickMarkValuesOnly",
+			[NSNumber numberWithBool:NO], @"NSVertical",
+			nil]);
+	slider = add_object(objects, cSlider,
+		[NSDictionary dictionaryWithObjectsAndKeys:
+			@"{{0, 220}, {200, 20}}", @"NSFrame",
+			[NSNumber numberWithUnsignedInt:0x100u], @"NSvFlags",
+			uid(sliderCell), @"NSCell",
+			nil]);
+
 	subviewsArray = add_array(objects, cArray,
-		[NSArray arrayWithObjects:uid(box), uid(scroll), nil]);
+		[NSArray arrayWithObjects:uid(box), uid(scroll), uid(slider), nil]);
 	view = add_object(objects, cView,
 		[NSDictionary dictionaryWithObjectsAndKeys:
-			@"{{0, 0}, {200, 220}}", @"NSFrame",
+			@"{{0, 0}, {200, 240}}", @"NSFrame",
 			[NSNumber numberWithUnsignedInt:0x100u], @"NSvFlags",
 			uid(subviewsArray), @"NSSubviews",
 			nil]);
 
 	[keys addObjectsFromArray:[NSArray arrayWithObjects:
-		uid(root), uid(view), uid(box), uid(inner), uid(titleCell), uid(scroll),
-		uid(clip), uid(matrix), uid(cellA), uid(cellB), nil]];
+		uid(root), uid(view), uid(box), uid(inner), uid(titleCell), uid(font),
+		uid(scroll), uid(clip), uid(matrix), uid(cellA), uid(cellB),
+		uid(slider), uid(sliderCell), nil]];
 	[owners addObjectsFromArray:[NSArray arrayWithObjects:
-		uid(root), uid(root), uid(view), uid(box), uid(box), uid(view),
-		uid(scroll), uid(clip), uid(matrix), uid(matrix), nil]];
+		uid(root), uid(root), uid(view), uid(box), uid(box), uid(titleCell),
+		uid(view), uid(scroll), uid(clip), uid(matrix), uid(matrix),
+		uid(view), uid(slider), nil]];
 
 	keysArray = add_array(objects, cArray, keys);
 	valuesArray = add_array(objects, cArray, owners);
@@ -428,7 +463,9 @@ test_layout_translation(void)
 	NSArray *subviews;
 	NSBox *box;
 	NSScrollView *scroll;
+	NSSlider *slider;
 	NSMatrix *matrix;
+	NSFont *titleFont;
 	NSString *reason = nil;
 
 	check([AGAppleNib validateAppleNibArchive:plist reason:&reason],
@@ -442,9 +479,10 @@ test_layout_translation(void)
 	      "the container nib instantiates");
 	view = [top count] == 1 ? [top objectAtIndex:0] : nil;
 	subviews = [view subviews];
-	check([subviews count] == 2, "the container view keeps both children");
-	box = [subviews count] == 2 ? [subviews objectAtIndex:0] : nil;
-	scroll = [subviews count] == 2 ? [subviews objectAtIndex:1] : nil;
+	check([subviews count] == 3, "the container view keeps all three children");
+	box = [subviews count] == 3 ? [subviews objectAtIndex:0] : nil;
+	scroll = [subviews count] == 3 ? [subviews objectAtIndex:1] : nil;
+	slider = [subviews count] == 3 ? [subviews objectAtIndex:2] : nil;
 
 	check([box isKindOfClass:[NSBox class]], "NSBox becomes an NSBox");
 	check([[box title] isEqualToString:@"Group"], "NSTitleCell becomes the box's title");
@@ -454,6 +492,9 @@ test_layout_translation(void)
 	      "NSOffsets becomes the content view margins");
 	check([[box contentView] superview] == (NSView *)box && [[box subviews] count] == 1,
 	      "the content view is not added twice");
+	titleFont = [[box titleCell] font];
+	check([titleFont isKindOfClass:[NSFont class]] && [titleFont pointSize] == 13.0,
+	      "NSSupport becomes the title cell's font");
 
 	check([scroll isKindOfClass:[NSScrollView class]], "NSScrollView becomes an NSScrollView");
 	check([scroll hasVerticalScroller] && [scroll hasHorizontalScroller],
@@ -469,6 +510,15 @@ test_layout_translation(void)
 	      "the matrix's cell titles travel");
 	check([matrix selectedRow] == 0 && [matrix selectedColumn] == 0,
 	      "NSSelectedCell becomes the selected slot");
+
+	check([slider isKindOfClass:[NSSlider class]], "NSSlider becomes an NSSlider");
+	check([[[slider cell] class] isSubclassOfClass:[NSSliderCell class]],
+	      "NSSliderCell becomes the slider's cell");
+	check([slider minValue] == 0.0 && [slider maxValue] == 10.0 && [slider doubleValue] == 4.0,
+	      "the slider's value range and value travel");
+	check([slider numberOfTickMarks] == 3 && [slider tickMarkPosition] == 1 &&
+	      [slider allowsTickMarkValuesOnly],
+	      "the slider's tick marks travel");
 
 	[nib release];
 }

@@ -165,7 +165,7 @@ static BOOL fn_is_auxiliary_class(NSString *name)
 			@"NSArray", @"NSMutableArray", @"NSSet", @"NSMutableSet",
 			@"NSDictionary", @"NSMutableDictionary", @"NSNull",
 			@"NSString", @"NSMutableString", @"NSNumber", @"NSDate", @"NSData", @"NSValue",
-			@"NSFont", @"NSFontManager", @"NSColor", @"NSImage", @"NSCustomResource",
+			@"NSFontManager", @"NSColor", @"NSImage", @"NSCustomResource",
 			@"NSAttributedString", @"NSMutableAttributedString", @"NSParagraphStyle",
 			nil];
 	}
@@ -185,7 +185,8 @@ static BOOL fn_is_translated_view_class(NSString *name)
 	    || [name isEqualToString:@"NSBox"]
 	    || [name isEqualToString:@"NSScrollView"]
 	    || [name isEqualToString:@"NSClipView"]
-	    || [name isEqualToString:@"NSMatrix"];
+	    || [name isEqualToString:@"NSMatrix"]
+	    || [name isEqualToString:@"NSSlider"];
 }
 
 static BOOL fn_is_translated_cell_class(NSString *name)
@@ -193,7 +194,8 @@ static BOOL fn_is_translated_cell_class(NSString *name)
 	return [name isEqualToString:@"NSCell"]
 	    || [name isEqualToString:@"NSActionCell"]
 	    || [name isEqualToString:@"NSButtonCell"]
-	    || [name isEqualToString:@"NSTextFieldCell"];
+	    || [name isEqualToString:@"NSTextFieldCell"]
+	    || [name isEqualToString:@"NSSliderCell"];
 }
 
 /* ==================================================================================================
@@ -668,6 +670,32 @@ static BOOL fn_is_translated_cell_class(NSString *name)
 	return YES;
 }
 
+
+/* **A FONT IS A DESIGN VALUE, NOT A STRUCTURAL OBJECT.** Apple's `NSFont` archive is three keys: the name, the size
+ * and a traits bitfield. This tree's `NSFont -initWithCoder:` asks for `fontName` and `pointSize` and substitutes a
+ * system font when the name is missing (a design written on another machine), so the translation states the two
+ * keys that matter and leaves `NSfFlags` to the ledger — the face's name already carries the family, and guessing a
+ * trait mask is the wrong value `NSNib.h` refuses. */
+- (BOOL)fnBuildFontRecordAtIndex:(NSUInteger)index record:(NSMutableDictionary *)record
+{
+	NSDictionary *entry = [_objects objectAtIndex:index];
+	NSString *name = [self fnStringValue:[entry objectForKey:@"NSName"]];
+	NSNumber *size = [self fnNumberValue:[entry objectForKey:@"NSSize"]];
+
+	if (name == nil) {
+		return [self fnFail:@"a font in the archive has no NSName"];
+	}
+	if (size == nil) {
+		return [self fnFail:[NSString stringWithFormat:@"the font %@ has no NSSize", name]];
+	}
+	[record setObject:@"NSFont" forKey:AGAppleClassKey];
+	[record setObject:name forKey:@"fontName"];
+	[record setObject:size forKey:@"pointSize"];
+	[self fnNoteUnmappedForEntry:entry className:@"NSFont"
+			    consumed:[NSSet setWithObjects:@"NSName", @"NSSize", nil]];
+	return YES;
+}
+
 - (BOOL)fnBuildViewRecordAtIndex:(NSUInteger)index
 			  appleClass:(NSString *)appleClass
 			      record:(NSMutableDictionary *)record
@@ -877,6 +905,45 @@ static BOOL fn_is_translated_cell_class(NSString *name)
 	if ((value = [self fnStringValue:[entry objectForKey:@"NSAlternateContents"]]) != nil) {
 		[record setObject:value forKey:@"alternateTitle"];
 	}
+	/* **`NSSupport` IS A FONT IN THE COMMON CASE AND AN IMAGE IN THE RARE ONE.** Only the font is translated, so the
+	 * cell gets this tree's `font` key; an image stays at the cell's default and the ledger names the key. */
+	{
+		id support = [entry objectForKey:@"NSSupport"];
+		NSUInteger supportIndex;
+
+		if (support != nil && fn_uid_index(support, &supportIndex) &&
+		    [[self fnClassNameAt:supportIndex] isEqualToString:@"NSFont"]) {
+			[record setObject:[AGAppleNibRef refWithIndex:supportIndex] forKey:@"font"];
+		}
+	}
+
+	/* **THE SLIDER'S OWN NUMBERS.** `NSVertical` is deliberately not one of them: this tree derives the orientation
+	 * from the frame (and says so at `-_vertical`), so the flag is a rendering fact rather than a property. */
+	if ([appleClass isEqualToString:@"NSSliderCell"]) {
+		/* AGORA KEY -> APPLE KEY, so the enumeration below reads as "for each key this tree knows". */
+		NSDictionary *sliderKeys = [NSDictionary dictionaryWithObjectsAndKeys:
+			@"NSMinValue", @"minValue",
+			@"NSMaxValue", @"maxValue",
+			@"NSValue", @"sliderValue",
+			@"NSNumberOfTickMarks", @"numberOfTickMarks",
+			@"NSTickMarkPosition", @"tickMarkPosition",
+			@"NSAltIncValue", @"altIncrementValue",
+			@"NSAllowsTickMarkValuesOnly", @"allowsTickMarkValuesOnly",
+			@"NSKnobThickness", @"knobThickness",
+			@"NSSliderType", @"sliderType",
+			nil];
+		NSEnumerator *e = [sliderKeys keyEnumerator];
+		NSString *agnibKey;
+
+		while ((agnibKey = [e nextObject]) != nil) {
+			NSNumber *sliderNumber = [self fnNumberValue:
+				[entry objectForKey:[sliderKeys objectForKey:agnibKey]]];
+
+			if (sliderNumber != nil) {
+				[record setObject:sliderNumber forKey:agnibKey];
+			}
+		}
+	}
 
 	/* **THE BUTTON'S SECOND FLAG WORD: the masks are GNUstep's `NSButtonCell -initWithCoder:` (same file), which
 	 * composes bezelStyle from the low bits and the modifier mask from bits 8 and up.** */
@@ -892,11 +959,27 @@ static BOOL fn_is_translated_cell_class(NSString *name)
 		}
 	}
 
-	[self fnNoteUnmappedForEntry:entry className:appleClass
-			    consumed:[NSSet setWithObjects:
-				@"NSCellFlags", @"NSCellFlags2", @"NSContents", @"NSKeyEquivalent",
-				@"NSAlternateContents", @"NSButtonFlags2", @"NSControlView",
-				@"NSSupport", @"NSMenu", @"NSFormatter", nil]];
+	{
+		NSMutableSet *consumed = [NSMutableSet setWithObjects:
+			@"NSCellFlags", @"NSCellFlags2", @"NSContents", @"NSKeyEquivalent",
+			@"NSAlternateContents", @"NSButtonFlags2", @"NSControlView",
+			@"NSMenu", @"NSFormatter", nil];
+		id support = [entry objectForKey:@"NSSupport"];
+		NSUInteger supportIndex;
+
+		if (support == nil ||
+		    (fn_uid_index(support, &supportIndex) &&
+		     [[self fnClassNameAt:supportIndex] isEqualToString:@"NSFont"])) {
+			[consumed addObject:@"NSSupport"];
+		}
+		if ([appleClass isEqualToString:@"NSSliderCell"]) {
+			[consumed addObjectsFromArray:[NSArray arrayWithObjects:
+				@"NSMinValue", @"NSMaxValue", @"NSValue", @"NSNumberOfTickMarks",
+				@"NSTickMarkPosition", @"NSAltIncValue", @"NSAllowsTickMarkValuesOnly",
+				@"NSKnobThickness", @"NSSliderType", @"NSVertical", nil]];
+		}
+		[self fnNoteUnmappedForEntry:entry className:appleClass consumed:consumed];
+	}
 	return YES;
 }
 
@@ -1086,11 +1169,19 @@ static BOOL fn_is_translated_cell_class(NSString *name)
 		if (name == nil) {
 			continue;
 		}
+		record = [NSMutableDictionary dictionary];
 		if ([name isEqualToString:AGAppleObjectDataClassName]) {
 			continue;
 		}
 		if ([name hasSuffix:@"Connector"]) {
 			[_connectorIndexes addObject:[NSNumber numberWithUnsignedInteger:i]];
+			continue;
+		}
+		if ([name isEqualToString:@"NSFont"]) {
+			if (![self fnBuildFontRecordAtIndex:i record:record]) {
+				return NO;
+			}
+			[_records setObject:record forKey:[NSNumber numberWithUnsignedInteger:i]];
 			continue;
 		}
 		if (fn_is_auxiliary_class(name)) {
@@ -1102,7 +1193,6 @@ static BOOL fn_is_translated_cell_class(NSString *name)
 			}
 			continue;
 		}
-		record = [NSMutableDictionary dictionary];
 		if ([name isEqualToString:@"NSWindowTemplate"]) {
 			if (![self fnBuildWindowTemplateRecordAtIndex:i record:record]) {
 				return NO;
