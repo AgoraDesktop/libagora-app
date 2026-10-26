@@ -6,9 +6,10 @@
 Agora is an installable desktop environment for Linux and BSD; see the project README in the parent
 directory (`../README.md`). `libagora-app` is the top of its stack: above it there are only applications.
 
-**IF YOU ARE PICKING THIS TREE UP RATHER THAN READING ITS API, START WITH `HANDOFF-7.md`** — the standing handoff: the
-measured surface, the traps the last sessions paid for, and where the next hour is best spent. `HANDOFF-6.md` and
-`HANDOFF.md` through `HANDOFF-5.md` are the earlier ones, and their instrument notes are still the ones in force.
+**IF YOU ARE PICKING THIS TREE UP RATHER THAN READING ITS API, START WITH `HANDOFF-8.md`** — the Apple `.nib`
+translator: the format, what is translated, the traps these sessions paid for, and where the next hour is best spent.
+`HANDOFF-7.md` is still the standing surface measurement and the controller long form, `HANDOFF-6.md` and `HANDOFF.md`
+through `HANDOFF-5.md` are the earlier ones, and their instrument notes are still the ones in force.
 
 ## Status
 
