@@ -51,6 +51,10 @@
 		}
 		_animates = [aDecoder decodeBoolForKey:@"animates"];
 		_allowsCutCopyPaste = [aDecoder decodeBoolForKey:@"allowsCutCopyPaste"];
+		/* THE CELL'S EDIT FLAG, which the view forwards: it is design state and has no other home in this archive. */
+		if ([aDecoder containsValueForKey:@"editable"]) {
+			[self setEditable:[aDecoder decodeBoolForKey:@"editable"]];
+		}
 	}
 	return self;
 }
@@ -60,6 +64,7 @@
 	[super encodeWithCoder:aCoder];
 	[aCoder encodeBool:_animates forKey:@"animates"];
 	[aCoder encodeBool:_allowsCutCopyPaste forKey:@"allowsCutCopyPaste"];
+	[aCoder encodeBool:[self isEditable] forKey:@"editable"];
 }
 
 + (BOOL)supportsSecureCoding

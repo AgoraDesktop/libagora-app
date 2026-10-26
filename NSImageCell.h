@@ -47,7 +47,7 @@ enum {
 	NSImageFrameButton = 4
 };
 
-@interface NSImageCell : NSCell
+@interface NSImageCell : NSCell <NSSecureCoding>
 {
 	NSCellImageAlignment _imageAlignment;
 	NSImageScaling _imageScaling;

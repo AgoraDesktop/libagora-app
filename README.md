@@ -53,9 +53,10 @@ archive whose root is `{AGNibVersion, AGNibTopLevelObjects, AGNibConnections}`, 
 records naming the file's owner by placeholder. The classes a design file may name are archivable — `NSResponder`,
 `NSView`, `NSControl`, the whole cell family (`NSCell`, `NSActionCell`, `NSTextFieldCell`, `NSButtonCell`,
 `NSBrowserCell`, `NSComboBoxCell`, `NSMenuItemCell`, `NSPathCell`, `NSPathComponentCell`, `NSPopUpButtonCell`,
-`NSScrollerCell`, `NSSearchFieldCell`, `NSSegmentedCell`, `NSSliderCell`, `NSTableHeaderCell`), the controls that
-place them (`NSButton`, `NSTextField`, `NSSlider`, `NSSegmentedControl`, `NSPopUpButton`, `NSSearchField`,
-`NSComboBox`, `NSPathControl`, `NSProgressIndicator`, `NSBrowser`, `NSMatrix`), the containers (`NSBox`,
+`NSScrollerCell`, `NSSearchFieldCell`, `NSSegmentedCell`, `NSSliderCell`, `NSImageCell`, `NSBrowserCell`,
+`NSTableHeaderCell`), the controls that place them (`NSButton`, `NSTextField`, `NSSlider`, `NSSegmentedControl`,
+`NSPopUpButton`, `NSSearchField`, `NSComboBox`, `NSPathControl`, `NSProgressIndicator`, `NSBrowser`, `NSImageView`,
+`NSMatrix`), the containers (`NSBox`,
 `NSScrollView`, `NSClipView`, `NSTableView`, `NSOutlineView`, `NSSplitView`, `NSToolbar`), and the value and menu
 classes (`NSWindow`, `NSMenu`, `NSMenuItem`,
 `NSTableColumn`, `NSFont`, `NSColor`, `NSImage`) — each conforming to `NSSecureCoding`, each implementing both coding
@@ -77,7 +78,8 @@ six ways it must not compile) and `tests/ibtool_test.m` (the tool run for real).
 maps, and translates the classes it states — `NSWindowTemplate`; `NSView`/`NSControl`/`NSButton`/`NSTextField`/
 `NSSplitView`; `NSBox`; `NSScrollView`/`NSClipView` (including the `NSsFlags` that create the bars); `NSMatrix`
 (flat cells regrouped into rows); `NSSlider`/`NSSliderCell`; `NSFont`; `NSColor` (white, RGB and catalog
-fallbacks); `NSMenu`/`NSMenuItem`; `NSCell`/`NSActionCell`/`NSButtonCell`/`NSTextFieldCell`; `NSCustomObject` and the
+fallbacks); `NSMenu`/`NSMenuItem`; `NSImageView`/`NSImageCell` and named images; `NSBrowser`/`NSBrowserCell`;
+`NSClassSwapper`; `NSCell`/`NSActionCell`/`NSButtonCell`/`NSTextFieldCell`; `NSCustomObject` and the
 two `NSNib*Connector`s — into this tree's coding keys before the same connection pass runs. `NSFrame` strings become
 `NSValue`s, `NSvFlags`/`NSCellFlags`/`NSCellFlags2` become the properties this tree archives separately, and a class
 outside that table (an `NSTextView`, a toolbar, a modern autolayout nib) refuses the file BY NAME rather than

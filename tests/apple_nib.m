@@ -17,10 +17,15 @@
  */
 #import <AppKit/AGAppleNib.h>
 #import <AppKit/NSBox.h>
+#import <AppKit/NSBrowser.h>
+#import <AppKit/NSBrowserCell.h>
 #import <AppKit/NSButton.h>
 #import <AppKit/NSClipView.h>
 #import <AppKit/NSColor.h>
 #import <AppKit/NSFont.h>
+#import <AppKit/NSImage.h>
+#import <AppKit/NSImageCell.h>
+#import <AppKit/NSImageView.h>
 #import <AppKit/NSMatrix.h>
 #import <AppKit/NSMenu.h>
 #import <AppKit/NSMenuItem.h>
@@ -312,6 +317,10 @@ build_layout_archive(void)
 	NSUInteger cSlider = add_class(objects, @"NSSlider");
 	NSUInteger cSliderCell = add_class(objects, @"NSSliderCell");
 	NSUInteger cColor = add_class(objects, @"NSColor");
+	NSUInteger cImageView = add_class(objects, @"NSImageView");
+	NSUInteger cImageCell = add_class(objects, @"NSImageCell");
+	NSUInteger cResource = add_class(objects, @"NSCustomResource");
+	NSUInteger cSwapper = add_class(objects, @"NSClassSwapper");
 	NSUInteger root;
 	NSUInteger font;
 	NSUInteger textColor;
@@ -319,6 +328,10 @@ build_layout_archive(void)
 	NSUInteger catalogBackground;
 	NSUInteger matrixBackground;
 	NSUInteger matrixCellBackground;
+	NSUInteger resource;
+	NSUInteger imageCell;
+	NSUInteger imageView;
+	NSUInteger swapper;
 	NSUInteger cellA;
 	NSUInteger cellB;
 	NSUInteger cellsArray;
@@ -472,11 +485,41 @@ build_layout_archive(void)
 			uid(sliderCell), @"NSCell",
 			nil]);
 
+	resource = add_object(objects, cResource,
+		[NSDictionary dictionaryWithObjectsAndKeys:
+			@"NSImage", @"NSClassName",
+			@"test-image", @"NSResourceName",
+			nil]);
+	imageCell = add_object(objects, cImageCell,
+		[NSDictionary dictionaryWithObjectsAndKeys:
+			[NSNumber numberWithInt:1], @"NSAlign",
+			[NSNumber numberWithInt:2], @"NSScale",
+			[NSNumber numberWithInt:1], @"NSStyle",
+			uid(resource), @"NSContents",
+			nil]);
+	imageView = add_object(objects, cImageView,
+		[NSDictionary dictionaryWithObjectsAndKeys:
+			@"{{0, 240}, {64, 64}}", @"NSFrame",
+			[NSNumber numberWithUnsignedInt:0x100u], @"NSvFlags",
+			uid(imageCell), @"NSCell",
+			[NSNumber numberWithBool:YES], @"NSEditable",
+			[NSNumber numberWithBool:NO], @"NSAnimates",
+			nil]);
+
+	swapper = add_object(objects, cSwapper,
+		[NSDictionary dictionaryWithObjectsAndKeys:
+			@"{{70, 240}, {60, 60}}", @"NSFrame",
+			[NSNumber numberWithUnsignedInt:0x100u], @"NSvFlags",
+			@"NSView", @"NSClassName",
+			@"NSView", @"NSOriginalClassName",
+			nil]);
+
 	subviewsArray = add_array(objects, cArray,
-		[NSArray arrayWithObjects:uid(box), uid(scroll), uid(slider), nil]);
+		[NSArray arrayWithObjects:uid(box), uid(scroll), uid(slider), uid(imageView),
+					  uid(swapper), nil]);
 	view = add_object(objects, cView,
 		[NSDictionary dictionaryWithObjectsAndKeys:
-			@"{{0, 0}, {200, 240}}", @"NSFrame",
+			@"{{0, 0}, {200, 304}}", @"NSFrame",
 			[NSNumber numberWithUnsignedInt:0x100u], @"NSvFlags",
 			uid(subviewsArray), @"NSSubviews",
 			nil]);
@@ -484,11 +527,13 @@ build_layout_archive(void)
 	[keys addObjectsFromArray:[NSArray arrayWithObjects:
 		uid(root), uid(view), uid(box), uid(inner), uid(titleCell), uid(font),
 		uid(scroll), uid(clip), uid(matrix), uid(cellA), uid(cellB),
-		uid(slider), uid(sliderCell), nil]];
+		uid(slider), uid(sliderCell), uid(imageView), uid(imageCell), uid(resource),
+		uid(swapper), nil]];
 	[owners addObjectsFromArray:[NSArray arrayWithObjects:
 		uid(root), uid(root), uid(view), uid(box), uid(box), uid(titleCell),
 		uid(view), uid(scroll), uid(clip), uid(matrix), uid(matrix),
-		uid(view), uid(slider), nil]];
+		uid(view), uid(slider), uid(view), uid(imageView), uid(imageCell),
+		uid(view), nil]];
 
 	keysArray = add_array(objects, cArray, keys);
 	valuesArray = add_array(objects, cArray, owners);
@@ -517,9 +562,13 @@ test_layout_translation(void)
 	NSArray *top = nil;
 	NSView *view;
 	NSArray *subviews;
+	NSView *swapper;
 	NSBox *box;
 	NSScrollView *scroll;
 	NSSlider *slider;
+	NSImageView *imageViewObject;
+	NSImageCell *imageCellObject;
+	NSImage *image;
 	NSMatrix *matrix;
 	NSFont *titleFont;
 	NSString *reason = nil;
@@ -535,10 +584,12 @@ test_layout_translation(void)
 	      "the container nib instantiates");
 	view = [top count] == 1 ? [top objectAtIndex:0] : nil;
 	subviews = [view subviews];
-	check([subviews count] == 3, "the container view keeps all three children");
-	box = [subviews count] == 3 ? [subviews objectAtIndex:0] : nil;
-	scroll = [subviews count] == 3 ? [subviews objectAtIndex:1] : nil;
-	slider = [subviews count] == 3 ? [subviews objectAtIndex:2] : nil;
+	check([subviews count] == 5, "the container view keeps all five children");
+	box = [subviews count] == 5 ? [subviews objectAtIndex:0] : nil;
+	scroll = [subviews count] == 5 ? [subviews objectAtIndex:1] : nil;
+	slider = [subviews count] == 5 ? [subviews objectAtIndex:2] : nil;
+	imageViewObject = [subviews count] == 5 ? [subviews objectAtIndex:3] : nil;
+	swapper = [subviews count] == 5 ? [subviews objectAtIndex:4] : nil;
 
 	check([box isKindOfClass:[NSBox class]], "NSBox becomes an NSBox");
 	check([[box title] isEqualToString:@"Group"], "NSTitleCell becomes the box's title");
@@ -586,6 +637,24 @@ test_layout_translation(void)
 	check([slider numberOfTickMarks] == 3 && [slider tickMarkPosition] == 1 &&
 	      [slider allowsTickMarkValuesOnly],
 	      "the slider's tick marks travel");
+
+	check([imageViewObject isKindOfClass:[NSImageView class]],
+	      "NSImageView becomes an NSImageView");
+	imageCellObject = (NSImageCell *)[imageViewObject cell];
+	check([imageCellObject isKindOfClass:[NSImageCell class]],
+	      "NSImageCell becomes the image view's cell");
+	check([imageViewObject imageAlignment] == 1 && [imageViewObject imageScaling] == 2 &&
+	      [imageViewObject imageFrameStyle] == 1,
+	      "NSAlign/NSScale/NSStyle become the cell's three placement facts");
+	check([imageViewObject isEditable], "NSEditable becomes the view's editable flag");
+	check(![imageViewObject animates], "NSAnimates becomes the view's animates flag");
+	image = [imageViewObject image];
+	check([image isKindOfClass:[NSImage class]] &&
+	      [[image name] isEqualToString:@"test-image"],
+	      "an NSCustomResource becomes a named NSImage");
+	check([swapper isKindOfClass:[NSView class]] &&
+	      NSEqualRects([swapper frame], NSMakeRect(70, 240, 60, 60)),
+	      "NSClassSwapper takes the class it names and its frame");
 
 	[nib release];
 }
@@ -759,6 +828,102 @@ test_menu_translation(void)
 	[nib release];
 }
 
+
+/* **A BROWSER IS ONE FLAG WORD AND A CELL PROTOTYPE.** Apple's `NSBrFlags` carries the scroller, the selection rules,
+ * the arrow-key pair and the column separators (masks from GNUstep's NSBrowser -initWithCoder:); the rest are scalar
+ * properties. The prototype is an NSBrowserCell, which is a cell like any other to this translator. */
+static NSDictionary *
+build_browser_archive(void)
+{
+	NSMutableArray *objects = [NSMutableArray arrayWithObject:@"$null"];
+	NSUInteger cObjectData = add_class(objects, @"NSIBObjectData");
+	NSUInteger cArray = add_class(objects, @"NSArray");
+	NSUInteger cCustom = add_class(objects, @"NSCustomObject");
+	NSUInteger cBrowser = add_class(objects, @"NSBrowser");
+	NSUInteger cBrowserCell = add_class(objects, @"NSBrowserCell");
+	NSUInteger root;
+	NSUInteger prototype;
+	NSUInteger browser;
+	NSUInteger keysArray;
+	NSUInteger valuesArray;
+	NSUInteger objectData;
+	NSMutableArray *keys = [NSMutableArray array];
+	NSMutableArray *owners = [NSMutableArray array];
+	NSDictionary *properties;
+
+	root = add_object(objects, cCustom,
+			  [NSDictionary dictionaryWithObject:@"Owner" forKey:@"NSClassName"]);
+	prototype = add_object(objects, cBrowserCell,
+		[NSDictionary dictionaryWithObjectsAndKeys:
+			[NSNumber numberWithUnsignedInt:0x04000000u], @"NSCellFlags",
+			@"Browser", @"NSContents",
+			nil]);
+	browser = add_object(objects, cBrowser,
+		[NSDictionary dictionaryWithObjectsAndKeys:
+			@"{{0, 0}, {300, 200}}", @"NSFrame",
+			[NSNumber numberWithUnsignedInt:0x100u], @"NSvFlags",
+			[NSNumber numberWithUnsignedInt:0x80010000u], @"NSBrFlags",
+			[NSNumber numberWithDouble:80.0], @"NSMinColumnWidth",
+			[NSNumber numberWithDouble:18.0], @"NSBrowserRowHeight",
+			[NSNumber numberWithInt:2], @"NSMaxNumberOfVisibleColumns",
+			[NSNumber numberWithInt:1], @"NSColumnResizingType",
+			@"/", @"NSPathSeparator",
+			uid(prototype), @"NSCellPrototype",
+			nil]);
+
+	[keys addObjectsFromArray:[NSArray arrayWithObjects:uid(root), uid(browser), uid(prototype), nil]];
+	[owners addObjectsFromArray:[NSArray arrayWithObjects:uid(root), uid(root), uid(browser), nil]];
+	keysArray = add_array(objects, cArray, keys);
+	valuesArray = add_array(objects, cArray, owners);
+	objectData = add_object(objects, cObjectData,
+		[NSDictionary dictionaryWithObjectsAndKeys:
+			uid(keysArray), @"NSObjectsKeys",
+			uid(valuesArray), @"NSObjectsValues",
+			uid(root), @"NSRoot",
+			nil]);
+	properties = [NSMutableDictionary dictionaryWithObjectsAndKeys:
+		[NSNumber numberWithInt:100000], @"$version",
+		@"NSKeyedArchiver", @"$archiver",
+		objects, @"$objects",
+		[NSDictionary dictionaryWithObject:uid(objectData) forKey:@"IB.objectdata"], @"$top",
+		nil];
+	return properties;
+}
+
+static void
+test_browser_translation(void)
+{
+	NSDictionary *plist = build_browser_archive();
+	NSData *data = archive_data(plist);
+	NSString *path;
+	NSNib *nib;
+	NSArray *top = nil;
+	NSBrowser *browser;
+	NSCell *prototype;
+
+	check([AGAppleNib validateAppleNibArchive:plist reason:NULL], "a browser archive validates");
+	path = [NSTemporaryDirectory() stringByAppendingPathComponent:@"agora-apple-nib-browser.nib"];
+	[data writeToFile:path atomically:YES];
+	nib = [[NSNib alloc] initWithContentsOfURL:[NSURL fileURLWithPath:path]];
+	check([nib instantiateNibWithOwner:nil topLevelObjects:&top], "a browser nib instantiates");
+	browser = ([top count] == 1 && [[top objectAtIndex:0] isKindOfClass:[NSBrowser class]])
+		? [top objectAtIndex:0] : nil;
+	check(browser != nil, "the browser is the top-level object");
+	check([browser minColumnWidth] == 80.0 && [browser rowHeight] == 18.0,
+	      "NSMinColumnWidth and NSBrowserRowHeight travel");
+	check([browser maxVisibleColumns] == 2 && [browser columnResizingType] == 1,
+	      "the visible-column and resizing keys travel");
+	check([[browser pathSeparator] isEqualToString:@"/"], "NSPathSeparator travels");
+	check([browser hasHorizontalScroller] && [browser allowsMultipleSelection] &&
+	      [browser allowsEmptySelection],
+	      "NSBrFlags carries the scroller and the two selection rules");
+	prototype = [browser cellPrototype];
+	check([prototype isKindOfClass:[NSBrowserCell class]] &&
+	      [[prototype title] isEqualToString:@"Browser"],
+	      "NSCellPrototype becomes an NSBrowserCell");
+	[nib release];
+}
+
 /* ============================== THE TESTS ======================================================= */
 
 static void
@@ -899,6 +1064,7 @@ main(void)
 	test_window_class_refusal();
 	test_layout_translation();
 	test_menu_translation();
+	test_browser_translation();
 
 	[pool drain];
 	printf(g_fail ? "apple_nib: FAIL\n" : "apple_nib: all checks passed\n");

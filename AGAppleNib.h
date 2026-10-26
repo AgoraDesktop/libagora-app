@@ -23,7 +23,9 @@
  * sizes); `NSSlider`/`NSSliderCell` (the value range, tick marks and increment); `NSFont` (the name and size a
  * cell's `NSSupport` names); `NSColor` (white, RGB and a catalog colour's resolved fallback, mapped into this tree's
  * calibrated RGBA); `NSMenu`/`NSMenuItem` (the item tree, titles, key equivalents, actions, tags, state, mnemonics,
- * separators and submenus); `NSCell`, `NSActionCell`, `NSButtonCell`, `NSTextFieldCell`; `NSCustomObject` (the file's owner becomes
+ * separators and submenus); `NSImageView`/`NSImageCell` and named images (`NSCustomResource` → an NSImage with a
+ * name); `NSBrowser`/`NSBrowserCell`; `NSClassSwapper`; `NSCell`, `NSActionCell`, `NSButtonCell`,
+ * `NSTextFieldCell`; `NSCustomObject` (the file's owner becomes
  * `NSNibFileOwner` in connections, and a top-level custom object must be a class registered with
  * `+[NSNib registerDesignClass:]`); `NSNibOutletConnector` and `NSNibControlConnector`. Geometry strings become
  * `NSValue`s, `NSvFlags`/`NSCellFlags`/`NSCellFlags2` become the properties this tree archives separately, and
@@ -32,9 +34,11 @@
  *
  * **WHAT IS NOT TRANSLATED IS REFUSED BY NAME.** `NSTextView`, toolbars, autolayout constraints and bindings are the
  * next slices; a nib that contains one is refused with the class that stopped it rather than loaded into a window that
- * is missing a piece. A key that this table does not name (an image, an `NSMenuItem`'s `NSTarget` or state images, a
- * formatter, a tooltip source, an NSMatrix mode flag, a font's trait flags, a colour space this translator cannot read)
- * is ignored, so the object keeps this tree's default for it;
+ * is missing a piece. A `DIRECT` `NSImage` (one carrying representations rather than a resource name) has no
+ * translated record either, because this tree's NSImage codes a name and not image data. A key that this table does
+ * not name (an `NSMenuItem`'s `NSTarget` or state images, a formatter, a tooltip source, an NSMatrix mode flag, a
+ * font's trait flags, a colour space this translator cannot read) is ignored, so the object keeps this tree's default
+ * for it;
  * `+unmappedKeysForAppleNibArchive:` reports them for a tool that wants to say so.
  */
 

@@ -167,7 +167,7 @@ static BOOL fn_is_auxiliary_class(NSString *name)
 			@"NSArray", @"NSMutableArray", @"NSSet", @"NSMutableSet",
 			@"NSDictionary", @"NSMutableDictionary", @"NSNull",
 			@"NSString", @"NSMutableString", @"NSNumber", @"NSDate", @"NSData", @"NSValue",
-			@"NSFontManager", @"NSImage", @"NSCustomResource",
+			@"NSFontManager", @"NSImage",
 			@"NSAttributedString", @"NSMutableAttributedString", @"NSParagraphStyle",
 			nil];
 	}
@@ -188,7 +188,10 @@ static BOOL fn_is_translated_view_class(NSString *name)
 	    || [name isEqualToString:@"NSScrollView"]
 	    || [name isEqualToString:@"NSClipView"]
 	    || [name isEqualToString:@"NSMatrix"]
-	    || [name isEqualToString:@"NSSlider"];
+	    || [name isEqualToString:@"NSSlider"]
+	    || [name isEqualToString:@"NSImageView"]
+	    || [name isEqualToString:@"NSBrowser"]
+	    || [name isEqualToString:@"NSClassSwapper"];
 }
 
 static BOOL fn_is_translated_cell_class(NSString *name)
@@ -197,7 +200,9 @@ static BOOL fn_is_translated_cell_class(NSString *name)
 	    || [name isEqualToString:@"NSActionCell"]
 	    || [name isEqualToString:@"NSButtonCell"]
 	    || [name isEqualToString:@"NSTextFieldCell"]
-	    || [name isEqualToString:@"NSSliderCell"];
+	    || [name isEqualToString:@"NSSliderCell"]
+	    || [name isEqualToString:@"NSImageCell"]
+	    || [name isEqualToString:@"NSBrowserCell"];
 }
 
 /* ==================================================================================================
@@ -941,6 +946,33 @@ static BOOL fn_parse_color_components(NSData *data, CGFloat *values, NSUInteger 
 	return YES;
 }
 
+
+/* **A NAMED IMAGE IS A CUSTOM RESOURCE, AND APPLE SAYS SO IN TWO KEYS.** `NSCustomResource` names a class and a
+ * resource (`NSClassName` = NSImage, `NSResourceName` = the name); this tree's NSImage is NAME-CODED —
+ * `+imageNamed:` at decode time, or an image that carries the name when the bundle has not registered it. So the
+ * resource becomes an NSImage record with `name`, which is the one spelling both sides understand. A DIRECT NSImage
+ * (reps and a TIFF representation) is NOT translated: this tree's NSImage does not code image data, and a guessed
+ * rep would be the wrong value the format refuses. Such a reference is left to the ledger by the caller. */
+- (BOOL)fnBuildCustomResourceRecordAtIndex:(NSUInteger)index record:(NSMutableDictionary *)record
+{
+	NSDictionary *entry = [_objects objectAtIndex:index];
+	NSString *className = [self fnStringValue:[entry objectForKey:@"NSClassName"]];
+	NSString *name = [self fnStringValue:[entry objectForKey:@"NSResourceName"]];
+
+	if (![className isEqualToString:@"NSImage"]) {
+		return [self fnFail:[NSString stringWithFormat:
+			@"an NSCustomResource of class %@ is not an image this translator can name", className]];
+	}
+	if (name == nil) {
+		return [self fnFail:@"an NSCustomResource names no resource"];
+	}
+	[record setObject:@"NSImage" forKey:AGAppleClassKey];
+	[record setObject:name forKey:@"name"];
+	[self fnNoteUnmappedForEntry:entry className:@"NSCustomResource"
+			    consumed:[NSSet setWithObjects:@"NSClassName", @"NSResourceName", nil]];
+	return YES;
+}
+
 - (BOOL)fnBuildFontRecordAtIndex:(NSUInteger)index record:(NSMutableDictionary *)record
 {
 	NSDictionary *entry = [_objects objectAtIndex:index];
@@ -974,10 +1006,12 @@ static BOOL fn_parse_color_components(NSData *data, CGFloat *values, NSUInteger 
 	NSMutableArray *refs;
 	NSUInteger i;
 
-	if ([appleClass isEqualToString:@"NSCustomView"]) {
+	if ([appleClass isEqualToString:@"NSCustomView"] ||
+	    [appleClass isEqualToString:@"NSClassSwapper"]) {
 		targetName = [self fnStringValue:[entry objectForKey:@"NSClassName"]];
 		if (targetName == nil) {
-			return [self fnFail:@"an NSCustomView in the archive names no class"];
+			return [self fnFail:[NSString stringWithFormat:
+				@"an %@ in the archive names no class", appleClass]];
 		}
 	}
 	cls = NSClassFromString(targetName);
@@ -1024,6 +1058,76 @@ static BOOL fn_parse_color_components(NSData *data, CGFloat *values, NSUInteger 
 		return [self fnFail:[NSString stringWithFormat:
 			@"%@ carries autolayout constraints, which this translator does not map yet", appleClass]];
 	}
+	/* **A BROWSER'S CONFIGURATION IS ITS OWN KEYS PLUS ONE FLAG WORD.** Apple's NSBrFlags carries the scroller, the
+	 * two selection rules, the arrow-key pair and the column separators; the rest are scalar properties. The MASKS are
+	 * GNUstep's `NSBrowser -initWithCoder:` (audit/corpus/libs-gui). */
+	if ([appleClass isEqualToString:@"NSBrowser"]) {
+		number = [self fnNumberValue:[entry objectForKey:@"NSBrFlags"]];
+		if (number != nil) {
+			unsigned int f = [number unsignedIntValue];
+
+			[record setObject:[NSNumber numberWithBool:((f & 0x10000u) != 0)]
+				   forKey:@"hasHorizontalScroller"];
+			[record setObject:[NSNumber numberWithBool:((f & 0x20000u) == 0)]
+				   forKey:@"allowsEmptySelection"];
+			[record setObject:[NSNumber numberWithBool:((f & 0x40000u) != 0)]
+				   forKey:@"sendsActionOnArrowKeys"];
+			[record setObject:[NSNumber numberWithBool:((f & 0x100000u) != 0)]
+				   forKey:@"acceptsArrowKeys"];
+			[record setObject:[NSNumber numberWithBool:((f & 0x4000000u) != 0)]
+				   forKey:@"separatesColumns"];
+			[record setObject:[NSNumber numberWithBool:((f & 0x8000000u) != 0)]
+				   forKey:@"takesTitleFromPreviousColumn"];
+			[record setObject:[NSNumber numberWithBool:((f & 0x80000000u) != 0)]
+				   forKey:@"allowsMultipleSelection"];
+		}
+		number = [self fnNumberValue:[entry objectForKey:@"NSMinColumnWidth"]];
+		if (number != nil) {
+			[record setObject:number forKey:@"minColumnWidth"];
+		}
+		number = [self fnNumberValue:[entry objectForKey:@"NSBrowserRowHeight"]];
+		if (number != nil) {
+			[record setObject:number forKey:@"rowHeight"];
+		}
+		number = [self fnNumberValue:[entry objectForKey:@"NSMaxNumberOfVisibleColumns"]];
+		if (number != nil) {
+			[record setObject:number forKey:@"maxVisibleColumns"];
+		}
+		number = [self fnNumberValue:[entry objectForKey:@"NSColumnResizingType"]];
+		if (number != nil) {
+			[record setObject:number forKey:@"columnResizingType"];
+		}
+		if ((value = [self fnStringValue:[entry objectForKey:@"NSPathSeparator"]]) != nil) {
+			[record setObject:value forKey:@"pathSeparator"];
+		}
+		if ((value = [self fnStringValue:[entry objectForKey:@"NSCellClass"]]) != nil) {
+			[record setObject:value forKey:@"cellClass"];
+		}
+		if (![self fnSetRefFrom:[entry objectForKey:@"NSCellPrototype"] key:@"NSCellPrototype"
+			       inRecord:record as:@"cellPrototype"]) {
+			return NO;
+		}
+		[self fnSetColorRef:[entry objectForKey:@"NSBackgroundColor"] key:@"NSBackgroundColor"
+			   inRecord:record as:@"backgroundColor" translated:NULL];
+	}
+
+	/* **AN IMAGE VIEW'S TWO EDIT FACTS ARE THE VIEW'S, NOT THE CELL'S.** NSEditable forwards to the cell in this
+	 * tree (the cell is what cut/copy/paste asks); NSAnimates and NSAllowsCutCopyPaste are the view's own flags. */
+	if ([appleClass isEqualToString:@"NSImageView"]) {
+		number = [self fnNumberValue:[entry objectForKey:@"NSEditable"]];
+		if (number != nil) {
+			[record setObject:number forKey:@"editable"];
+		}
+		number = [self fnNumberValue:[entry objectForKey:@"NSAnimates"]];
+		if (number != nil) {
+			[record setObject:number forKey:@"animates"];
+		}
+		number = [self fnNumberValue:[entry objectForKey:@"NSAllowsCutCopyPaste"]];
+		if (number != nil) {
+			[record setObject:number forKey:@"allowsCutCopyPaste"];
+		}
+	}
+
 	/* **THE CLASSES WHOSE CHILD IS NOT `NSSubviews`.** Each of these owns its children through a typed door (a box's
 	 * content view, a scroll view's clip view, a clip view's document, a matrix's cells), so taking the generic array
 	 * as well would add the same object twice. The extras functions above state each one's own spelling. */
@@ -1072,7 +1176,7 @@ static BOOL fn_parse_color_components(NSData *data, CGFloat *values, NSUInteger 
 	{
 		NSMutableSet *consumed = [NSMutableSet setWithObjects:
 			@"NSFrame", @"NSFrameSize", @"NSvFlags", @"NSToolTip", @"NSSubviews",
-			@"NSCell", @"NSAllowsLogicalLayoutDirection", @"NSNextKeyView",
+			@"NSCell", @"NSEnabled", @"NSAllowsLogicalLayoutDirection", @"NSNextKeyView",
 			@"NSPreviousKeyView", nil];
 
 		if ([appleClass isEqualToString:@"NSBox"]) {
@@ -1086,6 +1190,18 @@ static BOOL fn_parse_color_components(NSData *data, CGFloat *values, NSUInteger 
 		} else if ([appleClass isEqualToString:@"NSClipView"]) {
 			[consumed addObjectsFromArray:[NSArray arrayWithObjects:
 				@"NSDocView", @"NScvFlags", @"NSBGColor", nil]];
+		} else if ([appleClass isEqualToString:@"NSBrowser"]) {
+			[consumed addObjectsFromArray:[NSArray arrayWithObjects:
+				@"NSBrFlags", @"NSMinColumnWidth", @"NSBrowserRowHeight",
+				@"NSMaxNumberOfVisibleColumns", @"NSColumnResizingType",
+				@"NSPathSeparator", @"NSCellClass", @"NSCellPrototype",
+				@"NSBackgroundColor", nil]];
+		} else if ([appleClass isEqualToString:@"NSClassSwapper"]) {
+			[consumed addObjectsFromArray:[NSArray arrayWithObjects:
+				@"NSClassName", @"NSOriginalClassName", nil]];
+		} else if ([appleClass isEqualToString:@"NSImageView"]) {
+			[consumed addObjectsFromArray:[NSArray arrayWithObjects:
+				@"NSEditable", @"NSAnimates", @"NSAllowsCutCopyPaste", nil]];
 		} else if ([appleClass isEqualToString:@"NSMatrix"]) {
 			[consumed addObjectsFromArray:[NSArray arrayWithObjects:
 				@"NSCells", @"NSNumRows", @"NSNumCols", @"NSCellSize",
@@ -1109,6 +1225,7 @@ static BOOL fn_parse_color_components(NSData *data, CGFloat *values, NSUInteger 
 	BOOL textColorTranslated = NO;
 	BOOL backgroundColorTranslated = NO;
 	BOOL drawsBackgroundTranslated = NO;
+	BOOL contentsConsumed = NO;
 
 	if (cls == Nil) {
 		return [self fnFail:[NSString stringWithFormat:@"it names the cell class %@, which is not in this process",
@@ -1158,16 +1275,28 @@ static BOOL fn_parse_color_components(NSData *data, CGFloat *values, NSUInteger 
 			   forKey:@"allowsEditingTextAttributes"];
 	}
 
-	value = [self fnStringValue:[entry objectForKey:@"NSContents"]];
-	if (value != nil) {
-		/* **THE CONTENTS ARE THE VALUE EVERY CELL CARRIES; A BUTTON'S TITLE IS THE SAME STRING UNDER APPLE'S
-		 * MODEL, and this tree keeps the two in separate ivars.** A text field reads `objectValue`; a button
-		 * reads `title`, so both are stated for the button. */
-		[record setObject:value forKey:@"objectValue"];
-		/* **AND THE TITLE, FOR EVERY CELL.** A button draws `-title`; a box's `-title` is its TITLE
-		 * CELL's title; a field reads `-objectValue`. Apple's `NSContents` is the one string all three
-		 * stand on, so it is written under both names rather than guessed per class. */
-		[record setObject:value forKey:@"title"];
+	/* **`NSContents` IS A STRING FOR A TEXT CELL AND A NAMED IMAGE FOR AN IMAGE CELL.** A string becomes both
+	 * `objectValue` and `title` (a button draws the title, a field reads the value, a box reads its title cell's
+	 * title); a reference to an `NSCustomResource` becomes the cell's `image`. A direct `NSImage` with reps has no
+	 * translated record, so it is left alone and the ledger names the key. */
+	{
+		id contents = [entry objectForKey:@"NSContents"];
+		NSUInteger contentsIndex;
+		BOOL contentsTranslated = NO;
+
+		value = [self fnStringValue:contents];
+		if (value != nil) {
+			[record setObject:value forKey:@"objectValue"];
+			[record setObject:value forKey:@"title"];
+			contentsTranslated = YES;
+		} else if (contents != nil && fn_uid_index(contents, &contentsIndex) &&
+			   [[self fnClassNameAt:contentsIndex] isEqualToString:@"NSCustomResource"]) {
+			[record setObject:[AGAppleNibRef refWithIndex:contentsIndex] forKey:@"image"];
+			contentsTranslated = YES;
+		}
+		if (contentsTranslated) {
+			contentsConsumed = YES;
+		}
 	}
 	if ((value = [self fnStringValue:[entry objectForKey:@"NSKeyEquivalent"]]) != nil) {
 		[record setObject:value forKey:@"keyEquivalent"];
@@ -1224,6 +1353,23 @@ static BOOL fn_parse_color_components(NSData *data, CGFloat *values, NSUInteger 
 		}
 	}
 
+	/* **AN IMAGE CELL'S THREE PLACEMENT FACTS.** Apple spells them NSAlign, NSScale and NSStyle; this tree's
+	 * NSImageCell codes them as imageAlignment, imageScaling and imageFrameStyle. */
+	if ([appleClass isEqualToString:@"NSImageCell"]) {
+		number = [self fnNumberValue:[entry objectForKey:@"NSAlign"]];
+		if (number != nil) {
+			[record setObject:number forKey:@"imageAlignment"];
+		}
+		number = [self fnNumberValue:[entry objectForKey:@"NSScale"]];
+		if (number != nil) {
+			[record setObject:number forKey:@"imageScaling"];
+		}
+		number = [self fnNumberValue:[entry objectForKey:@"NSStyle"]];
+		if (number != nil) {
+			[record setObject:number forKey:@"imageFrameStyle"];
+		}
+	}
+
 	/* **THE BUTTON'S SECOND FLAG WORD: the masks are GNUstep's `NSButtonCell -initWithCoder:` (same file), which
 	 * composes bezelStyle from the low bits and the modifier mask from bits 8 and up.** */
 	if ([appleClass isEqualToString:@"NSButtonCell"]) {
@@ -1240,7 +1386,7 @@ static BOOL fn_parse_color_components(NSData *data, CGFloat *values, NSUInteger 
 
 	{
 		NSMutableSet *consumed = [NSMutableSet setWithObjects:
-			@"NSCellFlags", @"NSCellFlags2", @"NSContents", @"NSKeyEquivalent",
+			@"NSCellFlags", @"NSCellFlags2", @"NSKeyEquivalent",
 			@"NSAlternateContents", @"NSButtonFlags2", @"NSControlView",
 			@"NSMenu", @"NSFormatter", nil];
 		id support = [entry objectForKey:@"NSSupport"];
@@ -1256,6 +1402,13 @@ static BOOL fn_parse_color_components(NSData *data, CGFloat *values, NSUInteger 
 				@"NSMinValue", @"NSMaxValue", @"NSValue", @"NSNumberOfTickMarks",
 				@"NSTickMarkPosition", @"NSAltIncValue", @"NSAllowsTickMarkValuesOnly",
 				@"NSKnobThickness", @"NSSliderType", @"NSVertical", nil]];
+		}
+		if ([appleClass isEqualToString:@"NSImageCell"]) {
+			[consumed addObjectsFromArray:[NSArray arrayWithObjects:
+				@"NSAlign", @"NSScale", @"NSStyle", nil]];
+		}
+		if (contentsConsumed) {
+			[consumed addObject:@"NSContents"];
 		}
 		if (textColorTranslated) {
 			[consumed addObject:@"NSTextColor"];
@@ -1463,6 +1616,13 @@ static BOOL fn_parse_color_components(NSData *data, CGFloat *values, NSUInteger 
 		}
 		if ([name hasSuffix:@"Connector"]) {
 			[_connectorIndexes addObject:[NSNumber numberWithUnsignedInteger:i]];
+			continue;
+		}
+		if ([name isEqualToString:@"NSCustomResource"]) {
+			if (![self fnBuildCustomResourceRecordAtIndex:i record:record]) {
+				return NO;
+			}
+			[_records setObject:record forKey:[NSNumber numberWithUnsignedInteger:i]];
 			continue;
 		}
 		if ([name isEqualToString:@"NSFont"]) {

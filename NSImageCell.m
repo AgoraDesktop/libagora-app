@@ -29,6 +29,48 @@
 	return self;
 }
 
+/* **THE THREE PLACEMENT FACTS ARE DESIGN STATE, SO THEY CODE.** The image itself is the base cell's and travels through
+ * NSCell's own coding; these are the choices this class exists to make, and a decoded cell that dropped them would be
+ * an image placed three ways at random. */
+static NSString * const AGCoderImageCellAlignKey = @"imageAlignment";
+static NSString * const AGCoderImageCellScaleKey = @"imageScaling";
+static NSString * const AGCoderImageCellStyleKey = @"imageFrameStyle";
+
+- (void)encodeWithCoder:(NSCoder *)aCoder
+{
+	[super encodeWithCoder:aCoder];
+	[aCoder encodeInteger:(NSInteger)_imageAlignment forKey:AGCoderImageCellAlignKey];
+	[aCoder encodeInteger:(NSInteger)_imageScaling forKey:AGCoderImageCellScaleKey];
+	[aCoder encodeInteger:(NSInteger)_imageFrameStyle forKey:AGCoderImageCellStyleKey];
+}
+
+- (instancetype)initWithCoder:(NSCoder *)aDecoder
+{
+	self = [super initWithCoder:aDecoder];
+	if (self == nil) {
+		return nil;
+	}
+	/* THE DEFAULTS `-init` WOULD HAVE SET, repeated because a decode does not run it. */
+	_imageAlignment = NSImageAlignLeft;
+	_imageScaling = NSImageScaleNone;
+	_imageFrameStyle = NSImageFrameNone;
+	if ([aDecoder containsValueForKey:AGCoderImageCellAlignKey]) {
+		_imageAlignment = (NSCellImageAlignment)[aDecoder decodeIntegerForKey:AGCoderImageCellAlignKey];
+	}
+	if ([aDecoder containsValueForKey:AGCoderImageCellScaleKey]) {
+		_imageScaling = (NSImageScaling)[aDecoder decodeIntegerForKey:AGCoderImageCellScaleKey];
+	}
+	if ([aDecoder containsValueForKey:AGCoderImageCellStyleKey]) {
+		_imageFrameStyle = (NSImageFrameStyle)[aDecoder decodeIntegerForKey:AGCoderImageCellStyleKey];
+	}
+	return self;
+}
+
++ (BOOL)supportsSecureCoding
+{
+	return YES;
+}
+
 - (id)copyWithZone:(NSZone *)zone
 {
 	(void)zone;
