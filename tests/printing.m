@@ -22,8 +22,13 @@
  *   4. THE COPYING OPERATIONS. PDF and EPS render one rect to data, and `-isCopyingOperation` says so.
  *   5. THE PANELS. `-runModal` without a run loop answers OK and writes the ticket back; the page layout's read/write
  *      round trip leaves a ticket alone when nothing was changed.
- *   6. THE APPLICATION. `-application:printFiles:` tells the delegate and replies with the launch's code.
+ *   6. THE PANELS AS SHEETS. Both `-beginSheetWithPrintInfo:…` doors ATTACH the panel — which they did not: they called a
+ *      two-argument `-beginSheet:modalForWindow:` this tier has never had, so pressing a panel's Print or Page Setup
+ *      button aborted the process with "not implemented". The panel's own OK button is driven here, and the caller's
+ *      did-end is asserted to be called once with OK's code and its context intact, after which nothing is attached.
+ *   7. THE APPLICATION. `-application:printFiles:` tells the delegate and replies with the launch's code.
  */
+#import <Foundation/NSAutoreleasePool.h>	/* the pool a caller's local panel dies with */
 #import <AppKit/NSPrintInfo.h>
 #import <AppKit/NSPrintOperation.h>
 #import <AppKit/NSPrintPanel.h>
@@ -368,6 +373,18 @@ static void test_copying(void)
 @interface AGPrintAccessory : NSViewController <NSPrintPanelAccessorizing>
 @end
 
+/* **THE TWO PRIVATE DOORS THIS FILE DRIVES, AND WHY A PRIVATE DOOR IS THE HONEST WAY TO DRIVE THEM.** A panel's
+ * buttons send `-fn_ok:`/`-fn_cancel:`, and those are the actions that answer the session — the same ones a person's
+ * press reaches, and the only route to the sheet's reply. They are declared in the implementations' class extensions,
+ * so this is the tree's usual redeclaration of a private contract by the probe that needs it. */
+@interface NSPrintPanel (AGPrintingSheetTest)
+- (void)fn_ok:(id)sender;
+@end
+
+@interface NSPageLayout (AGPrintingSheetTest)
+- (void)fn_ok:(id)sender;
+@end
+
 @implementation AGPrintAccessory
 - (NSArray *)localizedSummaryItems { return [NSArray array]; }
 - (void)loadView { [self setView:[[[NSView alloc] initWithFrame:NSMakeRect(0.0, 0.0, 10.0, 10.0)] autorelease]]; }
@@ -447,6 +464,115 @@ static void test_panels(void)
 }
 @end
 
+/* **THE SHEET'S REPLY, AS THE CALLER OF A PANEL SEES IT.** Apple's did-end selector is
+ * `panelDidEnd:returnCode:contextInfo:` for the print panel and the same shape for the page layout, and the whole
+ * point of the session is that this method is called ONCE, with the code of the button that ended it. */
+@interface AGPrintSheetReception : NSObject
+{
+@public
+	NSInteger calls;
+	NSInteger code;
+	id endedPanel;
+	void *context;
+}
+@end
+
+@implementation AGPrintSheetReception
+- (void)panelDidEnd:(id)panel returnCode:(NSInteger)aCode contextInfo:(void *)aContext
+{
+	calls++;
+	code = aCode;
+	endedPanel = panel;
+	context = aContext;
+}
+@end
+
+/* **AND THE SHEET FORMS OF BOTH PANELS, WHICH ARE THE DOORS THAT WERE BROKEN.** `-beginSheetWithPrintInfo:…` on
+ * `NSPrintPanel` and on `NSPageLayout` called `-[NSApplication beginSheet:modalForWindow:]` — a selector this tier's
+ * `NSApplication` does NOT have — so pressing a panel's Print or Page Setup button raised "not implemented" from the
+ * runtime and ABORTED the process. MEASURED, from the gallery's own Print Panel button:
+ *
+ *   Foundation: -[NSApplication beginSheet:modalForWindow:] is not implemented
+ *   *** Terminating due to uncaught exception 'NSInvalidArgumentException'
+ *
+ * It compiled, which is the interesting part: an unknown selector on a typed receiver is a WARNING
+ * (`-Wobjc-method-access`) and the build's own noise hid it. So this test drives the doors end to end rather than
+ * checking that a selector exists: attach, the panel's own window is the sheet, the panel's OK button answers the
+ * CALLER'S did-end with NSOKButton (the panel replies itself, so the session must be begun with no reply of its own),
+ * and the attachment is gone afterwards. */
+static void test_panel_sheets(void)
+{
+	NSPrintInfo *info = [[NSPrintInfo alloc] init];
+	NSPrintPanel *panel = [NSPrintPanel printPanel];
+	NSPageLayout *layout = [NSPageLayout pageLayout];
+	NSWindow *parent = [[NSWindow alloc] initWithContentRect:NSMakeRect(100.0, 100.0, 420.0, 320.0)
+						      styleMask:NSTitledWindowMask
+							backing:NSBackingStoreBuffered
+							  defer:NO];
+	AGPrintSheetReception *reception = [[AGPrintSheetReception alloc] init];
+
+	printf("the panels as sheets\n");
+	check(parent != nil && reception != nil, "a parent to hang a panel on, and a caller to be answered");
+	[panel beginSheetWithPrintInfo:info
+			modalForWindow:parent
+			      delegate:reception
+			didEndSelector:@selector(panelDidEnd:returnCode:contextInfo:)
+			   contextInfo:(void *)0x5];
+	check([parent attachedSheet] != nil && [[parent attachedSheet] isSheet],
+	      "`-beginSheetWithPrintInfo:…` ATTACHES the panel to the window rather than raising a runtime error");
+	check(reception->calls == 0, "the session is asynchronous: nothing has been answered yet");
+	[panel fn_ok:nil];
+	check(reception->calls == 1, "the panel's OK button calls the caller's did-end ONCE");
+	check(reception->code == NSOKButton, "with OK's code");
+	check(reception->endedPanel == panel, "and with the panel itself as the window");
+	check(reception->context == (void *)0x5, "and the caller's own context pointer, untouched");
+	check([parent attachedSheet] == nil, "and the attachment is gone: the session ended as it should");
+
+	/* **AND THE PANEL SURVIVES THE POOL THAT MADE IT, WHICH IS THE REPORTED SEGFAULT.** `+printPanel` answers an
+	 * AUTORELEASED panel, and a sheet is asynchronous: the run loop drains a pool a pass later, and a panel that died
+	 * there released the views of a window that was still attached and still being displayed — MEASURED as a SIGSEGV
+	 * inside `-[NSView cg_dirtyRegionRecursive:…]` (and, from a pointer motion, inside
+	 * `-[NSView cg_rebuildStaleCursorRects]`). The session now retains its panel until it ends, so this drains a pool
+	 * with the sheet up and asks the sheet afterwards: a dead window would be a crash here rather than a failed check,
+	 * which is exactly the shape of the bug. */
+	{
+		NSAutoreleasePool *pass = [[NSAutoreleasePool alloc] init];
+		NSPrintPanel *transient = [NSPrintPanel printPanel];	/* autoreleased, as a caller's local would be */
+		NSWindow *sheet;
+
+		[transient beginSheetWithPrintInfo:info
+				     modalForWindow:parent
+					   delegate:reception
+				     didEndSelector:@selector(panelDidEnd:returnCode:contextInfo:)
+					contextInfo:(void *)0x7];
+		sheet = [parent attachedSheet];
+		check(sheet != nil, "a panel from the factory attaches a sheet");
+		[pass release];		/* the pass that made the panel ends with the sheet still up */
+		check([parent attachedSheet] == sheet, "and the sheet is STILL attached after the pool that made its panel");
+		check([[parent attachedSheet] isSheet], "and it is still a sheet: the session owns the panel, not the caller");
+		check(reception->calls == 1, "nothing has been answered while the sheet is up");
+		[transient fn_ok:nil];
+		check(reception->calls == 2 && reception->code == NSOKButton,
+		      "and its OK still answers the caller — the panel lived to end its own session");
+		check([parent attachedSheet] == nil, "with the attachment gone afterwards");
+	}
+
+	/* AND THE PAGE LAYOUT'S HALF OF IT, which had the same call and the same crash. */
+	[layout beginSheetWithPrintInfo:info
+			 modalForWindow:parent
+			       delegate:reception
+			 didEndSelector:@selector(panelDidEnd:returnCode:contextInfo:)
+			    contextInfo:NULL];
+	check([parent attachedSheet] != nil, "`-NSPageLayout beginSheetWithPrintInfo:…` attaches too");
+	[layout fn_ok:nil];
+	check(reception->calls == 3 && reception->code == NSOKButton, "and its OK answers the caller with OK's code");
+	check([parent attachedSheet] == nil, "and the session is over");
+
+	[reception release];
+	[parent release];
+	[info release];
+}
+
 static void test_document_and_application(void)
 {
 	NSPrintInfo *shared = [NSPrintInfo sharedPrintInfo];
@@ -491,6 +617,7 @@ int main(void)
 	test_render();
 	test_copying();
 	test_panels();
+	test_panel_sheets();
 	test_document_and_application();
 
 	printf("\n%d checks, %d failed\n", g_checks, g_failed);

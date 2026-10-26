@@ -1062,6 +1062,27 @@ target_link_libraries(panel_alert PRIVATE App m)
 add_test(NAME appkit-panel-alert COMMAND panel_alert)
 set_tests_properties(appkit-panel-alert PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
 
+# **AND THE SHEET ITSELF, WHICH IS A PAIR OF WINDOWS RATHER THAN ONE.** Where it goes (top edge at the bottom of the
+# parent's title bar, centred), what it loses (its own strip, and the frame that held it), that the pair is re-pinned on
+# every move and resize rather than remembering an offset, that its top rows are not a handle, and that ending the
+# session gives the strip back with the content intact. Offscreen: the geometry needs no compositor, the pixels are
+# `window_chrome`'s, and the compositor's half of the shape is `set_sheet_parent`'s.
+add_executable(sheet sheet.m)
+target_link_libraries(sheet PRIVATE App m)
+add_test(NAME appkit-sheet COMMAND sheet)
+set_tests_properties(appkit-sheet PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
+
+# **AND THE SAME PROBE ONCE WITH GLASS, BECAUSE ONE OF ITS RULES NEEDS SOME.** `-orderFront:` creates the window and
+# refuses without a compositor, so the visibility half of the pair — a parent ordered out takes its sheet with it, and
+# brings it back — can only be asserted where there is something to be visible ON. The probe says which half it ran,
+# and this is the run where the answer is "both". `drawer_visibility` is the same shape: a rule about the glass, held
+# by a headless compositor, skipping (77) where none can be started.
+add_test(NAME appkit-sheet-visibility
+  COMMAND "${CMAKE_CURRENT_SOURCE_DIR}/run-appkit-headless.sh"
+    "$<TARGET_FILE:sheet>" 3 "sheet: all checks passed")
+set_tests_properties(appkit-sheet-visibility PROPERTIES SKIP_RETURN_CODE 77
+  ENVIRONMENT "${_agora_app_test_env}")
+
 # **THE SEARCH FIELD: A FIELD WITH A MAGNIFIER AND A CLEAR BUTTON.** The three rectangles and the measurement that
 # pays for both slots, the glyph ink and the clear button that is absent until there is text, the press that misses
 # the text and starts no session, the delayed/immediate/whole-string sending rules with the timer fired by hand, and

@@ -494,8 +494,11 @@ typedef NSUInteger NSApplicationPresentationOptions;
  * AND WHAT IS NOT ENFORCED IS STATED RATHER THAN IMPLIED. A window with an attached sheet takes no input — that is
  * what window-modal means observably — and this tier enforces it in the ONE place it routes events,
  * `-sendEvent:`, by DROPPING an event aimed at the parent rather than delivering it (Apple disables the parent and
- * beeps; there is no beep here). It is not a grab the compositor knows about: nothing here negotiates with the
- * window manager, so a caller's key window is this application's own state and no more. */
+ * beeps; there is no beep here). **A CLICK IS STILL A CLICK, THOUGH**: a press anywhere in the pair activates the
+ * application, brings the parent and its sheet to the front, and leaves the SHEET key and main — the answer to
+ * "this one" that a person clicking a greyed-out document is giving — and only then is the event dropped, so no
+ * control behind the question ever sees it. It is not a grab the compositor knows about: nothing here negotiates
+ * with the window manager, so a caller's key window is this application's own state and no more. */
 - (void)beginSheet:(NSWindow *)sheet
     modalForWindow:(NSWindow *)docWindow
      modalDelegate:(nullable id)modalDelegate

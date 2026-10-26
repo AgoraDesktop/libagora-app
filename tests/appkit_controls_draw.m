@@ -2251,6 +2251,7 @@ int main(int argc, char **argv)
 	int showGalleryBottom = 0;
 	int showGalleryDrawer = 0;
 	int showPlaygroundWindow = 1;
+	int showPrintSheet = 0;
 	int i;
 
 	/* **THE CHROME'S THEME IS THIS DEMONSTRATION'S DEFAULT, WHICH IS WHAT MAKES IT THE THING TO ITERATE ON.** The
@@ -2276,6 +2277,12 @@ int main(int argc, char **argv)
 			/* AND WITH THE DRAWER OPEN, WHICH IS OTHERWISE A BUTTON PRESS AWAY. */
 			showGalleryWindow = 1;
 			showGalleryDrawer = 1;
+		} else if (strcmp(argv[i], "--print-sheet") == 0) {
+			/* **THE PRINT PANEL AS A SHEET AT STARTUP, WHICH IS THE SHEET FORM WITHOUT A CLICK.** A sheet is the one
+			 * arrangement of two windows this tier has, so a launcher that opens one is the difference between iterating
+			 * on it and clicking through the gallery every time — the same reason `--gallery-drawer` exists. The
+			 * gallery's own button is the interactive route to the same act. */
+			showPrintSheet = 1;
 		} else if (strcmp(argv[i], "--no-playground") == 0) {
 			/* **THE PLAYGROUND IS MAPPED LAST SO IT IS IN FRONT, WHICH IS RIGHT FOR LOOKING AT THE TEXT AND WRONG FOR
 			 * LOOKING AT THE CONTROLS** — it covers the right column, which is where the newest controls are. This flag
@@ -2748,6 +2755,17 @@ int main(int argc, char **argv)
 				[app activate];
 				[controller toggleDrawer:nil];
 			}
+		}
+		if (showPrintSheet) {
+			/* **THE SHEET GOES ON THE GALLERY, WHICH IS THE WINDOW THIS FLAG IS FOR.** `-showPrintPanel:` takes
+			 * `[app keyWindow]` the way the gallery's button does — so the gallery is ordered front and keyed first,
+			 * which is the same door `--gallery-drawer` uses and the only thing that decides WHERE the panel lands.
+			 * Without it the sheet can attach to the controls window behind the gallery and look like nothing
+			 * happened. The application is activated first for the reason the drawer's flag gives: a sheet on a
+			 * launcher's unactivated window is honestly attached and honestly not key. */
+			[app activate];
+			[controller showGallery:nil];
+			[controller showPrintPanel:nil];
 		}
 		/* ONE LINE OF GEOMETRY, so that a screenshot can be READ against the numbers the application believes rather
 		 * than against a guess about where a window landed. */

@@ -686,6 +686,19 @@ typedef NSUInteger NSWindowSharingType;
  * caller's and is not retained. */
 - (void)cg_drawChromeInContext:(nullable NSGraphicsContext *)context;
 
+/* **WHAT THE WINDOW'S BODY IS PAINTED WITH, WHICH IS NOT ALWAYS `-backgroundColor`.** For an ordinary window the two are
+ * the same door and this is only the name the painter uses. A SHEET's body is the CHROME'S FACE — `+cg_chromeFaceColor`,
+ * the colour the title bar is — because a sheet's top edge is its parent's title bar's bottom edge, and the same colour
+ * on both sides of that edge is what makes the sheet read as coming out from UNDER the bar rather than being pasted
+ * below it: with one colour the seam disappears and the bar's bottom hairline is simply interrupted across the sheet's
+ * width, which is what a Mac sheet looks like. A sheet that honoured its own `-backgroundColor` here would be a sheet
+ * with a line across the top of it.
+ *
+ * THE DOOR EXISTS SO THE RULE CAN BE ASKED. The painter is `-cg_drawFrame`'s and the dirty path's, both of which need a
+ * live surface; a bitmap rep does not, so a rule about a colour would otherwise only be checkable on a running
+ * compositor (see `tests/sheet.m`). */
+- (NSColor *)cg_bodyColor;
+
 /* **HOW MUCH OF THE SCREEN THIS WINDOW TAKES FOR ITSELF — AGORA-OWNED, AND IT IS NOT AN APPLE API.** `NSScreen`
  * declares `-visibleFrame` as the frame minus the menu bar and the Dock, and on the Mac the window server works the
  * Dock's share out of the Dock's own window frame through a private CGS call Agora has no answer for. So here the

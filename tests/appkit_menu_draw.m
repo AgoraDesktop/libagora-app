@@ -85,6 +85,10 @@ int main(int argc, char **argv)
 			passes = 1;
 		}
 	}
+	/* **UNBUFFERED, SO A RUNNER CAN SEE THIS PROGRAM WHILE IT IS STILL RUNNING.** Every line below is evidence a
+	 * screenshot runner waits for, and a pipe or a file would hold them until exit — which is exactly the moment the
+	 * picture is gone. */
+	setvbuf(stdout, NULL, _IONBF, 0);
 	{
 		/* **`i` IS NOT DECLARED YET AT THIS POINT** — the declaration block is below, which is where the first
 		 * version of this loop read it from. A scope of its own is the honest fix: this is argument parsing and it
@@ -292,6 +296,14 @@ int main(int argc, char **argv)
 
 			if (event != nil) {
 				[app sendEvent:event];
+			}
+			/* **AND ONE LINE WHEN THE MENU IS REALLY UP, BECAUSE A SCREENSHOT IS TAKEN FROM OUTSIDE.** A runner
+			 * photographs this compositor by stopping it while the picture is the picture, and it cannot know when
+			 * that is unless the program says so: the click above is only a REQUEST, and the menu's own window is
+			 * drawn on the frame callbacks this loop dispatches. A few passes in, it is on the glass. */
+			if (i == 5) {
+				printf("appkit_menu_draw: the menu is up\n");
+				fflush(stdout);
 			}
 		}
 	}

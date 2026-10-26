@@ -91,6 +91,16 @@ enum {
 
 + (NSPrintPanel *)printPanel;
 
+/* **AND THE PANEL KEEPS ITSELF ALIVE FOR A SHEET SESSION.** `+printPanel` answers a NEW, AUTORELEASED panel — Apple's
+ * own factory idiom — so a caller that begins a sheet and drops its local is the ordinary case, and the *session* is
+ * asynchronous: the sheet is still on the glass a run-loop pass later, when the pool that made the panel drains. A
+ * panel that died there took its window's views with it while the window was still attached and still displayed, and
+ * the next pass that walked that tree sent a message to freed memory — MEASURED as a SIGSEGV inside
+ * `-[NSView cg_dirtyRegionRecursive:…]` (and, from a pointer motion, inside `-[NSView cg_rebuildStaleCursorRects]`,
+ * which is how it was reported). So `-beginSheetWithPrintInfo:…` retains the panel and `-fn_finishWithCode:` gives
+ * that retain back: the panel lives exactly as long as the session it owns, and a caller who wants it afterwards
+ * retains it itself. */
+
 /* THE TICKET THE PANEL EDITS, AND THE OPTIONS THAT DECIDE WHICH CONTROLS IT SHOWS. */
 - (nullable NSPrintInfo *)printInfo;
 - (void)setPrintInfo:(NSPrintInfo *)printInfo;
@@ -115,7 +125,14 @@ enum {
 /* **THE TWO WAYS TO RUN IT.** Modal returns `NSOKButton` or `NSCancelButton`; the sheet form calls back on the delegate
  * with the same code after the panel has been dismissed. A program with no run loop gets the modal answer WITHOUT a
  * session — the panel's current values are applied and `NSOKButton` returned — which is the same guard the tree's menu,
- * field and alert sessions carry. */
+ * field and alert sessions carry.
+ *
+ * **THE REPLY IS THE PANEL'S, WHICH IS WHY THE SESSION IS BEGUN WITH NONE OF ITS OWN.** `-beginSheetWithPrintInfo:…`
+ * attaches the panel through `NSApplication -beginSheet:modalForWindow:modalDelegate:didEndSelector:contextInfo:` with
+ * a NIL delegate, and the panel's own buttons call the CALLER'S did-end from `-fn_finishWithCode:` — once, after
+ * `-endSheet:returnCode:` and after the panel has been ordered out. Passing the caller's delegate to the session as
+ * well would call it twice. (It used to call a two-argument `-beginSheet:modalForWindow:` that this tier does not have,
+ * so the button raised "not implemented" instead; `tests/printing.m` drives the door end to end.) */
 - (NSInteger)runModal;
 - (NSInteger)runModalWithPrintInfo:(NSPrintInfo *)printInfo;
 - (void)beginSheetWithPrintInfo:(NSPrintInfo *)printInfo

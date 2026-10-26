@@ -2235,9 +2235,14 @@ static void registry_global(void *data, struct wl_registry *registry, uint32_t n
 		 * a window made from a shell bound at 2 is a version 2 window whose `set_reserved` is the last thing it has. */
 		/* **NINE IS WHERE THE FRACTIONAL SCALE IS.** Below it the shell is bound at what the compositor offers and
 		 * windows keep the integer `wl_output.scale` path — a little soft on a fractional output, but correct. The
-		 * clipboard's seven and the fractional scale's nine are the two fences this seam knows about. */
+		 * clipboard's seven and the fractional scale's nine are the two older fences this seam knows about, and
+		 * **TEN IS THE SHEET'S**: below it a window has no way to say it hangs from another window's title bar, and a
+		 * sheet is drawn as the rectangle it is — square-shouldered, but a rectangle. Asking for exactly what this
+		 * seam understands matters here for the same reason it does at nine: the version a shell is bound at is the
+		 * version every window it makes is capped to, and a request sent above it is a protocol error that kills the
+		 * client rather than a call the server ignores. */
 		server->shell = wl_registry_bind(registry, name, &agora_shell_interface,
-						version < 9 ? version : 9);
+						version < 10 ? version : 10);
 	}
 }
 
@@ -2961,6 +2966,30 @@ void AGWindowSetActivatable(AGWindow *window, int activatable)
 		return;
 	}
 	agora_window_set_activatable(window->agora, activatable ? 1 : 0);
+	wl_display_flush(window->server->display);
+}
+
+/* **AND THE ONE STATEMENT ABOUT TWO WINDOWS THIS SEAM CAN MAKE.** A sheet is an ordinary window with an ordinary
+ * frame — the placement stays `AGWindowSetFrame`'s — but the server cannot tell a sheet from a window that merely
+ * touches one, so the application says which it is. What the pair buys is the shape (the top corners are the parent's
+ * title bar's seam, not the sheet's own edge) and the stack (the sheet is drawn and hit-tested immediately in front of
+ * its parent whoever was raised).
+ *
+ * A PARENT WITH NO `AGWindow` YET DETACHES, and that is not a degradation: a window that has never been ordered onto
+ * the screen has no surface for the server to draw above, so there is nothing to say about it. Both windows belong to
+ * this client, which is why the parent is an object here and an id everywhere else in this protocol — see
+ * `agora_window.set_sheet_parent`. */
+void AGWindowSetSheetParent(AGWindow *window, AGWindow *parent, int seam)
+{
+	struct agora_window *parent_role = NULL;
+
+	if (window == NULL || window->agora == NULL) {
+		return;
+	}
+	if (parent != NULL) {
+		parent_role = parent->agora;
+	}
+	agora_window_set_sheet_parent(window->agora, parent_role, seam > 0 ? seam : 0);
 	wl_display_flush(window->server->display);
 }
 

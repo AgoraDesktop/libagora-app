@@ -52,6 +52,9 @@ NS_ASSUME_NONNULL_BEGIN
 
 + (NSPageLayout *)pageLayout;
 
+/* AND THE SAME LIFETIME RULE AS `NSPrintPanel`'s: `+pageLayout` answers an autoreleased panel, so a sheet session
+ * keeps the panel alive for as long as the sheet is up (see `NSPrintPanel.h` for the measurement). */
+
 - (nullable NSPrintInfo *)printInfo;
 - (void)setPrintInfo:(NSPrintInfo *)printInfo;
 
@@ -65,7 +68,9 @@ NS_ASSUME_NONNULL_BEGIN
 - (void)readPrintInfo;
 - (void)writePrintInfo;
 
-/* THE SESSION: modal, or a sheet that calls the delegate back with the reply code. */
+/* THE SESSION: modal, or a sheet that calls the delegate back with the reply code. As on `NSPrintPanel`, the REPLY is
+ * this object's — the session is begun with a nil delegate and `-fn_finishWithCode:` calls the caller's did-end itself,
+ * once, after `-endSheet:returnCode:` — and `tests/printing.m` drives it. */
 - (NSInteger)runModal;
 - (NSInteger)runModalWithPrintInfo:(NSPrintInfo *)printInfo;
 - (void)beginSheetWithPrintInfo:(NSPrintInfo *)printInfo

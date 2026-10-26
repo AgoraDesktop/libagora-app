@@ -358,6 +358,11 @@
 
 			((AGPageLayoutDidEnd)objc_msgSend)(delegate, didEnd, self, code, context);
 		}
+		/* **THE SESSION'S RETAIN GOES BACK AFTER THE REPLY, BECAUSE THE REPLY MAY DROP THE CALLER'S.** By the time the
+		 * callback runs the sheet is ended and the panel is out of the way, so the caller is free to forget it — and a
+		 * panel released BEFORE its own did-end ran would be a use-after-free in the callback it just called. The
+		 * autorelease, rather than a release, is what keeps `self` alive for the rest of this method's own unwind. */
+		[self autorelease];
 		return;
 	}
 	[app stopModalWithCode:code];
@@ -411,7 +416,26 @@
 	_sheetDelegate = delegate;
 	_sheetDidEnd = didEndSelector;
 	_sheetContext = contextInfo;
-	[app beginSheet:_modalWindow modalForWindow:docWindow];
+	/* **THE SESSION OWNS THE PANEL, SO THE CALLER DOES NOT HAVE TO.** `+printPanel`/`+pageLayout` answer an
+	 * AUTORELEASED panel — Apple's factory idiom — and a sheet is ASYNCHRONOUS: it is still on the glass a run-loop pass
+	 * later, when the pool that made the panel drains. A panel that died there released its window's views while the
+	 * window was still attached and still displayed, and the next pass that walked that tree sent a message to freed
+	 * memory — MEASURED as `SIGSEGV` inside `-[NSView cg_dirtyRegionRecursive:…]` (and, from a pointer motion, inside
+	 * `-[NSView cg_rebuildStaleCursorRects]`, which is how it was reported). THIS RETAIN IS THE SESSION'S, and
+	 * `-fn_finishWithCode:` gives it back where the session ends. */
+	[self retain];
+	/* **AND THE SESSION IS BEGUN WITH NO REPLY OF ITS OWN, BECAUSE THE PANEL IS THE ONE THAT REPLIES.** `-fn_finishWithCode:`
+	 * calls the caller's did-end itself — after `-endSheet:returnCode:` and after ordering the panel out — so passing
+	 * the caller's delegate here would call it twice: once by the application, once by this class. It is the same
+	 * division `-beginModalSessionForWindow:relativeToWindow:` makes, and the FIVE arguments are the whole point:
+	 * `-beginSheet:modalForWindow:` does not exist in this tier, and calling it raised
+	 * `-[NSApplication beginSheet:modalForWindow:] is not implemented` the moment a person pressed a panel's Print or
+	 * Page Setup button. MEASURED, from the gallery's own Print Panel button. */
+	[app beginSheet:_modalWindow
+	 modalForWindow:docWindow
+	  modalDelegate:nil
+	 didEndSelector:NULL
+	    contextInfo:NULL];
 }
 
 @end

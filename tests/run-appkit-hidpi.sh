@@ -63,17 +63,33 @@ if [ ! -S "${RUNTIME}/${SOCK}" ]; then
 	exit 1
 fi
 
-WAYLAND_DISPLAY="${SOCK}" "${BINARY}" --seconds 2 \
-	--x "${WIN_X}" --y "${WIN_Y}" --width "${WIN_W}" --height "${WIN_H}" 2>&1 | head -4
-RC=$?
-if [ "${RC}" -ne 0 ]; then
-	echo "FAIL: the AppKit test exited ${RC}" >&2
-	cat /tmp/agora-hidpi.log >&2
-	exit 1
-fi
-sleep 0.4
+# **THE SERVER IS STOPPED WHILE THE WINDOW IS STILL ON THE SCREEN, AND THAT ORDER IS THE TEST.** The screenshot is
+# written at the server's shutdown from its last frame, so a client that has already gone takes its window with it: the
+# compositor now repaints the pixels a destroyed surface was covering (a full redraw, and the right thing to do — the
+# ground under a closed window is not something that surface ever damaged). So the client runs in the BACKGROUND with a
+# budget rather than in the foreground, the server is signalled once the window has had time to paint, and the client is
+# killed afterwards — the same order `window-server`'s own `run-headless.sh` records.
+CLIENT_LOG="/tmp/agora-hidpi-client-$$.log"
+WAYLAND_DISPLAY="${SOCK}" "${BINARY}" --seconds 10 \
+	--x "${WIN_X}" --y "${WIN_Y}" --width "${WIN_W}" --height "${WIN_H}" >"${CLIENT_LOG}" 2>&1 &
+CPID=$!
+for _ in $(seq 1 100); do
+	grep -q "appkit_hidpi: window" "${CLIENT_LOG}" 2>/dev/null && break
+	sleep 0.05
+done
+# THE WINDOW HAS BEEN MADE; ONE FRAME'S WORTH OF PATIENCE AND IT IS ON THE GLASS.
+sleep 0.6
 kill -TERM "${SPID}" 2>/dev/null
 wait "${SPID}" 2>/dev/null
+kill "${CPID}" 2>/dev/null
+wait "${CPID}" 2>/dev/null
+head -4 "${CLIENT_LOG}"
+if ! grep -q "appkit_hidpi: window" "${CLIENT_LOG}"; then
+	echo "FAIL: the AppKit test never made its window" >&2
+	cat "${CLIENT_LOG}" /tmp/agora-hidpi.log >&2
+	exit 1
+fi
+rm -f "${CLIENT_LOG}"
 
 if [ ! -f "${SHOT}" ]; then
 	echo "FAIL: the server wrote no screenshot" >&2

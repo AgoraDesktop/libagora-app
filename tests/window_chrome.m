@@ -38,6 +38,10 @@
  *      bare, which is checked first and is the policy; the triangle's SHAPE is then checked on a window that has a
  *      band for it to toggle (`fn_chrome_button_present` is where the difference is made).
  *   7. A title too long for the room between the two blocks is CUT rather than run under them.
+ *   8. A SHEET PAINTS NOTHING. It has no title bar to paint — the Mac gives it none, and the parent's bar is the one it
+ *      hangs from — so a frame-sized bitmap handed to the painter comes back untouched. That is the defect this check
+ *      was written for: a sheet drawn as an ordinary window wore a strip and a traffic light of its own, sitting on top
+ *      of its parent's title bar.
  */
 #import <AppKit/NSWindow.h>
 #import <AppKit/NSView.h>
@@ -213,6 +217,11 @@ static int text_ink_width(NSFont *font, NSString *s)
  * have sent it. */
 @interface NSWindow (APPKITWindowChromeTest)
 - (void)cg_updateTrackingForPoint:(NSPoint)windowPoint;
+/* **AND THE TWO SHEET DOORS THIS FILE ASKS.** The parent back-reference names the window whose title bar's border the
+ * sheet wears, and the tuck says which row that is: both are `NSWindow`'s own arithmetic, so a probe that wrote either
+ * number down would be a second copy of it. */
+- (NSWindow *)cg_sheetParent;
+- (CGFloat)cg_sheetTuck;
 @end
 
 int main(void)
@@ -585,6 +594,67 @@ int main(void)
 			      "an over-long title is CUT, and its ink stays clear of both blocks");
 			[rep release];
 			[narrow release];
+		}
+
+		/* 9. **A SHEET PAINTS NO CHROME AT ALL, AND THAT IS THE STRONGEST FORM OF THE CLAIM.** The Mac gives a sheet no
+		 * title bar — the parent's bar is the one it hangs from — and this tier's chrome is the client's, so `-isSheet`
+		 * is what the painter has to read. What is asserted is the whole rep: a frame-sized bitmap filled white and
+		 * handed to the painter comes back WHITE, every pixel of it. A bar, an outline, a traffic light, a title or a
+		 * hairline left anywhere in there fails this, which is exactly the defect that made a sheet look like a
+		 * second window with a strip of its own sitting on top of its parent's title bar. */
+		{
+			NSWindow *parent = [[NSWindow alloc] initWithContentRect:NSMakeRect(0.0, 0.0, 400.0, 300.0)
+				styleMask:NSTitledWindowMask backing:NSBackingStoreBuffered defer:NO];
+			NSWindow *sheet = [[NSWindow alloc] initWithContentRect:NSMakeRect(0.0, 0.0, (CGFloat)CW, (CGFloat)CH)
+				styleMask:(NSTitledWindowMask | NSClosableWindowMask) backing:NSBackingStoreBuffered defer:NO];
+			NSBitmapImageRep *rep = new_rep(CW, FH);
+			NSGraphicsContext *ctx = [NSGraphicsContext graphicsContextWithBitmapImageRep:rep];
+			int x, y, inked = 0, offRow = 0, onRow = 0;
+			int lineRow;
+
+			[sheet setTitle:@"Already exists"];
+			[[NSApplication sharedApplication] beginSheet:sheet modalForWindow:parent
+				modalDelegate:nil didEndSelector:NULL contextInfo:NULL];
+			[NSGraphicsContext setCurrentContext:ctx];
+			[[NSColor whiteColor] setFill];
+			[[NSBezierPath bezierPathWithRect:NSMakeRect(0.0, 0.0, (CGFloat)CW, (CGFloat)FH)] fill];
+			[sheet cg_drawChromeInContext:ctx];
+			/* **ONE ROW, AND IT IS THE PARENT'S TITLE BAR BORDER — EVERYTHING ELSE IS BARE.** A sheet has no strip, no
+			 * marks, no title and no hairline of its own; what it DOES paint is the bar's bottom border across itself,
+			 * because the bar is in front of the sheet on the Mac and here the sheet's surface is the one on top — so
+			 * the sheet wears the line, `tuck` points down from its top edge, and the parent's line meets it at the
+			 * sheet's two sides. The row is found by asking the pixels, not by writing down an index: `[sheet frame]`
+			 * is the sheet's content (no chrome), and the line is one row inside its top edge by the tuck. */
+			/* THE REP'S ROWS RUN FROM THE TOP AND THE PAINTER'S FROM THE BOTTOM, so the row is converted: the line is
+			 * `tuck` points below the sheet's top edge in window coordinates, which is `FH - 1 - that` in the bitmap. */
+			lineRow = FH - 1 - (int)([sheet frame].size.height - [[sheet cg_sheetParent] cg_sheetTuck] - 1.0);
+			for (y = 0; y < FH; y++) {
+				for (x = 0; x < CW; x++) {
+					BOOL ink = !is_colour(at(rep, x, y), [NSColor whiteColor], 0.02);
+
+					if (!ink) {
+						continue;
+					}
+					inked++;
+					if (y == lineRow) {
+						onRow++;
+					} else {
+						offRow++;
+					}
+				}
+			}
+			check([sheet isSheet], "the window under test IS a sheet");
+			check(offRow == 0, "a sheet paints NO chrome of its own — no strip, no marks, no title, no hairline");
+			check(onRow == CW,
+			      "and it does paint the PARENT'S TITLE BAR BORDER across itself: one full-width row, at the row the "
+			      "bar's line occupies");
+			check(is_colour(at(rep, CW / 2, lineRow), [NSColor controlDarkShadowColor], 0.02),
+			      "in the bar's own ink — the colour the parent's hairline is drawn with");
+			printf("  (note: %d inked pixel(s), %d of them on row %d)\n", inked, onRow, lineRow);
+			[rep release];
+			[[NSApplication sharedApplication] endSheet:sheet returnCode:0];
+			[sheet release];
+			[parent release];
 		}
 
 		[w release];

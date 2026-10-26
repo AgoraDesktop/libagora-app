@@ -36,6 +36,7 @@
 #import <AppKit/NSWindow.h>
 #import <Foundation/Foundation.h>
 
+#include <math.h>
 #include <stdio.h>
 
 static int s_failed;
@@ -317,7 +318,7 @@ static void test_alert_answers(void)
 static void test_alert_sheet(void)
 {
 	NSApplication *application = [NSApplication sharedApplication];
-	NSWindow *parent = [[NSWindow alloc] initWithContentRect:NSMakeRect(0.0, 0.0, 400.0, 300.0)
+	NSWindow *parent = [[NSWindow alloc] initWithContentRect:NSMakeRect(100.0, 100.0, 400.0, 300.0)
 						       styleMask:NSTitledWindowMask
 							 backing:NSBackingStoreBuffered
 							   defer:NO];
@@ -327,6 +328,16 @@ static void test_alert_sheet(void)
 				alternateButton:@"Cancel"
 				    otherButton:nil];
 	SheetReception *reception = [[SheetReception alloc] init];
+	NSWindow *sheet = [alert window];
+	/* **THE GEOMETRY IS MEASURED BEFORE THE ATTACHMENT, BECAUSE THE ATTACHMENT IS WHAT CHANGES IT.** The alert's panel
+	 * is a titled window, so its frame is its content plus a strip; a sheet has no strip of its own, so what has to
+	 * survive the transition is the CONTENT's size while the frame becomes exactly that. */
+	NSRect contentBefore = [sheet contentRectForFrameRect:[sheet frame]];
+	NSRect frameBefore = [sheet frame];
+
+	sheet = [alert window];
+	check(frameBefore.size.height > contentBefore.size.height,
+	      "the alert's panel is built as a TITLED window, so its frame is its content plus a strip");
 
 	[alert beginSheetModalForWindow:parent
 			  modalDelegate:reception
@@ -334,11 +345,60 @@ static void test_alert_sheet(void)
 			    contextInfo:NULL];
 	check([parent attachedSheet] == [alert window], "the alert is attached as the parent's sheet");
 	check([[alert window] isSheet], "and the panel knows it is one");
+	/* 5a. **A SHEET HAS NO CHROME, AND WHAT THAT MEANS HERE IS THAT ITS FRAME IS ITS CONTENT.** `-contentRectForFrameRect:`
+	 * has to answer the frame itself while a window is a sheet — otherwise the content view is laid out into a strip's
+	 * worth of pixels that are not on its surface — and the content has to be the size the alert laid itself out for. */
+	check([sheet frame].size.height == [sheet contentRectForFrameRect:[sheet frame]].size.height,
+	      "a sheet's frame IS its content: it has no title bar of its own");
+	/* **TO WITHIN A POINT, AND THAT IS THE POINT GRID RATHER THAN TOLERANCE.** An alert's computed height is a
+	 * fraction (109.6 here), and a sheet's frame is put on whole points because the row its title bar border sits on
+	 * has to be the row the parent's own border is on — see `-cg_setSheetParent:`. So the content keeps its size to
+	 * the nearest point, which is the only grid a frame has ever had on the wire. */
+	check(fabs([sheet frame].size.width - contentBefore.size.width) <= 1.0
+	      && fabs([sheet frame].size.height - contentBefore.size.height) <= 1.0,
+	      "and taking the strip off the frame leaves the alert's content the size it was laid out for");
+	/* 5b. **AND IT HANGS FROM THE PARENT'S TITLE BAR: TOP EDGE AT THE CONTENT'S TOP, CENTRED.** The Mac's rule, and
+	 * the one that makes a sheet read as part of the window rather than as a panel near it. */
+	{
+		NSRect parentContent = [parent contentRectForFrameRect:[parent frame]];
+
+		check(NSMaxY([sheet frame]) > NSMaxY(parentContent)
+		      && NSMaxY([sheet frame]) < NSMaxY([parent frame]),
+		      "the sheet's TOP edge is INSIDE the parent's title bar — it hangs from the bar, tucked under it");
+		check([[sheet cg_bodyColor] isEqual:[NSColor cg_chromeFaceColor]],
+		      "and the sheet's body is the chrome's own colour, so the seam is one surface");
+		check(fabs(NSMidX([sheet frame]) - NSMidX(parentContent)) < 0.001,
+		      "and it is centred on the parent's content");
+		check(NSMinY([sheet frame]) >= NSMinY(parentContent)
+		      && NSMinY([sheet frame]) < NSMaxY(parentContent),
+		      "with its body over the parent's content, which is what makes it a sheet ON it");
+	}
+	/* 5c. **AND IT MOVES WITH ITS PARENT.** A sheet left behind by a dragged parent is a separate window again, so a
+	 * move re-pins it and a resize re-centres it — both through the parent's own `-setFrame:display:`. */
+	[parent setFrame:NSMakeRect(60.0, 40.0, 460.0, 300.0) display:YES];
+	{
+		NSRect parentContent = [parent contentRectForFrameRect:[parent frame]];
+
+		check(NSMaxY([sheet frame]) > NSMaxY(parentContent) && NSMaxY([sheet frame]) < NSMaxY([parent frame]),
+		      "moving and widening the parent takes the sheet with it, still tucked into the bar");
+		check(fabs(NSMidX([sheet frame]) - NSMidX(parentContent)) < 0.001,
+		      "and the new width re-centres it, because the placement is re-applied rather than remembered");
+		check(fabs([sheet frame].size.height - contentBefore.size.height) <= 1.0,
+		      "the parent's size does not touch the sheet's own size");
+	}
+
 	[[[alert buttons] objectAtIndex:1] performClick:nil];
 	check([reception wasCalled], "the caller's did-end method ran");
 	check([reception code] == NSAlertSecondButtonReturn, "with the clicked button's code");
 	check([parent attachedSheet] == nil, "and the session is over");
 	check(![[alert window] isSheet], "the panel is no longer a sheet");
+	/* 5d. **AND THE STRIP COMES BACK WITH THE CONTENT INTACT.** A dismissed sheet is an ordinary titled window again —
+	 * Apple's contract does not destroy it — so the frame has to be its content plus chrome, with the alert's content
+	 * still the size it was built for. */
+	check([sheet frame].size.height > contentBefore.size.height,
+	      "ending the session gives the window its title bar back: its frame is its content plus a strip");
+	check(fabs([sheet contentRectForFrameRect:[sheet frame]].size.height - contentBefore.size.height) <= 1.0,
+	      "and the content it was dismissed with is the size the alert laid out for");
 
 	[reception release];
 	[parent release];

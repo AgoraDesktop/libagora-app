@@ -2116,6 +2116,157 @@ phantom left to count), and the protocol count **44 -> 49 of 56**. The seven sti
 speech delegates, `NSGlyphStorage` (which the typesetter facade would adopt), the two input-server era protocols, and
 `NSUserInterfaceItemSearching` — six that go with absent subsystems and one that goes with the deferred Help system.
 
+## 70. A sheet was a window with a title bar of its own, and the window server had never been told
+
+**THE DEFECT WAS ONE SENTENCE IN THE WRONG PLACE.** `-beginSheet:modalForWindow:…` attached the sheet and placed its frame's
+TOP edge at the parent's frame top, which is the Mac's own rule — a sheet slides out from UNDER the title bar, so its frame
+overlaps the strip — but the strip a sheet's frame contains was still being PAINTED, because the chrome arithmetic read the
+style mask and nothing else. MEASURED on a real window: an `NSAlert` sheet drew a grey bar with its own title, its own
+close box, and a hairline, sitting on top of its parent's title bar. Two of the three components were doing exactly what
+they had been told to do; nothing had told either of them what a sheet is.
+
+**SO A SHEET NOW HAS NO CHROME, AND THE FRAME SAYS SO.** `fn_chrome_height` is the new single answer — zero for a sheet —
+and every piece of the chrome arithmetic reads it: the instance `-contentRectForFrameRect:`/`-frameRectForContentRect:`
+pair (so the content view fills the surface), `fn_chrome_layout` (no strip, hence no height), `fn_chrome_button_present` (no
+traffic lights to press), the title (no text) and the hairline (no line). The style mask is untouched, which is Apple's
+behaviour as well: an alert's panel is BUILT titled and closable and reports that afterwards, and being a sheet is a MODE.
+Attaching therefore changes the frame to the content rect it already had — the mirror of `-setStyleMask:`'s content
+preservation, done in `-cg_setSheetParent:` so that ending the session puts the strip back with the content intact.
+
+**AND THE PLACEMENT IS ONE DOOR, RE-APPLIED RATHER THAN REMEMBERED.** `-cg_updateSheet` is the rule: the sheet's top edge
+at the bottom of the parent's title bar, centred on the parent's content. `-setFrame:display:` calls it on every move and
+resize, so a dragged parent drags its sheet and a wider parent re-centres it — before this a sheet was left behind by the
+window it belonged to, which is the other half of "it looks like a separate window".
+
+**THE COMPOSITOR'S HALF NEEDED A PROTOCOL REQUEST, AND THAT IS `agora_window.set_sheet_parent` (version 10).** Two facts
+the frames cannot carry: a sheet's TOP corners are its parent's title bar's seam and not its own edge (so they stay square,
+like a menu's top corners against the menu bar — the CPU and GL renderers each gained one condition for it), and the sheet
+is composited and hit-tested immediately in front of its parent whoever was raised (the server's list is the stack, so
+`surface_bring_to_front` and `window_lower` now move a window's sheet with it). The sheet also casts no shadow upward: its
+shadow's clip is `max(the menu bar's rows, its own top edge)`, in both renderers, because a shadow above that seam is a
+shadow ON the title bar. The request carries the PARENT OBJECT rather than an id — both windows are the calling client's,
+and a window object is the only name a client has for a window it made — and the server clears the link from the parent's
+side when the parent is destroyed, so the one cross-surface pointer it keeps can never dangle.
+
+**AND THE TUCK, THE COLOUR AND THE BORDER ARE ONE RULE WITH THREE PARTS, EACH FORCED BY A MEASUREMENT.** The sheet is
+placed with its top edge two points INTO the parent's title bar rather than flush with its bottom, because two frames
+rounded independently at a fractional scale can leave a device row of the bar's line showing across the top of a flush
+sheet. The overlap is invisible because a sheet's body is painted in `+cg_chromeFaceColor` — the bar's own colour, behind
+the new `-cg_bodyColor` door, since `-backgroundColor` is the CALLER's answer and a sheet is being painted as part of a
+bar. And the sheet draws the parent's title bar border ACROSS ITSELF (`fn_draw_chrome`), because on the Mac the bar is in
+front of the sheet and here the sheet's surface is the one on top: without it the bar's line stops at the sheet's two
+sides. Two further numbers fell out of getting that line to be ONE line: a sheet's frame is put on whole points when it
+becomes one (`-cg_setSheetParent:`) — an alert's layout computes 109.6, so the sheet's half of the border was rasterised
+at a fraction and came out as two soft rows against the bar's one crisp row — and `AGWindowSetFrame` is now fed ROUNDED
+coordinates (`fn_device_point`) rather than truncated ones, because truncation moved a window up by up to a point with a
+DIFFERENT error for each window of the pair. The compositor needed the seam for the same reason the shape did: its shadow
+may not be painted on the rows the sheet is tucked into, so `set_sheet_parent` carries it and both renderers clip there.
+
+**AND THE PAIR'S PLACE IN THE STACK IS DERIVED, AFTER BEING MAINTAINED BADLY.** The first version kept the sheet
+adjacent in the server's surface list — placed after the parent on attach, moved with it on raise/lower — which is
+adjacency by UPKEEP, and the upkeep had holes: raising the sheet on its own (`-orderFront:` on an alert) moved it to the
+top of the stack, over whatever had been raised in between; a third window raised between the two then sat in the gap;
+lowering placed the sheet BELOW its parent; and an `NSAlert`'s panel is at `NSModalPanelWindowLevel` while its document
+is at 0, so the pair was two windows with a level between them as well. The order is now ASKED rather than remembered:
+`aws_surface_drawn_with_parent` says a sheet whose parent is on the screen has no place of its own, `aws_output_walk`
+skips it where the list put it and emits it the instant the parent has been drawn, and `aws_surface_at` asks the same
+predicate so the pointer and the picture cannot disagree. Raising or lowering a sheet is answered on its parent (the
+family moves together, as the Mac does it), a sheet's level is unused while it is a sheet, and `tests/sheet_stack.c` is
+the walk's order as a unit test — the three orders that used to break adjacency, the no-double-draw rule, the hidden
+parent, and the bar staying above a pair drawn at the parent's level.
+
+**AND A CLICK IN THE DISABLED PARENT HAD TO BE ANSWERED, WHICH IS THE SECOND REPORTED DEFECT.** The modal gate in
+`NSApplication -sendEvent:` correctly drops every event aimed at a window with a sheet attached — that is what
+window-modal means observably — but the drop was ALL it did, so a click on a buried document's greyed body left the pair
+where it was and the question with it. A mouse-down aimed at such a parent now does the two acts the application owns
+and then drops the event: it activates, orders the parent front (which on this compositor raises the pair, since a sheet
+has no place of its own), and gives the KEY and MAIN to the SHEET rather than to the parent the click landed on. Doing
+that exposed a second defect in the same area: `-beginSheet:…` and `-endSheet:returnCode:` assigned `_keyWindow` and
+`_mainWindow` directly, so the PARENT kept `-isKeyWindow` YES for the whole session (two windows claiming the key,
+`-makeKeyWindow` on the parent early-returning, the sheet answering NO, and `-windowDidBecomeKey:` never posted) and the
+seat's focus was never told. Both doors now use `-becomeKeyWindow`/`-becomeMainWindow` and the resignations they cause.
+
+The seam gained `AGWindowSetSheetParent` for it. `tests/sheet.m` holds the geometry, the tuck, the re-pinning, the body
+colour, the return of the strip and, on a headless compositor, that ordering a parent out takes its sheet with it and
+that a click in the disabled parent keys the sheet;
+`tests/panel_alert.m` grew the same assertions on the alert path (92 checks); `tests/window_chrome.m` asks the pixels — a sheet paints
+NO chrome of its own and exactly ONE full-width row of the bar's ink where the border goes — and the
+`tests/readme_refs.cmake` guard is what caught the citation of `sheet.m` before the file existed.
+
+## 71. The panels' sheet forms called a selector that has never existed
+
+**REPORTED AS A CRASH FROM A BUTTON, AND THAT IS EXACTLY WHAT IT WAS:**
+
+```
+Foundation: -[NSApplication beginSheet:modalForWindow:] is not implemented
+*** Terminating due to uncaught exception 'NSInvalidArgumentException'
+```
+
+pressing the gallery's Print Panel button. `NSPrintPanel -beginSheetWithPrintInfo:modalForWindow:delegate:didEndSelector:
+contextInfo:` and `NSPageLayout`'s same-named door each ended with `[app beginSheet:_modalWindow modalForWindow:docWindow]`
+— a TWO-argument selector. This tier's application implements one sheet door and it takes five arguments; there is no
+two-argument form in any header, in this tree or in Apple's. The runtime raised it the moment the door was first reached,
+which is why the modal half of both panels worked for months and the SHEET half aborted the process on its first press.
+
+**THE BUILD SAID SO AND NOBODY COULD HEAR IT.** An unknown selector on a typed receiver is a WARNING
+(`-Wobjc-method-access`, "not found (return type defaults to 'id')"), not an error, so the call compiled and linked and
+waited for a person to press Print. So the fix is two lines and the guard is a sweep: every source in this component was
+compiled with `-fsyntax-only` and its warnings collected. **40 distinct selectors are unknown to their callers, and all 40
+are legitimate**: the private `cg_` doors (declared in implementation-side interfaces, which is this tree's seam pattern),
+and two of Apple's optional informal-protocol doors — `-fontManager:willIncludeFont:` and
+`-pasteboard:provideDataForType:` — which are asked of an application's own delegate behind `-respondsToSelector:`. Those
+two are the only selectors in the sweep with no implementation anywhere in the tree, and both are the CALLER'S to
+implement, so the sweep has no second victim: the panels' two calls were the whole of the defect.
+
+**THE REPLY IS THE PANEL'S, SO THE SESSION IS BEGUN WITH NONE OF ITS OWN.** `-fn_finishWithCode:` ends the sheet with
+`-endSheet:returnCode:`, orders the panel out, clears its four sheet ivars and THEN calls the caller's did-end — so
+passing the caller's delegate to the session as well would answer it twice. Both doors now call the five-argument door
+with a nil delegate, which is the same division `-beginModalSessionForWindow:relativeToWindow:` makes. `tests/printing.m`
+grew the door end to end: the panel attaches (its window is the parent's `-attachedSheet`), the session is asynchronous,
+the panel's OK button answers the caller ONCE with `NSOKButton`, the panel as the subject and the caller's context
+untouched, and nothing is attached afterwards — for both panels. Reverting the fix reproduces the reported abort, which
+is how the check was proved to have teeth.
+
+## 72. The print panel died a run-loop pass after its sheet appeared
+
+**REPORTED AS "print panel opens, but segfaults after a second or two", and the trace named the shape of it:** a message
+to a freed object, sent from a walk of a view tree. The top frame was `objc_msgSend_fpret`, which is a red herring —
+in `libagora-objc` `objc_msgSend_fpret` and `objc_msgSend` are the SAME ADDRESS (`objc_msgSend.x86-64.S` puts the two
+labels on one body), so the symbol says only "a message send", never "a floating-point return". The frame below it was
+`-[NSView cg_rebuildStaleCursorRects]`, reached from a pointer motion; the same crash reproduced here as
+`-[NSView cg_dirtyRegionRecursive:max:count:]` from `-displayIfNeeded`, which is what the timing was about: *any* walk of
+that tree.
+
+**THE CAUSE IS A LIFETIME, NOT A CURSOR.** `+[NSPrintPanel printPanel]` answers `[[[self alloc] init] autorelease]` — a
+fresh autoreleased panel, Apple's factory idiom — and the gallery's Print Panel button does what a caller does:
+
+```objc
+NSPrintPanel *panel = [NSPrintPanel printPanel];      /* the ONLY owner, and it is in the pool */
+[panel beginSheetWithPrintInfo:info modalForWindow:parent delegate:self …];
+```
+
+The sheet is ASYNCHRONOUS: the panel returns, the pass ends, and `-[NSApplication run]` drains its per-pass pool (the
+demonstration's own hand-pumped probe path drains nothing, which is why this stayed invisible to every probe and to the
+`--seconds` mode). The panel's `-dealloc` released its window, the window's views went with it — and the window was
+still ATTACHED and still being displayed, because the *session*, not the caller, is what keeps a sheet up. The next
+pass walked that tree: a message to freed memory. MEASURED both ways: a probe that begins the sheet inside a pool,
+drains it, and then asks the parent for its `-attachedSheet` segfaults exactly as reported; the same probe with the
+fix completes.
+
+**TWO FIXES, ONE FOR EACH END OF THE RELATIONSHIP.** `-beginSheetWithPrintInfo:…` on `NSPrintPanel` and `NSPageLayout`
+now **retains itself** for the session and gives that retain back in `-fn_finishWithCode:` — after the caller's did-end
+has run, because the reply may drop the caller's own reference. And `NSWindow -dealloc` now **breaks the sheet
+attachment from whichever end is dying**: neither pointer is retained (the application's registry owns every window, and
+an attachment that retained would be a cycle), so a window freed while the other end still names it was a pointer into
+freed memory waiting for the next walk. With both, "a sheet whose parent is gone is an ordinary window" and "a parent
+whose sheet is gone has no sheet" hold even when a caller gets the lifetimes wrong.
+
+`tests/printing.m` grew the pool case — a panel from the factory, the sheet up, the pool that made it drained, and then
+the sheet still attached, still a sheet, and its OK still answering — and `tests/sheet.m` grew the other direction (a
+sheet window freed while attached leaves no sheet on the parent; a parent freed while attached leaves an ordinary
+window), and the file now runs 33 checks. The demonstration also gained `--print-sheet`, which opens the panel as a sheet at startup, because
+this bug needed a reproduction that did not depend on a hand clicking a button.
+
 ## Keeping in sync
 
 The Fiwix AppKit is the origin and this repository has now diverged from it in the seam. A fix made there

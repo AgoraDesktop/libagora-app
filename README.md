@@ -16,20 +16,26 @@ through `HANDOFF-5.md` are the earlier ones, and their instrument notes are stil
 **AND A COMMIT NAMES ITS DAMAGE, INSTEAD OF THE WHOLE BUFFER.** `AGEndFrame` used to damage `0, 0, width, height` on
 every frame, so a window that repainted one strip made the compositor blend the whole window. `AGWindowDamage` is the
 seam door that names rectangles instead (buffer pixels, top-down, clamped to the buffer, a budget of sixteen that
-grows the last rather than dropping anything), and `-cg_drawFrameDirty:` reports the pieces it drew *and* the regions
-it copied — a scroll's translated block and what this buffer was missing — because a copied pixel is a changed pixel
-to the compositor. `-cg_drawFrame` (the whole-frame path) names nothing and so still damages everything, which is the
-safe default. `appkit-partial-damage` asks the seam what the last commit actually told the compositor: a 20x20 strip
-repaint reports **one rectangle of 400 pixels out of 66 600**.
+grows the last rather than dropping anything), and `-cg_drawFrameDirty:` reports the pieces it drew and a scroll's
+translated block — a copied pixel is a changed pixel to the compositor when the copy MOVED content. `-cg_drawFrame`
+(the whole-frame path) names nothing and so still damages everything, which is the safe default.
+`appkit-partial-damage` asks the seam what the last commit actually told the compositor: a 20x20 strip repaint reports
+**one rectangle of 400 pixels out of 66 600**.
 
-**THAT HALF IS NOW INERT, AND THE REASON IS THE OTHER SIDE OF THE WIRE.** `window-server`'s
-`surface_damage()` is a no-op on purpose — its comment says so: *"DAMAGE IS TRACKED NOWHERE, ON PURPOSE: this
-compositor recomposites the whole output on every frame"* — and `cpu_draw` clears the whole output and re-walks every
-window per frame. So the client's rectangles are correct, tested and currently discarded; making them pay needs the
-compositor to track per-surface damage and composite only the damaged region, in BOTH renderers (`renderer-cpu.c` and
-`renderer-gl.c`), with a full-redraw fallback for everything that is not a client commit (a pointer move redraws the
-old cursor position, a window move redraws its shadow). That is the next piece of work in `window-server`, and it is
-named here rather than left to be discovered from a profile that never moves.
+**AND THE OTHER SIDE OF THE WIRE NOW CONSUMES THEM.** `window-server`'s `surface_damage()` used to be a deliberate
+no-op — its comment said the compositor recomposited the whole output on every frame — so the client's rectangles were
+correct, tested and discarded. They are now a `pixman_region32_t` per frame, each rectangle its own pass in both
+renderers, and the pointer's own boxes are damaged the same way (`window-server/README.md` §2d has the numbers: a
+320x20 strip repaint went from 1.8 ms/frame of server CPU to 0.22).
+
+**AND THAT MADE ONE PIECE OF THIS SIDE'S ADVICE OBSOLETE, WHICH IS WHY IT CHANGED.** `-cg_drawFrameDirty:` used to
+report *what this buffer was missing* as damage as well as copying it, because a compositor that redrew the whole window
+from the committed buffer would show every stale byte — the widening was what kept the two-buffer swapchain from
+painting garbage. Now that the compositor keeps the screen, a copy INTO this buffer from the frame already on the glass
+writes the pixels that are already there: the copy still happens (the buffer has to be correct for its own next commit)
+but the pixels are no longer named, because naming them asked the compositor to redraw what nobody had changed. When the
+copy is REFUSED the region is painted instead, and then it is reported with everything else — because then it changed.
+The note beside `_cg_paintMissing` in `NSWindow.m`, and the one at the reporting block, are the long version.
 
 **THE APPLICATION'S LOOP IS A RUN LOOP.** `-[NSApplication run]` gives `NSRunLoop` one pass per frame before it
 reads the events, and `NSRunLoop` is Core Foundation's loop — so a due `NSTimer`, an fd source's readiness, a
@@ -223,6 +229,7 @@ tests/
                                 and the recess `-isBezeled` decides
   panel_alert.m                 the PANEL and the ALERT: the click-to-key rule, the content, the two ways to run it,
                                 the suppression box, and the delegate's one question
+  sheet.m                       the SHEET: where it hangs, what it loses and gets back, and the re-pinning on a move
   search_field.m                the SEARCH FIELD: two ornaments, the sending rules, the timer and the recents menu
   image_draw.m                  an image rep draws UP in a y-up and a y-down context alike — and the WIDE door:
                                 a crop, an operation and a fraction, a background, the delegate and the hints
@@ -763,8 +770,12 @@ the compositor is really gone.
   record is the content damage now: that invalidation paints its own 40x40 in 4.6 ms. **AND THE REGION A BUFFER IS
   MISSING IS COPIED FROM THE GLASS RATHER THAN REDRAWN**, which needs no knowledge of what is in it:
   `-cg_drawFrameDirty:` reads the last committed frame with `AGWindowPreviousFrameSized` and memcpys the rects the
-  ledger records, so the drawing left in a paint is exactly what the views asked for. `APPKIT_DRAW_DIAG` prints the painted pieces, the ledger's box and the views' damage, so a paint
-  that is wider than the views asked for is visible as the ledger's doing.
+  ledger records, so the drawing left in a paint is exactly what the views asked for. **AND A COPIED PIXEL IS NO LONGER
+  NAMED, WHICH IS THE ONE THING THAT CHANGED ONCE THE COMPOSITOR CONSUMED THE DAMAGE**: the copy writes what the screen
+  already shows, so naming it asked for a redraw nobody needed — the compositor keeps the pixels it is not told about.
+  The copy itself is still what makes this buffer correct for its own next commit, and a REFUSED copy is painted and
+  reported like any other piece. `APPKIT_DRAW_DIAG` prints the painted pieces, the ledger's box and the views'
+  damage, so a paint that is wider than the views asked for is visible as the ledger's doing.
   **AND THE BUFFERS ARE SHARED MEMORY, NOT GPU MEMORY, WHICH IS THE LARGER HALF OF THE SAME PERFORMANCE STORY.** See
   `AGWindowBeginFrame` in `platform/AGWindowServer.h`: drawing with the CPU into a dma-buf reads uncached memory, so
   the same gallery repaint cost 150-215 ms against 21 ms in shm. `AG_WINDOW_DMABUF=1` opts back in.
@@ -1599,6 +1610,57 @@ shape to a rounded rectangle at the same radius its shadow uses, which is what m
 window rather than a drawing on top of it. A surface flush with the output (a maximised window, the menu bar, a
 status item) is left square, so rounding never cuts a notch out of the desktop's own edge.
 
+**AND THE ONE CORNER THAT IS NOT THE WINDOW'S OWN IS A SEAM, NOT AN EDGE.** A menu's top edge IS the menu bar's
+bottom edge, which the compositor can read off the two numbers; a SHEET's top edge is its parent's title bar, which
+it cannot, because the title bar is the client's own drawing. So the application says it — `agora_window.set_sheet_
+parent` — and two things follow that a window cannot have on its own: the sheet's TOP corners stay square (rounding
+them would cut two bites out of the seam it hangs from, and its two bottom ones stay round, which is the shape a
+sheet has), and it is composited and hit-tested immediately in front of its parent however either of them was raised.
+
+**A SHEET ALSO HAS NO CHROME, AND THAT IS THE SAME RULE SEEN FROM THIS SIDE.** On the Mac the window server gives a
+sheet no title bar; here the chrome is `NSWindow`'s, so `-isSheet` is what every piece of that arithmetic reads —
+the strip's height is zero, no traffic lights are drawn or hit, there is no title text and no hairline, and the
+window's FRAME IS ITS CONTENT. Attaching a sheet therefore takes the strip off the frame while keeping the content's
+size and place (the mirror of `-setStyleMask:`), and ending the session puts it back. The placement is one rule with
+one door, `-cg_updateSheet`: the sheet's top edge TUCKED UNDER the parent's title bar and centred on the parent's
+content — and `-setFrame:display:` re-applies it on every move and resize, so a dragged parent drags its sheet and a
+wider parent re-centres it. `tests/sheet.m` holds the geometry and the reply, and `tests/panel_alert.m` runs the
+whole alert-as-a-sheet path.
+
+**AND THE PAIR IS ONE LAYER IN THE STACK, WHICH THE COMPOSITOR DERIVES RATHER THAN REMEMBERS.** `-beginSheet:…` sends
+`agora_window.set_sheet_parent`, and from then on the window server draws and hit-tests the sheet immediately in front
+of its parent — so raising the sheet on its own, raising another window in between, and the alert's panel sitting at
+`NSModalPanelWindowLevel` while the document is at 0 all leave the pair's order alone (a sheet's level is unused while
+it is a sheet). Raising a sheet raises its family, because a sheet in front of its parent and behind nothing else
+is a state the glass cannot show. `tests/sheet_stack.c` in the window server is that claim as a unit test of the
+composite order.
+
+**AND A CLICK IN THE DISABLED PARENT IS STILL A CLICK.** A window with an attached sheet takes no input — the only
+route events have, `NSApplication -sendEvent:`, DROPS anything aimed at the parent, which is this tier's version of
+Apple disabling it (there is no beep) — but the press is not *nothing*: it activates the application, orders the parent
+front, and gives the KEY and MAIN to the sheet, then drops the event so no control behind the question ever sees it.
+The bug was that the drop was all it did: a person clicking a buried document's greyed body got nothing at all, so the
+pair stayed behind whatever had been raised since. `tests/sheet.m` asserts both halves — the parent's content view
+never hears the press, the sheet is key and main afterwards, and a press ON the sheet still reaches its content.
+
+**AND THE SESSION'S KEY IS MOVED THROUGH THE WINDOWS' DOORS, WHICH IS WHY THE CLICK CAN MOVE IT BACK.** `-beginSheet:…`
+used to assign the application's `_keyWindow`/`_mainWindow` directly, which left the PARENT answering `-isKeyWindow`
+YES for the whole session (two windows claiming the key at once, and `-makeKeyWindow` on the parent early-returning
+because its flag was never cleared), the sheet answering NO, and the seat's focus untouched. Both doors now use
+`-becomeKeyWindow`/`-becomeMainWindow` and their resignations on the way out — the same pair a click runs.
+
+**AND THE TUCK IS WHAT MAKES IT ONE SURFACE RATHER THAN TWO, IN THREE PARTS.** A sheet's body is painted in
+`+cg_chromeFaceColor` — the title bar's own colour (`-cg_bodyColor`) — so the strip where the two windows overlap is
+one colour and there is no seam to see; the tuck puts the sheet's top edge two points INTO the bar, which is
+invisible for that reason and is what keeps the join exact where two independently rounded frames would leave a
+device row of the bar's line showing through at a fractional scale; and the sheet draws the PARENT'S TITLE BAR BORDER
+across itself, because on the Mac the bar is in front of the sheet and here the sheet's surface is the one on top, so
+the sheet has to wear the bar's line for the line to cross it at all. A sheet's frame is put on whole points when it
+becomes one, so the row its half of that border lands on is the row the parent's half is on — two antialiased rows
+inside the sheet against one crisp row outside it was the measurement that made that rounding part of the rule. See
+`tests/window_chrome.m`, which asks the pixels: no chrome of the sheet's own, and exactly one full-width row of the
+bar's ink where the border goes.
+
 **A THEME CAN STILL REPLACE IT, AND THAT IS THE OTHER HALF.** Point `AGORA_CHROME_THEME` at an XFWM theme (the
 directory of `.xpm` files, or a theme root with an `xfwm4/` inside it), or drop one at
 `~/.local/share/agora/chrome/xfwm4`. The buttons are then `close`, `hide`, `maximize` and `menu` in the four
@@ -1615,6 +1677,14 @@ draws the bar and the marks itself, as above.
 **`tests/run-controls.sh` IS HOW TO LOOK AT A THEME WHILE CHANGING IT.** It opens the controls demonstration in a
 nested Agora compositor — an ordinary X window that grabs nothing, unlike a nested `gnome-shell` — with the tree's
 own `themes/` as the demonstration's default, and prints which theme resolved and its strip height.
+
+**AND IT IS HOW TO GET A BACKTRACE FROM IT**, because a demonstration is where a defect in this layer is usually
+found by a hand rather than by a probe: `--gdb` starts the client as gdb's inferior and `--gdb-batch` does the same
+without a prompt, printing every thread's stack when the process dies and nothing at all when it leaves normally.
+The gdb run is not a hand-run `gdb --args`: the library path and `WAYLAND_DISPLAY` are the launcher's, and a
+hand-run debugger misses both. The gdb commands live in a file (not a pile of `-ex`) because the backtrace is
+guarded by `if $_siginfo` — a signal should print a trace and a normal exit should not — and gdb's `if` is a
+multi-line construct that `-ex` arguments cannot spell.
 
 **AND THE CHROME IS THE WINDOW'S HANDLE.** A press on the title bar that misses a button starts a MOVE: the window
 follows the pointer and the grabbed point stays under it. `-locationInWindow` is relative to a window that MOVES
@@ -2379,7 +2449,11 @@ button row. The first button carries Return and the second Escape, and because t
 pass for windows, the alert's panel turns those two keys into clicks itself. `tests/panel_alert.m` measures the panel's
 defaults and click-to-key rule, the alert's fields and button order, a long informative text becoming several fields,
 a changed message being laid out again, an accessory being placed and removed, the three codes 1000/1001/1002 through a
-modal session, Return and Escape through `-sendEvent:`, and the sheet form's attachment and reply — **55 checks**.
+modal session, Return and Escape through `-sendEvent:`, and the sheet form's attachment, its geometry and its reply —
+**92 checks**. `tests/sheet.m` is the pair on its own (the tuck, the re-pinning on every move and resize, the body's
+colour, the strip that is not a handle, the strip that comes back, and — on a headless compositor — a parent ordered out
+taking its sheet with it), and `tests/window_chrome.m` is the pixels: a sheet paints no chrome of its own and exactly
+one row of the bar's border where the tuck puts it.
 `-runModal` is not called there for the reason `NSApplication.m` gives about its own probe: it is an unbounded loop, and
 a test that called it would hang rather than fail.
 
@@ -2696,10 +2770,27 @@ orientation and the four margins, reading and writing the ticket through `-readP
 `NSOKButton` without a run loop — the guard the menu, field and alert sessions carry — which is what makes them
 testable headlessly.
 
-`tests/printing.m` asserts it in 72 checks: the ticket's defaults and arithmetic both orientations, the paper table's
+`tests/printing.m` asserts it in 89 checks: the ticket's defaults and arithmetic both orientations, the paper table's
 keywords and names, a three-page view and a tall one cut into three, a page range, save/preview/spool-with-no-queue, the
-PDF and EPS copying operations, both panels' sessions and the page layout's round trip, and a document's own ticket being
-a copy of the shared one.
+PDF and EPS copying operations, both panels' sessions and the page layout's round trip, a document's own ticket being a
+copy of the shared one — and **THE PANELS AS SHEETS**, which is the door that did not work: both
+`-beginSheetWithPrintInfo:…` methods called a two-argument `-beginSheet:modalForWindow:` this tier has never had, so
+pressing a Print or Page Setup button aborted the process with `-[NSApplication beginSheet:modalForWindow:] is not
+implemented` (MEASURED, from the gallery's Print Panel button). They now attach through the session's real door with a
+NIL delegate — the REPLY is the panel's: its own buttons call the caller's did-end once, from `-fn_finishWithCode:`, after
+`-endSheet:returnCode:` — and the probe drives the panel's OK button to prove the reply arrives with OK's code, the panel
+as its subject and the caller's context intact. The warning that hid it (`-Wobjc-method-access`, "not found") is now the
+one warning this tree treats as a defect rather than noise: a sweep of every source found 40 unknown selectors, all of
+them private `cg_` doors or Apple's optional informal-protocol delegate methods asked behind `-respondsToSelector:`.
+
+**AND THE SESSION OWNS THE PANEL, WHICH IS THE OTHER HALF OF THE SAME STORY.** `+printPanel` answers a NEW AUTORELEASED
+panel, and a sheet is asynchronous: the run loop drains a pool a pass later, and a panel that died there released the
+views of a window that was still attached and still being displayed — MEASURED as a SIGSEGV inside
+`-[NSView cg_dirtyRegionRecursive:…]`, and, from a pointer motion, inside `-[NSView cg_rebuildStaleCursorRects]`, which
+is how it was reported ("the print panel opens, but segfaults after a second or two"). Both panels now retain themselves
+for the session and give that retain back in `-fn_finishWithCode:`, after the caller's did-end has run; and `NSWindow
+-dealloc` breaks the sheet attachment from whichever end is dying, so a caller who gets the two lifetimes wrong loses a
+sheet rather than a process. `tests/printing.m` drains the pool that made a panel with the sheet still up.
 
 ### The text view's selection ranges, and the commands that write a run
 

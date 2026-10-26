@@ -399,6 +399,21 @@ void AGWindowSetReserved(AGWindow *window, int edge, int amount);
  * the application in front. A compositor that does not speak Agora's protocol has no door for it. */
 void AGWindowSetActivatable(AGWindow *window, int activatable);
 
+/* **AND WHICH WINDOW THIS ONE HANGS FROM, WHEN IT IS A SHEET.** A sheet is an ordinary window the application made and
+ * placed — the placement is `AGWindowSetFrame`'s, and this does not change it. What only the server can draw is the
+ * pair: a sheet's top edge is its parent's title bar's seam and not its own edge, so its TOP corners stay square
+ * (its two bottom ones do not), and it is composited and hit-tested immediately in front of its parent, whoever was
+ * raised. `parent` NULL detaches, which is what ending a sheet sends.
+ *
+ * BOTH WINDOWS ARE THE CALLER'S, which is why one `AGWindow` names the other: a window object belongs to the client
+ * that made it, so a client can only ever point at a window of its own. A compositor that does not speak
+ * `agora_shell` version 10 has no door for it and draws the window as the rectangle it is.
+ *
+ * `seam` is how many POINTS of this window's top edge are tucked into the parent's title bar — the strip the AppKit
+ * paints in the bar's own colour so that the sheet reads as coming out from under it. The server's one use for it is
+ * the shadow: none is painted on those rows, because they are the title bar's. Zero is a sheet placed flush. */
+void AGWindowSetSheetParent(AGWindow *window, AGWindow *parent, int seam);
+
 /* **WHETHER THIS WINDOW'S PIXELS CARRY ALPHA.** A transparent window's shm buffer is ARGB8888 and the compositor
  * blends it over what is behind (source-over, in `window-server/src/output.c`); an opaque window's is XRGB8888 and
  * is copied. Set it BEFORE the first frame, because the buffer's FORMAT is decided when the buffer is made; a

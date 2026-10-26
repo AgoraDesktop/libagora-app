@@ -107,6 +107,11 @@
 @end
 
 @interface NSWindow ()
+/* **AND THE PLACEMENT RULE, WHICH IS `NSApplication`'S BECAUSE THE SESSION IS.** A sheet hangs from the bottom edge of
+ * its parent's title bar, centred on the parent's content — a rule about two windows, so it lives beside the doors
+ * that make the pair rather than in this file. Declared here because the door that has to re-apply it on every move
+ * and resize is `-setFrame:display:`, three thousand lines below the sheet's state. */
+- (void)cg_updateSheet;
 - (NSInteger)cg_clickCountFor:(NSPoint)p at:(NSTimeInterval)now;
 - (NSInteger)currentClickCount;
 /* THE SEAM'S DOORS AND THE STATE THEY KEEP, declared here for the same reason. */
@@ -260,6 +265,23 @@
 - (void)cg_performDockMenuItem:(NSInteger)identifier;
 @end
 
+/* **A FRAME'S POINT IS PLACED AT THE POINT IT IS NEAREST, WHICH IS ROUNDING AND NOT TRUNCATION.** A Cocoa frame is
+ * arithmetic and its origin is very often fractional — an alert's computed height is 109.6 points, so a sheet whose
+ * top is the parent's title-bar bottom lands on a fraction — and `(int)` truncates it, which moves the window UP by up
+ * to a point and, worse, does it by a DIFFERENT amount for the two windows of a pair. MEASURED on a sheet: the sheet's
+ * top edge came out one row above the parent's content, so the border the sheet wears across itself (see
+ * `fn_draw_chrome`) met the parent's own border one row apart — a one-pixel jog in the one line the tuck exists to make
+ * continuous. Rounding is the honest reading of "where is this edge on the device": the nearest row, for the sheet and
+ * its parent alike.
+ *
+ * THE Y IS FLIPPED AND THEN ROUNDED, not rounded and then flipped, because the two are not the same: the display
+ * measures down from the top and Cocoa measures up from the bottom, so the flip is where the fraction enters, and the
+ * nearest row of the FLIPPED coordinate is what the compositor places. */
+static int fn_device_point(CGFloat value)
+{
+	return (int)floor((double)value + 0.5);
+}
+
 /* THE TITLE BAR'S HEIGHT, AND IT IS OURS. A titled window's FRAME is its content plus its chrome, and this
  * tree draws no title bar yet (Kestrel, which will, is parked) — so the number is this file's, stated here
  * rather than discovered: it is where the chrome and this arithmetic will have to agree. A borderless window
@@ -301,6 +323,21 @@ static const CGFloat fn_MARK_STROKE = 2.0;	/* the theme's two points, where this
  * line a point above it would be two boundaries where the window has one. */
 static const CGFloat fn_BAR_RADIUS = 6.0;
 static const CGFloat fn_BAR_BORDER = 1.0;
+
+/* **AND THE TUCK: HOW FAR A SHEET'S TOP EDGE SITS INSIDE ITS PARENT'S TITLE BAR.** A sheet placed FLUSH with the bar's
+ * bottom edge meets it along a line that two independently rounded frames can disagree about by a device row — at a
+ * fractional scale the bar's own bottom line can show through as a one-pixel seam across the sheet, which is exactly the
+ * ledge the tuck exists to remove. Two points is the hairline's one plus a point of slack; it is INVISIBLE because the
+ * sheet's body is painted in the chrome's own colour (`-cg_bodyColor`), and it is what makes the sheet read as coming
+ * out from under the bar: the bar's bottom hairline stops at the sheet's two sides instead of running across it.
+ *
+ * A PARENT WITH NO TITLE BAR HAS NOTHING TO TUCK UNDER, so the answer is zero there — overlapping a borderless
+ * window's CONTENT with a strip of chrome-coloured body would be a band across its document.
+ *
+ * It is a door rather than a file-static because the placement rule (`NSApplication -cg_updateSheet`) and the compositor's
+ * shadow clip (which must not paint on the bar the tuck covers) both need the same number, and two copies of it could
+ * disagree about the row a shadow stops at. */
+static const CGFloat fn_SHEET_TUCK = 2.0;
 
 /* **AND ITS PALETTE, SAMPLED FROM THE THEME'S ART RATHER THAN CHOSEN.** Each value is the colour that fills the most
  * pixels of the matching `.xpm`: `#939393` the outline along the top and down the ends, `#797979` the body of a mark on
@@ -356,6 +393,23 @@ static CGFloat fn_title_bar_height(void)
 	return (themed > 0.0) ? themed : fn_TITLE_BAR;
 }
 
+/* **AND A SHEET HAS NO CHROME AT ALL, WHICH IS THE ONE THING A STYLE MASK CANNOT SAY.** On the Mac a sheet's title bar
+ * is not drawn because the WINDOW SERVER does not give a sheet one — it is the parent's title bar the sheet hangs
+ * from, and the sheet's own top edge is that title bar's bottom edge. Here the chrome is the client's (the window
+ * server draws no title bar at all: see `agora-shell.xml`), so the same rule has to be stated on this side: a sheet's
+ * frame IS its content, so its content fills the surface and `-cg_drawChromeInContext:` has no strip to paint.
+ *
+ * THE STYLE MASK STAYS WHAT THE CALLER MADE, which is Apple's behaviour too: an `NSAlert`'s panel is built titled and
+ * closable and reports that afterwards, and the sheet is a MODE the window is in rather than a change to what it was
+ * built as. That is why this is an instance question and the class pair below cannot answer it. */
+static CGFloat fn_chrome_height(NSWindow *w)
+{
+	if ([w isSheet]) {
+		return 0.0;
+	}
+	return ([w styleMask] & NSTitledWindowMask) ? fn_title_bar_height() : 0.0;
+}
+
 /* **THE BAND THE TOOLBAR TAKES, ASKED OF THE TOOLBAR.** This is the one function that relates the window's frame
  * arithmetic to `NSToolbar`, and it answers zero for no toolbar and for a hidden one — so every caller below can add
  * it unconditionally and a window without a toolbar keeps the geometry it always had. */
@@ -382,6 +436,13 @@ typedef struct {
 static BOOL fn_chrome_button_present(NSWindow *w, AGChromeButton button)
 {
 	NSUInteger mask = [w styleMask];
+
+	/* **AND A SHEET WEARS NO BUTTONS AT ALL**, which follows from having no strip to put them on: the traffic light of
+	 * an alert belongs to the window the alert is ON, and a sheet with an X of its own is a sheet that looks like a
+	 * second window stuck to the first. Asked first so the style-mask rule below never has to know about sheets. */
+	if ([w isSheet]) {
+		return NO;
+	}
 
 	switch (button) {
 	case AGChromeButtonClose:    return (mask & NSClosableWindowMask) != 0;
@@ -414,12 +475,13 @@ static void fn_chrome_layout(NSWindow *w, fn_chrome_layout_t *layout)
 	int i;
 
 	memset(layout, 0, sizeof *layout);
-	/* **A BORDERLESS WINDOW HAS NO CHROME AND SO NO HEIGHT**, which is the same rule `+fn_chromeForStyleMask:`
-	 * applies to the frame arithmetic — and the two MUST agree, because this height is what the painter fills and
+	/* **AND A BORDERLESS WINDOW HAS NO CHROME AND SO NO HEIGHT** — which is the same rule `+fn_chromeForStyleMask:`
+	 * applies to the frame arithmetic, and the two MUST agree, because this height is what the painter fills and
 	 * what the hairline's guard reads. It was `fn_title_bar_height()` unconditionally, which is 22 (or the theme's
 	 * height) for a BORDERLESS window too: the strip fill landed above the window and was clipped away, so nothing
-	 * showed — but the hairline did not, and drew a dark row across the top of a MENU'S own window. */
-	layout->height = ([w styleMask] & NSTitledWindowMask) ? fn_title_bar_height() : 0.0;
+	 * showed — but the hairline did not, and drew a dark row across the top of a MENU'S own window. **AND A SHEET IS
+	 * THE SECOND KIND OF WINDOW WITH NO STRIP**, for the reason `fn_chrome_height` gives. */
+	layout->height = fn_chrome_height(w);
 	for (i = 0; i < AGChromeButtonCount; i++) {
 		layout->present[i] = fn_chrome_button_present(w, (AGChromeButton)i);
 	}
@@ -1180,6 +1242,25 @@ static NSString * const AGCoderWindowToolbarKey = @"toolbar";
 	[self setNeedsDisplay:YES];
 }
 
+/* **AND WHAT THE PAINTER ACTUALLY FILLS WITH, WHICH IS A DIFFERENT QUESTION FOR ONE KIND OF WINDOW.** See the header:
+ * a sheet's body is the chrome's face, so that its top edge and the title bar it hangs from are one colour and the sheet
+ * reads as emerging from under the bar. Every other window answers exactly what `-backgroundColor` says, which is why
+ * this is a door of its own rather than a change to that one: `-backgroundColor` is the CALLER's answer, and a sheet is
+ * not being asked to keep a colour it was given — it is being painted as part of a bar. */
+- (NSColor *)cg_bodyColor
+{
+	if ([self isSheet]) {
+		return [NSColor cg_chromeFaceColor];
+	}
+	return [self backgroundColor];
+}
+
+/* See `fn_SHEET_TUCK`: how far a sheet on THIS window is tucked into its title bar. */
+- (CGFloat)cg_sheetTuck
+{
+	return [self hasTitleBar] ? fn_SHEET_TUCK : 0.0;
+}
+
 /* THE STYLE MASK'S CHROME, which is the frame-to-content arithmetic and its inverse. Both directions exist
  * because both are asked for, and they are written as one pair so a change to the title-bar height cannot
  * make them disagree. */
@@ -1211,12 +1292,20 @@ static NSString * const AGCoderWindowToolbarKey = @"toolbar";
 /* **THE INSTANCE PAIR OWNS THE TOOLBAR'S BAND; THE CLASS PAIR CANNOT.** A class method has no toolbar to ask, and
  * Apple's own pair has the same limitation. The instance pair is what every geometry door in this file uses, so the
  * content view, the min/max constraint conversion and the title bar all see one answer: the content rect excludes
- * the chrome AND the toolbar while the toolbar is visible. */
+ * the chrome AND the toolbar while the toolbar is visible.
+ *
+ * **AND IT IS THE INSTANCE PAIR THAT KNOWS ABOUT SHEETS**, for the same reason it is the instance pair that knows about
+ * toolbars: being somebody's sheet is not a property of the style mask. A sheet's content is its whole frame, and a
+ * sheet with a toolbar band would be a sheet with a strip of chrome above its content that the window server does not
+ * give it — so the band is dropped too. */
 - (NSRect)contentRectForFrameRect:(NSRect)frameRect
 {
-	NSRect content = [[self class] contentRectForFrameRect:frameRect styleMask:_styleMask];
+	CGFloat chrome = fn_chrome_height(self);
+	CGFloat toolbar = [self isSheet] ? 0.0 : fn_toolbar_height(self);
+	NSRect content = NSMakeRect(frameRect.origin.x, frameRect.origin.y,
+				    frameRect.size.width, frameRect.size.height - chrome);
 
-	content.size.height -= fn_toolbar_height(self);
+	content.size.height -= toolbar;
 	if (content.size.height < 0.0) {
 		content.size.height = 0.0;
 	}
@@ -1225,9 +1314,10 @@ static NSString * const AGCoderWindowToolbarKey = @"toolbar";
 
 - (NSRect)frameRectForContentRect:(NSRect)contentRect
 {
-	NSRect frame = [[self class] frameRectForContentRect:contentRect styleMask:_styleMask];
+	NSRect frame = NSMakeRect(contentRect.origin.x, contentRect.origin.y,
+				  contentRect.size.width, contentRect.size.height + fn_chrome_height(self));
 
-	frame.size.height += fn_toolbar_height(self);
+	frame.size.height += [self isSheet] ? 0.0 : fn_toolbar_height(self);
 	return frame;
 }
 
@@ -1318,6 +1408,26 @@ static NSString * const AGCoderWindowToolbarKey = @"toolbar";
 		}
 		[_cg_childWindows release];
 		_cg_childWindows = nil;
+	}
+	/* **AND THE SHEET LINKAGE ENDS WITH EITHER SIDE, WHICH IS THE ONE INVARIANT THE PAIR CANNOT BE LEFT WITHOUT.** Neither
+	 * reference is retained (see `NSWindow.h`: the application's registry owns every window, and an attachment that
+	 * retained would be a cycle), so a window that is freed while the other end still names it leaves a pointer into
+	 * freed memory — and the walks that reach it are the ordinary ones: a `displayIfNeeded`, a pointer motion resolving a
+	 * cursor. MEASURED, as a `SIGSEGV` inside `-[NSView cg_dirtyRegionRecursive:…]` and inside
+	 * `-[NSView cg_rebuildStaleCursorRects]` when a sheet's owner died a run-loop pass after the sheet was attached.
+	 * Breaking it from BOTH ends here is what makes "a sheet whose parent is gone is an ordinary window" and "a parent
+	 * whose sheet is gone has no sheet" true even when the caller got the two lifetimes wrong. */
+	if (_cg_sheetParent != nil) {
+		NSWindow *parent = _cg_sheetParent;
+
+		_cg_sheetParent = nil;
+		[parent cg_setAttachedSheet:nil];
+	}
+	if (_cg_attachedSheet != nil) {
+		NSWindow *sheet = _cg_attachedSheet;
+
+		_cg_attachedSheet = nil;
+		[sheet cg_setSheetParent:nil];
 	}
 	/* THE WINDOW GOES, THE QUEUE GOES, AND THE CONNECTION DOES NOT: the connection is the process's (see
 	 * `fn_server`), and a window that dropped it would take every other window's events with it. */
@@ -1944,8 +2054,10 @@ static void fn_draw_chrome(CGContextRef c, NSWindow *w, NSRect content)
 	}
 
 	/* THE TITLE, CENTRED BETWEEN THE TWO BLOCKS — whatever those blocks are, the drawn marks or the theme's
-	 * buttons, which is why their widths come from the layout and not from the constants. */
-	if (([w styleMask] & NSTitledWindowMask) != 0) {
+	 * buttons, which is why their widths come from the layout and not from the constants. **AND ONLY A WINDOW WITH A
+	 * STRIP HAS A TITLE TO PUT IN IT**: the mask says the window was built titled, and a sheet is not drawn one
+	 * (see `fn_chrome_height`), so the height is what decides here rather than the mask. */
+	if (layout.height > 0.0 && ([w styleMask] & NSTitledWindowMask) != 0) {
 		NSDictionary *attributes = fn_title_attributes();
 		NSFont *font = attributes == nil ? nil : [attributes objectForKey:NSFontAttributeName];
 		CGFloat bandLeft = layout.leftBlock;
@@ -1982,6 +2094,36 @@ static void fn_draw_chrome(CGContextRef c, NSWindow *w, NSRect content)
 		if (toolbar == nil || ![toolbar isVisible] || [toolbar showsBaselineSeparator]) {
 			CGContextSetFillColorWithColor(c, [[NSColor controlDarkShadowColor] CGColor]);
 			CGContextFillRect(c, CGRectMake(0.0, content.size.height - 1.0, content.size.width, 1.0));
+		}
+	}
+
+	/* **AND A SHEET DRAWS ITS PARENT'S TITLE BAR BORDER OVER ITSELF, BECAUSE THE BAR IS IN FRONT OF IT.** A sheet's top
+	 * edge is tucked under its parent's title bar (`-cg_sheetTuck`), which means the bar's bottom border runs ACROSS the
+	 * sheet on the Mac — the sheet is behind the bar, so the line is the bar's and it is drawn over whatever is under it.
+	 * Here the two windows are separate surfaces and the SHEET's is the one on top, so the parent's line can only be
+	 * stopped at the sheet's two sides: the sheet has to wear the line itself, in the bar's own ink and at the row the
+	 * bar's line occupies, which is `tuck` points down from the sheet's top edge and therefore the row the parent's
+	 * hairline covers on both sides of it. ONE ROW OF ONE COLOUR IS THE WHOLE OF IT; the seek is that a sheet with its
+	 * body in the chrome's face colour and no line across it reads as a slab pasted under a bar rather than as a window
+	 * sliding out from behind one.
+	 *
+	 * THE PARENT IS ASKED RATHER THAN A CONSTANT READ, because the tuck is zero for a parent with no title bar — a sheet
+	 * on a borderless window hangs from the top of its content and has no bar's border to wear. */
+	if ([w isSheet]) {
+		NSWindow *parent = [w cg_sheetParent];
+		CGFloat tuck = (parent != nil) ? [parent cg_sheetTuck] : 0.0;
+
+		if (tuck >= 1.0 && content.size.height >= tuck + 1.0) {
+			/* **AND IT IS ANTIALIASED, LIKE THE PARENT'S HALF OF IT.** A one-point row at a fractional output scale covers
+			 * 1.33 device rows and is therefore a blend of two of them — that is what the parent's hairline is, and a
+			 * sheet whose half of the line was snapped to a whole row would change the line's THICKNESS at its own two
+			 * sides, which reads as two different lines meeting. MEASURED both ways at 1.332: snapped, the bar's line is
+			 * two rows at 188 and the sheet's one row at 188. */
+			CGContextSetFillColorWithColor(c, [[NSColor controlDarkShadowColor] CGColor]);
+			/* THE ROW IS THE PARENT'S, NOT THE SHEET'S: the bar's border is the last row OF THE PARENT'S CONTENT — the
+			 * row just below its content top — and the sheet's top edge is `tuck` above that top, so the border sits
+			 * `tuck + 1` points below the sheet's own top edge. */
+			CGContextFillRect(c, CGRectMake(0.0, content.size.height - tuck - 1.0, content.size.width, 1.0));
 		}
 	}
 }
@@ -2106,12 +2248,19 @@ static void fn_draw_chrome(CGContextRef c, NSWindow *w, NSRect content)
 		CGFloat screen_height = [[NSScreen mainScreen] frame].size.height;
 
 		if (screen_height > 0.0) {
-			AGWindowSetFrame(_agwindow, (int)_frame.origin.x,
-					 (int)(screen_height - (_frame.origin.y + _frame.size.height)),
-					 (int)_frame.size.width, (int)_frame.size.height);
+			AGWindowSetFrame(_agwindow, fn_device_point(_frame.origin.x),
+					 fn_device_point(screen_height - (_frame.origin.y + _frame.size.height)),
+					 fn_device_point(_frame.size.width), fn_device_point(_frame.size.height));
 		}
 		/* AND THE LEVEL IT WAS GIVEN BEFORE IT EXISTED, for the same reason the frame is told here. */
 		AGWindowSetLevel(_agwindow, (int)_level);
+	}
+	/* **AND WHETHER IT IS SOMEBODY'S SHEET, WHICH IS THE THIRD THING A WINDOW CAN KNOW BEFORE ITS SURFACE EXISTS.**
+	 * An alert attaches itself to its parent and is shown afterwards, so the attachment is older than the surface the
+	 * server has to be told about — this is where that statement finally finds a listener. See
+	 * `-cg_setSheetParent:`, which makes the same call for a window that already had one. */
+	if (_cg_sheetParent != nil) {
+		AGWindowSetSheetParent(_agwindow, _cg_sheetParent->_agwindow, (int)[_cg_sheetParent cg_sheetTuck]);
 	}
 	/* **AND IT IS NOT SHOWN HERE.** `-cg_ensureWindow` CREATES and `-orderFront:` SHOWS, and this used to do
 	 * both — so a window was shown twice, which is a second commit for no reason and, on a protocol where a
@@ -2362,9 +2511,9 @@ static CGFloat fn_clamp_axis(CGFloat v, CGFloat lo, CGFloat hi)
 		CGFloat screen_height = [[NSScreen mainScreen] frame].size.height;
 
 		if (screen_height > 0.0) {
-			AGWindowSetFrame(_agwindow, (int)_frame.origin.x,
-					 (int)(screen_height - (_frame.origin.y + _frame.size.height)),
-					 (int)_frame.size.width, (int)_frame.size.height);
+			AGWindowSetFrame(_agwindow, fn_device_point(_frame.origin.x),
+					 fn_device_point(screen_height - (_frame.origin.y + _frame.size.height)),
+					 fn_device_point(_frame.size.width), fn_device_point(_frame.size.height));
 		}
 	}
 	if (moved) {
@@ -2404,6 +2553,14 @@ static CGFloat fn_clamp_axis(CGFloat v, CGFloat lo, CGFloat hi)
 	 * height changes — and a tucked side drawer has to keep its tuck when the parent moves. The copy the drawer list
 	 * answers is stable across a drawer hiding itself and re-making its child link. */
 	[self cg_updateDrawers];
+	/* **AND A SHEET IS THE OTHER WINDOW WHOSE FRAME IS DERIVED FROM THIS ONE'S.** It is not a child window (on the Mac
+	 * a sheet's `-parentWindow` is nil and its `-sheetParent` is separate), so the child loop above does not move it,
+	 * and a sheet left behind by a dragged parent is exactly the "separate window" a sheet must not be. The rule is
+	 * `-cg_updateSheet`'s — it hangs from the bottom of this window's title bar, centred — and it is re-applied for
+	 * a move AND for a resize: a wider parent re-centres its sheet. */
+	if (moved || resized) {
+		[self cg_updateSheet];
+	}
 	(void)flag;
 }
 
@@ -2744,6 +2901,13 @@ static CGFloat fn_clamp_axis(CGFloat v, CGFloat lo, CGFloat hi)
 	if ([self cg_isDrawerWindow] && _cg_parentWindow != nil) {
 		[_cg_parentWindow cg_raiseForDrawer];
 	}
+	/* **AND A SHEET COMES BACK WITH THE WINDOW IT HANGS FROM.** On the Mac the pair is one thing on the glass: a sheet
+	 * cannot be on the screen without its parent. `-orderOut:` hides both (see there), so showing the parent has to
+	 * bring the sheet back or a hidden-and-shown document would lose its question. It is ordered AFTER the parent, so
+	 * the sheet is never briefly under it. */
+	if (_cg_attachedSheet != nil) {
+		[_cg_attachedSheet orderFront:nil];
+	}
 	_visible = YES;
 	/* A WINDOW THAT IS ON THE SCREEN IS ONE THE RUN LOOP MUST DRAIN, so it joins the registry here
 	 * rather than being polled for: the loop has no way to ask a server which windows are ours. */
@@ -2782,6 +2946,14 @@ static CGFloat fn_clamp_axis(CGFloat v, CGFloat lo, CGFloat hi)
 	_visible = NO;
 	if (_agwindow != NULL) {
 		AGWindowHide(_agwindow);
+	}
+	/* **AND A SHEET GOES WITH IT.** A sheet is a part of the window it hangs from — the pair is one thing on the glass —
+	 * so a parent ordered out with its sheet still showing leaves a question floating over the desktop with nothing to
+	 * be a question about. The SESSION is not ended: the attachment, the reply and the sheet's own frame are all left
+	 * alone, and `-orderFront:` brings the pair back together. ORDERED OUT AFTER THE PARENT, mirroring the order-in, so
+	 * neither door ever leaves the sheet on the screen alone. */
+	if (_cg_attachedSheet != nil) {
+		[_cg_attachedSheet orderOut:nil];
 	}
 	/* A HIDDEN WINDOW IS NOT FRONTMOST, whatever its key flag still says. The drawers ask the same question the
 	 * visibility rule does, through the same door. */
@@ -4577,8 +4749,10 @@ static CGFloat fn_clamp_axis(CGFloat v, CGFloat lo, CGFloat hi)
 	NSRect paint[APPKIT_DAMAGE_RECTS];
 	NSUInteger paintCount = 0;
 	/* **WHAT THIS PASS TELLS THE COMPOSITOR IT CHANGED**, in the window's own drawing space: the pieces it painted,
-	 * plus the regions whose pixels it COPIED rather than drew (a scroll's translated block, and what this buffer was
-	 * missing) — because a copied pixel is a changed pixel to the compositor, whatever the client did to get it. */
+	 * plus a scroll's translated block — because that copy moves content to coordinates where the screen has something
+	 * else. A copy made INTO this buffer from the frame on the glass (the missing-pixel ledger) is deliberately not
+	 * here: it writes the pixels the screen already shows, and the compositor keeps the screen now. See the note at the
+	 * reporting block. */
 	NSRect reported[APPKIT_DAMAGE_RECTS];
 	NSUInteger reportedCount = 0;
 	NSUInteger i;
@@ -4722,7 +4896,7 @@ static CGFloat fn_clamp_axis(CGFloat v, CGFloat lo, CGFloat hi)
 		 * the fill covered. Turning antialiasing off snaps the area's edges to whole device pixels, which is what an
 		 * area fill wants and what makes a client surface meet the server's strip with no seam. */
 		CGContextSetShouldAntialias(c, 0);
-		CGContextSetFillColorWithColor(c, [[self backgroundColor] CGColor]);
+		CGContextSetFillColorWithColor(c, [[self cg_bodyColor] CGColor]);
 		/* **ONE FILL AND ONE WALK PER PIECE, WHICH IS WHAT KEEPS AN UNRELATED SECOND DAMAGE FROM COSTING THE GAP.** The
 		 * fill is per piece for the same reason the walk is: a background over the bounding box would erase pixels this
 		 * pass has no intention of drawing. */
@@ -4775,7 +4949,7 @@ static CGFloat fn_clamp_axis(CGFloat v, CGFloat lo, CGFloat hi)
 	 * TOOLBAR VIEW, which draws its items into the band above the content, so the bar's edges and marks must not be
 	 * painted before it — and the FACE under them must be, which is why the fill is with the background above. See
 	 * `-cg_chromeRect`'s note for the order: face, content, chrome. */
-	if (_cg_chromeDirty) {
+	if (repaintChrome) {
 		NSRect chrome = [self cg_chromeRect];
 
 		[self cg_drawChromeInContext:[NSGraphicsContext graphicsContextWithCGContext:c flipped:NO]];
@@ -4790,9 +4964,20 @@ static CGFloat fn_clamp_axis(CGFloat v, CGFloat lo, CGFloat hi)
 	 * not read — while a transparent one is ARGB8888 and CoreGraphics filled its alpha. */
 	/* **AND THE COMPOSITOR IS TOLD WHAT CHANGED, IN ITS OWN SPACE.** Until this door existed every frame damaged the
 	 * whole buffer, so a terminal repainting one row made the server blend 1280x720; the rectangles below are the
-	 * pieces this pass painted and the regions it copied, and `+cg_bufferRowsForDirtyRect:` is the same y-up-to-top-down
-	 * mirror the scroll copy uses. A pass that painted nothing it can name (which cannot happen — the whole-frame
-	 * branch names the frame) leaves the seam's default, which is the full buffer. */
+	 * pieces this pass painted and the region a scroll moved, and `+cg_bufferRowsForDirtyRect:` is the same
+	 * y-up-to-top-down mirror the scroll copy uses. A pass that painted nothing it can name (which cannot happen — the
+	 * whole-frame branch names the frame) leaves the seam's default, which is the full buffer.
+	 *
+	 * **AND WHAT THIS BUFFER WAS MISSING IS NO LONGER PART OF THAT, WHEN IT WAS COPIED.** `_cg_paintMissing[slot]` is
+	 * pixels THIS buffer was behind on; the copy takes them from the frame already on the glass, at the same
+	 * coordinates, so the screen is already right there and naming them asked the compositor to draw pixels that had
+	 * not changed. That was the right answer while the compositor recomposited the whole window from the committed
+	 * buffer — every stale byte in this buffer would have reached the screen — and it is a cost with no payer now that
+	 * the compositor keeps the screen: the pixels it is not told about are the pixels it leaves alone. When the copy is
+	 * REFUSED the region is painted instead, and then it is in `paint` and reported with everything else, because then
+	 * it really did change. The reason is the same one `_cg_paintMissing` exists at all: a partial paint keeps every
+	 * pixel outside its rectangle, which is right for the buffer on the glass and must be made right for this one by
+	 * COPYING rather than by drawing — copying does not mean the screen changed. */
 	{
 		CGContextRef surface = (CGContextRef)_surface;
 		NSInteger surfaceHeight = (NSInteger)CGBitmapContextGetHeight(surface);
@@ -4802,10 +4987,6 @@ static CGFloat fn_clamp_axis(CGFloat v, CGFloat lo, CGFloat hi)
 
 		for (j = 0; j < paintCount; j++) {
 			[self cg_addPaintRect:[self cg_deviceOutward:paint[j]] to:reported count:&reportedCount];
-		}
-		if (canCopy && !NSIsEmptyRect(_cg_paintMissing[slot])) {
-			[self cg_addPaintRect:[self cg_deviceOutward:_cg_paintMissing[slot]] to:reported
-					count:&reportedCount];
 		}
 		if (scrolled) {
 			[self cg_addPaintRect:[self cg_deviceOutward:_cg_scrollRect] to:reported count:&reportedCount];
@@ -4960,7 +5141,7 @@ static CGFloat fn_clamp_axis(CGFloat v, CGFloat lo, CGFloat hi)
 		CGContextSetFillColorWithColor(c, [[NSColor cg_chromeFaceColor] CGColor]);
 		CGContextFillRect(c, CGRectMake(chrome.origin.x, chrome.origin.y, chrome.size.width, chrome.size.height));
 		/* THE CONTENT'S AREA FILL, WITH THE SAME REASON TO BE ALIASED — see `-cg_drawFrameDirty:`. */
-		CGContextSetFillColorWithColor(c, [[self backgroundColor] CGColor]);
+		CGContextSetFillColorWithColor(c, [[self cg_bodyColor] CGColor]);
 		CGContextFillRect(c, CGRectMake(0.0, 0.0, content.size.width, content.size.height));
 		CGContextSetShouldAntialias(c, 1);
 	} else {
@@ -7245,9 +7426,46 @@ static void fn_announce(NSWindow *w, NSString *name, SEL delegateSelector)
  * release it — is enforced by an ordering in ONE file, the application's, rather than by two files agreeing. */
 @implementation NSWindow (APPKITSheetState)
 
+/* **THE ATTACHMENT IS ALSO A STATEMENT TO THE WINDOW SERVER, AND IT IS MADE WHERE THE STATE IS.** Two things follow
+ * from being attached, and neither can be derived on the server's side: the sheet's TOP CORNERS are its parent's title
+ * bar's seam rather than its own edge (so they are square, like a menu's top corners against the menu bar), and the
+ * sheet is drawn and hit-tested immediately in front of its parent whoever was raised. The frames cannot say it: two
+ * rounded rectangles whose edges touch look exactly like two that belong to each other.
+ *
+ * **AND THE FRAME CHANGES HERE, FOR THE SAME REASON `-setStyleMask:` CHANGES IT THERE: THE CONTENT KEEPS ITS SIZE.**
+ * A sheet has no chrome (`fn_chrome_height`), so the strip the caller's window was built with has to come off its
+ * frame instead of turning into twenty-two points of content nobody asked for — and putting it BACK when the session
+ * ends is the same subtraction in reverse, so an alert dismissed as a sheet leaves a titled window with the content
+ * it was built with rather than one with a twenty-two-point bite out of it. The content's size and place are measured
+ * UNDER THE OLD MODE and the frame is re-derived under the NEW one, which is the whole of the arithmetic.
+ *
+ * A WINDOW THAT HAS NO SERVER-SIDE SURFACE YET says nothing — the seam's window is made lazily, by `-orderFront:`, and
+ * `-cg_ensureWindow` makes this same statement when it does. So the order a caller happens to attach and order in is
+ * not something this pair has to be careful about. */
 - (void)cg_setSheetParent:(NSWindow *)parent
 {
+	BOOL changes = ((_cg_sheetParent != nil) != (parent != nil));
+	NSRect content = [self contentRectForFrameRect:_frame];	/* under the mode this window is in NOW */
+
 	_cg_sheetParent = parent;
+	if (changes) {
+		NSRect frame = [self frameRectForContentRect:content];
+
+		/* **AND THE FRAME IS PUT ON THE POINT GRID, WHICH IS THE GRID THE SERVER PLACES ON.** A sheet's frame IS its
+		 * content, and a caller's content need not be a whole number of points — an alert's layout computes 109.6 — but
+		 * the protocol's frame is integral, so a fractional one is rasterised by the client at a fraction while the
+		 * server places the buffer at a whole point. MEASURED, as the sheet's half of the title bar's border sitting a
+		 * fraction of a row away from the parent's half: two antialiased rows inside the sheet where the bar has one
+		 * crisp row outside it. Rounding the frame is what makes the two halves ONE line, which is the whole point of
+		 * the tuck and of the border the sheet wears. */
+		frame.size.width = fn_device_point(frame.size.width);
+		frame.size.height = fn_device_point(frame.size.height);
+		[self setFrame:frame display:YES];
+	}
+	if (_agwindow != NULL) {
+		AGWindowSetSheetParent(_agwindow, parent != NULL ? parent->_agwindow : NULL,
+				       parent != NULL ? (int)[parent cg_sheetTuck] : 0);
+	}
 }
 
 - (NSWindow *)cg_sheetParent

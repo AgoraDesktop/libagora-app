@@ -151,6 +151,14 @@
 - (void)cg_setAttachedSheet:(NSWindow *)sheet;
 - (void)cg_setSheetReplyDelegate:(id)delegate selector:(SEL)selector contextInfo:(void *)contextInfo;
 - (BOOL)cg_takeSheetReplyDelegate:(id *)delegate selector:(SEL *)selector contextInfo:(void **)contextInfo;
+/* **AND HOW FAR A SHEET ON THIS WINDOW IS TUCKED INTO ITS TITLE BAR**, asked here because the placement below needs it
+ * and answered in `NSWindow.m` because the compositor's shadow clip needs the same number (see `fn_SHEET_TUCK`). */
+- (CGFloat)cg_sheetTuck;
+/* **AND THE PLACEMENT, WHICH IS THIS FILE'S EVEN THOUGH THE ATTACHMENT IS `NSWindow`'S.** A sheet's position is a rule
+ * about TWO windows — the parent's title bar and the sheet's top edge — so it belongs beside the doors that make the
+ * pair. `NSWindow -setFrame:display:` calls it too, which is why it is declared in that file's private seam as well;
+ * see `@implementation NSWindow (APPKITSheetPlacement)` below. */
+- (void)cg_updateSheet;
 @end
 
 /* **THE WINDOW'S PENDING DRAG MOVE, DECLARED HERE BECAUSE THIS IS WHAT APPLIES IT.** A pass ends by updating the
@@ -161,6 +169,62 @@
 /* AND THE RESIZE'S AIM, WHICH IS APPLIED IN THE SAME PASS FOR THE SAME REASON. */
 - (void)cg_applyPendingResize;
 @end
+
+/* ============================================================================================ *
+ * WHERE A SHEET GOES, IN ONE PLACE, BECAUSE THREE DOORS ASK.                                   *
+ *                                                                                                *
+ * **A SHEET HANGS FROM THE BOTTOM EDGE OF ITS PARENT'S TITLE BAR, CENTRED ON THE PARENT.**       *
+ * That is the whole of the rule and it is the Mac's: the sheet reads as part of the window it  *
+ * belongs to rather than as a panel that happens to be nearby, which is what "attached" means   *
+ * when the window server gives a sheet no title bar of its own to hang by.                       *
+ *                                                                                                *
+ * IT IS RE-APPLIED, NOT REMEMBERED. A parent that moves drags its sheet with it and a parent    *
+ * that resizes re-centres it — `NSWindow -setFrame:display:` is where that happens, through     *
+ * this door — so nothing here stores an offset that could drift from the parent's frame. The   *
+ * alternative, remembering a delta, is a second source of truth about a position the parent's  *
+ * frame already states.
+ *
+ * **AND ITS TOP EDGE IS TUCKED UNDER THE BAR RATHER THAN FLUSH WITH ITS BOTTOM.** The sheet's top edge is placed
+ * `NSWindow -cg_sheetTuck` points INTO the title bar, which is invisible — the sheet's body is painted in the chrome's own
+ * colour (`-cg_bodyColor`), so what the overlap covers is the same colour it is painted — and it is what makes the
+ * seam read as a tuck: the bar's bottom hairline is interrupted across the sheet's width instead of being a ledge the
+ * sheet sits under. IT IS NOT ONLY A LOOK: the bar's edge and the sheet's are placed by two `set_frame` calls rounded
+ * independently, so at a fractional scale a FLUSH sheet can leave a device row of the parent's line showing across the
+ * top of it — a one-pixel seam that a tuck of more than one point cannot have.
+ *
+ * A PARENT WITH NO TITLE BAR HAS NOTHING TO TUCK UNDER, so the tuck is zero there and the sheet hangs from the top of
+ * the window: overlapping a borderless parent's CONTENT with a strip of chrome-coloured body would be a band across its
+ * document, which is the opposite of invisible.
+ *
+ * AND IT IS A CATEGORY HERE BECAUSE THE RULE IS ABOUT TWO WINDOWS: the state is `NSWindow`'s and
+ * the session is this class's, which is the same split the sheet seam already makes.
+ * ============================================================================================ */
+@implementation NSWindow (APPKITSheetPlacement)
+
+- (void)cg_updateSheet
+{
+	NSWindow *sheet = [self attachedSheet];
+	NSRect parentContent;
+	NSRect frame;
+	CGFloat tuck;
+
+	if (sheet == nil) {
+		return;
+	}
+	/* THE PARENT'S CONTENT, NOT ITS FRAME: the bottom edge of the title bar is where the sheet's top goes, and the
+	 * content rect is exactly the frame minus that bar. Asking the frame and subtracting the chrome by hand would be
+	 * a second copy of the chrome arithmetic `-contentRectForFrameRect:` already owns. */
+	parentContent = [self contentRectForFrameRect:[self frame]];
+	/* THE TUCK IS `NSWindow`'s, because the compositor is told the same number — see `fn_SHEET_TUCK` there. */
+	tuck = [self cg_sheetTuck];
+	frame = [sheet frame];
+	frame.origin.x = parentContent.origin.x + (parentContent.size.width - frame.size.width) / 2.0;
+	frame.origin.y = NSMaxY(parentContent) + tuck - frame.size.height;
+	[sheet setFrameOrigin:frame.origin];
+}
+
+@end
+
 
 
 /* ============================================================================================ *
@@ -1405,11 +1469,34 @@ static double s_last_report;
 	}
 	/* **A WINDOW WITH AN ATTACHED SHEET TAKES NO INPUT** — that is what window-modal MEANS observably, and this is
 	 * the one place this tier routes events, so it is where the gate belongs. The event is DROPPED rather than
-	 * delivered, and it is dropped BEFORE the mouse-down below could make the parent key: a click that is refused
-	 * must not move the key window it was refused for. Apple disables the parent and beeps; the drop is the tier's
-	 * version, and the header says so where the doors are declared. The sheet itself carries no attachment of its
-	 * own, so events aimed at it are untouched. */
+	 * delivered: a click in a disabled parent must not reach a control behind a question nobody has answered yet.
+	 * The sheet itself carries no attachment of its own, so events aimed at it are untouched.
+	 *
+	 * **AND A CLICK IN IT IS NOT NOTHING.** Refusing the click is only half of what the Mac does with one: the other
+	 * half is that a press anywhere in the pair brings the pair FORWARD and leaves the SHEET with the keyboard — a
+	 * person who clicks a background document's dimmed body is saying "this one", and getting a document that comes
+	 * to the front with the question still greyed out (or, worse, nothing at all) is how a modal session comes to look
+	 * stuck. So the click does the two acts this class owns and then drops the event: the APPLICATION activates, the
+	 * parent is ordered front — which is the raise, and on this compositor it brings the sheet with it, because a
+	 * sheet is exactly one layer above its parent and has no place of its own — and the KEY AND MAIN go to the sheet,
+	 * never to the parent the click landed on. Apple disables the parent and beeps; the beep is the one part this tier
+	 * does not do, and the drop is what stands in for the disablement. */
 	if ([w attachedSheet] != nil) {
+		if ([theEvent type] == NSLeftMouseDown || [theEvent type] == NSRightMouseDown
+		    || [theEvent type] == NSOtherMouseDown) {
+			NSWindow *sheet = [w attachedSheet];
+
+			[self activate];
+			[w orderFront:nil];
+			/* **AND THE SHEET TAKES THE KEY, WHICH IS ALSO WHAT KEEPS IT THERE.** A window that cannot become key
+			 * (a borderless sheet) keeps whatever had it, which is this tier's answer to Apple's refusal-by-print. */
+			if ([sheet canBecomeKeyWindow]) {
+				[sheet makeKeyWindow];
+			}
+			if ([sheet canBecomeMainWindow]) {
+				[sheet makeMainWindow];
+			}
+		}
 		return;
 	}
 	/* **A WINDOW THAT IGNORES MOUSE EVENTS PASSES THE EVENT DOWN.** Apple's word for it is transparent: "a Boolean
@@ -1841,8 +1928,6 @@ NSString *NSEventTrackingRunLoopMode = @"NSEventTrackingRunLoopMode";
     didEndSelector:(SEL)didEndSelector
        contextInfo:(void *)contextInfo
 {
-	NSRect parentFrame, sheetFrame;
-
 	if (sheet == nil || docWindow == nil) {
 		/* Apple's door takes two windows. With either missing there is nothing to attach, so a nil gets nothing
 		 * rather than a half-attachment in which one window believes it is a sheet. */
@@ -1858,26 +1943,36 @@ NSString *NSEventTrackingRunLoopMode = @"NSEventTrackingRunLoopMode";
 	 * the moment, so an observer asking `-attachedSheet` here is told nil and is being told the truth. */
 	fn_announce_window(docWindow, NSWindowWillBeginSheetNotification, @selector(windowWillBeginSheet:));
 
-	/* THE ATTACHMENT, AND THEN THE PLACEMENT — which is OURS, because this tier places its own windows: the sheet
-	 * is centred horizontally on its parent with its TOP EDGE at the parent's top, that being what makes it read
-	 * as hanging from the window it belongs to. A frame's origin is its BOTTOM-left, so the y is the parent's top
-	 * minus the sheet's height. ONLY THE ORIGIN IS MOVED, which is also why `-setFrameOrigin:` is the door: a
-	 * sheet's SIZE is the sheet's own — it is a whole window the caller made — and a caller that wants a smaller
-	 * one makes a smaller window rather than asking this door to resize it. */
-	parentFrame = [docWindow frame];
-	sheetFrame = [sheet frame];
-	[sheet setFrameOrigin:NSMakePoint(
-		parentFrame.origin.x + (parentFrame.size.width - sheetFrame.size.width) / 2.0,
-		parentFrame.origin.y + parentFrame.size.height - sheetFrame.size.height)];
+	/* **THE ATTACHMENT, WHICH IS ALSO WHERE THE SHEET LOSES ITS CHROME.** A sheet is a window whose frame IS its
+	 * content — the Mac gives it no title bar, and `fn_chrome_height` is where this tier states the same thing — so
+	 * `-cg_setSheetParent:` takes the strip off the frame while keeping the CONTENT's size and place, the mirror of
+	 * what `-setStyleMask:` does when a mask changes. Doing it in the state's own door rather than here is what
+	 * makes ending the session put the strip back. */
 	[sheet cg_setSheetParent:docWindow];
 	[docWindow cg_setAttachedSheet:sheet];
 	[docWindow cg_setSheetReplyDelegate:modalDelegate selector:didEndSelector contextInfo:contextInfo];
+	/* **AND THE PLACEMENT, WHICH IS THIS TIER'S BECAUSE IT PLACES ITS OWN WINDOWS.** `-cg_updateSheet` is the one rule
+	 * (see its comment above): the sheet's top edge at the bottom of the parent's title bar, centred on the parent's
+	 * content. It is the same door the parent's own frame changes use, so a sheet cannot be placed one way here and
+	 * another way after a drag. */
+	[docWindow cg_updateSheet];
 	[sheet orderFront:nil];
-	/* AND THE SHEET HAS THE KEY, which is the other half of window-modal: the application's own idea of where input
-	 * goes. There is no `-makeKeyWindow` call here because this class's key window IS that idea — the same state
-	 * `-sendEvent:` sets on a click — and the X focus is a separate negotiation nothing in this tier asks for. */
-	_keyWindow = sheet;
-	_mainWindow = sheet;
+	/* **AND THE SHEET TAKES THE KEY AND MAIN THROUGH THE WINDOWS' OWN DOORS, NOT BY ASSIGNING THE IVARS.** Assigning
+	 * them — which is what this did — moved the application's two pointers and NOTHING ELSE: the parent kept
+	 * `-isKeyWindow` YES for the whole session (two windows claiming to be key at once), the sheet answered NO, and the
+	 * `-windowDidBecomeKey:` an observer was waiting for never came. It also left the SEAT alone, so a sheet opened
+	 * without a click left the keyboard where it was. The doors do all three, and they are the same pair a click runs:
+	 * `-becomeKeyWindow` resigns the previous key window, `-becomeMainWindow` the previous main.
+	 *
+	 * (That also makes `-makeKeyWindow` on the parent AFTER a sheet is attached mean something: with the parent's flag
+	 * never cleared it early-returned, and the two windows disagreed about who was key for as long as the sheet was
+	 * up.) */
+	if ([sheet canBecomeKeyWindow]) {
+		[sheet makeKeyWindow];
+	}
+	if ([sheet canBecomeMainWindow]) {
+		[sheet makeMainWindow];
+	}
 }
 
 - (void)endSheet:(NSWindow *)sheet
@@ -1904,12 +1999,16 @@ NSString *NSEventTrackingRunLoopMode = @"NSEventTrackingRunLoopMode";
 		 * either: a caller unwinding from a failure ends sessions it is not sure it began. */
 		return;
 	}
-	/* KEY GOES BACK TO THE PARENT FIRST, so that a reply which asks who has the key is told the truth. */
-	if (_keyWindow == sheet) {
-		_keyWindow = docWindow;
+	/* **KEY GOES BACK TO THE PARENT FIRST, SO THAT A REPLY WHICH ASKS WHO HAS THE KEY IS TOLD THE TRUTH** — and it goes
+	 * back through the windows' doors for the reason the attachment used them: the two flags, the application's two
+	 * pointers and the seat's focus are one answer, and assigning an ivar moves one of the three. The sheet's own flags
+	 * are cleared by the parent's `-becomeKeyWindow`/`-becomeMainWindow` resigning it, which is also what tells an
+	 * observer the session is over as far as the keyboard is concerned. */
+	if ([sheet isKeyWindow]) {
+		[docWindow makeKeyWindow];
 	}
-	if (_mainWindow == sheet) {
-		_mainWindow = docWindow;
+	if ([sheet isMainWindow]) {
+		[docWindow makeMainWindow];
 	}
 	/* THE REPLY IS TAKEN BEFORE ANYTHING ELSE IS UNDONE, and the record is cleared as it is read. */
 	owesReply = [docWindow cg_takeSheetReplyDelegate:&delegate selector:&selector contextInfo:&contextInfo];
