@@ -13,6 +13,24 @@ through `HANDOFF-5.md` are the earlier ones, and their instrument notes are stil
 
 ## Status
 
+**AND A COMMIT NAMES ITS DAMAGE, INSTEAD OF THE WHOLE BUFFER.** `AGEndFrame` used to damage `0, 0, width, height` on
+every frame, so a window that repainted one strip made the compositor blend the whole window. `AGWindowDamage` is the
+seam door that names rectangles instead (buffer pixels, top-down, clamped to the buffer, a budget of sixteen that
+grows the last rather than dropping anything), and `-cg_drawFrameDirty:` reports the pieces it drew *and* the regions
+it copied — a scroll's translated block and what this buffer was missing — because a copied pixel is a changed pixel
+to the compositor. `-cg_drawFrame` (the whole-frame path) names nothing and so still damages everything, which is the
+safe default. `appkit-partial-damage` asks the seam what the last commit actually told the compositor: a 20x20 strip
+repaint reports **one rectangle of 400 pixels out of 66 600**.
+
+**THAT HALF IS NOW INERT, AND THE REASON IS THE OTHER SIDE OF THE WIRE.** `window-server`'s
+`surface_damage()` is a no-op on purpose — its comment says so: *"DAMAGE IS TRACKED NOWHERE, ON PURPOSE: this
+compositor recomposites the whole output on every frame"* — and `cpu_draw` clears the whole output and re-walks every
+window per frame. So the client's rectangles are correct, tested and currently discarded; making them pay needs the
+compositor to track per-surface damage and composite only the damaged region, in BOTH renderers (`renderer-cpu.c` and
+`renderer-gl.c`), with a full-redraw fallback for everything that is not a client commit (a pointer move redraws the
+old cursor position, a window move redraws its shadow). That is the next piece of work in `window-server`, and it is
+named here rather than left to be discovered from a profile that never moves.
+
 **THE APPLICATION'S LOOP IS A RUN LOOP.** `-[NSApplication run]` gives `NSRunLoop` one pass per frame before it
 reads the events, and `NSRunLoop` is Core Foundation's loop — so a due `NSTimer`, an fd source's readiness, a
 `-performSelectorOnMainThread:` from a worker and `dispatch_async(dispatch_get_main_queue(), …)` are all delivered

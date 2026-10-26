@@ -614,8 +614,23 @@ uint32_t *AGWindowBeginFrameSized(AGWindow *window, int *stride, int *width, int
  * swap exists to prevent. */
 uint32_t *AGWindowPreviousFrameSized(AGWindow *window, int *stride, int *width, int *height);
 
+/* **WHAT THIS FRAME CHANGED, SO THE COMPOSITOR BLENDS ONLY THAT.** A rectangle in BUFFER pixels with a TOP-DOWN
+ * origin (the same space `wl_surface.damage_buffer` takes), clamped to the buffer here. Call it between
+ * `AGWindowBeginFrame…` and `AGWindowEndFrame`; several may be given, and **A FRAME WITH NONE DAMAGES THE WHOLE
+ * BUFFER**, which is the honest default for a client that does not track its own damage — and what every frame did
+ * before this door existed.
+ *
+ * THE SEAM DOES NOT KNOW WHAT IS IN THE RECTANGLE and does not need to: it is the client's statement that those
+ * pixels are the ones that moved, and the only way it can be wrong is by leaving something out. */
+void AGWindowDamage(AGWindow *window, int x, int y, int width, int height);
+
 /* Hand the frame to the compositor and ask for the next one. Does nothing when no frame is begun. */
 void AGWindowEndFrame(AGWindow *window);
+
+/* **WHAT THE LAST COMMIT ACTUALLY DAMAGED, FOR A DIAGNOSTIC AND FOR A TEST.** `index` names a rectangle; the answer is
+ * how many there are, and 0 with `index` past the end. A caller can ask "did my partial repaint really ask for a
+ * partial frame" without a compositor to watch, which is the question a damaged-region regression hides behind. */
+int AGWindowLastDamage(AGWindow *window, int index, int rect[4]);
 
 #ifdef __cplusplus
 }

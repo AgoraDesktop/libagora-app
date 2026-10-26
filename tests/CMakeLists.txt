@@ -702,6 +702,18 @@ add_test(NAME appkit-runloop-connection
 set_tests_properties(appkit-runloop-connection PROPERTIES SKIP_RETURN_CODE 77
   ENVIRONMENT "${_agora_app_test_env}")
 
+# **THE COMMIT NAMES ITS DAMAGE, INSTEAD OF THE WHOLE BUFFER.** A strip repaint must reach the seam as a strip — asked
+# through `AGWindowLastDamage`, so the assertion is about what the compositor was told rather than what the AppKit
+# meant. The headless runner supplies the compositor; without one the case SKIPS (77).
+add_executable(appkit_partial_damage appkit_partial_damage.m)
+target_link_libraries(appkit_partial_damage PRIVATE App)
+
+add_test(NAME appkit-partial-damage
+  COMMAND "${CMAKE_CURRENT_SOURCE_DIR}/run-appkit-headless.sh" "$<TARGET_FILE:appkit_partial_damage>" 3
+	  "all checks passed")
+set_tests_properties(appkit-partial-damage PROPERTIES SKIP_RETURN_CODE 77
+  ENVIRONMENT "${_agora_app_test_env}")
+
 add_executable(appkit_runloop_timer appkit_runloop_timer.m)
 target_link_libraries(appkit_runloop_timer PRIVATE App dispatch)
 

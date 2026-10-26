@@ -110,6 +110,16 @@ struct AGBuffer {
 	int dmabuf_fd;
 };
 
+/* HOW MANY RECTANGLES ONE FRAME MAY NAME. Sixteen covers a window's damage pieces (`APPKIT_DAMAGE_RECTS` is that
+ * kind of budget on the AppKit side too); past it the last slot grows rather than anything being dropped. */
+#define AG_WINDOW_DAMAGE_MAX 16
+
+/* THE ONE RECTANGLE TYPE, NAMED, because an array of an anonymous struct and another array of a DIFFERENT anonymous
+ * struct cannot be assigned to each other — which is exactly what recording the last frame's damage does. */
+struct AGDamageRect {
+	int x, y, w, h;
+};
+
 struct AGWindow {
 	AGWindowServer *server;
 	struct wl_surface *surface;
@@ -172,6 +182,16 @@ struct AGWindow {
 	int height;
 	int configured;
 	int begun;			/* between BeginFrame and EndFrame */
+
+	/* **THE DAMAGE THIS FRAME WILL ASK FOR, AND THE DAMAGE THE LAST ONE DID.** `damage` accumulates what the caller
+	 * says it changed (buffer pixels, top-down rows) and is emptied by `AGWindowEndFrame`; `last_damage` is kept so a
+	 * diagnostic — and a test — can ask what the last commit actually told the compositor, which is the only place
+	 * that number exists. A frame with NO recorded damage damages the whole buffer, which is the safe default for a
+	 * caller that does not track its own. */
+	struct AGDamageRect damage[AG_WINDOW_DAMAGE_MAX];
+	int damage_count;
+	struct AGDamageRect last_damage[AG_WINDOW_DAMAGE_MAX];
+	int last_damage_count;
 
 	/* The frame handler runs only when `frame_done` has arrived AND the buffer a frame would be drawn into is this
 	 * process's again. `frame_ready` is the first half, `spare.busy == 0` the second. */
@@ -968,6 +988,70 @@ uint32_t *AGWindowBeginFrame(AGWindow *window, int *stride)
 	return AGWindowBeginFrameSized(window, stride, NULL, NULL);
 }
 
+void AGWindowDamage(AGWindow *window, int x, int y, int width, int height)
+{
+	if (window == NULL || !window->begun || width <= 0 || height <= 0) {
+		return;
+	}
+	/* CLAMPED TO THE BUFFER HERE rather than at the commit: a caller working in device pixels can round outward past
+	 * an edge, and a damage rectangle outside the surface is a protocol error (`wl_surface.damage_buffer` requires a
+	 * non-empty region inside the buffer). */
+	if (x < 0) {
+		width += x;
+		x = 0;
+	}
+	if (y < 0) {
+		height += y;
+		y = 0;
+	}
+	if (x + width > window->buffer.width) {
+		width = window->buffer.width - x;
+	}
+	if (y + height > window->buffer.height) {
+		height = window->buffer.height - y;
+	}
+	if (width <= 0 || height <= 0) {
+		return;
+	}
+	if (window->damage_count < AG_WINDOW_DAMAGE_MAX) {
+		window->damage[window->damage_count].x = x;
+		window->damage[window->damage_count].y = y;
+		window->damage[window->damage_count].w = width;
+		window->damage[window->damage_count].h = height;
+		window->damage_count++;
+	} else {
+		/* THE BUDGET IS FULL: the last slot grows to cover this one. Over-damage is a slower frame; a dropped
+		 * rectangle is a stale pixel, and those are not the same mistake. */
+		int *x0 = &window->damage[AG_WINDOW_DAMAGE_MAX - 1].x;
+		int *y0 = &window->damage[AG_WINDOW_DAMAGE_MAX - 1].y;
+		int *w0 = &window->damage[AG_WINDOW_DAMAGE_MAX - 1].w;
+		int *h0 = &window->damage[AG_WINDOW_DAMAGE_MAX - 1].h;
+		int right = (*x0 + *w0 > x + width) ? *x0 + *w0 : x + width;
+		int bottom = (*y0 + *h0 > y + height) ? *y0 + *h0 : y + height;
+
+		if (x < *x0) {
+			*x0 = x;
+		}
+		if (y < *y0) {
+			*y0 = y;
+		}
+		*w0 = right - *x0;
+		*h0 = bottom - *y0;
+	}
+}
+
+int AGWindowLastDamage(AGWindow *window, int index, int rect[4])
+{
+	if (window == NULL || index < 0 || index >= window->last_damage_count || rect == NULL) {
+		return window != NULL ? window->last_damage_count : 0;
+	}
+	rect[0] = window->last_damage[index].x;
+	rect[1] = window->last_damage[index].y;
+	rect[2] = window->last_damage[index].w;
+	rect[3] = window->last_damage[index].h;
+	return window->last_damage_count;
+}
+
 void AGWindowEndFrame(AGWindow *window)
 {
 	struct AGBuffer drawn;
@@ -997,7 +1081,30 @@ void AGWindowEndFrame(AGWindow *window)
 	 * moment the compositor sees the commit; END is what makes the writes in it visible. */
 	ag_buffer_sync(&window->buffer, 0);
 	wl_surface_attach(window->surface, window->buffer.buffer, 0, 0);
-	wl_surface_damage_buffer(window->surface, 0, 0, window->buffer.width, window->buffer.height);
+	/* **WHAT THE CALLER SAID IT CHANGED, OR THE WHOLE BUFFER WHEN IT SAID NOTHING.** A caller that tracks its damage
+	 * tells the compositor the rectangles it painted and the compositor blends only those; a caller that does not
+	 * damages everything, which is what this door did for every frame before the rectangles existed. The rectangles
+	 * are buffer pixels with a TOP-DOWN origin, which is what `wl_surface.damage_buffer` wants and what the client's
+	 * own paint space is not (its windows are y-up), so the mirroring is the caller's to do. */
+	window->last_damage_count = 0;
+	if (window->damage_count == 0) {
+		wl_surface_damage_buffer(window->surface, 0, 0, window->buffer.width, window->buffer.height);
+		window->last_damage[0].x = 0;
+		window->last_damage[0].y = 0;
+		window->last_damage[0].w = window->buffer.width;
+		window->last_damage[0].h = window->buffer.height;
+		window->last_damage_count = 1;
+	} else {
+		int i;
+
+		for (i = 0; i < window->damage_count && i < AG_WINDOW_DAMAGE_MAX; i++) {
+			wl_surface_damage_buffer(window->surface, window->damage[i].x, window->damage[i].y,
+						 window->damage[i].w, window->damage[i].h);
+			window->last_damage[i] = window->damage[i];
+		}
+		window->last_damage_count = window->damage_count;
+	}
+	window->damage_count = 0;
 	wl_surface_commit(window->surface);
 	/* WHEN THE CALLER CAME HERE FROM `AGWindowShow`, THE FLUSH ALREADY HAPPENED — before the frame was asked
 	 * for and therefore before this commit. Flushing here means the frame just handed over does not wait for

@@ -142,6 +142,10 @@
 + (int)cg_connectionFd;
 + (long)cg_nextDeadlineMs;
 + (BOOL)cg_dispatchPending;
+/* **AND THE SEAM'S OWN WINDOW, FOR THE ONE QUESTION ONLY A DIAGNOSTIC ASKS**: what did the last commit tell the
+ * compositor it changed (`AGWindowLastDamage`)? The handle is this class's private business, so the door that hands
+ * it out is too. */
+- (AGWindow *)cg_seamWindow;
 - (NSScreen *)cg_screenFor:(NSScreen *)screen;
 - (void)cg_rebuildCursorRectsIfNeeded;
 - (NSCursor *)cg_cursorForContentPoint:(NSPoint)p;
@@ -2154,6 +2158,11 @@ static int s_connection_gone;
 	AGWindowServer *server = fn_server_if_connected();
 
 	return (server != NULL) ? AGWindowServerGetFd(server) : -1;
+}
+
+- (AGWindow *)cg_seamWindow
+{
+	return _agwindow;
 }
 
 + (long)cg_nextDeadlineMs
@@ -4567,17 +4576,45 @@ static CGFloat fn_clamp_axis(CGFloat v, CGFloat lo, CGFloat hi)
 	NSRect dirty = NSZeroRect;
 	NSRect paint[APPKIT_DAMAGE_RECTS];
 	NSUInteger paintCount = 0;
+	/* **WHAT THIS PASS TELLS THE COMPOSITOR IT CHANGED**, in the window's own drawing space: the pieces it painted,
+	 * plus the regions whose pixels it COPIED rather than drew (a scroll's translated block, and what this buffer was
+	 * missing) — because a copied pixel is a changed pixel to the compositor, whatever the client did to get it. */
+	NSRect reported[APPKIT_DAMAGE_RECTS];
+	NSUInteger reportedCount = 0;
 	NSUInteger i;
 	NSTimeInterval started = [NSDate timeIntervalSinceReferenceDate];
 
 	if (_agwindow == NULL || (count == 0 && !_cg_chromeDirty)) {
 		return;
 	}
+	/* **A SHEET'S CHROME IS REPAINTED ON EVERY PASS THAT PAINTS ANYTHING, AND THE REASON IS WHERE IT LIVES.** A sheet has
+	 * no strip; what it paints is its PARENT'S TITLE BAR BORDER across itself, one row inside its own body (see
+	 * `fn_draw_chrome`) — inside the CONTENT's rectangle, which is the whole frame. The content walk below repaints that
+	 * row whenever the content's top edge is damaged, and the chrome painter is the only thing that puts the line back,
+	 * so gating it on `_cg_chromeDirty` alone leaves the border missing after any content repaint there — a sheet with
+	 * the bar's line over half of it. It is one fill, and this is the flag that says to make it. */
+	BOOL repaintChrome = (_cg_chromeDirty || [self isSheet]) ? YES : NO;
 	/* **THE BOX IS KEPT BESIDE THE PIECES, FOR THE THREE QUESTIONS THAT WANT ONE RECTANGLE**: what the buffer ledger
 	 * records, what the diagnostic prints, and what the fallback paints when a copy has no source. The PIECES are what
 	 * the background and the view walk use, which is the whole point of the list — see `NSView.h`. */
 	for (i = 0; i < count; i++) {
 		dirty = NSIsEmptyRect(dirty) ? damage[i] : NSUnionRect(dirty, damage[i]);
+	}
+	/* **AND A DAMAGE THAT REACHES THE BOTTOM ROW OF THE CHROME PAYS FOR THE CHROME, BECAUSE THE HAIRLINE LIVES THERE.** The
+	 * one-point rule between the chrome and the content is the CONTENT'S TOP ROW (see `fn_draw_chrome`) — drawn by the
+	 * chrome painter, over pixels the content view also owns — so any content repaint that touches that row erases it
+	 * and nothing puts it back while `_cg_chromeDirty` is clear. MEASURED at a fractional scale: a window that had
+	 * repainted its content once had no line under its title bar at all, which is also the line a sheet wears across
+	 * itself — a sheet's half of it present and the parent's half gone. The line is one row, so the repaint it costs is
+	 * the strip's own; the flag is what makes every other part of this pass (the face fill, the walk's order, the
+	 * buffer ledger) treat it as a chrome pass rather than one more thing to remember. */
+	if ([self hasTitleBar]) {
+		CGFloat contentHeight = [self contentRectForFrameRect:_frame].size.height;
+
+		if (NSIntersectsRect(dirty, NSMakeRect(0.0, contentHeight - 1.0, _frame.size.width, 1.0))) {
+			_cg_chromeDirty = YES;
+			repaintChrome = YES;
+		}
 	}
 	if (!AGWindowServerCanWrite(fn_server())) {
 		return;
@@ -4751,6 +4788,50 @@ static CGFloat fn_clamp_axis(CGFloat v, CGFloat lo, CGFloat hi)
 	 * to mirror: `_surface` has held the buffer's rows all along. The alpha fix-up is not needed either, and for
 	 * the reason its own note gave — an opaque window's format is XRGB8888, whose fourth byte the compositor does
 	 * not read — while a transparent one is ARGB8888 and CoreGraphics filled its alpha. */
+	/* **AND THE COMPOSITOR IS TOLD WHAT CHANGED, IN ITS OWN SPACE.** Until this door existed every frame damaged the
+	 * whole buffer, so a terminal repainting one row made the server blend 1280x720; the rectangles below are the
+	 * pieces this pass painted and the regions it copied, and `+cg_bufferRowsForDirtyRect:` is the same y-up-to-top-down
+	 * mirror the scroll copy uses. A pass that painted nothing it can name (which cannot happen — the whole-frame
+	 * branch names the frame) leaves the seam's default, which is the full buffer. */
+	{
+		CGContextRef surface = (CGContextRef)_surface;
+		NSInteger surfaceHeight = (NSInteger)CGBitmapContextGetHeight(surface);
+		NSInteger surfaceWidth = (NSInteger)CGBitmapContextGetWidth(surface);
+		CGFloat scale = [self userSpaceScaleFactor];
+		NSUInteger j;
+
+		for (j = 0; j < paintCount; j++) {
+			[self cg_addPaintRect:[self cg_deviceOutward:paint[j]] to:reported count:&reportedCount];
+		}
+		if (canCopy && !NSIsEmptyRect(_cg_paintMissing[slot])) {
+			[self cg_addPaintRect:[self cg_deviceOutward:_cg_paintMissing[slot]] to:reported
+					count:&reportedCount];
+		}
+		if (scrolled) {
+			[self cg_addPaintRect:[self cg_deviceOutward:_cg_scrollRect] to:reported count:&reportedCount];
+		}
+		if (repaintChrome) {
+			[self cg_addPaintRect:[self cg_deviceOutward:[self cg_chromeRect]] to:reported
+					count:&reportedCount];
+		}
+		for (j = 0; j < reportedCount; j++) {
+			NSRange rows = [[self class] cg_bufferRowsForDirtyRect:reported[j] surfaceHeight:surfaceHeight];
+			NSInteger left = (NSInteger)floor((double)(reported[j].origin.x * scale));
+			NSInteger right = (NSInteger)ceil((double)((reported[j].origin.x + reported[j].size.width) * scale));
+
+			if (rows.length == 0 || right <= left) {
+				continue;
+			}
+			if (left < 0) {
+				left = 0;
+			}
+			if (right > surfaceWidth) {
+				right = surfaceWidth;
+			}
+			AGWindowDamage(_agwindow, (int)left, (int)rows.location, (int)(right - left),
+				       (int)rows.length);
+		}
+	}
 	AGWindowEndFrame(_agwindow);
 	/* **WHAT A PARTIAL PAINT ACTUALLY COSTS, WHICH IS THE NUMBER "DRAW ONLY WHAT CHANGED" IS JUDGED BY.** The
 	 * rectangle, the milliseconds and the frames per second it implies, because a damage rectangle that is right
