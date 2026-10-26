@@ -136,6 +136,12 @@
  * window has to ask before ordering itself in: with none, the session runs without an image rather than printing a
  * refusal for a window that could never be shown. */
 + (BOOL)cg_hasWindowServer;
+/* **AND THE THREE THAT MAKE THE CONNECTION ONE OF THE RUN LOOP'S SOURCES.** Declared here because the source's target
+ * lives in this file (see `AGConnectionSource`) and because the application's loop reads the seam's deadline; the
+ * first two answer WITHOUT CONNECTING, so a loop asking about a descriptor cannot open one. */
++ (int)cg_connectionFd;
++ (long)cg_nextDeadlineMs;
++ (BOOL)cg_dispatchPending;
 - (NSScreen *)cg_screenFor:(NSScreen *)screen;
 - (void)cg_rebuildCursorRectsIfNeeded;
 - (NSCursor *)cg_cursorForContentPoint:(NSPoint)p;
@@ -497,12 +503,65 @@ static AGWindowServer *fn_server_if_connected(void)
 	return s_server;
 }
 
+/* **THE CONNECTION'S RUN-LOOP TARGET, AND IT IS ONE OBJECT FOR THE PROCESS.** A run loop holds a source's target
+ * WEAKLY (see `-addSourceForFileDescriptor:`), and the connection outlives every window, so the target cannot be a
+ * window or the application: it is this singleton, and its whole body is "take what the compositor said".
+ *
+ * THE SOURCE IS INSTALLED WHERE THE CONNECTION IS MADE, not where an application's loop starts. That is the point of
+ * the change: ANY wait on this thread's run loop now services the compositor — an application's frame, a library
+ * caller's `-runUntilDate:`, a modal session, a `-performSelector:afterDelay:` — instead of only the one door that
+ * used to poll the descriptor. A reconnect is a different descriptor, so it is re-registered rather than watched
+ * twice (which would deliver every event twice). */
+@interface AGConnectionSource : NSObject
+- (void)connectionReadable;
+@end
+
+@implementation AGConnectionSource
+
+- (void)connectionReadable
+{
+	(void)[NSWindow cg_dispatchPending];
+}
+
+@end
+
+static AGConnectionSource *s_connection_source;
+static int s_connection_source_fd = -1;
+
+static void fn_install_connection_source(void)
+{
+	NSRunLoop *loop;
+	int fd;
+
+	if (s_server == NULL) {
+		return;
+	}
+	fd = AGWindowServerGetFd(s_server);
+	if (fd < 0 || fd == s_connection_source_fd) {
+		return;		/* nothing to watch, or the same descriptor already watched */
+	}
+	loop = [NSRunLoop currentRunLoop];
+	if (s_connection_source == nil) {
+		s_connection_source = [[AGConnectionSource alloc] init];
+	}
+	if (s_connection_source_fd >= 0) {
+		[loop removeSourceForTarget:s_connection_source];
+	}
+	[loop addSourceForFileDescriptor:fd
+				    mode:NSDefaultRunLoopMode
+				readable:YES
+				  target:s_connection_source
+				selector:@selector(connectionReadable)];
+	s_connection_source_fd = fd;
+}
+
 static AGWindowServer *fn_server(void)
 {
 	if (s_server == NULL) {
 		s_server = AGWindowServerShared();
 		if (s_server != NULL) {
 			AGWindowServerSetActivationHandler(s_server, fn_activation, NULL);
+			fn_install_connection_source();
 		}
 	}
 	return s_server;
@@ -2067,6 +2126,39 @@ static int s_connection_gone;
 	 * a live server for no reason. A real drag begins in a window that was ordered in, so a real application has
 	 * already connected by the time it asks. */
 	return s_server != NULL;
+}
+
+/* **THE CONNECTION AS A RUN-LOOP SOURCE.** These three answer about a connection that EXISTS: `fn_server_if_connected`
+ * instead of `fn_server`, so a loop that asks for a descriptor cannot open one (the same rule the zero-time poll
+ * below states, and for the same reason — discovery does round trips, and a query that blocks is not a query). */
++ (int)cg_connectionFd
+{
+	AGWindowServer *server = fn_server_if_connected();
+
+	return (server != NULL) ? AGWindowServerGetFd(server) : -1;
+}
+
++ (long)cg_nextDeadlineMs
+{
+	AGWindowServer *server = fn_server_if_connected();
+
+	return (server != NULL) ? (long)AGWindowServerNextDeadlineMs(server) : -1;
+}
+
+/* THE TAKE: whatever the compositor has said, read and dispatched without blocking, which turns the source's
+ * readiness into the NSEvents the drain that follows this pass will hand to `-sendEvent:`. */
++ (BOOL)cg_dispatchPending
+{
+	AGWindowServer *server = fn_server_if_connected();
+
+	if (server == NULL) {
+		return NO;
+	}
+	if (AGWindowServerDispatchTimeout(server, 0) < 0) {
+		s_connection_gone = 1;
+		return NO;
+	}
+	return s_queued_events > 0;
 }
 
 + (BOOL)cg_waitForEventInMilliseconds:(long)ms

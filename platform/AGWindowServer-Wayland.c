@@ -377,6 +377,7 @@ static void ag_window_maybe_frame(AGWindow *window)
 /* DEFINED WITH THE KEYBOARD HANDLERS, DECLARED HERE BECAUSE THE WINDOW TEARDOWN NEEDS IT TOO — a window going away
  * is one of the six ways a held key stops being held. */
 static void ag_repeat_cancel(AGWindowServer *server);
+static void ag_repeat_fire_if_due(AGWindowServer *server);
 
 static void ag_window_unlink(AGWindow *window)
 {
@@ -2330,6 +2331,25 @@ void AGWindowServerDisconnect(AGWindowServer *server)
 	free(server);
 }
 
+int AGWindowServerGetFd(AGWindowServer *server)
+{
+	if (server == NULL || server->display == NULL) {
+		return -1;
+	}
+	return wl_display_get_fd(server->display);
+}
+
+int AGWindowServerNextDeadlineMs(AGWindowServer *server)
+{
+	int32_t until;
+
+	if (server == NULL || !server->repeat_active || server->repeat_rate == 0) {
+		return -1;
+	}
+	until = (int32_t)(server->repeat_due_ms - ag_now_ms());
+	return (until < 0) ? 0 : (int)until;
+}
+
 int AGWindowServerDispatchPending(AGWindowServer *server)
 {
 	struct pollfd pfd;
@@ -2353,7 +2373,15 @@ int AGWindowServerDispatchPending(AGWindowServer *server)
 	} else {
 		wl_display_cancel_read(server->display);
 	}
-	return wl_display_dispatch_pending(server->display) < 0 ? -1 : 1;
+	if (wl_display_dispatch_pending(server->display) < 0) {
+		ag_server_error(server, "wl_display_dispatch_pending");
+		return -1;
+	}
+	/* **AND THE SEAM'S OWN CLOCK, WHICH THIS DOOR NOW TURNS AS WELL.** A held key's repeat is the compositor's
+	 * policy, and a loop that watches the connection as a run-loop source never calls the timeout form that used to
+	 * be the only place it was fired — so it is fired here, where every non-blocking dispatch comes through. */
+	ag_repeat_fire_if_due(server);
+	return 1;
 }
 
 int AGWindowServerDispatch(AGWindowServer *server)

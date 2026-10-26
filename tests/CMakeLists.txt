@@ -690,6 +690,18 @@ set_tests_properties(appkit-events-headless PROPERTIES SKIP_RETURN_CODE 77
 # a delayed perform, a performer from another thread and `dispatch_async(dispatch_get_main_queue(), …)` are all
 # delivered inside it — and a timer added for a mode it never runs is not. No window is made, so this case needs no
 # compositor and runs everywhere rather than skipping with the window tests.
+# **AND THE COMPOSITOR'S DESCRIPTOR IS ONE OF THE LOOP'S SOURCES.** A view paints only when the compositor asks for a
+# frame, so a paint produced by a `-runUntilDate:` wait with no manual pumping can only mean the connection was
+# serviced by the loop. The headless runner supplies the compositor; without one the case SKIPS (77).
+add_executable(appkit_runloop_connection appkit_runloop_connection.m)
+target_link_libraries(appkit_runloop_connection PRIVATE App)
+
+add_test(NAME appkit-runloop-connection
+  COMMAND "${CMAKE_CURRENT_SOURCE_DIR}/run-appkit-headless.sh" "$<TARGET_FILE:appkit_runloop_connection>" 3
+	  "all checks passed")
+set_tests_properties(appkit-runloop-connection PROPERTIES SKIP_RETURN_CODE 77
+  ENVIRONMENT "${_agora_app_test_env}")
+
 add_executable(appkit_runloop_timer appkit_runloop_timer.m)
 target_link_libraries(appkit_runloop_timer PRIVATE App dispatch)
 

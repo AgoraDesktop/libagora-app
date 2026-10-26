@@ -256,6 +256,19 @@ int AGWindowServerDispatchTimeout(AGWindowServer *server, int timeout_ms);
 /* Send anything buffered. */
 void AGWindowServerFlush(AGWindowServer *server);
 
+/* **THE CONNECTION'S DESCRIPTOR, WHICH IS WHAT A RUN LOOP WATCHES.** A loop waits on descriptors; until now this
+ * seam only offered "dispatch with a timeout", so an application's loop had to poll the compositor itself and could
+ * never share one wait with its timers, its other sources and the main dispatch queue. This is
+ * `wl_display_get_fd`, and -1 when there is no connection — **AND IT NEVER MAKES ONE**, because a caller asking for
+ * a descriptor is asking about a connection that exists. */
+int AGWindowServerGetFd(AGWindowServer *server);
+
+/* **AND THE SEAM'S OWN NEXT DEADLINE, IN MILLISECONDS, OR -1 FOR NONE.** The seam keeps one clock of its own: a held
+ * key's repeat, whose rate and delay come from the compositor's `wl_keyboard.repeat_info`. A loop that waits in
+ * CoreFoundation has no other way to learn that deadline, and a repeat that fires at the loop's cadence rather than
+ * at the rate the compositor asked for is a keyboard that stutters. */
+int AGWindowServerNextDeadlineMs(AGWindowServer *server);
+
 /* **WHETHER ANOTHER REQUEST WOULD FIT, WHICH IS HOW A CLIENT AVOIDS KILLING ITSELF.** A `wl_display_flush` that
  * cannot push everything answers `EAGAIN` and KEEPS the remainder in a fixed 4 KB buffer; a client that goes on
  * making requests then overflows it and libwayland closes the connection — "Data too big for buffer (4096 + 8 >

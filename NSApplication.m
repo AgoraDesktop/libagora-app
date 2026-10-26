@@ -11,12 +11,17 @@
  * thread, in a common mode — the main dispatch queue's port. That pass is taken once per frame, BEFORE the events
  * are read, which is the AppKit's own ordering: a timer fires, a view is marked dirty, and this frame paints it.
  *
- * THE WAIT ITSELF IS STILL BOUNDED, AND THAT IS DELIBERATE. The compositor's connection is a descriptor
- * CoreFoundation does not own, so the events are read with a deadline: one frame, and never past the loop's next
- * timer (`-limitDateForMode:`), which is what keeps a 60 Hz animation at 60 Hz instead of at the wait's resolution.
- * The consequence is the honest one: `-stop:` takes effect within a slice, which an unbounded wait could not
- * offer — a loop that only woke on an event could only be stopped BY an event, and a caller stopping it from a
- * delegate would wait forever.
+ * **AND THE WAIT IS THE RUN LOOP'S, WITH THE COMPOSITOR'S DESCRIPTOR AS ONE OF ITS SOURCES.** `NSWindow` registers
+ * the connection with the run loop where the connection is made (see its `fn_install_connection_source`), so the
+ * frame's wait covers the compositor, the timers, the fd sources, a performer from another thread and the main
+ * dispatch queue in ONE call — `-fnRunMode:forSeconds:returnAfterWork:`, which returns the moment anything was
+ * delivered and otherwise at the frame's deadline (or the seam's own, when a held key's repeat is due sooner).
+ * Nothing is polled: the compositor's events arrive because the loop was woken by its descriptor, not because a
+ * pass asked the connection whether it had anything.
+ *
+ * The consequence is still the honest one: the wait is BOUNDED by the frame, so `-stop:` takes effect within a
+ * slice even though a wake on input would have returned at once — a loop that only woke on an event could only be
+ * stopped BY an event, and a caller stopping it from a delegate would wait forever.
  *
  * AND THE DRAIN IS THE POINT OF THIS CLASS: an event is not delivered to a window until the APPLICATION asks
  * for it. `-nextEventMatchingMask:` drains the posted queue, then asks every window in the registry, and only
@@ -77,6 +82,13 @@
  * contract crossing a file boundary where it is CALLED. NSWindow keeps the ownership, and the note over its
  * implementation is still the explanation of why the connection is its to hand out. */
 + (AGWindowServer *)cg_sharedServer;
+/* **AND THE THREE DOORS THAT MAKE THE CONNECTION ONE OF THE LOOP'S OWN SOURCES** — the descriptor to watch, the
+ * seam's own next deadline (a held key's repeat), and the non-blocking take that turns readiness into queued
+ * NSEvents. The first two answer WITHOUT CONNECTING (`s_server`, not `fn_server()`): a loop asking about a
+ * descriptor must not make one, which is the rule this file already states for the zero-time poll. */
++ (int)cg_connectionFd;
++ (long)cg_nextDeadlineMs;
++ (BOOL)cg_dispatchPending;
 @end
 
 /* AND THE EVENT SEAM, WHICH IS THE SAME SHAPE FOR THE SAME REASON: NSEvent owns a monitor registry and a
@@ -605,6 +617,25 @@ BOOL NSApplicationLoad(void)
 static int s_passes;
 static double s_last_report;
 
+/* **AND HOW LONG THE PASS MAY WAIT.** One frame, unless the SEAM has a deadline sooner — a held key's repeat — in
+ * which case that is the deadline: the compositor asked for a repeat rate, and firing it at the frame's cadence
+ * instead is a keyboard that stutters. A closed connection or an empty process with no server at all has no source
+ * to wake it, so the frame's slice is also what keeps this loop from waiting forever on nothing. */
+- (double)cg_passSeconds
+{
+	double seconds = 1.0 / 60.0;
+	long deadline = [NSWindow cg_nextDeadlineMs];
+
+	if (deadline >= 0) {
+		double fromSeam = (double)deadline / 1000.0;
+
+		if (fromSeam < seconds) {
+			seconds = fromSeam;
+		}
+	}
+	return seconds;
+}
+
 - (void)run
 {
 	[self finishLaunching];
@@ -618,27 +649,23 @@ static double s_last_report;
 		/* A POOL PER PASS, because a loop that runs for the life of a process and never drains its own
 		 * autoreleased objects grows without bound — the reason a run loop owns a pool at all. */
 		id pool = [[NSClassFromString(@"NSAutoreleasePool") alloc] init];
-		/* **A SLICE IS A FRAME, NOT A TENTH OF A SECOND.** Every window is updated once per pass, so this number
-		 * IS the rate the desktop draws at: MEASURED, 0.1 s gave TEN passes per second — the whole interface
-		 * repainting ten times a second and every click waiting up to a tenth of one. A display's frame is the
-		 * honest deadline for a loop whose job is to keep windows drawn, and a loop with nothing to do now BLOCKS
-		 * on the compositor for the rest of the slice rather than waking to ask. BOTH LOOPS GET IT: this one and
-		 * the modal one below draw the same windows and were slow in the same way. */
-		NSDate *slice = [NSDate dateWithTimeIntervalSinceNow:1.0 / 60.0];
 		NSEvent *e;
 
 		/* THE UPDATE PAIR, ONCE PER PASS: Apple sends these when the loop is about to update the windows and
 		 * again when it has, which is what gives a delegate a place to change what is shown BETWEEN passes
 		 * rather than in response to an event. */
 		fn_announce(self, NSApplicationWillUpdateNotification, @selector(applicationWillUpdate:));
-		/* **A RUN-LOOP PASS IS PART OF THE FRAME, AND THAT IS WHAT MAKES TIMERS RUN.** The loop below waits on the
-		 * COMPOSITOR — a fd Core Foundation does not own — so a pass has to be given to `NSRunLoop` (which is
-		 * `CFRunLoopRunInMode`) before that wait, or a timer, an fd source, a `-performSelectorOnMainThread:` from a
-		 * worker and the main dispatch queue would all be delivered only when an event happened to arrive. This is
-		 * the AppKit's own ordering: timers fire, views are marked dirty, and THIS pass paints them. */
-		[[NSRunLoop currentRunLoop] runMode:NSDefaultRunLoopMode beforeDate:slice];
+		/* **THE WAIT IS THE RUN LOOP'S, AND THE CONNECTION IS ONE OF ITS SOURCES.** One frame's deadline (or the
+		 * seam's own, if it is sooner) is spent inside CoreFoundation, which wakes on the compositor's descriptor,
+		 * on a due timer, on a performer signalled by another thread and on the main dispatch queue's port — so a
+		 * pass no longer has to choose between "watch the compositor" and "let the rest of the loop run". A
+		 * handled source returns the pass at once; a timer does not make CoreFoundation return early on its own,
+		 * which is what the door's work counter is for. */
+		[[NSRunLoop currentRunLoop] fnRunMode:NSDefaultRunLoopMode
+					   forSeconds:[self cg_passSeconds]
+				      returnAfterWork:YES];
 		e = [self nextEventMatchingMask:NSAnyEventMask
-				       untilDate:slice
+				       untilDate:[NSDate distantPast]
 					  inMode:NSDefaultRunLoopMode
 					 dequeue:YES];
 
@@ -2015,20 +2042,18 @@ struct AGModalSession {
 	 * `NSModalPanelRunLoopMode` carries — but `-nextEventMatchingMask:` says of itself that it does not route by
 	 * one yet: a caller relying on the distinction would be relying on nothing, and this is where that is said. */
 	{
-		/* **A SLICE IS A FRAME, NOT A TENTH OF A SECOND.** Every window is updated once per pass, so this number
-		 * IS the rate the desktop draws at: MEASURED, 0.1 s gave TEN passes per second — the whole interface
-		 * repainting ten times a second and every click waiting up to a tenth of one. A display's frame is the
-		 * honest deadline for a loop whose job is to keep windows drawn, and a loop with nothing to do now BLOCKS
-		 * on the compositor for the rest of the slice rather than waking to ask. BOTH LOOPS GET IT: this one and
-		 * the modal one below draw the same windows and were slow in the same way. */
-		NSDate *slice = [NSDate dateWithTimeIntervalSinceNow:1.0 / 60.0];
 		/* A MODAL SESSION IS A FRAME TOO, in `NSModalPanelRunLoopMode` — so a timer or a performer scheduled for
-		 * that mode is delivered here, and one scheduled ONLY for the default mode is not (the mode rule). */
-		[[NSRunLoop currentRunLoop] runMode:NSModalPanelRunLoopMode beforeDate:slice];
-		NSEvent *e = [self nextEventMatchingMask:NSAnyEventMask
-					   untilDate:slice
-						  inMode:NSModalPanelRunLoopMode
-						 dequeue:YES];
+		 * that mode is delivered here, and one scheduled ONLY for the default mode is not (the mode rule). The
+		 * connection's source is in the common modes, so it is live in this one as well. */
+		NSEvent *e;
+
+		[[NSRunLoop currentRunLoop] fnRunMode:NSModalPanelRunLoopMode
+					   forSeconds:[self cg_passSeconds]
+				      returnAfterWork:YES];
+		e = [self nextEventMatchingMask:NSAnyEventMask
+				       untilDate:[NSDate distantPast]
+					  inMode:NSModalPanelRunLoopMode
+					 dequeue:YES];
 
 		/* THE SAME DRAIN AS THE MAIN LOOP: a modal session is a frame too, and taking one event per frame would
 		 * leave the same backlog behind a fast hand. */
