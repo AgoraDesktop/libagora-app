@@ -686,6 +686,17 @@ set_tests_properties(appkit-events-headless PROPERTIES SKIP_RETURN_CODE 77
 # a mask that named one event selected all of them (the `mask & NSAnyEventMask` pattern, in the posted queue, the
 # discard door AND the per-window queue); a compositor's close bypassed `-windowShouldClose:`; and a main-menu key
 # equivalent never reached the menu bar on the ordinary `-sendEvent:` route, only while a menu was tracking.
+# **THE APPLICATION'S LOOP IS A RUN LOOP.** `-[NSApplication run]` gives one `NSRunLoop` pass per frame, so a timer,
+# a delayed perform, a performer from another thread and `dispatch_async(dispatch_get_main_queue(), …)` are all
+# delivered inside it — and a timer added for a mode it never runs is not. No window is made, so this case needs no
+# compositor and runs everywhere rather than skipping with the window tests.
+add_executable(appkit_runloop_timer appkit_runloop_timer.m)
+target_link_libraries(appkit_runloop_timer PRIVATE App dispatch)
+
+add_test(NAME appkit-runloop-timer COMMAND appkit_runloop_timer)
+set_tests_properties(appkit-runloop-timer PROPERTIES TIMEOUT 60
+  ENVIRONMENT "${_agora_app_test_env}")
+
 add_executable(appkit_dispatch appkit_dispatch.m)
 target_link_libraries(appkit_dispatch PRIVATE App)
 

@@ -5,11 +5,18 @@
  * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
  * SPDX-License-Identifier: LGPL-3.0-or-later
  *
- * THE LOOP IS DELIBERATELY BOUNDED AND THAT IS A STATED DEVIATION. Apple's run loop waits in the run loop
- * until an event or a timer wakes it; this tree has no timer service wired into the loop yet, so each pass
- * waits on the CONNECTION for at most a slice. The consequence is the honest one: `-stop:` takes effect
- * within a slice, which an unbounded wait could not offer — a loop that only woke on an event could only be
- * stopped BY an event, and a caller stopping it from a delegate would wait forever.
+ * **EVERY PASS GIVES THE RUN LOOP A TURN AND THEN WAITS ON THE CONNECTION, AND THE FIRST HALF IS WHAT MAKES TIMERS
+ * RUN.** `NSRunLoop` is CoreFoundation's loop (see `libagora-base/NSRunLoop.m`), so one `-runMode:` pass delivers
+ * a due `NSTimer`, an fd source's readiness, a `-performSelectorOnMainThread:` from a worker and — on the main
+ * thread, in a common mode — the main dispatch queue's port. That pass is taken once per frame, BEFORE the events
+ * are read, which is the AppKit's own ordering: a timer fires, a view is marked dirty, and this frame paints it.
+ *
+ * THE WAIT ITSELF IS STILL BOUNDED, AND THAT IS DELIBERATE. The compositor's connection is a descriptor
+ * CoreFoundation does not own, so the events are read with a deadline: one frame, and never past the loop's next
+ * timer (`-limitDateForMode:`), which is what keeps a 60 Hz animation at 60 Hz instead of at the wait's resolution.
+ * The consequence is the honest one: `-stop:` takes effect within a slice, which an unbounded wait could not
+ * offer — a loop that only woke on an event could only be stopped BY an event, and a caller stopping it from a
+ * delegate would wait forever.
  *
  * AND THE DRAIN IS THE POINT OF THIS CLASS: an event is not delivered to a window until the APPLICATION asks
  * for it. `-nextEventMatchingMask:` drains the posted queue, then asks every window in the registry, and only
@@ -37,6 +44,7 @@
 #import "NSPrintOperation.h"
 
 #import <Foundation/NSThread.h>
+#import <Foundation/NSRunLoop.h>
 #import <AppKit/NSApplication.h>
 #import <AppKit/NSEvent.h>
 #import <AppKit/NSWindow.h>
@@ -623,7 +631,16 @@ static double s_last_report;
 		 * again when it has, which is what gives a delegate a place to change what is shown BETWEEN passes
 		 * rather than in response to an event. */
 		fn_announce(self, NSApplicationWillUpdateNotification, @selector(applicationWillUpdate:));
-		e = [self nextEventMatchingMask:NSAnyEventMask untilDate:slice inMode:nil dequeue:YES];
+		/* **A RUN-LOOP PASS IS PART OF THE FRAME, AND THAT IS WHAT MAKES TIMERS RUN.** The loop below waits on the
+		 * COMPOSITOR — a fd Core Foundation does not own — so a pass has to be given to `NSRunLoop` (which is
+		 * `CFRunLoopRunInMode`) before that wait, or a timer, an fd source, a `-performSelectorOnMainThread:` from a
+		 * worker and the main dispatch queue would all be delivered only when an event happened to arrive. This is
+		 * the AppKit's own ordering: timers fire, views are marked dirty, and THIS pass paints them. */
+		[[NSRunLoop currentRunLoop] runMode:NSDefaultRunLoopMode beforeDate:slice];
+		e = [self nextEventMatchingMask:NSAnyEventMask
+				       untilDate:slice
+					  inMode:NSDefaultRunLoopMode
+					 dequeue:YES];
 
 		/* **AND AN APPLICATION WHOSE WINDOW SERVER HAS GONE STOPS.** There is nothing left to draw on and no events
 		 * will ever come: a loop that keeps turning is a process nobody can tell is dead, and this one kept turning
@@ -822,6 +839,11 @@ static double s_last_report;
 	if (_mainMenu != nil && _menuBarWindow == nil) {
 		[self cg_updateMenuBarWindow];
 	}
+	/* **THE MODE, WHICH THIS DOOR USED TO DROP ON THE FLOOR.** It is `NSDefaultRunLoopMode` when the caller passed
+	 * nil (Apple's own reading), and it is what the run-loop pass below this door belongs to: a tracking loop that
+	 * asks for `NSEventTrackingRunLoopMode` gets that mode's timers and not the default ones. */
+	NSString *runMode = (mode != nil) ? mode : NSDefaultRunLoopMode;
+
 	/* **AND A QUEUED EVENT GIVES THE CONNECTION ITS TURN FIRST, ONCE PER PASS.** This door returns the durable queue
 	 * and the windows' queues BEFORE it ever waits, so under continuous input it returned event after event and the
 	 * native connection was never serviced: buffer-release and frame callbacks that arrive ON that connection stayed
@@ -886,11 +908,24 @@ static double s_last_report;
 		 * WHAT DECIDES. Waiting the remaining time means a pass ends when its deadline does. */
 		{
 			int wait_ms = 50;
+			/* **AND THE WAIT MUST NOT OVERSHOOT THE NEXT TIMER.** The block below is a wait on the COMPOSITOR's fd,
+			 * which Core Foundation does not watch; without this clamp a timer due in 2 ms would wait out the
+			 * rest of the slice here and fire a frame late — the difference between a 60 Hz animation and a
+			 * 20 Hz one. `-limitDateForMode:` is the loop's own answer to when its next timer is due, and nil
+			 * means none is scheduled, which is the ordinary case and costs one CF call per pass. */
+			NSDate *nextTimer = [[NSRunLoop currentRunLoop] limitDateForMode:runMode];
 
 			if (expiration != nil) {
 				double left = [expiration timeIntervalSinceNow] * 1000.0;
 
 				wait_ms = (left < 1.0) ? 1 : ((left < 50.0) ? (int)left : 50);
+			}
+			if (nextTimer != nil) {
+				double toTimer = [nextTimer timeIntervalSinceNow] * 1000.0;
+
+				/* A TIMER ALREADY DUE IS ONE PASS AWAY, so the wait is the shortest one that exists rather than a
+				 * negative number: the loop's own pass fires it. */
+				wait_ms = (toTimer < 1.0) ? 1 : ((toTimer < (double)wait_ms) ? (int)toTimer : wait_ms);
 			}
 			if (![NSWindow cg_waitForEventInMilliseconds:wait_ms]) {
 				if (expiration == nil) {
@@ -1987,6 +2022,9 @@ struct AGModalSession {
 		 * on the compositor for the rest of the slice rather than waking to ask. BOTH LOOPS GET IT: this one and
 		 * the modal one below draw the same windows and were slow in the same way. */
 		NSDate *slice = [NSDate dateWithTimeIntervalSinceNow:1.0 / 60.0];
+		/* A MODAL SESSION IS A FRAME TOO, in `NSModalPanelRunLoopMode` — so a timer or a performer scheduled for
+		 * that mode is delivered here, and one scheduled ONLY for the default mode is not (the mode rule). */
+		[[NSRunLoop currentRunLoop] runMode:NSModalPanelRunLoopMode beforeDate:slice];
 		NSEvent *e = [self nextEventMatchingMask:NSAnyEventMask
 					   untilDate:slice
 						  inMode:NSModalPanelRunLoopMode

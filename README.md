@@ -12,6 +12,18 @@ measured surface, the traps the last sessions paid for, and where the next hour 
 
 ## Status
 
+**THE APPLICATION'S LOOP IS A RUN LOOP.** `-[NSApplication run]` gives `NSRunLoop` one pass per frame before it
+reads the events, and `NSRunLoop` is Core Foundation's loop — so a due `NSTimer`, an fd source's readiness, a
+`-performSelectorOnMainThread:` from a worker and `dispatch_async(dispatch_get_main_queue(), …)` are all delivered
+inside an application. Before this, the loop was a pump over the compositor's descriptor and nothing else: timers
+scheduled by `NSAnimation`, `NSSearchFieldCell`'s delayed send, `NSDocumentController`'s autosave, `NSFileHandle`'s
+background reads and every `dispatch_async` to the main queue were silently dead. `-nextEventMatchingMask:` also
+honours its `inMode:` now (it was dropped), and its wait on the compositor is clamped to the loop's next timer, so a
+timer due in 2 ms is not held behind the frame's remaining 14. The unit proof is `libagora-base`'s `runloop_cf`; the
+application-level one is `appkit-runloop-timer` — a repeating timer, a delayed perform, a performer from a worker,
+a `dispatch_async` to the main queue and a timer in a mode the loop never runs, all through `-run` (`ctest`, no
+compositor needed: no window is made).
+
 **The AppKit is imported and its windows run on Agora's window server. The X11 seam is gone.** Above the
 window and view classes there is now a cell and control layer (buttons, switches, sliders, a segmented control, a progress indicator and a path
 bar), a tracking-area engine, one line of editable text with the standard key bindings, a title bar the client DRAWS
@@ -638,7 +650,7 @@ the compositor is really gone.
   while its slot is reserved either way so the caret does not jump on the first character. A press is hit-tested by
   the control BEFORE the text field opens a session, so the clear button clears and sends without leaving a caret in
   an empty field, and a press between the ornaments opens the session as usual. The probe fires the partial-string
-  timer BY HAND (the run loop is the test's own absence), checks that the immediate rule sends on the change and the
+  timer BY HAND (the probe owns no window and pumps no loop), checks that the immediate rule sends on the change and the
   whole-string rule only on Return, that a programmatic write does not send a second time, and that a Return adds the
   term to a bounded, deduped recents list. The template menu is built from the four tagged placeholders, and choosing
   a recent sends once. **74 checks.**
