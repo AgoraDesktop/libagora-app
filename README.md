@@ -21,8 +21,10 @@ background reads and every `dispatch_async` to the main queue were silently dead
 honours its `inMode:` now (it was dropped), and its whole wait is the run loop's: the compositor's descriptor is
 registered as a source where the connection is made (`AGWindowServerGetFd`), so one `-fnRunMode:forSeconds:` call
 covers the connection, the timers, the fd sources and the main dispatch queue — and the seam's own deadline (a held
-key's repeat, `AGWindowServerNextDeadlineMs`) bounds it when that is sooner than the frame. `appkit-runloop-connection`
-proves the causal half: a view in a plain `-runUntilDate:` wait paints because the compositor's frame callback arrived
+key's repeat, `AGWindowServerNextDeadlineMs`) bounds it when that is sooner than the frame. The public
+`-nextEventMatchingMask:untilDate:inMode:dequeue:` waits in that same place — a hand-pumped loop reaches the timers,
+the sources and the main dispatch queue while it waits, and keeps its fifty-millisecond cap so `-stop:` stays bounded.
+`appkit-runloop-connection` proves the causal half: a view in a plain `-runUntilDate:` wait paints because the compositor's frame callback arrived
 there, which cannot happen unless the loop was woken by the descriptor. The unit proof is `libagora-base`'s `runloop_cf`; the
 application-level one is `appkit-runloop-timer` — a repeating timer, a delayed perform, a performer from a worker,
 a `dispatch_async` to the main queue and a timer in a mode the loop never runs, all through `-run` (`ctest`, no

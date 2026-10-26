@@ -536,6 +536,13 @@ static void fn_install_connection_source(void)
 	if (s_server == NULL) {
 		return;
 	}
+	/* **THE LOOP THAT MATTERS IS THE MAIN THREAD'S.** A source is registered on the calling thread's loop and the
+	 * loop's own arrays are not locked, so a connection made on a worker thread cannot register one safely — and
+	 * would not be serviced anyway, because the loop an application runs is the main thread's. The connection is
+	 * still usable; it is served by whichever wait the program actually runs. */
+	if (![NSThread isMainThread]) {
+		return;
+	}
 	fd = AGWindowServerGetFd(s_server);
 	if (fd < 0 || fd == s_connection_source_fd) {
 		return;		/* nothing to watch, or the same descriptor already watched */

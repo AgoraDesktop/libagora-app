@@ -19,9 +19,14 @@
  * Nothing is polled: the compositor's events arrive because the loop was woken by its descriptor, not because a
  * pass asked the connection whether it had anything.
  *
- * The consequence is still the honest one: the wait is BOUNDED by the frame, so `-stop:` takes effect within a
- * slice even though a wake on input would have returned at once — a loop that only woke on an event could only be
- * stopped BY an event, and a caller stopping it from a delegate would wait forever.
+ * **AND `-nextEventMatchingMask:untilDate:inMode:dequeue:` WAITS IN THE SAME PLACE**, so a hand-pumped loop is not a
+ * second kind of loop: it reaches the timers, the sources and the main dispatch queue while it waits, and the
+ * connection is one of the sources it is waiting on rather than a timeout around them.
+ *
+ * The consequence is still the honest one: the wait is BOUNDED, by the frame in the loop and by the caller's own
+ * deadline (or the old fifty milliseconds) in the door, so `-stop:` takes effect within one of those even though a
+ * wake on input would have returned at once — a loop that only woke on an event could only be stopped BY an event,
+ * and a caller stopping it from a delegate would wait forever.
  *
  * AND THE DRAIN IS THE POINT OF THIS CLASS: an event is not delivered to a window until the APPLICATION asks
  * for it. `-nextEventMatchingMask:` drains the posted queue, then asks every window in the registry, and only
@@ -928,40 +933,33 @@ static double s_last_report;
 		if (expiration != nil && [expiration timeIntervalSinceNow] <= 0.0) {
 			return nil;
 		}
-		/* AND ONLY THEN THE WAIT, ON THE SERVER'S OWN CONNECTION. A slice rather than the whole remaining
-		 * time, so a window that appears mid-wait is drained rather than missed. */
-		/* **AND THE WAIT IS THE TIME LEFT, NOT A CONSTANT THAT OVERSHOOTS IT.** A fixed 50 ms under a 16 ms slice
-		 * would cap the loop at twenty passes a second however short the slice was — THE WAIT, NOT THE SLICE, IS
-		 * WHAT DECIDES. Waiting the remaining time means a pass ends when its deadline does. */
+		/* **AND ONLY THEN THE WAIT — AND IT IS THE RUN LOOP'S, THE SAME ONE THE FRAME USES.** This door used to
+		 * wait on the compositor's descriptor directly (`+cg_waitForEventInMilliseconds:`), which made a hand-pumped
+		 * loop and an application's loop two mechanisms with two different ideas of what could happen while
+		 * waiting: a timer did not fire in the first and a compositor event did not arrive in the second. Both wait
+		 * in one place now, so a caller that pumps through this door gets the timers, the fd sources, a performer
+		 * from another thread and the main dispatch queue for free — and the connection is one of those sources
+		 * rather than a timeout around them.
+		 *
+		 * THE WAIT IS WHAT THE CALLER ASKED FOR, capped at the old fifty milliseconds. The cap is not about the
+		 * descriptor: it is what bounds `-stop:` for a loop whose only work is this door, and it costs nothing when
+		 * something is due — `-fnRunMode:` returns the moment a timer fires or a source is handled, not when the
+		 * wait expires. A nil deadline means "until something happens", one cap at a time. */
 		{
-			int wait_ms = 50;
-			/* **AND THE WAIT MUST NOT OVERSHOOT THE NEXT TIMER.** The block below is a wait on the COMPOSITOR's fd,
-			 * which Core Foundation does not watch; without this clamp a timer due in 2 ms would wait out the
-			 * rest of the slice here and fire a frame late — the difference between a 60 Hz animation and a
-			 * 20 Hz one. `-limitDateForMode:` is the loop's own answer to when its next timer is due, and nil
-			 * means none is scheduled, which is the ordinary case and costs one CF call per pass. */
-			NSDate *nextTimer = [[NSRunLoop currentRunLoop] limitDateForMode:runMode];
+			double seconds = 0.05;
 
 			if (expiration != nil) {
-				double left = [expiration timeIntervalSinceNow] * 1000.0;
-
-				wait_ms = (left < 1.0) ? 1 : ((left < 50.0) ? (int)left : 50);
-			}
-			if (nextTimer != nil) {
-				double toTimer = [nextTimer timeIntervalSinceNow] * 1000.0;
-
-				/* A TIMER ALREADY DUE IS ONE PASS AWAY, so the wait is the shortest one that exists rather than a
-				 * negative number: the loop's own pass fires it. */
-				wait_ms = (toTimer < 1.0) ? 1 : ((toTimer < (double)wait_ms) ? (int)toTimer : wait_ms);
-			}
-			if (![NSWindow cg_waitForEventInMilliseconds:wait_ms]) {
-				if (expiration == nil) {
-					continue;
-				}
-				if ([expiration timeIntervalSinceNow] <= 0.0) {
+				seconds = [expiration timeIntervalSinceNow];
+				if (seconds <= 0.0) {
 					return nil;
 				}
+				if (seconds > 0.05) {
+					seconds = 0.05;
+				}
 			}
+			[[NSRunLoop currentRunLoop] fnRunMode:runMode
+						   forSeconds:seconds
+					      returnAfterWork:YES];
 		}
 	}
 }
