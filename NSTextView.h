@@ -99,7 +99,7 @@ enum {
 	NSTextSelectionGranularityDocument = 3
 };
 
-@interface NSTextView : NSText <NSTextInput, NSTextInputClient>
+@interface NSTextView : NSText <NSTextInput, NSTextInputClient, NSSecureCoding>
 {
 	/* **THE TRIO, AND THE VIEW OWNS THE FIRST TWO.** The store is RETAINED here and it retains the MANAGER (its own
 	 * list does); the manager retains the CONTAINER (its array does) and the container holds a BORROWED pointer back

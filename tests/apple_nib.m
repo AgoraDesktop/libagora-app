@@ -26,6 +26,7 @@
 #import <AppKit/NSImage.h>
 #import <AppKit/NSImageCell.h>
 #import <AppKit/NSImageView.h>
+#import <AppKit/NSTextView.h>
 #import <AppKit/NSMatrix.h>
 #import <AppKit/NSMenu.h>
 #import <AppKit/NSMenuItem.h>
@@ -321,6 +322,10 @@ build_layout_archive(void)
 	NSUInteger cImageCell = add_class(objects, @"NSImageCell");
 	NSUInteger cResource = add_class(objects, @"NSCustomResource");
 	NSUInteger cSwapper = add_class(objects, @"NSClassSwapper");
+	NSUInteger cTextView = add_class(objects, @"NSTextView");
+	NSUInteger cTextContainer = add_class(objects, @"NSTextContainer");
+	NSUInteger cLayoutManager = add_class(objects, @"NSLayoutManager");
+	NSUInteger cTextStorage = add_class(objects, @"NSTextStorage");
 	NSUInteger root;
 	NSUInteger font;
 	NSUInteger textColor;
@@ -332,6 +337,10 @@ build_layout_archive(void)
 	NSUInteger imageCell;
 	NSUInteger imageView;
 	NSUInteger swapper;
+	NSUInteger textStorage;
+	NSUInteger layoutManager;
+	NSUInteger textContainer;
+	NSUInteger textView;
 	NSUInteger cellA;
 	NSUInteger cellB;
 	NSUInteger cellsArray;
@@ -514,12 +523,33 @@ build_layout_archive(void)
 			@"NSView", @"NSOriginalClassName",
 			nil]);
 
+	textStorage = add_object(objects, cTextStorage,
+		[NSDictionary dictionaryWithObject:@"hello text" forKey:@"NSString"]);
+	layoutManager = add_object(objects, cLayoutManager,
+		[NSDictionary dictionaryWithObjectsAndKeys:
+			uid(textStorage), @"NSTextStorage",
+			nil]);
+	textContainer = add_object(objects, cTextContainer,
+		[NSDictionary dictionaryWithObjectsAndKeys:
+			uid(layoutManager), @"NSLayoutManager",
+			[NSNumber numberWithDouble:196.0], @"NSWidth",
+			nil]);
+	textView = add_object(objects, cTextView,
+		[NSDictionary dictionaryWithObjectsAndKeys:
+			@"{{0, 304}, {196, 80}}", @"NSFrame",
+			[NSNumber numberWithUnsignedInt:0x100u], @"NSvFlags",
+			uid(textContainer), @"NSTextContainer",
+			@"{10000000, 10000000}", @"NSMaxSize",
+			@"{0, 0}", @"NSMinize",
+			[NSNumber numberWithUnsignedInt:3u], @"NSTVFlags",
+			nil]);
+
 	subviewsArray = add_array(objects, cArray,
 		[NSArray arrayWithObjects:uid(box), uid(scroll), uid(slider), uid(imageView),
-					  uid(swapper), nil]);
+					  uid(swapper), uid(textView), nil]);
 	view = add_object(objects, cView,
 		[NSDictionary dictionaryWithObjectsAndKeys:
-			@"{{0, 0}, {200, 304}}", @"NSFrame",
+			@"{{0, 0}, {200, 384}}", @"NSFrame",
 			[NSNumber numberWithUnsignedInt:0x100u], @"NSvFlags",
 			uid(subviewsArray), @"NSSubviews",
 			nil]);
@@ -528,12 +558,13 @@ build_layout_archive(void)
 		uid(root), uid(view), uid(box), uid(inner), uid(titleCell), uid(font),
 		uid(scroll), uid(clip), uid(matrix), uid(cellA), uid(cellB),
 		uid(slider), uid(sliderCell), uid(imageView), uid(imageCell), uid(resource),
-		uid(swapper), nil]];
+		uid(swapper), uid(textView), uid(textContainer), uid(layoutManager),
+		uid(textStorage), nil]];
 	[owners addObjectsFromArray:[NSArray arrayWithObjects:
 		uid(root), uid(root), uid(view), uid(box), uid(box), uid(titleCell),
 		uid(view), uid(scroll), uid(clip), uid(matrix), uid(matrix),
 		uid(view), uid(slider), uid(view), uid(imageView), uid(imageCell),
-		uid(view), nil]];
+		uid(view), uid(view), uid(textView), uid(textContainer), uid(layoutManager), nil]];
 
 	keysArray = add_array(objects, cArray, keys);
 	valuesArray = add_array(objects, cArray, owners);
@@ -563,6 +594,7 @@ test_layout_translation(void)
 	NSView *view;
 	NSArray *subviews;
 	NSView *swapper;
+	NSTextView *textViewObject;
 	NSBox *box;
 	NSScrollView *scroll;
 	NSSlider *slider;
@@ -584,12 +616,13 @@ test_layout_translation(void)
 	      "the container nib instantiates");
 	view = [top count] == 1 ? [top objectAtIndex:0] : nil;
 	subviews = [view subviews];
-	check([subviews count] == 5, "the container view keeps all five children");
-	box = [subviews count] == 5 ? [subviews objectAtIndex:0] : nil;
-	scroll = [subviews count] == 5 ? [subviews objectAtIndex:1] : nil;
-	slider = [subviews count] == 5 ? [subviews objectAtIndex:2] : nil;
-	imageViewObject = [subviews count] == 5 ? [subviews objectAtIndex:3] : nil;
-	swapper = [subviews count] == 5 ? [subviews objectAtIndex:4] : nil;
+	check([subviews count] == 6, "the container view keeps all six children");
+	box = [subviews count] == 6 ? [subviews objectAtIndex:0] : nil;
+	scroll = [subviews count] == 6 ? [subviews objectAtIndex:1] : nil;
+	slider = [subviews count] == 6 ? [subviews objectAtIndex:2] : nil;
+	imageViewObject = [subviews count] == 6 ? [subviews objectAtIndex:3] : nil;
+	swapper = [subviews count] == 6 ? [subviews objectAtIndex:4] : nil;
+	textViewObject = [subviews count] == 6 ? [subviews objectAtIndex:5] : nil;
 
 	check([box isKindOfClass:[NSBox class]], "NSBox becomes an NSBox");
 	check([[box title] isEqualToString:@"Group"], "NSTitleCell becomes the box's title");
@@ -655,6 +688,12 @@ test_layout_translation(void)
 	check([swapper isKindOfClass:[NSView class]] &&
 	      NSEqualRects([swapper frame], NSMakeRect(70, 240, 60, 60)),
 	      "NSClassSwapper takes the class it names and its frame");
+	check([textViewObject isKindOfClass:[NSTextView class]],
+	      "NSTextView becomes an NSTextView");
+	check([[textViewObject string] isEqualToString:@"hello text"],
+	      "the string is read through NSTextContainer -> NSLayoutManager -> NSTextStorage");
+	check([textViewObject isHorizontallyResizable] && [textViewObject isVerticallyResizable],
+	      "NSTVFlags' two resizable bits travel");
 
 	[nib release];
 }
@@ -993,11 +1032,11 @@ test_unmapped_ledger(void)
 static void
 test_refusal_of_unsupported_class(void)
 {
-	NSDictionary *plist = build_archive(@"NSTextView", nil, NO);
+	NSDictionary *plist = build_archive(@"NSToolbar", nil, NO);
 	NSData *data = archive_data(plist);
 	NSString *reason = [NSNib refusalReasonForArchiveData:data];
 
-	check(reason != nil && [reason rangeOfString:@"NSTextView"].location != NSNotFound,
+	check(reason != nil && [reason rangeOfString:@"NSToolbar"].location != NSNotFound,
 	      "an unsupported Apple class is refused by name");
 }
 

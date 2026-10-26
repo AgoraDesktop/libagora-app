@@ -169,6 +169,7 @@ static BOOL fn_is_auxiliary_class(NSString *name)
 			@"NSString", @"NSMutableString", @"NSNumber", @"NSDate", @"NSData", @"NSValue",
 			@"NSFontManager", @"NSImage",
 			@"NSAttributedString", @"NSMutableAttributedString", @"NSParagraphStyle",
+			@"NSTextContainer", @"NSLayoutManager", @"NSTextStorage", @"NSTextViewSharedData",
 			nil];
 	}
 	return [auxiliary containsObject:name];
@@ -191,7 +192,8 @@ static BOOL fn_is_translated_view_class(NSString *name)
 	    || [name isEqualToString:@"NSSlider"]
 	    || [name isEqualToString:@"NSImageView"]
 	    || [name isEqualToString:@"NSBrowser"]
-	    || [name isEqualToString:@"NSClassSwapper"];
+	    || [name isEqualToString:@"NSClassSwapper"]
+	    || [name isEqualToString:@"NSTextView"];
 }
 
 static BOOL fn_is_translated_cell_class(NSString *name)
@@ -993,6 +995,64 @@ static BOOL fn_parse_color_components(NSData *data, CGFloat *values, NSUInteger 
 	return YES;
 }
 
+/* **A TEXT VIEW'S STRING IS NOT ON THE VIEW: IT IS THREE HOPS AWAY.** Apple archives the view, its `NSTextContainer`,
+ * that container's `NSLayoutManager` and the manager's `NSTextStorage`, whose `NSString` is the text (MEASURED on every
+ * corpus text view). The three system objects are AUXILIARY here — this tree's designated initialiser builds its own
+ * trio — so the translator FOLLOWS them only to read the string, and the view's own record states it. The private
+ * `NSSharedData` (typing attributes and selection) is left to defaults and named in the ledger. */
+- (NSString *)fnTextForTextViewEntry:(NSDictionary *)entry
+{
+	id containerValue = [entry objectForKey:@"NSTextContainer"];
+	id container = [self fnResolvedValue:containerValue];
+	id layout;
+	id storage;
+	id text;
+
+	if (![container isKindOfClass:[NSDictionary class]]) {
+		return nil;
+	}
+	layout = [self fnResolvedValue:[container objectForKey:@"NSLayoutManager"]];
+	if (![layout isKindOfClass:[NSDictionary class]]) {
+		return nil;
+	}
+	storage = [self fnResolvedValue:[layout objectForKey:@"NSTextStorage"]];
+	if (![storage isKindOfClass:[NSDictionary class]]) {
+		return nil;
+	}
+	text = [self fnResolvedValue:[storage objectForKey:@"NSString"]];
+	return [text isKindOfClass:[NSString class]] ? (NSString *)text : nil;
+}
+
+- (BOOL)fnBuildTextViewExtrasForEntry:(NSDictionary *)entry record:(NSMutableDictionary *)record
+{
+	NSNumber *number;
+	NSString *value;
+	NSString *text = [self fnTextForTextViewEntry:entry];
+
+	if (text != nil) {
+		[record setObject:text forKey:@"string"];
+	}
+	number = [self fnNumberValue:[entry objectForKey:@"NSTVFlags"]];
+	if (number != nil) {
+		unsigned int f = [number unsignedIntValue];
+
+		[record setObject:[NSNumber numberWithBool:((f & 0x1u) != 0)] forKey:@"horizontalResizable"];
+		[record setObject:[NSNumber numberWithBool:((f & 0x2u) != 0)] forKey:@"verticalResizable"];
+	}
+	if ((value = [self fnStringValue:[entry objectForKey:@"NSMaxSize"]]) != nil) {
+		[record setObject:[NSValue valueWithSize:NSSizeFromString(value)] forKey:@"maxSize"];
+	}
+	/* APPLE'S KEY IS `NSMinize`, A TYPO IT KEPT FOR A DECADE; the correct spelling is accepted too. */
+	value = [self fnStringValue:[entry objectForKey:@"NSMinize"]];
+	if (value == nil) {
+		value = [self fnStringValue:[entry objectForKey:@"NSMinSize"]];
+	}
+	if (value != nil) {
+		[record setObject:[NSValue valueWithSize:NSSizeFromString(value)] forKey:@"minSize"];
+	}
+	return YES;
+}
+
 - (BOOL)fnBuildViewRecordAtIndex:(NSUInteger)index
 			  appleClass:(NSString *)appleClass
 			      record:(NSMutableDictionary *)record
@@ -1061,6 +1121,11 @@ static BOOL fn_parse_color_components(NSData *data, CGFloat *values, NSUInteger 
 	/* **A BROWSER'S CONFIGURATION IS ITS OWN KEYS PLUS ONE FLAG WORD.** Apple's NSBrFlags carries the scroller, the
 	 * two selection rules, the arrow-key pair and the column separators; the rest are scalar properties. The MASKS are
 	 * GNUstep's `NSBrowser -initWithCoder:` (audit/corpus/libs-gui). */
+	if ([appleClass isEqualToString:@"NSTextView"]) {
+		if (![self fnBuildTextViewExtrasForEntry:entry record:record]) {
+			return NO;
+		}
+	}
 	if ([appleClass isEqualToString:@"NSBrowser"]) {
 		number = [self fnNumberValue:[entry objectForKey:@"NSBrFlags"]];
 		if (number != nil) {
@@ -1110,6 +1175,7 @@ static BOOL fn_parse_color_components(NSData *data, CGFloat *values, NSUInteger 
 		[self fnSetColorRef:[entry objectForKey:@"NSBackgroundColor"] key:@"NSBackgroundColor"
 			   inRecord:record as:@"backgroundColor" translated:NULL];
 	}
+
 
 	/* **AN IMAGE VIEW'S TWO EDIT FACTS ARE THE VIEW'S, NOT THE CELL'S.** NSEditable forwards to the cell in this
 	 * tree (the cell is what cut/copy/paste asks); NSAnimates and NSAllowsCutCopyPaste are the view's own flags. */
@@ -1190,6 +1256,10 @@ static BOOL fn_parse_color_components(NSData *data, CGFloat *values, NSUInteger 
 		} else if ([appleClass isEqualToString:@"NSClipView"]) {
 			[consumed addObjectsFromArray:[NSArray arrayWithObjects:
 				@"NSDocView", @"NScvFlags", @"NSBGColor", nil]];
+		} else if ([appleClass isEqualToString:@"NSTextView"]) {
+			[consumed addObjectsFromArray:[NSArray arrayWithObjects:
+				@"NSTextContainer", @"NSMaxSize", @"NSMinize", @"NSMinSize",
+				@"NSTVFlags", nil]];
 		} else if ([appleClass isEqualToString:@"NSBrowser"]) {
 			[consumed addObjectsFromArray:[NSArray arrayWithObjects:
 				@"NSBrFlags", @"NSMinColumnWidth", @"NSBrowserRowHeight",

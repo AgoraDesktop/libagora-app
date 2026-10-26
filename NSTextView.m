@@ -74,6 +74,93 @@ static void cg_announce(NSText *text, NSString *name, SEL delegateSelector)
 
 @implementation NSTextView
 
+/* **A TEXT VIEW'S DESIGN STATE IS ITS STRING AND ITS SIZING RULES, NOT ITS TEXT SYSTEM.** The storage, the layout
+ * manager and the container are built by the designated initialiser here; a decode repeats that construction and then
+ * states the text and the six properties a design chooses. The private `NSSharedData` an Apple archive also carries
+ * (typing attributes, selection) is left to the caller's defaults, and the translator names it in its ledger. */
+static NSString * const AGCoderTextViewStringKey = @"string";
+static NSString * const AGCoderTextViewEditableKey = @"editable";
+static NSString * const AGCoderTextViewSelectableKey = @"selectable";
+static NSString * const AGCoderTextViewRichKey = @"richText";
+static NSString * const AGCoderTextViewMinSizeKey = @"minSize";
+static NSString * const AGCoderTextViewMaxSizeKey = @"maxSize";
+static NSString * const AGCoderTextViewVerticalKey = @"verticalResizable";
+static NSString * const AGCoderTextViewHorizontalKey = @"horizontalResizable";
+static NSString * const AGCoderTextViewInsetKey = @"textContainerInset";
+
+- (void)encodeWithCoder:(NSCoder *)aCoder
+{
+	[super encodeWithCoder:aCoder];
+	[aCoder encodeObject:[self string] forKey:AGCoderTextViewStringKey];
+	[aCoder encodeBool:[self isEditable] forKey:AGCoderTextViewEditableKey];
+	[aCoder encodeBool:[self isSelectable] forKey:AGCoderTextViewSelectableKey];
+	[aCoder encodeBool:[self isRichText] forKey:AGCoderTextViewRichKey];
+	[aCoder encodeSize:[self minSize] forKey:AGCoderTextViewMinSizeKey];
+	[aCoder encodeSize:[self maxSize] forKey:AGCoderTextViewMaxSizeKey];
+	[aCoder encodeBool:[self isVerticallyResizable] forKey:AGCoderTextViewVerticalKey];
+	[aCoder encodeBool:[self isHorizontallyResizable] forKey:AGCoderTextViewHorizontalKey];
+	[aCoder encodeSize:[self textContainerInset] forKey:AGCoderTextViewInsetKey];
+}
+
+- (instancetype)initWithCoder:(NSCoder *)aDecoder
+{
+	NSRect frame = NSZeroRect;
+
+	if ([aDecoder containsValueForKey:@"frame"]) {
+		frame = [aDecoder decodeRectForKey:@"frame"];
+	}
+	/* THE DESIGNATED INITIALISER BUILDS THE TRIO; decoding on top of it is what keeps one construction path. */
+	self = [self initWithFrame:frame];
+	if (self == nil) {
+		return nil;
+	}
+	if ([aDecoder containsValueForKey:@"hidden"]) {
+		[self setHidden:[aDecoder decodeBoolForKey:@"hidden"]];
+	}
+	if ([aDecoder containsValueForKey:@"autoresizingMask"]) {
+		[self setAutoresizingMask:(NSUInteger)[aDecoder decodeIntegerForKey:@"autoresizingMask"]];
+	}
+	if ([aDecoder containsValueForKey:@"autoresizesSubviews"]) {
+		[self setAutoresizesSubviews:[aDecoder decodeBoolForKey:@"autoresizesSubviews"]];
+	}
+	if ([aDecoder containsValueForKey:@"tag"]) {
+		[self setTag:[aDecoder decodeIntegerForKey:@"tag"]];
+	}
+	if ([aDecoder containsValueForKey:AGCoderTextViewStringKey]) {
+		[self setString:[aDecoder decodeObjectForKey:AGCoderTextViewStringKey]];
+	}
+	if ([aDecoder containsValueForKey:AGCoderTextViewEditableKey]) {
+		[self setEditable:[aDecoder decodeBoolForKey:AGCoderTextViewEditableKey]];
+	}
+	if ([aDecoder containsValueForKey:AGCoderTextViewSelectableKey]) {
+		[self setSelectable:[aDecoder decodeBoolForKey:AGCoderTextViewSelectableKey]];
+	}
+	if ([aDecoder containsValueForKey:AGCoderTextViewRichKey]) {
+		[self setRichText:[aDecoder decodeBoolForKey:AGCoderTextViewRichKey]];
+	}
+	if ([aDecoder containsValueForKey:AGCoderTextViewMinSizeKey]) {
+		[self setMinSize:[aDecoder decodeSizeForKey:AGCoderTextViewMinSizeKey]];
+	}
+	if ([aDecoder containsValueForKey:AGCoderTextViewMaxSizeKey]) {
+		[self setMaxSize:[aDecoder decodeSizeForKey:AGCoderTextViewMaxSizeKey]];
+	}
+	if ([aDecoder containsValueForKey:AGCoderTextViewVerticalKey]) {
+		[self setVerticallyResizable:[aDecoder decodeBoolForKey:AGCoderTextViewVerticalKey]];
+	}
+	if ([aDecoder containsValueForKey:AGCoderTextViewHorizontalKey]) {
+		[self setHorizontallyResizable:[aDecoder decodeBoolForKey:AGCoderTextViewHorizontalKey]];
+	}
+	if ([aDecoder containsValueForKey:AGCoderTextViewInsetKey]) {
+		[self setTextContainerInset:[aDecoder decodeSizeForKey:AGCoderTextViewInsetKey]];
+	}
+	return self;
+}
+
++ (BOOL)supportsSecureCoding
+{
+	return YES;
+}
+
 - (instancetype)initWithFrame:(NSRect)frameRect
 {
 	return [self initWithFrame:frameRect textContainer:nil];
