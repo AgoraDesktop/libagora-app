@@ -52,6 +52,59 @@
 	return self;
 }
 
+/* **THE CODING DOOR, AND THE DOCUMENT VIEW IS THE ONE KEY THAT IS NOT JUST A FIELD.** `NSView`'s decode already
+ * brings in the subviews, but `-documentView` is a BORROWED pointer into that tree — a decode that only rebuilt the
+ * subviews would leave it nil and a clip view whose document cannot be asked for. So the document travels by name and
+ * is put back THROUGH `-setDocumentView:`, which is the door that re-establishes the notifications and the clamp. */
+static NSString * const AGCoderClipDocumentViewKey = @"documentView";
+static NSString * const AGCoderClipBackgroundKey = @"backgroundColor";
+static NSString * const AGCoderClipDrawsBackgroundKey = @"drawsBackground";
+static NSString * const AGCoderClipCopiesOnScrollKey = @"copiesOnScroll";
+
+- (void)encodeWithCoder:(NSCoder *)aCoder
+{
+	[super encodeWithCoder:aCoder];
+	[aCoder encodeObject:_docView forKey:AGCoderClipDocumentViewKey];
+	[aCoder encodeObject:_backgroundColor forKey:AGCoderClipBackgroundKey];
+	[aCoder encodeBool:_drawsBackground forKey:AGCoderClipDrawsBackgroundKey];
+	[aCoder encodeBool:_copiesOnScroll forKey:AGCoderClipCopiesOnScrollKey];
+}
+
+- (instancetype)initWithCoder:(NSCoder *)aDecoder
+{
+	self = [super initWithCoder:aDecoder];
+	if (self == nil) {
+		return nil;
+	}
+	/* THE FLAGS' DEFAULTS, and the flipped coordinate system a clip view is built with — neither is in the archive,
+	 * because both are the class's shape rather than the design's. */
+	[self setFlipped:YES];
+	_drawsBackground = YES;
+	_copiesOnScroll = YES;
+	if ([aDecoder containsValueForKey:AGCoderClipBackgroundKey]) {
+		_backgroundColor = [[aDecoder decodeObjectForKey:AGCoderClipBackgroundKey] retain];
+	}
+	if ([aDecoder containsValueForKey:AGCoderClipDrawsBackgroundKey]) {
+		_drawsBackground = [aDecoder decodeBoolForKey:AGCoderClipDrawsBackgroundKey];
+	}
+	if ([aDecoder containsValueForKey:AGCoderClipCopiesOnScrollKey]) {
+		_copiesOnScroll = [aDecoder decodeBoolForKey:AGCoderClipCopiesOnScrollKey];
+	}
+	if ([aDecoder containsValueForKey:AGCoderClipDocumentViewKey]) {
+		id view = [aDecoder decodeObjectForKey:AGCoderClipDocumentViewKey];
+
+		if ([view isKindOfClass:[NSView class]]) {
+			[self setDocumentView:view];
+		}
+	}
+	return self;
+}
+
++ (BOOL)supportsSecureCoding
+{
+	return YES;
+}
+
 - (void)dealloc
 {
 	/* **AND THE WATCH ENDS WITH THE VIEW.** The document is a retained subview and is still alive here, so the

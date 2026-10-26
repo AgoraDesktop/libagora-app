@@ -181,7 +181,11 @@ static BOOL fn_is_translated_view_class(NSString *name)
 	    || [name isEqualToString:@"NSButton"]
 	    || [name isEqualToString:@"NSTextField"]
 	    || [name isEqualToString:@"NSSplitView"]
-	    || [name isEqualToString:@"NSCustomView"];
+	    || [name isEqualToString:@"NSCustomView"]
+	    || [name isEqualToString:@"NSBox"]
+	    || [name isEqualToString:@"NSScrollView"]
+	    || [name isEqualToString:@"NSClipView"]
+	    || [name isEqualToString:@"NSMatrix"];
 }
 
 static BOOL fn_is_translated_cell_class(NSString *name)
@@ -485,6 +489,185 @@ static BOOL fn_is_translated_cell_class(NSString *name)
 
 /* ---- the table walk ------------------------------------------------------------------------ */
 
+
+/* ---- class-specific children and properties ------------------------------------------------- */
+
+/* ONE REFERENCE, PUT UNDER THIS TREE'S KEY. Geometry and scalars are translated where they are read; every object
+ * child goes through here, so "is this slot a UID" is answered once. */
+- (BOOL)fnSetRefFrom:(id)value key:(NSString *)key inRecord:(NSMutableDictionary *)record as:(NSString *)agnibKey
+{
+	NSUInteger index;
+
+	if (value == nil) {
+		return YES;
+	}
+	if (!fn_uid_index(value, &index)) {
+		return [self fnFail:[NSString stringWithFormat:@"%@ is not an object reference", key]];
+	}
+	[record setObject:[AGAppleNibRef refWithIndex:index] forKey:agnibKey];
+	return YES;
+}
+
+/* **NSBOX: ITS CHILD IS `NSContentView`, NOT `NSSubviews`.** Apple lists the content view in both; taking the
+ * `NSSubviews` array as well would add it twice (the box's own door re-parents it). `NSTitleCell` is the cell that
+ * draws the title, and `NSOffsets` is this tree's `contentViewMargins`. */
+- (BOOL)fnBuildBoxExtrasForEntry:(NSDictionary *)entry record:(NSMutableDictionary *)record
+{
+	NSNumber *number;
+	NSString *value;
+
+	if (![self fnSetRefFrom:[entry objectForKey:@"NSContentView"] key:@"NSContentView"
+		       inRecord:record as:@"contentView"]) {
+		return NO;
+	}
+	if (![self fnSetRefFrom:[entry objectForKey:@"NSTitleCell"] key:@"NSTitleCell"
+		       inRecord:record as:@"titleCell"]) {
+		return NO;
+	}
+	if ((value = [self fnStringValue:[entry objectForKey:@"NSOffsets"]]) != nil) {
+		[record setObject:[NSValue valueWithSize:NSSizeFromString(value)] forKey:@"contentViewMargins"];
+	}
+	number = [self fnNumberValue:[entry objectForKey:@"NSBoxType"]];
+	if (number != nil) {
+		[record setObject:number forKey:@"boxType"];
+	}
+	number = [self fnNumberValue:[entry objectForKey:@"NSBorderType"]];
+	if (number != nil) {
+		[record setObject:number forKey:@"borderType"];
+	}
+	number = [self fnNumberValue:[entry objectForKey:@"NSTitlePosition"]];
+	if (number != nil) {
+		[record setObject:number forKey:@"titlePosition"];
+	}
+	number = [self fnNumberValue:[entry objectForKey:@"NSTransparent"]];
+	if (number != nil) {
+		[record setObject:number forKey:@"transparent"];
+	}
+	return YES;
+}
+
+/* **NSScrollView: APPLE'S `NSsFlags` IS THE DESIGN, AND THE SCROLLER OBJECTS ARE ITS RENDERED FORM.** The low two bits
+ * are the border type, 16 and 32 say a bar exists, and 512 is autohide (GNUstep's `NSScrollView -initWithCoder:`
+ * reads exactly these). This tree creates its own bars from those flags, so the archived `NSScroller`s are dropped
+ * rather than translated; that is why they are in the consumed list below. */
+- (BOOL)fnBuildScrollViewExtrasForEntry:(NSDictionary *)entry record:(NSMutableDictionary *)record
+{
+	NSNumber *number;
+	unsigned int flags;
+
+	if (![self fnSetRefFrom:[entry objectForKey:@"NSContentView"] key:@"NSContentView"
+		       inRecord:record as:@"contentView"]) {
+		return NO;
+	}
+	number = [self fnNumberValue:[entry objectForKey:@"NSsFlags"]];
+	if (number != nil) {
+		flags = [number unsignedIntValue];
+		[record setObject:[NSNumber numberWithUnsignedInteger:(flags & 3u)] forKey:@"borderType"];
+		[record setObject:[NSNumber numberWithBool:((flags & 16u) != 0)]
+			   forKey:@"hasVerticalScroller"];
+		[record setObject:[NSNumber numberWithBool:((flags & 32u) != 0)]
+			   forKey:@"hasHorizontalScroller"];
+		[record setObject:[NSNumber numberWithBool:((flags & 512u) != 0)]
+			   forKey:@"autohidesScrollers"];
+	}
+	return YES;
+}
+
+/* **NSClipView: THE DOCUMENT IS `NSDocView` AND IS BORROWED.** It is put back through `-setDocumentView:`, which is
+ * what re-registers the frame/bounds notifications and clamps the origin. `NScvFlags` bits 4 and 2 are
+ * drawsBackground and no-copy-on-scroll. */
+- (BOOL)fnBuildClipViewExtrasForEntry:(NSDictionary *)entry record:(NSMutableDictionary *)record
+{
+	id document = [entry objectForKey:@"NSDocView"];
+	NSNumber *number;
+	NSArray *subviews;
+
+	if (document == nil) {
+		subviews = [self fnArrayValue:[entry objectForKey:@"NSSubviews"]];
+		if ([subviews count] > 0) {
+			document = [subviews objectAtIndex:0];
+		}
+	}
+	if (![self fnSetRefFrom:document key:@"NSDocView" inRecord:record as:@"documentView"]) {
+		return NO;
+	}
+	number = [self fnNumberValue:[entry objectForKey:@"NScvFlags"]];
+	if (number != nil) {
+		unsigned int flags = [number unsignedIntValue];
+
+		[record setObject:[NSNumber numberWithBool:((flags & 4u) != 0)] forKey:@"drawsBackground"];
+		[record setObject:[NSNumber numberWithBool:((flags & 2u) == 0)] forKey:@"copiesOnScroll"];
+	}
+	return YES;
+}
+
+/* **NSMatrix: APPLE'S `NSCells` IS FLAT AND THIS TREE'S `NSMatrixCells` IS AN ARRAY OF ROWS.** The rows and columns
+ * come from `NSNumRows`/`NSNumCols`, the sizes are strings, and the selected cell is a REFERENCE into the flat array
+ * that becomes the per-slot boolean array this tree archives. `NSMatrixFlags` is intentionally not translated: its
+ * bitfield's byte order differs between the PowerPC-era writers these archives come from, and a guessed mode is
+ * worse than the list mode this tree defaults to (the ledger names it). */
+- (BOOL)fnBuildMatrixExtrasForEntry:(NSDictionary *)entry record:(NSMutableDictionary *)record
+{
+	NSArray *flat = [self fnArrayValue:[entry objectForKey:@"NSCells"]];
+	NSNumber *rowsValue = [self fnNumberValue:[entry objectForKey:@"NSNumRows"]];
+	NSNumber *colsValue = [self fnNumberValue:[entry objectForKey:@"NSNumCols"]];
+	NSInteger rows = (rowsValue != nil) ? [rowsValue integerValue] : 0;
+	NSInteger cols = (colsValue != nil) ? [colsValue integerValue] : 0;
+	NSMutableArray *rowArrays;
+	NSMutableArray *selectedFlags;
+	NSUInteger selectedIndex = NSNotFound;
+	NSUInteger selectedValue = 0;
+	BOOL haveSelected = NO;
+	NSString *value;
+	NSInteger r, c;
+
+	if (flat == nil || rows <= 0 || cols <= 0 || (NSUInteger)(rows * cols) != [flat count]) {
+		return [self fnFail:[NSString stringWithFormat:
+			@"its NSMatrix cells (%lu) do not match %ld rows by %ld columns",
+			(unsigned long)[flat count], (long)rows, (long)cols]];
+	}
+	if ([entry objectForKey:@"NSSelectedCell"] != nil) {
+		haveSelected = fn_uid_index([entry objectForKey:@"NSSelectedCell"], &selectedValue);
+	}
+	for (r = 0; r < rows * cols; r++) {
+		NSUInteger cellIndex;
+
+		if (!fn_uid_index([flat objectAtIndex:(NSUInteger)r], &cellIndex)) {
+			return [self fnFail:@"an NSMatrix cell is not an object reference"];
+		}
+		if (haveSelected && cellIndex == selectedValue) {
+			selectedIndex = (NSUInteger)r;
+		}
+	}
+	rowArrays = [NSMutableArray arrayWithCapacity:(NSUInteger)rows];
+	selectedFlags = [NSMutableArray arrayWithCapacity:(NSUInteger)(rows * cols)];
+	for (r = 0; r < rows; r++) {
+		NSMutableArray *row = [NSMutableArray arrayWithCapacity:(NSUInteger)cols];
+
+		for (c = 0; c < cols; c++) {
+			NSUInteger cellIndex;
+			NSUInteger slot = (NSUInteger)(r * cols + c);
+
+			fn_uid_index([flat objectAtIndex:slot], &cellIndex);
+			[row addObject:[AGAppleNibRef refWithIndex:cellIndex]];
+			[selectedFlags addObject:[NSNumber numberWithBool:(slot == selectedIndex)]];
+		}
+		[rowArrays addObject:row];
+	}
+	[record setObject:rowArrays forKey:@"NSMatrixCells"];
+	[record setObject:selectedFlags forKey:@"NSMatrixSelected"];
+	[record setObject:[NSNumber numberWithInteger:rows] forKey:@"NSMatrixRows"];
+	[record setObject:[NSNumber numberWithInteger:cols] forKey:@"NSMatrixColumns"];
+	if ((value = [self fnStringValue:[entry objectForKey:@"NSCellSize"]]) != nil) {
+		[record setObject:[NSValue valueWithSize:NSSizeFromString(value)] forKey:@"NSMatrixCellSize"];
+	}
+	if ((value = [self fnStringValue:[entry objectForKey:@"NSIntercellSpacing"]]) != nil) {
+		[record setObject:[NSValue valueWithSize:NSSizeFromString(value)]
+			   forKey:@"NSMatrixIntercellSpacing"];
+	}
+	return YES;
+}
+
 - (BOOL)fnBuildViewRecordAtIndex:(NSUInteger)index
 			  appleClass:(NSString *)appleClass
 			      record:(NSMutableDictionary *)record
@@ -548,7 +731,26 @@ static BOOL fn_is_translated_cell_class(NSString *name)
 		return [self fnFail:[NSString stringWithFormat:
 			@"%@ carries autolayout constraints, which this translator does not map yet", appleClass]];
 	}
-	if ([entry objectForKey:@"NSSubviews"] != nil) {
+	/* **THE CLASSES WHOSE CHILD IS NOT `NSSubviews`.** Each of these owns its children through a typed door (a box's
+	 * content view, a scroll view's clip view, a clip view's document, a matrix's cells), so taking the generic array
+	 * as well would add the same object twice. The extras functions above state each one's own spelling. */
+	if ([appleClass isEqualToString:@"NSBox"]) {
+		if (![self fnBuildBoxExtrasForEntry:entry record:record]) {
+			return NO;
+		}
+	} else if ([appleClass isEqualToString:@"NSScrollView"]) {
+		if (![self fnBuildScrollViewExtrasForEntry:entry record:record]) {
+			return NO;
+		}
+	} else if ([appleClass isEqualToString:@"NSClipView"]) {
+		if (![self fnBuildClipViewExtrasForEntry:entry record:record]) {
+			return NO;
+		}
+	} else if ([appleClass isEqualToString:@"NSMatrix"]) {
+		if (![self fnBuildMatrixExtrasForEntry:entry record:record]) {
+			return NO;
+		}
+	} else if ([entry objectForKey:@"NSSubviews"] != nil) {
 		items = [self fnArrayValue:[entry objectForKey:@"NSSubviews"]];
 		if (items == nil) {
 			return [self fnFail:[NSString stringWithFormat:@"%@'s NSSubviews is not a collection", appleClass]];
@@ -574,11 +776,30 @@ static BOOL fn_is_translated_cell_class(NSString *name)
 		[record setObject:[AGAppleNibRef refWithIndex:cellIndex] forKey:@"cell"];
 	}
 
-	[self fnNoteUnmappedForEntry:entry className:appleClass
-			    consumed:[NSSet setWithObjects:
-				@"NSFrame", @"NSFrameSize", @"NSvFlags", @"NSToolTip",
-				@"NSSubviews", @"NSCell", @"NSAllowsLogicalLayoutDirection",
-				@"NSNextKeyView", @"NSPreviousKeyView", nil]];
+	{
+		NSMutableSet *consumed = [NSMutableSet setWithObjects:
+			@"NSFrame", @"NSFrameSize", @"NSvFlags", @"NSToolTip", @"NSSubviews",
+			@"NSCell", @"NSAllowsLogicalLayoutDirection", @"NSNextKeyView",
+			@"NSPreviousKeyView", nil];
+
+		if ([appleClass isEqualToString:@"NSBox"]) {
+			[consumed addObjectsFromArray:[NSArray arrayWithObjects:
+				@"NSContentView", @"NSTitleCell", @"NSOffsets", @"NSBoxType",
+				@"NSBorderType", @"NSTitlePosition", @"NSTransparent", nil]];
+		} else if ([appleClass isEqualToString:@"NSScrollView"]) {
+			[consumed addObjectsFromArray:[NSArray arrayWithObjects:
+				@"NSContentView", @"NSsFlags", @"NSVScroller", @"NSHScroller", nil]];
+		} else if ([appleClass isEqualToString:@"NSClipView"]) {
+			[consumed addObjectsFromArray:[NSArray arrayWithObjects:
+				@"NSDocView", @"NScvFlags", nil]];
+		} else if ([appleClass isEqualToString:@"NSMatrix"]) {
+			[consumed addObjectsFromArray:[NSArray arrayWithObjects:
+				@"NSCells", @"NSNumRows", @"NSNumCols", @"NSCellSize",
+				@"NSIntercellSpacing", @"NSSelectedCell", @"NSMatrixFlags",
+				@"NSCellClass", @"NSProtoCell", @"NSEnabled", nil]];
+		}
+		[self fnNoteUnmappedForEntry:entry className:appleClass consumed:consumed];
+	}
 	return YES;
 }
 
@@ -645,9 +866,10 @@ static BOOL fn_is_translated_cell_class(NSString *name)
 		 * MODEL, and this tree keeps the two in separate ivars.** A text field reads `objectValue`; a button
 		 * reads `title`, so both are stated for the button. */
 		[record setObject:value forKey:@"objectValue"];
-		if ([appleClass isEqualToString:@"NSButtonCell"]) {
-			[record setObject:value forKey:@"title"];
-		}
+		/* **AND THE TITLE, FOR EVERY CELL.** A button draws `-title`; a box's `-title` is its TITLE
+		 * CELL's title; a field reads `-objectValue`. Apple's `NSContents` is the one string all three
+		 * stand on, so it is written under both names rather than guessed per class. */
+		[record setObject:value forKey:@"title"];
 	}
 	if ((value = [self fnStringValue:[entry objectForKey:@"NSKeyEquivalent"]]) != nil) {
 		[record setObject:value forKey:@"keyEquivalent"];

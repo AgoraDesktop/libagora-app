@@ -36,7 +36,7 @@ NS_ASSUME_NONNULL_BEGIN
 @class NSEvent;
 @class NSNotification;
 
-@interface NSClipView : NSView
+@interface NSClipView : NSView <NSSecureCoding>
 {
 	/* BORROWED: the document view is a SUBVIEW, so the superview relationship already owns it and a second
 	 * retained pointer would be a second owner. */

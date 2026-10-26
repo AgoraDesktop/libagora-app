@@ -54,7 +54,7 @@ enum {
 	NSBelowBottom = 6
 };
 
-@interface NSBox : NSView
+@interface NSBox : NSView <NSSecureCoding>
 {
 	NSBoxType _boxType;
 	NSBorderType _borderType;

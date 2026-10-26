@@ -16,7 +16,11 @@
  * translator can get either half right and still not load a nib.
  */
 #import <AppKit/AGAppleNib.h>
+#import <AppKit/NSBox.h>
 #import <AppKit/NSButton.h>
+#import <AppKit/NSClipView.h>
+#import <AppKit/NSMatrix.h>
+#import <AppKit/NSScrollView.h>
 #import <AppKit/NSCell.h>
 #import <AppKit/NSControl.h>
 #import <AppKit/NSNib.h>
@@ -267,6 +271,208 @@ archive_data(NSDictionary *plist)
 	return data;
 }
 
+
+/* **THE SECOND FIXTURE: THE CONTAINERS.** A box with a content view and a title cell, a scroll view with a clip view
+ * and a matrix document, and the matrix's flat cell array — the four classes the first slice refused. They are built
+ * with the SAME Apple spelling as the first fixture (`NSContentView`, `NSDocView`, `NSsFlags`, `NScvFlags`,
+ * `NSCells`, `NSSubviews`), so this is the translator's own table being exercised rather than a shortcut. */
+static NSDictionary *
+build_layout_archive(void)
+{
+	NSMutableArray *objects = [NSMutableArray arrayWithObject:@"$null"];
+	NSUInteger cObjectData = add_class(objects, @"NSIBObjectData");
+	NSUInteger cArray = add_class(objects, @"NSArray");
+	NSUInteger cCustom = add_class(objects, @"NSCustomObject");
+	NSUInteger cView = add_class(objects, @"NSView");
+	NSUInteger cBox = add_class(objects, @"NSBox");
+	NSUInteger cScroll = add_class(objects, @"NSScrollView");
+	NSUInteger cClip = add_class(objects, @"NSClipView");
+	NSUInteger cMatrix = add_class(objects, @"NSMatrix");
+	NSUInteger cButtonCell = add_class(objects, @"NSButtonCell");
+	NSUInteger cFieldCell = add_class(objects, @"NSTextFieldCell");
+	NSUInteger root;
+	NSUInteger cellA;
+	NSUInteger cellB;
+	NSUInteger cellsArray;
+	NSUInteger matrix;
+	NSUInteger clip;
+	NSUInteger scroll;
+	NSUInteger titleCell;
+	NSUInteger inner;
+	NSUInteger box;
+	NSUInteger view;
+	NSUInteger subviewsArray;
+	NSUInteger keysArray;
+	NSUInteger valuesArray;
+	NSUInteger objectData;
+	NSMutableArray *keys = [NSMutableArray array];
+	NSMutableArray *owners = [NSMutableArray array];
+	NSDictionary *properties;
+
+	root = add_object(objects, cCustom,
+			  [NSDictionary dictionaryWithObject:@"Owner" forKey:@"NSClassName"]);
+
+	cellA = add_object(objects, cButtonCell,
+		[NSDictionary dictionaryWithObjectsAndKeys:
+			[NSNumber numberWithUnsignedInt:0x04000000u], @"NSCellFlags",
+			@"A", @"NSContents",
+			nil]);
+	cellB = add_object(objects, cButtonCell,
+		[NSDictionary dictionaryWithObjectsAndKeys:
+			[NSNumber numberWithUnsignedInt:0x04000000u], @"NSCellFlags",
+			@"B", @"NSContents",
+			nil]);
+	cellsArray = add_array(objects, cArray,
+		[NSArray arrayWithObjects:uid(cellA), uid(cellB), nil]);
+
+	/* THE MATRIX: two rows by one column, the first cell selected, its cells flat in Apple's order. */
+	matrix = add_object(objects, cMatrix,
+		[NSDictionary dictionaryWithObjectsAndKeys:
+			@"{{0, 0}, {100, 40}}", @"NSFrame",
+			[NSNumber numberWithUnsignedInt:0u], @"NSvFlags",
+			uid(cellsArray), @"NSCells",
+			[NSNumber numberWithInt:2], @"NSNumRows",
+			[NSNumber numberWithInt:1], @"NSNumCols",
+			@"{100, 20}", @"NSCellSize",
+			@"{0, 0}", @"NSIntercellSpacing",
+			uid(cellA), @"NSSelectedCell",
+			nil]);
+
+	titleCell = add_object(objects, cFieldCell,
+		[NSDictionary dictionaryWithObjectsAndKeys:
+			[NSNumber numberWithUnsignedInt:0u], @"NSCellFlags",
+			@"Group", @"NSContents",
+			nil]);
+
+	inner = add_object(objects, cView,
+		[NSDictionary dictionaryWithObjectsAndKeys:
+			@"{{4, 4}, {192, 80}}", @"NSFrame",
+			[NSNumber numberWithUnsignedInt:0x100u], @"NSvFlags",
+			nil]);
+
+	/* THE BOX: its content view is BOTH `NSContentView` and an entry in `NSSubviews`, which is Apple's own shape. */
+	box = add_object(objects, cBox,
+		[NSDictionary dictionaryWithObjectsAndKeys:
+			@"{{0, 0}, {200, 100}}", @"NSFrame",
+			[NSNumber numberWithUnsignedInt:0x100u], @"NSvFlags",
+			uid(inner), @"NSContentView",
+			uid(titleCell), @"NSTitleCell",
+			@"{3, 3}", @"NSOffsets",
+			[NSNumber numberWithInt:0], @"NSBoxType",
+			[NSNumber numberWithInt:0], @"NSBorderType",
+			[NSNumber numberWithInt:0], @"NSTitlePosition",
+			[NSNumber numberWithBool:NO], @"NSTransparent",
+			uid(inner), @"NSSubviews",
+			nil]);
+
+	clip = add_object(objects, cClip,
+		[NSDictionary dictionaryWithObjectsAndKeys:
+			@"{{0, 0}, {190, 90}}", @"NSFrame",
+			[NSNumber numberWithUnsignedInt:0u], @"NSvFlags",
+			uid(matrix), @"NSDocView",
+			[NSNumber numberWithUnsignedInt:4u], @"NScvFlags",
+			uid(matrix), @"NSSubviews",
+			nil]);
+
+	/* NSsFlags: border 0, vertical 16, horizontal 32, autohide 512. */
+	scroll = add_object(objects, cScroll,
+		[NSDictionary dictionaryWithObjectsAndKeys:
+			@"{{0, 110}, {200, 100}}", @"NSFrame",
+			[NSNumber numberWithUnsignedInt:0x100u], @"NSvFlags",
+			uid(clip), @"NSContentView",
+			[NSNumber numberWithUnsignedInt:560u], @"NSsFlags",
+			nil]);
+
+	subviewsArray = add_array(objects, cArray,
+		[NSArray arrayWithObjects:uid(box), uid(scroll), nil]);
+	view = add_object(objects, cView,
+		[NSDictionary dictionaryWithObjectsAndKeys:
+			@"{{0, 0}, {200, 220}}", @"NSFrame",
+			[NSNumber numberWithUnsignedInt:0x100u], @"NSvFlags",
+			uid(subviewsArray), @"NSSubviews",
+			nil]);
+
+	[keys addObjectsFromArray:[NSArray arrayWithObjects:
+		uid(root), uid(view), uid(box), uid(inner), uid(titleCell), uid(scroll),
+		uid(clip), uid(matrix), uid(cellA), uid(cellB), nil]];
+	[owners addObjectsFromArray:[NSArray arrayWithObjects:
+		uid(root), uid(root), uid(view), uid(box), uid(box), uid(view),
+		uid(scroll), uid(clip), uid(matrix), uid(matrix), nil]];
+
+	keysArray = add_array(objects, cArray, keys);
+	valuesArray = add_array(objects, cArray, owners);
+	objectData = add_object(objects, cObjectData,
+		[NSDictionary dictionaryWithObjectsAndKeys:
+			uid(keysArray), @"NSObjectsKeys",
+			uid(valuesArray), @"NSObjectsValues",
+			uid(root), @"NSRoot",
+			nil]);
+	properties = [NSMutableDictionary dictionaryWithObjectsAndKeys:
+		[NSNumber numberWithInt:100000], @"$version",
+		@"NSKeyedArchiver", @"$archiver",
+		objects, @"$objects",
+		[NSDictionary dictionaryWithObject:uid(objectData) forKey:@"IB.objectdata"], @"$top",
+		nil];
+	return properties;
+}
+
+static void
+test_layout_translation(void)
+{
+	NSDictionary *plist = build_layout_archive();
+	NSData *data = archive_data(plist);
+	NSString *path;
+	NSNib *nib;
+	NSArray *top = nil;
+	NSView *view;
+	NSArray *subviews;
+	NSBox *box;
+	NSScrollView *scroll;
+	NSMatrix *matrix;
+	NSString *reason = nil;
+
+	check([AGAppleNib validateAppleNibArchive:plist reason:&reason],
+	      "the container fixture validates");
+	check([NSNib refusalReasonForArchiveData:data] == nil, "the container fixture is accepted");
+
+	path = [NSTemporaryDirectory() stringByAppendingPathComponent:@"agora-apple-nib-layout.nib"];
+	[data writeToFile:path atomically:YES];
+	nib = [[NSNib alloc] initWithContentsOfURL:[NSURL fileURLWithPath:path]];
+	check([nib instantiateNibWithOwner:nil topLevelObjects:&top],
+	      "the container nib instantiates");
+	view = [top count] == 1 ? [top objectAtIndex:0] : nil;
+	subviews = [view subviews];
+	check([subviews count] == 2, "the container view keeps both children");
+	box = [subviews count] == 2 ? [subviews objectAtIndex:0] : nil;
+	scroll = [subviews count] == 2 ? [subviews objectAtIndex:1] : nil;
+
+	check([box isKindOfClass:[NSBox class]], "NSBox becomes an NSBox");
+	check([[box title] isEqualToString:@"Group"], "NSTitleCell becomes the box's title");
+	check([box contentView] != nil && [box contentView] != (NSView *)box,
+	      "NSContentView becomes the box's content view");
+	check(NSEqualSizes([box contentViewMargins], NSMakeSize(3, 3)),
+	      "NSOffsets becomes the content view margins");
+	check([[box contentView] superview] == (NSView *)box && [[box subviews] count] == 1,
+	      "the content view is not added twice");
+
+	check([scroll isKindOfClass:[NSScrollView class]], "NSScrollView becomes an NSScrollView");
+	check([scroll hasVerticalScroller] && [scroll hasHorizontalScroller],
+	      "NSsFlags creates both scrollers");
+	check([[scroll contentView] isKindOfClass:[NSClipView class]],
+	      "NSContentView becomes the clip view");
+	matrix = (NSMatrix *)[scroll documentView];
+	check([matrix isKindOfClass:[NSMatrix class]], "NSDocView becomes the document view");
+	check([matrix numberOfRows] == 2 && [matrix numberOfColumns] == 1,
+	      "the flat NSCells regroup into two rows by one column");
+	check([[[matrix cellAtRow:0 column:0] title] isEqualToString:@"A"] &&
+	      [[[matrix cellAtRow:1 column:0] title] isEqualToString:@"B"],
+	      "the matrix's cell titles travel");
+	check([matrix selectedRow] == 0 && [matrix selectedColumn] == 0,
+	      "NSSelectedCell becomes the selected slot");
+
+	[nib release];
+}
+
 /* ============================== THE TESTS ======================================================= */
 
 static void
@@ -336,11 +542,11 @@ test_unmapped_ledger(void)
 static void
 test_refusal_of_unsupported_class(void)
 {
-	NSDictionary *plist = build_archive(@"NSBox", nil, NO);
+	NSDictionary *plist = build_archive(@"NSTextView", nil, NO);
 	NSData *data = archive_data(plist);
 	NSString *reason = [NSNib refusalReasonForArchiveData:data];
 
-	check(reason != nil && [reason rangeOfString:@"NSBox"].location != NSNotFound,
+	check(reason != nil && [reason rangeOfString:@"NSTextView"].location != NSNotFound,
 	      "an unsupported Apple class is refused by name");
 }
 
@@ -405,6 +611,7 @@ main(void)
 	test_refusal_of_unsupported_class();
 	test_window_template_validation();
 	test_window_class_refusal();
+	test_layout_translation();
 
 	[pool drain];
 	printf(g_fail ? "apple_nib: FAIL\n" : "apple_nib: all checks passed\n");

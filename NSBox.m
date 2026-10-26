@@ -46,6 +46,127 @@
 	return self;
 }
 
+/* THE CODING DOOR, SO A BOX IS A DESIGN OBJECT AND NOT A GAP IN THE ALLOW-LIST. The keys are this tree's own
+ * (the AGNib spelling), and every one of them is a DESIGN property: the content view, the cell that draws the title,
+ * the four numbers, the two colours and the margins. Nothing here carries a superview, a window or a cursor rect —
+ * the same rule `NSNib.h` states for every class a nib may name. */
+static NSString * const AGCoderBoxTypeKey = @"boxType";
+static NSString * const AGCoderBoxBorderTypeKey = @"borderType";
+static NSString * const AGCoderBoxBorderWidthKey = @"borderWidth";
+static NSString * const AGCoderBoxCornerRadiusKey = @"cornerRadius";
+static NSString * const AGCoderBoxTitlePositionKey = @"titlePosition";
+static NSString * const AGCoderBoxTitleCellKey = @"titleCell";
+static NSString * const AGCoderBoxTitleFontKey = @"titleFont";
+static NSString * const AGCoderBoxMarginsKey = @"contentViewMargins";
+static NSString * const AGCoderBoxTransparentKey = @"transparent";
+static NSString * const AGCoderBoxFillColorKey = @"fillColor";
+static NSString * const AGCoderBoxBorderColorKey = @"borderColor";
+static NSString * const AGCoderBoxContentViewKey = @"contentView";
+
+- (void)encodeWithCoder:(NSCoder *)aCoder
+{
+	[super encodeWithCoder:aCoder];
+	[aCoder encodeInteger:(NSInteger)_boxType forKey:AGCoderBoxTypeKey];
+	[aCoder encodeInteger:(NSInteger)_borderType forKey:AGCoderBoxBorderTypeKey];
+	[aCoder encodeDouble:(double)_borderWidth forKey:AGCoderBoxBorderWidthKey];
+	[aCoder encodeDouble:(double)_cornerRadius forKey:AGCoderBoxCornerRadiusKey];
+	[aCoder encodeInteger:(NSInteger)_titlePosition forKey:AGCoderBoxTitlePositionKey];
+	[aCoder encodeObject:_titleCell forKey:AGCoderBoxTitleCellKey];
+	[aCoder encodeObject:_titleFont forKey:AGCoderBoxTitleFontKey];
+	[aCoder encodeSize:_contentViewMargins forKey:AGCoderBoxMarginsKey];
+	[aCoder encodeBool:_transparent forKey:AGCoderBoxTransparentKey];
+	[aCoder encodeObject:_fillColor forKey:AGCoderBoxFillColorKey];
+	[aCoder encodeObject:_borderColor forKey:AGCoderBoxBorderColorKey];
+	[aCoder encodeObject:_contentView forKey:AGCoderBoxContentViewKey];
+}
+
+- (instancetype)initWithCoder:(NSCoder *)aDecoder
+{
+	self = [super initWithCoder:aDecoder];
+	if (self == nil) {
+		return nil;
+	}
+	/* THE DEFAULTS THE DESIGNATED INITIALISER WOULD HAVE SET, repeated because a decode does not run
+	 * `-initWithFrame:`. They are the same values, in the same order, so a box from a file and a box from code start
+	 * in one state. */
+	_boxType = NSBoxPrimary;
+	_borderType = NSGrooveBorder;
+	_borderWidth = 1.0;
+	_cornerRadius = 0.0;
+	_titlePosition = NSAtTop;
+	_titleCell = [[NSCell alloc] initTextCell:@""];
+	_titleFont = [[NSFont systemFontOfSize:12.0] retain];
+	[_titleCell setFont:_titleFont];
+	[_titleCell setAlignment:NSCenterTextAlignment];
+	_contentViewMargins = NSMakeSize(8.0, 6.0);
+	_transparent = NO;
+	_fillColor = nil;
+	_borderColor = nil;
+	_contentView = [[NSView alloc] initWithFrame:[self contentRect]];
+	[self addSubview:_contentView];
+
+	if ([aDecoder containsValueForKey:AGCoderBoxTypeKey]) {
+		_boxType = (NSBoxType)[aDecoder decodeIntegerForKey:AGCoderBoxTypeKey];
+	}
+	if ([aDecoder containsValueForKey:AGCoderBoxBorderTypeKey]) {
+		_borderType = (NSBorderType)[aDecoder decodeIntegerForKey:AGCoderBoxBorderTypeKey];
+	}
+	if ([aDecoder containsValueForKey:AGCoderBoxBorderWidthKey]) {
+		_borderWidth = (CGFloat)[aDecoder decodeDoubleForKey:AGCoderBoxBorderWidthKey];
+	}
+	if ([aDecoder containsValueForKey:AGCoderBoxCornerRadiusKey]) {
+		_cornerRadius = (CGFloat)[aDecoder decodeDoubleForKey:AGCoderBoxCornerRadiusKey];
+	}
+	if ([aDecoder containsValueForKey:AGCoderBoxTitlePositionKey]) {
+		_titlePosition = (NSTitlePosition)[aDecoder decodeIntegerForKey:AGCoderBoxTitlePositionKey];
+	}
+	if ([aDecoder containsValueForKey:AGCoderBoxTitleCellKey]) {
+		id cell = [aDecoder decodeObjectForKey:AGCoderBoxTitleCellKey];
+
+		if ([cell isKindOfClass:[NSCell class]]) {
+			[cell retain];
+			[_titleCell release];
+			_titleCell = cell;
+		}
+	}
+	if ([aDecoder containsValueForKey:AGCoderBoxTitleFontKey]) {
+		id font = [aDecoder decodeObjectForKey:AGCoderBoxTitleFontKey];
+
+		if ([font isKindOfClass:[NSFont class]]) {
+			[font retain];
+			[_titleFont release];
+			_titleFont = font;
+			[_titleCell setFont:_titleFont];
+		}
+	}
+	if ([aDecoder containsValueForKey:AGCoderBoxMarginsKey]) {
+		_contentViewMargins = [aDecoder decodeSizeForKey:AGCoderBoxMarginsKey];
+	}
+	if ([aDecoder containsValueForKey:AGCoderBoxTransparentKey]) {
+		_transparent = [aDecoder decodeBoolForKey:AGCoderBoxTransparentKey];
+	}
+	if ([aDecoder containsValueForKey:AGCoderBoxFillColorKey]) {
+		_fillColor = [[aDecoder decodeObjectForKey:AGCoderBoxFillColorKey] retain];
+	}
+	if ([aDecoder containsValueForKey:AGCoderBoxBorderColorKey]) {
+		_borderColor = [[aDecoder decodeObjectForKey:AGCoderBoxBorderColorKey] retain];
+	}
+	if ([aDecoder containsValueForKey:AGCoderBoxContentViewKey]) {
+		id view = [aDecoder decodeObjectForKey:AGCoderBoxContentViewKey];
+
+		if ([view isKindOfClass:[NSView class]]) {
+			[self setContentView:view];
+		}
+	}
+	[self cg_layOutContent];
+	return self;
+}
+
++ (BOOL)supportsSecureCoding
+{
+	return YES;
+}
+
 - (void)dealloc
 {
 	[_titleCell release];

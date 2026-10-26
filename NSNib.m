@@ -48,6 +48,9 @@
 #import <AppKit/NSProgressIndicator.h>
 #import <AppKit/NSBrowser.h>
 #import <AppKit/NSScrollView.h>
+#import <AppKit/NSClipView.h>
+#import <AppKit/NSBox.h>
+#import <AppKit/NSMatrix.h>
 #import <AppKit/NSTableView.h>
 #import <AppKit/NSOutlineView.h>
 #import <AppKit/NSSplitView.h>
@@ -211,9 +214,12 @@ static Class const *fn_design_classes(NSUInteger *countOut)
 		classes[count++] = [NSPathControl class];
 		classes[count++] = [NSProgressIndicator class];
 		classes[count++] = [NSBrowser class];
+		classes[count++] = [NSMatrix class];
 		/* AND THE CONTAINERS: a table's columns, an outline over it, the scroll view that clips one, a split's two
 		 * panes, and a window's toolbar. */
+		classes[count++] = [NSBox class];
 		classes[count++] = [NSScrollView class];
+		classes[count++] = [NSClipView class];
 		classes[count++] = [NSTableView class];
 		classes[count++] = [NSOutlineView class];
 		classes[count++] = [NSSplitView class];

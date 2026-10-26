@@ -55,8 +55,9 @@ records naming the file's owner by placeholder. The classes a design file may na
 `NSBrowserCell`, `NSComboBoxCell`, `NSMenuItemCell`, `NSPathCell`, `NSPathComponentCell`, `NSPopUpButtonCell`,
 `NSScrollerCell`, `NSSearchFieldCell`, `NSSegmentedCell`, `NSSliderCell`, `NSTableHeaderCell`), the controls that
 place them (`NSButton`, `NSTextField`, `NSSlider`, `NSSegmentedControl`, `NSPopUpButton`, `NSSearchField`,
-`NSComboBox`, `NSPathControl`, `NSProgressIndicator`, `NSBrowser`), the containers (`NSScrollView`, `NSTableView`,
-`NSOutlineView`, `NSSplitView`, `NSToolbar`), and the value and menu classes (`NSWindow`, `NSMenu`, `NSMenuItem`,
+`NSComboBox`, `NSPathControl`, `NSProgressIndicator`, `NSBrowser`, `NSMatrix`), the containers (`NSBox`,
+`NSScrollView`, `NSClipView`, `NSTableView`, `NSOutlineView`, `NSSplitView`, `NSToolbar`), and the value and menu
+classes (`NSWindow`, `NSMenu`, `NSMenuItem`,
 `NSTableColumn`, `NSFont`, `NSColor`, `NSImage`) — each conforming to `NSSecureCoding`, each implementing both coding
 methods or adding no storage to inherit them for, and each archiving its DESIGN properties rather than its live graph
 (a view's window, a window's surface, a cell's control view, a table's rows and a segmented cell's private segment
@@ -73,12 +74,13 @@ six ways it must not compile) and `tests/ibtool_test.m` (the tool run for real).
 
 **AND APPLE'S COMPILED `.nib` IS READ THROUGH A TRANSLATOR, NOT A SECOND KEY SPELLING.** `AGAppleNib.h` recognises the
 `IB.objectdata` keyed archive Apple's `ibtool` writes, walks its `NSObjectsKeys`/`NSObjectsValues`/`NSConnections`
-maps, and translates the classes it states — `NSWindowTemplate`, `NSView`/`NSControl`/`NSButton`/`NSTextField`/
-`NSSplitView`, `NSCell`/`NSActionCell`/`NSButtonCell`/`NSTextFieldCell`, `NSCustomObject` and the two
-`NSNib*Connector`s — into this tree's coding keys before the same connection pass runs. `NSFrame` strings become
+maps, and translates the classes it states — `NSWindowTemplate`; `NSView`/`NSControl`/`NSButton`/`NSTextField`/
+`NSSplitView`; `NSBox`; `NSScrollView`/`NSClipView` (including the `NSsFlags` that create the bars); `NSMatrix`
+(flat cells regrouped into rows); `NSCell`/`NSActionCell`/`NSButtonCell`/`NSTextFieldCell`; `NSCustomObject` and the
+two `NSNib*Connector`s — into this tree's coding keys before the same connection pass runs. `NSFrame` strings become
 `NSValue`s, `NSvFlags`/`NSCellFlags`/`NSCellFlags2` become the properties this tree archives separately, and a class
-outside that table (an `NSBox`, an `NSScrollView`'s `NSClipView`, an `NSMatrix`, a modern autolayout nib) refuses
-the file BY NAME rather than loading it without a piece. `tests/apple_nib.m` builds the fixture the way Apple builds
+outside that table (an `NSTextView`, a menu, a toolbar, a modern autolayout nib) refuses the file BY NAME rather
+than loading it without a piece. `tests/apple_nib.m` builds the fixture the way Apple builds
 one — a binary property list with `CF$UID` references — and asserts both the object tree and the two connection
 kinds; `+[AGAppleNib unmappedKeysForAppleNibArchive:]` is the ledger of the Apple keys this slice leaves at the
 class's defaults.

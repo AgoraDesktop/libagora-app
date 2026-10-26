@@ -17,18 +17,21 @@
  *
  * WHAT IS TRANSLATED (the model is Apple's pre-autolayout "IB.objectdata" nib, which is what the corpus fixtures
  * are): `NSWindowTemplate` → `NSWindow`; `NSView`, `NSControl`, `NSButton`, `NSTextField`, `NSSplitView`,
- * `NSCustomView`; `NSCell`, `NSActionCell`, `NSButtonCell`, `NSTextFieldCell`; `NSCustomObject` (the file's owner
- * becomes `NSNibFileOwner` in connections, and a top-level custom object must be a class registered with
+ * `NSCustomView`; `NSBox` (its `NSContentView`/`NSTitleCell`/`NSOffsets` and the four box properties);
+ * `NSScrollView` (its `NSContentView` plus `NSsFlags`' border/presence/autohide bits) and `NSClipView` (its
+ * `NSDocView` and `NScvFlags`); `NSMatrix` (the flat `NSCells` regrouped into rows, the selected slot and the two
+ * sizes); `NSCell`, `NSActionCell`, `NSButtonCell`, `NSTextFieldCell`; `NSCustomObject` (the file's owner becomes
+ * `NSNibFileOwner` in connections, and a top-level custom object must be a class registered with
  * `+[NSNib registerDesignClass:]`); `NSNibOutletConnector` and `NSNibControlConnector`. Geometry strings become
  * `NSValue`s, `NSvFlags`/`NSCellFlags`/`NSCellFlags2` become the properties this tree archives separately, and
  * `NSSuperview`/`NSWindow`/`NSNextResponder`/`NSControlView` are DROPPED — they are live-graph state, which is
  * this tree's existing nib rule.
  *
- * **WHAT IS NOT TRANSLATED IS REFUSED BY NAME.** `NSBox`, `NSScrollView` (its content is an `NSClipView`), `NSMatrix`,
- * `NSTextView`, menus, toolbars, autolayout constraints and bindings are the next slices; a nib that contains one is
- * refused with the class that stopped it rather than loaded into a window that is missing a piece. A key that this
- * table does not name (a font, a colour, an image, a formatter, a tooltip source) is ignored, so the object keeps this
- * tree's default for it; `+unmappedKeysForAppleNibArchive:` reports them for a tool that wants to say so.
+ * **WHAT IS NOT TRANSLATED IS REFUSED BY NAME.** `NSTextView`, menus, toolbars, autolayout constraints and bindings
+ * are the next slices; a nib that contains one is refused with the class that stopped it rather than loaded into a
+ * window that is missing a piece. A key that this table does not name (a font, a colour, an image, a formatter, a
+ * tooltip source, an NSMatrix mode flag) is ignored, so the object keeps this tree's default for it;
+ * `+unmappedKeysForAppleNibArchive:` reports them for a tool that wants to say so.
  */
 
 #ifndef APPKIT_AGAPPLENIB_H

@@ -71,6 +71,11 @@ static NSString * const AGCoderScrollHRulerKey = @"horizontalRuler";
 static NSString * const AGCoderScrollRulersVisibleKey = @"rulersVisible";
 static NSString * const AGCoderScrollWantsVRulerKey = @"wantsVerticalRuler";
 static NSString * const AGCoderScrollWantsHRulerKey = @"wantsHorizontalRuler";
+/* **THE TWO PRESENCE FLAGS, WHICH ARE NOT THE SCROLLER OBJECTS.** A design can say "this view has a vertical
+ * scroller" without archiving the scroller itself — that is what Apple's NSsFlags says — and the tile pass creates
+ * the bar from the flag. Writing both keeps an AGNib round trip exact. */
+static NSString * const AGCoderScrollHasVScrollerKey = @"hasVerticalScroller";
+static NSString * const AGCoderScrollHasHScrollerKey = @"hasHorizontalScroller";
 
 /* **THE CLASS A SCROLL VIEW INSTANTIATES FOR A RULER IT WAS NOT HANDED.** One per process, as Apple's is, and
  * `NSRulerView` itself is the default — a caller with a subclass (a ruler that knows about its own document) installs it
@@ -84,6 +89,8 @@ static Class gRulerViewClass = Nil;
 	[aCoder encodeObject:_headerView forKey:AGCoderScrollHeaderViewKey];
 	[aCoder encodeObject:_vScroller forKey:AGCoderScrollVScrollerKey];
 	[aCoder encodeObject:_hScroller forKey:AGCoderScrollHScrollerKey];
+	[aCoder encodeBool:[self hasVerticalScroller] forKey:AGCoderScrollHasVScrollerKey];
+	[aCoder encodeBool:[self hasHorizontalScroller] forKey:AGCoderScrollHasHScrollerKey];
 	[aCoder encodeInteger:(NSInteger)_borderType forKey:AGCoderScrollBorderKey];
 	[aCoder encodeObject:_backgroundColor forKey:AGCoderScrollBackgroundKey];
 	[aCoder encodeBool:_drawsBackground forKey:AGCoderScrollDrawsBackgroundKey];
@@ -114,6 +121,14 @@ static Class gRulerViewClass = Nil;
 	}
 	if ([aDecoder containsValueForKey:AGCoderScrollHScrollerKey]) {
 		_hScroller = [[aDecoder decodeObjectForKey:AGCoderScrollHScrollerKey] retain];
+	}
+	/* **THE PRESENCE FLAGS CREATE THE BARS THROUGH THEIR OWN DOOR.** The archived scroller objects are the richer
+	 * spelling; these two let an archive that only carries Apple's NSsFlags state the same design. */
+	if ([aDecoder containsValueForKey:AGCoderScrollHasVScrollerKey]) {
+		[self setHasVerticalScroller:[aDecoder decodeBoolForKey:AGCoderScrollHasVScrollerKey]];
+	}
+	if ([aDecoder containsValueForKey:AGCoderScrollHasHScrollerKey]) {
+		[self setHasHorizontalScroller:[aDecoder decodeBoolForKey:AGCoderScrollHasHScrollerKey]];
 	}
 	if ([aDecoder containsValueForKey:AGCoderScrollBorderKey]) {
 		_borderType = (NSBorderType)[aDecoder decodeIntegerForKey:AGCoderScrollBorderKey];
