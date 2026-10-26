@@ -77,11 +77,11 @@ six ways it must not compile) and `tests/ibtool_test.m` (the tool run for real).
 maps, and translates the classes it states — `NSWindowTemplate`; `NSView`/`NSControl`/`NSButton`/`NSTextField`/
 `NSSplitView`; `NSBox`; `NSScrollView`/`NSClipView` (including the `NSsFlags` that create the bars); `NSMatrix`
 (flat cells regrouped into rows); `NSSlider`/`NSSliderCell`; `NSFont`; `NSColor` (white, RGB and catalog
-fallbacks); `NSCell`/`NSActionCell`/`NSButtonCell`/`NSTextFieldCell`; `NSCustomObject` and the two `NSNib*Connector`s — into this tree's coding keys before the same
-connection pass runs. `NSFrame` strings become
+fallbacks); `NSMenu`/`NSMenuItem`; `NSCell`/`NSActionCell`/`NSButtonCell`/`NSTextFieldCell`; `NSCustomObject` and the
+two `NSNib*Connector`s — into this tree's coding keys before the same connection pass runs. `NSFrame` strings become
 `NSValue`s, `NSvFlags`/`NSCellFlags`/`NSCellFlags2` become the properties this tree archives separately, and a class
-outside that table (an `NSTextView`, a menu, a toolbar, a modern autolayout nib) refuses the file BY NAME rather
-than loading it without a piece. `tests/apple_nib.m` builds the fixture the way Apple builds
+outside that table (an `NSTextView`, a toolbar, a modern autolayout nib) refuses the file BY NAME rather than
+loading it without a piece. `tests/apple_nib.m` builds the fixture the way Apple builds
 one — a binary property list with `CF$UID` references — and asserts both the object tree and the two connection
 kinds; `+[AGAppleNib unmappedKeysForAppleNibArchive:]` is the ledger of the Apple keys this slice leaves at the
 class's defaults.

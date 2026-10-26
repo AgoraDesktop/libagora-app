@@ -788,6 +788,115 @@ static BOOL fn_parse_color_components(NSData *data, CGFloat *values, NSUInteger 
 	}
 }
 
+
+/* **MENUS ARE TREES OF TWO CLASSES, AND APPLE'S KEYS ARE ALMOST ALL THIS TREE'S PROPERTIES.** An `NSMenu` lists its
+ * items and names its font; an `NSMenuItem` carries its title, key equivalent and modifier mask, action, tag, state,
+ * mnemonic and separator flag, and points at its submenu. `NSMenu` (the PARENT back-reference on every item) is dropped
+ * — the menu's own `-addItem:` is what establishes it — and `NSTarget` and the three state images are deliberately
+ * left to the ledger: a main-menu item's target is the responder chain (First Responder), which is exactly what a nil
+ * target means, and this translator has no image pipeline yet. */
+- (BOOL)fnBuildMenuRecordAtIndex:(NSUInteger)index record:(NSMutableDictionary *)record
+{
+	NSDictionary *entry = [_objects objectAtIndex:index];
+	NSString *title = [self fnStringValue:[entry objectForKey:@"NSTitle"]];
+	NSArray *items = [self fnArrayValue:[entry objectForKey:@"NSMenuItems"]];
+	NSMutableArray *refs;
+	NSUInteger i;
+
+	[record setObject:@"NSMenu" forKey:AGAppleClassKey];
+	if (title != nil) {
+		[record setObject:title forKey:@"title"];
+	}
+	if (items != nil) {
+		refs = [NSMutableArray arrayWithCapacity:[items count]];
+		for (i = 0; i < [items count]; i++) {
+			NSUInteger itemIndex;
+
+			if (!fn_uid_index([items objectAtIndex:i], &itemIndex)) {
+				return [self fnFail:@"an NSMenu item is not an object reference"];
+			}
+			[refs addObject:[AGAppleNibRef refWithIndex:itemIndex]];
+		}
+		[record setObject:refs forKey:@"items"];
+	}
+	if (![self fnSetRefFrom:[entry objectForKey:@"NSMenuFont"] key:@"NSMenuFont"
+		       inRecord:record as:@"font"]) {
+		return NO;
+	}
+	[self fnNoteUnmappedForEntry:entry className:@"NSMenu"
+			    consumed:[NSSet setWithObjects:
+				@"NSTitle", @"NSMenuItems", @"NSMenuFont", @"NSName", nil]];
+	return YES;
+}
+
+- (BOOL)fnBuildMenuItemRecordAtIndex:(NSUInteger)index record:(NSMutableDictionary *)record
+{
+	NSDictionary *entry = [_objects objectAtIndex:index];
+	NSString *value;
+	NSNumber *number;
+
+	[record setObject:@"NSMenuItem" forKey:AGAppleClassKey];
+	if ((value = [self fnStringValue:[entry objectForKey:@"NSTitle"]]) != nil) {
+		[record setObject:value forKey:@"title"];
+	}
+	if ((value = [self fnStringValue:[entry objectForKey:@"NSKeyEquiv"]]) != nil) {
+		[record setObject:value forKey:@"keyEquivalent"];
+	}
+	if ((value = [self fnStringValue:[entry objectForKey:@"NSAction"]]) != nil) {
+		[record setObject:value forKey:@"action"];
+	}
+	if ((value = [self fnStringValue:[entry objectForKey:@"NSToolTip"]]) != nil) {
+		[record setObject:value forKey:@"toolTip"];
+	}
+	if ((number = [self fnNumberValue:[entry objectForKey:@"NSKeyEquivModMask"]]) != nil) {
+		[record setObject:number forKey:@"keyEquivalentModifierMask"];
+	}
+	if ((number = [self fnNumberValue:[entry objectForKey:@"NSTag"]]) != nil) {
+		[record setObject:number forKey:@"tag"];
+	}
+	if ((number = [self fnNumberValue:[entry objectForKey:@"NSState"]]) != nil) {
+		[record setObject:number forKey:@"state"];
+	}
+	number = [self fnNumberValue:[entry objectForKey:@"NSMnemonicLoc"]];
+	if (number != nil) {
+		NSInteger location = [number integerValue];
+
+		/* APPLE'S 32-BIT "NO MNEMONIC" IS 0x7FFFFFFF; this tree spells it NSNotFound. */
+		if (location == 0x7FFFFFFFL) {
+			location = (NSInteger)NSNotFound;
+		}
+		[record setObject:[NSNumber numberWithInteger:location] forKey:@"mnemonicLocation"];
+	}
+	number = [self fnNumberValue:[entry objectForKey:@"NSIsDisabled"]];
+	if (number != nil) {
+		[record setObject:[NSNumber numberWithBool:![number boolValue]] forKey:@"enabled"];
+	}
+	if ((number = [self fnNumberValue:[entry objectForKey:@"NSIsSeparator"]]) != nil) {
+		[record setObject:number forKey:@"separator"];
+	}
+	if ((number = [self fnNumberValue:[entry objectForKey:@"NSAlternate"]]) != nil) {
+		[record setObject:number forKey:@"alternate"];
+	}
+	if ((number = [self fnNumberValue:[entry objectForKey:@"NSHidden"]]) != nil) {
+		[record setObject:number forKey:@"hidden"];
+	}
+	if (![self fnSetRefFrom:[entry objectForKey:@"NSSubmenu"] key:@"NSSubmenu"
+		       inRecord:record as:@"submenu"]) {
+		return NO;
+	}
+	if (![self fnSetRefFrom:[entry objectForKey:@"NSView"] key:@"NSView"
+		       inRecord:record as:@"view"]) {
+		return NO;
+	}
+	[self fnNoteUnmappedForEntry:entry className:@"NSMenuItem"
+			    consumed:[NSSet setWithObjects:
+				@"NSTitle", @"NSKeyEquiv", @"NSAction", @"NSToolTip",
+				@"NSKeyEquivModMask", @"NSTag", @"NSState", @"NSMnemonicLoc",
+				@"NSIsDisabled", @"NSIsSeparator", @"NSAlternate", @"NSHidden",
+				@"NSSubmenu", @"NSView", @"NSMenu", nil]];
+	return YES;
+}
+
 - (BOOL)fnBuildColorRecordAtIndex:(NSUInteger)index record:(NSMutableDictionary *)record
 {
 	NSDictionary *entry = [_objects objectAtIndex:index];
@@ -1389,6 +1498,14 @@ static BOOL fn_parse_color_components(NSData *data, CGFloat *values, NSUInteger 
 			}
 		} else if (fn_is_translated_cell_class(name)) {
 			if (![self fnBuildCellRecordAtIndex:i appleClass:name record:record]) {
+				return NO;
+			}
+		} else if ([name isEqualToString:@"NSMenu"]) {
+			if (![self fnBuildMenuRecordAtIndex:i record:record]) {
+				return NO;
+			}
+		} else if ([name isEqualToString:@"NSMenuItem"]) {
+			if (![self fnBuildMenuItemRecordAtIndex:i record:record]) {
 				return NO;
 			}
 		} else {

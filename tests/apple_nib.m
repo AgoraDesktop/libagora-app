@@ -22,6 +22,8 @@
 #import <AppKit/NSColor.h>
 #import <AppKit/NSFont.h>
 #import <AppKit/NSMatrix.h>
+#import <AppKit/NSMenu.h>
+#import <AppKit/NSMenuItem.h>
 #import <AppKit/NSSlider.h>
 #import <AppKit/NSScrollView.h>
 #import <AppKit/NSCell.h>
@@ -588,6 +590,175 @@ test_layout_translation(void)
 	[nib release];
 }
 
+
+/* **A MENU IS A TREE OF TWO CLASSES.** The top menu owns its items; an item may own a submenu; every item also carries
+ * a back-reference to its parent, which the translator drops (the menu's own `-addItem:` is the relationship). The
+ * fixture states the same keys Apple does: `NSMenuItems`, `NSTitle`, `NSMenuFont`; `NSKeyEquiv`, `NSKeyEquivModMask`,
+ * `NSAction`, `NSTag`, `NSState`, `NSMnemonicLoc`, `NSIsSeparator`, `NSIsDisabled`, `NSSubmenu`. */
+static NSDictionary *
+build_menu_archive(void)
+{
+	NSMutableArray *objects = [NSMutableArray arrayWithObject:@"$null"];
+	NSUInteger cObjectData = add_class(objects, @"NSIBObjectData");
+	NSUInteger cArray = add_class(objects, @"NSArray");
+	NSUInteger cCustom = add_class(objects, @"NSCustomObject");
+	NSUInteger cMenu = add_class(objects, @"NSMenu");
+	NSUInteger cItem = add_class(objects, @"NSMenuItem");
+	NSUInteger cFont = add_class(objects, @"NSFont");
+	NSUInteger root;
+	NSUInteger font;
+	NSUInteger newItem;
+	NSUInteger separatorItem;
+	NSUInteger quitItem;
+	NSUInteger recentItem;
+	NSUInteger recentFile;
+	NSUInteger subItems;
+	NSUInteger submenu;
+	NSUInteger topItems;
+	NSUInteger menu;
+	NSUInteger keysArray;
+	NSUInteger valuesArray;
+	NSUInteger objectData;
+	NSMutableArray *keys = [NSMutableArray array];
+	NSMutableArray *owners = [NSMutableArray array];
+	NSDictionary *properties;
+
+	root = add_object(objects, cCustom,
+			  [NSDictionary dictionaryWithObject:@"Owner" forKey:@"NSClassName"]);
+	font = add_object(objects, cFont,
+		[NSDictionary dictionaryWithObjectsAndKeys:
+			@"Helvetica", @"NSName",
+			[NSNumber numberWithDouble:13.0], @"NSSize",
+			nil]);
+
+	newItem = add_object(objects, cItem,
+		[NSDictionary dictionaryWithObjectsAndKeys:
+			@"New", @"NSTitle",
+			@"newDocument:", @"NSAction",
+			@"n", @"NSKeyEquiv",
+			[NSNumber numberWithUnsignedInt:(1u << 20)], @"NSKeyEquivModMask",
+			[NSNumber numberWithInt:1], @"NSTag",
+			[NSNumber numberWithInt:0], @"NSState",
+			[NSNumber numberWithInt:0x7FFFFFFF], @"NSMnemonicLoc",
+			nil]);
+	separatorItem = add_object(objects, cItem,
+		[NSDictionary dictionaryWithObjectsAndKeys:
+			@"", @"NSTitle",
+			[NSNumber numberWithBool:YES], @"NSIsSeparator",
+			[NSNumber numberWithInt:0x7FFFFFFF], @"NSMnemonicLoc",
+			nil]);
+	quitItem = add_object(objects, cItem,
+		[NSDictionary dictionaryWithObjectsAndKeys:
+			@"Quit", @"NSTitle",
+			@"terminate:", @"NSAction",
+			@"q", @"NSKeyEquiv",
+			[NSNumber numberWithUnsignedInt:(1u << 20)], @"NSKeyEquivModMask",
+			[NSNumber numberWithBool:YES], @"NSIsDisabled",
+			nil]);
+	recentFile = add_object(objects, cItem,
+		[NSDictionary dictionaryWithObjectsAndKeys:
+			@"Recent File", @"NSTitle",
+			@"openRecent:", @"NSAction",
+			nil]);
+	subItems = add_array(objects, cArray, [NSArray arrayWithObject:uid(recentFile)]);
+	submenu = add_object(objects, cMenu,
+		[NSDictionary dictionaryWithObjectsAndKeys:
+			@"Recent", @"NSTitle",
+			uid(subItems), @"NSMenuItems",
+			uid(font), @"NSMenuFont",
+			nil]);
+	recentItem = add_object(objects, cItem,
+		[NSDictionary dictionaryWithObjectsAndKeys:
+			@"Recent", @"NSTitle",
+			uid(submenu), @"NSSubmenu",
+			nil]);
+	topItems = add_array(objects, cArray,
+		[NSArray arrayWithObjects:uid(newItem), uid(separatorItem), uid(quitItem),
+					  uid(recentItem), nil]);
+	menu = add_object(objects, cMenu,
+		[NSDictionary dictionaryWithObjectsAndKeys:
+			@"File", @"NSTitle",
+			uid(topItems), @"NSMenuItems",
+			uid(font), @"NSMenuFont",
+			nil]);
+
+	[keys addObjectsFromArray:[NSArray arrayWithObjects:
+		uid(root), uid(menu), uid(newItem), uid(separatorItem), uid(quitItem),
+		uid(recentItem), uid(recentFile), uid(submenu), nil]];
+	[owners addObjectsFromArray:[NSArray arrayWithObjects:
+		uid(root), uid(root), uid(menu), uid(menu), uid(menu), uid(menu),
+		uid(submenu), uid(recentItem), nil]];
+
+	keysArray = add_array(objects, cArray, keys);
+	valuesArray = add_array(objects, cArray, owners);
+	objectData = add_object(objects, cObjectData,
+		[NSDictionary dictionaryWithObjectsAndKeys:
+			uid(keysArray), @"NSObjectsKeys",
+			uid(valuesArray), @"NSObjectsValues",
+			uid(root), @"NSRoot",
+			nil]);
+	properties = [NSMutableDictionary dictionaryWithObjectsAndKeys:
+		[NSNumber numberWithInt:100000], @"$version",
+		@"NSKeyedArchiver", @"$archiver",
+		objects, @"$objects",
+		[NSDictionary dictionaryWithObject:uid(objectData) forKey:@"IB.objectdata"], @"$top",
+		nil];
+	return properties;
+}
+
+static void
+test_menu_translation(void)
+{
+	NSDictionary *plist = build_menu_archive();
+	NSData *data = archive_data(plist);
+	NSString *path;
+	NSNib *nib;
+	NSArray *top = nil;
+	NSMenu *menu;
+	NSMenu *submenu;
+	NSMenuItem *newItem;
+	NSMenuItem *separatorItem;
+	NSMenuItem *quitItem;
+	NSMenuItem *recentItem;
+	NSFont *font;
+
+	check([AGAppleNib validateAppleNibArchive:plist reason:NULL], "a menu archive validates");
+	path = [NSTemporaryDirectory() stringByAppendingPathComponent:@"agora-apple-nib-menu.nib"];
+	[data writeToFile:path atomically:YES];
+	nib = [[NSNib alloc] initWithContentsOfURL:[NSURL fileURLWithPath:path]];
+	check([nib instantiateNibWithOwner:nil topLevelObjects:&top], "a menu nib instantiates");
+	check([top count] == 1 && [[top objectAtIndex:0] isKindOfClass:[NSMenu class]],
+	      "the menu is the top-level object");
+	menu = [top count] == 1 ? [top objectAtIndex:0] : nil;
+	check([[menu title] isEqualToString:@"File"], "NSTitle becomes the menu title");
+	check([menu numberOfItems] == 4, "NSMenuItems become four items");
+	font = (NSFont *)[menu font];
+	check([font isKindOfClass:[NSFont class]] && [font pointSize] == 13.0,
+	      "NSMenuFont becomes the menu's font");
+	newItem = [menu itemAtIndex:0];
+	check([[newItem title] isEqualToString:@"New"], "the first item's title");
+	check([NSStringFromSelector([newItem action]) isEqualToString:@"newDocument:"],
+	      "NSAction becomes the item's action");
+	check([[newItem keyEquivalent] isEqualToString:@"n"] &&
+	      [newItem keyEquivalentModifierMask] == (1u << 20),
+	      "the key equivalent and its modifier mask travel");
+	check([newItem tag] == 1, "NSTag travels");
+	check([newItem mnemonicLocation] == (NSUInteger)NSNotFound,
+	      "Apple's 0x7FFFFFFF mnemonic means NSNotFound");
+	separatorItem = [menu itemAtIndex:1];
+	check([separatorItem isSeparatorItem], "NSIsSeparator becomes a separator item");
+	quitItem = [menu itemAtIndex:2];
+	check(![quitItem isEnabled], "NSIsDisabled becomes an item that is not enabled");
+	recentItem = [menu itemAtIndex:3];
+	submenu = [recentItem submenu];
+	check([submenu isKindOfClass:[NSMenu class]] && [[submenu title] isEqualToString:@"Recent"],
+	      "NSSubmenu becomes the item's submenu");
+	check([submenu numberOfItems] == 1 &&
+	      [[[submenu itemAtIndex:0] title] isEqualToString:@"Recent File"],
+	      "the submenu's own item is translated");
+	[nib release];
+}
+
 /* ============================== THE TESTS ======================================================= */
 
 static void
@@ -727,6 +898,7 @@ main(void)
 	test_window_template_validation();
 	test_window_class_refusal();
 	test_layout_translation();
+	test_menu_translation();
 
 	[pool drain];
 	printf(g_fail ? "apple_nib: FAIL\n" : "apple_nib: all checks passed\n");
