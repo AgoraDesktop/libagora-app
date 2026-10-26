@@ -124,6 +124,7 @@ static NSString * const AGAppleObjectDataClassName = @"NSIBObjectData";
 	NSMutableSet *_building;		/* NSNumber indexes being decoded, for cycle detection */
 	NSMutableDictionary *_built;		/* NSNumber index -> live object */
 	NSMutableSet *_unmapped;		/* "Class.key" strings, for the ledger */
+	NSMutableArray *_syntheticConnections;	/* outlets a record implies (toolbar delegate, item target) */
 	NSString *_reason;			/* the first refusal, retained */
 }
 
@@ -361,6 +362,7 @@ static BOOL fn_is_translated_cell_class(NSString *name)
 		_building = [[NSMutableSet alloc] init];
 		_built = [[NSMutableDictionary alloc] init];
 		_unmapped = [[NSMutableSet alloc] init];
+		_syntheticConnections = [[NSMutableArray alloc] init];
 	}
 	return self;
 }
@@ -376,6 +378,7 @@ static BOOL fn_is_translated_cell_class(NSString *name)
 	[_building release];
 	[_built release];
 	[_unmapped release];
+	[_syntheticConnections release];
 	[_reason release];
 	[super dealloc];
 }
@@ -1063,6 +1066,229 @@ static BOOL fn_parse_color_components(NSData *data, CGFloat *values, NSUInteger 
  * The owner is NOT one of the constraint's keys: it is the object map's owner of the constraint, and the translator
  * attaches the record to that view's `constraints` array so the view's own `-addConstraint:` establishes the owner and
  * the active flag. (A `NSConstraints` array on the view is honoured too, and the two are de-duplicated.) */
+
+/* ---- toolbars --------------------------------------------------------------------------------- */
+
+/* **A TOOLBAR'S ITEM OBJECTS ARE PART OF ITS ARCHIVE, NOT ONLY ITS DELEGATE'S ANSWER.** Apple's keyed archive carries
+ * `NSToolbarIBIdentifiedItems` (a dictionary of pre-made items), the three identifier lists and the display/size/
+ * behaviour keys. This tree's NSToolbar has the Apple shape — a delegate that makes items — and the archive's items are
+ * handed to it as its identifier dictionary, which `-itemForItemIdentifier:` consults before the delegate. That is the
+ * model Apple's own `_initPListDatabase` gives it, stated through this tree's coding keys. */
+- (NSString *)fnToolbarIdentifierForValue:(id)value
+{
+	id resolved = [self fnResolvedValue:value];
+
+	if ([resolved isKindOfClass:[NSString class]]) {
+		return (NSString *)resolved;
+	}
+	if ([resolved isKindOfClass:[NSDictionary class]]) {
+		return [self fnStringValue:[resolved objectForKey:@"NSToolbarItemIdentifier"]];
+	}
+	return nil;
+}
+
+/* AN OUTLET A RECORD IMPLIES RATHER THAN ONE A CONNECTOR NAMES: a toolbar's delegate and an item's target are refs in
+ * their own records, and both are applied through the connection pass (which knows the file's-owner placeholder). */
+- (BOOL)fnQueueSyntheticOutletFromIndex:(NSUInteger)sourceIndex toValue:(id)destination keyPath:(NSString *)keyPath
+{
+	NSUInteger destinationIndex;
+	id destinationValue;
+
+	if (destination == nil || ([destination isKindOfClass:[NSString class]] &&
+				   [(NSString *)destination isEqualToString:@"$null"])) {
+		return YES;
+	}
+	if (!fn_uid_index(destination, &destinationIndex)) {
+		return [self fnFail:[NSString stringWithFormat:@"%@ is not an object reference", keyPath]];
+	}
+	if (destinationIndex == _rootIndex) {
+		destinationValue = NSNibFileOwner;
+	} else if ([_proxies containsObject:[NSNumber numberWithUnsignedInteger:destinationIndex]]) {
+		/* The FirstResponder and NSApplication proxies mean "the responder chain", which for a target is a nil
+		 * target and for a delegate is no delegate; both are the archive's own meaning. */
+		return YES;
+	} else {
+		NSString *name;
+
+		if ([_records objectForKey:[NSNumber numberWithUnsignedInteger:destinationIndex]] == nil) {
+			name = [self fnClassNameAt:destinationIndex];
+			return [self fnFail:[NSString stringWithFormat:
+				@"%@ names %@, which this translator does not map",
+				keyPath, (name != nil) ? name : @"an object"]];
+		}
+		destinationValue = [AGAppleNibRef refWithIndex:destinationIndex];
+	}
+	[_syntheticConnections addObject:[NSDictionary dictionaryWithObjectsAndKeys:
+		[AGAppleNibRef refWithIndex:sourceIndex], @"source",
+		destinationValue, @"destination",
+		keyPath, @"keyPath",
+		nil]];
+	return YES;
+}
+
+- (BOOL)fnBuildToolbarRecordAtIndex:(NSUInteger)index record:(NSMutableDictionary *)record
+{
+	NSDictionary *entry = [_objects objectAtIndex:index];
+	NSString *identifier = [self fnStringValue:[entry objectForKey:@"NSToolbarIdentifier"]];
+	NSArray *items;
+	NSArray *identifiers;
+	NSMutableArray *refs;
+	NSMutableArray *strings;
+	NSNumber *number;
+	NSString *value;
+	NSUInteger i;
+
+	if (identifier == nil) {
+		return [self fnFail:@"an NSToolbar in the archive has no identifier"];
+	}
+	[record setObject:@"NSToolbar" forKey:AGAppleClassKey];
+	[record setObject:identifier forKey:@"identifier"];
+
+	/* THE IDENTIFIED ITEMS DICTIONARY: this helper reads an NSDictionary archive object's `NS.objects` values. */
+	items = [self fnArrayValue:[entry objectForKey:@"NSToolbarIBIdentifiedItems"]];
+	if (items != nil) {
+		refs = [NSMutableArray arrayWithCapacity:[items count]];
+		for (i = 0; i < [items count]; i++) {
+			NSUInteger itemIndex;
+
+			if (!fn_uid_index([items objectAtIndex:i], &itemIndex)) {
+				return [self fnFail:@"NSToolbarIBIdentifiedItems holds an entry that is not an object"];
+			}
+			[refs addObject:[AGAppleNibRef refWithIndex:itemIndex]];
+		}
+		[record setObject:refs forKey:@"items"];
+	}
+	identifiers = [self fnArrayValue:[entry objectForKey:@"NSToolbarIBDefaultItems"]];
+	if (identifiers != nil) {
+		strings = [NSMutableArray arrayWithCapacity:[identifiers count]];
+		for (i = 0; i < [identifiers count]; i++) {
+			NSString *itemIdentifier = [self fnToolbarIdentifierForValue:
+				[identifiers objectAtIndex:i]];
+
+			if (itemIdentifier != nil) {
+				[strings addObject:itemIdentifier];
+			}
+		}
+		[record setObject:strings forKey:@"itemIdentifiers"];
+	}
+	if ((value = [self fnStringValue:[entry objectForKey:@"NSToolbarSelectedItemIdentifier"]]) != nil) {
+		[record setObject:value forKey:@"selectedItemIdentifier"];
+	}
+	number = [self fnNumberValue:[entry objectForKey:@"NSToolbarDisplayMode"]];
+	if (number != nil) {
+		[record setObject:number forKey:@"displayMode"];
+	}
+	number = [self fnNumberValue:[entry objectForKey:@"NSToolbarSizeMode"]];
+	if (number != nil) {
+		[record setObject:number forKey:@"sizeMode"];
+	}
+	number = [self fnNumberValue:[entry objectForKey:@"NSToolbarPrefersToBeShown"]];
+	if (number != nil) {
+		[record setObject:number forKey:@"visible"];
+	}
+	number = [self fnNumberValue:[entry objectForKey:@"NSToolbarAllowsUserCustomization"]];
+	if (number != nil) {
+		[record setObject:number forKey:@"allowsUserCustomization"];
+	}
+	number = [self fnNumberValue:[entry objectForKey:@"NSToolbarAutosavesConfiguration"]];
+	if (number != nil) {
+		[record setObject:number forKey:@"autosavesConfiguration"];
+	}
+	number = [self fnNumberValue:[entry objectForKey:@"NSToolbarShowsBaselineSeparator"]];
+	if (number != nil) {
+		[record setObject:number forKey:@"showsBaselineSeparator"];
+	}
+	if (![self fnQueueSyntheticOutletFromIndex:index
+					    toValue:[entry objectForKey:@"NSToolbarDelegate"]
+					    keyPath:@"delegate"]) {
+		return NO;
+	}
+	[self fnNoteUnmappedForEntry:entry className:@"NSToolbar"
+			    consumed:[NSSet setWithObjects:
+				@"NSToolbarIdentifier", @"NSToolbarIBIdentifiedItems",
+				@"NSToolbarIBDefaultItems", @"NSToolbarIBAllowedItems",
+				@"NSToolbarIBSelectableItems", @"NSToolbarSelectedItemIdentifier",
+				@"NSToolbarDisplayMode", @"NSToolbarSizeMode",
+				@"NSToolbarPrefersToBeShown", @"NSToolbarAllowsUserCustomization",
+				@"NSToolbarAutosavesConfiguration", @"NSToolbarShowsBaselineSeparator",
+				@"NSToolbarDelegate", nil]];
+	return YES;
+}
+
+- (BOOL)fnBuildToolbarItemRecordAtIndex:(NSUInteger)index record:(NSMutableDictionary *)record
+{
+	NSDictionary *entry = [_objects objectAtIndex:index];
+	NSString *identifier = [self fnStringValue:[entry objectForKey:@"NSToolbarItemIdentifier"]];
+	NSNumber *number;
+	NSString *value;
+	NSUInteger imageIndex;
+	id imageValue;
+
+	if (identifier == nil) {
+		return [self fnFail:@"an NSToolbarItem in the archive has no identifier"];
+	}
+	[record setObject:@"NSToolbarItem" forKey:AGAppleClassKey];
+	[record setObject:identifier forKey:@"itemIdentifier"];
+	if ((value = [self fnStringValue:[entry objectForKey:@"NSToolbarItemLabel"]]) != nil) {
+		[record setObject:value forKey:@"label"];
+	}
+	if ((value = [self fnStringValue:[entry objectForKey:@"NSToolbarItemPaletteLabel"]]) != nil) {
+		[record setObject:value forKey:@"paletteLabel"];
+	}
+	if ((value = [self fnStringValue:[entry objectForKey:@"NSToolbarItemToolTip"]]) != nil) {
+		[record setObject:value forKey:@"toolTip"];
+	}
+	if ((value = [self fnStringValue:[entry objectForKey:@"NSToolbarItemAction"]]) != nil) {
+		[record setObject:value forKey:@"action"];
+	}
+	number = [self fnNumberValue:[entry objectForKey:@"NSToolbarItemTag"]];
+	if (number != nil) {
+		[record setObject:number forKey:@"tag"];
+	}
+	number = [self fnNumberValue:[entry objectForKey:@"NSToolbarItemEnabled"]];
+	if (number != nil) {
+		[record setObject:number forKey:@"enabled"];
+	}
+	number = [self fnNumberValue:[entry objectForKey:@"NSToolbarItemVisibilityPriority"]];
+	if (number != nil) {
+		[record setObject:number forKey:@"visibilityPriority"];
+	}
+	number = [self fnNumberValue:[entry objectForKey:@"NSToolbarItemAutovalidates"]];
+	if (number != nil) {
+		[record setObject:number forKey:@"autovalidates"];
+	}
+	if ((value = [self fnStringValue:[entry objectForKey:@"NSToolbarItemMinSize"]]) != nil) {
+		[record setObject:[NSValue valueWithSize:NSSizeFromString(value)] forKey:@"minSize"];
+	}
+	if ((value = [self fnStringValue:[entry objectForKey:@"NSToolbarItemMaxSize"]]) != nil) {
+		[record setObject:[NSValue valueWithSize:NSSizeFromString(value)] forKey:@"maxSize"];
+	}
+	imageValue = [entry objectForKey:@"NSToolbarItemImage"];
+	if (imageValue != nil && fn_uid_index(imageValue, &imageIndex) &&
+	    [[self fnClassNameAt:imageIndex] isEqualToString:@"NSCustomResource"]) {
+		[record setObject:[AGAppleNibRef refWithIndex:imageIndex] forKey:@"image"];
+	}
+	if (![self fnSetRefFrom:[entry objectForKey:@"NSToolbarItemView"] key:@"NSToolbarItemView"
+		       inRecord:record as:@"view"]) {
+		return NO;
+	}
+	if (![self fnQueueSyntheticOutletFromIndex:index
+					    toValue:[entry objectForKey:@"NSToolbarItemTarget"]
+					    keyPath:@"target"]) {
+		return NO;
+	}
+	[self fnNoteUnmappedForEntry:entry className:@"NSToolbarItem"
+			    consumed:[NSSet setWithObjects:
+				@"NSToolbarItemIdentifier", @"NSToolbarItemLabel",
+				@"NSToolbarItemPaletteLabel", @"NSToolbarItemToolTip",
+				@"NSToolbarItemAction", @"NSToolbarItemTag",
+				@"NSToolbarItemEnabled", @"NSToolbarItemVisibilityPriority",
+				@"NSToolbarItemAutovalidates", @"NSToolbarItemMinSize",
+				@"NSToolbarItemMaxSize", @"NSToolbarItemImage",
+				@"NSToolbarItemView", @"NSToolbarItemTarget", nil]];
+	return YES;
+}
+
 - (BOOL)fnBuildLayoutConstraintRecordAtIndex:(NSUInteger)index record:(NSMutableDictionary *)record
 {
 	NSDictionary *entry = [_objects objectAtIndex:index];
@@ -1707,8 +1933,9 @@ static BOOL fn_parse_color_components(NSData *data, CGFloat *values, NSUInteger 
 		}
 		[record setObject:[AGAppleNibRef refWithIndex:subview] forKey:@"contentView"];
 	}
-	if ([entry objectForKey:@"NSToolbar"] != nil) {
-		return [self fnFail:@"the window template carries a toolbar, which this translator does not map yet"];
+	if (![self fnSetRefFrom:[entry objectForKey:@"NSToolbar"] key:@"NSToolbar"
+		       inRecord:record as:@"toolbar"]) {
+		return NO;
 	}
 
 	[self fnNoteUnmappedForEntry:entry className:@"NSWindowTemplate"
@@ -1865,6 +2092,14 @@ static BOOL fn_parse_color_components(NSData *data, CGFloat *values, NSUInteger 
 			}
 		} else if (fn_is_translated_cell_class(name)) {
 			if (![self fnBuildCellRecordAtIndex:i appleClass:name record:record]) {
+				return NO;
+			}
+		} else if ([name isEqualToString:@"NSToolbar"]) {
+			if (![self fnBuildToolbarRecordAtIndex:i record:record]) {
+				return NO;
+			}
+		} else if ([name isEqualToString:@"NSToolbarItem"]) {
+			if (![self fnBuildToolbarItemRecordAtIndex:i record:record]) {
 				return NO;
 			}
 		} else if ([name isEqualToString:@"NSLayoutConstraint"]) {
@@ -2082,6 +2317,19 @@ static BOOL fn_parse_color_components(NSData *data, CGFloat *values, NSUInteger 
 {
 	NSUInteger i;
 
+	/* THE OUTLETS A RECORD IMPLIED (a toolbar's delegate, an item's target). They are applied in the same pass, so
+	 * the file's-owner placeholder means the same thing here as in an archived connector. */
+	for (i = 0; i < [_syntheticConnections count]; i++) {
+		NSDictionary *synthetic = [_syntheticConnections objectAtIndex:i];
+		id source = [self fnDecodedValue:[synthetic objectForKey:@"source"]];
+		id destination = [self fnDecodedValue:[synthetic objectForKey:@"destination"]];
+		NSString *keyPath = [synthetic objectForKey:@"keyPath"];
+
+		if (source == nil || destination == nil) {
+			return NO;
+		}
+		[connections addObject:[NSNib outletConnectionFrom:source to:destination keyPath:keyPath]];
+	}
 	for (i = 0; i < [_connectorIndexes count]; i++) {
 		NSUInteger connectorIndex = [[_connectorIndexes objectAtIndex:i] unsignedIntegerValue];
 		NSDictionary *entry = [_objects objectAtIndex:connectorIndex];

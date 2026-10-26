@@ -49,16 +49,16 @@ that opens the recents and a clear button that empties it, whose typing sends th
 every key, or on Return — the caller's choice.
 
 **And a nib is now a thing this tier can READ AND WRITE.** `NSNib.h` is a format rather than a refusal: a keyed
-archive whose root is `{AGNibVersion, AGNibTopLevelObjects, AGNibConnections}`, with outlets and actions as connection
-records naming the file's owner by placeholder. The classes a design file may name are archivable — `NSResponder`,
+archive whose root is `{AGNibVersion, AGNibTopLevelObjects, AGNibConnections}`, with outlets, actions and bindings as
+connection records naming the file's owner by placeholder. The classes a design file may name are archivable — `NSResponder`,
 `NSView`, `NSControl`, the whole cell family (`NSCell`, `NSActionCell`, `NSTextFieldCell`, `NSButtonCell`,
 `NSBrowserCell`, `NSComboBoxCell`, `NSMenuItemCell`, `NSPathCell`, `NSPathComponentCell`, `NSPopUpButtonCell`,
 `NSScrollerCell`, `NSSearchFieldCell`, `NSSegmentedCell`, `NSSliderCell`, `NSImageCell`, `NSBrowserCell`,
 `NSTableHeaderCell`), the controls that place them (`NSButton`, `NSTextField`, `NSSlider`, `NSSegmentedControl`,
 `NSPopUpButton`, `NSSearchField`, `NSComboBox`, `NSPathControl`, `NSProgressIndicator`, `NSBrowser`, `NSImageView`,
 `NSMatrix`), the containers (`NSBox`,
-`NSScrollView`, `NSClipView`, `NSTableView`, `NSOutlineView`, `NSSplitView`, `NSToolbar`, `NSTextView`), and the
-value and menu classes (`NSWindow`, `NSMenu`, `NSMenuItem`,
+`NSScrollView`, `NSClipView`, `NSTableView`, `NSOutlineView`, `NSSplitView`, `NSToolbar`, `NSToolbarItem`,
+`NSTextView`), and the value and menu classes (`NSWindow`, `NSMenu`, `NSMenuItem`,
 `NSTableColumn`, `NSFont`, `NSColor`, `NSImage`) — each conforming to `NSSecureCoding`, each implementing both coding
 methods or adding no storage to inherit them for, and each archiving its DESIGN properties rather than its live graph
 (a view's window, a window's surface, a cell's control view, a table's rows and a segmented cell's private segment
@@ -80,11 +80,12 @@ maps, and translates the classes it states — `NSWindowTemplate`; `NSView`/`NSC
 (flat cells regrouped into rows); `NSSlider`/`NSSliderCell`; `NSFont`; `NSColor` (white, RGB and catalog
 fallbacks); `NSMenu`/`NSMenuItem`; `NSImageView`/`NSImageCell` and named images; `NSBrowser`/`NSBrowserCell`;
 `NSClassSwapper`; `NSTextView` (string through its text-system chain, sizes and resizable bits);
-`NSLayoutConstraint`; `NSNibBindingConnector`; `NSCell`/`NSActionCell`/`NSButtonCell`/`NSTextFieldCell`; `NSCustomObject` and the
+`NSLayoutConstraint`; `NSNibBindingConnector`; `NSToolbar`/`NSToolbarItem` (including the archived item database);
+`NSCell`/`NSActionCell`/`NSButtonCell`/`NSTextFieldCell`; `NSCustomObject` and the
 two `NSNib*Connector`s — into this tree's coding keys before the same connection pass runs. `NSFrame` strings become
 `NSValue`s, `NSvFlags`/`NSCellFlags`/`NSCellFlags2` become the properties this tree archives separately, and a class
-outside that table (a toolbar, a modern autolayout nib) refuses the file BY NAME rather than loading it without a
-piece. `tests/apple_nib.m` builds the fixture the way Apple builds
+outside that table (an `NSTabView`, an `NSDatePicker`, an unregistered app class) refuses the file BY NAME rather
+than loading it without a piece. `tests/apple_nib.m` builds the fixture the way Apple builds
 one — a binary property list with `CF$UID` references — and asserts both the object tree and the two connection
 kinds; `+[AGAppleNib unmappedKeysForAppleNibArchive:]` is the ledger of the Apple keys this slice leaves at the
 class's defaults.

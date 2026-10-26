@@ -840,11 +840,12 @@ static CGFloat fn_standard_width(NSToolbarItem *item, NSToolbarDisplayMode displ
 /* ============================================================================================
  * ARCHIVING: THE IDENTIFIERS AND THE LOOK, BECAUSE THE ITEMS ARE THE DELEGATE'S.
  * ============================================================================================ */
-/* **A TOOLBAR'S ITEMS ARE ITS DELEGATE'S ANSWERS, NOT ITS OWN CONTENT.** Apple's model is that the delegate supplies items
- * for identifiers and the toolbar keeps the identifiers; a nib therefore carries the IDENTIFIER LIST, the display and size
- * modes, and the visibility and customisation flags, and the items are rebuilt when the toolbar meets its delegate — which
- * a nib wires as a CONNECTION. That also keeps `NSToolbarItem` (a class with its own view and target) out of the format
- * until it needs to be in it. `_toolbarView`, `_window` and `_supportsAutosave` are runtime. */
+/* **A TOOLBAR'S ITEMS ARE ITS DELEGATE'S ANSWERS *OR* THE ARCHIVE'S.** Apple's model is that the delegate supplies
+ * items for identifiers and the toolbar keeps the identifiers — and that a nib may instead carry pre-made
+ * `NSToolbarItem`s in `NSToolbarIBIdentifiedItems`, which Apple's toolbar keeps in an item database consulted first.
+ * This side codes both: the identifier list, the display/size/visibility/customisation flags, and the identified
+ * items as an array (rebuilt into a dictionary on decode). `_toolbarView`, `_window` and `_supportsAutosave` are
+ * runtime. */
 static NSString * const AGCoderToolbarIdentifierKey = @"identifier";
 static NSString * const AGCoderToolbarItemIdentifiersKey = @"itemIdentifiers";
 static NSString * const AGCoderToolbarSelectedItemKey = @"selectedItemIdentifier";
@@ -854,11 +855,14 @@ static NSString * const AGCoderToolbarVisibleKey = @"visible";
 static NSString * const AGCoderToolbarCustomizationKey = @"allowsUserCustomization";
 static NSString * const AGCoderToolbarAutosavesKey = @"autosavesConfiguration";
 static NSString * const AGCoderToolbarBaselineKey = @"showsBaselineSeparator";
+/* THE PRE-MADE ITEMS A NIB SUPPLIES, kept as an ARRAY in the archive and rebuilt into the identifier dictionary. */
+static NSString * const AGCoderToolbarItemsKey = @"items";
 
 - (void)encodeWithCoder:(NSCoder *)aCoder
 {
 	[aCoder encodeObject:_identifier forKey:AGCoderToolbarIdentifierKey];
 	[aCoder encodeObject:_itemIdentifiers forKey:AGCoderToolbarItemIdentifiersKey];
+	[aCoder encodeObject:[_identifiedItems allValues] forKey:AGCoderToolbarItemsKey];
 	[aCoder encodeObject:_selectedItemIdentifier forKey:AGCoderToolbarSelectedItemKey];
 	[aCoder encodeInteger:(NSInteger)_displayMode forKey:AGCoderToolbarDisplayModeKey];
 	[aCoder encodeInteger:(NSInteger)_sizeMode forKey:AGCoderToolbarSizeModeKey];
@@ -881,6 +885,22 @@ static NSString * const AGCoderToolbarBaselineKey = @"showsBaselineSeparator";
 
 		if ([identifiers isKindOfClass:[NSArray class]]) {
 			_itemIdentifiers = [[NSMutableArray alloc] initWithArray:identifiers];
+		}
+	}
+	if ([aDecoder containsValueForKey:AGCoderToolbarItemsKey]) {
+		id items = [aDecoder decodeObjectForKey:AGCoderToolbarItemsKey];
+
+		if ([items isKindOfClass:[NSArray class]]) {
+			NSUInteger i;
+
+			for (i = 0; i < [(NSArray *)items count]; i++) {
+				id item = [(NSArray *)items objectAtIndex:i];
+
+				if ([item isKindOfClass:[NSToolbarItem class]] &&
+				    [[item itemIdentifier] length] > 0) {
+					[_identifiedItems setObject:item forKey:[item itemIdentifier]];
+				}
+			}
 		}
 	}
 	if ([aDecoder containsValueForKey:AGCoderToolbarSelectedItemKey]) {
@@ -920,6 +940,7 @@ static NSString * const AGCoderToolbarBaselineKey = @"showsBaselineSeparator";
 		_identifier = [(identifier != nil ? identifier : @"") copy];
 		_items = [[NSMutableArray alloc] init];
 		_itemIdentifiers = [[NSMutableArray alloc] init];
+		_identifiedItems = [[NSMutableDictionary alloc] init];
 		_delegate = nil;
 		_window = nil;
 		_selectedItemIdentifier = nil;
@@ -951,6 +972,7 @@ static NSString * const AGCoderToolbarBaselineKey = @"showsBaselineSeparator";
 	}
 	[_items release];
 	[_itemIdentifiers release];
+	[_identifiedItems release];
 	[_identifier release];
 	[_selectedItemIdentifier release];
 	[_toolbarView release];
@@ -970,7 +992,12 @@ static NSString * const AGCoderToolbarBaselineKey = @"showsBaselineSeparator";
 {
 	NSToolbarItem *item = nil;
 
-	if (_delegate != nil &&
+	/* **A NIB MAY SUPPLY THE ITEMS THEMSELVES, WHICH IS APPLE'S `_initPListDatabase` IN ITS PUBLIC BEHAVIOUR.** The
+	 * identifier is looked up here first; a toolbar with no delegate is not empty if its archive named its items. */
+	if (_identifiedItems != nil) {
+		item = [_identifiedItems objectForKey:identifier];
+	}
+	if (item == nil && _delegate != nil &&
 	    [_delegate respondsToSelector:@selector(toolbar:itemForItemIdentifier:willBeInsertedIntoToolbar:)]) {
 		item = [_delegate toolbar:self itemForItemIdentifier:identifier willBeInsertedIntoToolbar:flag];
 	}
@@ -1054,6 +1081,12 @@ static NSString * const AGCoderToolbarBaselineKey = @"showsBaselineSeparator";
 	if (_delegate != nil && [_delegate respondsToSelector:@selector(toolbarDefaultItemIdentifiers:)]) {
 		identifiers = [_delegate toolbarDefaultItemIdentifiers:self];
 	}
+	/* **A DECODED TOOLBAR'S OWN LIST IS THE FALLBACK.** A nib states the identifiers it wants and the items that go
+	 * with them; a delegate may override the list, but its absence (or an owner that does not implement the optional
+	 * method) must not leave the archived toolbar empty. */
+	if (identifiers == nil && [_itemIdentifiers count] > 0) {
+		identifiers = [NSArray arrayWithArray:_itemIdentifiers];
+	}
 	if (identifiers == nil) {
 		return;
 	}
@@ -1117,17 +1150,16 @@ static NSString * const AGCoderToolbarBaselineKey = @"showsBaselineSeparator";
 
 - (NSArray *)items
 {
-	if (_window != nil) {
-		[self fn_loadItemsIfNeeded];
-	}
+	/* **THE ITEMS ARE LOADED WHETHER OR NOT THE TOOLBAR HAS A WINDOW.** Apple's accessor answers the current items, and
+	 * a nib can ask before attachment; gating on `_window` made an archived toolbar answer an empty array until it
+	 * met its window, which is not what either side documents. */
+	[self fn_loadItemsIfNeeded];
 	return [NSArray arrayWithArray:_items];
 }
 
 - (NSArray *)visibleItems
 {
-	if (_window != nil) {
-		[self fn_loadItemsIfNeeded];
-	}
+	[self fn_loadItemsIfNeeded];
 	if (_toolbarView != nil) {
 		return [(NSToolbarView *)_toolbarView cg_visibleItems];
 	}

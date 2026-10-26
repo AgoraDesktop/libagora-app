@@ -28,6 +28,9 @@
  * `NSTextContainer` → `NSLayoutManager` → `NSTextStorage`, plus its min/max sizes and two resizable bits);
  * `NSLayoutConstraint` (the equation, attached to the view the object map names as its owner); `NSNibBindingConnector`
  * (a binding connection — its options are not translated, so a transformer or formatter is named in the ledger);
+ * `NSToolbar`/`NSToolbarItem` (the identifier list, display/size/visibility flags, and the identified items the toolbar
+ * keeps and hands out before its delegate; an item's target and the toolbar's delegate are applied as outlet
+ * connections);
  * `NSCell`, `NSActionCell`, `NSButtonCell`, `NSTextFieldCell`; `NSCustomObject` (the file's owner becomes
  * `NSNibFileOwner` in connections, and a top-level custom object must be a class registered with
  * `+[NSNib registerDesignClass:]`); `NSNibOutletConnector` and `NSNibControlConnector`. Geometry strings become

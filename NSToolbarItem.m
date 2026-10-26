@@ -64,6 +64,103 @@ NSString *NSToolbarPrintItemIdentifier = @"NSToolbarPrintItem";
 	return self;
 }
 
+/* **AN ITEM IS DESIGN STATE, SO IT CODES.** The identifier, labels, tool tip, image, custom view, target/action, tag,
+ * enabled flag, size range, visibility priority and autovalidates switch are all what a toolbar archive states; the
+ * toolbar back-pointer is not (it is the graph that owns the item), and neither is the menu-form representation (it is
+ * MADE on first ask). */
+static NSString * const AGCoderToolbarItemIdentifierKey = @"itemIdentifier";
+static NSString * const AGCoderToolbarItemLabelKey = @"label";
+static NSString * const AGCoderToolbarItemPaletteKey = @"paletteLabel";
+static NSString * const AGCoderToolbarItemToolTipKey = @"toolTip";
+static NSString * const AGCoderToolbarItemTagKey = @"tag";
+static NSString * const AGCoderToolbarItemEnabledKey = @"enabled";
+static NSString * const AGCoderToolbarItemImageKey = @"image";
+static NSString * const AGCoderToolbarItemViewKey = @"view";
+static NSString * const AGCoderToolbarItemTargetKey = @"target";
+static NSString * const AGCoderToolbarItemActionKey = @"action";
+static NSString * const AGCoderToolbarItemMinSizeKey = @"minSize";
+static NSString * const AGCoderToolbarItemMaxSizeKey = @"maxSize";
+static NSString * const AGCoderToolbarItemPriorityKey = @"visibilityPriority";
+static NSString * const AGCoderToolbarItemAutovalidatesKey = @"autovalidates";
+
+- (void)encodeWithCoder:(NSCoder *)aCoder
+{
+	[aCoder encodeObject:_itemIdentifier forKey:AGCoderToolbarItemIdentifierKey];
+	[aCoder encodeObject:_label forKey:AGCoderToolbarItemLabelKey];
+	[aCoder encodeObject:_paletteLabel forKey:AGCoderToolbarItemPaletteKey];
+	[aCoder encodeObject:_toolTip forKey:AGCoderToolbarItemToolTipKey];
+	[aCoder encodeInteger:_tag forKey:AGCoderToolbarItemTagKey];
+	[aCoder encodeBool:_enabled forKey:AGCoderToolbarItemEnabledKey];
+	[aCoder encodeObject:_image forKey:AGCoderToolbarItemImageKey];
+	[aCoder encodeObject:_view forKey:AGCoderToolbarItemViewKey];
+	[aCoder encodeObject:_target forKey:AGCoderToolbarItemTargetKey];
+	[aCoder encodeObject:(_action != NULL) ? NSStringFromSelector(_action) : nil
+		     forKey:AGCoderToolbarItemActionKey];
+	[aCoder encodeSize:_minSize forKey:AGCoderToolbarItemMinSizeKey];
+	[aCoder encodeSize:_maxSize forKey:AGCoderToolbarItemMaxSizeKey];
+	[aCoder encodeInteger:_visibilityPriority forKey:AGCoderToolbarItemPriorityKey];
+	[aCoder encodeBool:_autovalidates forKey:AGCoderToolbarItemAutovalidatesKey];
+}
+
+- (instancetype)initWithCoder:(NSCoder *)aDecoder
+{
+	NSString *identifier = [aDecoder decodeObjectForKey:AGCoderToolbarItemIdentifierKey];
+
+	self = [self initWithItemIdentifier:identifier];
+	if (self == nil) {
+		return nil;
+	}
+	if ([aDecoder containsValueForKey:AGCoderToolbarItemLabelKey]) {
+		[self setLabel:[aDecoder decodeObjectForKey:AGCoderToolbarItemLabelKey]];
+	}
+	if ([aDecoder containsValueForKey:AGCoderToolbarItemPaletteKey]) {
+		[self setPaletteLabel:[aDecoder decodeObjectForKey:AGCoderToolbarItemPaletteKey]];
+	}
+	if ([aDecoder containsValueForKey:AGCoderToolbarItemToolTipKey]) {
+		[self setToolTip:[aDecoder decodeObjectForKey:AGCoderToolbarItemToolTipKey]];
+	}
+	if ([aDecoder containsValueForKey:AGCoderToolbarItemTagKey]) {
+		[self setTag:[aDecoder decodeIntegerForKey:AGCoderToolbarItemTagKey]];
+	}
+	if ([aDecoder containsValueForKey:AGCoderToolbarItemEnabledKey]) {
+		[self setEnabled:[aDecoder decodeBoolForKey:AGCoderToolbarItemEnabledKey]];
+	}
+	if ([aDecoder containsValueForKey:AGCoderToolbarItemImageKey]) {
+		[self setImage:[aDecoder decodeObjectForKey:AGCoderToolbarItemImageKey]];
+	}
+	if ([aDecoder containsValueForKey:AGCoderToolbarItemViewKey]) {
+		[self setView:[aDecoder decodeObjectForKey:AGCoderToolbarItemViewKey]];
+	}
+	if ([aDecoder containsValueForKey:AGCoderToolbarItemTargetKey]) {
+		[self setTarget:[aDecoder decodeObjectForKey:AGCoderToolbarItemTargetKey]];
+	}
+	if ([aDecoder containsValueForKey:AGCoderToolbarItemActionKey]) {
+		id name = [aDecoder decodeObjectForKey:AGCoderToolbarItemActionKey];
+
+		if ([name isKindOfClass:[NSString class]]) {
+			[self setAction:NSSelectorFromString(name)];
+		}
+	}
+	if ([aDecoder containsValueForKey:AGCoderToolbarItemMinSizeKey]) {
+		[self setMinSize:[aDecoder decodeSizeForKey:AGCoderToolbarItemMinSizeKey]];
+	}
+	if ([aDecoder containsValueForKey:AGCoderToolbarItemMaxSizeKey]) {
+		[self setMaxSize:[aDecoder decodeSizeForKey:AGCoderToolbarItemMaxSizeKey]];
+	}
+	if ([aDecoder containsValueForKey:AGCoderToolbarItemPriorityKey]) {
+		[self setVisibilityPriority:[aDecoder decodeIntegerForKey:AGCoderToolbarItemPriorityKey]];
+	}
+	if ([aDecoder containsValueForKey:AGCoderToolbarItemAutovalidatesKey]) {
+		[self setAutovalidates:[aDecoder decodeBoolForKey:AGCoderToolbarItemAutovalidatesKey]];
+	}
+	return self;
+}
+
++ (BOOL)supportsSecureCoding
+{
+	return YES;
+}
+
 - (void)dealloc
 {
 	[_itemIdentifier release];

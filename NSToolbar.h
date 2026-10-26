@@ -13,12 +13,15 @@
  * painted in the band between them. Showing or hiding it preserves the CONTENT's size and changes the FRAME's, which
  * is what a person expects from a toolbar toggle: the document does not get shorter, the window gets taller.
  *
- * **THE ITEMS ARE THE DELEGATE'S.** A toolbar asks its delegate for a default identifier list, for an item when an
- * identifier is inserted, and for the set of identifiers a user may choose from. The three standard spacers
- * (`NSToolbarSeparatorItemIdentifier`, `NSToolbarSpaceItemIdentifier`,
+ * **THE ITEMS ARE THE DELEGATE'S, UNLESS THE ARCHIVE SUPPLIED THEM.** A toolbar asks its delegate for a default
+ * identifier list, for an item when an identifier is inserted, and for the set of identifiers a user may choose from.
+ * A nib, however, carries pre-made `NSToolbarItem`s (Apple's `NSToolbarIBIdentifiedItems`), and Apple's toolbar keeps
+ * them in an item database consulted before the delegate — the same shape is here, in `_identifiedItems`. The three
+ * standard spacers (`NSToolbarSeparatorItemIdentifier`, `NSToolbarSpaceItemIdentifier`,
  * `NSToolbarFlexibleSpaceItemIdentifier`) are made here because they are not items a delegate can usefully own;
  * the four "standard commands" are asked of the delegate first, and a toolbar with no delegate item for one answers
- * a plain item carrying the command's own action.
+ * a plain item carrying the command's own action. A decoded toolbar with no delegate loads its own identifier list,
+ * so an archived toolbar is not empty merely because it is unattached.
  *
  * **WHAT IS DELIBERATELY NOT HERE: THE CUSTOMIZATION PALETTE.** The palette is a second window with a drag-and-drop
  * editing session, and this tier has neither a panel class nor a drag session. `-runCustomizationPalette:` refuses
@@ -100,6 +103,7 @@ extern NSString *NSToolbarAllowsUserCustomizationKey;
 	NSString *_identifier;			/* COPIED: the toolbar's name, and the defaults key's stem */
 	NSMutableArray *_items;			/* RETAINED: the toolbar owns the items it was given */
 	NSMutableArray *_itemIdentifiers;	/* RETAINED, parallel to `_items` */
+	NSMutableDictionary *_identifiedItems;	/* RETAINED: pre-made items a nib supplied, by identifier */
 	id _delegate;				/* NOT RETAINED: this tree's rule for every delegate */
 	NSWindow *_window;			/* NOT RETAINED: the window owns the toolbar */
 	NSString *_selectedItemIdentifier;	/* COPIED, or nil */
@@ -120,8 +124,9 @@ extern NSString *NSToolbarAllowsUserCustomizationKey;
 - (instancetype)initWithIdentifier:(NSString *)identifier;
 - (NSString *)identifier;
 
-/* THE PRIMITIVES. An insertion asks the delegate for the item (and for one that is not in the allowed list, it asks
- * anyway: the allowed list is the PALETTE's rule, and this tier has no palette). `-items` is the live order. */
+/* THE PRIMITIVES. An insertion asks the toolbar's identified items first and then the delegate (and for one that is
+ * not in the allowed list, it asks anyway: the allowed list is the PALETTE's rule, and this tier has no palette).
+ * `-items` is the live order and loads an archived identifier list even when the toolbar has no window. */
 - (void)insertItemWithItemIdentifier:(NSString *)itemIdentifier atIndex:(NSInteger)index;
 - (void)removeItemAtIndex:(NSInteger)index;
 - (NSArray *)items;

@@ -899,6 +899,7 @@ static NSString * const AGCoderWindowShowsToolbarButtonKey = @"showsToolbarButto
 static NSString * const AGCoderWindowPreservesContentKey = @"preservesContentDuringLiveResize";
 static NSString * const AGCoderWindowBackgroundColorKey = @"backgroundColor";
 static NSString * const AGCoderWindowContentViewKey = @"contentView";
+static NSString * const AGCoderWindowToolbarKey = @"toolbar";
 
 - (void)encodeWithCoder:(NSCoder *)aCoder
 {
@@ -939,6 +940,7 @@ static NSString * const AGCoderWindowContentViewKey = @"contentView";
 	[aCoder encodeBool:_preservesContentDuringLiveResize forKey:AGCoderWindowPreservesContentKey];
 	[aCoder encodeObject:_backgroundColor forKey:AGCoderWindowBackgroundColorKey];
 	[aCoder encodeObject:_contentView forKey:AGCoderWindowContentViewKey];
+	[aCoder encodeObject:_toolbar forKey:AGCoderWindowToolbarKey];
 }
 
 - (instancetype)initWithCoder:(NSCoder *)aDecoder
@@ -1077,6 +1079,15 @@ static NSString * const AGCoderWindowContentViewKey = @"contentView";
 
 		if ([view isKindOfClass:[NSView class]]) {
 			[self setContentView:view];
+		}
+	}
+	/* THE TOOLBAR LAST, THROUGH `-setToolbar:`, which is the door that makes the band and tells the toolbar its
+	 * window; a toolbar decoded into an ivar would be attached to nothing. */
+	if ([aDecoder containsValueForKey:AGCoderWindowToolbarKey]) {
+		id toolbar = [aDecoder decodeObjectForKey:AGCoderWindowToolbarKey];
+
+		if ([toolbar isKindOfClass:[NSToolbar class]]) {
+			[self setToolbar:toolbar];
 		}
 	}
 	return self;

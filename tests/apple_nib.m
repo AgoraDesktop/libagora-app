@@ -27,6 +27,8 @@
 #import <AppKit/NSImageCell.h>
 #import <AppKit/NSImageView.h>
 #import <AppKit/NSKeyValueBinding.h>
+#import <AppKit/NSToolbar.h>
+#import <AppKit/NSToolbarItem.h>
 #import <AppKit/NSLayoutConstraint.h>
 #import <AppKit/NSTextView.h>
 #import <AppKit/NSMatrix.h>
@@ -1092,6 +1094,176 @@ test_binding_translation(void)
 	[owner release];
 }
 
+
+/* **A TOOLBAR ARCHIVE CARRIES ITS ITEMS.** `NSToolbarIBIdentifiedItems` is a dictionary of pre-made items,
+ * `NSToolbarIBDefaultItems` the identifiers in display order, and the toolbar's own keys are display/size/visibility/
+ * customization/baseline. This tree's NSToolbar now keeps the identified items and consults them before its delegate,
+ * which is Apple's `_initPListDatabase` behaviour. An item's target and the toolbar's delegate are refs, so they are
+ * applied as outlet connections through the file's-owner placeholder. */
+static NSDictionary *
+build_toolbar_archive(BOOL withWindow)
+{
+	NSMutableArray *objects = [NSMutableArray arrayWithObject:@"$null"];
+	NSUInteger cObjectData = add_class(objects, @"NSIBObjectData");
+	NSUInteger cArray = add_class(objects, @"NSArray");
+	NSUInteger cDictionary = add_class(objects, @"NSDictionary");
+	NSUInteger cCustom = add_class(objects, @"NSCustomObject");
+	NSUInteger cToolbar = add_class(objects, @"NSToolbar");
+	NSUInteger cItem = add_class(objects, @"NSToolbarItem");
+	NSUInteger cResource = add_class(objects, @"NSCustomResource");
+	NSUInteger cWindow = add_class(objects, @"NSWindowTemplate");
+	NSUInteger root;
+	NSUInteger image;
+	NSUInteger doItem;
+	NSUInteger separator;
+	NSUInteger identified;
+	NSUInteger defaults;
+	NSUInteger toolbar;
+	NSUInteger window;
+	NSUInteger keysArray;
+	NSUInteger valuesArray;
+	NSUInteger objectData;
+	NSMutableArray *keys = [NSMutableArray array];
+	NSMutableArray *owners = [NSMutableArray array];
+	NSDictionary *properties;
+
+	root = add_object(objects, cCustom,
+			  [NSDictionary dictionaryWithObject:@"Owner" forKey:@"NSClassName"]);
+	image = add_object(objects, cResource,
+		[NSDictionary dictionaryWithObjectsAndKeys:
+			@"NSImage", @"NSClassName",
+			@"toolbar-image", @"NSResourceName",
+			nil]);
+	doItem = add_object(objects, cItem,
+		[NSDictionary dictionaryWithObjectsAndKeys:
+			@"doThing", @"NSToolbarItemIdentifier",
+			@"Do", @"NSToolbarItemLabel",
+			@"Do It", @"NSToolbarItemPaletteLabel",
+			@"Do the thing", @"NSToolbarItemToolTip",
+			@"doThing:", @"NSToolbarItemAction",
+			[NSNumber numberWithInt:7], @"NSToolbarItemTag",
+			[NSNumber numberWithBool:YES], @"NSToolbarItemEnabled",
+			[NSNumber numberWithBool:YES], @"NSToolbarItemAutovalidates",
+			[NSNumber numberWithInt:0], @"NSToolbarItemVisibilityPriority",
+			uid(image), @"NSToolbarItemImage",
+			uid(root), @"NSToolbarItemTarget",
+			@"{24, 24}", @"NSToolbarItemMinSize",
+			@"{24, 24}", @"NSToolbarItemMaxSize",
+			nil]);
+	separator = add_object(objects, cItem,
+		[NSDictionary dictionaryWithObjectsAndKeys:
+			NSToolbarSeparatorItemIdentifier, @"NSToolbarItemIdentifier",
+			@"", @"NSToolbarItemLabel",
+			nil]);
+	identified = add_object(objects, cDictionary,
+		[NSDictionary dictionaryWithObjectsAndKeys:
+			[NSArray arrayWithObjects:uid(doItem), uid(separator), nil], @"NS.objects",
+			[NSArray arrayWithObjects:@"doThing", NSToolbarSeparatorItemIdentifier, nil], @"NS.keys",
+			nil]);
+	defaults = add_array(objects, cArray,
+		[NSArray arrayWithObjects:uid(doItem), uid(separator), nil]);
+	toolbar = add_object(objects, cToolbar,
+		[NSDictionary dictionaryWithObjectsAndKeys:
+			@"Main", @"NSToolbarIdentifier",
+			uid(identified), @"NSToolbarIBIdentifiedItems",
+			uid(defaults), @"NSToolbarIBDefaultItems",
+			[NSNumber numberWithInt:1], @"NSToolbarDisplayMode",
+			[NSNumber numberWithInt:1], @"NSToolbarSizeMode",
+			[NSNumber numberWithBool:YES], @"NSToolbarPrefersToBeShown",
+			[NSNumber numberWithBool:NO], @"NSToolbarAllowsUserCustomization",
+			[NSNumber numberWithBool:NO], @"NSToolbarAutosavesConfiguration",
+			[NSNumber numberWithBool:YES], @"NSToolbarShowsBaselineSeparator",
+			uid(root), @"NSToolbarDelegate",
+			nil]);
+
+	[keys addObjectsFromArray:[NSArray arrayWithObjects:
+		uid(root), uid(toolbar), uid(doItem), uid(separator), uid(image), nil]];
+	[owners addObjectsFromArray:[NSArray arrayWithObjects:
+		uid(root), uid(root), uid(toolbar), uid(toolbar), uid(doItem), nil]];
+	if (withWindow) {
+		window = add_object(objects, cWindow,
+			[NSDictionary dictionaryWithObjectsAndKeys:
+				@"NSWindow", @"NSWindowClass",
+				@"{{0, 0}, {200, 200}}", @"NSWindowRect",
+				[NSNumber numberWithUnsignedInt:15u], @"NSWindowStyleMask",
+				@"Toolbar Window", @"NSWindowTitle",
+				uid(toolbar), @"NSToolbar",
+				nil]);
+		[keys addObject:uid(window)];
+		[owners addObject:uid(root)];
+	}
+	keysArray = add_array(objects, cArray, keys);
+	valuesArray = add_array(objects, cArray, owners);
+	objectData = add_object(objects, cObjectData,
+		[NSDictionary dictionaryWithObjectsAndKeys:
+			uid(keysArray), @"NSObjectsKeys",
+			uid(valuesArray), @"NSObjectsValues",
+			uid(root), @"NSRoot",
+			nil]);
+	properties = [NSMutableDictionary dictionaryWithObjectsAndKeys:
+		[NSNumber numberWithInt:100000], @"$version",
+		@"NSKeyedArchiver", @"$archiver",
+		objects, @"$objects",
+		[NSDictionary dictionaryWithObject:uid(objectData) forKey:@"IB.objectdata"], @"$top",
+		nil];
+	return properties;
+}
+
+static void
+test_toolbar_translation(void)
+{
+	NSDictionary *plist = build_toolbar_archive(NO);
+	NSData *data = archive_data(plist);
+	NSString *path;
+	NSNib *nib;
+	AppleNibOwner *owner = [[AppleNibOwner alloc] init];
+	NSArray *top = nil;
+	NSToolbar *toolbar;
+	NSArray *items;
+	NSToolbarItem *item;
+	NSImage *image;
+
+	check([AGAppleNib validateAppleNibArchive:plist reason:NULL], "a toolbar archive validates");
+	{
+		NSDictionary *windowed = build_toolbar_archive(YES);
+
+		check([AGAppleNib validateAppleNibArchive:windowed reason:NULL],
+		      "a window template's NSToolbar validates");
+	}
+	path = [NSTemporaryDirectory() stringByAppendingPathComponent:@"agora-apple-nib-toolbar.nib"];
+	[data writeToFile:path atomically:YES];
+	nib = [[NSNib alloc] initWithContentsOfURL:[NSURL fileURLWithPath:path]];
+	check([nib instantiateNibWithOwner:owner topLevelObjects:&top], "a toolbar nib instantiates");
+	toolbar = ([top count] == 1 && [[top objectAtIndex:0] isKindOfClass:[NSToolbar class]])
+		? [top objectAtIndex:0] : nil;
+	check(toolbar != nil, "the toolbar is the top-level object");
+	check([[toolbar identifier] isEqualToString:@"Main"], "NSToolbarIdentifier becomes the identifier");
+	check([toolbar delegate] == owner, "NSToolbarDelegate is applied to the owner");
+	check([toolbar displayMode] == 1 && [toolbar sizeMode] == 1 && [toolbar isVisible] &&
+	      [toolbar showsBaselineSeparator],
+	      "the toolbar's display, size and visibility keys travel");
+
+	items = [toolbar items];
+	check([items count] == 2, "NSToolbarIBDefaultItems become the toolbar's items");
+	item = [items count] == 2 ? [items objectAtIndex:0] : nil;
+	check([[item itemIdentifier] isEqualToString:@"doThing"] &&
+	      [[item label] isEqualToString:@"Do"] &&
+	      [[item paletteLabel] isEqualToString:@"Do It"],
+	      "the identified item's identifier and labels travel");
+	check([NSStringFromSelector([item action]) isEqualToString:@"doThing:"],
+	      "the item's action travels");
+	check([item target] == owner, "the item's target is applied to the owner");
+	check([item tag] == 7 && NSEqualSizes([item minSize], NSMakeSize(24, 24)),
+	      "the item's tag and size range travel");
+	image = [item image];
+	check([image isKindOfClass:[NSImage class]] && [[image name] isEqualToString:@"toolbar-image"],
+	      "NSToolbarItemImage becomes a named NSImage");
+	check([[[items objectAtIndex:1] itemIdentifier] isEqualToString:NSToolbarSeparatorItemIdentifier],
+	      "the separator keeps its identifier");
+	[nib release];
+	[owner release];
+}
+
 /* ============================== THE TESTS ======================================================= */
 
 static void
@@ -1234,6 +1406,7 @@ main(void)
 	test_menu_translation();
 	test_browser_translation();
 	test_binding_translation();
+	test_toolbar_translation();
 
 	[pool drain];
 	printf(g_fail ? "apple_nib: FAIL\n" : "apple_nib: all checks passed\n");

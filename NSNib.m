@@ -58,6 +58,7 @@
 #import <AppKit/NSOutlineView.h>
 #import <AppKit/NSSplitView.h>
 #import <AppKit/NSToolbar.h>
+#import <AppKit/NSToolbarItem.h>
 #import <AppKit/NSLayoutConstraint.h>
 #import <AppKit/NSWindow.h>
 #import <AppKit/NSMenu.h>
@@ -232,6 +233,7 @@ static Class const *fn_design_classes(NSUInteger *countOut)
 		classes[count++] = [NSOutlineView class];
 		classes[count++] = [NSSplitView class];
 		classes[count++] = [NSToolbar class];
+		classes[count++] = [NSToolbarItem class];
 		/* AND THE EQUATIONS, without which a nib could state a frame but never a relationship. */
 		classes[count++] = [NSLayoutConstraint class];
 		classes[count++] = [NSWindow class];

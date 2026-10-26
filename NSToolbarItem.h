@@ -17,6 +17,11 @@
  * view answers them; the item keeps the value as well, because the toolbar's validation and the item's menu form both
  * read it. That is what makes a custom control inside a toolbar behave like the standard item it replaced.
  *
+ * **AND IT CODES ITS DESIGN STATE**, which is what lets an Apple nib carry the item itself rather than only an
+ * identifier: the identifier, labels, tool tip, image, custom view, target/action, tag, enabled flag, size range,
+ * visibility priority and autovalidates switch. The toolbar back-pointer and the menu-form representation are not
+ * archived — the first is the graph's, the second is made on demand.
+ *
  * Written from `NSToolbarItem.h` in the MacOSX10.6 SDK (see PROVENANCE.md).
  */
 #ifndef APPKIT_NSTOOLBARITEM_H
@@ -44,7 +49,7 @@ enum {
 	NSToolbarItemVisibilityPriorityUser = 2000
 };
 
-@interface NSToolbarItem : NSObject <NSCopying, NSValidatedUserInterfaceItem>
+@interface NSToolbarItem : NSObject <NSCopying, NSValidatedUserInterfaceItem, NSSecureCoding>
 {
 	NSString *_itemIdentifier;		/* COPIED: the delegate and the toolbar identify an item by this */
 	NSString *_label;			/* COPIED */
