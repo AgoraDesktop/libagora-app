@@ -1325,6 +1325,10 @@ void AGWindowEndFrame(AGWindow *window)
 		}
 		window->last_damage_count = window->damage_count;
 	}
+	if (getenv("AG_WINDOW_DIAG") != NULL) {
+		fprintf(stderr, "  DIAG commit: buffer=%p damage=%d size=%dx%d\n", (void *)window->buffer.buffer,
+			window->last_damage_count, window->buffer.width, window->buffer.height);
+	}
 	window->damage_count = 0;
 	wl_surface_commit(window->surface);
 	/* WHEN THE CALLER CAME HERE FROM `AGWindowShow`, THE FLUSH ALREADY HAPPENED — before the frame was asked
@@ -3131,6 +3135,11 @@ void AGWindowShow(AGWindow *window)
 	 * `AGWindowEndFrame` is how a client gets that order for free: the first commit the compositor ever sees
 	 * carries the buffer, so there is never a moment when the window is on the screen and empty. A window shown and
 	 * never drawn is then never mapped at all, which is right — it has nothing to show. */
+	if (getenv("AG_WINDOW_DIAG") != NULL) {
+		fprintf(stderr, "  DIAG show: agora=%p xdg=%p configured=%d frame_ready=%d surface=%p\n",
+			(void *)window->agora, (void *)window->xdg_surface, window->configured, window->frame_ready,
+			(void *)window->surface);
+	}
 	wl_display_flush(window->server->display);
 	if (window->agora != NULL) {
 		/* **AND A WINDOW THAT IS SHOWN IS VISIBLE, WHICH THIS NEVER SAID.** `-orderOut:` was wired to a hide
