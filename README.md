@@ -496,6 +496,15 @@ the compositor is really gone.
   `-inputSource` still answers nil and the layouts are still what `-textInputSources` lists, because the default is a
   COMPOSER rather than a selection — and a source change discards the composition on both sides (the source's state and
   the client's mark) so an abandoned accent cannot compose into a later keystroke.
+  **AND `-charactersIgnoringModifiers` IS HONEST NOW, WHICH IS WHAT MAKES A CONTROL COMBINATION NAMEABLE.** It was the
+  SAME string as `-characters`, and `-characters` has Control folded into it (`Ctrl+A` is `0x01`, `Ctrl+[` is `0x1b`),
+  so a key EQUIVALENT could never match one: `Ctrl+Shift+C` and `Ctrl+C` type the same `0x03` and `NSMenu
+  -performKeyEquivalent:` matches on the ignoring-modifiers door, as Apple's does. `AGKeyboardTranslateIgnoringModifiers`
+  answers the key's own symbol from the layout's levels — Shift kept, Control/Alt/Super and the locks dropped, which is
+  Apple's sentence exactly — and the seam carries it beside `text` (`AGEvent.text_plain`). MEASURED
+  (`tests/appkit_dispatch.m`): an event whose two strings are both `0x03` matches NOTHING, and the same keystroke with
+  `C` in the second one fires a `Ctrl+Shift+C` item once — so the copy shortcut a terminal needs can be a menu item, and
+  an interrupt cannot fire it.
 - **And `-transpose:` AND THE FIELD-ROLE INSERTIONS** (`ctest`): the one command in the responder's named list that
   needed no model this tier was missing — a position and two characters are arithmetic over the string. MEASURED:
   transposing at index **2** of `abcd` gives `acbd` with the caret at **3**; a selection of two swaps exactly those

@@ -90,6 +90,7 @@ static void check(int ok, const char *what)
 	unsigned int lastSourceTime;
 	unsigned int lastFocusSerial;
 	unsigned int lastKeysym;	/* `-cg_keysym`, which the seam has always carried and AppKit used to drop */
+	NSString *lastIgnoringModifiers;	/* and `-charactersIgnoringModifiers`, the key with the modifiers taken off */
 	NSPoint lastPoint;
 }
 @end
@@ -112,6 +113,8 @@ static void check(int ok, const char *what)
 	lastSourceTime = [event cg_sourceTimestamp];
 	lastFocusSerial = [event cg_focusSerial];
 	lastKeysym = [event cg_keysym];
+	[lastIgnoringModifiers release];
+	lastIgnoringModifiers = [[event charactersIgnoringModifiers] copy];
 }
 
 - (void)keyUp:(NSEvent *)event
@@ -175,6 +178,17 @@ static AGEvent evdev_key(uint32_t code, const char *text, int pressed, int modif
 	event.modifier = modifier;
 	event.modifiers = modifiers;
 	snprintf(event.text, sizeof event.text, "%s", text != NULL ? text : "");
+	return event;
+}
+
+/* **AND THE SAME KEY WITH THE MODIFIERS OFF, WHICH IS A SECOND FIELD AND NOT A SECOND OPINION.** `AGKeyboard`
+ * produces both — `-Translate` for what the person will see, `-TranslateIgnoringModifiers` for which key it was — so a
+ * test that filled only one would be testing half the seam. */
+static AGEvent evdev_key_plain(uint32_t code, const char *text, const char *plain, int pressed, uint32_t modifiers)
+{
+	AGEvent event = evdev_key(code, text, pressed, 0, modifiers);
+
+	snprintf(event.text_plain, sizeof event.text_plain, "%s", plain != NULL ? plain : "");
 	return event;
 }
 
@@ -434,6 +448,44 @@ int main(void)
 			      "and a DEAD KEY arrives named, which is the only way it can be identified at all");
 			check(content->lastCharacters != nil && [content->lastCharacters length] == 0,
 			      "typing nothing, as a dead key does: the name is the whole of what it says");
+
+			/* **1c. AND THE KEY WITH ITS MODIFIERS OFF, WHICH IS THE ONLY THING THAT NAMES A CONTROL COMBINATION.**
+			 * `Ctrl+Shift+C` and `Ctrl+C` both type `0x03`, so `-characters` cannot tell the copy shortcut from an
+			 * interrupt — the menu's key equivalent and a terminal's modifier parameter both need the symbol the
+			 * key carries, and `NSMenu -performKeyEquivalent:` has always matched on
+			 * `-charactersIgnoringModifiers`. This is the chain: `AGKeyboard`'s unmasked answer into the seam's field,
+			 * through `NSWindow`, out of the event the view is sent. */
+			event = evdev_key_plain(30 /* KEY_A */, "\x01", "a", 1, AGModifierControl);
+			deliver(application, window, &event);
+			check(content->lastCharacters != nil && [content->lastCharacters length] == 1 &&
+			      [content->lastCharacters characterAtIndex:0] == 0x01,
+			      "Control makes the key type the control character");
+			check(content->lastIgnoringModifiers != nil &&
+			      [content->lastIgnoringModifiers isEqual:@"a"],
+			      "and the very same event still says the key was `a`");
+
+			event = evdev_key_plain(30, "\x01", "A", 1, AGModifierControl | AGModifierShift);
+			deliver(application, window, &event);
+			check([content->lastCharacters isEqual:content->lastIgnoringModifiers] == NO &&
+			      [content->lastIgnoringModifiers isEqual:@"A"],
+			      "Ctrl+Shift types the same byte as Ctrl and answers `A` when the modifiers are ignored");
+
+			/* **AND A KEY THAT TYPES NOTHING ANSWERS THE SAME CHARACTER BOTH WAYS**, which is what AppKit does
+			 * for the `0xF700` block: the name IS the character, so `-charactersIgnoringModifiers` has nothing
+			 * better to say and must not fall back to the empty string. */
+			event = evdev_key(103 /* KEY_UP */, "", 1, 0, 0);
+			event.keysym = XKB_KEY_Up;
+			deliver(application, window, &event);
+			check(is_function_key(content->lastIgnoringModifiers, NSUpArrowFunctionKey),
+			      "an arrow answers NSUpArrowFunctionKey with the modifiers ignored too");
+
+			/* AND AN EVENT WITH NO UNMASKED TEXT — one this tier fabricated, or a seam that did not fill it —
+			 * falls back to `-characters` rather than to an empty string, so nothing that read that door before
+			 * this field existed changes its answer. */
+			event = evdev_key(30, "a", 1, 0, 0);
+			deliver(application, window, &event);
+			check([content->lastIgnoringModifiers isEqual:@"a"],
+			      "with no unmasked text the door answers what the key typed");
 
 			/* **A KEY WITH NO COCOA NAME IS STILL DELIVERED, WITH NO CHARACTER.** A layout can bind a key this
 			 * tier does not map, and the alternative to an empty string is a refusal or a wrong guess; the empty

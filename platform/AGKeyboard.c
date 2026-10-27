@@ -246,6 +246,54 @@ int AGKeyboardTranslate(AGKeyboard *keyboard, uint32_t evdev_keycode, char *utf8
 	return written > 0 ? written : 0;
 }
 
+/* **THE SAME KEY WITH THE MODIFIERS TAKEN OFF, READ FROM THE KEYMAP'S LEVELS RATHER THAN FROM A DOCTORED STATE.**
+ *
+ * A second `xkb_state` fed only Shift would answer this too, and it would be the wrong instrument twice over: it is
+ * another piece of state to keep in step with the first (and `-setModifiers:` would have to feed both), and a SELECTED
+ * COMPOSING SOURCE'S PENDING DEAD KEY lives in the real state — a copy that was built by re-feeding modifiers could
+ * carry a composition across from a keystroke it never saw. `xkb_keymap_key_get_syms_by_level` asks the layout
+ * directly, which is what the question is: level 0 is the key unmasked, level 1 is the key with Shift, and everything
+ * above that is a level-3 (AltGr) or a group reading the masking is supposed to drop. The GROUP is the live one, so a
+ * layout with three groups still answers for the group the person is typing in.
+ *
+ * `xkb_keysym_to_utf8` is the conversion, and it agrees with what the state would have produced for the same level:
+ * a dead key has no text, `Return` is `0x0D`, and a keysym with several reading says its first. */
+int AGKeyboardTranslateIgnoringModifiers(AGKeyboard *keyboard, uint32_t evdev_keycode, char *utf8, size_t size,
+					uint32_t *modifiers)
+{
+	const xkb_keysym_t *syms = NULL;
+	xkb_layout_index_t group;
+	unsigned level;
+	int count;
+	int written;
+
+	if (size > 0) {
+		utf8[0] = '\0';
+	}
+	if (keyboard == NULL || keyboard->keymap == NULL || keyboard->state == NULL) {
+		if (modifiers != NULL) {
+			*modifiers = 0;
+		}
+		return 0;
+	}
+	if (modifiers != NULL) {
+		*modifiers = AGKeyboardModifiers(keyboard);
+	}
+	if (size == 0) {
+		return 0;
+	}
+	/* SHIFT IS THE ONE MODIFIER KEPT, and the mask this keyboard was just asked for is where it is read from — so the
+	 * two doors agree about what is down without either of them re-deriving it. */
+	level = ((modifiers != NULL && (*modifiers & AGModifierShift) != 0)) ? 1u : 0u;
+	group = xkb_state_serialize_layout(keyboard->state, XKB_STATE_LAYOUT_EFFECTIVE);
+	count = xkb_keymap_key_get_syms_by_level(keyboard->keymap, AG_EVDEV_TO_XKB(evdev_keycode), group, level, &syms);
+	if (count <= 0 || syms == NULL) {
+		return 0;
+	}
+	written = xkb_keysym_to_utf8(syms[0], utf8, size);
+	return written > 0 ? written : 0;
+}
+
 int AGKeyboardKeyIsRepeatable(AGKeyboard *keyboard, uint32_t evdev_keycode)
 {
 	xkb_keysym_t sym;

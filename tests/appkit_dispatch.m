@@ -403,6 +403,47 @@ int main(void)
 		check(target->fired == 2, "a bare `n` fires no menu item");
 		check(content->keyDowns == 1, "and reaches the first responder as it should");
 
+		/* **AND A CONTROL COMBINATION CAN BE A KEY EQUIVALENT, WHICH IT COULD NOT BEFORE THE EVENT CARRIED THE
+		 * KEY'S OWN NAME.** `Ctrl+Shift+C` types `0x03` — the same byte as `Ctrl+C` — because xkbcommon folds Control
+		 * into the C0 range, so a menu matching `-characters` (which is what `-performKeyEquivalent:` would have to
+		 * do without a second string) has nothing to tell the copy shortcut from an interrupt. The ignored-modifier
+		 * text is that second string, and this is the pair an event really has. THE FIRST SEND IS THE EVENT THIS TIER
+		 * USED TO PRODUCE, and it must still fail: matching a key equivalent on a control byte would make `Ctrl+C`
+		 * fire the copy item in every terminal. */
+		item = [[NSMenuItem alloc] initWithTitle:@"Copy" action:@selector(fire:) keyEquivalent:@"C"];
+		[item setKeyEquivalentModifierMask:(NSControlKeyMask | NSShiftKeyMask)];
+		[item setTarget:target];
+		[item setEnabled:YES];
+		[menu addItem:item];
+
+		event = [NSEvent keyEventWithType:NSKeyDown
+					 location:NSZeroPoint
+				    modifierFlags:(NSControlKeyMask | NSShiftKeyMask)
+					timestamp:0
+				     windowNumber:(NSInteger)[window windowNumber]
+					  context:nil
+				       characters:@"\x03"
+			  charactersIgnoringModifiers:@"\x03"
+				  isARepeat:NO
+				    keyCode:46 /* KEY_C */];
+		[application sendEvent:event];
+		check(target->fired == 2, "a control-combination event that knows only its control byte matches NOTHING");
+		check(content->keyDowns == 2, "and falls through to the responder, as an unclaimed keystroke should");
+
+		event = [NSEvent keyEventWithType:NSKeyDown
+					 location:NSZeroPoint
+				    modifierFlags:(NSControlKeyMask | NSShiftKeyMask)
+					timestamp:0
+				     windowNumber:(NSInteger)[window windowNumber]
+					  context:nil
+				       characters:@"\x03"
+			  charactersIgnoringModifiers:@"C"
+				  isARepeat:NO
+				    keyCode:46];
+		[application sendEvent:event];
+		check(target->fired == 3, "Ctrl+Shift+C fires the item once the event says WHICH key it was");
+		check(content->keyDowns == 2, "and the responder does not also see it");
+
 		printf("appkit_dispatch: %d checks, %d failed%s\n", g_checks, g_failed,
 		       g_failed == 0 ? " -- all checks passed" : "");
 

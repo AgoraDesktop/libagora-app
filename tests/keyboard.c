@@ -65,12 +65,26 @@ static uint32_t translate_modifiers(AGKeyboard *keyboard, uint32_t code)
 	return modifiers;
 }
 
+/* THE SAME KEY WITH THE MODIFIERS OFF, and the line it prints shows the pair together on purpose: the two answers are
+ * a claim about the same keystroke, so a reader can see `Ctrl+A` giving `0x01` one way and `a` the other. */
+static int translate_plain(AGKeyboard *keyboard, uint32_t code, const char *want)
+{
+	char seen[8];
+	char plain[8];
+	uint32_t modifiers = 0;
+
+	AGKeyboardTranslate(keyboard, code, seen, sizeof seen, NULL);
+	AGKeyboardTranslateIgnoringModifiers(keyboard, code, plain, sizeof plain, &modifiers);
+	printf("    evdev %-3u typed \"%s\" ignoring-modifiers \"%s\"\n", code, seen, plain);
+	return strcmp(plain, want) == 0;
+}
+
 int main(void)
 {
 	struct xkb_rule_names names = { "evdev", "pc105", "us", "", NULL };
 	struct xkb_context *context;
 	struct xkb_keymap *keymap;
-	xkb_mod_index_t shift_index, caps_index;
+	xkb_mod_index_t shift_index, caps_index, ctrl_index;
 	char *text;
 	AGKeyboard *keyboard;
 
@@ -85,8 +99,9 @@ int main(void)
 	}
 	shift_index = xkb_keymap_mod_get_index(keymap, XKB_MOD_NAME_SHIFT);
 	caps_index = xkb_keymap_mod_get_index(keymap, XKB_MOD_NAME_CAPS);
-	if (shift_index == XKB_MOD_INVALID || caps_index == XKB_MOD_INVALID) {
-		fprintf(stderr, "keyboard: the us keymap has no Shift or Lock modifier\n");
+	ctrl_index = xkb_keymap_mod_get_index(keymap, XKB_MOD_NAME_CTRL);
+	if (shift_index == XKB_MOD_INVALID || caps_index == XKB_MOD_INVALID || ctrl_index == XKB_MOD_INVALID) {
+		fprintf(stderr, "keyboard: the us keymap has no Shift, Lock or Control modifier\n");
 		return 2;
 	}
 
@@ -132,6 +147,35 @@ int main(void)
 	check(translate(keyboard, KEY_A, "A"), "caps lock makes evdev 30 \"A\"");
 	check((translate_modifiers(keyboard, KEY_A) & AGModifierCapsLock) != 0,
 	      "AGModifierCapsLock is reported while caps lock is on");
+
+	/* **AND THE SAME KEY WITH THE MODIFIERS OFF — what a key EQUIVALENT is matched on.** The interesting cases are the
+	 * ones where the two answers DIFFER, so each is asserted on both doors: `Ctrl+A` types the control character and
+	 * answers `a`; a locked Caps does not survive the masking, because `Cmd+C` with Caps on must still match a menu's
+	 * `c`; and Shift is the one modifier the masking KEEPS, which is what lets an uppercase key equivalent work. */
+	AGKeyboardSetModifiers(keyboard, 0, 0, 0, 0);
+	check(translate_plain(keyboard, KEY_A, "a"), "unmodified, evdev 30 ignores modifiers to \"a\"");
+	check(translate_plain(keyboard, KEY_1, "1"), "and evdev 2 to \"1\"");
+
+	AGKeyboardSetModifiers(keyboard, (uint32_t)1u << ctrl_index, 0, 0, 0);
+	check(translate(keyboard, KEY_A, "\x01"), "Control makes evdev 30 the control character");
+	check(translate_plain(keyboard, KEY_A, "a"), "while ignoring the modifiers it is still \"a\"");
+	check((translate_modifiers(keyboard, KEY_A) & AGModifierControl) != 0,
+	      "and the mask it reports is the LIVE one, not the masked text");
+
+	AGKeyboardSetModifiers(keyboard, (uint32_t)1u << ctrl_index, 0, 0, 0);
+	check(translate_plain(keyboard, KEY_ESC, "\x1b"), "Escape keeps its ESC byte either way — it is not a modifier");
+
+	AGKeyboardSetModifiers(keyboard, ((uint32_t)1u << ctrl_index) | ((uint32_t)1u << shift_index), 0, 0, 0);
+	check(translate(keyboard, KEY_A, "\x01"), "Ctrl+Shift types the SAME control character as Ctrl alone");
+	check(translate_plain(keyboard, KEY_A, "A"), "and only the ignoring-modifiers door says WHICH key it was: \"A\"");
+
+	AGKeyboardSetModifiers(keyboard, 0, 0, (uint32_t)1u << caps_index, 0);
+	check(translate(keyboard, KEY_A, "A"), "caps lock on types \"A\"");
+	check(translate_plain(keyboard, KEY_A, "a"), "and the masking DROPS the lock, so a \"c\" menu item still matches");
+
+	AGKeyboardSetModifiers(keyboard, 0, 0, 0, 0);
+	check(translate_plain(keyboard, KEY_UP, ""), "an arrow has no text with the modifiers off either");
+	check(translate_plain(keyboard, KEY_SPACE, " "), "and Space is a space");
 
 	/* AND WHICH KEYS ARE MODIFIERS, which is a different question from what they type — the AppKit delivers a
 	 * modifier as `-flagsChanged:` and everything else as `-keyDown:`, so a keymap that answered this wrongly

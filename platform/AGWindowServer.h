@@ -129,6 +129,18 @@ typedef struct AGEvent {
 	int modifier;			/* nonzero when `keycode` is a MODIFIER key rather than one that types */
 	uint32_t modifiers;		/* AGModifier... */
 	char text[8];			/* UTF-8; empty when the key produces no text */
+	/* **AND THE SAME KEY WITH THE MODIFIERS TAKEN OFF, WHICH IS A DIFFERENT QUESTION AND A DIFFERENT ANSWER.** `text`
+	 * is what the person will see, and the modifiers are part of that: with Control down it is the CONTROL CHARACTER
+	 * (`xkb_state_key_get_utf8` folds `Ctrl+A` to `0x01`, `Ctrl+[` to `0x1b`, `Ctrl+Space` to `0x00`), and `Ctrl+Shift+C`
+	 * then looks exactly like `Ctrl+C`. That is right for a text view and wrong for anything that matches keystrokes: a
+	 * menu's key equivalent, and a terminal writing an escape sequence's modifier parameter, both need to know WHICH KEY
+	 * it was — `C` — and cannot recover it from a control character that three keystrokes share.
+	 *
+	 * So this is the symbol the key has in the layout's first two levels: Shift kept, everything else dropped, which is
+	 * AppKit's own sentence for `-charactersIgnoringModifiers`. It is empty exactly when `text` is empty for a reason
+	 * other than a modifier — an arrow, an F key, a dead key — and a caller that needs a character in every case takes
+	 * this one when it has one and `text` otherwise. `AGKeyboardTranslateIgnoringModifiers` produces it. */
+	char text_plain[8];		/* UTF-8 with Shift applied and every other modifier dropped */
 	/* **AND THE KEYMAP'S OWN NAME FOR THE KEY, WHICH IS NEITHER ITS TEXT NOR ITS CODE.** `text` is what the key
 	 * TYPES, so it is empty for every key that does not type — the arrows, Home and End, the F keys, the keypad's
 	 * commands. `keycode` is the PHYSICAL key, so it says which switch was pressed and not what it means, and what

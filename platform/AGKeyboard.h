@@ -54,6 +54,25 @@ int AGKeyboardTranslate(AGKeyboard *keyboard, uint32_t evdev_keycode, char *utf8
 /* The modifier mask for the state last fed in. */
 uint32_t AGKeyboardModifiers(AGKeyboard *keyboard);
 
+/* **WHAT THIS KEY TYPES WITH THE MODIFIERS TAKEN OFF — Apple's `-charactersIgnoringModifiers`, which is a question
+ * about the KEY rather than about the keystroke.** `AGKeyboardTranslate` above answers what the person will SEE, and the
+ * modifiers are part of that answer: `Ctrl+A` types `0x01`, `Shift+a` types `A`, `Caps Lock` on types `A`. This door
+ * answers the other question — the symbol the key has in the layout's own first two levels — and it is what a key
+ * EQUIVALENT is matched on and what a terminal builds an escape sequence's modifier parameter from: `Ctrl+Shift+C`
+ * types `0x03`, so the only thing that says WHICH key it was is the `C` this door answers.
+ *
+ * THE MASKING IS EXACTLY APPLE'S SENTENCE — "as if no modifier key (except for Shift) had been pressed": SHIFT IS
+ * KEPT and Control, Alt, Super, Caps Lock and Num Lock are dropped. Shift is kept because it changes WHICH symbol the
+ * key carries rather than which meaning is layered over it, and the locks are dropped because a lock is a modifier key
+ * too: `Cmd+C` with Caps Lock on must still match a `c` item in a menu, which it cannot if the answer is `C`.
+ *
+ * IT IS ANSWERED FROM THE KEYMAP'S LEVELS AND NOT BY EDITING THE STATE, so it cannot disturb the composition: a
+ * dead-key state that is waiting in `-translate` is untouched by asking this, and the two questions can be asked in
+ * either order. A key whose level has no symbol answers no text at all (`0`), which is every arrow and every F key.
+ * `*modifiers` receives the LIVE mask, unchanged — this door ignores modifiers in its TEXT, not in its report. */
+int AGKeyboardTranslateIgnoringModifiers(AGKeyboard *keyboard, uint32_t evdev_keycode, char *utf8, size_t size,
+					uint32_t *modifiers);
+
 /* IS THIS KEY A MODIFIER RATHER THAN A CHARACTER? Nonzero when the keymap says the key is one of the modifier
  * keysyms (Shift, Control, Alt, Super, Caps Lock, Num Lock, the ISO group and level keys). It is a separate
  * question because the ANSWER changes how an event is delivered rather than what it says: AppKit sends

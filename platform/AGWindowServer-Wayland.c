@@ -1304,6 +1304,12 @@ static void keyboard_key(void *data, struct wl_keyboard *keyboard, uint32_t seri
 	if (server->keyboard_state != NULL) {
 		AGKeyboardTranslate(server->keyboard_state, key, event.text, sizeof event.text,
 				    &event.modifiers);
+		/* **AND THE SAME KEY WITH THE MODIFIERS OFF, BECAUSE A CONTROL CHARACTER DOES NOT NAME THE KEY.**
+		 * `Ctrl+Shift+C` and `Ctrl+C` both type `0x03`, so the only thing that separates the copy shortcut from an
+		 * interrupt is this string; a menu's key equivalent is matched against it and a terminal builds its
+		 * modifier parameter from it. */
+		AGKeyboardTranslateIgnoringModifiers(server->keyboard_state, key, event.text_plain,
+						    sizeof event.text_plain, NULL);
 		event.keysym = AGKeyboardKeysym(server->keyboard_state, key);
 		event.modifier = AGKeyboardKeyIsModifier(server->keyboard_state, key);
 	}

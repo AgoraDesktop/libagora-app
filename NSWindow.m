@@ -844,6 +844,15 @@ static NSEvent *fn_translate(NSWindow *w, const AGEvent *e, NSTimeInterval now)
 		 * `NSUpArrowFunctionKey` and not the empty string the translation produced. See the table above for what is
 		 * mapped and what is deliberately not. */
 		NSString *chars = nil;
+		/* **AND THE KEY WITH THE MODIFIERS OFF, WHICH IS A SECOND STRING AND NOT A SECOND OPINION.** `-characters`
+		 * is what the keystroke means — `Ctrl+Shift+C` is `0x03`, the same as `Ctrl+C` — so a menu matching a key
+		 * EQUIVALENT against it can never see the `C`, and `NSMenu -performKeyEquivalent:` (which reads
+		 * `-charactersIgnoringModifiers`, as Apple's does) would have nothing to match `Ctrl+Shift+C` with. The seam
+		 * carries the unmasked symbol in `text_plain`; what it cannot carry is the `0xF700` name of a key that types
+		 * nothing, and that is this file's to add — so an arrow answers the SAME character both ways, which is what
+		 * AppKit does too. Empty text falls back to `chars` rather than to `@""`, because every key in the block
+		 * below depends on the command character being there. */
+		NSString *plain = nil;
 
 		if (e->text[0] != '\0') {
 			chars = [NSString stringWithUTF8String:e->text];
@@ -856,6 +865,10 @@ static NSEvent *fn_translate(NSWindow *w, const AGEvent *e, NSTimeInterval now)
 		}
 		if (chars == nil) {
 			chars = @"";
+		}
+		plain = (e->text_plain[0] != '\0') ? [NSString stringWithUTF8String:e->text_plain] : chars;
+		if (plain == nil) {
+			plain = @"";
 		}
 		/* **A MODIFIER IS NOT A KEYSTROKE**, and this is where that shows: AppKit delivers one as
 		 * `-flagsChanged:` and everything else as `-keyDown:`/`-keyUp:`, so the type is chosen from the seam's
@@ -871,7 +884,7 @@ static NSEvent *fn_translate(NSWindow *w, const AGEvent *e, NSTimeInterval now)
 						 location:where modifierFlags:flags
 						timestamp:now windowNumber:win context:nil
 					       characters:chars
-				  charactersIgnoringModifiers:chars
+				  charactersIgnoringModifiers:plain
 					      isARepeat:(e->repeat ? YES : NO)
 						keyCode:(unsigned short)e->keycode];
 

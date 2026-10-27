@@ -407,6 +407,21 @@ NS_ASSUME_NONNULL_BEGIN
 @property (readonly) CGFloat deltaX;
 @property (readonly) CGFloat deltaY;
 @property (readonly) CGFloat deltaZ;
+/* **THE TWO STRINGS A KEY HAS, AND WHY ONE IS NOT THE OTHER.** `-characters` is what the keystroke MEANS, with every
+ * modifier applied: xkbcommon folds Control into the C0 range, so `Ctrl+A` is `0x01`, `Ctrl+[` is `0x1b` and
+ * `Ctrl+Space` is `0x00` — which is exactly what a text view wants to insert and exactly what makes a control
+ * combination unnamed.
+ *
+ * `-charactersIgnoringModifiers` is what the KEY IS: the symbol it has with Shift kept and every other modifier dropped,
+ * which is Apple's own sentence ("as if no modifier key (except for Shift) had been pressed"). It is where a key
+ * EQUIVALENT is matched — `NSMenu -performKeyEquivalent:` reads this door, as Apple's does — and it is the only string
+ * that can tell `Ctrl+Shift+C` from `Ctrl+C`, because both type `0x03`. The locks (Caps Lock, Num Lock) are dropped with
+ * the rest: `Cmd+C` while Caps Lock is on must still match a `c` item in a menu.
+ *
+ * The seam carries both (`AGEvent.text` and `AGEvent.text_plain`, from `AGKeyboardTranslate` and
+ * `AGKeyboardTranslateIgnoringModifiers`), and this tier used to put the SAME string in both — which left every control
+ * combination unnameable to a menu. An event with no unmasked text (a fabricated one, or a key that types nothing and is
+ * named by the `0xF700` block) answers the same string both ways, which is what AppKit does for a commanding key. */
 @property (readonly, nullable) NSString *characters;
 @property (readonly, nullable) NSString *charactersIgnoringModifiers;
 @property (readonly) unsigned short keyCode;
