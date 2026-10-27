@@ -20,7 +20,11 @@ grows the last rather than dropping anything), and `-cg_drawFrameDirty:` reports
 translated block — a copied pixel is a changed pixel to the compositor when the copy MOVED content. `-cg_drawFrame`
 (the whole-frame path) names nothing and so still damages everything, which is the safe default.
 `appkit-partial-damage` asks the seam what the last commit actually told the compositor: a 20x20 strip repaint reports
-**one rectangle of 400 pixels out of 66 600**.
+**one rectangle of 400 pixels out of 66 600**. **AND IT IS RUN TWICE, BECAUSE THE ARITHMETIC THAT MATTERS IS THE ONE AT
+A SCALE THAT IS NOT ONE:** `run-appkit-scaled.sh` runs the same case against Agora's own window server at `--scale
+1.5`, where the strip's rows must be the DEVICE rows it really occupies — the plain run uses gnome-shell's 1x virtual
+monitor, where a point IS a pixel and a missing conversion cannot show. See the note on the reporting block in
+`NSWindow.m`, and the row-units entry under "Damage, and what \"draw only what changed\" needs to mean" below.
 
 **AND THE OTHER SIDE OF THE WIRE NOW CONSUMES THEM.** `window-server`'s `surface_damage()` used to be a deliberate
 no-op — its comment said the compositor recomposited the whole output on every frame — so the client's rectangles were
@@ -2315,6 +2319,16 @@ things were missing, and each cost a full repaint on its own:
   same distance down, so the click appeared to do nothing until a full frame (a window move, a drag) repainted
   everything. `+cg_bufferRowsForDirtyRect:surfaceHeight:` is that arithmetic by itself, and `tests/display_damage.m`
   holds it.
+- **AND THE ROWS WERE POINTS, WHILE THE ROWS WANTED PIXELS.** The reporting block converted the COLUMNS to device
+  pixels (`origin.x * scale`) and handed the point-space rectangle to the row mirror as if its y were pixels too. At
+  scale 1 that is the same number twice, which is why nothing caught it; at any other scale the damage was short by
+  `height - height * scale` rows at the TOP of the buffer, because the mirror counts rows down from its height.
+  MEASURED at this machine's 1.332 output: a Workspace file window that navigated to a new folder told the compositor
+  that rows 192..826 of an 826-row buffer had changed and left the 192 above them as the frame before the navigation —
+  so the new folder's first icon row was cut off at exactly that line, the path bar still named the old folder and the
+  sidebar wore both selections, until an unrelated repaint happened to touch those rows. `appkit-partial-damage` now
+  compares a strip's reported rows with the device rows it occupies, and `run-appkit-scaled.sh` gives it a compositor
+  whose scale is not 1; without the conversion that check names rows 303..323 where the strip is 288..318.
 - **THE INVALIDATION STOPPED AT THE RECTANGLE THAT IS STROKED.** In Workspace, the focus ring is stroked ON the
   highlight's edge, so half the stroke and its antialiasing live outside it; damage that ended at the rectangle left
   a thin outline in every cell the selection had left. The icon view's invalidation reaches `WSIconHighlightSlop`

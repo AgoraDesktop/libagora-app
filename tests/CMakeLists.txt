@@ -714,6 +714,17 @@ add_test(NAME appkit-partial-damage
 set_tests_properties(appkit-partial-damage PROPERTIES SKIP_RETURN_CODE 77
   ENVIRONMENT "${_agora_app_test_env}")
 
+# **AND THE SAME CASE AT A SCALE THAT IS NOT ONE, WHICH IS THE ONLY SCALE THAT ASKS THE QUESTION.** gnome-shell's
+# virtual monitor is 1x, and at 1x a point IS a device pixel — so the strip's rows are right whether or not the damage
+# reporter converted them, and the case could not see the bug that left a Workspace file window with the top rows of
+# its frame uncopied (MEASURED: 192 of 826). Agora's own window server runs at 1.5 here, so the reported rows have to
+# be the strip's DEVICE rows rather than its point numbers.
+add_test(NAME appkit-partial-damage-scaled
+  COMMAND "${CMAKE_CURRENT_SOURCE_DIR}/run-appkit-scaled.sh"
+	  "${AGORA_WINDOW_SERVER_BINARY}" "$<TARGET_FILE:appkit_partial_damage>" 1.5 "all checks passed")
+set_tests_properties(appkit-partial-damage-scaled PROPERTIES SKIP_RETURN_CODE 77
+  ENVIRONMENT "${_agora_app_test_env}")
+
 add_executable(appkit_runloop_timer appkit_runloop_timer.m)
 target_link_libraries(appkit_runloop_timer PRIVATE App dispatch)
 

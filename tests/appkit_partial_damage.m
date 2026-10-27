@@ -22,6 +22,13 @@
  *   3. AND THE RECTANGLES ARE IN THE COMPOSITOR'S SPACE: inside the buffer, non-empty, and in buffer pixels (which is
  *      not the window's point space at a fractional output scale — the whole point of a device-space door).
  *
+ *   4. AND A STRIP'S ROWS ARE THE STRIP'S ROWS. Check 3's "inside the buffer" is a weak test: a fractional scale that
+ *      was never applied to the y axis reports a band shifted by `height - height * scale` rows and every rectangle is
+ *      still legal — MEASURED, it is how a Workspace file window came to leave a whole 192-row strip of the frame
+ *      before it on the glass while naming 634 of 826 rows as changed. So the rows are compared with the ones the
+ *      painted strip really occupies, in device pixels, at whatever scale the runner gave the compositor. At scale 1
+ *      this check cannot fail, which is why the scaled runner (`run-appkit-scaled.sh`) exists beside the plain one.
+ *
  * THE RUNNER SUPPLIES A COMPOSITOR, so a machine without one SKIPS (exit 77) rather than failing.
  */
 #import <Foundation/Foundation.h>
@@ -182,6 +189,42 @@ int main(void)
 			check(report.area > 0, "the damage is not empty", detail);
 			check(report.inside, "with every rectangle inside the buffer", detail);
 			check(!report.empty, "and none of them empty", detail);
+		}
+
+		/* 2b. **AND THE ROWS IT NAMED ARE THE STRIP'S OWN.** The strip was invalidated in POINTS at (10, 10) inside a
+		 * view 200 points tall; the buffer is the whole frame in DEVICE pixels and its rows count down from its height.
+		 * The painted rectangle is converted to window points first (`-convertRect:toView:` puts the content view's
+		 * strip in the frame's space, title bar included) and only then multiplied by the scale — the two steps the
+		 * damage reporter has to take, and the second one is the one that was missing. */
+		{
+			AGWindow *seam = [window cg_seamWindow];
+			NSRect stripInWindow = [view convertRect:NSMakeRect(10.0, 10.0, 20.0, 20.0) toView:nil];
+			double scale = (double)[window userSpaceScaleFactor];
+			int expectedTop = buffer_height - (int)ceil((double)((stripInWindow.origin.y +
+									 stripInWindow.size.height) * scale));
+			int expectedBottom = buffer_height - (int)floor((double)(stripInWindow.origin.y * scale));
+			int top = buffer_height;
+			int bottom = 0;
+			int rects = AGWindowLastDamage(seam, -1, NULL);
+			char detail[200];
+			int k;
+
+			for (k = 0; k < rects && k < 16; k++) {
+				int rect[4] = { 0, 0, 0, 0 };
+
+				(void)AGWindowLastDamage(seam, k, rect);
+				if (rect[1] < top) {
+					top = rect[1];
+				}
+				if (rect[1] + rect[3] > bottom) {
+					bottom = rect[1] + rect[3];
+				}
+			}
+			snprintf(detail, sizeof(detail),
+				 "rows %d..%d of %d, and the strip is rows %d..%d (scale %.3f)",
+				 top, bottom, buffer_height, expectedTop, expectedBottom, scale);
+			check(abs(top - expectedTop) <= 1 && abs(bottom - expectedBottom) <= 1,
+			      "the damage's rows are the strip's rows in DEVICE pixels", detail);
 		}
 
 		/* 3. AND A FULL PAINT AFTER IT GOES BACK TO THE WHOLE BUFFER: the strip case must not have latched. */

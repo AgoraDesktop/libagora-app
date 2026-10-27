@@ -4995,19 +4995,45 @@ static CGFloat fn_clamp_axis(CGFloat v, CGFloat lo, CGFloat hi)
 			[self cg_addPaintRect:[self cg_deviceOutward:[self cg_chromeRect]] to:reported
 					count:&reportedCount];
 		}
+		/* **THE RECTANGLES ARE IN POINTS AND `+cg_bufferRowsForDirtyRect:` WANTS DEVICE PIXELS, SO BOTH AXES ARE
+		 * CONVERTED HERE.** The columns always were — `origin.x * scale` is right under it — and the rows were not:
+		 * the point-space rectangle was handed to the row mirror as if its numbers were already pixels. At scale 1
+		 * that is the same number twice, which is why every case that existed passed; at any other scale the
+		 * damage was SHORT BY `height - height * scale` ROWS AT THE TOP, and it was the top because the mirror
+		 * counts rows down from the buffer's height. MEASURED on this machine's 1.332 output: a file window that
+		 * navigated to a new directory told the compositor that rows 192..826 of an 826-row buffer had changed and
+		 * left the 192 rows above them as the frame before the navigation — so the new folder's first icon row was
+		 * cut off at exactly that line and the path bar still named the old folder, until an unrelated repaint
+		 * happened to touch those rows. The rounding is OUTWARD, like the paint it reports: over-reporting a row
+		 * costs a composite, and under-reporting it is a stale pixel on the glass. */
 		for (j = 0; j < reportedCount; j++) {
-			NSRange rows = [[self class] cg_bufferRowsForDirtyRect:reported[j] surfaceHeight:surfaceHeight];
 			NSInteger left = (NSInteger)floor((double)(reported[j].origin.x * scale));
 			NSInteger right = (NSInteger)ceil((double)((reported[j].origin.x + reported[j].size.width) * scale));
+			NSInteger bottom = (NSInteger)floor((double)(reported[j].origin.y * scale));
+			NSInteger top = (NSInteger)ceil((double)((reported[j].origin.y + reported[j].size.height) * scale));
+			NSRange rows;
 
-			if (rows.length == 0 || right <= left) {
-				continue;
-			}
 			if (left < 0) {
 				left = 0;
 			}
 			if (right > surfaceWidth) {
 				right = surfaceWidth;
+			}
+			if (bottom < 0) {
+				bottom = 0;
+			}
+			if (top > surfaceHeight) {
+				top = surfaceHeight;
+			}
+			if (right <= left || top <= bottom) {
+				continue;
+			}
+			rows = [[self class] cg_bufferRowsForDirtyRect:
+				NSMakeRect((CGFloat)left, (CGFloat)bottom,
+					   (CGFloat)(right - left), (CGFloat)(top - bottom))
+						     surfaceHeight:surfaceHeight];
+			if (rows.length == 0) {
+				continue;
 			}
 			AGWindowDamage(_agwindow, (int)left, (int)rows.location, (int)(right - left),
 				       (int)rows.length);
