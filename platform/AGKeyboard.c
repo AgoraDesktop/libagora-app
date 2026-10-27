@@ -206,6 +206,22 @@ int AGKeyboardKeyIsModifier(AGKeyboard *keyboard, uint32_t evdev_keycode)
 	}
 }
 
+uint32_t AGKeyboardKeysym(AGKeyboard *keyboard, uint32_t evdev_keycode)
+{
+	xkb_keysym_t sym;
+
+	if (keyboard == NULL || keyboard->state == NULL) {
+		return 0;
+	}
+	/* **ONE SYMBOL, NOT THE LIST OF THEM.** A key has several symbols — one per level (unshifted, shifted, AltGr,
+	 * a second group) — and `xkb_state_key_get_one_sym` applies the modifier state this keyboard was fed and
+	 * answers the one the person is actually pressing. That is the question "which key is this", not "what could
+	 * this key be", and the answer is what a caller that has to name the key wants. A code the map does not define
+	 * answers `XKB_KEY_NoSymbol`, which IS 0, so an undefined code and a null keyboard agree. */
+	sym = xkb_state_key_get_one_sym(keyboard->state, AG_EVDEV_TO_XKB(evdev_keycode));
+	return (uint32_t)sym;
+}
+
 int AGKeyboardTranslate(AGKeyboard *keyboard, uint32_t evdev_keycode, char *utf8, size_t size,
 			uint32_t *modifiers)
 {

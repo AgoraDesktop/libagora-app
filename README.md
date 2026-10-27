@@ -1538,6 +1538,34 @@ Both fixes were falsified before they were kept: removing the chain fails the bu
 hit test fails the "click lands on the subview" check — which the first version of the test did NOT catch,
 because it had made the clicked subview the first responder.
 
+### The keys that type nothing, and the name a view is finally given for them
+
+- **A COMMANDING KEY ARRIVES AS A CHARACTER, AND THIS TIER HAD NONE FOR IT.** `NSEvent.h` says it in the 0xF700 block:
+a key that commands arrives as a character in that block, which is how a view tells a left arrow from an up arrow
+without a key code. `-characters` was built from the seam's UTF-8 alone, and xkbcommon produces no UTF-8 for a key that
+types nothing — so the arrows, Home, Page Up and every F key arrived as the EMPTY STRING, and the 0xF700 block existed
+only for tests that made the character themselves. Every control whose arrow handling lives behind
+`NSUpArrowFunctionKey` was dead under a real keyboard.
+- **`AGEvent` NOW CARRIES `keysym`** — the layout's own name for the key, an `XKB_KEY_…` number, `0` when the map has no
+symbol for the code — filled by the backend from the same keymap state the text comes from. It is the one piece of a
+keystroke the other two fields cannot supply: `text` is empty for exactly these keys, and `keycode` is the PHYSICAL
+switch, so evdev 103 means "up" only on a layout that agrees. `AGKeyboardKeysym` is a separate door from the
+translation, for the same reason `AGKeyboardKeyIsModifier` is: Escape has a keysym AND types 0x1B, an arrow has one and
+types nothing. It applies the modifier state, so Shift-A answers the shifted keysym — the level being pressed.
+- **AND `NSWindow` TURNS IT INTO APPKIT'S VOCABULARY ONCE** (`fn_function_key_for_keysym`): the four arrows, Insert,
+forward Delete, Home, Begin, End, the page pair, Print Screen, Scroll Lock, Pause, Sys Req, Break, Reset, Menu, Select,
+Execute, Undo, Redo, Find, Help — and the 35 F keys by arithmetic, because `XKB_KEY_F1` and `NSF1FunctionKey` both head
+a run of 35 that counts up by one, so a range test and an addition cannot drift apart the way a copied table can. A key
+that TYPES keeps its text (the table is only consulted when `text` is empty), and a keysym with no Cocoa equivalent is
+DELIVERED with empty characters rather than refused. Backtab, the numeric pad's own characters and the Clear/Stop/Print
+family are deliberately not guessed at.
+- **`tests/keyboard.c`** asks the keymap directly (evdev 103 is `XKB_KEY_Up` and types nothing; a code the map does not
+define has no keysym; Shift changes the level), and **`tests/appkit_events.m`** asks the chain inside the library — build
+a keymap with `AGKeyboard`, ask it the same question the backend asks, put the answer in the seam's field, push it
+through the window's door and the application's own pump, and read what the view was sent. Arrows, Home, End, the page
+keys, Insert, forward Delete, F1, F12, shift-up, an unmapped keysym and text-wins-over-keysym: 43 checks in that file,
+none of them skippable.
+
 ### And three things the controls, the text and the menus found
 
 - **The first responder was assigned, never asked.** `-setContentView:` wrote `_firstResponder` straight and

@@ -2267,6 +2267,53 @@ sheet window freed while attached leaves no sheet on the parent; a parent freed 
 window), and the file now runs 33 checks. The demonstration also gained `--print-sheet`, which opens the panel as a sheet at startup, because
 this bug needed a reproduction that did not depend on a hand clicking a button.
 
+## 73. The name a key has when it types nothing: the seam carries the keysym
+
+**A KEY THAT TYPES NOTHING WAS A KEY A VIEW COULD NOT NAME.** Every event method in this tier is reached by the
+CHARACTER an event carries — that is AppKit's design, and `NSEvent.h` states it in the 0xF700 block: a commanding key
+arrives as a character in that block, which is how a text view tells a left arrow from an up arrow without ever seeing a
+key code. This tier built `-characters` from the seam's UTF-8 and nothing else, and xkbcommon — correctly — produces no
+UTF-8 for a key that types nothing. So an arrow key, Home, Page Up and every F key arrived as the EMPTY STRING. The
+0xF700 block was reachable only from a test that made the character itself, which is what `tests/matrix.m`,
+`tests/date_picker.m` and `tests/responder_commands.m` all do; under a real keyboard every control whose arrow handling
+lives behind `NSUpArrowFunctionKey` was dead. `AGKeyboard.h` recorded the gap in its own words — the translation returns
+`0` "when the key produces no text — a modifier, an arrow, Escape" — and the correction to that sentence is that Escape
+DOES type 0x1B (`tests/keyboard.c` asserts it, and asserted it before this change).
+
+**THE FIX IS A FIELD, TWO DOORS AND A TABLE, AND THE FIELD IS THE POINT.** `AGEvent` carries `keysym`: the layout's own
+name for the key, an `XKB_KEY_…` number, `0` when the map has no symbol for the code. It is what a caller needs and
+cannot recover from the two fields that were there — `text` is empty for exactly the keys in question, and `keycode` is
+the PHYSICAL switch, so evdev 103 is "up" only on a layout that agrees with the table one would have to write.
+`AGKeyboardKeysym` answers it from the same keymap state the translation uses, as a separate door for the same reason
+`AGKeyboardKeyIsModifier` is separate: Escape has a keysym AND types 0x1B, an arrow has a keysym and types nothing, and
+a caller may want either answer alone. `AGKeyboardKeysym` applies the CURRENT modifier state, so Shift-A answers
+`XKB_KEY_A` — the level being pressed — which is why the question is "which key is this" and not "what could it be".
+
+**AND THE MAPPING IS `NSWindow`'s, WRITTEN ONCE.** `fn_function_key_for_keysym` puts the layout's vocabulary into Cocoa's:
+the four arrows, Insert, forward Delete, Home, Begin, End, Page Up/Down, Print Screen, Scroll Lock, Pause, Sys Req,
+Break, Reset, Menu, Select, Execute, Undo, Redo, Find and Help. THE F KEYS ARE ARITHMETIC rather than 35 lines, because
+both sides count up by one from their first member — `XKB_KEY_F1` (0xffbe) heads 35 keys and `NSF1FunctionKey`
+(0xF704) heads the same 35 — so a range test and an addition cannot drift apart the way a copied table can.
+
+**WHAT IS DELIBERATELY NOT MAPPED, AND WHY THAT IS NOT AN OMISSION.** The table is consulted only when `text` is empty, so
+a key that types keeps its text: Tab, Return, Escape and Backspace are untouched, and a check pins that precedence
+explicitly rather than leaving it to the order the fields are filled in. Apple's `NSBackTabCharacter` comes from
+Shift-Tab, the numeric pad has characters of its own, and the Clear/Stop/Print family has no keysym that means it on every
+layout — `XKB_KEY_Print` is the print-screen key and calling it `NSPrintFunctionKey` would be a guess this tier cannot
+keep. Those keys arrive with empty characters and their modifier flags, which is what the seam can honestly say; a key
+with no Cocoa equivalent is therefore still DELIVERED, with empty characters, rather than refused.
+
+**MEASURED IN TWO PLACES, BECAUSE IT IS TWO QUESTIONS.** `tests/keyboard.c` asks the keymap directly — evdev 30 is
+`XKB_KEY_a`, 103 is `XKB_KEY_Up` and types nothing, 105 is `XKB_KEY_Left`, 59 is `XKB_KEY_F1`, 42 is `XKB_KEY_Shift_L`
+(a modifier with a keysym, which is why the doors are separate), a code the map does not define answers 0, and Shift-A
+answers `XKB_KEY_A`. `tests/appkit_events.m` asks the whole chain, INSIDE THE LIBRARY: it builds a keymap with
+`AGKeyboard`, asks it the same question the backend asks for a real evdev code, puts the answer in the seam's own field,
+pushes it through `-[NSWindow cg_handleSeamEvent:]` and the application's own pump, and reads what the view was sent —
+arrows, Home, End, the page keys, Insert, forward Delete, F1, F12, shift-up (the same character with the flag), an
+unmapped keysym (empty characters), and text winning over a keysym that would map. 43 checks, none of them skippable. The
+one link still synthetic is the compositor calling the door, which is the same link every other check in that file
+leaves out and which a configure event already proves.
+
 ## Keeping in sync
 
 The Fiwix AppKit is the origin and this repository has now diverged from it in the seam. A fix made there

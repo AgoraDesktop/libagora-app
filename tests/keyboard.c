@@ -22,6 +22,7 @@
 #include <string.h>
 
 #include <xkbcommon/xkbcommon.h>
+#include <xkbcommon/xkbcommon-keysyms.h>	/* the names the keysym door answers in */
 
 /* Linux evdev codes, from <linux/input-event-codes.h>; spelled out so this file needs no kernel headers. */
 #define KEY_ESC        1
@@ -30,6 +31,9 @@
 #define KEY_LEFTSHIFT  42
 #define KEY_CAPSLOCK   58
 #define KEY_SPACE      57
+#define KEY_F1         59
+#define KEY_UP         103
+#define KEY_LEFT       105
 
 static int failures;
 
@@ -136,6 +140,34 @@ int main(void)
 	check(AGKeyboardKeyIsModifier(keyboard, KEY_CAPSLOCK) != 0, "evdev 58 (Caps Lock) IS a modifier");
 	check(AGKeyboardKeyIsModifier(keyboard, KEY_A) == 0, "evdev 30 (A) is NOT a modifier");
 	check(AGKeyboardKeyIsModifier(keyboard, KEY_SPACE) == 0, "evdev 57 (Space) is NOT a modifier");
+
+	/* **AND WHICH KEY IT IS, WHICH IS A THIRD QUESTION.** The translation above answers what a key TYPES, so it
+	 * answers nothing for the keys that type nothing — and those are exactly the keys a terminal has to write an
+	 * escape sequence for and a control has to move a selection with. `AGKeyboardKeysym` answers the LAYOUT's own
+	 * name for the key: `XKB_KEY_Up` on every keyboard that has an up arrow, whatever evdev calls the switch. The
+	 * assertions are by keysym NAME on both sides, so they say "this code is that key" rather than lucking into a
+	 * number that happens to match. */
+	AGKeyboardSetModifiers(keyboard, 0, 0, 0, 0);
+	check(AGKeyboardKeysym(keyboard, KEY_A) == XKB_KEY_a,
+	      "evdev 30 is XKB_KEY_a, the letter it types");
+	check(AGKeyboardKeysym(keyboard, KEY_UP) == XKB_KEY_Up,
+	      "evdev 103 is XKB_KEY_Up, and its text is empty");
+	check(translate(keyboard, KEY_UP, ""),
+	      "and an arrow TYPES nothing, which is why the keysym door exists");
+	check(AGKeyboardKeysym(keyboard, KEY_LEFT) == XKB_KEY_Left, "evdev 105 is XKB_KEY_Left");
+	check(AGKeyboardKeysym(keyboard, KEY_F1) == XKB_KEY_F1, "evdev 59 is XKB_KEY_F1");
+	check(AGKeyboardKeysym(keyboard, KEY_LEFTSHIFT) == XKB_KEY_Shift_L,
+	      "evdev 42 is XKB_KEY_Shift_L: a modifier HAS a keysym, which is why the two questions are separate doors");
+	check(AGKeyboardKeysym(keyboard, 0x2ff) == 0,
+	      "a code the keymap does not define has NO keysym (XKB_KEY_NoSymbol), not a stale one");
+
+	/* THE MODIFIER STATE IS APPLIED, because the question is "which key is being pressed" and not "what could this
+	 * key be": with Shift down the same code answers the SHIFTED keysym. A caller that wants the physical key has
+	 * `keycode`, and one that wants the character has the translation. */
+	AGKeyboardSetModifiers(keyboard, (uint32_t)1u << shift_index, 0, 0, 0);
+	check(AGKeyboardKeysym(keyboard, KEY_A) == XKB_KEY_A,
+	      "with Shift down evdev 30 answers XKB_KEY_A, the level actually being pressed");
+	AGKeyboardSetModifiers(keyboard, 0, 0, 0, 0);
 
 	/* **AND WHICH KEYS MAY REPEAT WHEN HELD** — the keymap's half of the repeat contract. The compositor owns the
 	 * RATE and the DELAY (`wl_keyboard.repeat_info`); what a repeat is allowed to be at all is this, and getting it

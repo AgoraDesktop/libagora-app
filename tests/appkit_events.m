@@ -37,6 +37,9 @@
 #import <AppKit/NSEvent.h>
 
 #include "AGWindowServer.h"
+#include "AGKeyboard.h"	/* the same door the seam's backend asks, so the two halves are joined by the test */
+
+#include <xkbcommon/xkbcommon-keysyms.h>	/* keysym names on both sides of an assertion */
 
 #include <stdio.h>
 #include <string.h>
@@ -49,6 +52,13 @@
 
 static int g_checks;
 static int g_failed;
+
+/* A FUNCTION KEY'S CHARACTER IS ITS NAME, so the check is that the string is exactly that one unit — not that it
+ * merely contains it. */
+static BOOL is_function_key(NSString *characters, unichar wanted)
+{
+	return characters != nil && [characters length] == 1 && [characters characterAtIndex:0] == wanted;
+}
 
 static void check(int ok, const char *what)
 {
@@ -286,6 +296,143 @@ int main(void)
 		event = evdev_key(30, "a", 0, 0, 0);
 		deliver(application, window, &event);
 		check(content->keyUps == 1, "a key release reaches it too");
+
+		/* **1b. A KEY THAT TYPES NOTHING ARRIVES AS ITS FUNCTION-KEY CHARACTER.** AppKit's whole vocabulary for a
+		 * commanding key is the 0xF700 block in `-characters`, and this tier used to build `-characters` from the
+		 * seam's UTF-8 alone — so an arrow arrived as an EMPTY string, an F key was indistinguishable from it, and
+		 * every control whose arrow handling lives behind `NSUpArrowFunctionKey` was dead under a real keyboard. The
+		 * seam now carries the keymap's keysym; this is the chain end to end inside the library: this test asks the
+		 * SAME `AGKeyboard` the backend asks for the SAME evdev code, puts the answer in the seam's own field, and
+		 * reads back what the view was sent. The one link still not exercised is the compositor calling the door,
+		 * which is the same link every other check here leaves out.
+		 *
+		 * THE CODES ARE THE PHYSICAL KEYS and the keysyms come from the layout, so a failure names which half broke:
+		 * "the code is not that key" would fail in `keyboard`, and what fails here is the Cocoa mapping. */
+		{
+			AGKeyboard *keyboard = AGKeyboardCreate();
+			int beforeFunction = content->keyDowns;
+
+			if (keyboard == NULL || AGKeyboardUseDefaultKeymap(keyboard) != 0) {
+				fprintf(stderr, "appkit_events: NO KEYMAP — the function-key checks cannot run\n");
+				return 1;
+			}
+
+			/* THE ARROWS, in the order Cocoa's own constants are defined, so a transposed table shows up. */
+			event = evdev_key(103 /* KEY_UP */, "", 1, 0, 0);
+			event.keysym = AGKeyboardKeysym(keyboard, 103);
+			deliver(application, window, &event);
+			check(content->keyDowns == beforeFunction + 1, "an arrow key reaches the first responder at all");
+			check(is_function_key(content->lastCharacters, NSUpArrowFunctionKey),
+			      "and its -characters is NSUpArrowFunctionKey, not an empty string");
+
+			event = evdev_key(108 /* KEY_DOWN */, "", 1, 0, 0);
+			event.keysym = AGKeyboardKeysym(keyboard, 108);
+			deliver(application, window, &event);
+			check(is_function_key(content->lastCharacters, NSDownArrowFunctionKey),
+			      "evdev 108 is NSDownArrowFunctionKey");
+
+			event = evdev_key(105 /* KEY_LEFT */, "", 1, 0, 0);
+			event.keysym = AGKeyboardKeysym(keyboard, 105);
+			deliver(application, window, &event);
+			check(is_function_key(content->lastCharacters, NSLeftArrowFunctionKey),
+			      "evdev 105 is NSLeftArrowFunctionKey");
+
+			event = evdev_key(106 /* KEY_RIGHT */, "", 1, 0, 0);
+			event.keysym = AGKeyboardKeysym(keyboard, 106);
+			deliver(application, window, &event);
+			check(is_function_key(content->lastCharacters, NSRightArrowFunctionKey),
+			      "evdev 106 is NSRightArrowFunctionKey");
+
+			/* **AND THE MODIFIER IS STILL A MODIFIER.** Shift-Up moves the selection rather than the caret, and the
+			 * way a view knows is `-modifierFlags` — the character is the same one either way. */
+			event = evdev_key(103 /* KEY_UP */, "", 1, 0, AGModifierShift);
+			event.keysym = AGKeyboardKeysym(keyboard, 103);
+			deliver(application, window, &event);
+			check(is_function_key(content->lastCharacters, NSUpArrowFunctionKey) &&
+			      (content->lastModifiers & NSShiftKeyMask) != 0,
+			      "shift-up is the SAME character with the shift flag set");
+
+			/* THE EDIT BLOCK: Home, End, and the two page keys. */
+			event = evdev_key(102 /* KEY_HOME */, "", 1, 0, 0);
+			event.keysym = AGKeyboardKeysym(keyboard, 102);
+			deliver(application, window, &event);
+			check(is_function_key(content->lastCharacters, NSHomeFunctionKey),
+			      "evdev 102 is NSHomeFunctionKey");
+
+			event = evdev_key(107 /* KEY_END */, "", 1, 0, 0);
+			event.keysym = AGKeyboardKeysym(keyboard, 107);
+			deliver(application, window, &event);
+			check(is_function_key(content->lastCharacters, NSEndFunctionKey),
+			      "evdev 107 is NSEndFunctionKey");
+
+			event = evdev_key(104 /* KEY_PAGEUP */, "", 1, 0, 0);
+			event.keysym = AGKeyboardKeysym(keyboard, 104);
+			deliver(application, window, &event);
+			check(is_function_key(content->lastCharacters, NSPageUpFunctionKey),
+			      "evdev 104 is NSPageUpFunctionKey");
+
+			event = evdev_key(109 /* KEY_PAGEDOWN */, "", 1, 0, 0);
+			event.keysym = AGKeyboardKeysym(keyboard, 109);
+			deliver(application, window, &event);
+			check(is_function_key(content->lastCharacters, NSPageDownFunctionKey),
+			      "evdev 109 is NSPageDownFunctionKey");
+
+			/* **THE TWO DELETES ARE DIFFERENT KEYS AND THIS IS THE ONE THAT IS A FUNCTION KEY.** Backspace types
+			 * 0x08 (a character, so it is untouched by this table); the FORWARD delete is `NSDeleteFunctionKey`, and a
+			 * tier that mapped neither would give a view no way to tell them apart. */
+			event = evdev_key(14 /* KEY_BACKSPACE */, "\b", 1, 0, 0);
+			event.keysym = AGKeyboardKeysym(keyboard, 14);
+			deliver(application, window, &event);
+			check(content->lastCharacters != nil && [content->lastCharacters isEqual:@"\b"],
+			      "Backspace still arrives as the character it types");
+
+			event = evdev_key(111 /* KEY_DELETE */, "", 1, 0, 0);
+			event.keysym = AGKeyboardKeysym(keyboard, 111);
+			deliver(application, window, &event);
+			check(is_function_key(content->lastCharacters, NSDeleteFunctionKey),
+			      "while forward delete (evdev 111) is NSDeleteFunctionKey");
+
+			event = evdev_key(110 /* KEY_INSERT */, "", 1, 0, 0);
+			event.keysym = AGKeyboardKeysym(keyboard, 110);
+			deliver(application, window, &event);
+			check(is_function_key(content->lastCharacters, NSInsertFunctionKey),
+			      "evdev 110 is NSInsertFunctionKey");
+
+			/* **THE F KEYS ARE ONE RUN ON BOTH SIDES, WHICH IS WHY THE TABLE IS ARITHMETIC.** The first and last of
+			 * the 35 are checked: an off-by-one in the base shows at F1, and one in the count at F12 — which is also
+			 * the last F key most keyboards have. */
+			event = evdev_key(59 /* KEY_F1 */, "", 1, 0, 0);
+			event.keysym = AGKeyboardKeysym(keyboard, 59);
+			deliver(application, window, &event);
+			check(is_function_key(content->lastCharacters, NSF1FunctionKey),
+			      "evdev 59 is NSF1FunctionKey");
+
+			event = evdev_key(88 /* KEY_F12 */, "", 1, 0, 0);
+			event.keysym = AGKeyboardKeysym(keyboard, 88);
+			deliver(application, window, &event);
+			check(is_function_key(content->lastCharacters, NSF12FunctionKey),
+			      "and evdev 88 is NSF12FunctionKey, eleven keys along the same run");
+
+			/* **A KEY WITH NO COCOA NAME IS STILL DELIVERED, WITH NO CHARACTER.** A layout can bind a key this
+			 * tier does not map, and the alternative to an empty string is a refusal or a wrong guess; the empty
+			 * string with its modifier flags is what the seam can honestly say. */
+			event = evdev_key(0 /* no code in particular */, "", 1, 0, 0);
+			event.keysym = XKB_KEY_Multi_key;
+			deliver(application, window, &event);
+			check(content->lastCharacters != nil && [content->lastCharacters length] == 0,
+			      "a keysym with no Cocoa equivalent arrives with EMPTY characters, not a refused event");
+
+			/* **AND TEXT WINS WHEN THERE IS ANY**, which is the branch the table is behind: a key that types keeps
+			 * what it typed even if its keysym would map. Contrived here on purpose — no real key does both — so the
+			 * precedence is asserted rather than left as an effect of the order the two fields are filled in. */
+			event = evdev_key(30 /* KEY_A */, "a", 1, 0, 0);
+			event.keysym = XKB_KEY_Up;
+			deliver(application, window, &event);
+			check(content->lastCharacters != nil && [content->lastCharacters isEqual:@"a"],
+			      "a key that TYPES keeps its text even when its keysym would map");
+
+			AGKeyboardDestroy(keyboard);
+		}
 
 		/* 2. A MODIFIER IS `-flagsChanged:`, NOT A KEYSTROKE. */
 		before = content->keyDowns;

@@ -1,5 +1,5 @@
 /*
- * AGKeyboard.h — an evdev key code and a compositor keymap, turned into text and modifiers.
+ * AGKeyboard.h — an evdev key code and a compositor keymap, turned into text, modifiers and the key's own name.
  *
  * Copyright © 2026 Kyle J. Cardoza.
  * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
@@ -45,8 +45,9 @@ void AGKeyboardSetModifiers(AGKeyboard *keyboard, uint32_t depressed, uint32_t l
 			    uint32_t group);
 
 /* Translate an evdev key code to UTF-8 and the CURRENT modifier mask. Returns the number of bytes written
- * to `utf8` (0 when the key produces no text — a modifier, an arrow, Escape). `*modifiers` always receives
- * the mask. `size` must be > 0. */
+ * to `utf8` (0 when the key produces no text — a modifier, an arrow, an F key). `*modifiers` always receives
+ * the mask. `size` must be > 0. A key that types nothing is not a key that means nothing: ask
+ * `AGKeyboardKeysym` below for which key it was. */
 int AGKeyboardTranslate(AGKeyboard *keyboard, uint32_t evdev_keycode, char *utf8, size_t size,
 			uint32_t *modifiers);
 
@@ -59,6 +60,22 @@ uint32_t AGKeyboardModifiers(AGKeyboard *keyboard);
  * `-flagsChanged:` for a modifier and `-keyDown:`/`-keyUp:` for everything else, so a tool that delivered
  * every key press as a key down would leave `-flagsChanged:` unreachable. */
 int AGKeyboardKeyIsModifier(AGKeyboard *keyboard, uint32_t evdev_keycode);
+
+/* **THE KEYMAP'S NAME FOR THE KEY ITSELF.** `AGKeyboardTranslate` answers what a key TYPES, so it answers nothing at
+ * all for a key that types nothing — an arrow, Home, an F key — and a caller that has to know WHICH key it was (a
+ * terminal writing an escape sequence, a control that nudges with arrows, `NSEvent`'s 0xF700 command block) has only
+ * two bad options without this: a table of evdev codes, which is right for one layout and wrong for the next; or a
+ * guess from the empty text and the modifier mask, which cannot tell an up arrow from an F key.
+ *
+ * The answer is an `XKB_KEY_…` keysym — the layout's own vocabulary, where `XKB_KEY_Up` means "the key that goes up"
+ * whatever the hardware calls it — and it is `0` (`XKB_KEY_NoSymbol`) when the map defines no symbol for the code.
+ * The CURRENT modifier state is applied, so the keysym is the one the person is pressing rather than a list of the
+ * key's levels.
+ *
+ * IT IS A SEPARATE DOOR FROM THE TRANSLATION for the same reason `AGKeyboardKeyIsModifier` is: the two questions have
+ * different answers for the same key (Escape has a keysym AND types 0x1B; an arrow has a keysym and types nothing),
+ * and a caller may want either alone. */
+uint32_t AGKeyboardKeysym(AGKeyboard *keyboard, uint32_t evdev_keycode);
 
 /* **DOES THIS KEY REPEAT WHEN HELD?** The keyboard's own answer, and the one a repeat generator has to ask: a
  * MODIFIER does not (holding Shift does not type Shift over and over), and neither does a key the map gives no symbol

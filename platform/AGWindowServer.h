@@ -36,10 +36,10 @@
  * `AGWindowSetTransparent`. An opaque window's alpha byte is ignored; a transparent window's IS the window's
  * transparency, and the compositor blends on it.
  *
- * EVENTS. Nothing here is an `NSEvent`. This layer reports what the compositor said — an evdev key code, a
- * pointer position, a UTF-8 string already translated through the compositor's own keymap — and NSEvent
- * will be built from it one layer up. That split is deliberate: the keymap translation is xkbcommon's and
- * is tested on its own (`AGKeyboard.h`), and the Cocoa-shaped event is AppKit's business.
+ * EVENTS. Nothing here is an `NSEvent`. This layer reports what the compositor said — an evdev key code, the
+ * keymap's own keysym for it, a pointer position, a UTF-8 string already translated through the compositor's
+ * own keymap — and NSEvent will be built from it one layer up. That split is deliberate: the keymap translation
+ * is xkbcommon's and is tested on its own (`AGKeyboard.h`), and the Cocoa-shaped event is AppKit's business.
  */
 
 #ifndef AG_WINDOW_SERVER_H
@@ -67,7 +67,9 @@ typedef enum {
 	 * window a person could work in, so the question "what does that click mean" is the application's. It arrives
 	 * at the window the ask named, and the answer need not be that window. */
 	AGEventReopen,
-	/* A key changed state. `keycode` is the evdev code, `text` the UTF-8 it produces (empty when none). */
+	/* A key changed state. `keycode` is the evdev code, `text` the UTF-8 it produces (empty when none), and
+	 * `keysym` the keymap's name for the key itself, which is the only one of the three a key that TYPES NOTHING
+	 * still has. */
 	AGEventKey,
 	/* The pointer moved inside the window. */
 	AGEventPointerMotion,
@@ -127,6 +129,19 @@ typedef struct AGEvent {
 	int modifier;			/* nonzero when `keycode` is a MODIFIER key rather than one that types */
 	uint32_t modifiers;		/* AGModifier... */
 	char text[8];			/* UTF-8; empty when the key produces no text */
+	/* **AND THE KEYMAP'S OWN NAME FOR THE KEY, WHICH IS NEITHER ITS TEXT NOR ITS CODE.** `text` is what the key
+	 * TYPES, so it is empty for every key that does not type — the arrows, Home and End, the F keys, the keypad's
+	 * commands. `keycode` is the PHYSICAL key, so it says which switch was pressed and not what it means, and what
+	 * a key means is a property of the layout the person is using. The keysym is the answer to "which key is this"
+	 * in that layout's own vocabulary — xkb's, an `XKB_KEY_…` number — and it is the only one of the three that
+	 * remains when a key produces no character and the hardware is not what the caller cares about. A terminal
+	 * writing `ESC [ A` for the up arrow, or a control that nudges with arrows, needs exactly this and cannot
+	 * recover it from the other two fields: evdev 103 is "up" only on a layout that agrees, and the empty `text`
+	 * is the same empty `text` an F key has.
+	 *
+	 * IT IS 0 (`XKB_KEY_NoSymbol`) when the keymap defines no symbol for the code. `AGKeyboard.h` produces it, so
+	 * this header names no xkb type: the seam is a C struct and the number is a `uint32_t` whatever wrote it. */
+	uint32_t keysym;		/* an xkb keysym (XKB_KEY_…); 0 when the keymap has no symbol for the code */
 	/* **AND THE SCROLL'S OWN FOUR NUMBERS**, meaningful only for `AGEventPointerAxis`. `delta` is the precise
 	 * distance along `axis` in the compositor's unit — where one wheel notch is 15.0 — and it is the ONLY distance:
 	 * a client must not add `discrete` to it, because they are the same motion said twice, once continuously and

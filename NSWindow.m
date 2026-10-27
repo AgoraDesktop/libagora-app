@@ -46,6 +46,10 @@
 #import "NSToolbar_internal.h"	/* the band's height and view, and the toolbar's own seam */
 
 #include <math.h>	/* sqrt — how far a two-point diagonal reaches past its centreline */
+/* **THE KEYSYMS THE FUNCTION-KEY TABLE BELOW IS WRITTEN IN.** The header carries an enum of constants and nothing else,
+ * so naming them here adds no link dependency: this target already compiles `AGKeyboard.c` against the same xkbcommon,
+ * and the backend already gets the numbers from the compositor's keymap. */
+#include <xkbcommon/xkbcommon-keysyms.h>
 
 #import "AppKitRefusal.h"
 #import "NSDockMenu.h"	/* the dock menu's description, which this window carries out for the application */
@@ -690,6 +694,62 @@ static NSEvent *fn_with_global(NSEvent *ev, const AGEvent *e)
 	return ev;
 }
 
+/* **A KEY THAT TYPES NOTHING IS STILL A KEY A VIEW HAS TO BE ABLE TO NAME.** AppKit's answer is the 0xF700-0xF747
+ * block in `NSEvent.h`: a key that COMMANDS arrives as a character in it, which is how a text view tells a left arrow
+ * from an up arrow without seeing a key code and how `-doCommandBySelector:` names a movement. This tier used to build
+ * `characters` from the seam's UTF-8 alone, so every non-typing key arrived as an EMPTY string: a real arrow key was
+ * indistinguishable from a real F key, every control whose arrow handling is reachable only through
+ * `NSUpArrowFunctionKey` was dead under a real keyboard, and the character existed only in tests that made it
+ * themselves. The seam carries the keymap's keysym now, and this is the one place the layout's vocabulary becomes
+ * Cocoa's.
+ *
+ * THE MAPPING IS BY KEYSYM RATHER THAN BY KEY CODE, which is the whole point of carrying one: `XKB_KEY_Up` means "the
+ * key that goes up" on every layout, while evdev 103 means that only on a keyboard that agrees with the table.
+ *
+ * AND THE F KEYS ARE ARITHMETIC RATHER THAN A TABLE, because both sides count upward by one from their first member:
+ * `XKB_KEY_F1` (0xffbe) heads 35 keys and `NSF1FunctionKey` (0xF704) heads the same 35, so a range test and an
+ * addition say it once. Everything else is a switch of exact pairs, which is the only form in which a wrong answer is
+ * visible.
+ *
+ * WHAT IS DELIBERATELY NOT MAPPED. A key that TYPES keeps its text — this table is only consulted when `text` is empty
+ * — so Tab, Return, Escape and Backspace are untouched here. Apple's `NSBackTabCharacter`, the numeric pad's own
+ * characters and the Clear/Stop/Print family have no keysym that means them on every layout: `XKB_KEY_Print` is the
+ * print-screen key and nothing else, and calling it `NSPrintFunctionKey` would be a guess this tier cannot keep. Those
+ * keys arrive as an empty string with their modifier flags, which is exactly what the seam says about them. */
+static unichar fn_function_key_for_keysym(uint32_t keysym)
+{
+	if (keysym >= XKB_KEY_F1 && keysym <= XKB_KEY_F35) {
+		return (unichar)(NSF1FunctionKey + (keysym - XKB_KEY_F1));
+	}
+	switch (keysym) {
+	case XKB_KEY_Up:		return NSUpArrowFunctionKey;
+	case XKB_KEY_Down:		return NSDownArrowFunctionKey;
+	case XKB_KEY_Left:		return NSLeftArrowFunctionKey;
+	case XKB_KEY_Right:		return NSRightArrowFunctionKey;
+	case XKB_KEY_Insert:		return NSInsertFunctionKey;
+	case XKB_KEY_Delete:		return NSDeleteFunctionKey;
+	case XKB_KEY_Home:		return NSHomeFunctionKey;
+	case XKB_KEY_Begin:		return NSBeginFunctionKey;
+	case XKB_KEY_End:		return NSEndFunctionKey;
+	case XKB_KEY_Prior:		return NSPageUpFunctionKey;
+	case XKB_KEY_Next:		return NSPageDownFunctionKey;
+	case XKB_KEY_Print:		return NSPrintScreenFunctionKey;
+	case XKB_KEY_Scroll_Lock:	return NSScrollLockFunctionKey;
+	case XKB_KEY_Pause:		return NSPauseFunctionKey;
+	case XKB_KEY_Sys_Req:		return NSSysReqFunctionKey;
+	case XKB_KEY_Break:		return NSBreakFunctionKey;
+	case XKB_KEY_Reset:		return NSResetFunctionKey;
+	case XKB_KEY_Menu:		return NSMenuFunctionKey;
+	case XKB_KEY_Select:		return NSSelectFunctionKey;
+	case XKB_KEY_Execute:		return NSExecuteFunctionKey;
+	case XKB_KEY_Undo:		return NSUndoFunctionKey;
+	case XKB_KEY_Redo:		return NSRedoFunctionKey;
+	case XKB_KEY_Find:		return NSFindFunctionKey;
+	case XKB_KEY_Help:		return NSHelpFunctionKey;
+	default:			return 0;
+	}
+}
+
 /* THE TRANSLATION ITSELF, and it is one function for the same reason the point conversion is: the pump, the
  * mouse-location door and any future monitor all have to agree about what a seam event means. A NULL answer
  * is "this is not an event this class delivers" — a configure, a close — and the pump handles those itself
@@ -777,9 +837,23 @@ static NSEvent *fn_translate(NSWindow *w, const AGEvent *e, NSTimeInterval now)
 		/* **THE TEXT ARRIVES ALREADY TRANSLATED**, which is the seam's job and xkbcommon's: `AGKeyboard` turned
 		 * the evdev code into UTF-8 through the keymap the COMPOSITOR sent, so there is no keymap in this file
 		 * and no `XLookupString` behind it. The keycode is carried too, because a caller that wants the PHYSICAL
-		 * key asks for it. */
-		NSString *chars = [NSString stringWithUTF8String:e->text];
+		 * key asks for it.
+		 *
+		 * **AND A KEY THAT TYPED NOTHING ARRIVES AS ITS FUNCTION KEY**, which is the other half of the same
+		 * sentence: `-characters` is where AppKit puts the NAME of a commanding key, so an up arrow is
+		 * `NSUpArrowFunctionKey` and not the empty string the translation produced. See the table above for what is
+		 * mapped and what is deliberately not. */
+		NSString *chars = nil;
 
+		if (e->text[0] != '\0') {
+			chars = [NSString stringWithUTF8String:e->text];
+		} else {
+			unichar function = fn_function_key_for_keysym(e->keysym);
+
+			if (function != 0) {
+				chars = [NSString stringWithCharacters:&function length:1];
+			}
+		}
 		if (chars == nil) {
 			chars = @"";
 		}

@@ -1298,10 +1298,13 @@ static void keyboard_key(void *data, struct wl_keyboard *keyboard, uint32_t seri
 	event.keycode = key;
 	event.pressed = state == WL_KEYBOARD_KEY_STATE_PRESSED;
 	/* THE TRANSLATION IS UNCONDITIONAL, even on release: the caller may want the text of the key that went
-	 * up, and the modifier mask is wanted either way. */
+	 * up, and the modifier mask is wanted either way. **AND SO IS THE KEYSYM**, for a stronger reason: a key that
+	 * types nothing — an arrow, Home, an F key — has NO text to carry, so without this field the only thing a
+	 * released arrow key says is which physical switch it was. */
 	if (server->keyboard_state != NULL) {
 		AGKeyboardTranslate(server->keyboard_state, key, event.text, sizeof event.text,
 				    &event.modifiers);
+		event.keysym = AGKeyboardKeysym(server->keyboard_state, key);
 		event.modifier = AGKeyboardKeyIsModifier(server->keyboard_state, key);
 	}
 	ag_window_deliver(window, &event);
