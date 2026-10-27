@@ -48,6 +48,9 @@
 
 #include "AGWindowServer.h"
 #include "AGKeyboard.h"
+#ifdef AG_HAVE_GL
+#include "AGGL.h"
+#endif
 
 #include <errno.h>
 #include <fcntl.h>
@@ -108,6 +111,17 @@ struct AGBuffer {
 	struct gbm_bo *bo;
 	void *map_data;
 	int dmabuf_fd;
+	/* **AND WHEN THE BUFFER WAS MADE BY EGL RATHER THAN BY GBM.** A GPU buffer has two possible origins and they are not
+	 * interchangeable: MEASURED on this machine, a `gbm_bo_create_with_modifiers` allocation is REFUSED by this same
+	 * device's EGL (`glEGLImageTargetTexture2DOES` answers `GL_INVALID_OPERATION`, so nobody can render into it), while a
+	 * texture exported with `EGL_MESA_image_dma_buf_export` imports and renders perfectly. `egl_texture` non-zero means
+	 * this slot's memory IS that texture, and the texture must outlive every descriptor handed out from it, because an
+	 * export aliases it rather than copying. */
+	unsigned int egl_texture;
+	/* **AND THE LAYOUT THE MEMORY WAS MADE WITH**, which a caller importing it needs and which only `gbm_bo` can answer
+	 * after the fact — an EGL-exported buffer has no handle to ask, so both allocators record it here. */
+	unsigned int fourcc;
+	unsigned long long modifier;
 };
 
 /* HOW MANY RECTANGLES ONE FRAME MAY NAME. Sixteen covers a window's damage pieces (`APPKIT_DAMAGE_RECTS` is that
@@ -229,6 +243,9 @@ struct AGWindowServer {
 	struct zwp_linux_dmabuf_v1 *dmabuf;
 	struct gbm_device *gbm;
 	int gbm_fd;
+	/* **THE GPU ALLOCATOR, LAZILY.** One EGL context per connection, on the same device the window's buffers come from,
+	 * used only to make those buffers — the client's own rendering context is its own business. */
+	AGGLContext *gl;
 	struct {
 		uint32_t format;
 		uint64_t modifier;
@@ -462,6 +479,15 @@ static void ag_buffer_dispose(struct AGBuffer *buffer)
 		wl_buffer_destroy(buffer->buffer);
 	}
 #ifdef AG_HAVE_DMABUF
+	if (buffer->egl_texture != 0) {
+		/* An EGL-allocated slot: the texture IS the memory, so it goes last, after the descriptor that aliases it. */
+		if (buffer->dmabuf_fd >= 0) {
+			close(buffer->dmabuf_fd);
+		}
+		buffer->egl_texture = 0;
+		memset(buffer, 0, sizeof *buffer);
+		return;
+	}
 	if (buffer->bo != NULL) {
 		/* **THE GPU BUFFER IS UNMAPPED FIRST AND DESTROYED SECOND**, and the descriptor last: the mapping belongs
 		 * to the bo, and the bo's destroy is what drops this process's reference to the memory. */
@@ -614,6 +640,21 @@ static int ag_gbm_ready(AGWindowServer *server)
  * GPU will read and the per-frame copy from a private backing store disappears. `-1` means "use shared memory", and
  * every failure below is that answer rather than an error — a client that refused to open a window because its GPU
  * path did not work would be worse than one that copies pixels. */
+/* **CAN THE COMPOSITOR SAMPLE THIS PAIR?** The list came from `zwp_linux_dmabuf_v1`, and a buffer outside it is refused at
+ * `create` time with no diagnosis — so an allocator that gets to choose the layout (the EGL one does) has to check. */
+static int ag_dmabuf_pair_supported(AGWindowServer *server, uint32_t format, uint64_t modifier)
+{
+	int i;
+
+	for (i = 0; i < server->dmabuf_format_count; i++) {
+		if (server->dmabuf_formats[i].format == format &&
+		    (server->dmabuf_formats[i].modifier == modifier || server->dmabuf_formats[i].modifier == 0)) {
+			return 1;
+		}
+	}
+	return 0;
+}
+
 static int ag_buffer_create_dmabuf(AGWindow *window, struct AGBuffer *slot, int width, int height)
 {
 	AGWindowServer *server = window->server;
@@ -651,6 +692,77 @@ static int ag_buffer_create_dmabuf(AGWindow *window, struct AGBuffer *slot, int 
 		fprintf(stderr, "  DIAG dmabuf: trying %dx%d, %d format(s) advertised\n",
 			width, height, server->dmabuf_format_count);
 	}
+	/* **EGL FIRST, BECAUSE ITS BUFFERS ARE THE ONES THAT CAN BE RENDERED INTO.** See `AGBuffer.egl_texture`: this
+	 * machine's GBM allocations are refused by the same device's EGL, so a window made of them cannot be drawn into with
+	 * the GPU at all. The fallback is GBM, kept because a machine whose EGL cannot export still gets a GPU buffer the
+	 * compositor can sample — it simply cannot be rendered into by EGL, which is what `AGWindowBeginFrameDMABUF`'s
+	 * callers want and the ordinary CPU path does not need. */
+#ifdef AG_HAVE_GL
+	{
+		/* **THE DEVICE HAS TO BE OPEN BEFORE THE CONTEXT CAN BE MADE ON IT**, and `ag_gbm_ready` is what opens it — the
+		 * context uses the device as a device, not as an allocator, which is the whole distinction this path turns on. */
+		(void)ag_gbm_ready(server);
+		if (server->gl == NULL) {
+			server->gl = AGGLContextCreateWithGBM(server->gbm != NULL ? (void *)server->gbm : NULL);
+		}
+		if (server->gl != NULL) {
+			unsigned int texture = AGGLTextureAllocate(server->gl, width, height);
+			int egl_fd = -1;
+			int egl_stride = 0;
+			unsigned int egl_fourcc = 0;
+			unsigned long long egl_modifier = 0;
+
+			if (texture == 0 && getenv("AG_WINDOW_DIAG") != NULL) {
+				fprintf(stderr, "  DIAG dmabuf: the EGL texture could not be allocated\n");
+			}
+			if (texture != 0) {
+				int exported = AGGLExportTextureDmabuf(server->gl, texture, width, height, &egl_fd,
+								       &egl_stride, &egl_fourcc, &egl_modifier);
+
+				if (getenv("AG_WINDOW_DIAG") != NULL) {
+					fprintf(stderr, "  DIAG dmabuf: export=%d fourcc 0x%08x modifier 0x%016llx "
+							"supported=%d\n", exported, egl_fourcc, (unsigned long long)egl_modifier,
+						exported ? ag_dmabuf_pair_supported(server, egl_fourcc, egl_modifier) : -1);
+				}
+				if (exported && ag_dmabuf_pair_supported(server, egl_fourcc, egl_modifier)) {
+					params = zwp_linux_dmabuf_v1_create_params(server->dmabuf);
+
+					zwp_linux_buffer_params_v1_add(params, egl_fd, 0, 0, (uint32_t)egl_stride,
+								       (uint32_t)(egl_modifier >> 32),
+								       (uint32_t)egl_modifier);
+					slot->buffer = zwp_linux_buffer_params_v1_create_immed(params, width, height,
+											       egl_fourcc, 0);
+					zwp_linux_buffer_params_v1_destroy(params);
+					if (slot->buffer != NULL) {
+						slot->egl_texture = texture;
+						slot->fourcc = egl_fourcc;
+						slot->modifier = egl_modifier;
+						slot->dmabuf_fd = egl_fd;
+						slot->width = width;
+						slot->height = height;
+						slot->stride = egl_stride;
+						slot->size = (size_t)egl_stride * (size_t)height;
+						/* `pixels` STAYS NULL, AND THAT IS THE POINT: this buffer's memory is not this
+						 * process's to write through a pointer. A caller draws into it as a descriptor. */
+						if (getenv("AG_WINDOW_DIAG") != NULL) {
+							fprintf(stderr, "  DIAG dmabuf: egl %dx%d stride %d format 0x%08x "
+									"modifier 0x%016llx\n", width, height, egl_stride,
+								egl_fourcc, (unsigned long long)egl_modifier);
+						}
+						return 0;
+					}
+					close(egl_fd);
+				}
+				AGGLDeleteTexture(server->gl, texture);
+			}
+		}
+		if (getenv("AG_WINDOW_DIAG") != NULL) {
+			fprintf(stderr, "  DIAG dmabuf: the EGL allocation was not available (context %p), falling back to "
+					"gbm\n", (void *)server->gl);
+		}
+	}
+#endif
+
 	if (!ag_dmabuf_pick(server, format, &modifier)) {
 		return -1;
 	}
@@ -687,6 +799,8 @@ static int ag_buffer_create_dmabuf(AGWindow *window, struct AGBuffer *slot, int 
 	}
 	slot->bo = bo;
 	slot->map_data = map_data;
+	slot->fourcc = format;
+	slot->modifier = modifier;
 	slot->dmabuf_fd = fd;	/* kept for DMA_BUF_IOCTL_SYNC; the params request dups its own */
 	slot->pixels = map;
 	slot->width = width;
@@ -722,6 +836,21 @@ static void ag_buffer_sync(struct AGBuffer *buffer, int start)
 }
 
 #else /* !AG_HAVE_DMABUF */
+
+/* **CAN THE COMPOSITOR SAMPLE THIS PAIR?** The list came from `zwp_linux_dmabuf_v1`, and a buffer outside it is refused at
+ * `create` time with no diagnosis — so an allocator that gets to choose the layout (the EGL one does) has to check. */
+static int ag_dmabuf_pair_supported(AGWindowServer *server, uint32_t format, uint64_t modifier)
+{
+	int i;
+
+	for (i = 0; i < server->dmabuf_format_count; i++) {
+		if (server->dmabuf_formats[i].format == format &&
+		    (server->dmabuf_formats[i].modifier == modifier || server->dmabuf_formats[i].modifier == 0)) {
+			return 1;
+		}
+	}
+	return 0;
+}
 
 static int ag_buffer_create_dmabuf(AGWindow *window, struct AGBuffer *slot, int width, int height)
 {
@@ -778,6 +907,23 @@ static void ag_window_resize(AGWindow *window, int width, int height)
 		 * paint rather than a window that draws into nothing. */
 		return;
 	}
+#ifdef AG_HAVE_DMABUF
+	/* **AND THE OTHER SLOT IS MADE NOW, WHEN THE SLOT IS AN EGL BUFFER.** MEASURED: this machine's EGL exports a texture
+	 * to a dma-buf happily, but refuses to export a SECOND one once the first buffer is being imported and rendered into
+	 * by another context — so a lazily-made second slot fell back to GBM, whose buffers that same EGL then refused to
+	 * import, and the whole point of the path was lost. Both slots are therefore allocated together, before either is
+	 * drawn into, which is the arrangement the exports work in.
+	 *
+	 * The shared-memory path is untouched: its second slot is still made on the first swap, where it costs nothing. */
+	if (window->spare.egl_texture != 0 && window->buffer.buffer == NULL) {
+		if (ag_buffer_make(window, &window->buffer, width, height) != 0) {
+			if (getenv("AG_WINDOW_DIAG") != NULL) {
+				fprintf(stderr, "  DIAG resize: the second GPU slot could not be made; a swap will have to "
+						"allocate later\n");
+			}
+		}
+	}
+#endif
 }
 
 /* **A RESIZE THAT WAS ASKED FOR UNDER A FRAME IS MADE HERE, ONCE THE DRAWING SLOT IS FREE.** There are two doors
@@ -901,7 +1047,7 @@ int AGWindowBeginFrameDMABUF(AGWindow *window, AGWindowFrameDMABUF *out)
 		return 0;
 	}
 #ifdef AG_HAVE_DMABUF
-	if (window->spare.bo == NULL || window->spare.dmabuf_fd < 0) {
+	if (window->spare.dmabuf_fd < 0 || (window->spare.bo == NULL && window->spare.egl_texture == 0)) {
 		/* Shared memory: this window was not asked for a GPU buffer, or the compositor imports nothing. The caller
 		 * draws the ordinary way, which is why this is a return and not an error. */
 		return 0;
@@ -910,8 +1056,10 @@ int AGWindowBeginFrameDMABUF(AGWindow *window, AGWindowFrameDMABUF *out)
 	out->width = window->spare.width;
 	out->height = window->spare.height;
 	out->stride = window->spare.stride;
-	out->fourcc = (window->transparent != 0) ? AG_DRM_FORMAT_ARGB8888 : AG_DRM_FORMAT_XRGB8888;
-	out->modifier = gbm_bo_get_modifier(window->spare.bo);
+	/* **THE LAYOUT IS THE SLOT'S OWN RECORD**, not a guess from `transparent`: an EGL-exported buffer is ARGB8888 with a
+	 * tiled modifier and no handle to ask afterwards. */
+	out->fourcc = window->spare.fourcc;
+	out->modifier = window->spare.modifier;
 	window->begun = 1;
 	window->begun_gpu = 1;
 	return 1;

@@ -853,6 +853,29 @@ unsigned int AGGLTextureFromPixels(AGGLContext *context, const uint32_t *pixels,
 	return texture;
 }
 
+unsigned int AGGLTextureAllocate(AGGLContext *context, int width, int height)
+{
+	GLuint texture = 0;
+
+	if (context == NULL || !context->ready || width <= 0 || height <= 0 || width > context->max_texture_size ||
+	    height > context->max_texture_size) {
+		return 0;
+	}
+	glGenTextures(1, &texture);
+	glBindTexture(GL_TEXTURE_2D, texture);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
+	glBindTexture(GL_TEXTURE_2D, 0);
+	if (glGetError() != GL_NO_ERROR || gl_texture_register(context, texture, EGL_NO_IMAGE_KHR, 0) == 0) {
+		glDeleteTextures(1, &texture);
+		return 0;
+	}
+	return texture;
+}
+
 unsigned int AGGLTextureFromImage(AGGLContext *context, const void *egl_image, int width, int height)
 {
 	(void)width;
@@ -1421,6 +1444,37 @@ int AGGLPresentToWindow(AGGLContext *context, AGWindow *window, int x, int y)
 	(void)window;
 	(void)x;
 	(void)y;
+	return 0;
+}
+
+unsigned int AGGLTextureAllocate(AGGLContext *context, int width, int height)
+{
+	GLuint texture = 0;
+
+	if (context == NULL || !context->ready || width <= 0 || height <= 0 || width > context->max_texture_size ||
+	    height > context->max_texture_size) {
+		return 0;
+	}
+	glGenTextures(1, &texture);
+	glBindTexture(GL_TEXTURE_2D, texture);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
+	glBindTexture(GL_TEXTURE_2D, 0);
+	if (glGetError() != GL_NO_ERROR || gl_texture_register(context, texture, EGL_NO_IMAGE_KHR, 0) == 0) {
+		glDeleteTextures(1, &texture);
+		return 0;
+	}
+	return texture;
+}
+
+unsigned int AGGLTextureAllocate(AGGLContext *context, int width, int height)
+{
+	(void)context;
+	(void)width;
+	(void)height;
 	return 0;
 }
 

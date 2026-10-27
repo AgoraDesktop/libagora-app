@@ -3738,9 +3738,11 @@ descriptor instead of its mapping (`AGWindowCancelFrame` gives a slot back when 
 builds a context on the device the buffers come from — `AGWindowServerNativeGBMDevice` — and `AGGLRenderTargetFromDmabuf`
 imports a buffer as a framebuffer so GL can draw into it. MEASURED on this machine: a buffer this seam exported from its own
 EGL imports and renders into perfectly, and a buffer allocated through GBM does not — `glEGLImageTargetTexture2DOES` answers
-`GL_INVALID_OPERATION` — which is recorded here because it is a fact about the machine and the driver, not about the code:
-the door, the device query and the render target are each exercised, and the client that needs the whole-window case
-(`libagora-webview`'s nested test) SKIPS with that sentence.
+`GL_INVALID_OPERATION`. So the seam now allocates a window's GPU buffers THROUGH EGL (`AGGLTextureAllocate` +
+`EGL_MESA_image_dma_buf_export`) and keeps GBM as the fallback, and both of a window's slots are made together, because this
+driver refuses to export a second texture once the first buffer is being imported elsewhere. What remains open is the
+channel order: the exported buffer is AB24, the compositor reads those bytes the other way round, and the client's nested
+test SKIPS with that sentence rather than passing on a red-and-blue-exchanged picture.
 
 **What is deliberately not here.** No `NSOpenGL*` (those stay refused by name — an era API this stack does not
 implement), no `CALayer`, no change to how the AppKit paints a window, and no child surface: a `WebView` INSIDE a

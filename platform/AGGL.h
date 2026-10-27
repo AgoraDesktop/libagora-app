@@ -210,6 +210,13 @@ void AGGLRenderTargetDestroy(AGGLContext *context, AGGLRenderTarget *target);
  * window's GPU buffer with the CPU never seeing it. 0 when nothing has been drawn. */
 unsigned int AGGLTargetTexture(AGGLContext *context);
 
+/* **A TEXTURE WITH STORAGE AND NOTHING IN IT, FOR A CALLER THAT WANTS THE MEMORY RATHER THAN THE PIXELS.** This is how a
+ * window's GPU buffer is MADE: the texture is the allocation, `AGGLExportTextureDmabuf` is its descriptor, and a renderer
+ * draws into that descriptor as a target. The caller owns the texture until `AGGLDeleteTexture`, and it must outlive every
+ * descriptor handed out from it — on this machine's driver an export ALIASES the texture rather than copying it. Returns 0
+ * when the size is beyond the driver's limit. */
+unsigned int AGGLTextureAllocate(AGGLContext *context, int width, int height);
+
 /* **A TEXTURE DRAWN INTO THE CURRENT TARGET, WHICH IS THE WHOLE OF "COMPOSITE AN ENGINE'S FRAME".** Straight copy: no
  * blending, no texture coordinates invented, (0,0) of the texture at the bottom-left of the rectangle, in target
  * pixels. Returns 1 when it drew. */
