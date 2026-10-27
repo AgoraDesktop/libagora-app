@@ -309,6 +309,20 @@ static NSMutableArray *s_monitors;
 	return _cg_focusSerial;
 }
 
+/* **THE KEY'S NAME, WHICH TRAVELS WITH THE EVENT BECAUSE NOTHING ELSE CAN RECOVER IT.** The seam hands AppKit three
+ * facts about a key — what it typed, which physical code it was, and what the keymap calls it — and only the third
+ * survives for the keys whose text is empty or ambiguous. See the header: a dead key types nothing, and a keypad digit
+ * types the same character as the row above it. */
+- (void)cg_setKeysym:(unsigned int)keysym
+{
+	_cg_keysym = keysym;
+}
+
+- (unsigned int)cg_keysym
+{
+	return _cg_keysym;
+}
+
 + (nullable NSEvent *)cg_scrollEventWithDeltaX:(CGFloat)dx
 				  deltaY:(CGFloat)dy
 				location:(NSPoint)location

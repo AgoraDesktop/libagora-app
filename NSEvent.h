@@ -348,6 +348,10 @@ NS_ASSUME_NONNULL_BEGIN
 	BOOL _cg_hasSourceTimestamp;
 	unsigned int _cg_sourceTimestamp;
 	unsigned int _cg_focusSerial;
+	/* **AND THE KEY'S OWN NAME, WHICH IS NOT ITS TEXT AND NOT ITS CODE.** See `-cg_keysym` below for why a key event
+	 * cannot be understood without it: a dead key types nothing at all, and the character a plain key types is the
+	 * same character two different physical keys can produce. Zero means the keymap named no symbol. */
+	unsigned int _cg_keysym;
 	CGFloat _deltaX;
 	CGFloat _deltaY;
 	CGFloat _deltaZ;
@@ -479,6 +483,30 @@ NS_ASSUME_NONNULL_BEGIN
 @property (readonly) BOOL cg_hasSourceTimestamp;
 @property (readonly) unsigned int cg_sourceTimestamp;
 @property (readonly) unsigned int cg_focusSerial;
+
+/* **THE KEYMAP'S NAME FOR THE KEY, CARRIED THROUGH TO THE CALLER THAT HAS TO ACT ON WHICH KEY IT WAS.** `-characters`
+ * answers what the key TYPED, and there are two families of key for which that is the wrong question:
+ *
+ *   - A key that types NOTHING. The `0xF700` block names the commanding ones (`NSUpArrowFunctionKey` and its
+ *     neighbours), and `-keyCode` names the physical switch — but a DEAD KEY types nothing and is in neither: `´` is
+ *     not a character in `-characters` (xkbcommon answers no text at all for one) and `-keyCode` says only which
+ *     piece of plastic moved. Without the keysym, a dead key is indistinguishable from a key the layout does not
+ *     define, which is why `AGInputMethod` could not see one from real hardware.
+ *
+ *   - A key whose TEXT does not identify it. The keypad's `1` and the row's `1` both type "1"; `-` on a US layout and
+ *     the ASCII grave it shares a key with are one character and two meanings. A terminal writing an escape sequence
+ *     for the keypad needs the former, and a text view deciding whether a `` ` `` BEGINS a composition needs the
+ *     latter — the answer is "no" on a US layout, where that key is `XKB_KEY_grave`, and "yes" on a French one,
+ *     where it is `XKB_KEY_dead_grave`.
+ *
+ * It is an `XKB_KEY_…` value (`xkbcommon-keysyms.h`), the layout's own vocabulary, because that is what the seam
+ * carries: `AGEvent.keysym`. Zero (`XKB_KEY_NoSymbol`) for a key whose code the map does not define, and for every
+ * event this tier fabricates, since a fabricated event has no keymap behind it. Agora extension; not in Apple's 10.6
+ * surface. */
+@property (readonly) unsigned int cg_keysym;
+/* **THE PRIVATE HALF, AND IT IS `cg_` SO THE PUBLIC SURFACE STAYS APPLE'S.** Only the seam's translation path knows a
+ * key's keysym, so only it writes this — exactly the arrangement `-cg_setSourceTimestamp:…` has. */
+- (void)cg_setKeysym:(unsigned int)keysym;
 
 + (nullable NSEvent *)cg_scrollEventWithDeltaX:(CGFloat)dx
 				  deltaY:(CGFloat)dy

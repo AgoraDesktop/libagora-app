@@ -19,7 +19,8 @@
  *
  * WHAT IS ASSERTED, and each one was a bug or a dead branch before it passed:
  *
- *   1. A key goes to the FIRST RESPONDER and carries its characters.
+ *   1. A key goes to the FIRST RESPONDER and carries its characters — and, for every key and not only the ones
+ *      that type nothing, THE KEYMAP'S NAME FOR THE KEY, which is the only thing that identifies a dead key.
  *   2. A MODIFIER arrives as `-flagsChanged:` rather than as a key down.
  *   3. A click goes to THE VIEW UNDER THE POINTER, not to the first responder.
  *   4. A view that does not implement the event method BUBBLES it up the responder chain, which is what
@@ -88,6 +89,7 @@ static void check(int ok, const char *what)
 	BOOL lastHadSourceTime;
 	unsigned int lastSourceTime;
 	unsigned int lastFocusSerial;
+	unsigned int lastKeysym;	/* `-cg_keysym`, which the seam has always carried and AppKit used to drop */
 	NSPoint lastPoint;
 }
 @end
@@ -109,6 +111,7 @@ static void check(int ok, const char *what)
 	lastHadSourceTime = [event cg_hasSourceTimestamp];
 	lastSourceTime = [event cg_sourceTimestamp];
 	lastFocusSerial = [event cg_focusSerial];
+	lastKeysym = [event cg_keysym];
 }
 
 - (void)keyUp:(NSEvent *)event
@@ -412,6 +415,25 @@ int main(void)
 			deliver(application, window, &event);
 			check(is_function_key(content->lastCharacters, NSF12FunctionKey),
 			      "and evdev 88 is NSF12FunctionKey, eleven keys along the same run");
+
+			/* **AND THE KEY'S NAME REACHES THE VIEW FOR A KEY THAT TYPES, WHICH IT DID NOT BEFORE.** The mapping
+			 * above turns a keysym into a `0xF700` character and the translation path used to stop there: the symbol
+			 * survived only for keys that typed nothing, so a dead key — which types nothing AND has no `0xF700`
+			 * character — arrived as an empty string with no name at all. A typing key and a dead one are checked
+			 * here, which is the whole of what `NSWindow` owes: identifying them is the input method's job. */
+			event = evdev_key(30 /* KEY_A */, "a", 1, 0, 0);
+			event.keysym = AGKeyboardKeysym(keyboard, 30);
+			deliver(application, window, &event);
+			check(content->lastKeysym == XKB_KEY_a,
+			      "a key that types carries its keysym too — `XKB_KEY_a` for evdev 30");
+
+			event = evdev_key(13 /* KEY_EQUAL, the `de` dead-accent key */, "", 1, 0, 0);
+			event.keysym = XKB_KEY_dead_acute;
+			deliver(application, window, &event);
+			check(content->lastKeysym == XKB_KEY_dead_acute,
+			      "and a DEAD KEY arrives named, which is the only way it can be identified at all");
+			check(content->lastCharacters != nil && [content->lastCharacters length] == 0,
+			      "typing nothing, as a dead key does: the name is the whole of what it says");
 
 			/* **A KEY WITH NO COCOA NAME IS STILL DELIVERED, WITH NO CHARACTER.** A layout can bind a key this
 			 * tier does not map, and the alternative to an empty string is a refusal or a wrong guess; the empty

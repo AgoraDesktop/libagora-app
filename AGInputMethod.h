@@ -7,11 +7,17 @@
  *
  * **THIS IS THE CLASS `NSTextInputContext.h` SAID THE TIER DID NOT HAVE.** A context sends every key to its input
  * source before the standard key binding, and a source that composes owns state ACROSS KEYSTROKES. This one is a
- * DEAD-KEY table: the keymap emits a spacing accent — `´`, `` ` ``, `^`, `~`, `¨` — and this method holds it as a
- * ONE-CHARACTER COMPOSITION, shown marked, until the next key either COMBINES with it into a single character
- * (`´` then `e` is `é`) or does not, in which case the accent stands alone and the next key is handled normally. The
- * second keystroke CONFIRMS by replacing the marked range, which is exactly what `NSTextView -insertText:` does while
- * a mark is up.
+ * DEAD-KEY table: the keymap names the key with a `dead`-something keysym (`XKB_KEY_dead_acute`, `dead_grave`,
+ * `dead_circumflex`, `dead_tilde`, `dead_diaeresis`, `dead_cedilla`), which `NSEvent -cg_keysym` carries, and this
+ * method holds the accent that symbol STANDS FOR — `´`, `` ` ``, `^`, `~`, `¨`, `¸` — as a ONE-CHARACTER COMPOSITION,
+ * shown marked, until the next key either COMBINES with it into a single character (`´` then `e` is `é`) or does not, in
+ * which case the accent stands alone and the next key is handled normally. The second keystroke CONFIRMS by replacing
+ * the marked range, which is exactly what `NSTextView -insertText:` does while a mark is up.
+ *
+ * **THE KEYSYM IS WHY THIS WORKS FROM REAL HARDWARE, AND THE SPACING CLONE IS WHY IT STILL WORKS FROM A FABRICATED
+ * EVENT.** A dead key types nothing, so the character `-characters` reports is the empty string on every real layout;
+ * the clone is what such a key is SHOWN as, not what it emits. An event with no keysym — one a test builds — has only
+ * the clone to offer, so that reading is kept, confined to `cg_keysym == 0`.
  *
  * **AND A KEY IT DOES NOT OWN IS DECLINED, WHICH IS THE CONTRACT.** `-handleEvent:context:` answers whether it
  * CONSUMED the event; a plain `a` with no accent pending answers NO, so the context's standard key binding inserts it,

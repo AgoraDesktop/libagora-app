@@ -11,6 +11,14 @@
  * nothing composes, leaves the accent literal and lets the standard binding have the key. So the probe reads the
  * view's string, its marked range, and the source's own idea of whether it is composing.
  *
+ * **AND THE KEY IT COMPOSES WITH IS IDENTIFIED BY ITS KEYSYM, BECAUSE TEXT CANNOT IDENTIFY IT.** A dead key types
+ * nothing at all — the keymap has no text for `XKB_KEY_dead_acute` — so the first three cases below feed events that
+ * carry a symbol and an empty string, which is exactly what real hardware delivers. The fourth case is the other half
+ * of that claim: a US keyboard's `` ` `` is an ORDINARY key (`XKB_KEY_grave`), types a character, and must NOT begin a
+ * composition — a rule a characters-only table cannot express, because `` ` `` is also the spacing clone of the dead
+ * grave accent. The fifth and sixth cases cover a dead key arriving while one waits, and the composer the context
+ * supplies when nobody installed a source.
+ *
  * **AND A KEY THE METHOD DOES NOT OWN IS DECLINED.** A plain letter with nothing pending, a Command key, and a
  * movement key all fall through to the context's standard key binding — which is what makes a source safe to install,
  * and is checked here by the caret moving on a left arrow with the method in place.
@@ -24,6 +32,7 @@
 #import <AppKit/NSEvent.h>
 #import <Foundation/Foundation.h>
 #include <stdio.h>
+#include <xkbcommon/xkbcommon-keysyms.h>	/* XKB_KEY_dead_… and XKB_KEY_grave */
 
 static int failures;
 
@@ -41,6 +50,17 @@ static NSEvent *key(NSString *characters, NSUInteger flags)
 			       timestamp:0.0 windowNumber:0 context:nil
 			      characters:characters charactersIgnoringModifiers:characters
 			       isARepeat:NO keyCode:0];
+}
+
+/* **A KEY AS THE SEAM DELIVERS IT: WHAT IT TYPED (OFTEN NOTHING) AND WHAT THE KEYMAP CALLED IT.** A dead key types
+ * nothing — xkbcommon writes no bytes for `XKB_KEY_dead_acute` — so this is the only shape in which a real dead key can
+ * arrive, and a table that only reads `-characters` cannot see one. */
+static NSEvent *keyWithKeysym(NSString *characters, NSUInteger flags, unsigned int keysym)
+{
+	NSEvent *event = key(characters, flags);
+
+	[event cg_setKeysym:keysym];
+	return event;
 }
 
 static NSString *one(unichar c)
@@ -149,6 +169,143 @@ int main(void)
 		[context handleEvent:key(@"e", 0)];
 		check([[view string] isEqualToString:[acute stringByAppendingString:@"e"]],
 		      "so the next letter is inserted as itself rather than composed");
+
+		[context setInputSource:nil];
+		[method release];
+		[view release];
+	}
+
+	/* 3. **A DEAD KEY FROM A REAL KEYMAP.** The event types NOTHING and is identified only by its keysym — the shape
+	 * every key on a French, German or international layout arrives in, and the shape this probe could not produce
+	 * before the keysym reached `NSEvent`. */
+	{
+		NSTextView *view = [[NSTextView alloc] initWithFrame:NSMakeRect(0.0, 0.0, 300.0, 60.0)];
+		NSTextInputContext *context = (NSTextInputContext *)[view inputContext];
+		AGInputMethod *method = [[AGInputMethod alloc] init];
+
+		[view setEditable:YES];
+		[context setInputSource:method];
+
+		[view setString:@""];
+		[context handleEvent:keyWithKeysym(@"", 0, XKB_KEY_dead_acute)];
+		check([view hasMarkedText] && [method isComposing], "a dead key that TYPES NOTHING still begins a composition");
+		check([[view string] isEqualToString:one(0x00B4)], "and the accent it stands for is in the store, MARKED");
+		[context handleEvent:key(@"e", 0)];
+		check([[view string] isEqualToString:one(0x00E9)], "and the next letter composes with it — `é`");
+
+		/* THE OTHER DIRECTION: GERMAN, WHERE `^` IS A DEAD KEY AND `a` COMPOSES TO `â`. */
+		[view setString:@""];
+		[context handleEvent:keyWithKeysym(@"", 0, XKB_KEY_dead_circumflex)];
+		[context handleEvent:key(@"a", 0)];
+		check([[view string] isEqualToString:one(0x00E2)], "`circumflex` then `a` is `â`");
+
+		/* AND THE CEDILLA, WHICH xkbcommon ALSO NAMES AS A DEAD KEY. */
+		[view setString:@""];
+		[context handleEvent:keyWithKeysym(@"", 0, XKB_KEY_dead_cedilla)];
+		[context handleEvent:key(@"c", 0)];
+		check([[view string] isEqualToString:one(0x00E7)], "`cedilla` then `c` is `ç`");
+
+		[context setInputSource:nil];
+		[method release];
+		[view release];
+	}
+
+	/* 4. **AND A KEY THAT TYPES ONE OF THOSE CHARACTERS WITHOUT BEING DEAD IS NOT ONE.** This is the half the keysym
+	 * buys and a characters-only table cannot: on a US keyboard `` ` `` and `^` are ORDINARY keys whose symbol is
+	 * `XKB_KEY_grave`/`XKB_KEY_asciicircum`, and typing "`e" there must produce "`e". Before the keysym existed this
+	 * probe would have composed `è` — a character the person did not type, from a keystroke they did. */
+	{
+		NSTextView *view = [[NSTextView alloc] initWithFrame:NSMakeRect(0.0, 0.0, 300.0, 60.0)];
+		NSTextInputContext *context = (NSTextInputContext *)[view inputContext];
+		AGInputMethod *method = [[AGInputMethod alloc] init];
+
+		[view setEditable:YES];
+		[context setInputSource:method];
+
+		[view setString:@""];
+		[context handleEvent:keyWithKeysym(@"`", 0, XKB_KEY_grave)];
+		check(![method isComposing], "a US `grave` key does NOT begin a composition");
+		[context handleEvent:key(@"e", 0)];
+		check([[view string] isEqualToString:@"`e"], "so ` then e is `e, not the composed `è`");
+
+		[view setString:@""];
+		[context handleEvent:keyWithKeysym(@"^", 0, XKB_KEY_asciicircum)];
+		[context handleEvent:key(@"a", 0)];
+		check([[view string] isEqualToString:@"^a"], "and the same for `^`, which is `â` only where the map says `dead`");
+
+		[context setInputSource:nil];
+		[method release];
+		[view release];
+	}
+
+	/* 5. **A DEAD KEY WHILE ONE IS WAITING CONFIRMS THE FIRST AND BEGINS THE SECOND.** Two accents have nothing to
+	 * compose with each other, so the first stands alone as a literal and the person's second accent is what waits. The
+	 * readings this rules out both lose a keystroke: dropping the first loses an accent they typed, and dropping the
+	 * second makes their next letter compose with the accent they had already abandoned. */
+	{
+		NSTextView *view = [[NSTextView alloc] initWithFrame:NSMakeRect(0.0, 0.0, 300.0, 60.0)];
+		NSTextInputContext *context = (NSTextInputContext *)[view inputContext];
+		AGInputMethod *method = [[AGInputMethod alloc] init];
+
+		[view setEditable:YES];
+		[context setInputSource:method];
+
+		[view setString:@""];
+		[context handleEvent:keyWithKeysym(@"", 0, XKB_KEY_dead_acute)];
+		[context handleEvent:keyWithKeysym(@"", 0, XKB_KEY_dead_grave)];
+		check([method isComposing] && [method pendingDeadKey] == 0x0060,
+		      "a second dead key replaces the accent that was waiting");
+		[context handleEvent:key(@"e", 0)];
+		check([[view string] isEqualToString:[one(0x00B4) stringByAppendingString:one(0x00E8)]],
+		      "and the first stands alone: `´è`");
+
+		[context setInputSource:nil];
+		[method release];
+		[view release];
+	}
+
+	/* 6. **AND IT COMPOSES WITH NOTHING INSTALLED.** The seam does not compose dead keys for anybody — `AGKeyboard`
+	 * answers what a key types, and a dead key types nothing — so a context that composes only when somebody installed a
+	 * source would leave every text view in the system unable to type `é`. The default is a COMPOSER, not a selection:
+	 * `-inputSource` still answers nil and the layouts are still what the context lists. */
+	{
+		NSTextView *view = [[NSTextView alloc] initWithFrame:NSMakeRect(0.0, 0.0, 300.0, 60.0)];
+		NSTextInputContext *context = (NSTextInputContext *)[view inputContext];
+
+		[view setEditable:YES];
+		check([context inputSource] == nil, "nothing is installed, so no method is named");
+		check([[context textInputSources] count] > 0, "and the keyboard's layouts are still the sources");
+		[view setString:@""];
+		[context handleEvent:keyWithKeysym(@"", 0, XKB_KEY_dead_acute)];
+		check([view hasMarkedText], "with nothing installed a dead key STILL begins a composition");
+		[context handleEvent:key(@"e", 0)];
+		check([[view string] isEqualToString:one(0x00E9)], "and it completes with the default composer");
+
+		/* AN INSTALLED SOURCE REPLACES THE DEFAULT RATHER THAN STACKING ON IT: the accent the default was holding is
+		 * discarded when the installed one takes over, so the next letter is inserted as itself. */
+		AGInputMethod *method = [[AGInputMethod alloc] init];
+
+		[view setString:@""];
+		[context handleEvent:keyWithKeysym(@"", 0, XKB_KEY_dead_acute)];
+		[context setInputSource:method];
+		check(![view hasMarkedText], "installing a source takes the default composer's mark down");
+		[context handleEvent:key(@"e", 0)];
+		/* THE ACCENT STAYS AS A LITERAL, WHICH IS `-discardMarkedText`'s OWN RULE: a discarded composition keeps the
+		 * text it had already put in the store and forgets only that it was a composition. What must NOT happen is
+		 * composition through a source that never saw the accent. */
+		check([[view string] isEqualToString:[one(0x00B4) stringByAppendingString:@"e"]],
+		      "an installed source does not compose the default composer's abandoned accent");
+
+		/* **AND THE ACCENT DOES NOT COME BACK WHEN THE SOURCE IS TAKEN OFF AGAIN.** An accent waiting in a source the
+		 * person has moved away from is state for a keyboard they are no longer using; left alone it would surface on
+		 * the next letter typed, composing `é` out of two keystrokes with a layout change between them. */
+		[view setString:@""];
+		[context setInputSource:method];
+		[context handleEvent:keyWithKeysym(@"", 0, XKB_KEY_dead_acute)];
+		[context setInputSource:nil];
+		[context handleEvent:key(@"e", 0)];
+		check([[view string] isEqualToString:[one(0x00B4) stringByAppendingString:@"e"]],
+		      "and un-installing a source does not compose the accent it was holding into the next letter");
 
 		[context setInputSource:nil];
 		[method release];

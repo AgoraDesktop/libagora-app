@@ -15,6 +15,7 @@
 #import <AppKit/NSTextInputContext.h>
 #import <AppKit/NSTextInput.h>
 #import <AppKit/NSEvent.h>
+#import <AppKit/AGInputMethod.h>	/* the default composer — see `-cg_composingSource` */
 #import <Foundation/NSArray.h>
 #import <Foundation/NSString.h>
 #import <Foundation/NSValue.h>
@@ -133,18 +134,54 @@ static NSString *fn_selectedLayout = nil;
 - (void)dealloc
 {
 	[_inputSource release];
+	[_composingSource release];
 	[super dealloc];
 }
 
-/* **AND THE SOURCE, WHICH IS RETAINED.** A context with none does the standard key binding directly, which is what a
- * stock keyboard is; one with a source sends every key to it first. */
+/* **THE COMPOSER THAT IS THERE WITHOUT BEING INSTALLED.** The seam does not compose dead keys — `AGKeyboard` reports
+ * what a key types, and a dead key types nothing — so a context with no installed source would drop the accent on the
+ * floor and insert the letter plain. This makes composition the DEFAULT rather than a thing a caller has to know to
+ * install, while leaving `-inputSource` answering `nil` so that `-textInputSources` and `-selectedInputSource` keep
+ * naming the keyboard layouts (the selection) instead of the composer (the mechanism).
+ *
+ * IT IS MADE ON DEMAND AND KEPT, because a composition spans keystrokes: an accent that is waiting when the source is
+ * released is an accent lost. */
+- (id <NSTextInputSource>)cg_composingSource
+{
+	if (_inputSource != nil) {
+		return _inputSource;
+	}
+	if (_composingSource == nil) {
+		_composingSource = [[AGInputMethod alloc] init];
+	}
+	return _composingSource;
+}
+
+/* **AND THE SOURCE, WHICH IS RETAINED.** A context with none composes with the default (see `-cg_composingSource`);
+ * one with a source sends every key to it first.
+ *
+ * **AND WHATEVER WAS COMPOSING IS TOLD THE COMPOSITION IS OVER, WHICH IS THE DIFFERENCE BETWEEN A SWAP AND A LEAK.** An
+ * accent waiting in the outgoing source is state for a keyboard the person is no longer using: left alone, it would
+ * surface on the next letter typed after the source came back — `é` from two keystrokes with a layout change between
+ * them. The mark is the client's and is cleared by `-discardMarkedText`; this clears the OTHER half. */
 - (void)setInputSource:(id <NSTextInputSource>)source
 {
 	if (source != _inputSource) {
 		id held = [source retain];
 
+		if (_inputSource != nil && [_inputSource respondsToSelector:@selector(discardComposition)]) {
+			[_inputSource discardComposition];
+		}
+		if (_composingSource != nil && [_composingSource respondsToSelector:@selector(discardComposition)]) {
+			[_composingSource discardComposition];
+		}
 		[_inputSource release];
 		_inputSource = held;
+		/* AND THE CLIENT'S HALF OF IT. The mark lives in the view and the composition in the source, so a source
+		 * change has to take down both or the person is left looking at an accent that nothing will ever compose. */
+		if (_client != nil) {
+			[_client unmarkText];
+		}
 	}
 }
 
@@ -179,9 +216,15 @@ static NSString *fn_selectedLayout = nil;
 		return;
 	}
 	/* **AND THE INPUT SOURCE SEES IT FIRST.** A source that consumes the event — composing through the client — ends
-	 * the call; what it DECLINES falls through to the mapping below. */
-	if (_inputSource != nil && [_inputSource handleEvent:event context:self]) {
-		return;
+	 * the call; what it DECLINES falls through to the mapping below. THE SOURCE IS THE INSTALLED ONE OR THE DEFAULT
+	 * COMPOSER: with nothing installed the context still has to compose, because the seam hands over an uncomposed
+	 * dead key (see `-cg_composingSource`). */
+	{
+		id <NSTextInputSource> source = [self cg_composingSource];
+
+		if (source != nil && [source handleEvent:event context:self]) {
+			return;
+		}
 	}
 	chars = [event characters];
 	if ([chars length] == 0) {
@@ -279,8 +322,10 @@ static NSString *fn_selectedLayout = nil;
  * text. */
 - (void)discardMarkedText
 {
-	if (_inputSource != nil && [_inputSource respondsToSelector:@selector(discardComposition)]) {
-		[_inputSource discardComposition];
+	id <NSTextInputSource> source = [self cg_composingSource];
+
+	if (source != nil && [source respondsToSelector:@selector(discardComposition)]) {
+		[source discardComposition];
 	}
 	if (_client != nil) {
 		[_client unmarkText];
@@ -291,8 +336,10 @@ static NSString *fn_selectedLayout = nil;
  * here, and a source with none answers nothing. */
 - (void)invalidateCharacterCoordinates
 {
-	if (_inputSource != nil && [_inputSource respondsToSelector:@selector(invalidateCharacterCoordinates)]) {
-		[_inputSource invalidateCharacterCoordinates];
+	id <NSTextInputSource> source = [self cg_composingSource];
+
+	if (source != nil && [source respondsToSelector:@selector(invalidateCharacterCoordinates)]) {
+		[source invalidateCharacterCoordinates];
 	}
 }
 

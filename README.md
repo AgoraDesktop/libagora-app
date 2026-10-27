@@ -481,6 +481,21 @@ the compositor is really gone.
   METHOD IS HERE TOO** (`ctest`, `tests/text_input_method.m`): `-setInputSource:` installs an `NSTextInputSource` and
   every key is sent to it FIRST — `AGInputMethod` is a dead-key table that holds the accent as MARKED text and composes
   it with the next letter, and a key it does not own is DECLINED and reaches the standard binding.
+  **AND A DEAD KEY IS IDENTIFIED BY ITS KEYSYM, BECAUSE NOTHING ELSE CAN IDENTIFY IT.** A dead key types nothing at all
+  (`xkb_state_key_get_utf8` writes zero bytes for `XKB_KEY_dead_acute`), so a table reading `-characters` sees an empty
+  string — and the seam's keysym, which `AGWindowServer.h` carries for exactly this reason, was consumed by
+  `fn_function_key_for_keysym` for the keys that type nothing and DISCARDED for every key that types something. It now
+  rides on the event as `NSEvent -cg_keysym` (`tests/appkit_events.m` measures the symbol reaching the view for a
+  typing key and for a dead one), and `AGInputMethod` reads it: MEASURED, `dead_acute` then `e` is **é** and
+  `dead_circumflex` then `a` is **â** (`tests/text_input_method.m`). **AND THE OTHER HALF OF THAT CLAIM IS A FIX TOO**:
+  a US keyboard's `` ` `` and `^` are ORDINARY keys whose symbol is `grave`/`asciicircum`, so typing "`e" there must give
+  "`e" — a characters-only table composes "è", a character the person did not type, from a keystroke they did.
+  **AND COMPOSITION IS THE DEFAULT NOW, BECAUSE THE SEAM CANNOT DO IT**: `AGKeyboard` reports what a key TYPES and
+  nothing in the tree calls `xkb_compose_state`, so a context that composed only when somebody installed a source left
+  every text view unable to type `é`. With nothing installed the context composes with an `AGInputMethod` OF ITS OWN —
+  `-inputSource` still answers nil and the layouts are still what `-textInputSources` lists, because the default is a
+  COMPOSER rather than a selection — and a source change discards the composition on both sides (the source's state and
+  the client's mark) so an abandoned accent cannot compose into a later keystroke.
 - **And `-transpose:` AND THE FIELD-ROLE INSERTIONS** (`ctest`): the one command in the responder's named list that
   needed no model this tier was missing — a position and two characters are arithmetic over the string. MEASURED:
   transposing at index **2** of `abcd` gives `acbd` with the caret at **3**; a selection of two swaps exactly those

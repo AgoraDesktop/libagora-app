@@ -20,7 +20,16 @@
  * SHIPS TWO SUCH SOURCES: `AGInputMethod`, a dead-key table that composes an accent with the next letter, and
  * `AGVariantsInputMethod`, which offers a letter's readings in an `AGCandidateWindow` — the candidate list, placed at
  * the caret the client reports and moved by `-invalidateCharacterCoordinates`.
- */
+ *
+ * **AND DEAD KEYS STILL COMPOSE WITH NOTHING INSTALLED, BECAUSE THE SEAM DOES NOT COMPOSE THEM.** On the Mac the keyboard
+ * layout itself resolves a dead key — `UCKeyTranslate` answers a state, and the next key composes against it — so a
+ * context with no method installed loses nothing. Here the layout is xkbcommon and `AGKeyboard` reports only what a
+ * key TYPES: `xkb_state_key_get_utf8` writes NO BYTES for `XKB_KEY_dead_acute`, and nothing in the tree calls
+ * `xkb_compose_state`, so the accent and the letter would arrive as a space and a letter with nothing joining them. The
+ * composition therefore lives HERE, which is what makes AppKit the owner of it: when no source has been installed the
+ * context composes with an `AGInputMethod` OF ITS OWN, created on first need. `-inputSource` still answers `nil` in
+ * that state, because nothing was installed and the layout registry is still the answer to "which keyboard is this" —
+ * the default is a COMPOSER, not a selection. */
 #ifndef APPKIT_NSTEXTINPUTCONTEXT_H
 #define APPKIT_NSTEXTINPUTCONTEXT_H
 
@@ -62,6 +71,12 @@ extern NSString *const NSAllowsAnyInputSource;
 	 * so a context that retained the client would keep a view alive from the object it is drawing for. */
 	id <NSTextInput> _client;	/* NOT RETAINED */
 	id <NSTextInputSource> _inputSource;	/* RETAINED; nil means the stock keyboard */
+	/* **THE COMPOSER THAT IS THERE WITHOUT BEING INSTALLED.** Created on the first key that needs one (see the header's
+	 * note on why composition cannot be left to the seam), it stands in for `_inputSource` while that is nil — and it
+	 * is a separate field precisely so `-inputSource` keeps answering "nothing was installed" and `-textInputSources`
+	 * keeps answering with the keyboard's layouts. An explicitly installed source REPLACES it rather than stacking on
+	 * top of it, because two composing sources would each want the same keystroke. */
+	id <NSTextInputSource> _composingSource;	/* RETAINED; the default composer, made on demand */
 	BOOL _active;
 	/* **AND THE SWEEP'S TWO PIECES OF CONTEXT STATE.** `_acceptsGlyphInfo` is the input method contract's flag (recorded;
 	 * this tier's keyboard source sends no glyph info, so nothing here consults it and the header says so).

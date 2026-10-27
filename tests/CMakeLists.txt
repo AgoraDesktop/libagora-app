@@ -381,9 +381,11 @@ set_tests_properties(appkit-text-input-context PROPERTIES ENVIRONMENT "${_agora_
 # **AND THE INPUT METHOD ITSELF: A DEAD KEY COMPOSED WITH THE NEXT KEYSTROKE.** The context is handed an
 # `AGInputMethod`; the accent goes into the store MARKED, and the next letter either composes over it or the accent
 # stands alone. A key the method does not own — a plain letter, a movement — is DECLINED and reaches the standard
-# binding, which is what makes a source safe to install.
+# binding, which is what makes a source safe to install. AND THE DEAD KEY IS IDENTIFIED BY ITS KEYSYM, which is the only
+# way it can be identified at all: it types nothing. xkbcommon's keymap header supplies the `XKB_KEY_dead_…` constants
+# this probe feeds into `-cg_setKeysym:`, so the target takes the same xkbcommon include path `keyboard` does.
 add_executable(text_input_method text_input_method.m)
-target_link_libraries(text_input_method PRIVATE App m)
+target_link_libraries(text_input_method PRIVATE App m PkgConfig::XKBCOMMON)
 add_test(NAME appkit-text-input-method COMMAND text_input_method)
 set_tests_properties(appkit-text-input-method PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
 

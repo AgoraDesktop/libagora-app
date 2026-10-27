@@ -879,8 +879,16 @@ static NSEvent *fn_translate(NSWindow *w, const AGEvent *e, NSTimeInterval now)
 			 * source time and the keyboard tenure are the compositor's, and they are what a nonblocking
 			 * confirmation asks about — "was this queued before my dialog appeared?", "was this pair interrupted by
 			 * the keyboard leaving?". */
+			/* **AND THE KEY'S OWN NAME RIDES ALONG, WHICH IT DID NOT BEFORE.** `fn_function_key_for_keysym` above turns a
+			 * keysym into a `0xF700` character and this file used to stop there, so the keysym was consumed for the keys
+			 * that type nothing and DISCARDED for every key that types something. That is the case a dead key is in: it
+			 * types nothing (xkbcommon answers no text), it is not in the `0xF700` block, and the character it is spelled
+			 * with is the spacing clone of the accent — so AppKit saw an empty string and had no way to tell
+			 * `XKB_KEY_dead_acute` from a key the layout does not define at all. The event carries it now, and
+			 * `AGInputMethod` reads it. */
 			[key cg_setSourceTimestamp:e->source_time_ms hasSourceTimestamp:(e->has_source_time ? YES : NO)
 				       focusSerial:e->focus_serial];
+			[key cg_setKeysym:e->keysym];
 			return key;
 		}
 	}
