@@ -479,6 +479,16 @@ int main(void)
 			check(is_function_key(content->lastIgnoringModifiers, NSUpArrowFunctionKey),
 			      "an arrow answers NSUpArrowFunctionKey with the modifiers ignored too");
 
+			/* **AND SHIFT-TAB IS `NSBackTabCharacter`, NOT THE EMPTY STRING.** A shifted Tab is
+			 * `XKB_KEY_ISO_Left_Tab`, it types nothing, and it is not in the `0xF700` block — so before the mapping
+			 * had this case it was indistinguishable from a key the layout does not define, and a terminal had
+			 * nothing to key `CSI Z` off. Apple's answer is the control character `0x19`. */
+			event = evdev_key(15 /* KEY_TAB */, "", 1, 0, AGModifierShift);
+			event.keysym = XKB_KEY_ISO_Left_Tab;
+			deliver(application, window, &event);
+			check(is_function_key(content->lastCharacters, NSBackTabCharacter),
+			      "Shift-Tab is NSBackTabCharacter, not an empty string");
+
 			/* AND AN EVENT WITH NO UNMASKED TEXT — one this tier fabricated, or a seam that did not fill it —
 			 * falls back to `-characters` rather than to an empty string, so nothing that read that door before
 			 * this field existed changes its answer. */

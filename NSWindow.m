@@ -722,13 +722,19 @@ static unichar fn_function_key_for_keysym(uint32_t keysym)
 		return (unichar)(NSF1FunctionKey + (keysym - XKB_KEY_F1));
 	}
 	switch (keysym) {
-	case XKB_KEY_Up:		return NSUpArrowFunctionKey;
-	case XKB_KEY_Down:		return NSDownArrowFunctionKey;
+	case XKB_KEY_Up:		return NSUpArrowFunctionKey;	case XKB_KEY_Down:		return NSDownArrowFunctionKey;
 	case XKB_KEY_Left:		return NSLeftArrowFunctionKey;
 	case XKB_KEY_Right:		return NSRightArrowFunctionKey;
 	case XKB_KEY_Insert:		return NSInsertFunctionKey;
 	case XKB_KEY_Delete:		return NSDeleteFunctionKey;
 	case XKB_KEY_Home:		return NSHomeFunctionKey;
+	/* **SHIFT-TAB IS `NSBackTabCharacter`, AND IT WAS THE ONE COMMANDING KEY THAT ARRIVED AS THE EMPTY STRING.**
+	 * A shifted Tab is `XKB_KEY_ISO_Left_Tab` in every keymap that has a Tab at all, it types nothing, and it is not in
+	 * the `0xF700` block — Apple's answer is the control character `0x19`, which is what a text view reads as
+	 * "backward tab". Without it, a view could not tell Shift-Tab from a key the layout does not define, which is the
+	 * same hole the arrows were in before `fn_function_key_for_keysym` existed; a terminal, which writes `CSI Z` for
+	 * it, had nothing to key off. */
+	case XKB_KEY_ISO_Left_Tab:	return NSBackTabCharacter;
 	case XKB_KEY_Begin:		return NSBeginFunctionKey;
 	case XKB_KEY_End:		return NSEndFunctionKey;
 	case XKB_KEY_Prior:		return NSPageUpFunctionKey;
