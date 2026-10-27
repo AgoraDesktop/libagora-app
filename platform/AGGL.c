@@ -1070,7 +1070,8 @@ int AGGLFillRect(AGGLContext *context, int x, int y, int width, int height, uint
 	return glGetError() == GL_NO_ERROR;
 }
 
-int AGGLBlitTexture(AGGLContext *context, unsigned int texture, int x, int y, int width, int height)
+static int gl_blit(AGGLContext *context, unsigned int texture, int x, int y, int width, int height, int flip);
+static int gl_blit(AGGLContext *context, unsigned int texture, int x, int y, int width, int height, int flip)
 {
 	GLfloat quad[16];
 	GLfloat left;
@@ -1095,10 +1096,10 @@ int AGGLBlitTexture(AGGLContext *context, unsigned int texture, int x, int y, in
 	top = 2.0f * (GLfloat)(y + height) / (GLfloat)context->height - 1.0f;
 	/* A triangle strip with the texture's own origin at the rectangle's bottom-left, which is GL's. A caller whose
 	 * image is top-down flips the two V values — one line, at the caller, where the knowledge is. */
-	quad[0] = left;  quad[1] = bottom; quad[2] = 0.0f; quad[3] = 0.0f;
-	quad[4] = right; quad[5] = bottom; quad[6] = 1.0f; quad[7] = 0.0f;
-	quad[8] = left;  quad[9] = top;    quad[10] = 0.0f; quad[11] = 1.0f;
-	quad[12] = right; quad[13] = top;  quad[14] = 1.0f; quad[15] = 1.0f;
+	quad[0] = left;  quad[1] = bottom; quad[2] = 0.0f; quad[3] = flip ? 1.0f : 0.0f;
+	quad[4] = right; quad[5] = bottom; quad[6] = 1.0f; quad[7] = flip ? 1.0f : 0.0f;
+	quad[8] = left;  quad[9] = top;    quad[10] = 0.0f; quad[11] = flip ? 0.0f : 1.0f;
+	quad[12] = right; quad[13] = top;  quad[14] = 1.0f; quad[15] = flip ? 0.0f : 1.0f;
 
 	blend_was_on = glIsEnabled(GL_BLEND);
 	glDisable(GL_BLEND);
@@ -1121,6 +1122,16 @@ int AGGLBlitTexture(AGGLContext *context, unsigned int texture, int x, int y, in
 		glEnable(GL_BLEND);
 	}
 	return glGetError() == GL_NO_ERROR;
+}
+
+int AGGLBlitTexture(AGGLContext *context, unsigned int texture, int x, int y, int width, int height)
+{
+	return gl_blit(context, texture, x, y, width, height, 0);
+}
+
+int AGGLBlitTextureFlipped(AGGLContext *context, unsigned int texture, int x, int y, int width, int height)
+{
+	return gl_blit(context, texture, x, y, width, height, 1);
 }
 
 #else /* !AG_HAVE_GL */
@@ -1252,6 +1263,17 @@ int AGGLExportTextureDmabuf(AGGLContext *context, unsigned int texture, int widt
 }
 
 int AGGLBlitTexture(AGGLContext *context, unsigned int texture, int x, int y, int width, int height)
+{
+	(void)context;
+	(void)texture;
+	(void)x;
+	(void)y;
+	(void)width;
+	(void)height;
+	return 0;
+}
+
+int AGGLBlitTextureFlipped(AGGLContext *context, unsigned int texture, int x, int y, int width, int height)
 {
 	(void)context;
 	(void)texture;

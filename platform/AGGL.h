@@ -170,6 +170,13 @@ int AGGLExportTextureDmabuf(AGGLContext *context, unsigned int texture, int widt
  * pixels. Returns 1 when it drew. */
 int AGGLBlitTexture(AGGLContext *context, unsigned int texture, int x, int y, int width, int height);
 
+/* **THE SAME DRAW WITH THE TEXTURE TURNED OVER, WHICH A FOREIGN RENDERER'S FRAME NEEDS.** A producer that hands over
+ * pixels top-down — WPE WebKit's exported images are — arrives in GL as a texture whose row 0 is the picture's TOP, and
+ * `AGGLBlitTexture` puts a texture's row 0 at the rectangle's bottom, which would draw every page upside down. This is the
+ * same call with the V coordinates swapped; it is a separate door because the flip is knowledge the CALLER has about its
+ * producer, not something this file can guess. */
+int AGGLBlitTextureFlipped(AGGLContext *context, unsigned int texture, int x, int y, int width, int height);
+
 /* **THE TWO DOORS THAT LET A CALLER PAINT WITHOUT SPEAKING GL.** A host has to clear behind its engine and sometimes
  * upload a bitmap of its own (a placeholder, an engine's software path, a snapshot); both are three lines over GL here
  * and twenty in every caller, and the twenty are the ones that get the channel order wrong.
