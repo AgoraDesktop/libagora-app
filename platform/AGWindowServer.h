@@ -317,6 +317,23 @@ void AGWindowServerMenuBarArea(AGWindowServer *server, int *x, int *y, int *widt
  * right. 0xRRGGBB, and 0 when the compositor did not say. */
 void AGWindowServerMenuBarColour(AGWindowServer *server, unsigned int *rgb);
 
+/* **THE CONNECTION ITSELF, FOR A GPU CONTEXT THAT MAY BE ABLE TO SHARE IT.** A `wl_display *`, typed `void *` so that
+ * this header still names no Wayland type: an EGL display built on a compositor's connection is the ONLY path that can
+ * make a renderer's buffers importable by that compositor, and it is what `libwpe`'s FDO backend is initialised against
+ * (`wpe_fdo_initialize_for_egl_display`). `AGGLContextCreate` is this seam's first consumer; a foreign renderer is the
+ * intended second.
+ *
+ * **THE CONNECTION IS NECESSARY AND NOT SUFFICIENT, WHICH IS MEASURED RATHER THAN ASSUMED.** A Wayland EGL platform
+ * learns which device to open from `wl_drm`, which this compositor does not publish, so on this machine an EGL display
+ * on this connection resolves to Mesa's software driver while the surfaceless platform resolves to the card. That makes
+ * the connection a PREFERENCE for sharing rather than a promise of it, and `AGGLInfo` is where a host can see which
+ * device it actually got.
+ *
+ * IT IS BORROWED, NEVER OWNED. The connection belongs to the server object and dies with it, and a caller must not
+ * dispatch or destroy it — `AGWindowServerDispatch` and friends remain the only drivers of the queue, because two
+ * owners of one `wl_display` is a read race and not a sharing problem. NULL when there is no server. */
+void *AGWindowServerNativeDisplay(AGWindowServer *server);
+
 /* The compositor's first output, as far as a client can know it. `*width` and `*height` receive the output's
  * current mode, and `*name` the model the compositor reported — the closest thing to a screen name a Wayland
  * client is given. Any of the three may be NULL. Width and height are left at 0 when no output has been

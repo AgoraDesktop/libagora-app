@@ -2755,6 +2755,11 @@ double AGWindowBufferScale(AGWindow *window)
 	return (window != NULL && window->scale > 0.0) ? window->scale : 1.0;
 }
 
+void *AGWindowServerNativeDisplay(AGWindowServer *server)
+{
+	return (server != NULL) ? (void *)server->display : NULL;
+}
+
 void AGWindowServerScreenSize(AGWindowServer *server, int *width, int *height, const char **name)
 {
 	if (width != NULL) {

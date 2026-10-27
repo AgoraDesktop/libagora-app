@@ -174,6 +174,23 @@ else()
 endif()
 
 # ---------------------------------------------------------------------------
+# GPU COMPOSITING (optional): EGL + GLES2
+#
+# **THE ONE DOOR A FOREIGN RENDERER NEEDS, AND IT IS OPTIONAL IN THE SAME SHAPE gbm IS.** A web engine composites on
+# the GPU and hands back images; the AppKit does not, and will not. `platform/AGGL.h` is the seam between those two
+# facts — an FBO the size of a view, a readback in the window buffer's own format, and the EGLImage/dmabuf doors a
+# `wpebackend-fdo` host uses. Without libEGL and GLESv2 the file compiles to stubs that answer "unavailable", so no
+# caller needs a conditional and no build fails for want of a GPU.
+# ---------------------------------------------------------------------------
+pkg_check_modules(EGL IMPORTED_TARGET egl)
+pkg_check_modules(GLESV2 IMPORTED_TARGET glesv2)
+if(EGL_FOUND AND GLESV2_FOUND)
+  message(STATUS "libagora-app: GPU compositing: on (EGL ${EGL_VERSION}, GLESv2 ${GLESV2_VERSION})")
+else()
+  message(STATUS "libagora-app: GPU compositing: off (no egl/glesv2) — AGGL answers unavailable")
+endif()
+
+# ---------------------------------------------------------------------------
 # PRINTING (optional): libcups
 #
 # **THE PRINT SYSTEM IS A SYSTEM LIBRARY, ON THE SAME TERMS AS WAYLAND AND XKBCOMMON.** CUPS is Apache-2.0 since 2.3,
@@ -212,6 +229,10 @@ if(GBM_FOUND)
   add_dependencies(App linux-dmabuf-bindings)
   target_compile_definitions(App PRIVATE AG_HAVE_DMABUF)
   target_link_libraries(App PRIVATE PkgConfig::GBM)
+endif()
+if(EGL_FOUND AND GLESV2_FOUND)
+  target_compile_definitions(App PRIVATE AG_HAVE_GL)
+  target_link_libraries(App PRIVATE PkgConfig::EGL PkgConfig::GLESV2)
 endif()
 if(CUPS_FOUND)
   target_compile_definitions(App PRIVATE AG_HAVE_CUPS)

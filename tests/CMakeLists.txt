@@ -655,6 +655,21 @@ add_test(NAME appkit-work-area
 set_tests_properties(appkit-work-area PROPERTIES SKIP_RETURN_CODE 77
   ENVIRONMENT "${_agora_app_test_env}")
 
+# **THE GPU SEAM, AND THE FIRST THING IN THIS TREE THAT PUTS A GPU FRAME THROUGH A WINDOW.** It renders into an FBO,
+# reads the frame back in the window buffer's own format, presents it, and exports a texture to a dma-buf and imports
+# it again — the two doors a `wpebackend-fdo` host is built out of. The runner asserts the COMPOSITED screenshot, so
+# a present that wrote the right pixels to the wrong buffer cannot pass. Registered only when the build found EGL and
+# GLESv2, because the stubs deliberately answer "unavailable" and a test of a stub is a test of nothing.
+if(EGL_FOUND AND GLESV2_FOUND)
+  add_executable(gl_present gl_present.c)
+  target_link_libraries(gl_present PRIVATE App)
+  add_test(NAME seam-gl-present
+    COMMAND "${CMAKE_CURRENT_SOURCE_DIR}/run-gl-present.sh"
+	    "$<TARGET_FILE:gl_present>" "${AGORA_WINDOW_SERVER_BINARY}" 20)
+  set_tests_properties(seam-gl-present PROPERTIES SKIP_RETURN_CODE 77
+    ENVIRONMENT "${_agora_app_test_env}")
+endif()
+
 # **ONLY THE ACTIVE APPLICATION'S MENUS SHOW.** The compositor already says which CLIENT has the keyboard, so an
 # application knows when it is in front without a protocol of its own; this asserts that the menu bar window is
 # shown while active and HIDDEN when deactivated. It needs Agora's own server, since the menu bar is its strip.

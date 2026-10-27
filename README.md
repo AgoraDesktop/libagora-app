@@ -136,6 +136,8 @@ $ readelf -d build/libagora-app.so | grep NEEDED
 platform/
   AGWindowServer.h              the seam: connection, windows, frames, events
   AGWindowServer-Wayland.c      its first implementation: an xdg-shell client + wl_output
+  AGGL.h / AGGL.c               the GPU door: an EGL/GLES2 context, an offscreen target, the readback, and the
+                                EGLImage/dma-buf doors a web engine's host is built from (optional: EGL + GLESv2)
   AGKeyboard.h / AGKeyboard.c   evdev key codes -> text and modifiers, through xkbcommon
 NS*.h / NS*.m                   the AppKit itself — window, view, application, controls, menus, fonts
 tests/
@@ -3662,3 +3664,53 @@ imported and then changed — the changes are recorded in [`PROVENANCE.md`](PROV
   CONFORMANCE WAS NOT COMPLETE, which the same honesty has to say: the compiler found the three range-carrying doors
   above, and they were real. The lesson is the one this file keeps re-learning: a check has to be about the thing
   it claims to measure, and INHERITANCE IS PART OF THAT THING — as is the COMPILER's view of a protocol.
+
+### The GPU seam, and what a web engine actually needs from this layer
+
+**Why it is here at all.** The AppKit draws with the CPU into shared memory, and `AGWindowBeginFrame` says why that is a
+decision rather than a limitation: blending into a dma-buf costs 2.4 µs a pixel against 2 ns in shm, so a CPU-drawn
+window is a hundredfold faster in RAM. But a web engine cannot be written that way — WebKit, Servo and CEF all composite
+on the GPU and hand back images — so embedding one is a choice between two doors, and `platform/AGGL.h` is both of them:
+
+1. **the engine renders offscreen and the pixels come back** — `AGGLBeginFrame` gives an FBO the size of the view,
+   `AGGLReadPixels` reads it into the window buffer's own `0x00RRGGBB`, and a caller either presents that into a window
+   (`AGGLPresentToWindow`) or wraps it in a `CGImage` for the AppKit to draw. No protocol change, one readback and one
+   copy per frame;
+2. **the engine's images are imported and composited** — `AGGLTextureFromImage` and `AGGLTextureFromDmabuf` turn a
+   `wpebackend-fdo` frame into a texture on this context, and `AGGLBlitTexture` draws it. `AGGLContextHandles` exists for
+   the same reason: `wpe_fdo_initialize_for_egl_display` needs the display, and an image created on it is one this
+   context can sample.
+
+**What is measured, and by what.** `tests/gl_present.c` (run by `seam-gl-present`, against Agora's own window server)
+renders an FBO, reads it back, presents it, and ASSERTS THE COMPOSITED SCREENSHOT — green 20 rows from the top, yellow
+20 rows from the bottom, blue elsewhere, which is the orientation and the geometry in one picture. MEASURED on this
+machine (NVIDIA GTX 1060, headless server): **32-33 frames** of a 200x120 window in the runner's roughly one second, and
+**96 frames in two seconds** against the nested X11 session with the compositor's GL renderer on the card — about 48 a
+second through a full readback and window memcpy. That is a floor for the readback path, not a benchmark of any engine.
+
+**And three things the hardware taught the code, each now a comment at the place it matters.**
+
+- **THE CLIENT'S EGL DOES NOT GET THE COMPOSITOR'S DEVICE ON THIS MACHINE, AND THE FLAG THAT SAYS SO IS HONEST.** A
+  Wayland EGL platform learns which device to open from `wl_drm`, which this compositor does not publish; MEASURED with
+  the server's GL renderer running and 81 dma-buf format/modifier pairs advertised, the compositor's own connection
+  still resolves to **Mesa's software driver**, while the surfaceless platform resolves to the card. So a software
+  renderer is treated as a reason to try the next platform rather than a success, `AGGLInfo.wayland_display` reports
+  which one won, and making the two genuinely share is window-server work (`wl_drm`, or
+  `zwp_linux_dmabuf_feedback_v1`'s device) rather than a claim this layer can make.
+- **`eglTerminate` IS NOT CALLED, BECAUSE AN EGLDISPLAY IS PROCESS-WIDE.** Two calls to `eglGetPlatformDisplay` for one
+  platform return the SAME handle, so a second context's teardown terminated the device under the first: MEASURED as a
+  framebuffer that reported status 0 and a probe that could not make a 200x120 target any more.
+- **A DRIVER MAY REFUSE TO IMPORT ITS OWN EXPORT.** Mesa's software driver completes the round trip exactly — a texture
+  exported, the source deleted, and the picture rebuilt from the descriptor in a SECOND context, four quadrants where
+  they belong. This machine's hardware driver exports `AR24` with a block-linear modifier (`0x0300000000cdb012`) and
+  samples solid black on import into the same device, so the probe reports that as a NOTE and does not pretend either
+  way. The door itself is exercised on this machine by pointing libglvnd at Mesa's software vendor
+  (`__EGL_VENDOR_LIBRARY_FILENAMES=/usr/share/glvnd/egl_vendor.d/50_mesa.json`, printed by the probe when it needs it),
+  and in production it is exercised by a descriptor from a DIFFERENT producer — which is the only direction a host ever
+  uses.
+
+**What is deliberately not here.** No `NSOpenGL*` (those stay refused by name — an era API this stack does not
+implement), no `CALayer`, no change to how the AppKit paints a window, and no child surface: a `WebView` INSIDE a
+CPU-drawn window still needs a second `wl_surface` placed and clipped by the compositor, which the server does not have
+yet. `AGGLPresentToWindow` is for a window whose whole content is the renderer's — the browser-as-an-application shape —
+and the sub-view shape waits for that protocol work rather than being faked with a window in the right place.
