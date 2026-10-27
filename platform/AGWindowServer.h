@@ -346,6 +346,14 @@ void AGWindowServerMenuBarColour(AGWindowServer *server, unsigned int *rgb);
  * owners of one `wl_display` is a read race and not a sharing problem. NULL when there is no server. */
 void *AGWindowServerNativeDisplay(AGWindowServer *server);
 
+/* **THE GBM DEVICE THE WINDOW'S GPU BUFFERS ARE ALLOCATED FROM**, borrowed and NULL when this build has no gbm or no
+ * device opened. It is the answer to "which device must render into this window's buffer": a buffer allocated on one device
+ * and imported on another is a dmabuf import that fails, and MEASURED it fails silently as a frame that never arrives. A
+ * renderer that draws into a window's dma-buf (`AGWindowBeginFrameDMABUF`) builds its EGL display on THIS device.
+ *
+ * Typed `void *` because this header names no gbm type, and it is a `struct gbm_device *`. */
+void *AGWindowServerNativeGBMDevice(AGWindowServer *server);
+
 /* The compositor's first output, as far as a client can know it. `*width` and `*height` receive the output's
  * current mode, and `*name` the model the compositor reported — the closest thing to a screen name a Wayland
  * client is given. Any of the three may be NULL. Width and height are left at 0 when no output has been
@@ -672,6 +680,39 @@ uint32_t *AGWindowBeginFrameSized(AGWindow *window, int *stride, int *width, int
  * THE PIXELS ARE NOT YOURS TO WRITE. The compositor is sampling them, so a write here is the blink the two-buffer
  * swap exists to prevent. */
 uint32_t *AGWindowPreviousFrameSized(AGWindow *window, int *stride, int *width, int *height);
+
+/* **A FRAME WHOSE PIXELS ARE A GPU BUFFER, FOR A CLIENT THAT DRAWS WITH THE GPU.** `AGWindowBeginFrame` hands back a CPU
+ * mapping and expects the caller to fill it; this hands back the DESCRIPTOR of the buffer the compositor will sample, so a
+ * renderer can import it as an EGLImage and draw into it without a single pixel crossing the CPU. It is the same frame —
+ * the same double-buffered slot, the same swap, the same commit at `AGWindowEndFrame` — and only the pointer differs.
+ *
+ * Returns 1 and fills `out` when the window's buffers really are GPU memory. Returns 0 when they are shared memory (the
+ * default, because a CPU-drawn client is faster in shm — see `AGWindowBeginFrame`), and then the caller draws the ordinary
+ * way. **`fd` IS BORROWED**: it belongs to the window's buffer and must not be closed, and it is only valid until
+ * `AGWindowEndFrame`.
+ *
+ * `fourcc` and `modifier` are the DRM format and layout the buffer was made with, which is what an importer needs and
+ * cannot guess: the compositor advertised a set of pairs and the buffer was allocated to match one of them.
+ *
+ * **NOTHING SYNCS THE BUFFER FOR THE CALLER.** The CPU path brackets its writes with `DMA_BUF_IOCTL_SYNC`, which is
+ * meaningless for writes that never leave the GPU; a GPU caller finishes its own commands before the commit, and the
+ * engine that uses this door does (`AGGLEndFrame` is a `glFinish`). */
+typedef struct AGWindowFrameDMABUF {
+	int fd;				/* borrowed: do not close, and not valid after AGWindowEndFrame */
+	int width;			/* device pixels */
+	int height;
+	int stride;			/* bytes per row */
+	unsigned int fourcc;		/* a DRM format, e.g. 0x34325258 for XRGB8888 */
+	unsigned long long modifier;
+} AGWindowFrameDMABUF;
+
+int AGWindowBeginFrameDMABUF(AGWindow *window, AGWindowFrameDMABUF *out);
+
+/* **AND THE WAY OUT OF A FRAME THAT DECIDED NOT TO DRAW.** A caller that began a frame and then found it had nothing to
+ * paint must be able to give the slot back: `AGWindowEndFrame` would commit an unchanged buffer (and damage the whole of
+ * it, since a frame with no damage means everything), which at 60 Hz is a repaint of a window nobody changed. This
+ * abandons the frame instead — the slot stays this process's, nothing is attached, nothing is committed. */
+void AGWindowCancelFrame(AGWindow *window);
 
 /* **WHAT THIS FRAME CHANGED, SO THE COMPOSITOR BLENDS ONLY THAT.** A rectangle in BUFFER pixels with a TOP-DOWN
  * origin (the same space `wl_surface.damage_buffer` takes), clamped to the buffer here. Call it between

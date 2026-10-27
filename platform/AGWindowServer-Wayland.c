@@ -182,6 +182,10 @@ struct AGWindow {
 	int height;
 	int configured;
 	int begun;			/* between BeginFrame and EndFrame */
+	/* **AND WHICH KIND OF FRAME IT IS.** A GPU frame's pixels were written by the GPU, so the CPU cache maintenance
+	 * `ag_buffer_sync` performs at the commit is not just unnecessary — it is about a mapping that was never used. */
+	int begun_gpu;
+	int gpu_frame_pending;
 
 	/* **THE DAMAGE THIS FRAME WILL ASK FOR, AND THE DAMAGE THE LAST ONE DID.** `damage` accumulates what the caller
 	 * says it changed (buffer pixels, top-down rows) and is emptied by `AGWindowEndFrame`; `last_damage` is kept so a
@@ -875,6 +879,59 @@ static const struct wl_callback_listener frame_listener = {
 	frame_done,
 };
 
+
+/* **THE SAME FRAME, HANDED OVER AS A DESCRIPTOR.** Everything above this door is shared with `AGWindowBeginFrameSized` —
+ * the configured check, the spare slot, the resize that was asked for between frames — and the only difference is that a
+ * GPU buffer's descriptor is what the caller gets instead of its mapping. That is why this is a separate door and not a
+ * flag on the old one: the two return different KINDS of thing, and a caller that got the wrong one would either draw into
+ * uncached memory or import a descriptor that does not exist. */
+int AGWindowBeginFrameDMABUF(AGWindow *window, AGWindowFrameDMABUF *out)
+{
+	if (window == NULL || out == NULL || !window->configured) {
+		return 0;
+	}
+	if (window->begun) {
+		return 0;		/* a second frame cannot start inside the first */
+	}
+	if (window->spare.busy) {
+		return 0;		/* the compositor still owns the drawing slot */
+	}
+	ag_window_apply_pending_resize(window);
+	if (window->spare.buffer == NULL) {
+		return 0;
+	}
+#ifdef AG_HAVE_DMABUF
+	if (window->spare.bo == NULL || window->spare.dmabuf_fd < 0) {
+		/* Shared memory: this window was not asked for a GPU buffer, or the compositor imports nothing. The caller
+		 * draws the ordinary way, which is why this is a return and not an error. */
+		return 0;
+	}
+	out->fd = window->spare.dmabuf_fd;
+	out->width = window->spare.width;
+	out->height = window->spare.height;
+	out->stride = window->spare.stride;
+	out->fourcc = (window->transparent != 0) ? AG_DRM_FORMAT_ARGB8888 : AG_DRM_FORMAT_XRGB8888;
+	out->modifier = gbm_bo_get_modifier(window->spare.bo);
+	window->begun = 1;
+	window->begun_gpu = 1;
+	return 1;
+#else
+	(void)out;
+	return 0;			/* built without gbm: every window is shared memory */
+#endif
+}
+
+void AGWindowCancelFrame(AGWindow *window)
+{
+	if (window == NULL || !window->begun) {
+		return;
+	}
+	/* The slot was never attached to the surface, so giving it back is a flag and nothing else: the next BeginFrame
+	 * finds it un-busy and draws into it, which is exactly the state a cancelled frame should leave behind. */
+	window->begun = 0;
+	window->begun_gpu = 0;
+	window->damage_count = 0;
+}
 uint32_t *AGWindowBeginFrameSized(AGWindow *window, int *stride, int *width, int *height)
 {
 	if (window == NULL || !window->configured) {
@@ -1064,6 +1121,16 @@ void AGWindowEndFrame(AGWindow *window)
 	 * ask. A drain here is free when there is nothing to send and bounded when there is. */
 	ag_flush_drain(window->server, 50);
 	window->begun = 0;
+	{
+		int gpu_frame = window->begun_gpu;
+
+		window->begun_gpu = 0;
+		/* Captured before the swap below, and used after it: the buffer whose pixels were written by the GPU is the
+		 * one being handed to the compositor, and it is `window->spare` until the swap makes it `window->buffer`. */
+		if (gpu_frame) {
+			window->gpu_frame_pending = 1;
+		}
+	}
 	if (window->frame_cb == NULL) {
 		/* REQUESTED BEFORE THE COMMIT IT IS MEANT TO FOLLOW, which is what the protocol requires. */
 		window->frame_cb = wl_surface_frame(window->surface);
@@ -1079,7 +1146,13 @@ void AGWindowEndFrame(AGWindow *window)
 	window->buffer.busy = 1;
 	/* **AND THE PIXELS LEAVE THIS PROCESS'S CACHE BEFORE THEY LEAVE THIS PROCESS.** The GPU may sample the buffer the
 	 * moment the compositor sees the commit; END is what makes the writes in it visible. */
-	ag_buffer_sync(&window->buffer, 0);
+	if (window->gpu_frame_pending) {
+		/* **A GPU FRAME IS FINISHED BY THE GPU, NOT BY A CACHE FLUSH.** The engine that wrote it called `glFinish`
+		 * before the commit; `DMA_BUF_IOCTL_SYNC` here would be maintenance for a mapping nobody used. */
+		window->gpu_frame_pending = 0;
+	} else {
+		ag_buffer_sync(&window->buffer, 0);
+	}
 	wl_surface_attach(window->surface, window->buffer.buffer, 0, 0);
 	/* **WHAT THE CALLER SAID IT CHANGED, OR THE WHOLE BUFFER WHEN IT SAID NOTHING.** A caller that tracks its damage
 	 * tells the compositor the rectangles it painted and the compositor blends only those; a caller that does not
@@ -2764,6 +2837,20 @@ double AGWindowBufferScale(AGWindow *window)
 void *AGWindowServerNativeDisplay(AGWindowServer *server)
 {
 	return (server != NULL) ? (void *)server->display : NULL;
+}
+
+void *AGWindowServerNativeGBMDevice(AGWindowServer *server)
+{
+	/* **THE DEVICE IS OPENED ON DEMAND, BECAUSE A CLIENT THAT NEVER ASKS FOR A GPU BUFFER NEVER NEEDS ONE.** This asks
+	 * the same question `ag_buffer_create_dmabuf` asks, through the same code, so a renderer that builds its display on
+	 * the answer is on the device the buffers will come from. */
+	if (server == NULL) {
+		return NULL;
+	}
+	if (!ag_gbm_ready(server)) {
+		return NULL;
+	}
+	return (void *)server->gbm;
 }
 
 void AGWindowServerScreenSize(AGWindowServer *server, int *width, int *height, const char **name)

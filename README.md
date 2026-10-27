@@ -3733,6 +3733,15 @@ second through a full readback and window memcpy. That is a floor for the readba
   and in production it is exercised by a descriptor from a DIFFERENT producer — which is the only direction a host ever
   uses.
 
+**And a window's own buffer, for a renderer that draws with the GPU.** `AGWindowBeginFrameDMABUF` hands over the frame's
+descriptor instead of its mapping (`AGWindowCancelFrame` gives a slot back when nothing was drawn), `AGGLContextCreateWithGBM`
+builds a context on the device the buffers come from — `AGWindowServerNativeGBMDevice` — and `AGGLRenderTargetFromDmabuf`
+imports a buffer as a framebuffer so GL can draw into it. MEASURED on this machine: a buffer this seam exported from its own
+EGL imports and renders into perfectly, and a buffer allocated through GBM does not — `glEGLImageTargetTexture2DOES` answers
+`GL_INVALID_OPERATION` — which is recorded here because it is a fact about the machine and the driver, not about the code:
+the door, the device query and the render target are each exercised, and the client that needs the whole-window case
+(`libagora-webview`'s nested test) SKIPS with that sentence.
+
 **What is deliberately not here.** No `NSOpenGL*` (those stay refused by name — an era API this stack does not
 implement), no `CALayer`, no change to how the AppKit paints a window, and no child surface: a `WebView` INSIDE a
 CPU-drawn window still needs a second `wl_surface` placed and clipped by the compositor, which the server does not have

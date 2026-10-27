@@ -76,6 +76,7 @@ typedef struct AGGLContext AGGLContext;
 typedef struct AGGLInfo {
 	int available;			/* 1 when a context exists and GL calls are legal */
 	int wayland_display;		/* 1 when the EGL display is the window server's connection */
+	int gbm_display;		/* 1 when it was made from a GBM device, which is what a window's dma-buf needs */
 	int import_dmabuf;		/* EGL_EXT_image_dma_buf_import */
 	int import_dmabuf_modifiers;	/* EGL_EXT_image_dma_buf_import_modifiers */
 	int gl_texture_image;		/* EGL_KHR_gl_texture_2D_image — needs this to EXPORT a texture */
@@ -92,6 +93,16 @@ typedef struct AGGLInfo {
  * GL is not thread-safe, so a second thread that wants to draw needs its own context, which this door does not
  * offer yet (a renderer with its own thread keeps its own, and shares through `AGGLContextHandles`). */
 AGGLContext *AGGLContextCreate(AGWindowServer *server);
+
+/* **A CONTEXT ON A GBM DEVICE, FOR DRAWING INTO THAT DEVICE'S BUFFERS.** `AGGLContextCreate` builds its display from a
+ * Wayland connection or from Mesa's surfaceless platform, and on this machine neither of those is necessarily the device a
+ * window's dma-buf was allocated from — MEASURED: importing such a buffer fails, and a frame that never arrives is what
+ * that looks like from outside. A renderer that composites into a window's GPU buffer builds its display from
+ * `AGWindowServerNativeGBMDevice` instead, so allocation and rendering are the same device by construction.
+ *
+ * `gbm_device` is a `struct gbm_device *`, typed `void *` here as everywhere in this seam, and borrowed. Returns NULL when
+ * the EGL has no GBM platform or the device cannot be made a display. */
+AGGLContext *AGGLContextCreateWithGBM(void *gbm_device);
 void AGGLContextDestroy(AGGLContext *context);
 
 void AGGLContextInfo(const AGGLContext *context, AGGLInfo *info);
@@ -164,6 +175,40 @@ void AGGLDeleteTexture(AGGLContext *context, unsigned int texture);
  * capability and not a fault. */
 int AGGLExportTextureDmabuf(AGGLContext *context, unsigned int texture, int width, int height, int *fd,
 			    int *stride, unsigned int *fourcc, unsigned long long *modifier);
+
+/* ================================================================================================================
+ * RENDER TARGETS: DRAWING INTO SOMEBODY ELSE'S GPU BUFFER
+ *
+ * **A WINDOW'S PIXELS ARE A dma-buf, AND GL CAN DRAW INTO ONE**, which is the whole point of the door below: a renderer
+ * whose frames are textures composites into the buffer the compositor will sample and no pixel touches the CPU. The
+ * import is the same one `AGGLTextureFromDmabuf` makes; the difference is that the texture is attached to a framebuffer
+ * and made current, so the next GL call renders into the window.
+ *
+ * A target is a thing you keep across frames — the window's buffer is a descriptor whose contents change every frame, but
+ * the import does not — and it is the caller's to destroy.
+ * ================================================================================================================ */
+
+typedef struct AGGLRenderTarget AGGLRenderTarget;
+
+/* Import a descriptor as a render target. `stride`, `fourcc` and `modifier` are what the buffer was MADE with, which a
+ * caller gets from the buffer's owner. Returns NULL when the driver cannot import it — including the case where the
+ * buffer is shared memory and there is nothing to import. */
+AGGLRenderTarget *AGGLRenderTargetFromDmabuf(AGGLContext *context, int fd, int width, int height, int stride,
+					     unsigned int fourcc, unsigned long long modifier);
+
+/* Bind the target and set the viewport to its size. GL calls after this render into the caller's buffer, with (0,0) at
+ * the BOTTOM LEFT, as GL always has. */
+int AGGLBeginRenderTarget(AGGLContext *context, AGGLRenderTarget *target);
+
+/* **FINISH, THEN UNBIND — AND THE FINISH IS THE POINT.** The compositor samples this buffer as soon as the commit lands, so
+ * the drawing has to be over before the caller hands it over; this is where that happens rather than in the caller. */
+void AGGLEndRenderTarget(AGGLContext *context);
+void AGGLRenderTargetDestroy(AGGLContext *context, AGGLRenderTarget *target);
+
+/* **THE TEXTURE THE LAST `AGGLBeginFrame` DREW INTO.** A renderer that has already composited into this file's offscreen
+ * target can hand that texture to another target's blit without a readback — which is how a web engine's frame reaches a
+ * window's GPU buffer with the CPU never seeing it. 0 when nothing has been drawn. */
+unsigned int AGGLTargetTexture(AGGLContext *context);
 
 /* **A TEXTURE DRAWN INTO THE CURRENT TARGET, WHICH IS THE WHOLE OF "COMPOSITE AN ENGINE'S FRAME".** Straight copy: no
  * blending, no texture coordinates invented, (0,0) of the texture at the bottom-left of the rectangle, in target

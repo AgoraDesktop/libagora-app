@@ -83,6 +83,7 @@ struct AGGLContext {
 	EGLContext context;
 	int ready;
 	int wayland_display;
+	int gbm_display;
 
 	/* The extensions this context was actually given, not the ones the build hoped for. */
 	int import_dmabuf;
@@ -320,6 +321,67 @@ static int gl_context_bring_up(AGGLContext *context, EGLenum platform, void *nat
 	return 1;
 }
 
+/* **THE GBM PLATFORM IS THE ONE THAT MATCHES A WINDOW'S BUFFERS**, so it is tried first when a device is given and the
+ * display it makes is the one an import will be legal on. Everything after the bring-up is shared with the other
+ * constructors: the same context attributes, the same extension probing, the same offscreen target. */
+AGGLContext *AGGLContextCreateWithGBM(void *gbm_device)
+{
+	AGGLContext *context;
+	const char *egl_extensions;
+	EGLint config_attributes[] = {
+		EGL_SURFACE_TYPE, EGL_PBUFFER_BIT,
+		EGL_RENDERABLE_TYPE, EGL_OPENGL_ES2_BIT,
+		EGL_RED_SIZE, 8,
+		EGL_GREEN_SIZE, 8,
+		EGL_BLUE_SIZE, 8,
+		EGL_ALPHA_SIZE, 8,
+		EGL_NONE
+	};
+	EGLint context_attributes[] = { EGL_CONTEXT_CLIENT_VERSION, 2, EGL_NONE };
+
+	if (gbm_device == NULL) {
+		return NULL;
+	}
+	context = calloc(1, sizeof *context);
+	if (context == NULL) {
+		return NULL;
+	}
+	context->display = EGL_NO_DISPLAY;
+	context->context = EGL_NO_CONTEXT;
+	context->get_platform_display = (PFNEGLGETPLATFORMDISPLAYEXTPROC)eglGetProcAddress("eglGetPlatformDisplayEXT");
+	if (context->get_platform_display == NULL) {
+		gl_context_teardown(context);
+		return NULL;
+	}
+	context->create_image = (PFNEGLCREATEIMAGEKHRPROC)eglGetProcAddress("eglCreateImageKHR");
+	context->destroy_image = (PFNEGLDESTROYIMAGEKHRPROC)eglGetProcAddress("eglDestroyImageKHR");
+	context->image_target_texture = (PFNGLEGLIMAGETARGETTEXTURE2DOESPROC)
+		eglGetProcAddress("glEGLImageTargetTexture2DOES");
+	context->export_dmabuf_query = (PFNEGLEXPORTDMABUFIMAGEQUERYMESAPROC)
+		eglGetProcAddress("eglExportDMABUFImageQueryMESA");
+	context->export_dmabuf_image = (PFNEGLEXPORTDMABUFIMAGEQUERYMESAPROC)
+		eglGetProcAddress("eglExportDMABUFImageQueryMESA") != NULL ?
+		(PFNEGLEXPORTDMABUFIMAGEMESAPROC)eglGetProcAddress("eglExportDMABUFImageMESA") : NULL;
+	if (!gl_context_bring_up(context, EGL_PLATFORM_GBM_KHR, gbm_device, "the GBM device", config_attributes,
+				 context_attributes)) {
+		gl_context_teardown(context);
+		return NULL;
+	}
+	context->gbm_display = 1;
+	egl_extensions = eglQueryString(context->display, EGL_EXTENSIONS);
+	context->import_dmabuf = extension_has(egl_extensions, "EGL_EXT_image_dma_buf_import");
+	context->import_modifiers = extension_has(egl_extensions, "EGL_EXT_image_dma_buf_import_modifiers");
+	context->gl_texture_image = extension_has(egl_extensions, "EGL_KHR_gl_texture_2D_image");
+	context->export_dmabuf = extension_has(egl_extensions, "EGL_MESA_image_dma_buf_export");
+	context->surfaceless = extension_has(egl_extensions, "EGL_KHR_surfaceless_context");
+	copy_string(context->vendor, sizeof context->vendor, eglQueryString(context->display, EGL_VENDOR));
+	copy_string(context->renderer, sizeof context->renderer, (const char *)glGetString(GL_RENDERER));
+	copy_string(context->version, sizeof context->version, (const char *)glGetString(GL_VERSION));
+	glGetIntegerv(GL_MAX_TEXTURE_SIZE, &context->max_texture_size);
+	context->ready = 1;
+	return context;
+}
+
 AGGLContext *AGGLContextCreate(AGWindowServer *server)
 {
 	AGGLContext *context;
@@ -467,6 +529,7 @@ void AGGLContextInfo(const AGGLContext *context, AGGLInfo *info)
 	}
 	info->available = context->ready;
 	info->wayland_display = context->wayland_display;
+	info->gbm_display = context->gbm_display;
 	info->import_dmabuf = context->import_dmabuf;
 	info->import_dmabuf_modifiers = context->import_modifiers;
 	info->gl_texture_image = context->gl_texture_image;
@@ -805,20 +868,21 @@ unsigned int AGGLTextureFromImage(AGGLContext *context, const void *egl_image, i
 	return gl_texture_wrap(context, (EGLImageKHR)(uintptr_t)egl_image, 0);
 }
 
-unsigned int AGGLTextureFromDmabuf(AGGLContext *context, int fd, int width, int height, int stride,
-				   unsigned int fourcc, unsigned long long modifier)
+/* **ONE PLACE BUILDS THE IMPORT ATTRIBUTES.** The texture door and the render-target door import the same kind of buffer
+ * and would otherwise disagree about which plane attributes they send — the sort of difference that works on one driver
+ * and fails on the next. */
+static EGLImageKHR gl_image_from_dmabuf(AGGLContext *context, int fd, int width, int height, int stride,
+					unsigned int fourcc, unsigned long long modifier)
 {
 	EGLint attributes[24];
 	int at = 0;
-	EGLImageKHR image;
-	unsigned int texture;
 
 	if (context == NULL || !context->ready || !context->import_dmabuf || context->create_image == NULL) {
-		return 0;
+		return EGL_NO_IMAGE_KHR;
 	}
 	if (fd < 0 || width <= 0 || height <= 0 || stride <= 0 || width > context->max_texture_size ||
 	    height > context->max_texture_size) {
-		return 0;
+		return EGL_NO_IMAGE_KHR;
 	}
 	attributes[at++] = EGL_WIDTH;
 	attributes[at++] = width;
@@ -842,9 +906,16 @@ unsigned int AGGLTextureFromDmabuf(AGGLContext *context, int fd, int width, int 
 		attributes[at++] = (EGLint)(modifier >> 32);
 	}
 	attributes[at++] = EGL_NONE;
+	return context->create_image(context->display, EGL_NO_CONTEXT, EGL_LINUX_DMA_BUF_EXT, NULL, attributes);
+}
 
-	image = context->create_image(context->display, EGL_NO_CONTEXT, EGL_LINUX_DMA_BUF_EXT, NULL,
-				      attributes);
+unsigned int AGGLTextureFromDmabuf(AGGLContext *context, int fd, int width, int height, int stride,
+				   unsigned int fourcc, unsigned long long modifier)
+{
+	EGLImageKHR image;
+	unsigned int texture;
+
+	image = gl_image_from_dmabuf(context, fd, width, height, stride, fourcc, modifier);
 	if (image == EGL_NO_IMAGE_KHR) {
 		return 0;
 	}
@@ -853,6 +924,131 @@ unsigned int AGGLTextureFromDmabuf(AGGLContext *context, int fd, int width, int 
 		context->destroy_image(context->display, image);
 	}
 	return texture;
+}
+
+/* ----------------------------------------------------------------------------------------------------------------
+ * render targets
+ * ---------------------------------------------------------------------------------------------------------------- */
+
+struct AGGLRenderTarget {
+	GLuint framebuffer;
+	GLuint texture;
+	EGLImageKHR image;
+	int width;
+	int height;
+};
+
+AGGLRenderTarget *AGGLRenderTargetFromDmabuf(AGGLContext *context, int fd, int width, int height, int stride,
+					     unsigned int fourcc, unsigned long long modifier)
+{
+	AGGLRenderTarget *target;
+	EGLImageKHR image;
+	GLuint texture = 0;
+	GLuint framebuffer = 0;
+	GLenum status;
+
+	if (context == NULL || !context->ready) {
+		return NULL;
+	}
+	image = gl_image_from_dmabuf(context, fd, width, height, stride, fourcc, modifier);
+	if (image == EGL_NO_IMAGE_KHR) {
+		/* **THE REASON, BECAUSE A FAILED IMPORT IS OTHERWISE A FRAME THAT NEVER ARRIVES.** The numbers are what the
+		 * attributes were built from, and the extension flags say which half of the import is missing. */
+		fprintf(stderr, "AGGL: cannot import %dx%d stride %d fourcc 0x%08x modifier 0x%llx (import=%d modifiers=%d "
+				"renderer=%s)\n", width, height, stride, fourcc, modifier, context->import_dmabuf,
+			context->import_modifiers, context->renderer);
+		return NULL;
+	}
+	glGenTextures(1, &texture);
+	glBindTexture(GL_TEXTURE_2D, texture);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+	while (glGetError() != GL_NO_ERROR) {
+		/* Drain whatever the caller left behind, so the next check is this call's verdict. */
+	}
+	context->image_target_texture(GL_TEXTURE_2D, (GLeglImageOES)image);
+	{
+		GLenum error = glGetError();
+
+		if (error != GL_NO_ERROR) {
+			/* **THE BIND IS THE STEP THAT FAILS WHEN THE BUFFER AND THE CONTEXT ARE NOT REALLY THE SAME DEVICE.** The
+			 * error code is the only thing that distinguishes "this driver will not sample that layout" from "this is not
+			 * my memory", and without it the symptom is a frame that never arrives. */
+			fprintf(stderr, "AGGL: an imported %dx%d buffer (fourcc 0x%08x) would not bind as a texture: GL error "
+					"0x%04x\n", width, height, fourcc, (unsigned)error);
+			glBindTexture(GL_TEXTURE_2D, 0);
+			glDeleteTextures(1, &texture);
+			context->destroy_image(context->display, image);
+			return NULL;
+		}
+	}
+	glBindTexture(GL_TEXTURE_2D, 0);
+	glGenFramebuffers(1, &framebuffer);
+	glBindFramebuffer(GL_FRAMEBUFFER, framebuffer);
+	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, texture, 0);
+	status = glCheckFramebufferStatus(GL_FRAMEBUFFER);
+	glBindFramebuffer(GL_FRAMEBUFFER, 0);
+	if (status != GL_FRAMEBUFFER_COMPLETE) {
+		fprintf(stderr, "AGGL: the imported buffer cannot be rendered into (status 0x%04x)\n", (unsigned)status);
+		glDeleteFramebuffers(1, &framebuffer);
+		glDeleteTextures(1, &texture);
+		context->destroy_image(context->display, image);
+		return NULL;
+	}
+	target = calloc(1, sizeof *target);
+	if (target == NULL) {
+		glDeleteFramebuffers(1, &framebuffer);
+		glDeleteTextures(1, &texture);
+		context->destroy_image(context->display, image);
+		return NULL;
+	}
+	target->framebuffer = framebuffer;
+	target->texture = texture;
+	target->image = image;
+	target->width = width;
+	target->height = height;
+	return target;
+}
+
+int AGGLBeginRenderTarget(AGGLContext *context, AGGLRenderTarget *target)
+{
+	if (context == NULL || !context->ready || target == NULL) {
+		return 0;
+	}
+	glBindFramebuffer(GL_FRAMEBUFFER, target->framebuffer);
+	glViewport(0, 0, target->width, target->height);
+	return 1;
+}
+
+void AGGLEndRenderTarget(AGGLContext *context)
+{
+	if (context == NULL || !context->ready) {
+		return;
+	}
+	glFinish();
+	glBindFramebuffer(GL_FRAMEBUFFER, 0);
+}
+
+void AGGLRenderTargetDestroy(AGGLContext *context, AGGLRenderTarget *target)
+{
+	if (context == NULL || target == NULL) {
+		return;
+	}
+	if (context->ready) {
+		glDeleteFramebuffers(1, &target->framebuffer);
+		glDeleteTextures(1, &target->texture);
+	}
+	if (target->image != EGL_NO_IMAGE_KHR && context->destroy_image != NULL) {
+		context->destroy_image(context->display, target->image);
+	}
+	free(target);
+}
+
+unsigned int AGGLTargetTexture(AGGLContext *context)
+{
+	return (context != NULL) ? context->target_texture : 0;
 }
 
 void AGGLDeleteTexture(AGGLContext *context, unsigned int texture)
@@ -1140,6 +1336,12 @@ int AGGLBlitTextureFlipped(AGGLContext *context, unsigned int texture, int x, in
  * caller never needs a `#ifdef` of its own and a build that cannot render web content says so at the call rather than
  * at a link error it cannot read. This is the same deal `AG_HAVE_DMABUF` makes for the GPU buffer path. */
 
+AGGLContext *AGGLContextCreateWithGBM(void *gbm_device)
+{
+	(void)gbm_device;
+	return NULL;
+}
+
 AGGLContext *AGGLContextCreate(AGWindowServer *server)
 {
 	(void)server;
@@ -1281,6 +1483,43 @@ int AGGLBlitTextureFlipped(AGGLContext *context, unsigned int texture, int x, in
 	(void)y;
 	(void)width;
 	(void)height;
+	return 0;
+}
+
+AGGLRenderTarget *AGGLRenderTargetFromDmabuf(AGGLContext *context, int fd, int width, int height, int stride,
+					     unsigned int fourcc, unsigned long long modifier)
+{
+	(void)context;
+	(void)fd;
+	(void)width;
+	(void)height;
+	(void)stride;
+	(void)fourcc;
+	(void)modifier;
+	return NULL;
+}
+
+int AGGLBeginRenderTarget(AGGLContext *context, AGGLRenderTarget *target)
+{
+	(void)context;
+	(void)target;
+	return 0;
+}
+
+void AGGLEndRenderTarget(AGGLContext *context)
+{
+	(void)context;
+}
+
+void AGGLRenderTargetDestroy(AGGLContext *context, AGGLRenderTarget *target)
+{
+	(void)context;
+	(void)target;
+}
+
+unsigned int AGGLTargetTexture(AGGLContext *context)
+{
+	(void)context;
 	return 0;
 }
 
