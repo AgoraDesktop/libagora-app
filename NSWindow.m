@@ -158,6 +158,16 @@
 - (NSScreen *)cg_screenFor:(NSScreen *)screen;
 - (void)cg_rebuildCursorRectsIfNeeded;
 - (NSCursor *)cg_cursorForContentPoint:(NSPoint)p;
+/* **AND THE DOOR THAT MAKES A CURSOR VISIBLE, WHICH IS THE ONE THE WHOLE PIPELINE ENDS AT.** The resolution above answers
+ * WHICH cursor; this puts it up in the process (`-set`) and tells the window server WHICH SHAPE it is — by name, and only
+ * when the name changed since the last request. Called from the pointer's motion, from a pointer entering the window (a
+ * window raised under a resting hand never sees a motion), and after the cursor rects are invalidated (a page finishing a
+ * load under a resting pointer is the same case). */
+- (void)cg_applyCursor:(NSCursor *)cursor;
+- (NSCursor *)cg_resolveAndApplyCursorAtPoint:(NSPoint)windowPoint;
+- (void)cg_refreshCursorAtRestingPointer;
+- (NSString *)cg_sentCursorName;
+- (NSUInteger)cg_cursorRequests;
 /* THE KEY-VIEW LOOP'S PRIVATE DOORS, declared here because this is the file that defines them. */
 - (void)cg_ensureKeyViewLoop;
 - (NSView *)cg_keyViewLoopEntry:(NSInteger)index;
@@ -799,9 +809,7 @@ static NSEvent *fn_translate(NSWindow *w, const AGEvent *e, NSTimeInterval now)
 		 * divider or a split view is dragging (that owner has already pushed its resize cursor) and ruinously
 		 * expensive in a browser with hundreds of columns; the hover answer is only for a move with no button. */
 		if (!dragging) {
-			NSCursor *c = [w cg_cursorForContentPoint:where];
-
-			[(c != nil ? c : [NSCursor arrowCursor]) set];
+			[w cg_resolveAndApplyCursorAtPoint:where];
 		}
 		/* **AND THE TRACKING ENGINE RUNS HERE, ABOVE THE EARLY RETURN, WHICH IS THE WHOLE POINT OF PUTTING IT FIRST.**
 		 * `-acceptsMouseMovedEvents` decides whether a bare move becomes an `NSEvent` for the responder chain, and an
@@ -1464,6 +1472,10 @@ static NSString * const AGCoderWindowToolbarKey = @"toolbar";
 	_title = nil;
 	_cursorRectsEnabled = YES;
 	_cursorRectsDirty = YES;
+	/* NOTHING HAS BEEN SAID TO THE COMPOSITOR YET, which is not the same state as "the default was sent": the first
+	 * resolution says something so that a compositor whose default differs from this window's answer hears it. */
+	_cg_sentCursorName = nil;
+	_cg_cursorRequests = 0;
 	_delegate = nil;
 	_deferred = flag;
 	_visible = NO;
@@ -1537,6 +1549,7 @@ static NSString * const AGCoderWindowToolbarKey = @"toolbar";
 		_agwindow = NULL;
 	}
 	[_cg_events release];
+	[_cg_sentCursorName release];
 	[_title release];
 	[_frameAutosaveName release];
 	[_representedFilename release];
@@ -4337,6 +4350,14 @@ static CGFloat fn_clamp_axis(CGFloat v, CGFloat lo, CGFloat hi)
 			 * pointer that leaves a button and never moves again would otherwise leave the button prelighted for good. */
 			[self cg_clearTracking];
 			return;
+		}
+		/* **AND A WINDOW THAT COMES UNDER A RESTING POINTER RESOLVES ITS CURSOR HERE, WITH NO MOTION TO FOLLOW.** This is
+		 * the case a compositor creates and a mouse does not: a Dock tile raises a window under a hand that is not moving,
+		 * or a menu closes onto one. Without this the pointer kept the shape of the window it was over a moment ago until
+		 * something happened to move — the same class of staleness as a click that goes nowhere until the mouse moves. A
+		 * drag owns the cursor exactly as it does on a motion, for the same reason: the owner has already pushed its own. */
+		if (event->type == AGEventPointerEnter && ![self cg_mouseButtonDown]) {
+			[self cg_resolveAndApplyCursorAtPoint:p];
 		}
 		ev = fn_translate(self, event, [NSDate timeIntervalSinceReferenceDate]);
 		if (ev != nil) {
@@ -7242,6 +7263,63 @@ static void fn_discard_cursor_rects(NSView *v)
 	return [_contentView cg_cursorAtPoint:p];
 }
 
+/* **WHAT THE POINTER LOOKS LIKE, SAID TO THE WINDOW SERVER — AND IT IS THE END OF A PIPELINE THAT USED TO STOP HERE.**
+ * The resolution above answers a shared `NSCursor`, and a shared `NSCursor` carries no pixels: twenty-one of them were
+ * indistinguishable to a display, so `-set` moved a process-global variable and nothing on the glass changed. What a
+ * cursor DOES carry is its name (`NSCursor.h`), which is the Xcursor vocabulary the compositor's own theme is written
+ * in — so this is the one place an `NSCursor` becomes something a display can act on.
+ *
+ * **TWO THINGS HAPPEN HERE AND THE ORDER MATTERS.** `-set` is the AppKit's global stack, which is what a view's
+ * `+currentCursor` reads on this side of the seam; then the window says the NAME, because the shape belongs to the window
+ * and the pointer follows whatever window it is over. `-set` is called on every resolution because it is a pointer
+ * comparison and a retain at worst, but the REQUEST is made only when the name differs from the last one sent — that is
+ * the difference between a motion costing a round trip and a motion costing nothing.
+ *
+ * **A CURSOR WITH NO NAME ASKS FOR THE DEFAULT, NOT FOR NOTHING.** An image cursor (`-initWithImage:hotSpot:`) has no
+ * theme entry and its pixels cannot cross the protocol yet, so the empty string is sent: the compositor shows its
+ * default, which is the honest "nothing special" rather than a stale shape from the last view. A window that has never
+ * sent anything has `nil` here, which is not the same state: nil means "nothing has been said yet", and the first
+ * resolution with a name to give always says it, so that a compositor which started with ITS default hears ours if it
+ * differs. (A window whose very first answer is an image cursor has no name to give and says nothing, which is the
+ * same thing — the default is already what is shown.) */
+- (void)cg_applyCursor:(NSCursor *)cursor
+{
+	NSString *name = [cursor name];
+
+	[cursor set];
+	if (_cg_sentCursorName == name || (_cg_sentCursorName != nil && name != nil &&
+					   [_cg_sentCursorName isEqualToString:name])) {
+		return;
+	}
+	[_cg_sentCursorName release];
+	_cg_sentCursorName = [name copy];
+	_cg_cursorRequests++;
+	AGWindowSetCursor((AGWindow *)_agwindow, name != nil ? [name UTF8String] : "");
+}
+
+/* THE RESOLUTION AND THE REQUEST IN ONE CALL, which is what every caller actually wants: three call sites would
+ * otherwise each have to remember Apple's "the arrow is the answer when no view has an opinion". */
+- (NSCursor *)cg_resolveAndApplyCursorAtPoint:(NSPoint)windowPoint
+{
+	NSCursor *c = [self cg_cursorForContentPoint:windowPoint];
+
+	if (c == nil) {
+		c = [NSCursor arrowCursor];
+	}
+	[self cg_applyCursor:c];
+	return c;
+}
+
+- (NSString *)cg_sentCursorName
+{
+	return _cg_sentCursorName;
+}
+
+- (NSUInteger)cg_cursorRequests
+{
+	return _cg_cursorRequests;
+}
+
 - (void)resetCursorRects
 {
 	/* EVERYTHING STALE, THEN THE PASS: this door says "the rects are no longer right", which is what a caller
@@ -7251,6 +7329,7 @@ static void fn_discard_cursor_rects(NSView *v)
 	}
 	_cursorRectsDirty = YES;
 	[self cg_rebuildCursorRectsIfNeeded];
+	[self cg_refreshCursorAtRestingPointer];
 }
 
 - (void)invalidateCursorRectsForView:(NSView *)aView
@@ -7261,6 +7340,23 @@ static void fn_discard_cursor_rects(NSView *v)
 	/* THE VIEW AND EVERYTHING UNDER IT, because a view that moved has moved its subviews' rects too. */
 	[aView cg_markCursorRectsStale];
 	_cursorRectsDirty = YES;
+	/* **AND THE POINTER MAY ALREADY BE ON THE NEW ANSWER.** `-invalidateCursorRectsForView:` is what a page calls when the
+	 * engine announces a different cursor under a hand that is not moving — the video player that hid its own pointer,
+	 * the link that finished loading — and a resolution left until the next motion is a cursor that changes when the person
+	 * jiggles the mouse. The request is still deduped by name, so a layout that invalidates its rects on every pass costs
+	 * a resolution and no round trip. */
+	[self cg_refreshCursorAtRestingPointer];
+}
+
+/* **THE RE-RESOLUTION A RESTING POINTER NEEDS, AND NOTHING WHEN THERE IS NOT A RESTING ONE.** A window has no business
+ * deciding what shape a pointer outside it wears, so `_cg_hasPointer` is the gate — and a drag owns the cursor (the
+ * owner has pushed its own), which is the same rule the motion path follows. */
+- (void)cg_refreshCursorAtRestingPointer
+{
+	if (!_cg_hasPointer || _cg_mouseButtonDown) {
+		return;
+	}
+	[self cg_resolveAndApplyCursorAtPoint:_cg_pointer];
 }
 
 - (void)discardCursorRects

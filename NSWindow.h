@@ -432,6 +432,14 @@ typedef NSUInteger NSWindowSharingType;
 	 * the controller is where Apple puts the DOOR, and the window is where the ledger keeps the ROW. */
 	BOOL _documentEdited;	BOOL _cursorRectsEnabled;
 	BOOL _cursorRectsDirty;
+	/* **AND THE POINTER'S NAME, WHICH IS WHAT THE COMPOSITOR CAN ACT ON.** The manager resolved from the view tree is an
+	 * `NSCursor`, and an `NSCursor` carries no pixels — it carries an Xcursor NAME (`-name`, nil for an image cursor),
+	 * which `AGWindowSetCursor` sends and the compositor resolves against its theme. `_cg_sentCursorName` is the name this
+	 * window LAST told the compositor, so a motion that resolves the same cursor again sends nothing: a motion is sixty
+	 * events a second and a request per motion would be that many round trips to repeat one word. `_cg_cursorRequests`
+	 * counts the requests actually made, which is what makes "and it does NOT ask again" assertable rather than inferred. */
+	NSString *_cg_sentCursorName;	/* RETAINED; nil until the first request, and for "the default" */
+	NSUInteger _cg_cursorRequests;
 	NSUInteger _styleMask;
 	/* THE DEFAULT BUTTON CELL, RETAINED; the Return key's target on a platform whose responder chain would
 	 * otherwise have to find it. Stored and answered here. */

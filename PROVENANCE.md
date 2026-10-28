@@ -2314,6 +2314,47 @@ unmapped keysym (empty characters), and text winning over a keysym that would ma
 one link still synthetic is the compositor calling the door, which is the same link every other check in that file
 leaves out and which a configure event already proves.
 
+## 74. The pointer had no shape to show: twenty-one identical cursors and no wire
+
+**A CURSOR WAS AN IMAGE AND A HOT SPOT, AND THE SYSTEM CURSORS HAD NEITHER.** `+arrowCursor` and its twenty siblings
+answer a SHARED instance — Apple's contract, one object per class — created through `+cg_sharedCursor:`, which was
+`[[self alloc] init]`. `-init` was not overridden, so `_image` was nil in every one of them: TWENTY-ONE IDENTICAL EMPTY
+OBJECTS. That was a deliberate deviation and `NSCursor.h` said so ("their `-image` answers nil, because the arrow's
+pixels are the server's to supply"), but it had a consequence nobody had written down: an `NSCursor` carried NOTHING a
+display could act on, so `-set` moved a process-global variable and the glass did not change. A web view that resolved the
+right cursor for a link — which it did, and `libagora-webview` measures it — produced a correct answer that died here.
+
+**THE FIX IS A NAME, AND IT IS THE ONE THING A CURSOR HAS THAT A THEME CAN RESOLVE.** `-name` answers the Xcursor name
+for a shared cursor (`left_ptr`, `text`, `pointer`, `crosshair`, `not-allowed`, `nwse-resize` …), assigned where the
+singleton is made rather than looked up in a second table keyed by pointer identity — a cursor is created once and never
+asked again, so the name cannot drift from the object. Two answers are deliberately NIL: a cursor made from an image
+(`-initWithImage:hotSpot:`, which is what a custom pointer will be when the protocol can carry pixels) and
+`disappearingItemCursor`, whose poof of smoke is not a shape any Xcursor theme has (the nearest entries, `dnd-none` and
+`no-drop`, mean a refused drop). A nil name makes the window ask for the compositor's DEFAULT, which is the honest
+"nothing special" rather than a name that would draw something else.
+
+**AND THE WINDOW IS WHAT SAYS IT, BECAUSE THE SHAPE FOLLOWS WHAT THE POINTER IS OVER.** `AGWindowSetCursor` is one string
+on the display seam (`agora_window.set_cursor`, protocol 11) and the compositor resolves it against the theme it already
+loaded. `-[NSWindow cg_applyCursor:]` is the whole of the client side: `-set` for the AppKit's own stack, then the NAME
+when it differs from `_cg_sentCursorName`. THAT SECOND HALF IS THE INTERESTING ONE — a motion is sixty events a second,
+so a request per motion would be sixty round trips to repeat one word. Three callers resolve, and each is a case that
+used to be invisible: the pointer's MOTION (unchanged behaviour), a pointer ENTERING the window (a Dock tile raises a
+window under a hand that is not moving), and a cursor-rect INVALIDATION (a page announcing a different cursor under a
+resting pointer — the case that made the 0 ms figures in `libagora-webview` unobservable). A motion with a button down
+still resolves nothing, because a drag's owner has already pushed its own cursor; that rule was here before the name
+existed and is pinned so it cannot be lost.
+
+**MEASURED WITHOUT A COMPOSITOR, BECAUSE A CURSOR IS THE ONE THING A SCREENSHOT OF THIS TREE CANNOT SHOW.**
+`tests/cursor_name.m` asserts the mapping, and checks EVERY name against the vendored Vimix theme's own directory — a
+typo would be a silent fallback to the arrow, which is precisely the failure this slice is about — then drives
+`-[NSWindow cg_handleSeamEvent:]` with pointer events it builds: one request for two motions over the same link, a
+second request when the cursor really changes, NONE while a button is down, one on release, and one more when a view
+changes its answer under a resting pointer. On the server side `window-server-cursor-name` maps a client's four kinds of
+name to the theme's artwork (or to the blank pixel `none` means) through `AWS_CURSOR_DIAG`, and the seat's rule — the
+shape of the window under the pointer, applied on the focus change — is a case in `window-server-seat-routing`. What no
+test in either repository can show is the pointer itself: a nested session hands it to the host and a DRM output
+composites it into pixels no suite is looking at, which is the sentence `window-server`'s cursor suite has always said.
+
 ## Keeping in sync
 
 The Fiwix AppKit is the origin and this repository has now diverged from it in the seam. A fix made there

@@ -9,16 +9,22 @@
  * WHAT THIS CLASS OWNS IS THE STATE, NOT THE PIXELS. A cursor is an image plus the point in it that is the
  * pointer's tip, and everything else here — the stack, the push/pop pair, the two flags that make a cursor
  * apply itself when the mouse crosses a view — is bookkeeping this class can do completely on its own. The
- * PIXELS ON THE SCREEN are the window server's, so nothing here draws: the display and event seam (D1,
- * the window server) is what will take the top of this stack and put it under the pointer.
+ * PIXELS ON THE SCREEN are the window server's, so nothing here draws: the window's own resolution hands the top of
+ * this stack to the display seam as a NAME (see `-name` below, and `AGWindowSetCursor`), and the compositor draws it.
  *
  * AND THAT IS WHY THE SYSTEM CURSORS HAVE NO IMAGE, WHICH IS THE DEVIATION WORTH READING. `+arrowCursor`
- * and its seventeen siblings answer a SHARED INSTANCE — one per class, created on first ask, which is what
- * Apple's do — and their `-image` answers nil, because the arrow's pixels are the server's to supply and
- * there is no server yet. Apple's contract for these is the shared OBJECT, and a caller that wants to
- * compare, push or set one gets exactly what it asked for; a caller that wants the bitmap gets the truth
- * instead of a fabricated rectangle. `-image` is therefore annotated NULLABLE, which is the standing rule
- * for these headers: the annotation says what the implementation answers.
+ * and its siblings answer a SHARED INSTANCE — one per class, created on first ask, which is what Apple's do —
+ * and their `-image` answers nil, because the arrow's pixels are the server's to supply and there is no server yet.
+ * Apple's contract for these is the shared OBJECT, and a caller that wants to compare, push or set one gets
+ * exactly what it asked for; a caller that wants the bitmap gets the truth instead of a fabricated rectangle.
+ * `-image` is therefore annotated NULLABLE, which is the standing rule for these headers: the annotation says what
+ * the implementation answers.
+ *
+ * **AND AN IMAGE THAT IS NIL IS WHY THE NAME HAD TO BE ADDED.** Twenty-one shared objects with no image are
+ * indistinguishable to a display, so until recently installing the right one for a link changed nothing anywhere —
+ * the answer died in this class. `-name` is what crosses: the Xcursor vocabulary the desktop's theme is written in,
+ * resolved by the compositor into artwork at its own scale. That is a shape and not a bitmap, and it is the whole of
+ * what a system cursor carries to the glass; its pixels stay the theme's business, which is the point.
  *
  * AND THE THREE DOORS THAT HIDE THE POINTER ARE DELIBERATELY ABSENT — `+hide`, `+unhide` and
  * `+setHiddenUntilMouseMoves:`. They take no argument and return nothing, so without a server they are
@@ -45,6 +51,8 @@ NS_ASSUME_NONNULL_BEGIN
 {
 	NSImage *_image;		/* RETAINED; nil for a system cursor, whose pixels are the server's */
 	NSPoint _hotSpot;
+	/* RETAINED; the Xcursor name the compositor resolves into artwork, or nil for a cursor no theme can supply. */
+	NSString *_name;
 	BOOL _onMouseEntered;
 	BOOL _onMouseExited;
 }
@@ -122,6 +130,21 @@ NS_ASSUME_NONNULL_BEGIN
 + (NSCursor *)dragLinkCursor;
 + (NSCursor *)dragCopyCursor;
 + (NSCursor *)contextualMenuCursor;
+
+/* **THE NAME THE COMPOSITOR KNOWS THIS POINTER BY, WHICH IS WHAT MAKES A CURSOR VISIBLE AT ALL.** `_image` is nil for
+ * every system cursor — the pixels are the window server's — so before the name existed an `NSCursor` carried NOTHING a
+ * display could act on: twenty-one distinct objects that were indistinguishable on the wire, which is why installing the
+ * right one for a link changed nothing on the glass. The name is the Xcursor vocabulary the desktop's theme is written
+ * in (`left_ptr`, `text`, `pointer`, `crosshair`, `not-allowed`, `nwse-resize` …), so it is a SHAPE and not a bitmap:
+ * the compositor picks the artwork and the size for its own dots per inch (`AGWindowSetCursor` in
+ * `platform/AGWindowServer.h`).
+ *
+ * **NIL IS A REAL ANSWER.** A cursor made from an image — `-initWithImage:hotSpot:`, which is what a custom pointer will
+ * be when the compositor can carry pixels — has no name in any theme, and neither does a system cursor this tier does
+ * not know. The window then asks for the compositor's DEFAULT rather than inventing a shape, so a custom image cursor
+ * shows the theme's arrow for now: its pixels cannot cross yet, and an arrow is the honest "nothing special" rather
+ * than a pointer that vanishes. The table lives in `NSCursor.m` beside the class methods it maps. */
+@property (readonly, nullable) NSString *name;
 
 @end
 

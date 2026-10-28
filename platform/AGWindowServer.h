@@ -466,6 +466,24 @@ void AGWindowSetActivatable(AGWindow *window, int activatable);
  * the shadow: none is painted on those rows, because they are the title bar's. Zero is a sheet placed flush. */
 void AGWindowSetSheetParent(AGWindow *window, AGWindow *parent, int seam);
 
+/* **THE POINTER'S SHAPE WHILE IT IS OVER THIS WINDOW.** An Xcursor name in the compositor's own theme vocabulary —
+ * `left_ptr`, `text`, `pointer`, `crosshair`, `not-allowed`, `nwse-resize` — which the compositor resolves into its
+ * theme's artwork at the output's scale. NULL or "" means the default (the theme's arrow), and `"none"` means the
+ * pointer is not drawn at all, which is what a video player or a page that paints its own pointer wants: falling back
+ * to the arrow there would put our pointer on top of theirs.
+ *
+ * **A NAME RATHER THAN A PIXEL, WHICH IS THE DIFFERENCE FROM `wl_pointer.set_cursor`.** That protocol carries a surface
+ * of the client's own pixels and would make every application ship an arrow, an I-beam and a resize cursor; a desktop
+ * already HAS a theme, so what crosses is the shape's name and the compositor picks the variant. It is also what makes
+ * a fractional scale work: the client names a shape, the server chooses the artwork for its own dots per inch.
+ *
+ * **SEND IT WHEN THE SHAPE CHANGES AND NOT WHEN THE POINTER MOVES.** A motion is sixty events a second, and a request
+ * per motion would be that many round trips to repeat one word — the AppKit is the side that remembers what it last
+ * said (`-[NSWindow cg_applyCursor:]`), and a compositor receiving the same name again has nothing to do with it. A
+ * compositor that does not speak `agora_shell` version 11 has no door for this and ignores it, which is why a stock
+ * compositor keeps showing its own pointer. */
+void AGWindowSetCursor(AGWindow *window, const char *name);
+
 /* **WHETHER THIS WINDOW'S PIXELS CARRY ALPHA.** A transparent window's shm buffer is ARGB8888 and the compositor
  * blends it over what is behind (source-over, in `window-server/src/output.c`); an opaque window's is XRGB8888 and
  * is copied. Set it BEFORE the first frame, because the buffer's FORMAT is decided when the buffer is made; a

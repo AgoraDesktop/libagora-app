@@ -846,6 +846,19 @@ add_test(NAME appkit-window-resize
 set_tests_properties(appkit-window-resize PROPERTIES SKIP_RETURN_CODE 77
   ENVIRONMENT "${_agora_app_test_env}")
 
+# **AND THE POINTER'S NAME, WHICH IS WHAT MAKES A CURSOR VISIBLE AT ALL.** Twenty-one shared `NSCursor`s used to carry
+# nothing a display could act on — no image and no name — so installing the right one over a link changed nothing. This
+# asserts the two halves of the fix without a compositor: every shared cursor's name is a cursor the VENDORED THEME
+# really has (checked against its own directory, because a typo would be a silent fallback to the arrow), and a window
+# asks the seam for the NAME when the resolved cursor changes and for NOTHING when it does not. The theme's directory is
+# window-server's, read here the same way the protocol XML is, and the argument is optional so the mapping half still
+# runs on a checkout with the artwork removed.
+add_executable(cursor_name cursor_name.m)
+target_link_libraries(cursor_name PRIVATE App)
+add_test(NAME appkit-cursor-name
+  COMMAND cursor_name "${CMAKE_CURRENT_SOURCE_DIR}/../../window-server/assets/cursors/Vimix/cursors")
+set_tests_properties(appkit-cursor-name PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
+
 # AND THE CHROME: Agora's title bar is an X, a minus and a plus drawn in one ink, a centred bold title, and a pill
 # at the far end — so what is checked is the SHAPES, which is a question about pixels and not about intent. The
 # client draws its own chrome, so this needs no compositor: `-cg_drawChromeInContext:` takes a bitmap rep's context.

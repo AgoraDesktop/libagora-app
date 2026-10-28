@@ -2469,14 +2469,14 @@ static void registry_global(void *data, struct wl_registry *registry, uint32_t n
 		 * a window made from a shell bound at 2 is a version 2 window whose `set_reserved` is the last thing it has. */
 		/* **NINE IS WHERE THE FRACTIONAL SCALE IS.** Below it the shell is bound at what the compositor offers and
 		 * windows keep the integer `wl_output.scale` path — a little soft on a fractional output, but correct. The
-		 * clipboard's seven and the fractional scale's nine are the two older fences this seam knows about, and
-		 * **TEN IS THE SHEET'S**: below it a window has no way to say it hangs from another window's title bar, and a
-		 * sheet is drawn as the rectangle it is — square-shouldered, but a rectangle. Asking for exactly what this
-		 * seam understands matters here for the same reason it does at nine: the version a shell is bound at is the
-		 * version every window it makes is capped to, and a request sent above it is a protocol error that kills the
-		 * client rather than a call the server ignores. */
+		 * clipboard's seven and the fractional scale's nine are the two older fences this seam knows about, **TEN IS THE
+		 * SHEET'S** (below it a window has no way to say it hangs from another window's title bar and a sheet is drawn as
+		 * the rectangle it is), and **ELEVEN IS THE POINTER'S SHAPE**: below it there is no `set_cursor`, so every window
+		 * shows the compositor's default. Asking for exactly what this seam understands matters here for the same reason
+		 * it does at nine: the version a shell is bound at is the version every window it makes is capped to, and a
+		 * request sent above it is a protocol error that kills the client rather than a call the server ignores. */
 		server->shell = wl_registry_bind(registry, name, &agora_shell_interface,
-						version < 10 ? version : 10);
+						version < 11 ? version : 11);
 	}
 }
 
@@ -3248,6 +3248,19 @@ void AGWindowSetSheetParent(AGWindow *window, AGWindow *parent, int seam)
 		parent_role = parent->agora;
 	}
 	agora_window_set_sheet_parent(window->agora, parent_role, seam > 0 ? seam : 0);
+	wl_display_flush(window->server->display);
+}
+
+/* **THE POINTER'S SHAPE, WHICH IS ONE STRING AND NO PIXELS AT ALL.** See the header: the compositor resolves the name
+ * against the theme it already loaded, so what an application sends is a shape and not a bitmap. NULL and "" are the same
+ * request — the default — because the AppKit has no name for a custom image cursor (its pixels cannot cross yet) and the
+ * compositor's default is the honest answer for it. */
+void AGWindowSetCursor(AGWindow *window, const char *name)
+{
+	if (window == NULL || window->agora == NULL) {
+		return;
+	}
+	agora_window_set_cursor(window->agora, name != NULL ? name : "");
 	wl_display_flush(window->server->display);
 }
 

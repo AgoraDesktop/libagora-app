@@ -274,6 +274,17 @@ the compositor is really gone.
   the application and makes the clicked window KEY and MAIN.
 - **The seam alone** (`ctest`): exactly 60 of 60 frames headless, and the keymap translation checked against
   a pinned `us` keymap.
+- **AND THE POINTER'S SHAPE, WHICH IS THE ONE THING A SCREENSHOT OF THIS TREE COULD NEVER SHOW** (`ctest`,
+  `tests/cursor_name.m`): a cursor is an IMAGE and a HOT SPOT — and for the twenty-one shared system cursors the image
+  is nil, because the pixels are the window server's. That left them indistinguishable to a display, so installing the
+  right one over a link changed nothing. Each now carries the NAME the desktop's theme is written in (`-name`: the arrow
+  is `left_ptr`, the I-beam `text`, the hand `pointer`, …), and every one of those names is checked against the vendored
+  Vimix theme's own directory — a typo there would be a silent fallback to the arrow. A window then asks the seam for the
+  name when the resolved cursor CHANGES and for nothing when it does not (one request for two motions over one link); a
+  motion with a button down asks for nothing at all, because a drag's owner has already pushed its own cursor; and a view
+  that changes its answer under a RESTING pointer reaches the server through `-invalidateCursorRectsForView:`, which is
+  what a page announcing a new cursor is. `AGWindowSetCursor` carries it, `agora_window.set_cursor` puts it on the wire,
+  and `window-server`'s `window-server-cursor-name` suite resolves it against the theme.
 - **The controls** (`ctest`, all offscreen): a button draws its bezel and title and sends its action; a switch
   draws an indicator and a radio a different one; a slider's `-knobRect:flipped:` and its inverse agree at the
   knob's centre and clamp past either end; a push button's height is a bezel METRIC rather than a property of its

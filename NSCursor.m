@@ -40,13 +40,14 @@ static int s_hiddenCount;
 static BOOL s_hiddenUntilMouseMoves;
 
 @interface NSCursor ()
-+ (NSCursor *)cg_sharedCursor:(NSCursor **)slot;
++ (NSCursor *)cg_sharedCursor:(NSCursor **)slot named:(nullable NSString *)name;
 @end
 
 @implementation NSCursor
 
 @synthesize image = _image;
 @synthesize hotSpot = _hotSpot;
+@synthesize name = _name;
 @synthesize isSetOnMouseEntered = _onMouseEntered;
 @synthesize isSetOnMouseExited = _onMouseExited;
 
@@ -55,6 +56,11 @@ static BOOL s_hiddenUntilMouseMoves;
 	if ((self = [super init]) != nil) {
 		_image = [newImage retain];
 		_hotSpot = point;
+		/* **AND NO NAME, WHICH THE WINDOW TURNS INTO THE COMPOSITOR's DEFAULT.** A cursor made from an image is a
+		 * shape no theme has: its pixels are in `_image` and cannot cross the protocol yet (`set_cursor` carries a NAME),
+		 * so the honest thing to show is the theme's arrow rather than a name invented for it. See `-name` in the
+		 * header. */
+		_name = nil;
 		_onMouseEntered = NO;
 		_onMouseExited = NO;
 	}
@@ -77,6 +83,7 @@ static BOOL s_hiddenUntilMouseMoves;
 - (void)dealloc
 {
 	[_image release];
+	[_name release];
 	[super dealloc];
 }
 
@@ -174,15 +181,25 @@ static BOOL s_hiddenUntilMouseMoves;
 }
 
 /* ------------------------------------------------------------------------- */
-/* The shared system cursors                                                   */
+/* The shared system cursors and the names their shapes are known by         */
 /* ------------------------------------------------------------------------- */
 
-/* ONE HELPER, ONE STATIC PER METHOD, NO LOCK: created on first ask and immortal, which is what a shared
- * cursor is. The slot is a local static's address, so each cursor has exactly one. */
-+ (NSCursor *)cg_sharedCursor:(NSCursor **)slot
+/* **ONE HELPER, ONE STATIC PER METHOD, NO LOCK: created on first ask and immortal, which is what a shared
+ * cursor is.** The slot is a local static's address, so each cursor has exactly one. `name` is the Xcursor name the
+ * compositor resolves into artwork, and it is set HERE rather than in a lookup table elsewhere for one reason worth
+ * naming: a shared cursor is created once and never asked again, so a name assigned at creation cannot disagree with the
+ * object it belongs to — which is exactly the bug a second table keyed by pointer identity would eventually have.
+ *
+ * **EVERY NAME BELOW WAS CHECKED AGAINST THE VENDORED THEME, NOT INVENTED.** `ls window-server/assets/cursors/Vimix/cursors`
+ * carries them all, and a name no theme has costs a fallback the compositor reports once — a pointer that simply does not
+ * change is the failure this list exists to prevent. The one cursor with NO name is `disappearingItemCursor`: a poof of
+ * smoke is not in an Xcursor theme (the nearest entries, `dnd-none` and `no-drop`, are about a refused drop) and the
+ * default arrow is a better answer than a name that would draw something else. */
++ (NSCursor *)cg_sharedCursor:(NSCursor **)slot named:(NSString *)name
 {
 	if (*slot == nil) {
 		*slot = [[self alloc] init];
+		(*slot)->_name = [name copy];
 	}
 	return *slot;
 }
@@ -191,119 +208,119 @@ static BOOL s_hiddenUntilMouseMoves;
 {
 	static NSCursor *s;
 
-	return [self cg_sharedCursor:&s];
+	return [self cg_sharedCursor:&s named:@"left_ptr"];
 }
 
 + (NSCursor *)IBeamCursor
 {
 	static NSCursor *s;
 
-	return [self cg_sharedCursor:&s];
+	return [self cg_sharedCursor:&s named:@"text"];
 }
 
 + (NSCursor *)pointingHandCursor
 {
 	static NSCursor *s;
 
-	return [self cg_sharedCursor:&s];
+	return [self cg_sharedCursor:&s named:@"pointer"];
 }
 
 + (NSCursor *)closedHandCursor
 {
 	static NSCursor *s;
 
-	return [self cg_sharedCursor:&s];
+	return [self cg_sharedCursor:&s named:@"closedhand"];
 }
 
 + (NSCursor *)openHandCursor
 {
 	static NSCursor *s;
 
-	return [self cg_sharedCursor:&s];
+	return [self cg_sharedCursor:&s named:@"openhand"];
 }
 
 + (NSCursor *)resizeLeftCursor
 {
 	static NSCursor *s;
 
-	return [self cg_sharedCursor:&s];
+	return [self cg_sharedCursor:&s named:@"left_side"];
 }
 
 + (NSCursor *)resizeRightCursor
 {
 	static NSCursor *s;
 
-	return [self cg_sharedCursor:&s];
+	return [self cg_sharedCursor:&s named:@"right_side"];
 }
 
 + (NSCursor *)resizeLeftRightCursor
 {
 	static NSCursor *s;
 
-	return [self cg_sharedCursor:&s];
+	return [self cg_sharedCursor:&s named:@"sb_h_double_arrow"];
 }
 
 + (NSCursor *)resizeUpCursor
 {
 	static NSCursor *s;
 
-	return [self cg_sharedCursor:&s];
+	return [self cg_sharedCursor:&s named:@"top_side"];
 }
 
 + (NSCursor *)resizeDownCursor
 {
 	static NSCursor *s;
 
-	return [self cg_sharedCursor:&s];
+	return [self cg_sharedCursor:&s named:@"bottom_side"];
 }
 
 + (NSCursor *)resizeUpDownCursor
 {
 	static NSCursor *s;
 
-	return [self cg_sharedCursor:&s];
+	return [self cg_sharedCursor:&s named:@"sb_v_double_arrow"];
 }
 
 + (NSCursor *)crosshairCursor
 {
 	static NSCursor *s;
 
-	return [self cg_sharedCursor:&s];
+	return [self cg_sharedCursor:&s named:@"crosshair"];
 }
 
 + (NSCursor *)disappearingItemCursor
 {
 	static NSCursor *s;
 
-	return [self cg_sharedCursor:&s];
+	return [self cg_sharedCursor:&s named:nil];
 }
 
 + (NSCursor *)operationNotAllowedCursor
 {
 	static NSCursor *s;
 
-	return [self cg_sharedCursor:&s];
+	return [self cg_sharedCursor:&s named:@"not-allowed"];
 }
 
 + (NSCursor *)dragLinkCursor
 {
 	static NSCursor *s;
 
-	return [self cg_sharedCursor:&s];
+	return [self cg_sharedCursor:&s named:@"link"];
 }
 
 + (NSCursor *)dragCopyCursor
 {
 	static NSCursor *s;
 
-	return [self cg_sharedCursor:&s];
+	return [self cg_sharedCursor:&s named:@"dnd-copy"];
 }
 
 + (NSCursor *)contextualMenuCursor
 {
 	static NSCursor *s;
 
-	return [self cg_sharedCursor:&s];
+	return [self cg_sharedCursor:&s named:@"context-menu"];
 }
 
 
