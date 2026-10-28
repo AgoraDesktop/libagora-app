@@ -864,6 +864,18 @@ the compositor is really gone.
   and the child clip is the child's FRAME region rather than its bounds rect — which was the same value only while the
   origin was zero. MEASURED: a mark at a document's own y 100..120 draws at 110 with the clip view at the top and at
   10 after a scroll of 100, in one run, through `-displayRect:`.
+- **AND THE WHEEL, WHICH NOTHING IN THE TIER HAD EVER HANDLED** (`ctest`, offscreen). Every scroll listed above
+  moved the clip view and a person turning a wheel moved NOTHING: `NSResponder` forwards `-scrollWheel:` up the chain,
+  no class overrode it, and the event reached the window and stopped. `NSScrollView` answers it now, and it needed no
+  new arithmetic: one wheel line is `-verticalLineScroll`/`-horizontalLineScroll` — the SAME fields a scroller's
+  increment line reads — so a notch is a line step and a caller that wants a coarser wheel sets those and not a
+  wheel-specific property (there is none, on this era or any other). MEASURED in `tests/scroll_view.m`: a notch down
+  moves 10 with that line step set, up comes back, three notches in one event move THREE (a spun wheel arrives
+  batched), the horizontal axis turns right with its sign flipped once, the knob follows through
+  `-reflectScrolledClipView:`, and a wheel over the DOCUMENT reaches the scroll view along the responder chain. **An
+  axis the document cannot move in is handed ON rather than eaten** — a scroll view whose document fits forwards the
+  event to its superview, so a horizontal bar inside a vertical one still works — while one that CAN move keeps it, so
+  a list at its bottom does not start scrolling the page behind it.
 - **And the strip that measures the document** (`ctest`, offscreen): `NSRulerView` and `NSRulerMarker` are here, and
   `NSScrollView` wears them. The ruler does not scroll — it moves its BOUNDS ORIGIN onto the document, which the scroll
   view keeps equal to the clip view's for the ruler's own axis, so a mark drawn at document coordinate 300 lands under

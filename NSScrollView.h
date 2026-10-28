@@ -174,6 +174,14 @@ NS_ASSUME_NONNULL_BEGIN
 - (BOOL)scrollsDynamically;
 - (void)setScrollsDynamically:(BOOL)flag;
 
+/* **THE WHEEL IS `-scrollWheel:`, AND IT IS A LINE STEPPER LIKE THE SCROLLER'S INCREMENT LINE.** It is inherited from
+ * `NSResponder` and declared nowhere — Apple's rule — but the AMOUNT it moves by is the pair above: one wheel line is
+ * `-verticalLineScroll` or `-horizontalLineScroll`, so a scroll view whose lines are ten points moves ten points per
+ * notch and a caller that wants a coarser one sets those, not a wheel-specific property (there is none, on this era or
+ * any other). `NSEvent -deltaY` counts lines and is positive UP; the clip view's origin runs the other way, which is why
+ * the arithmetic reads as a subtraction. An axis the document cannot move in is NOT consumed: the event goes on up the
+ * responder chain, which is what lets a horizontal scroller inside a vertical one work. */
+
 /* **THE RULERS, WHICH ARE THE THIRD KIND OF STRIP A SCROLL VIEW CAN WEAR.** `-hasVerticalRuler` says whether one EXISTS,
  * `-setHasVerticalRuler:` creates or removes it, and `-rulersVisible` says whether the ones that exist are SHOWING —
  * which is the era's split and the reason hiding a ruler does not throw away its markers.

@@ -83,6 +83,34 @@ static void aim_scroller(NSScroller *sc, NSPoint press, CGFloat value)
 	[sc setFloatValue:value knobProportion:[sc knobProportion]];
 }
 
+/* **A VIEW THAT ONLY COUNTS WHEELS**, so "the scroll view did not consume this" can be seen: the responder chain is
+ * decided by `-nextResponder`, and a scroll view's successor is its superview. */
+@interface AGWheelSink : NSView
+{
+@public
+	int wheels;
+}
+@end
+
+@implementation AGWheelSink
+- (void)scrollWheel:(NSEvent *)event
+{
+	(void)event;
+	wheels++;
+}
+@end
+
+/* A WHEEL EVENT, built the way the seam builds one: `NSEvent`'s own two numbers, in WHEEL LINES. */
+static NSEvent *scroll_event(double dx, double dy)
+{
+	return [NSEvent cg_scrollEventWithDeltaX:(CGFloat)dx
+					  deltaY:(CGFloat)dy
+					location:NSMakePoint(10.0, 10.0)
+				   modifierFlags:0
+				       timestamp:1.0
+				    windowNumber:0];
+}
+
 /* A DOCUMENT THAT MARKS ONE PLACE IN ITS OWN COORDINATES, so a scroll can be read as the mark MOVING. It is flipped
  * to match the clip view it goes into, which keeps the mark's arithmetic out of the flip's way. */
 @interface AGScrollMarker : NSView
@@ -402,6 +430,73 @@ int main(void)
 			       (double)[c2 bounds].origin.y, (double)[[two verticalScroller] floatValue]);
 			check(near([c2 bounds].origin.y, 185.0 - 15.0),
 			      "and a page of 0 is the visible extent less the line step, on that axis's own numbers");
+
+			/* 13. **AND THE WHEEL, WHICH IS A LINE STEPPER LIKE THE SCROLLER'S INCREMENT LINE.** This is the door the
+			 * tier did not have: every other scroll in it — a knob, a page, a line, `-scrollPoint:`, `-scrollRectToVisible:` —
+			 * moved the clip view, and a person turning a wheel moved nothing, because nothing overrode `-scrollWheel:` and
+			 * `NSResponder`'s forward ended at the window. The amounts are the SAME fields the scroller action reads, so the
+			 * wheel needs no constant of its own. */
+			{
+				AGWheelSink *sink;
+				NSScrollView *fits;
+				NSView *small;
+
+				[two setVerticalLineScroll:10.0];
+				[two setHorizontalLineScroll:20.0];
+				[c2 scrollToPoint:NSMakePoint(0.0, 0.0)];
+
+				[two scrollWheel:scroll_event(0.0, -1.0)];
+				check(near([c2 bounds].origin.y, 10.0),
+				      "a wheel notch DOWN moves the clip view by ONE LINE, `-verticalLineScroll`");
+				check(near([c2 bounds].origin.x, 0.0), "and leaves the other axis where it was");
+
+				[two scrollWheel:scroll_event(0.0, 1.0)];
+				check(near([c2 bounds].origin.y, 0.0), "a notch UP comes back by the same amount");
+				[two scrollWheel:scroll_event(0.0, 1.0)];
+				check(near([c2 bounds].origin.y, 0.0),
+				      "and at the top it stops there, because the clip view constrains the point it is handed");
+
+				[two scrollWheel:scroll_event(0.0, -3.0)];
+				check(near([c2 bounds].origin.y, 30.0),
+				      "three notches in ONE event are three lines, which is what a spun wheel arrives as");
+
+				[two scrollWheel:scroll_event(-1.0, 0.0)];
+				check(near([c2 bounds].origin.x, 20.0),
+				      "a wheel turned RIGHT moves x by `+horizontalLineScroll`, the sign turning once as it does");
+				check(near([c2 bounds].origin.y, 30.0), "without disturbing the vertical position");
+				check([[two verticalScroller] floatValue] > 0.0,
+				      "and the knob followed, through `-reflectScrolledClipView:`");
+
+				/* THE CHAIN, WHICH IS WHAT MAKES THIS THE TIER'S AND NOT THE SCROLL VIEW'S: a wheel over the DOCUMENT
+				 * reaches the scroll view through the clip view, because a view's successor is its superview. */
+				[c2 scrollToPoint:NSMakePoint(0.0, 0.0)];
+				[d2 scrollWheel:scroll_event(0.0, -1.0)];
+				check(near([c2 bounds].origin.y, 10.0),
+				      "a wheel over the DOCUMENT itself reaches the scroll view up the responder chain");
+
+				/* **AND AN AXIS THAT CANNOT MOVE IS HANDED ON RATHER THAN SWALLOWED.** A scroll view whose document fits
+				 * is inside a split pane as often as not, and a wheel that stopped there would leave the pane above it
+				 * deaf. A scroll view that CAN move keeps the event even at the end of its travel, which is the other
+				 * half of the same rule. */
+				sink = [[AGWheelSink alloc] initWithFrame:NSMakeRect(0.0, 0.0, 300.0, 300.0)];
+				fits = [[NSScrollView alloc] initWithFrame:NSMakeRect(0.0, 0.0, 200.0, 200.0)];
+				small = [[NSView alloc] initWithFrame:NSMakeRect(0.0, 0.0, 100.0, 100.0)];
+				[sink addSubview:fits];
+				[fits setDocumentView:small];
+				[fits scrollWheel:scroll_event(0.0, -1.0)];
+				check(sink->wheels == 1,
+				      "a document that FITS hands the wheel up the responder chain instead of eating it");
+
+				[small setFrame:NSMakeRect(0.0, 0.0, 100.0, 500.0)];
+				[fits scrollWheel:scroll_event(0.0, -1.0)];
+				check(sink->wheels == 1,
+				      "and a document that scrolls KEEPS it, so a list at its bottom does not scroll the page behind");
+				check(near([[fits contentView] bounds].origin.y, 10.0), "having moved by its own line step");
+
+				[small release];
+				[fits release];
+				[sink release];
+			}
 
 			/* THE DOCUMENT'S CURSOR IS THE CLIP VIEW'S, AND THIS IS THE FORWARD. */
 			check([two documentCursor] == nil, "a scroll view has no document cursor by default");

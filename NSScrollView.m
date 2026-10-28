@@ -949,6 +949,64 @@ static Class gRulerViewClass = Nil;
 	_scrollsDynamically = YES;
 }
 
+/* **AND THE WHEEL, WHICH IS THE ONE INPUT THIS CLASS DID NOT HAVE.** Every scroller action, every `-scrollPoint:`, every
+ * `-scrollRectToVisible:` in this tree moves the clip view, and a person turning a wheel moved NOTHING: `NSResponder`
+ * forwards `-scrollWheel:` up the chain, no class in the tier overrode it, and the event reached the window and stopped
+ * there. Measured before this door existed — `appkit-wheel` and the demo both — a wheel over a scroll view left the clip
+ * view's origin exactly where it was.
+ *
+ * **THE UNITS ARE WHEEL LINES, AND THE MULTIPLIER IS THIS CLASS'S OWN.** `NSEvent -deltaY` counts lines (one per notch,
+ * positive meaning UP) and the amount one line moves is `-verticalLineScroll` — the SAME number a scroller's increment
+ * line uses, which is why the wheel needed no new arithmetic and no new constant: it is the scroller's own step, taken
+ * fractionally. The sign falls out of the geometry the clip view already has: `-cg_scrollerAction:` moves
+ * `bounds.origin.y` UP the number line to go DOWN the document (`NSScrollerIncrementLine` adds), so a wheel notch that
+ * wants to go down is `deltaY < 0` and the origin gains `-deltaY * line`.
+ *
+ * **BOTH AXES IN ONE SCROLL.** A trackpad reports both in one event; scrolling twice would move the clip view twice and
+ * damage the frame twice, and the second `-reflectScrolledClipView:` would be a redundant answer to a question already
+ * asked.
+ *
+ * **AND AN AXIS THAT CANNOT MOVE IS NOT CONSUMED.** A scroll view whose document fits, or one that only scrolls down
+ * while the wheel turns sideways, hands the event up the responder chain — which is what makes a horizontal scroller
+ * inside a vertical one, or a scroll view inside a split pane, behave the way Apple's does. A view that CAN scroll
+ * consumes the event even at the end of its travel, because a wheel that walks out of a list at the bottom and starts
+ * scrolling the page behind it is worse than one that stops. */
+- (void)scrollWheel:(NSEvent *)event
+{
+	NSClipView *clip = _contentView;
+	CGFloat dy = [event deltaY];
+	CGFloat dx = [event deltaX];
+	NSRect doc;
+	NSRect vis;
+	NSPoint target;
+	BOOL canY;
+	BOOL canX;
+
+	if (clip == nil) {
+		[super scrollWheel:event];
+		return;
+	}
+	doc = [clip documentRect];
+	vis = [clip bounds];
+	/* A RANGE OF ZERO IS "THIS AXIS DOES NOT SCROLL", and a step of zero would be a consumed event that did nothing. */
+	canY = (doc.size.height - vis.size.height > 0.0) && (_verticalLineScroll > 0.0);
+	canX = (doc.size.width - vis.size.width > 0.0) && (_horizontalLineScroll > 0.0);
+	if ((dy == 0.0 || !canY) && (dx == 0.0 || !canX)) {
+		[super scrollWheel:event];
+		return;
+	}
+	target = vis.origin;
+	if (dy != 0.0 && canY) {
+		target.y -= dy * _verticalLineScroll;
+	}
+	if (dx != 0.0 && canX) {
+		target.x -= dx * _horizontalLineScroll;
+	}
+	/* THE CLIP VIEW CONSTRAINS AND SNAPS, and tells this view so the knob follows; see
+	 * `-scrollClipView:toPoint:` for why the scroll goes through the override rather than straight to the clip view. */
+	[self scrollClipView:clip toPoint:target];
+}
+
 /* **AND THE DOCUMENT'S CURSOR, WHICH IS THE CLIP VIEW'S.** See the header: the pair is declared on both classes and
  * this is the forward, so a caller holding the scroll view never has to find the clip view to say it. */
 - (NSCursor *)documentCursor

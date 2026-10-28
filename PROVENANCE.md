@@ -2355,6 +2355,41 @@ shape of the window under the pointer, applied on the focus change — is a case
 test in either repository can show is the pointer itself: a nested session hands it to the host and a DRM output
 composites it into pixels no suite is looking at, which is the sentence `window-server`'s cursor suite has always said.
 
+## 75. The wheel went nowhere: no class in the tier had ever answered `-scrollWheel:`
+
+**EVERY SCROLL IN THIS TIER MOVED THE CLIP VIEW AND A PERSON TURNING A WHEEL MOVED NOTHING.** `NSClipView
+-scrollToPoint:`, `NSScrollView -scrollClipView:toPoint:`, the scroller's action, `-scrollPoint:`,
+`-scrollRectToVisible:` and `-autoscroll:` all existed and were tested; `-scrollWheel:` did not exist anywhere in the
+tier at all. That is not an oversight in one function — it is what a WHEEL is here: `NSResponder` implements it as a
+forward to `-nextResponder`, `NSView`'s successor is its superview, the chain ends at the window, and nothing along the
+way claimed it. So the event that every desktop uses as the primary way to read a document arrived and was dropped in
+silence. Found from the outside, by a person: the wheel over a web view moved the page a point per notch, which was a
+unit error on the web view's own path (that component's README records it) and, one layer down, the discovery that the
+AppKit had nothing there to be slow in the first place.
+
+**THE AMOUNT WAS ALREADY IN THE CLASS, UNDER ANOTHER NAME.** `-verticalLineScroll` and `-horizontalLineScroll` are what
+a scroller's increment line steps by, so a wheel notch is the SAME distance and the wheel needed no new constant, no
+acceleration curve and no new property: `NSEvent -deltaY` counts lines, one per notch, and the clip view's origin runs
+the other way (a scroller's increment ADDS to y, so going down the document is a negative `deltaY`). The door therefore
+reads as `target.y -= deltaY * verticalLineScroll`, which is the whole of the arithmetic, and both axes are applied in
+ONE scroll so a trackpad's diagonal gesture damages the frame once.
+
+**AND THE TWO RULES AROUND IT ARE APPLE'S, AND THEY MATTER MORE THAN THE ARITHMETIC.** An axis the document cannot move
+in is NOT consumed: the event goes on up the responder chain, which is what lets a horizontal scroller inside a vertical
+one, or a scroll view inside a split pane, behave the way people expect. An axis it CAN move in keeps the event even at
+the end of its travel, because a wheel that walks out of a list at the bottom and starts scrolling the page behind it is
+worse than one that stops. Both halves are pinned, and so is the chain itself: a wheel over the DOCUMENT reaches the
+scroll view, because a view's successor is its superview — which is the property `NSView -nextResponder` gained in this
+tier and the reason nothing had to be wired by hand.
+
+**MEASURED WITHOUT A DISPLAY, IN THE FIXTURE THAT ALREADY EXISTED.** `tests/scroll_view.m` builds a real scroll view
+with a 500x500 document in a 185x185 frame, so the wheel is driven there: a notch down moves 10 with the line step set
+to 10, a notch up comes back, a notch up at the top stays at 0 (the clip view constrains the point it is handed), three
+notches in ONE event move 30 (the compositor batches a spun wheel into one axis per frame), a wheel turned right moves x
+by the horizontal step with its sign turned once, and the knob follows through `-reflectScrolledClipView:`. A second
+small fixture — a scroll view inside a counting view — holds the two rules: a document that fits hands the event up, and
+a document that scrolls keeps it.
+
 ## Keeping in sync
 
 The Fiwix AppKit is the origin and this repository has now diverged from it in the seam. A fix made there
