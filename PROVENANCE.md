@@ -2390,8 +2390,32 @@ by the horizontal step with its sign turned once, and the knob follows through `
 small fixture — a scroll view inside a counting view — holds the two rules: a document that fits hands the event up, and
 a document that scrolls keeps it.
 
-## Keeping in sync
+## 76. A resizable window's corner was the arrow: the diagonal cursors Apple does not publish
 
-The Fiwix AppKit is the origin and this repository has now diverged from it in the seam. A fix made there
-does not arrive here automatically: it has to be ported by hand, and a fix made here does not travel back.
-That is the cost of the seam decision, and it is stated rather than discovered.
+**THE ONE PLACE IN THE TIER WHERE THE POINTER WAS DELIBERATELY WRONG ABOUT WHAT A CLICK WOULD DO.** `fn_resizeEdges` has
+always answered a five-point band along each side and a twelve-point square at each corner, and the PRESS path asks
+that function before anything else — so dragging a corner has always resized the window. The CURSOR path asks
+`fn_resizeCursor`, which answered `+resizeLeftRightCursor` for a side, `+resizeUpDownCursor` for the top or bottom, and
+NIL for a corner, with a comment saying why: the era's public cursor set has those two shapes and nothing diagonal. So
+the handle most people actually reach for showed the arrow. Reported from the outside as "the pointer never changes when
+I can resize a window", and the sides turned out to work — measured end to end in a nested session, where a pointer
+walked to a window's left edge made the compositor log `window 1 asks for sb_h_double_arrow` — so the corners were the
+whole of it.
+
+**APPLE'S ANSWER IS PRIVATE, AND THIS TIER'S PROTOCOL IS A NAME.** AppKit has diagonal resize cursors and does not
+declare them (`NSCursor`'s public surface stops at the two straight ones; the diagonals are CGS cursors), which is a thing
+a reader of the headers cannot discover. Here the protocol carries an Xcursor NAME, so the shape costs nothing but a
+name — and the vendored Vimix theme already has both, `nwse-resize` (its `size_fdiag`) and `nesw-resize`
+(`size_bdiag`). They are `+cg_resizeNorthWestSouthEastCursor` and `+cg_resizeNorthEastSouthWestCursor`, `cg_` doors for
+the same reason `+cg_isHidden` is one: not Apple's API, named so nobody mistakes them for a selector of the era, and made
+through the same `+cg_sharedCursor:named:` every other shared cursor is.
+
+**WHICH DIAGONAL IS WHICH IS THE ONE PIECE OF THINKING.** A window's coordinates are bottom-up, so the top band is the
+NORTH one: the left+top and right+bottom pairs are the NW-SE diagonal and the other two the NE-SW one, which is a test of
+whether the two bands are on the SAME side of the window rather than a switch over four corners. MEASURED in
+`tests/cursor_name.m`, on an ordinary titled-and-resizable window, in seam coordinates: two points from the left edge is
+`sb_h_double_arrow`, two from the bottom is `sb_v_double_arrow`, all four corners are the diagonal that joins them
+(bottom-left and top-right `nesw-resize`, the other pair `nwse-resize`), the middle of the same window is `left_ptr`, and
+an unresizable window's edge is `left_ptr` — the style mask being the question, exactly as it is for the press.
+
+## Keeping in sync

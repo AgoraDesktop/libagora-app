@@ -2006,9 +2006,13 @@ static int fn_resizeEdges(NSWindow *w, NSPoint p)
 	return edges;
 }
 
-/* THE CURSOR THAT SAYS WHICH WAY AN EDGE GOES, or nil where there is no edge. A CORNER ANSWERS NIL, and that is
- * the era's own limit rather than this file's: the cursor set has a left-right and an up-down arrow and NOTHING
- * diagonal, and a corner shown as one of the two would be claiming a direction it does not have. */
+/* THE CURSOR THAT SAYS WHICH WAY AN EDGE GOES, or nil where there is no edge. **A CORNER IS A DIAGONAL AND USED TO
+ * ANSWER NIL**, which was the one place in this tier where the pointer was deliberately wrong about what a click would
+ * do: a press on a corner has always started a resize (see the press path, which asks `fn_resizeEdges` and not this),
+ * and the era's public cursor set has a left-right and an up-down arrow and nothing diagonal — so the pointer over a
+ * handle said "nothing here". MEASURED before the fix, and the reason `NSCursor` gained the two `cg_` diagonals: Apple
+ * keeps those in private CGS cursors, which is why its public surface looks complete and is not. The theme carries
+ * `nwse-resize` and `nesw-resize`, so the corner now shows the direction it actually drags in. */
 static NSCursor *fn_resizeCursor(NSWindow *w, NSPoint p)
 {
 	int edges = fn_resizeEdges(w, p);
@@ -2020,6 +2024,16 @@ static NSCursor *fn_resizeCursor(NSWindow *w, NSPoint p)
 	}
 	if (vertical && !horizontal) {
 		return [NSCursor resizeUpDownCursor];
+	}
+	if (horizontal && vertical) {
+		/* THE TWO DIAGONALS ARE NAMED BY THE CORNERS THEY JOIN: NW-SE is the top-left and the bottom-right, NE-SW the
+		 * other pair. A window's coordinates are BOTTOM-UP, so "north" is the TOP band — and the test is whether the
+		 * horizontal and vertical bands are on the SAME side of the window (left+top, right+bottom = NW-SE) or on
+		 * opposite ones (left+bottom, right+top = NE-SW). */
+		BOOL nwse = ((edges & FN_RESIZE_LEFT) != 0) == ((edges & FN_RESIZE_TOP) != 0);
+
+		return nwse ? [NSCursor cg_resizeNorthWestSouthEastCursor]
+			    : [NSCursor cg_resizeNorthEastSouthWestCursor];
 	}
 	return nil;
 }

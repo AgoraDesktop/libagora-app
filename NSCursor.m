@@ -323,6 +323,23 @@ static BOOL s_hiddenUntilMouseMoves;
 	return [self cg_sharedCursor:&s named:@"context-menu"];
 }
 
+/* **AND THE TWO DIAGONALS, WHICH APPLE DOES NOT PUBLISH** — see `NSCursor.h`. A window's corner resizes and the era's
+ * public cursors have no shape for it, so the pointer there used to be the arrow while a press began a resize. The names
+ * are the theme's own, so the artwork is the same vendored Vimix art every other pointer comes from. */
++ (NSCursor *)cg_resizeNorthWestSouthEastCursor
+{
+	static NSCursor *s;
+
+	return [self cg_sharedCursor:&s named:@"nwse-resize"];
+}
+
++ (NSCursor *)cg_resizeNorthEastSouthWestCursor
+{
+	static NSCursor *s;
+
+	return [self cg_sharedCursor:&s named:@"nesw-resize"];
+}
+
 
 /* ---- THE HIDE COUNTER ----------------------------------------------------------------------- */
 

@@ -131,6 +131,26 @@ NS_ASSUME_NONNULL_BEGIN
 + (NSCursor *)dragCopyCursor;
 + (NSCursor *)contextualMenuCursor;
 
+/* ============================================================================================ *
+ * THE TWO DIAGONAL RESIZE CURSORS, WHICH APPLE HAS AND DOES NOT PUBLISH.                        *
+ *                                                                                                 *
+ * **A WINDOW'S CORNER IS A RESIZE HANDLE AND ITS CURSOR IS NOT ONE OF THE ERA'S PUBLIC ONES.**    *
+ * `+resizeLeftRightCursor` and `+resizeUpDownCursor` are the only resize shapes 10.6 declares,   *
+ * so a window that resolves its own edges has nothing diagonal to answer at a corner — Apple      *
+ * keeps those in private CGS cursors, which is why the public surface looks complete and is not.  *
+ * MEASURED here before this pair existed: the pointer over a resizable window's corner was the    *
+ * ARROW, while a press there started a resize — the one place in the tier where the pointer was   *
+ * deliberately wrong about what a click would do.                                                *
+ *                                                                                                 *
+ * THEY ARE `cg_` DOORS FOR THE SAME REASON `+cg_isHidden` IS: not Apple's API, this tier's, and   *
+ * named so a reader cannot mistake them for a selector of the era. The names are the theme's own — *
+ * `nwse-resize` and `nesw-resize` — so the compositor draws them out of the same Vimix artwork    *
+ * every other pointer here comes from, and their pixels are the server's like every shared         *
+ * cursor's. `NWSE` runs from the top-left corner to the bottom-right; `NESW` the other way.       *
+ * ============================================================================================ */
++ (NSCursor *)cg_resizeNorthWestSouthEastCursor;
++ (NSCursor *)cg_resizeNorthEastSouthWestCursor;
+
 /* **THE NAME THE COMPOSITOR KNOWS THIS POINTER BY, WHICH IS WHAT MAKES A CURSOR VISIBLE AT ALL.** `_image` is nil for
  * every system cursor — the pixels are the window server's — so before the name existed an `NSCursor` carried NOTHING a
  * display could act on: twenty-one distinct objects that were indistinguishable on the wire, which is why installing the

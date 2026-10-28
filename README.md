@@ -284,7 +284,14 @@ the compositor is really gone.
   motion with a button down asks for nothing at all, because a drag's owner has already pushed its own cursor; and a view
   that changes its answer under a RESTING pointer reaches the server through `-invalidateCursorRectsForView:`, which is
   what a page announcing a new cursor is. `AGWindowSetCursor` carries it, `agora_window.set_cursor` puts it on the wire,
-  and `window-server`'s `window-server-cursor-name` suite resolves it against the theme.
+  and `window-server`'s `window-server-cursor-name` suite resolves it against the theme. **AND THE WINDOW'S OWN EDGES
+  ARE PART OF THE SAME TEST**: a resizable window asks for `sb_h_double_arrow` two points from a side and
+  `sb_v_double_arrow` two points from the top or bottom, the middle of the same window is the arrow, an unresizable
+  window's edge is the arrow because the style mask is the question — and EVERY CORNER IS A DIAGONAL, which it was not:
+  a press on a corner has always started a resize, and the pointer there used to be the arrow because the era's public
+  cursor set has a left-right and an up-down shape and nothing diagonal. Those two are `cg_` doors on `NSCursor`
+  (`nwse-resize`, `nesw-resize`), the theme's own artwork, and Apple keeps the equivalent in private CGS cursors — which
+  is why its public surface looks complete and is not.
 - **The controls** (`ctest`, all offscreen): a button draws its bezel and title and sends its action; a switch
   draws an indicator and a radio a different one; a slider's `-knobRect:flipped:` and its inverse agree at the
   knob's centre and clamp past either end; a push button's height is a bezel METRIC rather than a property of its

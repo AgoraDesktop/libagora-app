@@ -168,7 +168,8 @@ int main(int argc, char **argv)
 			[NSCursor resizeRightCursor], [NSCursor resizeLeftRightCursor], [NSCursor resizeUpCursor],
 			[NSCursor resizeDownCursor], [NSCursor resizeUpDownCursor], [NSCursor crosshairCursor],
 			[NSCursor operationNotAllowedCursor], [NSCursor dragLinkCursor], [NSCursor dragCopyCursor],
-			[NSCursor contextualMenuCursor]
+			[NSCursor contextualMenuCursor], [NSCursor cg_resizeNorthWestSouthEastCursor],
+			[NSCursor cg_resizeNorthEastSouthWestCursor]
 		};
 		size_t i;
 		int named = 0, missing = 0;
@@ -188,7 +189,7 @@ int main(int argc, char **argv)
 			}
 		}
 		check(missing == 0, "every shared cursor in this set answers a name");
-		check(named == 16, "and the sixteen of them are the theme's own cursors");
+		check(named == 18, "and the eighteen of them are the theme's own cursors");
 
 		/* `disappearingItemCursor` IS THE DOCUMENTED EXCEPTION, and it is asserted so that "no name" stays a decision
 		 * rather than an oversight: a poof of smoke is not in an Xcursor theme, and the default arrow is a better answer
@@ -266,6 +267,87 @@ int main(int argc, char **argv)
 	/* and invalidating when nothing changed asks for nothing, which is the dedup again on a different path */
 	[window invalidateCursorRectsForView:view];
 	check([window cg_cursorRequests] == 4, "and invalidating again without a change asks for nothing");
+
+	/* 9. **AND THE WINDOW'S OWN EDGES, WHICH ARE THE ONE CURSOR THIS TIER RESOLVES WITHOUT A VIEW'S HELP.** A
+	 * RESIZABLE window answers a resize cursor within five points of an edge, and the name it asks for is the theme's:
+	 * `sb_h_double_arrow` for a side, `sb_v_double_arrow` for the top or the bottom. This is an ordinary `NSWindow`
+	 * with a title bar, so the frame is taller than its content and the point has to be flipped with the FRAME's
+	 * height — the same conversion the window's own dispatch does. */
+	{
+		NSWindow *framed = [[NSWindow alloc] initWithContentRect:NSMakeRect(0.0, 0.0, 400.0, 300.0)
+							       styleMask:(NSTitledWindowMask | NSResizableWindowMask)
+								 backing:NSBackingStoreBuffered
+								   defer:NO];
+		NSView *empty = [[NSView alloc] initWithFrame:NSMakeRect(0.0, 0.0, 400.0, 300.0)];
+		CGFloat frameHeight;
+
+		[framed setContentView:empty];
+		frameHeight = [framed frame].size.height;
+
+		/* the LEFT edge, at mid height */
+		e = motion_event(2, (int)(frameHeight - 150.0));
+		[framed cg_handleSeamEvent:&e];
+		check([[framed cg_sentCursorName] isEqualToString:@"sb_h_double_arrow"],
+		      "a pointer two points from the LEFT edge asks for the horizontal resize cursor");
+
+		/* the BOTTOM edge, mid width */
+		e = motion_event(200, (int)(frameHeight - 2.0));
+		[framed cg_handleSeamEvent:&e];
+		check([[framed cg_sentCursorName] isEqualToString:@"sb_v_double_arrow"],
+		      "and two points from the BOTTOM edge asks for the vertical one");
+
+		/* **AND EVERY CORNER IS A DIAGONAL, WHICH IT WAS NOT.** A press on a corner has always started a resize, and the
+		 * pointer there used to be the arrow: the era's public cursor set has a left-right and an up-down shape and nothing
+		 * diagonal, so `fn_resizeCursor` answered nil and the handle said "nothing here". The corner squares are twelve
+		 * points, and each pair of bands has to answer the diagonal that joins it. */
+		e = motion_event(2, (int)(frameHeight - 2.0));
+		[framed cg_handleSeamEvent:&e];
+		check([[framed cg_sentCursorName] isEqualToString:@"nesw-resize"],
+		      "the BOTTOM-LEFT corner is the NE-SW diagonal, which is the one that joins it to the top-right");
+
+		e = motion_event(398, (int)(frameHeight - 2.0));
+		[framed cg_handleSeamEvent:&e];
+		check([[framed cg_sentCursorName] isEqualToString:@"nwse-resize"],
+		      "and the BOTTOM-RIGHT corner is the NW-SE one");
+
+		e = motion_event(398, 2);
+		[framed cg_handleSeamEvent:&e];
+		check([[framed cg_sentCursorName] isEqualToString:@"nesw-resize"],
+		      "the TOP-RIGHT is the same diagonal as the bottom-left, as it must be");
+
+		e = motion_event(2, 2);
+		[framed cg_handleSeamEvent:&e];
+		check([[framed cg_sentCursorName] isEqualToString:@"nwse-resize"],
+		      "and the TOP-LEFT the other, so NO corner is the arrow any more");
+
+		/* the middle is the arrow again */
+		e = motion_event(200, (int)(frameHeight - 150.0));
+		[framed cg_handleSeamEvent:&e];
+		check([[framed cg_sentCursorName] isEqualToString:@"left_ptr"],
+		      "and the middle of the same window is the arrow, so the edge is not the whole frame");
+
+		/* AND A WINDOW THAT MAY NOT BE RESIZED HAS NO EDGE TO TAKE. */
+		{
+			NSWindow *fixed = [[NSWindow alloc] initWithContentRect:NSMakeRect(0.0, 0.0, 400.0, 300.0)
+								      styleMask:NSTitledWindowMask
+									backing:NSBackingStoreBuffered
+									  defer:NO];
+			NSView *plain = [[NSView alloc] initWithFrame:NSMakeRect(0.0, 0.0, 400.0, 300.0)];
+
+			[fixed setContentView:plain];
+			e = motion_event(2, (int)([fixed frame].size.height - 150.0));
+			[fixed cg_handleSeamEvent:&e];
+			check([[fixed cg_sentCursorName] isEqualToString:@"left_ptr"],
+			      "and an unresizable window's edge is the arrow, because the style mask is the question");
+			[fixed setContentView:nil];
+			[plain release];
+			[fixed release];
+		}
+
+		[framed setContentView:nil];
+		[empty release];
+		[framed release];
+	}
 
 	[window setContentView:nil];
 	[view release];
