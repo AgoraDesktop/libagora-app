@@ -859,6 +859,17 @@ add_test(NAME appkit-cursor-name
   COMMAND cursor_name "${CMAKE_CURRENT_SOURCE_DIR}/../../window-server/assets/cursors/Vimix/cursors")
 set_tests_properties(appkit-cursor-name PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
 
+# **AND THE WHEEL, AS THE WINDOW DISPATCHES IT.** A `NSScrollWheel` is a pointer-family event whose target is the deepest
+# view containing the pointer, so the hop from the seam's `AGEvent` to a view's `-scrollWheel:` is the one that silently
+# does nothing when it is wrong — and it is also where the UNITS are decided: the compositor's notch is 15.0, `-deltaY`
+# is one LINE per notch, and the web view's engine turns a line into forty points. This asserts the middle hop through the
+# real door and the APPLICATION's own pump, with no compositor: one notch is one line, three notches are three, and the
+# other axis flips its sign once.
+add_executable(wheel wheel.m)
+target_link_libraries(wheel PRIVATE App)
+add_test(NAME appkit-wheel COMMAND wheel)
+set_tests_properties(appkit-wheel PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
+
 # AND THE CHROME: Agora's title bar is an X, a minus and a plus drawn in one ink, a centred bold title, and a pill
 # at the far end — so what is checked is the SHAPES, which is a question about pixels and not about intent. The
 # client draws its own chrome, so this needs no compositor: `-cg_drawChromeInContext:` takes a bitmap rep's context.
