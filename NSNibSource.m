@@ -36,6 +36,7 @@
 #import <Foundation/NSException.h>
 #import <Foundation/NSNumber.h>
 #import <Foundation/NSScanner.h>
+#import <Foundation/NSSet.h>
 #import <Foundation/NSString.h>
 #import <Foundation/NSValue.h>
 
@@ -1036,6 +1037,447 @@ static BOOL ag_is_structural_key(NSString *key)
 	       [key isEqualToString:@"cell"] || [key isEqualToString:@"contentView"];
 }
 
+/* ============================================================================================
+ * SPELLINGS SHARED BY THE TWO WRITERS
+ * ============================================================================================
+ *
+ * **THERE IS ONE DEFINITION OF HOW A QUOTED STRING AND A LITERAL ARE SPELLED, BECAUSE TWO WRITERS NOW NEED
+ * THEM.** The decompiler below writes text from live objects and the editor's writer writes it from the property
+ * list the parser built; a colour spelled `@color(#ff0000)` by one and `@color(#FF0000)` by the other would be the
+ * same design twice in one repository, and the parser accepts only one of them. The escapes are the parser's own
+ * set (`ag_string` decodes exactly `\n`, `\t`, `\r`, `\"` and `\\`), so this is the writer half of that function
+ * rather than a second opinion.
+ */
+static NSString *ag_quoted_text(NSString *string)
+{
+	NSMutableString *out = [NSMutableString stringWithCapacity:[string length] + 2];
+	NSUInteger i;
+
+	[out appendString:@"\""];
+	for (i = 0; i < [string length]; i++) {
+		unichar c = [string characterAtIndex:i];
+
+		switch (c) {
+		case '"': [out appendString:@"\\\""]; break;
+		case '\\': [out appendString:@"\\\\"]; break;
+		case '\n': [out appendString:@"\\n"]; break;
+		case '\t': [out appendString:@"\\t"]; break;
+		case '\r': [out appendString:@"\\r"]; break;
+		default: [out appendFormat:@"%C", c]; break;
+		}
+	}
+	[out appendString:@"\""];
+	return out;
+}
+
+/* **A LITERAL IS THE ONE PROPERTY VALUE THAT IS AN OBJECT**, and this is the whole vocabulary: a colour, a font and an
+ * image. Answers nil for anything else, and leaves the caller to decide whether that is a refusal or a skip. */
+static NSString *ag_literal_text_for_object(id value)
+{
+	if ([value isKindOfClass:[NSColor class]]) {
+		CGFloat red = [(NSColor *)value redComponent];
+		CGFloat green = [(NSColor *)value greenComponent];
+		CGFloat blue = [(NSColor *)value blueComponent];
+		CGFloat alpha = [(NSColor *)value alphaComponent];
+		unsigned int r = (unsigned int)(red * 255.0 + 0.5);
+		unsigned int g = (unsigned int)(green * 255.0 + 0.5);
+		unsigned int b = (unsigned int)(blue * 255.0 + 0.5);
+		unsigned int a = (unsigned int)(alpha * 255.0 + 0.5);
+
+		if (a == 255) {
+			return [NSString stringWithFormat:@"@color(#%02x%02x%02x)", r, g, b];
+		}
+		return [NSString stringWithFormat:@"@color(#%02x%02x%02x%02x)", r, g, b, a];
+	}
+	if ([value isKindOfClass:[NSFont class]]) {
+		NSString *name = [(NSFont *)value fontName];
+
+		if (name == nil) {
+			return nil;
+		}
+		return [NSString stringWithFormat:@"@font(\"%@\" %g)", name, (double)[(NSFont *)value pointSize]];
+	}
+	if ([value isKindOfClass:[NSImage class]]) {
+		NSString *name = [(NSImage *)value name];
+
+		if (name == nil) {
+			return nil;
+		}
+		return [NSString stringWithFormat:@"@image(%@)", name];
+	}
+	return nil;
+}
+
+/* ============================================================================================
+ * THE OBJECT TABLE, SHARED BY THE TWO DOORS THAT BUILD A GRAPH
+ * ============================================================================================
+ *
+ * **THE COMPILER AND THE EDITOR MUST REFUSE THE SAME FILES FOR THE SAME REASONS.** `archiveFromSourceData:` builds a
+ * graph to archive it and `objectsFromPropertyList:objectsByID:error:` builds one to show it, so the two doors keep ONE
+ * copy of the root's rules and one copy of the object table; a second copy of the refusals is the drift this file
+ * already argues against for the coder's key vocabulary. The messages are the compiler's and appear verbatim in the
+ * tests.
+ */
+static BOOL ag_source_root_is_valid(id plist, NSString **error)
+{
+	id version;
+	id objects;
+
+	if (![plist isKindOfClass:[NSDictionary class]]) {
+		if (error != NULL) {
+			*error = @"the source's root must be a dictionary";
+		}
+		return NO;
+	}
+	version = [(NSDictionary *)plist objectForKey:@"version"];
+	if (![version isKindOfClass:[NSNumber class]]) {
+		if (error != NULL) {
+			*error = @"the source has no \"version\"";
+		}
+		return NO;
+	}
+	if ([version integerValue] > [NSNib formatVersion]) {
+		if (error != NULL) {
+			*error = [NSString stringWithFormat:@"the source is version %ld and this compiler writes %ld",
+				  (long)[version integerValue], (long)[NSNib formatVersion]];
+		}
+		return NO;
+	}
+	objects = [(NSDictionary *)plist objectForKey:@"objects"];
+	if (![objects isKindOfClass:[NSArray class]] || [(NSArray *)objects count] == 0) {
+		if (error != NULL) {
+			*error = @"the source has no \"objects\" array, or it is empty";
+		}
+		return NO;
+	}
+	return YES;
+}
+
+/* THE OBJECT TABLE ITSELF, ANSWERED **RETAINED** so that the archive door can keep releasing it on every path it already
+ * releases on. The registration of nested ids is `ag_build_object`'s, which is what makes the table complete. */
+static NSMutableArray *ag_built_objects_from_plist(NSDictionary *plist, NSDictionary *registry, NSString **error)
+{
+	NSArray *records = [(NSDictionary *)plist objectForKey:@"objects"];
+	NSMutableArray *built = [[NSMutableArray alloc] init];
+	NSUInteger i;
+
+	for (i = 0; i < [records count]; i++) {
+		id record = [records objectAtIndex:i];
+		id object;
+
+		if (![record isKindOfClass:[NSDictionary class]]) {
+			if (error != NULL) {
+				*error = [NSString stringWithFormat:@"object %lu is not a dictionary", (unsigned long)i];
+			}
+			[built release];
+			return nil;
+		}
+		object = ag_build_object(record, registry, error);
+		if (object == nil) {
+			[built release];
+			return nil;
+		}
+		[built addObject:object];
+	}
+	return built;
+}
+
+/* ============================================================================================
+ * THE WRITER THE OTHER DIRECTION NEEDS: A PROPERTY LIST BACK INTO SOURCE, EXACTLY AS IT STANDS
+ * ============================================================================================
+ *
+ * **TWO WRITERS, AND THE DIFFERENCE IS WHOSE VALUES THEY TRUST.** `AGNibWriter` writes LIVE OBJECTS: it asks each
+ * class's coder which keys it codes and reads the live values, which is what a DECOMPILER wants — an archive carries no
+ * source text, so the class is the only witness to what a property was. This one writes THE PROPERTY LIST THE PARSER
+ * BUILT: every key it was given, exactly once, with nothing supplied and nothing defaulted.
+ *
+ * An EDITOR needs the second and would be damaged by the first. A builder holds the tree it read, and a save must be that
+ * tree plus the edits — not the tree plus every key every class happens to code today (which bakes defaults into the file
+ * and makes a later change to a class's default silently change an old design's meaning), and not less than the tree
+ * (which is what a decompile does to a key KVC cannot box: it skips it, and the value is gone). So this writer is defined
+ * as the parser's inverse and nothing else, and `ibtool roundtrip` and the edit test hold it to `parse → emit → parse`.
+ *
+ * **KEY ORDER IS THE FORMAT'S OWN, THEN ALPHABETICAL, BECAUSE A DESIGN FILE IS REVIEWED AS A DIFF.** A dictionary has no
+ * order, so emitting `-allKeys` would let one save reorder a file nobody edited. Every key a shape is KNOWN to have
+ * therefore has a place (`id`, `class`, `properties`, `cell`, `contentView`, `subviews`, `constraints`; a connection's
+ * `source`, then its key path or action, then its destination; a constraint's terms in the order the grammar reads them),
+ * and anything else — the keys inside `properties` — is sorted, so saving an unedited file twice is byte-identical.
+ */
+/* **A STRING IS BARE WHEN A BARE WORD READS BACK AS THE SAME STRING.** The parser TYPES a bare word — `41`, `4.5`, `YES`,
+ * `NO` — and every other word is a string, so `NSView` writes bare and `YES` does not. The three refusals are the
+ * parser's own: the two boolean spellings, a word that `strtod` consumes WHOLE (the rule `ag_word` applies, whole-word
+ * and no partial parse), and a leading `@`, which would read as a literal rather than as text. Anything containing a
+ * character the word scanner stops at — `=`, `;`, a quote, a space — is quoted because it would not survive the scan.
+ */
+static BOOL ag_string_needs_quotes(NSString *string)
+{
+	const char *text;
+	char *end = NULL;
+	NSUInteger i;
+
+	if ([string length] == 0) {
+		return YES;
+	}
+	if ([string isEqualToString:@"YES"] || [string isEqualToString:@"NO"]) {
+		return YES;
+	}
+	if ([string characterAtIndex:0] == '@') {
+		return YES;
+	}
+	for (i = 0; i < [string length]; i++) {
+		unichar c = [string characterAtIndex:i];
+
+		if (c == '{' || c == '}' || c == '(' || c == ')' || c == '=' || c == ';' || c == ',' ||
+		    c == '"' || c == ' ' || c == '\t' || c == '\n' || c == '\r') {
+			return YES;
+		}
+	}
+	text = [string UTF8String];
+	if (text == NULL) {
+		return YES;
+	}
+	if (text[0] == '-' || text[0] == '+' || (text[0] >= '0' && text[0] <= '9')) {
+		(void)strtod(text, &end);
+		if (end != NULL && *end == '\0') {
+			return YES;
+		}
+	}
+	return NO;
+}
+
+/* **A LITERAL RECORD IS A SPELLING, NOT A DICTIONARY.** The parser keeps `@color(orange)` as
+ * `{ "$literal" = "color"; "$value" = "orange"; }` on purpose: the body is text because `"Helvetica Neue" 13` and
+ * `#ff0000` are the COMPILER's to interpret, and a parser that normalised them would be a second opinion about a colour.
+ * The writer therefore has to put the record back as `@color(orange)` — written as the dictionary it is, it would parse
+ * back as a dictionary and the property would be applied as the wrong kind of value. */
+static NSString *ag_literal_record_text(NSDictionary *dictionary)
+{
+	NSString *name;
+	NSString *body;
+
+	if ([dictionary count] != 2) {
+		return nil;
+	}
+	name = [dictionary objectForKey:@"$literal"];
+	body = [dictionary objectForKey:@"$value"];
+	if (![name isKindOfClass:[NSString class]] || ![body isKindOfClass:[NSString class]]) {
+		return nil;
+	}
+	return [NSString stringWithFormat:@"@%@(%@)", name, body];
+}
+
+static NSArray *ag_preferred_key_order(void)
+{
+	static NSArray *order = nil;
+
+	if (order == nil) {
+		order = [[NSArray alloc] initWithObjects:
+			@"id", @"class", @"properties", @"cell", @"contentView", @"subviews", @"constraints",
+			@"version", @"objects", @"connections",
+			@"source", @"keyPath", @"action", @"binding", @"destination", @"options",
+			@"first", @"firstAttribute", @"second", @"secondAttribute", @"relation", @"multiplier",
+			@"constant", @"priority", @"identifier",
+			nil];
+	}
+	return order;
+}
+
+static NSArray *ag_ordered_keys(NSDictionary *dictionary)
+{
+	NSArray *preferred = ag_preferred_key_order();
+	NSSet *known = [NSSet setWithArray:preferred];
+	NSArray *sorted = [[dictionary allKeys] sortedArrayUsingSelector:@selector(compare:)];
+	NSMutableArray *ordered = [NSMutableArray arrayWithCapacity:[sorted count]];
+	NSUInteger i;
+
+	for (i = 0; i < [preferred count]; i++) {
+		NSString *key = [preferred objectAtIndex:i];
+
+		if ([dictionary objectForKey:key] != nil) {
+			[ordered addObject:key];
+		}
+	}
+	for (i = 0; i < [sorted count]; i++) {
+		NSString *key = [sorted objectAtIndex:i];
+
+		if (![known containsObject:key]) {
+			[ordered addObject:key];
+		}
+	}
+	return ordered;
+}
+
+/* **A KEY IS BARE ONLY WHEN IT READS BACK AS ITSELF.** The parser types a bare word, so a key spelled `YES` would come
+ * back as the boolean under the key `1`, and a key with a `.` or a space would not survive the word scanner. Anything
+ * outside `[A-Za-z_][A-Za-z0-9_]*` — and the two boolean spellings — is quoted instead. */
+static NSString *ag_key_text(NSString *key)
+{
+	NSUInteger length = [key length];
+	BOOL bare = (length > 0);
+	NSUInteger i;
+
+	for (i = 0; bare && i < length; i++) {
+		unichar c = [key characterAtIndex:i];
+
+		if (i == 0) {
+			bare = ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c == '_');
+		} else {
+			bare = ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
+				(c >= '0' && c <= '9') || c == '_');
+		}
+	}
+	if (bare && ([key isEqualToString:@"YES"] || [key isEqualToString:@"NO"])) {
+		bare = NO;
+	}
+	return bare ? key : ag_quoted_text(key);
+}
+
+@interface AGSourceWriter : NSObject
+{
+	NSMutableString *_out;
+	NSString *_error;
+}
+- (NSString *)error;
+- (NSString *)takeOutput;
+- (BOOL)writeRoot:(NSDictionary *)root;
+@end
+
+@implementation AGSourceWriter
+
+- (instancetype)init
+{
+	self = [super init];
+	if (self != nil) {
+		_out = [[NSMutableString alloc] init];
+	}
+	return self;
+}
+
+- (void)dealloc
+{
+	[_out release];
+	[_error release];
+	[super dealloc];
+}
+
+- (NSString *)error
+{
+	return _error;
+}
+
+- (NSString *)takeOutput
+{
+	return [[_out copy] autorelease];
+}
+
+- (void)fail:(NSString *)format, ...
+{
+	va_list args;
+
+	if (_error != nil) {
+		return;
+	}
+	va_start(args, format);
+	_error = [[NSString alloc] initWithFormat:format arguments:args];
+	va_end(args);
+}
+
+/* A VALUE THAT FITS ON THE LINE IT IS ON. Answers nil for one that does not — a dictionary or an array — and the caller
+ * then writes the block form, which is why this is not the recursive door. */
+- (NSString *)scalarText:(id)value
+{
+	NSString *literal = ag_literal_text_for_object(value);
+
+	if (literal != nil) {
+		return literal;
+	}
+	if ([value isKindOfClass:[NSString class]]) {
+		return ag_string_needs_quotes((NSString *)value)
+			? ag_quoted_text((NSString *)value)
+			: (NSString *)value;
+	}
+	if ([value isKindOfClass:[NSNumber class]]) {
+		const char *type = [(NSNumber *)value objCType];
+
+		if (type != NULL && (strcmp(type, @encode(BOOL)) == 0 || strcmp(type, "c") == 0)) {
+			return [(NSNumber *)value boolValue] ? @"YES" : @"NO";
+		}
+		if (type != NULL && (strcmp(type, @encode(double)) == 0 || strcmp(type, @encode(float)) == 0)) {
+			return [NSString stringWithFormat:@"%.17g", [(NSNumber *)value doubleValue]];
+		}
+		return [NSString stringWithFormat:@"%lld", (long long)[(NSNumber *)value longLongValue]];
+	}
+	return nil;
+}
+
+/* THE RECURSIVE DOOR. `indent` is the column the CLOSING delimiter lands in, so a value written after `key = ` closes
+ * level with the key's own line and the file reads as a tree. */
+- (BOOL)writeValue:(id)value indent:(NSString *)indent
+{
+	NSString *text;
+
+	if ([value isKindOfClass:[NSDictionary class]]) {
+		text = ag_literal_record_text((NSDictionary *)value);
+		if (text != nil) {
+			[_out appendString:text];
+			return YES;
+		}
+		{
+		NSDictionary *dictionary = value;
+		NSArray *keys = ag_ordered_keys(dictionary);
+		NSString *inner = [indent stringByAppendingString:@"  "];
+		NSUInteger i;
+
+		[_out appendString:@"{\n"];
+		for (i = 0; i < [keys count]; i++) {
+			NSString *key = [keys objectAtIndex:i];
+
+			[_out appendFormat:@"%@%@ = ", inner, ag_key_text(key)];
+			if (![self writeValue:[dictionary objectForKey:key] indent:inner]) {
+				return NO;
+			}
+			[_out appendString:@";\n"];
+		}
+		[_out appendFormat:@"%@}", indent];
+		return YES;
+		}
+	}
+	if ([value isKindOfClass:[NSArray class]]) {
+		NSArray *array = value;
+		NSString *inner = [indent stringByAppendingString:@"  "];
+		NSUInteger i;
+
+		[_out appendString:@"(\n"];
+		for (i = 0; i < [array count]; i++) {
+			[_out appendString:inner];
+			if (![self writeValue:[array objectAtIndex:i] indent:inner]) {
+				return NO;
+			}
+			[_out appendString:@"\n"];
+		}
+		[_out appendFormat:@"%@)", indent];
+		return YES;
+	}
+	text = [self scalarText:value];
+	if (text == nil) {
+		[self fail:@"a %@ has no spelling in this grammar", NSStringFromClass([value class])];
+		return NO;
+	}
+	[_out appendString:text];
+	return YES;
+}
+
+- (BOOL)writeRoot:(NSDictionary *)root
+{
+	if (![self writeValue:root indent:@""]) {
+		return NO;
+	}
+	[_out appendString:@"\n"];
+	return YES;
+}
+
+@end
+
 static NSString *ag_attribute_name(NSLayoutAttribute attribute);
 static NSString *ag_relation_name(NSLayoutRelation relation);
 
@@ -1126,8 +1568,7 @@ static NSString *ag_relation_name(NSLayoutRelation relation);
 		return [NSString stringWithFormat:@"%lld", (long long)[(NSNumber *)value longLongValue]];
 	}
 	if ([value isKindOfClass:[NSString class]]) {
-		return [NSString stringWithFormat:@"\"%@\"",
-			[(NSString *)value stringByReplacingOccurrencesOfString:@"\"" withString:@"\\\""]];
+		return ag_quoted_text((NSString *)value);
 	}
 	if ([value isKindOfClass:[NSValue class]]) {
 		const char *type = [(NSValue *)value objCType];
@@ -1158,38 +1599,7 @@ static NSString *ag_relation_name(NSLayoutRelation relation);
  * Answers nil for anything else, and the caller falls back to a scalar or refuses. */
 - (NSString *)literalText:(id)value
 {
-	if ([value isKindOfClass:[NSColor class]]) {
-		CGFloat red = [(NSColor *)value redComponent];
-		CGFloat green = [(NSColor *)value greenComponent];
-		CGFloat blue = [(NSColor *)value blueComponent];
-		CGFloat alpha = [(NSColor *)value alphaComponent];
-		unsigned int r = (unsigned int)(red * 255.0 + 0.5);
-		unsigned int g = (unsigned int)(green * 255.0 + 0.5);
-		unsigned int b = (unsigned int)(blue * 255.0 + 0.5);
-		unsigned int a = (unsigned int)(alpha * 255.0 + 0.5);
-
-		if (a == 255) {
-			return [NSString stringWithFormat:@"@color(#%02x%02x%02x)", r, g, b];
-		}
-		return [NSString stringWithFormat:@"@color(#%02x%02x%02x%02x)", r, g, b, a];
-	}
-	if ([value isKindOfClass:[NSFont class]]) {
-		NSString *name = [(NSFont *)value fontName];
-
-		if (name == nil) {
-			return nil;
-		}
-		return [NSString stringWithFormat:@"@font(\"%@\" %g)", name, (double)[(NSFont *)value pointSize]];
-	}
-	if ([value isKindOfClass:[NSImage class]]) {
-		NSString *name = [(NSImage *)value name];
-
-		if (name == nil) {
-			return nil;
-		}
-		return [NSString stringWithFormat:@"@image(%@)", name];
-	}
-	return nil;
+	return ag_literal_text_for_object(value);
 }
 
 /* THE PROPERTIES AN OBJECT CAN STATE, as `key = value;` lines. Anything object-valued that is not structure is a
@@ -1428,8 +1838,6 @@ static NSString *ag_relation_name(NSLayoutRelation relation)
 + (NSData *)archiveFromSourceData:(NSData *)data error:(NSString **)error
 {
 	id plist;
-	id version;
-	id objects;
 	id connections;
 	NSMutableDictionary *registry;
 	NSMutableArray *builtObjects;
@@ -1443,55 +1851,15 @@ static NSString *ag_relation_name(NSLayoutRelation relation)
 	if (plist == nil) {
 		return nil;
 	}
-	if (![plist isKindOfClass:[NSDictionary class]]) {
-		if (error != NULL) {
-			*error = @"the source's root must be a dictionary";
-		}
-		return nil;
-	}
-	version = [(NSDictionary *)plist objectForKey:@"version"];
-	if (![version isKindOfClass:[NSNumber class]]) {
-		if (error != NULL) {
-			*error = @"the source has no \"version\"";
-		}
-		return nil;
-	}
-	if ([version integerValue] > [NSNib formatVersion]) {
-		if (error != NULL) {
-			*error = [NSString stringWithFormat:@"the source is version %ld and this compiler writes %ld",
-				  (long)[version integerValue], (long)[NSNib formatVersion]];
-		}
-		return nil;
-	}
-	objects = [(NSDictionary *)plist objectForKey:@"objects"];
-	if (![objects isKindOfClass:[NSArray class]] || [(NSArray *)objects count] == 0) {
-		if (error != NULL) {
-			*error = @"the source has no \"objects\" array, or it is empty";
-		}
+	if (!ag_source_root_is_valid(plist, error)) {
 		return nil;
 	}
 
 	registry = [[NSMutableDictionary alloc] init];
-	builtObjects = [[NSMutableArray alloc] init];
-	for (i = 0; i < [(NSArray *)objects count]; i++) {
-		id record = [(NSArray *)objects objectAtIndex:i];
-		id object;
-
-		if (![record isKindOfClass:[NSDictionary class]]) {
-			if (error != NULL) {
-				*error = [NSString stringWithFormat:@"object %lu is not a dictionary", (unsigned long)i];
-			}
-			[registry release];
-			[builtObjects release];
-			return nil;
-		}
-		object = ag_build_object(record, registry, error);
-		if (object == nil) {
-			[registry release];
-			[builtObjects release];
-			return nil;
-		}
-		[builtObjects addObject:object];
+	builtObjects = ag_built_objects_from_plist((NSDictionary *)plist, registry, error);
+	if (builtObjects == nil) {
+		[registry release];
+		return nil;
 	}
 
 	builtConnections = [[NSMutableArray alloc] init];
@@ -1694,6 +2062,63 @@ static NSString *ag_relation_name(NSLayoutRelation relation)
 		[text release];
 		return data;
 	}
+}
+
+/* ============================================================================================
+ * THE DESIGN TOOL'S TWO DOORS
+ * ============================================================================================ */
+
++ (NSArray *)objectsFromPropertyList:(id)propertyList
+			 objectsByID:(NSDictionary **)outObjectsByID
+			       error:(NSString **)error
+{
+	NSMutableDictionary *registry;
+	NSMutableArray *built;
+
+	if (error != NULL) {
+		*error = nil;
+	}
+	if (outObjectsByID != NULL) {
+		*outObjectsByID = nil;
+	}
+	if (!ag_source_root_is_valid(propertyList, error)) {
+		return nil;
+	}
+	registry = [[NSMutableDictionary alloc] init];
+	built = ag_built_objects_from_plist((NSDictionary *)propertyList, registry, error);
+	if (built == nil) {
+		[registry release];
+		return nil;
+	}
+	if (outObjectsByID != NULL) {
+		*outObjectsByID = [NSDictionary dictionaryWithDictionary:registry];
+	}
+	[registry release];
+	return [built autorelease];
+}
+
++ (NSData *)sourceDataFromPropertyList:(id)propertyList error:(NSString **)error
+{
+	AGSourceWriter *writer;
+	NSString *text;
+
+	if (error != NULL) {
+		*error = nil;
+	}
+	if (!ag_source_root_is_valid(propertyList, error)) {
+		return nil;
+	}
+	writer = [[AGSourceWriter alloc] init];
+	if (![writer writeRoot:(NSDictionary *)propertyList]) {
+		if (error != NULL) {
+			*error = [[[writer error] retain] autorelease];
+		}
+		[writer release];
+		return nil;
+	}
+	text = [writer takeOutput];
+	[writer release];
+	return [text dataUsingEncoding:NSUTF8StringEncoding];
 }
 
 @end

@@ -30,7 +30,7 @@
  *                      dropping it
  *   help               this text
  */
-#import "NSNibSource.h"
+#import <AppKit/NSNibSource.h>
 
 #import <AppKit/NSNib.h>
 #import <AppKit/NSView.h>

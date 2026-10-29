@@ -19,7 +19,7 @@
  * application actually names — and its `-drawRect:` count is what proves the decoded window has a working surface rather
  * than merely correct fields.
  */
-#import "NSNibSource.h"
+#import <AppKit/NSNibSource.h>
 
 #import <AppKit/NSApplication.h>
 #import <AppKit/NSWindow.h>

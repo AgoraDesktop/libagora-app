@@ -111,6 +111,35 @@ NS_ASSUME_NONNULL_BEGIN
  * coding methods deliberately leave out (a target, a delegate, a window's surface). */
 + (nullable NSData *)sourceFromArchiveData:(NSData *)archive error:(NSString * _Nullable * _Nullable)error;
 
+/* ============================ THE TWO DOORS A DESIGN TOOL NEEDS ============================ */
+
+/* **AN EDITOR NEEDS THE GRAPH AND THE NAMES, WHICH IS THE ONE THING THE ARCHIVE DOOR CANNOT GIVE IT.** The compiler
+ * answers archive bytes: the objects are inside them and the names the source used to refer to them are GONE, because an
+ * archive has no `id`. A builder holds the tree it read, shows the live object behind each node, and writes the tree back
+ * — so it needs what this door returns: the top-level objects in file order, and the `id` → object table for EVERY object
+ * in the file, nested ones included, because the object a connection or a constraint names is usually a subview.
+ *
+ * The objects are made by the same code that makes them for the archive, so what an editor shows and what a runtime
+ * instantiates are the same graph, made by the same refusals. **CONNECTIONS ARE NOT APPLIED AND THE OWNER IS NOT A
+ * PARAMETER**: at design time the owner does not exist and a connection to it is a record in the source rather than a
+ * message to send, and the connections are already in the property list this door takes. Applying them is
+ * `NSNib -instantiateNibWithOwner:topLevelObjects:`, at the other end of the format. */
++ (nullable NSArray *)objectsFromPropertyList:(id)propertyList
+				 objectsByID:(NSDictionary * _Nullable * _Nullable)outObjectsByID
+				       error:(NSString * _Nullable * _Nullable)error;
+
+/* **AND THE WAY BACK, FROM THE TREE RATHER THAN FROM LIVE OBJECTS.** `sourceFromArchiveData:` is a DECOMPILER: it asks
+ * each class's coder which keys it codes, reads the live values and writes every one of them — right for an archive that
+ * has no source text, wrong for an editor, which would then bake every class's defaults into the file and silently drop a
+ * value KVC cannot box. This writes THE PROPERTY LIST THE PARSER BUILT: the keys it holds, once each, in an order that
+ * depends on nothing but the tree, so saving an unedited file twice is byte-identical and a design file is reviewed as a
+ * diff. `parse → emit → parse` is the identity it is held to.
+ *
+ * **THE ROOT IS VALIDATED BY THE COMPILER'S OWN RULES BEFORE ANYTHING IS WRITTEN**, so a file this door answers is a file
+ * the door above can compile. Saving is therefore never the step at which a design became unreadable. */
++ (nullable NSData *)sourceDataFromPropertyList:(id)propertyList
+					 error:(NSString * _Nullable * _Nullable)error;
+
 @end
 
 NS_ASSUME_NONNULL_END

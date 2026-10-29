@@ -1,0 +1,23 @@
+{
+  "classes": {
+    "Owner": {
+      "actions": [
+        "go:"
+      ],
+      "outlets": [
+        {
+          "key": "runButton",
+          "type": "id"
+        },
+        {
+          "key": "titleField",
+          "type": "id"
+        },
+        {
+          "key": "windowOutlet",
+          "type": "id"
+        }
+      ]
+    }
+  }
+}

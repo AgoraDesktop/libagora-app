@@ -21,7 +21,7 @@
  *   4. The typed words: `41` is a number, `4.5` is a real, `YES` is a boolean, and `NSView3` is a STRING (the whole-word
  *      rule, which a naive `isdigit` check gets wrong).
  */
-#import "NSNibSource.h"
+#import <AppKit/NSNibSource.h>
 
 #import <AppKit/NSNib.h>
 #import <AppKit/NSView.h>

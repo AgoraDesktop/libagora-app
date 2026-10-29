@@ -553,7 +553,11 @@ typedef NSUInteger NSApplicationPresentationOptions;
 /* `-arrangeInFront:` REUSES THE CASCADE the placement work already built — `-cascadeTopLeftFromPoint:` places a
  * window AND answers where the next one goes, which is exactly what arranging every window needs — and
  * `-miniaturizeAll:` is the same door the title bar's button sends, applied to each window. A second copy of
- * either arithmetic would be a second thing to keep true. */
+ * either arithmetic would be a second thing to keep true.
+ *
+ * **AND ONLY THE APPLICATION'S ORDINARY WINDOWS ARE ARRANGED.** The menu bar and the desktop are `NSWindow`s in
+ * this tier, but they are the furniture AROUND the application's windows; the cascade leaves them where they are,
+ * so "Bring All to Front" can never move the bar off its strip. */
 - (void)arrangeInFront:(nullable id)sender;
 - (void)miniaturizeAll:(nullable id)sender;
 /* NOTHING ELSE MAY ORDER A WINDOW WHILE THIS IS SET, which is what a caller rearranging windows asks for. */

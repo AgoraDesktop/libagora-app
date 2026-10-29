@@ -22,6 +22,7 @@
  *   2. Its menu bar window is SHOWN while it is active.
  *   3. DEACTIVATING hides it, which is the whole feature.
  *   4. ACTIVATING shows it again — a window ordered out is not destroyed.
+ *   5. "BRING ALL TO FRONT" arranges the application's windows and LEAVES THE MENU BAR WHERE IT IS.
  */
 #import <AppKit/NSApplication.h>
 #import <AppKit/NSWindow.h>
@@ -120,7 +121,21 @@ int main(void)
 		check([app isActive], "activating sets the active state again");
 		check(barWindow != nil && [barWindow isVisible], "and the menu bar comes back with it");
 
-		/* 5. **THERE IS ALWAYS A KEY APPLICATION.** Hiding the window that HAS the keyboard does not leave the
+		/* 5. **"BRING ALL TO FRONT" MUST NOT MOVE THE MENU BAR.** The bar is an `NSWindow` in this tier and is in
+		 * the application's registry, so a cascade over that registry used to drag it off its strip. It is FURNITURE,
+		 * not one of the windows being arranged, and the application's own window is what must still move. */
+		if (barWindow != nil) {
+			NSRect barBefore = [barWindow frame];
+			NSRect windowBefore = [window frame];
+
+			[app arrangeInFront:nil];
+			check(NSEqualRects([barWindow frame], barBefore),
+			      "\"Bring All to Front\" leaves the MENU BAR where it was");
+			check(!NSEqualRects([window frame], windowBefore),
+			      "and still arranges the application's own window");
+		}
+
+		/* 6. **THERE IS ALWAYS A KEY APPLICATION.** Hiding the window that HAS the keyboard does not leave the
 		 * desktop with none: the compositor moves it to the topmost window that is left — here the menu bar window
 		 * itself, which is this application's too — so the application is STILL active and its menus stay. A desk
 		 * with no key window is a desk with no menu bar at all, which is the state this forbids. */

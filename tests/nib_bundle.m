@@ -23,7 +23,7 @@
  *   5. A name the bundle does not have is an EXCEPTION from `-loadView`, not a nil view — the failure mode this class
  *      exists to make loud.
  */
-#import "NSNibSource.h"
+#import <AppKit/NSNibSource.h>
 
 #import <AppKit/NSNib.h>
 #import <AppKit/NSView.h>

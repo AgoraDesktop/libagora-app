@@ -2349,9 +2349,22 @@ struct AGModalSession {
 		next = NSMakePoint(visible.origin.x, visible.origin.y + visible.size.height);
 	}
 	/* THE REGISTRY IS FRONT-FIRST, so the window that was already in front keeps the seed and the rest cascade
-	 * behind it — which is what "arrange in front" means. */
+	 * behind it — which is what "arrange in front" means.
+	 *
+	 * **FURNITURE IS NOT ONE OF "ALL THE WINDOWS", AND THE MENU BAR IS THE PROOF.** The bar is an `NSWindow` in
+	 * this tier — the Mac's is the server's, not the application's — so a cascade that walked the whole registry
+	 * MOVED IT OFF ITS STRIP, which is what "Bring All to Front" used to do to the menu bar. The desktop is the
+	 * same kind of object at the other end of the screen, and it belongs to the same exclusion. The band is the
+	 * one `-cg_handleReopen` already uses to tell an application's windows from the furniture around them: from
+	 * `NSNormalWindowLevel` up to (not including) `NSDockWindowLevel`. */
 	for (i = 0; i < [_windows count]; i++) {
-		next = [[_windows objectAtIndex:i] cascadeTopLeftFromPoint:next];
+		NSWindow *w = [_windows objectAtIndex:i];
+		NSInteger level = [w level];
+
+		if (level < NSNormalWindowLevel || level >= NSDockWindowLevel) {
+			continue;
+		}
+		next = [w cascadeTopLeftFromPoint:next];
 	}
 }
 

@@ -25,9 +25,13 @@
  * ============================ THE FORMAT: "AGNib", version 1 ============================
  *
  * **THE ARCHIVE IS THE PRODUCT; THE SOURCE IS WHAT A PERSON EDITS.** This file describes the archive — the bytes a
- * runtime reads. The text a designer writes, and the compiler that turns one into the other, are `NSNibSource.h` (in this
- * repository's `tests/`, because the eventual home of a compiler is its own repository). The split is Apple's
- * `.xib`/`.nib` split, and it exists for the reason a federation of git repositories needs it: text merges, bytes do not.
+ * runtime reads. The text a designer writes, and the compiler that turns one into the other, are `NSNibSource.h`, which
+ * sits beside this reader and is INSTALLED with it. It used to live in `tests/`, on the argument that the eventual home of
+ * a compiler is its own repository; that home is still the plan, but the reader and the compiler are one format's two
+ * halves and a DESIGN TOOL — a builder that shows the live object graph and writes the text back — LINKS them rather than
+ * shelling out to a command-line tool, so both halves are part of this tree's installed surface. Splitting the compiler
+ * out is then a `git mv` that changes no header and no caller. The split from the READER is Apple's `.xib`/`.nib` split,
+ * and it exists for the reason a federation of git repositories needs it: text merges, bytes do not.
  *
  * A NIB IS A KEYED ARCHIVE. The bytes are whatever `NSKeyedArchiver` writes — a property list with the `$objects`
  * table, the `$class` chain and object identity preserved — because that machinery already exists in
