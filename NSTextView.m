@@ -985,15 +985,21 @@ static NSString * const AGCoderTextViewInsetKey = @"textContainerInset";
 /* **AND THE WIDTH IS THE CONTAINER'S.** A resize carries the new size into the container — LESS THE TWO SIDES OF THE
  * VIEW'S INSET, so an inset is a margin around the text rather than a shift of it — marks the layout stale, and re-fits
  * when the WIDTH moved, because that is what re-wraps. */
+/* **ONLY A WIDTH IS A NEW WRAP, AND ONLY A NEW WRAP IS A NEW LAYOUT.** MEASURED: this method used to invalidate the
+ * layout of the whole text on EVERY frame-size change, and a height-only change was paying for a full re-layout of a
+ * document whose lines had not moved — 109 ms per motion for a pane divider in Forge, which is what made a splitter drag
+ * crawl. The container follows the width alone (`-cg_sizeContainerToFrame` invalidates the manager, deliberately), and a
+ * height-only change leaves the wrap, the container and the manager's fragments exactly where they were. */
 - (void)setFrameSize:(NSSize)newSize
 {
-	BOOL widthChanged = (newSize.width != [self frame].size.width);
+	NSSize oldSize = [self frame].size;
 
+	if (newSize.width == oldSize.width && newSize.height == oldSize.height) {
+		return;		/* nothing moved, so there is nothing to wrap, fit or repaint */
+	}
 	[super setFrameSize:newSize];
-	[self cg_sizeContainerToFrame];
-	[_cg_layoutManager invalidateLayoutForCharacterRange:NSMakeRange(0, [_cg_textStorage length])
-					     actualCharacterRange:NULL];
-	if (widthChanged) {
+	if (newSize.width != oldSize.width) {
+		[self cg_sizeContainerToFrame];
 		[self cg_fitHeight];
 	}
 	[self setNeedsDisplay:YES];
