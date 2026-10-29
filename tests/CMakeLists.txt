@@ -1985,6 +1985,10 @@ set_tests_properties(appkit-clip-view-clips PROPERTIES ENVIRONMENT "${_agora_app
 add_executable(menu_pick_dismisses menu_pick_dismisses.m)
 target_link_libraries(menu_pick_dismisses PRIVATE App)
 add_test(NAME appkit-menu-pick-dismisses COMMAND menu_pick_dismisses)
+
+add_executable(open_panel_accept open_panel_accept.m)
+target_link_libraries(open_panel_accept PRIVATE App)
+add_test(NAME appkit-open-panel-accept COMMAND open_panel_accept)
 set_tests_properties(appkit-menu-pick-dismisses PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
 
 # **THE TEXT BEING EDITED SITS WHERE THE SAME CELL DRAWS IT.** A field editor insets its own text by `NS_TEXT_INSET`

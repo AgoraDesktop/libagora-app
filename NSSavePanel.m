@@ -640,7 +640,25 @@ static BOOL fn_extension_is_allowed(NSString *name, NSArray *types)
 	}
 }
 
+/* **A PRESS THAT CANNOT ACCEPT SAYS SO.** `-cg_accept` answers NO for two very different reasons: the press opened a
+ * directory (a way in, and it moves), or it asked for something that is not there (nothing moves). The second used to be
+ * completely silent — press Open with no selection, nothing happens, and the panel looks broken. The directory's own URL
+ * is the test: unchanged means nothing was opened, so the panel says what it wants and the person hears it. */
 - (BOOL)cg_accept
+{
+	NSURL *before = [[_directoryURL retain] autorelease];
+	BOOL accepted = [self cg_acceptNow];
+	BOOL navigated = (before != _directoryURL) && ![before isEqual:_directoryURL];
+
+	if (!accepted && !navigated) {
+		[self setMessage:(_isOpenPanel ? @"Choose a file, or type its name."
+					       : @"Type a name for the file.")];
+		NSBeep();
+	}
+	return accepted;
+}
+
+- (BOOL)cg_acceptNow
 {
 	NSInteger row = [_table selectedRow];
 	BOOL selectedIsDirectory = (row >= 0 && [self cg_entryIsDirectoryAtIndex:row]);

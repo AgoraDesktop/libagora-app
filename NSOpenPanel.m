@@ -41,6 +41,10 @@ typedef void (*AGOpenPanelDidEndIMP)(id, SEL, id, NSInteger, void *);
 	[self setPrompt:@"Open"];
 	[self setTitle:@"Open"];
 	[self setNameFieldLabel:@"Name:"];
+	/* **AN OPEN PANEL HAS NO NAME OF ITS OWN TO OFFER.** The base panel starts a SAVE with "Untitled" in the field, and
+	 * an open panel that kept it answered every press of Open with that name: no such file, no selection, and
+	 * `-cg_accept` returned silently — which reads as a button that does nothing. */
+	[self setNameFieldStringValue:@""];
 	[_table setAllowsMultipleSelection:NO];
 	[self cg_reloadEntries];
 }
