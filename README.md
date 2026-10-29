@@ -2168,6 +2168,14 @@ alone, and a document that ARRIVES is measured against the origin the clip alrea
 view that recentred on every `-setDocumentView:` would move a caller's visible region whenever it swapped content).
 `tests/clip_view.m` holds both halves.
 
+**AND A DOCUMENT THAT FITS IS PINNED, NOT CENTRED — WHICH THIS CLASS HAD BACKWARDS.** `-constrainScrollPoint:` centred any
+document smaller than the clip view, on the belief that Apple's does; it does not, and the belief cost every text view
+holding less than a pane: one line of a file floated in the middle of Forge's editor, and a two-line build log sat in the
+middle of its strip. A clip view is a WINDOW onto a document and a document begins at its origin — the scroll knob resting
+at the top of the track says the same thing. Centring is the right answer for a picture, and a picture viewer can ask for
+it; a clip view that centred everything made every short document look like one. The rule is `p = doc.origin` in both axes,
+and `tests/clip_view.m` states it (a 40-point document in a 100-point clip is at (0, 0), not (-30, -30)).
+
 ### The menu's delegate, and the two controls that wanted its one message
 
 **`NSMenuDelegate` EXISTED AS AN ABSENCE FOR AS LONG AS THE SESSION HAD NOTHING TO REPORT.** The header said so in as many

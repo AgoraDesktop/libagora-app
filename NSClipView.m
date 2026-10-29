@@ -248,17 +248,21 @@ static NSString * const AGCoderClipCopiesOnScrollKey = @"copiesOnScroll";
 		return newOrigin;
 	}
 	doc = [self documentRect];
-	/* **A DOCUMENT SHORTER THAN THE CLIP VIEW IS CENTRED, NOT PINNED** — Apple's rule, and the reason a small
-	 * document sits in the middle of a window rather than at one corner of it. */
+	/* **A DOCUMENT THAT FITS IS PINNED TO ITS TOP-LEFT, NOT CENTRED.** This centred, on the belief that Apple's clip
+	 * view does — it does not, and the consequence was visible in any text view holding less than a pane: one line of a
+	 * file floated in the middle of the editor, and a two-line build log sat in the middle of its strip. A clip view is a
+	 * WINDOW onto a document, and a document has a beginning: its origin is the corner the reader starts at, and the
+	 * scroll bar's knob at the top is the same statement. Centring is the answer for a picture, and a picture viewer can
+	 * ask for it; a clip view that centred everything made every short document look like a picture. */
 	if (doc.size.width <= clip.width) {
-		p.x = doc.origin.x - (clip.width - doc.size.width) / 2.0;
+		p.x = doc.origin.x;
 	} else if (p.x < doc.origin.x) {
 		p.x = doc.origin.x;
 	} else if (p.x > doc.origin.x + doc.size.width - clip.width) {
 		p.x = doc.origin.x + doc.size.width - clip.width;
 	}
 	if (doc.size.height <= clip.height) {
-		p.y = doc.origin.y - (clip.height - doc.size.height) / 2.0;
+		p.y = doc.origin.y;
 	} else if (p.y < doc.origin.y) {
 		p.y = doc.origin.y;
 	} else if (p.y > doc.origin.y + doc.size.height - clip.height) {

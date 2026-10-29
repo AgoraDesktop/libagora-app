@@ -150,10 +150,13 @@ int main(void)
 
 		[c setDocumentView:doc];
 		note_pt("short document, asked for (0,0)", [c constrainScrollPoint:NSMakePoint(0.0, 0.0)]);
-		check(eqp([c constrainScrollPoint:NSMakePoint(0.0, 0.0)], NSMakePoint(-30.0, -30.0)),
-		      "a document SHORTER than the clip view is CENTRED: -30 is half of 100-40, left and above");
-		check(eqp([c constrainScrollPoint:NSMakePoint(500.0, 500.0)], NSMakePoint(-30.0, -30.0)),
-		      "and asking to scroll it does not move it off the centre");
+		/* **A DOCUMENT THAT FITS IS PINNED TO ITS TOP-LEFT.** It was centred (a 40-point document in a 100-point clip
+		 * sat at (-30, -30)), which floated one line of a file in the middle of the editor and a two-line build log in
+		 * the middle of its strip. A clip view is a window onto a document, and a document begins at its origin. */
+		check(eqp([c constrainScrollPoint:NSMakePoint(0.0, 0.0)], NSMakePoint(0.0, 0.0)),
+		      "a document SHORTER than the clip view is pinned to its top-left, not centred");
+		check(eqp([c constrainScrollPoint:NSMakePoint(500.0, 500.0)], NSMakePoint(0.0, 0.0)),
+		      "and asking to scroll it cannot move it: there is nothing to scroll to");
 		[c release];
 		[doc release];
 	}
@@ -163,7 +166,7 @@ int main(void)
 
 		[c setDocumentView:doc];
 		check(eqp([c constrainScrollPoint:NSMakePoint(50.0, 50.0)], NSMakePoint(0.0, 0.0)),
-		      "a document EXACTLY the clip view's size is centred too — the test is `<=`, not `<`");
+		      "a document EXACTLY the clip view's size is pinned too — the test is `<=`, not `<`");
 		[c release];
 		[doc release];
 	}
@@ -219,8 +222,12 @@ int main(void)
 		      "a long document scrolls to its far edge");
 		[doc setFrame:NSMakeRect(0.0, 0.0, 40.0, 40.0)];	/* the document SHRANK */
 		note_pt("after the document shrank", [c bounds].origin);
-		check(eqp([c bounds].origin, NSMakePoint(-30.0, -30.0)),
-		      "and a document that SHRANK pulls the visible area back to CENTRE it — the frame-changed wire");
+		/* **AND A DOCUMENT THAT SHRANK COMES BACK TO ITS ORIGIN, WHICH IS ITS TOP-LEFT.** It used to be pulled to the
+		 * CENTRE — a 40-point document in a 100-point clip sat at (-30, -30) — which floated one line of text in the
+		 * middle of an editor and a two-line log in the middle of its strip. A clip view is a window onto a document and
+		 * a document has a beginning; the scroll knob at the top says the same thing. */
+		check(eqp([c bounds].origin, NSMakePoint(0.0, 0.0)),
+		      "and a document that SHRANK is pinned to its top-left, not centred — the frame-changed wire");
 		[c release];
 		[doc release];
 	}
