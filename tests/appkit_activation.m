@@ -23,6 +23,14 @@
  *   3. DEACTIVATING hides it, which is the whole feature.
  *   4. ACTIVATING shows it again — a window ordered out is not destroyed.
  *   5. "BRING ALL TO FRONT" arranges the application's windows and LEAVES THE MENU BAR WHERE IT IS.
+ *   6. THE KEYBOARD GOES TO A WINDOW, NEVER TO THE BAR, and an application with no window left gives it up rather
+ *      than handing it to its own chrome. That rule is what stops the bar of an application nobody activated from
+ *      becoming the bar on the screen.
+ *   7. **CLICKING A MENU ITEM DOES NOT CHANGE THE APPLICATION THAT HAS THE KEYBOARD.** A picked row is a press on
+ *      the menu's own window, and a press is what gives a window the keyboard — so a menu that said nothing took it
+ *      for as long as it was up and handed it on when it went away, which is exactly "choosing File > New left
+ *      somebody else's menus in the bar". Read from the compositor's own window list, whose `active` field is the
+ *      only notion of "frontmost" this tree has.
  */
 #import <AppKit/NSApplication.h>
 #import <AppKit/NSWindow.h>
@@ -31,6 +39,8 @@
 #import <AppKit/NSMenuItem.h>
 #import <AppKit/NSEvent.h>
 #import <Foundation/Foundation.h>
+
+#include "AGWindowServer.h"
 
 #include <stdio.h>
 
@@ -44,6 +54,49 @@ static void check(int ok, const char *name)
 	}
 }
 
+/* DRAIN THE QUEUE, so a request has been read by the compositor and its answer is in the seam's own storage. */
+static void fn_pump(NSApplication *app, int passes)
+{
+	int i;
+
+	for (i = 0; i < passes; i++) {
+		NSEvent *e = [app nextEventMatchingMask:NSAnyEventMask
+					      untilDate:[NSDate dateWithTimeIntervalSinceNow:0.01]
+						 inMode:nil dequeue:YES];
+
+		if (e != nil) {
+			[app sendEvent:e];
+		}
+	}
+}
+
+/* A HANDLER IS WHAT ASKS FOR THE LIST — the snapshot is sent to a listener, and a listener exists only once somebody
+ * has registered. The owner function below reads the seam's copy of the last snapshot, so the callback itself has
+ * nothing left to do. */
+static void fn_window_list(void *context, const AGWindowInfo *windows, int count)
+{
+	(void)context;
+	(void)windows;
+	(void)count;
+}
+
+/* **WHICH WINDOW HAS THE KEYBOARD, ASKED OF THE COMPOSITOR RATHER THAN OF THE APPLICATION.** The window list's
+ * `active` flag is the same answer a Dock draws its indicator from, and it is per WINDOW rather than per client —
+ * which is what makes it able to see a menu stealing the keyboard at all, since the menu and the window it was
+ * opened from belong to one application. */
+static unsigned int fn_keyboard_owner(AGWindowServer *server)
+{
+	int count = 0, i;
+	const AGWindowInfo *rows = AGWindowListRows(server, &count);
+
+	for (i = 0; i < count; i++) {
+		if (rows[i].active) {
+			return rows[i].id;
+		}
+	}
+	return 0;
+}
+
 int main(void)
 {
 	@autoreleasepool {
@@ -51,6 +104,7 @@ int main(void)
 		NSWindow *window;
 		NSWindow *barWindow = nil;
 		NSMenu *bar;
+		AGWindowServer *server = NULL;
 		int i;
 
 		setvbuf(stdout, NULL, _IONBF, 0);
@@ -99,6 +153,15 @@ int main(void)
 			}
 		}
 
+		/* **AND THE COMPOSITOR'S OWN ANSWER ABOUT WHO HAS THE KEYBOARD IS ASKED FOR HERE**, once, because two of
+		 * the sections below are questions only it can answer: the list's `active` flag is per WINDOW rather than per
+		 * client, which is what lets it see a menu taking the keyboard from a window of the menu's own application. An
+		 * application's `-isActive` cannot — the keyboard never left the application. */
+		server = AGWindowServerShared();
+		if (server != NULL) {
+			AGWindowListSetHandler(server, fn_window_list, NULL);
+		}
+
 		check(barWindow != nil, "the application has a MENU BAR window holding its own menus");
 		check([app isActive], "and it is ACTIVE — the compositor gave this client the keyboard");
 		check(barWindow != nil && [barWindow isVisible],
@@ -135,24 +198,117 @@ int main(void)
 			      "and still arranges the application's own window");
 		}
 
-		/* 6. **THERE IS ALWAYS A KEY APPLICATION.** Hiding the window that HAS the keyboard does not leave the
-		 * desktop with none: the compositor moves it to the topmost window that is left — here the menu bar window
-		 * itself, which is this application's too — so the application is STILL active and its menus stay. A desk
-		 * with no key window is a desk with no menu bar at all, which is the state this forbids. */
-		[window orderOut:nil];
-		for (i = 0; i < 60; i++) {
-			NSEvent *e = [app nextEventMatchingMask:NSAnyEventMask
-						      untilDate:[NSDate dateWithTimeIntervalSinceNow:0.01]
-							 inMode:nil dequeue:YES];
+		/* 6. **THE KEYBOARD GOES TO A WINDOW, NEVER TO THE BAR.** The compositor gives the keyboard to the window the
+		 * application is working in, and when that window goes away it gives it to the topmost WINDOW that is left —
+		 * a BAR is not a candidate, because a bar is the active application's CHROME and handing it the keyboard is
+		 * handing it the menu bar. So an application that still has a window keeps the keyboard through the loss of
+		 * its key one, and an application with nothing left gives it up; neither outcome is "the bar takes over". */
+		{
+			NSWindow *other = [[NSWindow alloc]
+				initWithContentRect:NSMakeRect(120.0, 320.0, 240.0, 160.0)
+					  styleMask:NSTitledWindowMask
+					    backing:NSBackingStoreBuffered
+					      defer:NO];
 
-			if (e != nil) {
-				[app sendEvent:e];
-			}
+			[other setTitle:@"Second"];
+			[other setContentView:[[[NSView alloc] initWithFrame:NSMakeRect(0.0, 0.0, 240.0, 160.0)] autorelease]];
+			[other orderFront:nil];
+			/* THE NEW WINDOW IS THE TOPMOST AND THE OLD ONE IS KEY: two windows, and the keyboard deliberately not
+			 * on the front one. */
+			[window makeKeyWindow];
+			fn_pump(app, 30);
+			check([window isKeyWindow], "the keyboard is on the window that was made key");
+
+			[window orderOut:nil];
+			fn_pump(app, 30);
+			check([app isActive],
+			      "hiding the KEY window moves the keyboard to another of this application's windows");
+			check(server != NULL && fn_keyboard_owner(server) == (unsigned int)[other windowNumber],
+			      "and the compositor gave it to that one, not to the menu bar");
+			check(barWindow != nil && [barWindow isVisible], "so the menu bar stays, which is the active one's");
+
+			[other orderOut:nil];
+			fn_pump(app, 30);
+			check(![app isActive],
+			      "and with no window left the application gives the keyboard up rather than to its bar");
+			[other release];
+			/* AND SAID BACK ON, because a bar window that is not on the glass is not a bar window. */
+			[app activate];
+			fn_pump(app, 10);
 		}
-		check([app isActive],
-		      "hiding the KEY window moves the keyboard to another of this application's windows, not to nobody");
-		check(barWindow != nil && [barWindow isVisible],
-		      "so the menu bar stays — the desktop is never left without a key application");
+
+		/* 7. **A MENU IS NOT A PLACE TO PUT THE KEYBOARD EITHER.** A picked row is a press on the menu's own window,
+		 * and the compositor gives a press's window the keyboard. A menu that said nothing therefore took the keyboard
+		 * for as long as it was up, and when the session ended the compositor had to give it to somebody — the topmost
+		 * WINDOW underneath, which need not be the one the menu belongs to. That is the report this measures: choosing
+		 * a row changed the application in front, and the other application's menus appeared in the strip.
+		 *
+		 * THE SCENE IS THE STATE THAT MAKES IT VISIBLE: two ordinary windows, the TOPMOST one NOT the key one — which
+		 * is what a second application's window is, in a rule the compositor states in levels and windows rather than
+		 * in clients. The press itself is asked for through `AGWindowActivate`, the door a Dock's tile click uses; the
+		 * click path and that door meet in one gate (`aws_seat_set_keyboard_focus`), so a window that refuses this
+		 * refuses a press. */
+		{
+			NSWindow *lower, *upper;
+			NSWindow *menuWindow = nil;
+			NSMenu *popup;
+			unsigned int lowerID;
+
+			lower = [[NSWindow alloc] initWithContentRect:NSMakeRect(500.0, 100.0, 260.0, 180.0)
+							     styleMask:NSTitledWindowMask
+							       backing:NSBackingStoreBuffered
+								 defer:NO];
+			upper = [[NSWindow alloc] initWithContentRect:NSMakeRect(600.0, 320.0, 260.0, 180.0)
+							     styleMask:NSTitledWindowMask
+							       backing:NSBackingStoreBuffered
+								 defer:NO];
+			[lower setTitle:@"Lower"];
+			[upper setTitle:@"Upper"];
+			[lower orderFront:nil];
+			[upper orderFront:nil];
+			[lower makeKeyWindow];
+
+			fn_pump(app, 30);
+			lowerID = (unsigned int)[lower windowNumber];
+			check(server != NULL && fn_keyboard_owner(server) == lowerID,
+			      "the keyboard is on the key window even though another window is stacked above it");
+
+			popup = [[NSMenu alloc] initWithTitle:@"Popup"];
+			[popup addItemWithTitle:@"Row" action:NULL keyEquivalent:@""];
+			[popup cg_beginSessionAt:NSMakePoint(200.0, 200.0)];
+			check([popup cg_isTracking], "a menu session is up");
+			{
+				NSArray *windows = [app windows];
+				NSUInteger k;
+
+				for (k = 0; k < [windows count]; k++) {
+					NSWindow *w = [windows objectAtIndex:k];
+
+					if ([w level] == NSPopUpMenuWindowLevel) {
+						menuWindow = w;
+						break;
+					}
+				}
+			}
+			check(menuWindow != nil, "and it has a window of its own, above everything");
+
+			if (server != NULL && menuWindow != nil) {
+				AGWindowActivate(server, (unsigned int)[menuWindow windowNumber]);
+				fn_pump(app, 30);
+				check(fn_keyboard_owner(server) == lowerID,
+				      "a press on a menu does NOT take the keyboard from the window that had it");
+
+				[popup cancelTracking];
+				fn_pump(app, 30);
+				check(fn_keyboard_owner(server) == lowerID,
+				      "so choosing a row leaves the SAME window with the keyboard — the same application active");
+			} else {
+				check(0, "the menu's window could not be asked about the keyboard");
+			}
+			[popup release];
+			[lower release];
+			[upper release];
+		}
 
 		/* **AND THE APPLICATION'S SEVEN SWEEP DOORS.** Three are questions about the responder chain and a string, two
 		 * are one-line answers, and one is a named refusal — none of them needs a compositor to be worth asserting. */

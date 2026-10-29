@@ -2418,4 +2418,35 @@ whether the two bands are on the SAME side of the window rather than a switch ov
 (bottom-left and top-right `nesw-resize`, the other pair `nwse-resize`), the middle of the same window is `left_ptr`, and
 an unresizable window's edge is `left_ptr` — the style mask being the question, exactly as it is for the press.
 
+## 77. Chrome is a place to click THROUGH: the four windows that must not take the keyboard
+
+**A REPORT OF "THE ACTIVE APPLICATION CHANGES WHEN I CHOOSE A MENU ITEM", AND THE ANSWER IS A DOOR THE DOCK ALREADY HAD.**
+`agora_window.set_activatable` (protocol 4) is the client's word for "clicking this window never gives its application
+the keyboard", and the Dock's strip has used it since it existed, because a Dock that took the keyboard took the menu bar
+with it and left the desktop with no bar at all. Three more windows needed the same sentence and none of them said it:
+the MENU BAR window, a STATUS ITEM, and — the one this report named — a MENU'S OWN DROPDOWN.
+
+**EACH IS CHROME A PERSON WORKS *THROUGH*.** The compositor gives the keyboard to the window a press lands on, and it
+sits above everything else on the screen, so a press on any of them is a press that takes the menu bar away from the
+application a person is working in. The bar was the loudest: MEASURED, `focus 10 (level 101, hidden) -> 3 (level 25)` —
+Forge's own bar took the keyboard the moment its File menu closed, and Workspace's menus replaced it. A status item is
+the same shape one level lower (the clock is above every ordinary window), and a dropdown is the same shape again at
+level 101.
+
+**THE DROPDOWN IS NOT THE PRESS THAT OPENED IT.** Opening a menu from the bar puts the tracking window UNDER the
+pointer, so the very next press — the one that chooses a row — lands on it. MEASURED in `tests/appkit_activation.m`
+against the headless compositor, with the scene that makes it visible (two ordinary windows, the topmost NOT the key
+one): the menu window at level 101 took the keyboard from the key window, and when the session ended the compositor's
+reassignment gave the keyboard to the window stacked ABOVE the key one. In a session that window belongs to another
+application, so choosing `File > New` made the other application active and put ITS menus in the strip. With
+`-cg_setActivatable:NO` on the tracking window the keyboard never leaves the key window, and the window list's `active`
+field — the same one a Dock draws its indicator from — says so after a pick as it did before the menu opened.
+
+**AND THE TEST WAS WRONG FOR THE SAME REASON IT PASSED.** `appkit_activation`'s last check asserted that hiding an
+application's only window moves the keyboard to "the menu bar window itself, which is this application's too". That was
+true only while a bar could take the keyboard — the very defect being removed — so it is now stated the way the
+compositor works: the keyboard goes to another WINDOW of the application if there is one, and an application with nothing
+left gives it up rather than handing it to its own chrome. (A real desktop never sees that case: Workspace's desktop
+window is always there.)
+
 ## Keeping in sync

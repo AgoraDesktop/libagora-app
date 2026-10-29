@@ -200,7 +200,9 @@ tests/
   window_chrome.m               the DRAWN chrome, offscreen: Greybird's bar and its four marks, the centred title
   menu_validation.m             validation and state, which the view tests do not reach
   appkit_activation.m           only the ACTIVE application's menu bar shows, and its sole window is key/main —
-                                plus the responder-chain target, the Help search and the hide flag
+                                plus the responder-chain target, the Help search and the hide flag; and the
+                                keyboard goes to a WINDOW and never to the bar, so a picked menu row (which is a
+                                press on the menu's own window) leaves the SAME window with it
   appkit_controls_draw.m        a window full of controls (and the NEW-CONTROLS strip: stepper, level indicator,
                                 secure/search field, progress, date picker, box, tab view), a SCROLL PANEL, a TEXT
                                 PLAYGROUND, a TABLE & OUTLINE window, and a GUI GALLERY (matrix, form, image view,
@@ -1570,7 +1572,12 @@ These are properties of the protocol rather than gaps, and each is written at th
   autohiding Dock says before it hides. `tests/appkit_window.m` asserts both directions against Agora's own
   server and skips the block on a stock compositor, which has no work area to move. **And its second Agora-owned
   door is `-cg_setActivatable:`**: a window that says NO never takes the keyboard when clicked, which is what keeps
-  a Dock from taking the menu bar with it — the pointer still reaches it, and the focus stays where it was.
+  a Dock from taking the menu bar with it — the pointer still reaches it, and the focus stays where it was. THE
+  CHROME WINDOWS ARE THE FOUR THAT SAY IT — the Dock's strip, a status item, the menu bar window, and a menu's own
+  dropdown — because each of them is a surface a person works THROUGH rather than IN, and each would otherwise hand
+  its application the menu bar for as long as it had the keyboard: MEASURED, a picked menu row took the keyboard and
+  the compositor then gave it to the window stacked above the key one, so choosing a row changed the application in
+  front.
 - **There is no Expose.** The client owns the pixels; a repaint is asked for by the frame callback, which is
   why `-display` and the seam's frame handler both end in the same draw.
 - **The screen is an output.** `NSScreen` asks the seam, which learns the size from `wl_output`; with no

@@ -1185,6 +1185,15 @@ static double s_last_report;
 							       backing:NSBackingStoreBuffered
 								 defer:NO];
 		[_menuBarWindow setLevel:NSMainMenuWindowLevel];
+		/* **AND IT IS NOT A PLACE TO PUT THE KEYBOARD.** The menu bar is the HIGHEST thing on the screen, and the
+		 * server gives the keyboard to the topmost window whenever the window that had it goes away — a menu, a
+		 * panel, a closed sheet. Handing it to a BAR is handing it to whichever application ordered its bar front
+		 * last, so the bar of an application nobody activated becomes the active application: MEASURED as Forge's
+		 * menu bar vanishing the moment its File menu closed, and as Workspace keeping the bar until it quit
+		 * (`AWS_SEAT_DIAG`: `focus 10 (level 101, hidden) -> 3 (level 25)`). The rule the server already states for
+		 * the Dock — "a Dock is not a place to give it" — is the same rule here, and `-cg_setActivatable:NO` is how a
+		 * client says it: the bar stays clickable and the keyboard stays with the application's own window. */
+		[_menuBarWindow cg_setActivatable:NO];
 		/* **THE BAR WANTS THE MOTION, AND NOT WANTING IT WAS HALF OF A BUG.** This tier drops a plain
 		 * `NSMouseMoved` for a window that has not asked (`NSWindow -fn_translate`), and nothing had ever asked —
 		 * so the bar's own tracking loop never heard the pointer cross from one title to another, and the menu a

@@ -266,6 +266,11 @@
 	 * application decides how it is ordered against everything else — which is why the two are separate doors and
 	 * why the item asks for the status level rather than being given it. */
 	[_fWindow setLevel:NSStatusWindowLevel];
+	/* **A STATUS ITEM IS CHROME, SO IT DOES NOT TAKE THE KEYBOARD EITHER.** It sits at `NSStatusWindowLevel`, above
+	 * every ordinary window, so a server that has to give the keyboard somewhere after a menu or panel closes would
+	 * hand it to the clock — and the menu bar of whatever application owns that item would become the bar on the
+	 * screen. `-cg_setActivatable:NO` is the client's word for "not a place to give it"; the item stays clickable. */
+	[_fWindow cg_setActivatable:NO];
 	[_fWindow cg_setStatusItemLength:length];
 	/* **AND THE ITEM DRAWS ITSELF WHEN THE APPLICATION HAS NOT GIVEN IT A VIEW.** A status item with a title and no view
 	 * would be a window with nothing in it — which is what this class WAS before the sweep: `-setTitle:` stored a string

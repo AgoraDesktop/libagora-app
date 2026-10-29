@@ -1168,6 +1168,16 @@ static const CGFloat NSMenuStateColumnWidth = 20.0;
 	 * (`NSWindow -fn_translate`) — so the row under the pointer never lit up and a submenu never opened by
 	 * hovering, which is the second half of the reported behaviour. Asking here is the whole of the fix. */
 	[_trackingWindow setAcceptsMouseMovedEvents:YES];
+	/* **AND A MENU IS NOT A PLACE TO PUT THE KEYBOARD EITHER.** The press that picks a row lands on THIS window, and
+	 * the compositor gives the window a press lands on the keyboard — so a menu that said nothing took it for as long
+	 * as it was up, and handed it on when it went away to the topmost window underneath, which need not be the one the
+	 * menu belongs to. MEASURED with the headless compositor and its own seat diagnostic: a bar menu at level 101 took
+	 * the keyboard from the key window (level 0), and when the session ended the keyboard went to the window STACKED
+	 * ABOVE the key one — the other application's, in a live session — which is exactly "choosing a row changed the
+	 * active application" and the other application's menus appearing in the strip. The bar, a status item and the
+	 * Dock already say NO through this same door; a dropdown hanging off the bar is the same kind of furniture, and it
+	 * is now the fourth to say it. The rows are still clicked: this is about the keyboard, not the pointer. */
+	[_trackingWindow cg_setActivatable:NO];
 	if (_trackingWindow == nil) {
 		/* **A SESSION WITH NO WINDOW IS NOTED RATHER THAN REFUSED, AND THE DIFFERENCE MATTERS.** A host with no
 		 * reachable display cannot show a menu, but the session's own state — its frame, its rows, its highlight,
