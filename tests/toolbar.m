@@ -326,6 +326,62 @@ int main(void)
 		[afterRep release];
 	}
 
+	/* 2c. **AND A CLICK TAKES THE PRELIGHT AWAY.** The plate is the band answering the pointer's arrival; leaving it up
+	 * after a press is a button that looks stuck — MEASURED in Forge as the Run item still lit after its product had
+	 * started. The exit that would eventually clear it is not guaranteed: a click can send the hand to ANOTHER window,
+	 * which produces no `-mouseExited:` here at all, which is the second half of the same fix (the window's
+	 * resign-key announcement clears it too).
+	 *
+	 * The comparison is the band before the click (pointer away, nothing lit) against the band after it, with the
+	 * delegate's selectable list EMPTY so no selection is in play. */
+	{
+		NSBitmapImageRep *flatRep = [[NSBitmapImageRep alloc] initWithBitmapDataPlanes:NULL
+			pixelsWide:(NSInteger)TW pixelsHigh:(NSInteger)[toolbar cg_toolbarHeight] bitsPerSample:8
+			samplesPerPixel:4 hasAlpha:YES isPlanar:NO colorSpaceName:NSDeviceRGBColorSpace
+			bytesPerRow:(NSInteger)TW * 4 bitsPerPixel:32];
+		NSBitmapImageRep *clickedRep = [[NSBitmapImageRep alloc] initWithBitmapDataPlanes:NULL
+			pixelsWide:(NSInteger)TW pixelsHigh:(NSInteger)[toolbar cg_toolbarHeight] bitsPerSample:8
+			samplesPerPixel:4 hasAlpha:YES isPlanar:NO colorSpaceName:NSDeviceRGBColorSpace
+			bytesPerRow:(NSInteger)TW * 4 bitsPerPixel:32];
+		NSRect f = [toolbarView frame];
+		NSPoint at = NSMakePoint(8.0 + 20.0 + f.origin.x, f.origin.y + [toolbar cg_toolbarHeight] / 2.0);
+		unsigned char *flat;
+		unsigned char *clicked;
+		int x, y, differing = 0;
+
+		delegate->selectable = NO;
+		[toolbar setSelectedItemIdentifier:nil];
+		/* THE POINTER LEAVES FIRST, so the baseline is a band with nothing lit. */
+		[toolbarView mouseExited:mouse(NSMouseExited, NSMakePoint(2.0, 2.0), [window windowNumber])];
+		[NSGraphicsContext setCurrentContext:[NSGraphicsContext graphicsContextWithBitmapImageRep:flatRep]];
+		[toolbarView displayRect:[toolbarView bounds]];
+		flat = [flatRep bitmapData];
+
+		[toolbarView mouseDown:mouse(NSLeftMouseDown, at, [window windowNumber])];
+		[toolbarView mouseUp:mouse(NSLeftMouseUp, at, [window windowNumber])];
+		[NSGraphicsContext setCurrentContext:[NSGraphicsContext graphicsContextWithBitmapImageRep:clickedRep]];
+		[toolbarView displayRect:[toolbarView bounds]];
+		clicked = [clickedRep bitmapData];
+
+		for (y = 0; y < (int)[toolbar cg_toolbarHeight]; y++) {
+			for (x = 8; x < 48; x++) {
+				unsigned char *pf = flat + ((size_t)y * (size_t)TW + (size_t)x) * 4u;
+				unsigned char *pc = clicked + ((size_t)y * (size_t)TW + (size_t)x) * 4u;
+
+				if (pf[0] != pc[0] || pf[1] != pc[1] || pf[2] != pc[2]) {
+					differing++;
+				}
+			}
+		}
+		if (differing > 0) {
+			printf("       %d point(s) of the clicked item still differ from the flat band\n", differing);
+		}
+		check(differing == 0, "after a click the item is the flat band again, with no plate left behind");
+		delegate->selectable = YES;
+		[flatRep release];
+		[clickedRep release];
+	}
+
 	/* 3. INSERT AND REMOVE, WITH THE NOTIFICATIONS BOTH WAYS. */
 	[toolbar insertItemWithItemIdentifier:@"five" atIndex:1];
 	items = [toolbar items];

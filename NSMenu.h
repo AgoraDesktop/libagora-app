@@ -212,6 +212,10 @@ extern NSString *NSMenuDidEndTrackingNotification;
 - (void)setHighlightedItem:(nullable id)item;
 - (BOOL)cg_trackOneEvent:(nullable id)event;
 
+/* **AND WHETHER THE SESSION IS STILL UP**, which a caller driving one event at a time needs in order to stop. It is
+ * also the door the test of "the menu is gone before its action runs" reads from inside the action. */
+- (BOOL)cg_isTracking;
+
 /* **A MENU THAT HAS BEEN TORN OFF STAYS UP**, which is what this flag means and the whole of what it does: the
  * session consults it in the two places that would otherwise dismiss — a click outside and a pick — so a torn-off
  * menu behaves like the palette it is rather than like a popup. THE WRITER IS OURS (`-cg_setTornOff:`) because

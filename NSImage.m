@@ -491,6 +491,45 @@ NSString *NSImageNameUserGuest = @"NSImageNameUserGuest";
 
 /* ---- TEMPLATES AND THEIR INK --------------------------------------------------------------- */
 
+/* **A TEMPLATE MADE BY A CALLER NEEDS ITS STENCIL, AND `-setTemplate:` IS WHERE THAT HAPPENS.** The flag says "this
+ * picture can be drawn in any ink"; the STENCIL is what makes that true, and `AGSystemImages` builds one per size because
+ * it has the coverage tables. A caller's image has only pixels — so the alpha channel IS the stencil, and this lifts it out
+ * of each representation. MEASURED, without this: `-isTemplate` answered YES, `-cg_drawInRect:ink:` found no mask, and the
+ * toolbar fell back to drawing the raw picture — a black glyph beside a greyed word on every disabled item. */
+static CGImageRef fn_mask_from_bitmap_alpha(NSBitmapImageRep *rep)
+{
+	NSInteger side = [rep pixelsWide];
+	unsigned char *samples;
+	CGDataProviderRef provider;
+	CGImageRef mask;
+	NSInteger x, y;
+
+	if (side <= 0 || [rep pixelsHigh] != side || [rep samplesPerPixel] < 2) {
+		return NULL;
+	}
+	samples = (unsigned char *)malloc((size_t)(side * side));
+	if (samples == NULL) {
+		return NULL;
+	}
+	for (y = 0; y < side; y++) {
+		for (x = 0; x < side; x++) {
+			unsigned char *pixel = [rep bitmapData] + (y * [rep bytesPerRow]) + (x * [rep samplesPerPixel]);
+
+			/* A MASK IS OPAQUE WHERE THE INK GOES, so the sample is the pixel's COVERAGE — which is one minus its
+			 * alpha, the same inversion `AGSystemImages` makes on its coverage tables. */
+			samples[(size_t)y * (size_t)side + (size_t)x] = (unsigned char)(255u - pixel[[rep samplesPerPixel] - 1]);
+		}
+	}
+	provider = CGDataProviderCreateWithData(NULL, samples, (size_t)(side * side), NULL);
+	if (provider == NULL) {
+		free(samples);
+		return NULL;
+	}
+	mask = CGImageMaskCreate((size_t)side, (size_t)side, 8, 8, (size_t)side, provider, NULL, true);
+	CGDataProviderRelease(provider);
+	return mask;
+}
+
 - (void)cg_setTemplateMask:(CGImageRef)mask forSize:(NSInteger)points
 {
 	NSUInteger slot;
@@ -1431,7 +1470,36 @@ withImageDestinationRect:(NSRect)imageRectDestSpace
 
 - (void)setTemplate:(BOOL)flag
 {
+	NSUInteger slot;
+
 	_template = flag ? YES : NO;
+	if (!flag) {
+		/* A PICTURE THAT IS NO LONGER A TEMPLATE IS NOT INKED IN ANY COLOUR, so its stencils go. */
+		for (slot = 0; slot < 3; slot++) {
+			if (_templateMasks[slot] != NULL) {
+				CGImageRelease(_templateMasks[slot]);
+				_templateMasks[slot] = NULL;
+				_templateMaskSizes[slot] = 0;
+			}
+		}
+		return;
+	}
+	if (_reps != nil) {
+		NSUInteger i;
+
+		for (i = 0; i < [_reps count]; i++) {
+			NSImageRep *rep = [_reps objectAtIndex:i];
+
+			if ([rep isKindOfClass:[NSBitmapImageRep class]]) {
+				CGImageRef mask = fn_mask_from_bitmap_alpha((NSBitmapImageRep *)rep);
+
+				if (mask != NULL) {
+					[self cg_setTemplateMask:mask forSize:(NSInteger)([rep size].width + 0.5)];
+					CGImageRelease(mask);
+				}
+			}
+		}
+	}
 }
 
 /* SPELLED `NSUInteger` IN BOTH DIRECTIONS, AND THAT IS REQUIRED RATHER THAN PREFERRED: the header's ivar and

@@ -1014,19 +1014,25 @@ static const CGFloat NSMenuStateColumnWidth = 20.0;
 		/* **THE PICK IS THE RELEASE, AND RELEASING OVER NOTHING IS A DISMISSAL RATHER THAN A PICK** — which is what
 		 * makes a click outside the menu close it without sending anything. */
 		NSMenuItem *picked = [self cg_itemAtPoint:[event locationInWindow]];
+		BOOL takes = (picked != nil && [picked isEnabled] && ![picked isSeparatorItem]);
+		NSInteger pickedIndex = takes ? [self indexOfItem:picked] : -1;
 
-		if (picked != nil && [picked isEnabled] && ![picked isSeparatorItem]) {
-			[self performActionForItemAtIndex:[self indexOfItem:picked]];
-		}
-		/* **AND A MENU THAT HAS BEEN TORN OFF STAYS UP THROUGH BOTH HALVES OF THAT**, which is the whole of what
-		 * the flag means: a pick from a torn-off menu SENDS ITS ACTION AND LEAVES THE MENU WHERE IT IS, and a click
-		 * outside neither picks nor dismisses, because a torn-off menu is a palette rather than a popup. ONE LINE
-		 * OF BEHAVIOUR IN ONE PLACE, and the check beside it asserts both halves rather than one. ESCAPE STILL
-		 * CLOSES IT — the key branch below is deliberately untouched — so a torn-off menu is not a trap. */
+		/* **THE MENU GOES AWAY BEFORE ITS ACTION RUNS, AND THAT ORDER IS THE WHOLE OF THIS DOOR'S CONTRACT.** An
+		 * action may open a MODAL panel — Forge's `Project Info…` runs an alert — and a modal loop started while the
+		 * menu is still tracking leaves the menu on the glass over (or under) the panel until it returns: MEASURED as
+		 * the Project menu hanging in the air while its sheet was up. Apple's own order is the same one: the session
+		 * ends, then the item is performed. A TORN-OFF menu is the exception and the only one — it is a palette, it
+		 * sends and stays, which is what the flag means. */
 		if (_tornOff) {
+			if (takes) {
+				[self performActionForItemAtIndex:pickedIndex];
+			}
 			return YES;
 		}
 		[self cancelTracking];
+		if (takes) {
+			[self performActionForItemAtIndex:pickedIndex];
+		}
 		return NO;
 	}
 	if (type == NSKeyDown) {
@@ -1362,6 +1368,13 @@ static const CGFloat NSMenuStateColumnWidth = 20.0;
 	[_menuView release];
 	_menuView = nil;
 	[[NSNotificationCenter defaultCenter] postNotificationName:NSMenuDidEndTrackingNotification object:self];
+}
+
+/* **WHETHER A SESSION IS UP.** A caller that drives the session one event at a time — the menu bar, a combo box, a
+ * probe — has to know when it has ended, and reading a private field is not a door. */
+- (BOOL)cg_isTracking
+{
+	return _tracking;
 }
 
 - (void)cancelTrackingWithoutAnimation

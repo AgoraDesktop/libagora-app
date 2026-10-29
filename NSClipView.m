@@ -304,6 +304,14 @@ static CGFloat ag_snap_to_device(CGFloat value, CGFloat scale)
  * entire visible area — every label, every glyph, every image — to slide the content up sixteen points. MEASURED on the
  * demo's gallery: 22 ms a step, which is a scroller knob that trails the hand.
  *
+ * **AND IT IS OFF BY DEFAULT NOW, BECAUSE ITS PICTURE WAS WRONG.** The copy reads the frame on the glass, and outside
+ * the scrolled rectangle that frame holds another view's pixels: scrolling Forge's code editor dragged the build log's
+ * lines up into it, one band of ghosts per scroll step (MEASURED, and reproduced after clamping the copy to the
+ * rectangle in `NSWindow -cg_copyRect:from:stride:delta:` — the clamp changed the ghosts and did not remove them).
+ * `-cg_scrollContentInRect:inView:by:` answers NO unless `APPKIT_SCROLL_COPY=1`, which leaves the whole visible area
+ * dirty: a repaint, which is what this class did before the optimisation and what every scroll test in this tree
+ * measures. Turning it back on is the work of whoever finds the remaining error.
+ *
  * The pixels for everything but the strip that came into view are already on the glass, in the frame this window last
  * committed, and the window can read them (`AGWindowPreviousFrameSized`). So the window is handed the translation and
  * this class keeps only the strip dirty: one copy plus one small draw, and the content is pixel-identical to a full

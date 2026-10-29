@@ -877,7 +877,16 @@ static NSString * const AGCoderCellActionKey = @"action";
 - (void)selectWithFrame:(NSRect)aRect inView:(NSView *)controlView editor:(NSText *)textObj
 	       delegate:(id)anObject start:(NSInteger)selStart length:(NSInteger)selLength
 {
-	NSRect room = [self drawingRectForBounds:aRect];
+	/* **THE EDITOR IS GIVEN THE CELL'S TEXT RECT, GROWN BY THE INSET IT SUPPLIES ITSELF.** A field editor positions
+	 * its own text with `NS_TEXT_INSET` inside its frame (`NSText.m`: the baseline is
+	 * `NSMaxY(bounds) - NS_TEXT_INSET - ascender`, and the pen's x is that same inset from the edge), while a cell
+	 * draws inside `-drawingRectForBounds:`, which adds the same air. Handing the editor the drawing rect paid the
+	 * padding TWICE — MEASURED as the text in a field being edited sitting four points low with its caret (Forge's
+	 * Version field). Growing the rect by one inset is the fix that keeps a cell whose text rect is NARROWER than its
+	 * frame for a real reason — a search field's ornaments — honest: the editor still stops where that cell's text
+	 * stops, and the padding is paid once. */
+	NSRect editorRoom = NSInsetRect([self drawingRectForBounds:aRect], -NS_TEXT_INSET, -NS_TEXT_INSET);
+
 	NSString *string = [self stringValue];
 
 	if (textObj == nil) {
@@ -886,7 +895,7 @@ static NSString * const AGCoderCellActionKey = @"action";
 	_cgFieldDelegate = anObject;
 	textObj = [self setUpFieldEditorAttributes:textObj];
 	_cgFieldEditor = textObj;
-	[textObj setFrame:room];
+	[textObj setFrame:editorRoom];
 	[textObj setString:(string != nil ? string : @"")];
 	[textObj setDelegate:self];
 	if (controlView != nil) {
@@ -921,11 +930,17 @@ static NSString * const AGCoderCellActionKey = @"action";
 - (void)endEditing:(NSText *)textObj
 {
 	id caller = _cgFieldDelegate;
+	/* THE CONTROL IS REPAINTED WHEN THE EDITOR LEAVES IT — see `NSTextFieldCell -fn_finishEditing:…` for the
+	 * measurement (a caret left behind in the field the focus came FROM). */
+	NSView *control = [textObj superview];
 
 	if (textObj != nil) {
 		[self setStringValue:[textObj string]];
 		[textObj setDelegate:nil];
 		[textObj removeFromSuperview];
+		if (control != nil) {
+			[control setNeedsDisplay:YES];
+		}
 	}
 	_cgFieldEditor = nil;
 	_cgFieldDelegate = nil;

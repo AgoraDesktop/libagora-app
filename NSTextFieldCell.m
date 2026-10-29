@@ -578,12 +578,21 @@ static NSString * const AGCoderFieldPlaceholderAttributedKey = @"placeholderAttr
 - (void)selectWithFrame:(NSRect)aRect inView:(NSView *)controlView editor:(NSText *)textObj
 	       delegate:(id)anObject start:(NSInteger)selStart length:(NSInteger)selLength
 {
-	NSRect room = [self drawingRectForBounds:aRect];
+	/* **THE EDITOR IS GIVEN THE CELL'S TEXT RECT, GROWN BY THE INSET IT SUPPLIES ITSELF.** A field editor positions
+	 * its own text with `NS_TEXT_INSET` inside its frame (`NSText.m`: the baseline is
+	 * `NSMaxY(bounds) - NS_TEXT_INSET - ascender`, and the pen's x is that same inset from the edge), while a cell
+	 * draws inside `-drawingRectForBounds:`, which adds the same air. Handing the editor the drawing rect paid the
+	 * padding TWICE — MEASURED as the text in a field being edited sitting four points low with its caret (Forge's
+	 * Version field). Growing the rect by one inset is the fix that keeps a cell whose text rect is NARROWER than its
+	 * frame for a real reason — a search field's ornaments — honest: the editor still stops where that cell's text
+	 * stops, and the padding is paid once. */
+	NSRect editorRoom = NSInsetRect([self drawingRectForBounds:aRect], -NS_TEXT_INSET, -NS_TEXT_INSET);
+
 	NSString *string = [self stringValue];
 
 	_editorDelegate = anObject;
 	_cg_textEditing = YES;
-	[textObj setFrame:room];
+	[textObj setFrame:editorRoom];
 	/* **AND THE FIELD'S OWN SETTINGS COME FROM THE DOOR ABOVE**, so a subclass that wants a different editor changes
 	 * one method rather than editing this one — and the editor that comes back is the one held as this session's, in
 	 * case it is not the same object. */
@@ -643,6 +652,14 @@ static NSString * const AGCoderFieldPlaceholderAttributedKey = @"placeholderAttr
 {
 	id caller = _editorDelegate;
 
+	/* **THE FIELD IS MARKED DIRTY WHEN ITS SESSION ENDS, BECAUSE ITS PIXELS WERE THE EDITOR'S WHILE ONE WAS UP.** A
+	 * cell does not draw its words during a session (`-drawInteriorWithFrame:` returns while `_cg_textEditing`, so the
+	 * editor's text and caret are the only ink) — so when the session ends and the editor leaves, nothing has asked the
+	 * control to paint itself again and the caret the editor drew stays on the glass. MEASURED: clicking from one field
+	 * into another left the FIRST field showing a caret until the pointer passed over it, which is the one thing that
+	 * marks it dirty. The control is taken from the editor's superview BEFORE the editor is removed from it. */
+	NSView *control = [textObj superview];
+
 	/* **AND THE EDITOR IS FORGOTTEN BEFORE THE STRING IS WRITTEN BACK, WHICH IS AN ORDER AND NOT A STYLE.** The
 	 * write-back below goes through `-setStringValue:`, which tells the editor about a new value — so forgetting it
 	 * first keeps the teardown from telling the editor a string it is standing on, and leaves one rule (a session's
@@ -659,6 +676,9 @@ static NSString * const AGCoderFieldPlaceholderAttributedKey = @"placeholderAttr
 	}
 	[textObj setDelegate:nil];
 	[textObj removeFromSuperview];
+	if (control != nil) {
+		[control setNeedsDisplay:YES];
+	}
 	if (caller != nil && [caller respondsToSelector:@selector(textDidEndEditing:)]) {
 		NSDictionary *info = [NSDictionary dictionaryWithObject:[NSNumber numberWithInteger:(NSInteger)movement]
 								 forKey:NSTextMovementUserInfoKey];

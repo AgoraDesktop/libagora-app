@@ -241,6 +241,8 @@ static void fn_item_rects(NSToolbarItem *item, NSRect rect, NSToolbarDisplayMode
 
 - (void)dealloc
 {
+	/* THE FOCUS ANNOUNCEMENT IS ALSO OWED A REMOVAL, or a window that outlives this view sends to freed memory. */
+	[[NSNotificationCenter defaultCenter] removeObserver:self name:NSWindowDidResignKeyNotification object:nil];
 	/* THE AREA GOES FIRST: removing it can fire a `-mouseExited:` at this view, and that door redraws. */
 	if (_hoverArea != nil) {
 		[self removeTrackingArea:_hoverArea];
@@ -714,7 +716,12 @@ static CGFloat fn_standard_width(NSToolbarItem *item, NSToolbarDisplayMode displ
 	NSInteger pressed = _pressedIndex;
 
 	_pressedIndex = -1;
-	_hoverIndex = index;
+	/* **A CLICK ENDS THE PRELIGHT.** The plate is the band answering the pointer's ARRIVAL; after a press it has done
+	 * its job, and every platform takes it away at the release. Leaving it up was MEASURED as a lavender slab that
+	 * outlived the click that made it — Forge's toolbar showed "Run" still lit after the product had been started — and
+	 * the exit event that would eventually clear it is not guaranteed to arrive: the pointer can leave for ANOTHER
+	 * WINDOW, which is exactly where a click on Run sends the hand next. */
+	_hoverIndex = -1;
 	[self setNeedsDisplay:YES];
 	if (pressed >= 0 && pressed == index && (NSUInteger)pressed < [_layoutItems count]) {
 		NSToolbarItem *item = [_layoutItems objectAtIndex:pressed];
@@ -767,9 +774,31 @@ static CGFloat fn_standard_width(NSToolbarItem *item, NSToolbarDisplayMode displ
 	[super viewDidMoveToWindow];
 	if ([self window] != nil) {
 		[self cg_installHoverArea];
-	} else if (_hoverArea != nil) {
-		[self removeTrackingArea:_hoverArea];
+		/* **AND THE PLATE GOES OUT WHEN THE WINDOW STOPS BEING THE KEY ONE.** A pointer that leaves this view for
+		 * another WINDOW produces no `-mouseExited:` here, so the hover that a click left behind could sit on the
+		 * band for as long as the other window was in front. The window's own announcement is the door that always
+		 * arrives. */
+		[[NSNotificationCenter defaultCenter] addObserver:self
+							 selector:@selector(cg_windowLostFocus:)
+							     name:NSWindowDidResignKeyNotification
+							   object:[self window]];
+	} else {
+		if (_hoverArea != nil) {
+			[self removeTrackingArea:_hoverArea];
+		}
+		[[NSNotificationCenter defaultCenter] removeObserver:self
+							   name:NSWindowDidResignKeyNotification
+							 object:nil];
 		_hoverIndex = -1;
+	}
+}
+
+- (void)cg_windowLostFocus:(NSNotification *)notification
+{
+	(void)notification;
+	if (_hoverIndex != -1) {
+		_hoverIndex = -1;
+		[self setNeedsDisplay:YES];
 	}
 }
 
@@ -1404,6 +1433,13 @@ static NSString * const AGCoderToolbarItemsKey = @"items";
 		if ([item autovalidates]) {
 			[item validate];
 		}
+	}
+	/* **AND THE BAND IS REPAINTED, BECAUSE VALIDATION CHANGES ITS INK.** An item's enabled state is what the strip draws
+	 * (a greyed label against the chrome's own), and setting it marks nothing: MEASURED in Forge, where the first paint
+	 * happened before any validation and every verb stayed grey — the window had asked for the pass, the items had
+	 * answered, and the picture never changed. */
+	if (_toolbarView != nil) {
+		[_toolbarView setNeedsDisplay:YES];
 	}
 }
 

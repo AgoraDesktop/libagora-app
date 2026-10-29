@@ -283,8 +283,22 @@ int main(void)
 	      "through -mouseDown:, a press on the clear button clears without opening an editor");
 	[field mouseDown:press_in_field(field, NSMakePoint(NSMidX(textRect), NSMidY(textRect)))];
 	check([field currentEditor] != nil, "and a press in the text opens a session");
-	check(NSEqualRects([(NSText *)[field currentEditor] frame], [cell searchTextRectForBounds:[field bounds]]),
-	      "the editor is put in the TEXT rect, between the ornaments, rather than over the whole field");
+	/* **THE EDITOR'S TEXT LANDS IN THE TEXT RECT, WHICH IS NOT THE SAME CLAIM AS ITS FRAME BEING THAT RECT.** A field
+	 * editor insets its own text by `NS_TEXT_INSET` inside its frame, and a cell draws inside `-drawingRectForBounds:`
+	 * which already carries that air — so the editor is given the text rect GROWN by one inset, and what must equal the
+	 * text rect is the area the editor writes in. (Asserting the FRAME was the older rule, and it is what made an
+	 * editing field's text sit four points low: `appkit-field-editor-alignment` measures that directly.) */
+	{
+		NSRect editorFrame = [(NSText *)[field currentEditor] frame];
+		NSRect editorText = NSInsetRect(editorFrame, 4.0, 4.0);
+		NSRect textRect = [cell searchTextRectForBounds:[field bounds]];
+
+		check(fabs((double)(NSMinX(editorText) - NSMinX(textRect))) <= 0.5 &&
+		      fabs((double)(NSMinY(editorText) - NSMinY(textRect))) <= 0.5,
+		      "the editor's TEXT is in the text rect, between the ornaments, rather than over the whole field");
+		check(NSWidth(editorText) <= NSWidth(textRect) + 8.5,
+		      "and the editor is no wider than the slot it was given");
+	}
 	[field abortEditing];
 
 	/* 7. **TYPING IS A DELAYED SEND, AND THE TIMER IS THE DELAY.** A change arms one timer; firing it sends once. The

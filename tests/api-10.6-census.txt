@@ -38,13 +38,21 @@
 # "80 declared" for three slices after the number became 86 — the gate did not notice, because a comment is not a
 # metric. Recompute them when you re-pin, from `api-ledger census`, rather than editing the numbers by eye.
 #
-# **AND `methods-declared` HAS MOVED THREE TIMES WITHOUT ONE 10.6 SELECTOR MOVING, WHICH IS THE INSTRUMENT WORKING.**
+# **AND `methods-declared` HAS MOVED FOUR TIMES WITHOUT ONE 10.6 SELECTOR MOVING, WHICH IS THE INSTRUMENT WORKING.**
 # One for `NSCursor -name` — the pointer's own door, added because the twenty-one shared cursors carried no image and no
 # name, so nothing about them could reach a display — and two more for `+cg_resizeNorthWestSouthEastCursor` and its
 # sibling: the era's public cursor set has a left-right and an up-down resize shape and NOTHING diagonal, so a resizable
-# window's corner used to be the arrow while a press there began a resize. Those two are `cg_` doors of this tree's
-# rather than Apple's, and `sel:NSCursor` (a manifest-driven count of Apple's surface) stays at 35: a surface this tree
-# adds is measured, and it is not mistaken for surface Apple has.
+# window's corner used to be the arrow while a press there began a resize. And a fourth for the format's two EDITOR
+# doors (`+objectsFromPropertyList:objectsByID:error:` and `+sourceDataFromPropertyList:error:`), which a builder links
+# rather than a command line: they turn the text source from something a tool COMPILES into something a tool EDITS, and
+# with them `NSNibSource` moved out of `tests/` and into this tree's installed surface, so the methods it already had are
+# measured here for the first time. Those doors are this tree's, not Apple's, and `sel:NSCursor` (a manifest-driven count
+# of Apple's surface) stays at 35: a surface this tree adds is measured, and it is not mistaken for surface Apple has.
+#
+# **A FIFTH, FOR `NSMenu -cg_isTracking`.** A caller that drives a menu's session one event at a time — the menu bar, a
+# combo box's chip, a test — has to know when the session ended, and it was reading a private field to find out. The door
+# is this tree's and not Apple's (`sel:NSMenu` is unchanged), and it is what makes the order the pick follows assertable
+# from inside an action: the menu must not be tracking when its action runs.
 #
 classes-missing 20
 classes-offered 168
@@ -227,7 +235,7 @@ functions-defined-not-declared 0
 functions-missing 0
 functions-offered 86
 functions-present 86
-methods-declared 5419
+methods-declared 5426
 methods-declared-not-implemented 0
 methods-informal 0
 methods-external 0

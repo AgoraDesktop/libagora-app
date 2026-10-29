@@ -59,6 +59,7 @@
 
 #include <objc/runtime.h>	/* the drawer list's association */
 
+#import <AppKit/NSControl.h>
 #import <AppKit/NSWindow.h>
 #import <AppKit/NSPrintOperation.h>
 #import <AppKit/NSTrackingArea.h>
@@ -4733,16 +4734,30 @@ static CGFloat fn_clamp_axis(CGFloat v, CGFloat lo, CGFloat hi)
 	}
 	dy = (NSInteger)llround((double)(delta.height * scale));
 	dx = (NSInteger)llround((double)(delta.width * scale));
+	/* **THE SOURCE MUST LIE INSIDE THE RECTANGLE TOO, NOT MERELY INSIDE THE SURFACE.** A copy reads the frame that is
+	 * on the glass, and OUTSIDE this rectangle that frame holds ANOTHER VIEW's pixels — the pane below a scrolled
+	 * document, the pane beside it. Copying from there dragged the neighbouring pane's ink into this one: MEASURED in
+	 * Forge, where scrolling the code editor moved the build log's lines up into the editor, one row of ghosts per
+	 * scroll step. Only the overlap of the rectangle with itself moved by `delta` is a scroll; the band that came into
+	 * view is the caller's dirty strip and is drawn, not copied. */
+	{
+		NSInteger bandTop = (NSInteger)rows.location;
+		NSInteger bandBottom = (NSInteger)(rows.location + rows.length);
+		NSInteger firstDestination = (bandTop > bandTop - dy) ? bandTop : (bandTop - dy);
+		NSInteger lastDestination = (bandBottom < bandBottom - dy) ? bandBottom : (bandBottom - dy);
+
+		row = firstDestination;
+		rowEnd = lastDestination;
+		columnLow = (left > left - dx) ? left : (left - dx);
+		columnHigh = (right < right - dx) ? right : (right - dx);
+		if (rowEnd <= row || columnHigh <= columnLow) {
+			return NO;
+		}
+	}
 	/* DESTINATION row r takes SOURCE row r + dy, because a row's index grows DOWNWARD while the delta is stated
 	 * upward: content that moved up the window has its pixels at a HIGHER row number than it did. */
-	row = (NSInteger)rows.location;
-	rowEnd = (NSInteger)(rows.location + rows.length);
-	/* AND THE COLUMNS ARE THE SAME ARITHMETIC UNMIRRORED: destination column c takes source column c - dx. */
-	columnLow = (dx > left) ? dx : left;
-	columnHigh = (surfaceWidth + dx < right) ? (surfaceWidth + dx) : right;
-	if (columnHigh <= columnLow) {
-		return NO;
-	}
+	/* THE COLUMNS ARE THE SAME ARITHMETIC UNMIRRORED: destination column c takes source column c - dx, and both must
+	 * be inside the rectangle. */
 	destination = (unsigned char *)_pixels;
 	source = (const unsigned char *)previous;
 	for (; row < rowEnd; row++) {
@@ -4775,6 +4790,16 @@ static CGFloat fn_clamp_axis(CGFloat v, CGFloat lo, CGFloat hi)
 	NSRect inWindow;
 
 
+	/* **THE COPY PATH IS OPT-IN UNTIL IT IS RIGHT.** Moving pixels is an optimisation whose failure mode is a wrong
+	 * PICTURE rather than a slow one, and it has one: MEASURED in Forge, scrolling the code editor dragged its
+	 * neighbours' ink into it, a row of ghosts per scroll step, and clamping the copy's source to the scrolled
+	 * rectangle (`-cg_copyRect:…`) changed the ghosts without removing them. A repaint is what the tier drew before
+	 * the optimisation existed, and it is correct; so the default is the repaint, and `APPKIT_SCROLL_COPY=1` turns the
+	 * fast path back on for whoever works on it next. The strip arithmetic in `NSClipView -setBoundsOrigin:` and the
+	 * buffer copy below are kept, with their reasoning, rather than deleted. */
+	if (getenv("APPKIT_SCROLL_COPY") == NULL) {
+		return NO;
+	}
 	if (_agwindow == NULL || view == nil || _contentView == nil) {
 		return NO;
 	}
@@ -6392,6 +6417,23 @@ static NSUInteger fn_edge_index(NSRectEdge edge)
 	 * The reason it is NOT a refusal: the machinery is all here, and the door is the window's own `-makeFirstResponder:`
 	 * rather than a second teardown. `anObject` is not consulted because the window owns exactly ONE field editor, so
 	 * there is one session to end whichever object a caller names. */
+	/* **THE SESSION BELONGS TO THE CELL THAT OPENED IT, SO ENDING IT ASKS THAT CELL.** The first version only ended a
+	 * session when the editor happened to be the window's FIRST RESPONDER — and a window whose focus went elsewhere
+	 * (a click into another field that this tier's `-makeFirstResponder:` refused, an offscreen window, a session
+	 * begun by a caller) still had a session to close. Leaving it open is the bug a person sees as TWO CARETS: the
+	 * first cell still believes it is editing, so it draws no words of its own and never repaints the caret the editor
+	 * left behind. MEASURED, and the reason the cell's `-endEditing:` marks its control dirty. */
+	if (anObject != nil && [anObject respondsToSelector:@selector(currentEditor)]) {
+		NSText *editor = [(NSControl *)anObject currentEditor];
+
+		if (editor != nil) {
+			id cell = [(NSControl *)anObject cell];
+
+			if ([cell respondsToSelector:@selector(endEditing:)]) {
+				[cell endEditing:editor];
+			}
+		}
+	}
 	if (_fieldEditor != nil && _firstResponder == (NSResponder *)_fieldEditor) {
 		[self makeFirstResponder:nil];
 	}

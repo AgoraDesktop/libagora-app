@@ -85,9 +85,20 @@ int main(void)
 	      "with the cell's string in it, so the field shows what it holds the moment it is clicked into");
 	check([editor delegate] == (id)cell,
 	      "and the CELL is the editor's delegate — it owns the string, so reading it back is its job");
-	check(fabs(NSMinX([editor frame]) - NSMinX([cell drawingRectForBounds:frame])) < 0.01
-	      && fabs(NSWidth([editor frame]) - NSWidth([cell drawingRectForBounds:frame])) < 0.01,
-	      "and its frame IS the cell's text rect, so an editor and a drawn string agree about where the words live");
+	/* **THE AGREEMENT IS ABOUT WHERE THE WORDS LIVE, NOT ABOUT THE FRAME.** A field editor lays its own text out with
+	 * `NS_TEXT_INSET` inside its frame and a cell draws inside `-drawingRectForBounds:`, which already carries that
+	 * air — so the editor is given that rect GROWN by one inset and the area it writes in is the text rect. Asserting
+	 * the frame was the older rule, and it is what put an editing field's text four points low
+	 * (`appkit-field-editor-alignment` measures that equality directly). */
+	{
+		NSRect textRoom = NSInsetRect([editor frame], 4.0, 4.0);
+		NSRect cellRoom = [cell drawingRectForBounds:frame];
+
+		check(fabs(NSMinX(textRoom) - NSMinX(cellRoom)) < 0.01 &&
+		      fabs(NSMinY(textRoom) - NSMinY(cellRoom)) < 0.01 &&
+		      fabs(NSWidth(textRoom) - NSWidth(cellRoom)) < 0.01,
+		      "and the area it writes in IS the cell's text rect, so an editor and a drawn string agree");
+	}
 	check([editor isFieldEditor], "and the editor knows it is one, which is what a window's own editor is");
 	/* **AND IT DRAWS NO BACKGROUND OF ITS OWN, WHICH IS THE GREY BOX THAT WAS SEEN IN THE DEMONSTRATION.** An editor
 	 * that paints a fill paints a rectangle the size of this text rect — inset from the border, stopping at a chip — and

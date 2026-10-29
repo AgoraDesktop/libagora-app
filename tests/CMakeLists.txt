@@ -113,6 +113,18 @@ set_tests_properties(appkit-menu-validation PROPERTIES ENVIRONMENT "${_agora_app
 
 # **THE OUTLINE: THE TABLE'S TREE, FLATTENED.** Roots and children, levels, the disclosure triangle's click, the
 # outline column's inset, and selection in item terms — offscreen.
+# **THE UMBRELLA, MEASURED TWICE: THAT IT COMPILES, AND THAT IT NAMES EVERY INSTALLED HEADER.** The app installs its
+# headers with a glob, so a class joins the public surface the moment its file exists — and an umbrella that stopped
+# naming them would be a directory listing pretending to be an interface. The probe classifies each header as public
+# or internal and fails with the one nobody classified.
+add_executable(umbrella umbrella.m)
+target_link_libraries(umbrella PRIVATE App)
+target_compile_definitions(umbrella PRIVATE
+  APPKIT_UMBRELLA="${CMAKE_CURRENT_SOURCE_DIR}/../AppKit.h"
+  APPKIT_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/..")
+add_test(NAME appkit-umbrella COMMAND umbrella)
+set_tests_properties(appkit-umbrella PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
+
 add_executable(outline_view outline_view.m)
 target_link_libraries(outline_view PRIVATE App m)
 add_test(NAME appkit-outline-view COMMAND outline_view)
@@ -1168,16 +1180,27 @@ set_tests_properties(appkit-apple-nib PROPERTIES ENVIRONMENT "${_agora_app_test_
 # (dictionaries, arrays, quoted strings, and bare words TYPED as numbers or booleans) and compiles it into a nib — the
 # same split as `.xib` and `.nib`, and the one that makes a design something git can review. `nib_compile` asserts the
 # good case, the typed words, and six refusals that must each NAME what was wrong.
-add_executable(nib_compile nib_compile.m NSNibSource.m)
+add_executable(nib_compile nib_compile.m)
 target_link_libraries(nib_compile PRIVATE App)
 add_test(NAME appkit-nib-compile COMMAND nib_compile)
 set_tests_properties(appkit-nib-compile PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
+
+# **THE TWO DOORS A DESIGN TOOL USES, AND THE LOOP IT RUNS ON THEM.** An editor holds the property list it parsed, shows
+# the live object behind each node and writes the tree back — so `nib_edit` measures that loop rather than describing it:
+# `parse → emit → parse → emit` is byte-identical (an unedited save cannot churn a diff), the emitted text COMPILES, every
+# `id` — a SUBVIEW's included — is in the object table under the same identity the hierarchy holds, and the editor's door
+# refuses with the compiler's own sentence. The one rewrite the format has (a colour written by NAME parses to an
+# `NSColor` that does not remember the name, so it comes back as components) is asserted rather than hidden.
+add_executable(nib_edit nib_edit.m)
+target_link_libraries(nib_edit PRIVATE App)
+add_test(NAME appkit-nib-edit COMMAND nib_edit)
+set_tests_properties(appkit-nib-edit PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
 
 # **A NIB IN A BUNDLE, LOADED BY NAME, INTO A VIEW CONTROLLER.** Every other nib test used a PATH; an application says
 # `initWithNibName:bundle:` and lets the bundle find Contents/Resources/Main.nib. This builds a real bundle-shaped
 # directory, compiles two nibs into it from source, and then does what an application does — including the two branches
 # nothing else touches: the name lookup and NSViewController's owner outlet.
-add_executable(nib_bundle nib_bundle.m NSNibSource.m)
+add_executable(nib_bundle nib_bundle.m)
 target_link_libraries(nib_bundle PRIVATE App)
 add_test(NAME appkit-nib-bundle COMMAND nib_bundle
 	"${CMAKE_CURRENT_SOURCE_DIR}/fixtures/Main.nibsource")
@@ -1188,7 +1211,7 @@ set_tests_properties(appkit-nib-bundle PROPERTIES ENVIRONMENT "${_agora_app_test
 # back through -setContentView:. It needs a real compositor (the wall every other nib test deliberately avoids), so it
 # runs under the AppKit's headless wrapper and SKIPS 77 without one. The assertion that matters is the DRAW COUNT: a
 # decoded window that is never asked to draw is a window that only looks like one.
-add_executable(nib_window nib_window.m NSNibSource.m)
+add_executable(nib_window nib_window.m)
 target_link_libraries(nib_window PRIVATE App)
 add_test(NAME appkit-nib-window
   COMMAND "${CMAKE_CURRENT_SOURCE_DIR}/run-appkit-headless.sh" "$<TARGET_FILE:nib_window>" 3
@@ -1209,11 +1232,21 @@ target_link_libraries(bundler_test PRIVATE App)
 add_test(NAME appkit-bundler COMMAND bundler_test "$<TARGET_FILE:agora_bundler>")
 set_tests_properties(appkit-bundler PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
 
+# **THE DECLARATIONS A NIB CAN NAME, READ OUT OF THE HEADER BY CLANG ITSELF.** `IBOutlet`/`IBAction` are
+# clang's own attributes (`NSNibDeclarations.h`), so the AST carries them and an editor's Connect list can be
+# exact instead of guessing from the class's storage. The fixture is the point: `_delegate` is an ivar and must
+# NOT appear, `_runButton`/`titleField`/`windowOutlet` must.
+add_test(NAME appkit-nib-outlets
+	 COMMAND python3 ${CMAKE_CURRENT_SOURCE_DIR}/../tools/nib-outlets
+		 --check ${CMAKE_CURRENT_SOURCE_DIR}/fixtures/outlets/Owner.expected.json
+		 --include ${CMAKE_CURRENT_SOURCE_DIR}/../../build-prefix/include
+		 ${CMAKE_CURRENT_SOURCE_DIR}/fixtures/outlets/Owner.h)
+
 # **THE FORMAT'S COMMAND LINE, AND ITS TEST.** `ibtool` is the reason a design file can be checked by a shell rather than
 # by a person clicking: `dump`, `validate` and `roundtrip` read the same archives the reader does, with no display and no
 # owner. The test RUNS the tool — the only honest way to test an executable — and builds its own fixture, because this
 # repository commits no binaries.
-add_executable(ibtool ibtool.m NSNibSource.m)
+add_executable(ibtool ibtool.m)
 target_link_libraries(ibtool PRIVATE App)
 set_target_properties(ibtool PROPERTIES ENABLE_EXPORTS ON)
 
@@ -1936,3 +1969,45 @@ target_link_libraries(persistent_document PRIVATE App)
 
 add_test(NAME appkit-persistent-document COMMAND persistent_document)
 set_tests_properties(appkit-persistent-document PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
+
+# **A CLIP VIEW CLIPS.** `-displayRect:` clipped each child to the child's FRAME region, and a document taller than
+# its clip has a frame region bigger than the visible band — so a full repaint drew the whole document and the overflow
+# landed on the pane above (measured in Forge as the log's lines painted across the code editor). Pixels, not
+# intentions: a document that paints a band 700 points down must leave the surface above the clip white.
+add_executable(clip_view_clips clip_view_clips.m)
+target_link_libraries(clip_view_clips PRIVATE App)
+add_test(NAME appkit-clip-view-clips COMMAND clip_view_clips)
+set_tests_properties(appkit-clip-view-clips PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
+
+# **THE MENU IS GONE BEFORE ITS ACTION RUNS.** A pick used to send the action first and end the session afterwards, so an
+# action that opens a modal panel left the menu on the glass until the panel was answered (MEASURED in Forge: the
+# Project menu hanging in the air over the Project Info sheet). Read from inside the action, which is where it matters.
+add_executable(menu_pick_dismisses menu_pick_dismisses.m)
+target_link_libraries(menu_pick_dismisses PRIVATE App)
+add_test(NAME appkit-menu-pick-dismisses COMMAND menu_pick_dismisses)
+set_tests_properties(appkit-menu-pick-dismisses PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
+
+# **THE TEXT BEING EDITED SITS WHERE THE SAME CELL DRAWS IT.** A field editor insets its own text by `NS_TEXT_INSET`
+# and the cell's `-drawingRectForBounds:` adds the same air — giving the editor the drawing rect paid the padding twice,
+# and the text dropped four points with its caret (MEASURED in Forge's info pane). The claim is the equality of the two
+# paths' answers, not the editor's frame on its own.
+add_executable(field_editor_alignment field_editor_alignment.m)
+target_link_libraries(field_editor_alignment PRIVATE App m)
+add_test(NAME appkit-field-editor-alignment COMMAND field_editor_alignment)
+set_tests_properties(appkit-field-editor-alignment PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
+
+# **THE FIELD THE FOCUS LEFT IS REPAINTED, SO ITS CARET GOES WITH IT.** A cell draws no words during a session — the
+# editor's caret is the ink — so ending the session has to mark the control dirty or the caret stays on the glass until
+# the pointer passes over it (MEASURED: two carets, one of them disappearing only on hover).
+add_executable(field_focus_caret field_focus_caret.m)
+target_link_libraries(field_focus_caret PRIVATE App m)
+add_test(NAME appkit-field-focus-caret COMMAND field_focus_caret)
+set_tests_properties(appkit-field-focus-caret PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
+
+# **A TEMPLATE A CALLER MADE CAN BE INKED.** `-setTemplate:` used to set the flag and nothing else, so a programmatic image
+# answered YES to `-isTemplate` while having no stencil — and the toolbar fell back to drawing the raw picture, which is a
+# black glyph beside a greyed word on every disabled button. The stencil is the alpha channel; this asserts the ink lands.
+add_executable(image_template_ink image_template_ink.m)
+target_link_libraries(image_template_ink PRIVATE App m)
+add_test(NAME appkit-image-template-ink COMMAND image_template_ink)
+set_tests_properties(appkit-image-template-ink PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
