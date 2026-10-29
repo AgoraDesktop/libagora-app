@@ -307,6 +307,7 @@ static Class fn_class_for_list_member(SEL sel, NSString *want)
 	id quality = [hints objectForKey:NSImageHintInterpolation];
 	CGInterpolationQuality previousQuality = kCGInterpolationDefault;
 	BOOL hadQuality = NO;
+	BOOL resamples = NO;
 
 	/* NO CONTEXT OR NO PIXELS IS A NO, NOT A RAISE — the same rule the context's own members follow. */
 	if (ctx == nil || img == NULL) {
@@ -315,6 +316,23 @@ static Class fn_class_for_list_member(SEL sel, NSString *want)
 	cg = [ctx CGContext];
 	if (cg == NULL) {
 		return NO;
+	}
+	ctm = CGContextGetCTM(cg);
+	/* **A DRAW THAT RESAMPLES IS SMOOTH UNLESS THE CALLER SAYS OTHERWISE.** This tree's CG defaults to
+	 * `kCGInterpolationNone` (that ordering is a decision, stated in `CGContext.h`), and its image sampler honours it
+	 * literally — so a picture whose PIXELS outnumber the device pixels it is drawn into used to arrive as one sample
+	 * per destination pixel. THE DESKTOP'S ICONS WERE THE VISIBLE CASE: an application's 512-pixel artwork is a 64-point
+	 * icon, so the hammer arrived with stair-stepped edges. The comparison is in DEVICE pixels — the CTM's own scale
+	 * counts — because a 2x context drawing a 128-pixel picture into a 64-point rect is exactly 1:1 and must stay
+	 * untouched, which is what keeps every hi-dpi probe byte-for-byte. A caller that passed
+	 * `NSImageHintInterpolation`, or set the context's quality, still wins. */
+	if (quality == nil) {
+		double deviceW = (double)dstRect.size.width * fabs((double)ctm.a);
+		double deviceH = (double)dstRect.size.height * fabs((double)ctm.d);
+
+		resamples = (deviceW > 0.0 && deviceH > 0.0 && _pixelsWide > 0 && _pixelsHigh > 0 &&
+			     (fabs((double)_pixelsWide / deviceW - 1.0) > 0.01 ||
+			      fabs((double)_pixelsHigh / deviceH - 1.0) > 0.01));
 	}
 	/* **THE CROP IS IN PIXELS AND THE CALLER SPEAKS POINTS**, which are the same number until a rep is given a size
 	 * different from its pixel count — resolution independence, and the one place the conversion belongs. A source
@@ -338,6 +356,12 @@ static Class fn_class_for_list_member(SEL sel, NSString *want)
 		previousQuality = CGContextGetInterpolationQuality(cg);
 		hadQuality = YES;
 		[ctx setImageInterpolation:(NSImageInterpolation)[quality integerValue]];
+	} else if (resamples) {
+		/* MEDIUM IS WHAT THIS CG HAS: its sampler is one bilinear tap for every quality above None, and saying
+		 * so is more honest than asking for High and getting the same filter. */
+		previousQuality = CGContextGetInterpolationQuality(cg);
+		hadQuality = YES;
+		CGContextSetInterpolationQuality(cg, kCGInterpolationMedium);
 	}
 	[ctx setCompositingOperation:op];
 	CGContextSetAlpha(cg, delta);
