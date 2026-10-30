@@ -451,6 +451,18 @@ static void apk_fill_vertical_gradient(NSRect rect, CGFloat radius,
 								current = hit;
 								break;
 							}
+							/* **AND A PRESS ON THE TITLE WHOSE MENU IS ALREADY OPEN CLOSES IT, WHICH IS THE SAME CLICK AGAIN.**
+							 * It used to be in neither branch: not a move (the title is the one already open) and not "outside"
+							 * (the point is on a title), so the press was dropped and the menu stayed up — a person clicking
+							 * twice on File saw it open and stay. The release is inert (see above), so the press is the whole
+							 * gesture: the session ends here and the title comes up with it. */
+							if (type == NSLeftMouseDown && hit >= 0 && hit == current) {
+								if (getenv("APPKIT_MENU_DIAG") != NULL) {
+									fprintf(stderr, "  DIAG bar: a press on the OPEN title closes it\n");
+								}
+								[open cancelTracking];
+								ended = YES;
+							}
 							if (type == NSLeftMouseDown && hit < 0) {
 								if (getenv("APPKIT_MENU_DIAG") != NULL) {
 									fprintf(stderr, "  DIAG bar: ENDING the session here (event type %ld)\n",
