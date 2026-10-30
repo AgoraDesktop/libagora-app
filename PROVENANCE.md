@@ -1232,7 +1232,7 @@ bit nobody reads this file keeps warning about. The ONE position door a face can
 `-positionOfGlyph:precededByGlyph:isNominal:` is the preceding glyph's advancement.
 
 **A DEFAULTS WRITE THAT CANNOT LAND MUST NOT ABORT A CALLER.** This tree's `NSUserDefaults` writes under
-`$AGORA_CONFIG_ROOT/Users/<name>/Configuration`; without that variable `-setObject:forKey:` throws. The four user-font
+`$AGORA_CONFIG_ROOT/home/<name>/Configuration` on a Linux host; without that variable `-setObject:forKey:` throws. The four user-font
 doors catch it and carry on — the preference does not persist, which is the honest outcome, and not a crash inside a font
 lookup. The probe sets a root (a launcher's job) and measures the round trip; the doors are what make a launcher's
 omission survivable.

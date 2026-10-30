@@ -57,7 +57,7 @@ int main(void)
 
 	setvbuf(stdout, NULL, _IONBF, 0);
 	/* **THE CONFIGURATION ROOT IS THE LAUNCHER'S CHOICE**, not the library's: this tree's `NSUserDefaults` writes under
-	 * `$AGORA_CONFIG_ROOT/Users/<name>/Configuration`, so a probe that measures the defaults doors points it at a
+	 * `$AGORA_CONFIG_ROOT/home/<name>/Configuration` (the host's home placed inside the root), so a probe that measures the defaults doors points it at a
 	 * temporary tree first. Without it the write throws (and the DOORS catch that — that is a separate check below). */
 	setenv("AGORA_CONFIG_ROOT", "/tmp", 0);
 	check(font != nil, "a system font was made");

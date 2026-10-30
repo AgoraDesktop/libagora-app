@@ -158,7 +158,7 @@ int main(void)
 {
 	NSAutoreleasePool *pool;
 
-	/* **THE DEFAULTS ROOT IS A TEMP DIRECTORY, NOT THE TEST RUNNER'S `/Users/...`.** `NSUserDefaults` writes
+	/* **THE DEFAULTS ROOT IS A TEMP DIRECTORY, NOT THE TEST RUNNER'S OWN HOME.** `NSUserDefaults` writes
 	 * under `AGORA_CONFIG_ROOT`, which is empty by default — the same environment the table's and split view's autosave
 	 * probes set, and the reason this probe can exercise a real save and load without touching anything of the
 	 * user's. */
