@@ -425,10 +425,17 @@ extern NSString *NSImageNameUserAccounts;
 extern NSString *NSImageNameUserGroup;
 extern NSString *NSImageNameUserGuest;
 
-/* AND THE LOOKUP ITSELF. Apple's `+imageNamed:` answers an image from the main bundle's resources, cached
- * per name; this one asks the bundle for the resource and loads it, WITHOUT a cache — an image is not
- * re-read once loaded by the caller, and a cache here would be a second lifetime to get wrong. A name that
- * is not in the bundle answers nil, which is the honest answer and the one the probe checks. */
+/* AND THE LOOKUP ITSELF, IN THREE STEPS. Apple's `+imageNamed:` answers an image from the main bundle's resources,
+ * cached per name; this one asks, in order: AppKit's own platform names, the application's bundle resources, and — since
+ * a desktop's art is a system resource — the installed ICON THEMES, from which it answers a TEMPLATE image at the
+ * artwork's natural size. WITHOUT a cache, because an image is not re-read once loaded by the caller and a cache here
+ * would be a second lifetime to get wrong. A name that is nowhere answers nil, which is the honest answer and the one
+ * the probe checks.
+ *
+ * **AND A NAME MAY SAY WHICH THEME IT MEANS: `toolbar:hammer`, `tabler:folder-open`, `frost:folder-open`.** `toolbar:`
+ * is the alias for whichever theme holds the UI's symbols, which is what a band should ask for — the vendored set can be
+ * replaced without every caller changing — and naming a theme outright settles the names both carry, like `folder-open`,
+ * which is an outline in one and a filled place folder in the other. See `IconServices/IconServices.h`. */
 + (nullable NSImage *)imageNamed:(nullable NSString *)name;
 
 /* THE TWO NAMES THE FIRST PASS MISSED, and their value is their identifier like the rest. */
