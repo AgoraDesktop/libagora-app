@@ -69,9 +69,17 @@ NSString *NSToolbarSizeModeKey = @"NSToolbarSizeMode";
 NSString *NSToolbarShowsBaselineSeparatorKey = @"NSToolbarShowsBaselineSeparator";
 NSString *NSToolbarAllowsUserCustomizationKey = @"NSToolbarAllowsUserCustomization";
 
-/* THE TWO HEIGHTS, READ AS THE SIZE MODE'S ANSWER. `Default` is regular: an unset toolbar is the ordinary one. */
+/* THE TWO HEIGHTS, READ AS THE SIZE MODE'S ANSWER. `Default` is regular: an unset toolbar is the ordinary one.
+ *
+ * **AND EACH INCLUDES A ROW FOR THE LABEL, WHICH A TOOLBAR THAT DRAWS NO LABELS MUST NOT RESERVE.** `fn_TOOLBAR_LABEL_ROW`
+ * is that row at the size it is drawn at — the same number the painter uses, which is why it lives here beside the
+ * heights rather than inside `fn_item_rects` as a local: the band's height and the text in it have to be the same fact.
+ * MEASURED in Forge, whose View menu now hides the words: the strip kept its 52 points with the label row empty, so the
+ * toolbar was a taller band of nothing over the editor. */
 static const CGFloat fn_TOOLBAR_HEIGHT_REGULAR = 52.0;
 static const CGFloat fn_TOOLBAR_HEIGHT_SMALL = 38.0;
+static const CGFloat fn_TOOLBAR_LABEL_ROW_REGULAR = 15.0;
+static const CGFloat fn_TOOLBAR_LABEL_ROW_SMALL = 12.0;
 
 /* THE LAYOUT'S FEW MEASURES, all in points: the strip's padding, the air around a separator, and the fixed width of
  * a plain space. A flexible space has no width of its own — it is the share that is left. */
@@ -181,20 +189,16 @@ static CGFloat fn_label_width(NSToolbarItem *item, NSToolbarSizeMode mode)
 	return [label sizeWithAttributes:attrs].width;
 }
 
-static void fn_item_rects(NSToolbarItem *item, NSRect rect, NSToolbarDisplayMode display,
-			  NSToolbarSizeMode mode, NSRect *imageRect, NSRect *labelRect)
+/* **THE MODE AN ITEM ACTUALLY DRAWS IN, WHICH IS NOT ALWAYS THE TOOLBAR'S.** An icon-only item with no image would be an
+ * empty cell, and a label-and-icon item with no icon is a label, so the two fall back to whatever they have. Stated once
+ * and read by BOTH the painter and the band's height: a strip that reserves a label row for an item that draws only a
+ * picture is a strip taller than what is in it, and one that drops the row for an item that DOES draw its label clips it. */
+static NSToolbarDisplayMode fn_effective_display(NSToolbarItem *item, NSToolbarDisplayMode display)
 {
-	BOOL small = (mode == NSToolbarSizeModeSmall);
 	BOOL hasImage = ([item image] != nil);
 	BOOL hasLabel = ([item label] != nil && [[item label] length] > 0);
-	CGFloat icon = small ? 16.0 : 24.0;
-	CGFloat labelBand = small ? 12.0 : 15.0;
-	CGFloat topPad = small ? 4.0 : 6.0;
 	NSToolbarDisplayMode effective = display;
 
-	/* **A MODE THAT HAS NOTHING TO SHOW FALLS BACK TO THE THING IT HAS.** An icon-only item with no image would be an
-	 * empty cell, and a label-and-icon item with no icon is a label. The fallback is the same one the toolbar's own
-	 * drawing has always needed and is stated here rather than repeated at the painter. */
 	if (effective == NSToolbarDisplayModeDefault) {
 		effective = NSToolbarDisplayModeIconAndLabel;
 	}
@@ -204,6 +208,49 @@ static void fn_item_rects(NSToolbarItem *item, NSRect rect, NSToolbarDisplayMode
 	if ((effective == NSToolbarDisplayModeIconAndLabel || effective == NSToolbarDisplayModeLabelOnly) && !hasLabel) {
 		effective = hasImage ? NSToolbarDisplayModeIconOnly : NSToolbarDisplayModeLabelOnly;
 	}
+	return effective;
+}
+
+/* **AND WHETHER ANYTHING ON THE STRIP WILL DRAW A LABEL, WHICH IS WHAT THE BAND'S HEIGHT ASKS.** THREE conditions, because
+ * each is a way the row can be wasted: the item must HAVE a label (a separator and a flexible space have none, and would
+ * otherwise keep the row for the whole strip — MEASURED: Forge's toolbar has separators between its verbs); it must not be
+ * a CUSTOM VIEW, whose view IS the item and whose label the painter never draws (`-NSToolbarView -drawRect:` skips such an
+ * item — MEASURED: Forge's Code | Info switch is one, with a label and no picture, and it held the row open on its own);
+ * and its effective mode must not be icon-only. An empty toolbar — the state before the delegate's items are loaded — answers YES,
+ * so the ordinary band is what a window is given first and the strip only gets shorter once there are items to decide with. */
+static BOOL fn_band_reserves_label_row(NSArray *items, NSToolbarDisplayMode display)
+{
+	NSUInteger i;
+
+	if ([items count] == 0) {
+		return YES;
+	}
+	for (i = 0; i < [items count]; i++) {
+		NSToolbarItem *item = [items objectAtIndex:i];
+		NSString *label = [item label];
+
+		if ([item view] != nil) {
+			continue;
+		}
+		if (label == nil || [label length] == 0) {
+			continue;
+		}
+		if (fn_effective_display(item, display) != NSToolbarDisplayModeIconOnly) {
+			return YES;
+		}
+	}
+	return NO;
+}
+
+static void fn_item_rects(NSToolbarItem *item, NSRect rect, NSToolbarDisplayMode display,
+			  NSToolbarSizeMode mode, NSRect *imageRect, NSRect *labelRect)
+{
+	BOOL small = (mode == NSToolbarSizeModeSmall);
+	BOOL hasImage = ([item image] != nil);
+	CGFloat icon = small ? 16.0 : 24.0;
+	CGFloat labelBand = small ? fn_TOOLBAR_LABEL_ROW_SMALL : fn_TOOLBAR_LABEL_ROW_REGULAR;
+	CGFloat topPad = small ? 4.0 : 6.0;
+	NSToolbarDisplayMode effective = fn_effective_display(item, display);
 
 	*imageRect = NSZeroRect;
 	*labelRect = NSZeroRect;
@@ -1447,7 +1494,18 @@ static NSString * const AGCoderToolbarItemsKey = @"items";
 
 - (CGFloat)cg_toolbarHeight
 {
-	return (_sizeMode == NSToolbarSizeModeSmall) ? fn_TOOLBAR_HEIGHT_SMALL : fn_TOOLBAR_HEIGHT_REGULAR;
+	BOOL small = (_sizeMode == NSToolbarSizeModeSmall);
+
+	/* **A BAND THAT DRAWS NO LABELS IS A BAND WITHOUT THE LABEL ROW.** `IconOnly` is the mode a toolbar is put in when a
+	 * person wants the verbs and not their words, and the empty 15 points the words used to occupy are height the window's
+	 * content should have instead: MEASURED in Forge, the strip stayed 52 points tall with its label row blank. The question
+	 * is asked of the ITEMS rather than of the mode alone, because an item with no image draws its label under `IconOnly`
+	 * too (`-fn_effective_display`) and that row has to stay. */
+	if (!fn_band_reserves_label_row([self visibleItems], _displayMode)) {
+		return (small ? fn_TOOLBAR_HEIGHT_SMALL - fn_TOOLBAR_LABEL_ROW_SMALL
+			      : fn_TOOLBAR_HEIGHT_REGULAR - fn_TOOLBAR_LABEL_ROW_REGULAR);
+	}
+	return small ? fn_TOOLBAR_HEIGHT_SMALL : fn_TOOLBAR_HEIGHT_REGULAR;
 }
 
 - (NSView *)cg_view
@@ -1478,11 +1536,16 @@ static NSString * const AGCoderToolbarItemsKey = @"items";
 
 - (void)cg_layoutChanged
 {
+	/* **THE WINDOW FIRST, THEN THE ITEM RECTS, BECAUSE THE BAND'S HEIGHT CAN CHANGE WITH WHAT IT DRAWS.** A toolbar in
+	 * `IconOnly` is 15 points shorter (no label row), and the item rects are computed from the VIEW's bounds — so a
+	 * relayout that runs before the window has been told lays them out for the height the band used to have. MEASURED,
+	 * turning the labels back on: the strip was taller and every label was drawn across its own icon, one band behind.
+	 * Telling the window first also keeps the content view in step, since its height is the same arithmetic. */
+	[_window cg_toolbarLayoutChanged];
 	if (_toolbarView != nil) {
 		[(NSToolbarView *)_toolbarView cg_relayout];
 		[(NSView *)_toolbarView setNeedsDisplay:YES];
 	}
-	[_window cg_toolbarLayoutChanged];
 	[self fn_saveConfiguration];
 }
 

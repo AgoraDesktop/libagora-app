@@ -664,6 +664,91 @@ int main(void)
 	[window cg_performChromeButton:AGChromeButtonMenu];
 	check([toolbar isVisible], "and toggles it back");
 
+	/* 10b. **A BAND THAT DRAWS NO LABELS IS A BAND WITHOUT THE LABEL ROW.** `IconOnly` is the mode a person puts a toolbar
+	 * in when they want the verbs and not their words, and the 15 points the words lived in are height the CONTENT should
+	 * have: MEASURED in Forge, the strip stayed 52 points tall with its label row blank. The question is asked of the items
+	 * and not of the mode alone, because an item with no picture draws its label under `IconOnly` too — and a separator,
+	 * which has neither, must not hold the row for the whole strip. */
+	{
+		NSImage *picture = [[[NSImage alloc] initWithSize:NSMakeSize(24.0, 24.0)] autorelease];
+		NSArray *all = [toolbar items];
+		CGFloat tall = [toolbar cg_toolbarHeight];
+		CGFloat frameHeight = [window frame].size.height;
+		CGFloat contentTall = [window contentRectForFrameRect:[window frame]].size.height;
+		NSUInteger k;
+
+		check(near(tall, 52.0), "the ordinary band is 52 points");
+
+		/* THE DELEGATE'S ITEMS HAVE LABELS AND NO PICTURES, so `IconOnly` changes nothing: they fall back to their words
+		 * and the row has to stay. */
+		[toolbar setDisplayMode:NSToolbarDisplayModeIconOnly];
+		check(near([toolbar cg_toolbarHeight], tall),
+		      "a toolbar whose items have NO picture keeps the label row, because it draws the labels anyway");
+
+		/* AND GIVEN PICTURES the same mode really does drop the words — and the band with them. */
+		for (k = 0; k < [all count]; k++) {
+			[[all objectAtIndex:k] setImage:picture];
+		}
+		[toolbar setDisplayMode:NSToolbarDisplayModeIconAndLabel];
+		check(near([toolbar cg_toolbarHeight], tall), "with pictures and labels the band is the ordinary height");
+		[toolbar setDisplayMode:NSToolbarDisplayModeIconOnly];
+		check(near([toolbar cg_toolbarHeight], tall - 15.0),
+		      "and IconOnly takes exactly the label row's 15 points off it, separators and all");
+		check(near([toolbarView frame].size.height, tall - 15.0), "the strip on the window is that much shorter");
+		check(near([window frame].size.height, frameHeight), "the window's own frame does not change");
+		check(near([window contentRectForFrameRect:[window frame]].size.height, contentTall + 15.0),
+		      "and the CONTENT gets the row: the band is chrome, the space it gives up is the document's");
+		[toolbar setDisplayMode:NSToolbarDisplayModeIconAndLabel];
+		check(near([toolbar cg_toolbarHeight], tall) &&
+		      near([window contentRectForFrameRect:[window frame]].size.height, contentTall),
+		      "turning the words back on puts the 15 points back");
+	}
+
+	/* 10c. **AND THE SMALL BAND HAS ITS OWN ROW, ON A TOOLBAR OF ITS OWN.** A toolbar that belongs to no window still
+	 * answers its height, which is the door this asks; the window's own toolbar is left alone so the geometry the next
+	 * case measures is the one the earlier cases set up. */
+	{
+		NSToolbar *loose = [[NSToolbar alloc] initWithIdentifier:@"AGToolbarProbeSmall"];
+		NSImage *picture = [[[NSImage alloc] initWithSize:NSMakeSize(16.0, 16.0)] autorelease];
+		NSArray *looseItems;
+		NSUInteger k;
+
+		[loose setDelegate:delegate];
+		looseItems = [loose items];
+		for (k = 0; k < [looseItems count]; k++) {
+			[[looseItems objectAtIndex:k] setImage:picture];
+		}
+		[loose setSizeMode:NSToolbarSizeModeSmall];
+		check(near([loose cg_toolbarHeight], 38.0), "the small band is 38 points with its labels showing");
+		[loose setDisplayMode:NSToolbarDisplayModeIconOnly];
+		check(near([loose cg_toolbarHeight], 38.0 - 12.0),
+		      "and the small band loses its own 12-point row, not the regular band's 15");
+
+		/* **AND A CUSTOM-VIEW ITEM DOES NOT HOLD THE ROW OPEN.** Its view IS the item — the painter skips such an item
+		 * entirely — so a label it carries is never drawn, and counting it would keep the band tall for nothing.
+		 * MEASURED: Forge's `Code | Info` switch is one, with a label and no picture, and the strip stayed 52 points. */
+		[loose setSizeMode:NSToolbarSizeModeRegular];
+		[loose setDisplayMode:NSToolbarDisplayModeIconAndLabel];
+		check(near([loose cg_toolbarHeight], 52.0), "the ordinary band is back before the custom view goes in");
+		{
+			NSView *view = [[[NSView alloc] initWithFrame:NSMakeRect(0.0, 0.0, 60.0, 24.0)] autorelease];
+			NSToolbarItem *custom = [[[NSToolbarItem alloc] initWithItemIdentifier:@"custom"] autorelease];
+
+			[custom setLabel:@"a label nobody draws"];
+			[custom setView:view];
+			[custom setMinSize:NSMakeSize(60.0, 24.0)];
+			[custom setMaxSize:NSMakeSize(60.0, 24.0)];
+			delegate->customItem = custom;
+			[loose insertItemWithItemIdentifier:@"custom" atIndex:0];
+			[loose setDisplayMode:NSToolbarDisplayModeIconOnly];
+			check(near([loose cg_toolbarHeight], 52.0 - 15.0),
+			      "a custom view's label is not drawn, so it does not keep the label row either");
+			[loose removeItemAtIndex:0];
+			delegate->customItem = nil;
+		}
+		[loose release];
+	}
+
 	/* 11. REMOVING THE TOOLBAR GIVES THE BAND BACK. */
 	frame = [window frame];
 	[window setToolbar:nil];
