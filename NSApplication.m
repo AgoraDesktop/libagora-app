@@ -1678,6 +1678,15 @@ static double s_last_report;
  * no file window would never open one. The band is therefore the ordinary levels: from `NSNormalWindowLevel` up to
  * (not including) `NSDockWindowLevel`, which is where furniture starts.
  * ============================================================================================ */
+/* **AND THE ONE A SHELL ASKS WHEN IT WANTS THE APPLICATION GONE RATHER THAN ITS WINDOWS CLOSED.** `agora-shell` 12's
+ * `quit_window` arrives as an event at a window because window ids are the only names the two sides share, and it is
+ * the APPLICATION's to answer — through `-terminate:`, which is the same path ⌘Q takes, so a delegate that refuses
+ * still refuses and an application with unsaved work still asks before it goes. */
+- (void)cg_handleQuit
+{
+	[self terminate:nil];
+}
+
 - (BOOL)cg_handleReopen
 {
 	BOOL hasVisibleWindows = NO;

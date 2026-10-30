@@ -2469,3 +2469,30 @@ through a door. The link now holds the parent MENU, which is what Apple's `-supe
 the receiver"), and the three places that ask whether it is tracking share one door (`-cg_supermenuIsTracking`) rather
 than three copies of a cast. `tests/menu_pick_dismisses.m`'s fourth case holds both halves: the right release is
 consumed and picks nothing, and the first left release after it picks.
+
+## 79. "Quit" could not replace a desktop, and a menu's dismiss-click was a click on somebody else
+
+**TWO QUESTIONS A DOCK COULD NOT ASK, AND BOTH WERE ANSWERED BY THE SAME SESSION'S WORK.**
+
+**`NSRunningApplication -terminate` NEVER TERMINATED ANYTHING.** It asked every WINDOW to close and left the rest to the
+application — which is the right answer for a menu's Quit row, and no answer at all for an application whose windows are
+FURNITURE. Workspace's desktop window closes, the desktop goes on being drawn, and the process is still there, so the
+Dock's Restart had nothing to restart. MEASURED in a live session: the row ran, the Dock logged
+`restart asked of io.github.agoradesktop.workspace`, and the application went on drawing. The protocol's own note says
+the same thing from the other side ("Force Quit is a session concern"), but a polite QUIT is not force quit, and every
+session has it — so `agora-shell` 12 added `quit_window`, `agora_window.quit` arrives at a window of the application
+(the address, exactly as `reopen`'s), and this tier's answer is `-[NSApplication terminate:]`, the same path ⌘Q takes:
+the delegate may refuse, and an application with unsaved work still asks first. `-terminate` sends it and falls back to
+closing windows against a compositor older than 12, so the old behaviour is what an older server gets.
+`tests/window_list.c` asserts the event reaches the application and leaves the window alone.
+
+**AND THE PRESS THAT DISMISSES A MENU WAS A PRESS ON SOMETHING ELSE.** A pop-up menu's session pulls every event of the
+application, and the click that dismisses one is usually addressed to a window that is not the menu's — the desktop, an
+application's window, or (in the Dock) an invisible window put up to catch it. The coordinate test in
+`-cg_trackOneEvent:` cannot answer for those: the point is in ANOTHER window's space. MEASURED: a press on the Dock's
+catcher at the screen's bottom-left mapped to a point INSIDE the menu's own frame, so the menu stayed up and the desktop
+took the keyboard for a click that meant "never mind". A press addressed to another window now dismisses the session
+before any coordinate is read (`-cg_eventIsInAnotherWindow:`), and `-dismissedAt` is not recorded, because the only
+reader is the menu bar, which needs a point in its own space. `tests/appkit_activation.m`'s eighth section is the case,
+on a real compositor with a real tracking window: the press is addressed to the key window at a point that IS inside the
+menu, and the assertions are that the menu closes and that the application in front is still in front.

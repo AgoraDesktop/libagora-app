@@ -67,6 +67,10 @@ typedef enum {
 	 * window a person could work in, so the question "what does that click mean" is the application's. It arrives
 	 * at the window the ask named, and the answer need not be that window. */
 	AGEventReopen,
+	/* **THE SHELL ASKED THIS APPLICATION TO TERMINATE** — the Dock's Restart, and a session's shutdown when there is
+	 * one. The application's own termination path answers it, so the delegate may still refuse; the window it arrives
+	 * at is the address and not the subject. */
+	AGEventQuit,
 	/* A key changed state. `keycode` is the evdev code, `text` the UTF-8 it produces (empty when none), and
 	 * `keysym` the keymap's name for the key itself, which is the only one of the three a key that TYPES NOTHING
 	 * still has. */
@@ -590,6 +594,11 @@ void AGWindowRequestClose(AGWindowServer *server, unsigned int id);
  * ADDRESS rather than a subject — the application decides what opens — and a compositor that does not speak
  * `agora_shell` version 5 never answers, which is the silence every older door has. */
 void AGWindowReopen(AGWindowServer *server, unsigned int id);
+/* **AND "QUIT", WHICH IS A DIFFERENT QUESTION FROM `AGWindowRequestClose`.** That one asks each WINDOW to close and
+ * leaves the rest to the application, which is right for a menu's Quit row; this asks the APPLICATION to terminate,
+ * which is the only thing that can replace an application whose windows are furniture (a desktop). Answers 1 when the
+ * request went out and 0 when the compositor is older than `agora-shell` 12, so a caller can fall back. */
+int AGWindowRequestQuit(AGWindowServer *server, unsigned int id);
 
 /* ============================================================================================ *
  * A DOCK TILE'S MENU: A QUESTION, AN ANSWER, AND A CHOICE.

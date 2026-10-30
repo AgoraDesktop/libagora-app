@@ -920,6 +920,21 @@ static const CGFloat NSMenuStateColumnWidth = 20.0;
 	_tornOff = flag;
 }
 
+/* **WHETHER AN EVENT WAS ADDRESSED TO SOME OTHER WINDOW, WHICH IS THE ONE PRESS A MENU CANNOT MISTAKE.** A session
+ * that drives itself pulls every event of the application, including the ones aimed at a window that is not the
+ * menu's — and the press that dismisses a pop-up is usually exactly that: a click on the desktop, on another
+ * application's window, or (in the Dock) on the invisible window a menu puts up to catch it. The coordinate test in
+ * the step below cannot answer for those, because `-locationInWindow` is in ANOTHER window's space: MEASURED, a press
+ * on the Dock's catcher at the screen's bottom-left mapped to a point inside the menu's own frame, so the menu stayed
+ * up. A session with no window (a probe with no display) answers NO and keeps the coordinate test. */
+- (BOOL)cg_eventIsInAnotherWindow:(id)event
+{
+	if (_trackingWindow == nil || event == nil || ![event respondsToSelector:@selector(windowNumber)]) {
+		return NO;
+	}
+	return [event windowNumber] != [_trackingWindow windowNumber];
+}
+
 /* THE LOOP'S BODY. It takes ONE event and answers whether the session is still up — so a caller with a run loop
  * writes `while ([menu cg_trackOneEvent:[app nextEventMatchingMask:...]]) { }` and nothing else. */
 - (BOOL)cg_trackOneEvent:(id)event
@@ -956,6 +971,15 @@ static const CGFloat NSMenuStateColumnWidth = 20.0;
 			return NO;
 		}
 		return YES;
+	}
+	/* **A PRESS ADDRESSED TO ANOTHER WINDOW IS A PRESS OUTSIDE THIS MENU, WITHOUT ASKING WHERE IT LANDED.** It comes
+	 * before the coordinate test because it is the case that test cannot answer: the point is in the other window's
+	 * space. `-dismissedAt` is deliberately NOT recorded — the only reader is the menu bar, which needs a point in ITS
+	 * own space to re-open the title under the pointer, and a bar's events never reach this step from another window
+	 * (its loop asks `-cg_ownsEvent:` first). A self-driving pop-up is dismissed and says nothing. */
+	if ((type == NSLeftMouseDown || type == NSRightMouseDown) && [self cg_eventIsInAnotherWindow:event]) {
+		[self cancelTracking];
+		return NO;
 	}
 	/* **AND A PRESS OUTSIDE THE MENU ENDS IT AT ONCE, REMEMBERING WHERE — AND IT GOES FIRST.** The branch below
 	 * handles `NSLeftMouseDown` too ("a press is deliberately not a pick"), so a check placed after it is DEAD CODE

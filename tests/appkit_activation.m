@@ -26,6 +26,9 @@
  *   6. THE KEYBOARD GOES TO A WINDOW, NEVER TO THE BAR, and an application with no window left gives it up rather
  *      than handing it to its own chrome. That rule is what stops the bar of an application nobody activated from
  *      becoming the bar on the screen.
+ *   7a. **AND A PRESS OUTSIDE AN OPEN MENU DOES NOT EITHER.** A click on another window — the desktop, another
+ *      application, or the invisible window a Dock puts up to catch it — dismisses a pop-up menu without making the
+ *      window it landed on the active one. Read from the menu's own session step and from the application's state.
  *   7. **CLICKING A MENU ITEM DOES NOT CHANGE THE APPLICATION THAT HAS THE KEYBOARD.** A picked row is a press on
  *      the menu's own window, and a press is what gives a window the keyboard — so a menu that said nothing took it
  *      for as long as it was up and handed it on when it went away, which is exactly "choosing File > New left
@@ -308,6 +311,56 @@ int main(void)
 			[popup release];
 			[lower release];
 			[upper release];
+		}
+
+		/* 8. **A PRESS IN ANOTHER WINDOW DISMISSES A MENU AND ACTIVATES NOBODY.** The menu is a caller-driven session,
+		 * so it has a real tracking window (and therefore a window number) without a loop. The press is ADDRESSED to
+		 * the application's key window — "somewhere else" — at a point that maps INSIDE the menu by the coordinate
+		 * rule, which is what makes the window the reason it dismisses rather than the position. */
+		{
+			NSMenu *popup = [[NSMenu alloc] initWithTitle:@"Outside"];
+			NSWindow *menuWindow = nil;
+			NSWindow *keyBefore = [app keyWindow];
+			NSEvent *press;
+			BOOL stillTracking = YES;
+
+			[popup addItemWithTitle:@"Row" action:NULL keyEquivalent:@""];
+			[popup cg_beginSessionAt:NSMakePoint(200.0, 200.0)];
+			{
+				NSArray *windows = [app windows];
+				NSUInteger k;
+
+				for (k = 0; k < [windows count]; k++) {
+					NSWindow *w = [windows objectAtIndex:k];
+
+					if ([w level] == NSPopUpMenuWindowLevel) {
+						menuWindow = w;
+					}
+				}
+			}
+			check([popup cg_isTracking] && menuWindow != nil,
+			      "a menu is up, with a window and a window number of its own");
+			if (menuWindow != nil && keyBefore != nil) {
+				NSRect m = [menuWindow frame];
+				NSRect k = [keyBefore frame];
+				NSPoint p = NSMakePoint(NSMidX(m) - m.origin.x, NSMidY(m) - m.origin.y);
+
+				/* THE POINT IS IN THE KEY WINDOW'S SPACE AND LANDS INSIDE THE MENU WHEN READ AS A MENU POINT —
+				 * if it is not, the case would pass for the coordinate reason instead of the window one. */
+				check(NSMidX(m) >= m.origin.x && NSMidY(m) >= m.origin.y &&
+				      p.x <= k.size.width && p.y <= k.size.height,
+				      "the fixture's press is inside the key window and maps inside the menu");
+				press = [NSEvent mouseEventWithType:NSLeftMouseDown location:p modifierFlags:0
+							  timestamp:0.0 windowNumber:(NSInteger)[keyBefore windowNumber]
+							 context:nil eventNumber:0 clickCount:1 pressure:1.0];
+				stillTracking = [popup cg_trackOneEvent:press];
+				check(stillTracking == NO && ![popup cg_isTracking],
+				      "and a press in ANOTHER WINDOW dismisses it, whatever the coordinates say");
+				check([app isActive], "the application that was in front is still in front");
+				check([app keyWindow] == keyBefore && [keyBefore isKeyWindow],
+				      "and the window the press landed in did not take the keyboard");
+			}
+			[popup release];
 		}
 
 		/* **AND THE APPLICATION'S SEVEN SWEEP DOORS.** Three are questions about the responder chain and a string, two

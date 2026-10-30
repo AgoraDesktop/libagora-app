@@ -2080,6 +2080,19 @@ static void agora_window_pointer_global(void *data, struct agora_window *window,
  * delivered as an event rather than acted on here because what opens is the application's decision: the AppKit
  * turns it into its delegate's `-applicationShouldHandleReopen:hasVisibleWindows:` and nothing in this seam knows
  * what a window means to the program that owns it. */
+/* **THE SHELL ASKING THE APPLICATION TO GO, DELIVERED AS AN EVENT FOR THE SAME REASON `reopen` IS**: what terminates
+ * is the application, through its own path, with everything that asks before it does — so nothing here acts on it. */
+static void agora_window_quit(void *data, struct agora_window *window)
+{
+	AGWindow *w = data;
+	AGEvent event;
+
+	(void)window;
+	memset(&event, 0, sizeof event);
+	event.type = AGEventQuit;
+	ag_window_deliver(w, &event);
+}
+
 static void agora_window_reopen(void *data, struct agora_window *window)
 {
 	AGWindow *w = data;
@@ -2117,14 +2130,15 @@ static void agora_window_dock_menu_action(void *data, struct agora_window *windo
 }
 
 static const struct agora_window_listener agora_window_listener = {
-	/* IN THE PROTOCOL'S OWN ORDER: `close`, `work_area_changed`, `pointer_global`, `reopen`,
-	 * `dock_menu_requested`, `dock_menu_action`. */
+	/* IN THE PROTOCOL'S OWN ORDER, which is what a Wayland listener table is:
+	 * `close`, `work_area_changed`, `pointer_global`, `reopen`, `dock_menu_requested`, `dock_menu_action`, `quit`. */
 	agora_window_close,
 	agora_window_work_area_changed,
 	agora_window_pointer_global,
 	agora_window_reopen,
 	agora_window_dock_menu_requested,
 	agora_window_dock_menu_action,
+	agora_window_quit,
 };
 
 /* ============================================================================================ *
@@ -2305,6 +2319,19 @@ void AGWindowReopen(AGWindowServer *server, unsigned int id)
 	wl_display_flush(server->display);
 }
 
+int AGWindowRequestQuit(AGWindowServer *server, unsigned int id)
+{
+	if (server == NULL || server->shell == NULL) {
+		return 0;
+	}
+	if (wl_proxy_get_version((struct wl_proxy *)server->shell) < 12) {
+		return 0;	/* an older compositor has no such question; the caller asks the windows instead */
+	}
+	agora_shell_quit_window(server->shell, id);
+	wl_display_flush(server->display);
+	return 1;
+}
+
 /* ============================================================================================ *
  * A DOCK TILE'S MENU, FROM THE ASKING SIDE.
  *                                                                                                *
@@ -2472,11 +2499,14 @@ static void registry_global(void *data, struct wl_registry *registry, uint32_t n
 		 * clipboard's seven and the fractional scale's nine are the two older fences this seam knows about, **TEN IS THE
 		 * SHEET'S** (below it a window has no way to say it hangs from another window's title bar and a sheet is drawn as
 		 * the rectangle it is), and **ELEVEN IS THE POINTER'S SHAPE**: below it there is no `set_cursor`, so every window
-		 * shows the compositor's default. Asking for exactly what this seam understands matters here for the same reason
-		 * it does at nine: the version a shell is bound at is the version every window it makes is capped to, and a
-		 * request sent above it is a protocol error that kills the client rather than a call the server ignores. */
+		 * shows the compositor's default. **TWELVE IS THE QUIT REQUEST**, and it is the one fence here that is a
+		 * REQUEST this client SENDS rather than a window's property: below it `AGWindowRequestQuit` answers 0 and the
+		 * caller falls back to closing windows, which is what a Dock's Quit meant before it existed. Asking for exactly
+		 * what this seam understands matters here for the same reason it does at nine: the version a shell is bound at is
+		 * the version every window it makes is capped to, and a request sent above it is a protocol error that kills the
+		 * client rather than a call the server ignores. */
 		server->shell = wl_registry_bind(registry, name, &agora_shell_interface,
-						version < 11 ? version : 11);
+						version < 12 ? version : 12);
 	}
 }
 

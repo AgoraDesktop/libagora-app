@@ -273,6 +273,8 @@
 /* **AND THE ONE THAT IS NOT ABOUT THIS WINDOW AT ALL.** A shell's reopen ask arrives at a window because window ids
  * are the only names the two sides share, but the answer belongs to the application. */
 - (BOOL)cg_handleReopen;
+/* **AND THE ONE THAT IS NOT ABOUT THIS WINDOW EITHER: the shell asking the APPLICATION to terminate.** */
+- (void)cg_handleQuit;
 /* **AND THE TWO A DOCK TILE'S MENU ARRIVES THROUGH, which cross the same way and for the same reason.** The menu is
  * the delegate's answer to `-applicationDockMenu:`, so the APPLICATION is what holds it — a window is only the address
  * the question arrived at and the thing that has a connection to answer on. */
@@ -4334,6 +4336,12 @@ static CGFloat fn_clamp_axis(CGFloat v, CGFloat lo, CGFloat hi)
 		break;
 	case AGEventClose:
 		_cg_closeRequested = YES;
+		break;
+	case AGEventQuit:
+		/* **A SHELL ASKING FOR THE APPLICATION, NOT THE WINDOW.** Same address, different subject: the window is
+		 * where the question arrived and what terminates is the application — so it goes straight on, as `reopen`
+		 * does. */
+		[[NSApplication sharedApplication] cg_handleQuit];
 		break;
 	case AGEventReopen:
 		/* **A DOCK CLICK WITH NOTHING TO RAISE, ASKED OF THIS WINDOW BECAUSE A WINDOW IS THE ADDRESS.** The answer

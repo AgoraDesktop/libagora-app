@@ -461,9 +461,16 @@ static NSInteger fn_architecture_of_elf(const char *path)
 	if (server == NULL) {
 		return NO;
 	}
-	/* **EVERY WINDOW, WHICH IS THE MAC'S ANSWER FOR AN APPLICATION WITHOUT DOCUMENT SEMANTICS.** The application
-	 * hears `close` on each and decides; a client that refuses stays open, which is why Force Quit is separate and
-	 * why it needs the session. */
+	/* **THE APPLICATION IS ASKED, WHICH IS WHAT APPLE'S `-terminate` MEANS AND WHAT A SHELL CAN NOW SAY.** Apple:
+	 * "Attempts to terminate the receiver" — the application, through its own termination path, refusing if it must.
+	 * The older answer here asked every WINDOW to close and left the rest to the application, which is the same thing
+	 * for an application that quits with its last window and nothing at all for one whose windows are furniture
+	 * (Workspace's desktop): the desktop closed and the application went on drawing it, so a Dock's Restart could not
+	 * work. `AGWindowRequestQuit` is `agora-shell` 12's `quit_window`, and a compositor older than that answers 0 — in
+	 * which case the windows are asked instead, which is exactly the behaviour that existed before. */
+	if (AGWindowRequestQuit(server, [[_windowIDs lastObject] unsignedIntValue])) {
+		return YES;
+	}
 	{
 		NSUInteger i;
 
