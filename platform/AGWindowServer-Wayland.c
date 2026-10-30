@@ -1481,8 +1481,6 @@ static void keyboard_enter(void *data, struct wl_keyboard *keyboard, uint32_t se
 			break;
 		}
 	}
-	fprintf(stderr, "ENTERDBG surface %p -> window %p (%s)\n", (void *)surface, (void *)server->keyboard_focus,
-		server->keyboard_focus != NULL ? "found" : "NOT FOUND");
 	/* THE TENURE BEGINS HERE, AND ONLY HERE. A repeat keeps the serial it was armed under, so a generated repeat is
 	 * never mistaken for a press after a focus return. */
 	server->focus_serial++;
