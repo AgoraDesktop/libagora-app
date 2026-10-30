@@ -2006,6 +2006,17 @@ target_link_libraries(open_panel_accept PRIVATE App)
 add_test(NAME appkit-open-panel-accept COMMAND open_panel_accept)
 set_tests_properties(appkit-open-panel-accept PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
 
+# **TWO PROCESSES OF ONE BUNDLE ARE ONE APPLICATION.** `-openURL:` on a bundle whose identifier is already in the
+# window list brings that application forward and spawns nothing; the fixture proves it can see a spawn by making the
+# application stop being running and launching again. It needs Agora's own window server, so it skips (77) without one.
+add_executable(workspace_single_instance workspace_single_instance.m)
+target_link_libraries(workspace_single_instance PRIVATE App)
+add_test(NAME appkit-single-instance
+  COMMAND "${CMAKE_CURRENT_SOURCE_DIR}/run-activation-headless.sh"
+	  "$<TARGET_FILE:workspace_single_instance>" "${AGORA_WINDOW_SERVER_BINARY}" 3)
+set_tests_properties(appkit-single-instance PROPERTIES SKIP_RETURN_CODE 77
+  ENVIRONMENT "${_agora_app_test_env}")
+
 # **A QUIT ARRIVES FROM SEVERAL PLACES AT ONCE** — the menu, a Dock's tile, and every window of an application whose
 # tile groups two processes. The first terminates it; the rest must not announce `-applicationWillTerminate:` again.
 add_executable(app_terminate_once app_terminate_once.m)

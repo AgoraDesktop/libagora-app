@@ -132,6 +132,34 @@ static void fn_window_list(void *context, const AGWindowInfo *rows, int count)
 	[(NSWorkspace *)context cg_applyWindowList:rows count:count];
 }
 
+/* **AND A CALLER THAT NEEDS THE TRUTH NOW WAITS FOR IT, BECAUSE THE MODEL STARTS EMPTY AND EMPTY IS NOT A STATE IT
+ * CAN TELL FROM "NOTHING IS RUNNING".** The snapshot is pushed on every window change and, now, once when a list is
+ * bound — so a process that has just started has heard nothing yet, and comparing a bundle against its empty model
+ * would find nothing running and start a second copy. MEASURED: three `-openURL:` calls from a fresh launcher started
+ * three Forge instances. The wait is bounded and stepped exactly as `NSDockMenu`'s own round trip is. */
+#define FNWORKSPACE_LIST_TIMEOUT 0.25
+
+- (void)cg_waitForWindowList
+{
+	AGWindowServer *server;
+	NSDate *deadline;
+
+	if (_listHeard) {
+		return;
+	}
+	[self cg_startListening];
+	server = AGWindowServerShared();
+	if (server == NULL) {
+		return;	/* no compositor: nothing to wait for, and the empty model is the honest answer */
+	}
+	deadline = [NSDate dateWithTimeIntervalSinceNow:FNWORKSPACE_LIST_TIMEOUT];
+	while (!_listHeard && [deadline timeIntervalSinceNow] > 0.0) {
+		if (AGWindowServerDispatchTimeout(server, 10) < 0) {
+			break;	/* the connection is gone; the caller's launch will fail on its own */
+		}
+	}
+}
+
 - (void)cg_startListening
 {
 	AGWindowServer *server;
@@ -153,6 +181,7 @@ static void fn_window_list(void *context, const AGWindowInfo *rows, int count)
  * gives each identifier a begin and an end. */
 - (void)cg_applyWindowList:(const AGWindowInfo *)rows count:(int)count
 {
+	_listHeard = YES;
 	NSMutableDictionary *byIdentifier = [NSMutableDictionary dictionary];
 	NSMutableDictionary *windowsByIdentifier = [NSMutableDictionary dictionary];
 	/* **AND THE ONES A PERSON CAN WORK IN, WHICH IS NOT THE SAME SET.** An application's furniture — a desktop, a
@@ -360,11 +389,63 @@ static void fn_window_list(void *context, const AGWindowInfo *rows, int count)
 	return path;
 }
 
+/* **ONE APPLICATION PER BUNDLE IDENTIFIER, WHICH IS WHAT EVERYTHING ELSE HERE ALREADY ASSUMES.** A row in the
+ * compositor's window list is grouped by `CFBundleIdentifier`, so two processes of one bundle are ONE application to
+ * the Dock, to the menu bar and to `-runningApplications` — and a second launch is then not a second application but a
+ * second copy of one, with two processes competing for one identity. MEASURED: two Forge instances shared a tile, and
+ * one press of that tile's Quit ended one of them and left the other.
+ *
+ * So a launch of a bundle that is ALREADY RUNNING brings that application forward instead of starting another, which
+ * is the Mac's answer to opening a running application. The check lives here rather than in Launch Services because
+ * this is the only layer that can see what is running: Launch Services is a spawner and knows nothing about the
+ * compositor's window list. A direct `exec` from a shell is still a second copy — nothing at this layer can prevent
+ * that — but every launch the desktop performs goes through this door. */
+static NSRunningApplication *fn_runningApplicationForBundleAtURL(NSURL *url, NSArray *running)
+{
+	NSString *path = [url path];
+	NSString *identifier;
+	NSUInteger i;
+
+	if (path == nil) {
+		return nil;
+	}
+	/* THE IDENTIFIER COMES FROM THE BUNDLE ON DISK, because it is the bundle that is being launched and its manifest
+	 * is where the name comes from. A path that is not a bundle — a document — answers nil and is left alone. */
+	identifier = [[NSBundle bundleWithPath:path] bundleIdentifier];
+	if (identifier == nil || [identifier length] == 0) {
+		return nil;
+	}
+	for (i = 0; i < [running count]; i++) {
+		NSRunningApplication *candidate = [running objectAtIndex:i];
+
+		if ([[candidate bundleIdentifier] isEqualToString:identifier]) {
+			return candidate;
+		}
+	}
+	return nil;
+}
+
 - (BOOL)openURL:(NSURL *)url
 {
-	CFURLRef item = CFCreateWithNSURL(url);
+	CFURLRef item;
 	OSStatus status;
+	NSRunningApplication *already;
 
+	/* **AND A RUNNING ONE IS BROUGHT FORWARD RATHER THAN STARTED AGAIN.** This is the same door a Dock's tile click
+	 * uses, so an application with no window a person can work in is still activated through its menu bar, and one
+	 * with windows has them raised. An application that cannot be activated at all — terminated between the snapshot
+	 * and this call — falls through to the launch, which is the honest answer.
+	 *
+	 * **THE LIST IS WAITED FOR FIRST**, because a launcher that has just started has never been sent one: see
+	 * `-cg_waitForWindowList`. Without it this door would compare against an empty model and start a second copy. */
+	[self cg_waitForWindowList];
+	if (url != nil &&
+	    (already = fn_runningApplicationForBundleAtURL(url, [self runningApplications])) != nil) {
+		if ([already activateWithOptions:NSApplicationActivateAllWindows]) {
+			return YES;
+		}
+	}
+	item = CFCreateWithNSURL(url);
 	if (item == NULL) {
 		return NO;
 	}

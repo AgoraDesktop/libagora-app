@@ -96,6 +96,7 @@ enum {
 	NSMutableArray *_runningApplications;	/* NSRunningApplication, in the order the window list gave them */
 	NSRunningApplication *_frontmost;
 	BOOL _listening;			/* the window-list handler is installed on the shared connection */
+	BOOL _listHeard;			/* a snapshot has arrived, so the model is this compositor's and not an empty default */
 }
 
 + (NSWorkspace *)sharedWorkspace;
@@ -117,7 +118,14 @@ enum {
 
 /* **OPEN, WHICH IS LAUNCH FOR AN APPLICATION AND "OPEN WITH" FOR EVERYTHING ELSE.** YES when a launch happened; NO
  * when Launch Services had no answer — which for a document means no Agora bundle claims its type, and never a
- * foreign application (the registry is Agora's bundles only). */
+ * foreign application (the registry is Agora's bundles only).
+ *
+ * **AND AN APPLICATION THAT IS ALREADY RUNNING IS BROUGHT FORWARD, NOT STARTED AGAIN.** One bundle identifier is one
+ * application to everything above this door — one Dock tile, one menu bar, one entry in `-runningApplications` — so a
+ * second launch would be a second process behind a single identity. The bundle's `CFBundleIdentifier` is read from the
+ * bundle on disk and matched against the window list; a match is activated (which is the same door a Dock's tile click
+ * uses) and answered YES. A copy started by hand from a shell is still possible, which is the one thing this layer
+ * cannot prevent. */
 - (BOOL)openURL:(NSURL *)url;
 - (BOOL)openFile:(NSString *)fullPath;
 
