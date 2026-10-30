@@ -76,6 +76,24 @@
 
 @end
 
+/* **THE APPLICATION'S OWN VERBS LIVE ON ITS DELEGATE, AND THE CHAIN HAS TO END THERE.** macOS's responder chain runs
+ * first responder → … → application → **application delegate**, and that last link is what makes a nil-target action
+ * work. This stand-in owns one selector nothing else in the process implements, which is the question. */
+@interface AGDelegateVerb : NSObject
+{
+@public
+	int ran;
+}
+@end
+
+@implementation AGDelegateVerb
+- (void)onlyTheDelegateAnswers:(id)sender
+{
+	(void)sender;
+	ran++;
+}
+@end
+
 static int g_failed;
 
 static void check(int ok, const char *name)
@@ -492,6 +510,27 @@ int main(void)
 			check([app targetForAction:@selector(setNeedsDisplay:) to:nil from:content] == content,
 			      "a responder sender answers from ITS OWN chain, which is how the view a click came from is found");
 			check([app targetForAction:NULL] == nil, "and a nil action has no target");
+
+			/* **AND THE LAST LINK OF THE CHAIN IS THE DELEGATE, WHICH IS WHERE AN APPLICATION'S OWN VERBS LIVE.** A
+			 * nil-target action that only the delegate implements answers — the arrangement macOS has, and the one a
+			 * toolbar item or a menu row relies on when it names nobody. MEASURED before this: the walk stopped at the
+			 * application and never asked, so Forge's New and Open rows were dead buttons until they named the delegate
+			 * themselves. */
+			{
+				AGDelegateVerb *previous = (AGDelegateVerb *)[app delegate];
+				AGDelegateVerb *standIn = [[AGDelegateVerb alloc] init];
+
+				[app setDelegate:standIn];
+				check([app targetForAction:@selector(onlyTheDelegateAnswers:)] == standIn,
+				      "an action only the DELEGATE implements is found at the end of the chain");
+				check([app targetForAction:@selector(onlyTheDelegateAnswers:) to:standIn from:nil] == standIn,
+				      "a target named explicitly still wins, and is the same object");
+				check([app sendAction:@selector(onlyTheDelegateAnswers:) to:nil from:nil] &&
+				      standIn->ran == 1,
+				      "and `-sendAction:to:nil from:` reaches it, which is what a nil-target row does");
+				[app setDelegate:previous];
+				[standIn release];
+			}
 
 			/* 2. THE HELP SEARCH: the match inside the range, case-insensitively, with the title's `&` SKIPPED. */
 			{

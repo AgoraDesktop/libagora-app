@@ -610,6 +610,24 @@ BOOL NSApplicationLoad(void)
 	return [self targetForAction:anAction to:nil from:nil];
 }
 
+/* **THE LAST LINK IS THE APPLICATION'S DELEGATE, WHICH IS WHERE AN APPLICATION PUTS ITS OWN VERBS.** macOS's chain runs
+ * first responder → … → window → window controller → document → application → **application delegate**, and that last
+ * link is what makes a nil-target action work: a menu row or a toolbar item that names nothing is answered by whichever
+ * object in the chain implements it, and an application's own verbs (New Project, Open Project, and everything else it
+ * keeps on its controller) are implemented by the DELEGATE, not by `NSApplication`.
+ *
+ * THIS WALK USED TO STOP AT THE APPLICATION, and that was a bug with a workaround on top of it: MEASURED, Forge's New and
+ * Open toolbar items were dead buttons when their target was left nil, because nothing in the chain answered and this
+ * door never asked the delegate — so Forge named the delegate explicitly instead. Naming it still works and still wins
+ * (a caller's `to:` is answered first), but an action that only the delegate implements now resolves the way it does on
+ * the Mac, and the workaround is no longer load-bearing. */
+static id fn_delegate_for_action(NSApplication *app, SEL anAction)
+{
+	id delegate = [app delegate];
+
+	return (delegate != nil && [delegate respondsToSelector:anAction]) ? delegate : nil;
+}
+
 /* **AND THE SENDER DECIDES WHERE THE WALK STARTS.** A sender that is a RESPONDER answers from its own chain — that is how
  * a menu item's action finds the view the click came from — and anything else (nil, a window, a control that is not a
  * responder) starts at the key window's first responder, which is what the one-argument door has always done. */
@@ -636,10 +654,10 @@ BOOL NSApplicationLoad(void)
 			}
 			r = [r nextResponder];
 		}
-		return [self respondsToSelector:anAction] ? self : nil;
-	}
-	if (anAction == NULL) {
-		return nil;
+		if ([self respondsToSelector:anAction]) {
+			return self;
+		}
+		return fn_delegate_for_action(self, anAction);
 	}
 	/* THE CHAIN, STARTED AT THE KEY WINDOW'S FIRST RESPONDER — which walks view → superview → … → window →
 	 * application, because the window's `-nextResponder` is this object. */
@@ -656,7 +674,10 @@ BOOL NSApplicationLoad(void)
 		}
 		r = [r nextResponder];
 	}
-	return [self respondsToSelector:anAction] ? self : nil;
+	if ([self respondsToSelector:anAction]) {
+		return self;
+	}
+	return fn_delegate_for_action(self, anAction);
 }
 
 /* ---- LAUNCHING AND RUNNING ------------------------------------------------------------------ */
