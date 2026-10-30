@@ -72,6 +72,15 @@ NSString *NSMenuDidEndTrackingNotification = @"NSMenuDidEndTrackingNotification"
 - (void)cg_detachAllItems;
 @end
 
+/* **THE ONE QUESTION THREE PLACES ASK ABOUT THE LINK UP: IS THE MENU THAT HOLDS ME RUNNING A SESSION?** A submenu
+ * belongs to its parent's session — the parent's loop drives both windows — and a menu bar's menu has no session
+ * above it at all (the bar is a window with a view). It is a door rather than a C function because the link is a
+ * PROTECTED ivar, and it is written once because three copies of a cast is three chances to ask it of the wrong
+ * object; that is exactly what the item/menu confusion above used to do. */
+@interface NSMenu (APPKITMenuSupermenu)
+- (BOOL)cg_supermenuIsTracking;
+@end
+
 @implementation NSMenu
 
 /* ============================================================================================
@@ -220,10 +229,18 @@ static NSString * const AGCoderMenuChangedMessagesKey = @"menuChangedMessagesEna
 
 - (void)setSupermenu:(id)supermenu
 {
-	/* NULLABLE ASYMMETRY, and both halves are deliberate: an item's submenu is TOLD which item holds it (the
-	 * argument), while an item's submenu is also told when it is DETACHED (nil). The memory policy is
-	 * NSMenuItem's — the link up is not retained — so this is a plain assignment. */
+	/* **THE LINK UP NAMES A MENU, WHICH IS WHAT APPLE'S `-supermenu` ANSWERS**: "the menu that contains the
+	 * receiver". It used to be given the ITEM that held this menu, and the three places that ASK it — the drag that
+	 * leaves a submenu, and the two that decide whether this menu may run a session of its own — then read an
+	 * `NSMenuItem`'s memory as if it were an `NSMenu`'s `_tracking` flag. MEASURED: the answer depended on whatever
+	 * byte sat at that offset in the item, which made "is my parent tracking?" a coin toss. The memory policy is the
+	 * item's — the link up is not retained — so this is a plain assignment. */
 	_supermenu = supermenu;
+}
+
+- (BOOL)cg_supermenuIsTracking
+{
+	return _supermenu != nil && [(NSMenu *)_supermenu cg_isTracking];
 }
 
 /* ---- THE LIST, AND THE ONE PLACE THE LINKS ARE KEPT IN STEP ------------------------------------ */
@@ -247,7 +264,7 @@ static NSString * const AGCoderMenuChangedMessagesKey = @"menuChangedMessagesEna
 	/* AND THE VERTICAL LINK IS RESTORED IF THE ITEM ALREADY HAD A SUBMENU, which is what makes re-inserting an
 	 * item that was removed (and detached) work without the caller telling it again. */
 	if ([newItem submenu] != nil) {
-		[[newItem submenu] setSupermenu:newItem];
+		[[newItem submenu] setSupermenu:self];
 	}
 	[[NSNotificationCenter defaultCenter] postNotificationName:NSMenuDidAddItemNotification object:self];
 }
@@ -466,8 +483,8 @@ static NSString * const AGCoderMenuChangedMessagesKey = @"menuChangedMessagesEna
 	}
 	[anItem setSubmenu:aMenu];
 	/* BOTH DIRECTIONS, IN ONE CALL — which is the whole reason this door exists rather than the caller writing
-	 * the two lines: the item now holds the menu, and the menu now knows which item holds IT. */
-	[aMenu setSupermenu:anItem];
+	 * the two lines: the item now holds the menu, and the menu now knows the MENU it hangs from. */
+	[aMenu setSupermenu:self];
 }
 
 /* ---- AN ITEM CHANGED, AND SENDING AN ITEM'S ACTION --------------------------------------------- */
@@ -976,7 +993,7 @@ static const CGFloat NSMenuStateColumnWidth = 20.0;
 			 * legitimately over that bar the whole time the button is held. MEASURED, the first version asked
 			 * whether the drag was outside the PARENT'S TRACKING WINDOW, and the bar has none, so it answered
 			 * "yes, it left" for every movement and the menu closed on the first one. */
-			if (_supermenu != nil && ((NSMenu *)_supermenu)->_tracking) {
+			if ([self cg_supermenuIsTracking]) {
 				[self cancelTracking];
 				return NO;
 			}
@@ -1006,7 +1023,13 @@ static const CGFloat NSMenuStateColumnWidth = 20.0;
 		}
 		return YES;
 	}
-	if (type == NSLeftMouseUp && _openedByPress) {
+	/* **THE RELEASE THAT OPENED THE SESSION IS CONSUMED, WHICHEVER BUTTON OPENED IT.** A session started by a
+	 * right-click is opened by a right PRESS, and its release is a RIGHT one; swallowing only a left release left this
+	 * flag set past the gesture that should have cleared it, so the NEXT left release — the first click on a menu row —
+	 * was eaten instead. MEASURED on a Dock tile's menu in a live session: the first click on `Remove from Dock` did
+	 * nothing and the second one acted, which is the same "the first click on a menu item is ignored" the flag exists
+	 * to prevent, arriving from the other side. */
+	if (_openedByPress && (type == NSLeftMouseUp || type == NSRightMouseUp || type == NSOtherMouseUp)) {
 		_openedByPress = NO;
 		return YES;		/* the press that opened the menu, coming up: the menu stays */
 	}
@@ -1254,12 +1277,10 @@ static const CGFloat NSMenuStateColumnWidth = 20.0;
 	 * taken. `-menuDidClose:` is what made it observable (it never arrived), and the fix is to close the session in the
 	 * branch that cannot track it. A SUBMENU WHOSE PARENT IS TRACKING IS NOT THAT CASE: its session belongs to the
 	 * parent's loop, which is the same test that decides whether this menu may loop at all. */
-	if ((_supermenu == nil || !((NSMenu *)_supermenu)->_tracking) &&
-	    ![[NSApplication sharedApplication] isRunning] && _tracking) {
+	if (![self cg_supermenuIsTracking] && ![[NSApplication sharedApplication] isRunning] && _tracking) {
 		[self cancelTracking];
 	}
-	if ((_supermenu == nil || !((NSMenu *)_supermenu)->_tracking) &&
-	    [[NSApplication sharedApplication] isRunning]) {
+	if (![self cg_supermenuIsTracking] && [[NSApplication sharedApplication] isRunning]) {
 		NSApplication *app = [NSApplication sharedApplication];
 
 		if (getenv("APPKIT_MENU_DIAG") != NULL) {

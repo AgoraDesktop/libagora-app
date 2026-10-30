@@ -116,7 +116,7 @@ extern NSString *NSMenuDidEndTrackingNotification;
 	NSMutableArray *_items;			/* RETAINED: the menu OWNS its items */
 	/* NOT RETAINED, AND BOTH ARE THE TREE'S UPWARD POINTERS: a submenu knows the item that holds it and an
 	 * item knows the menu that holds it, and neither may own the other or the tree is a cycle. */
-	id _supermenu;				/* the item whose submenu this menu is, or nil */
+	id _supermenu;				/* the MENU that holds this one as a submenu, or nil (Apple's -supermenu) */
 	/* THE GEOMETRY'S FOUR FIELDS. `_font` is RETAINED (a menu owns the font it was given); the other three are
 	 * plain values, and `_size` is what a CALLER set rather than what the menu answers — the answer is the floor
 	 * and the state column applied on top of it, which is where `-showsStateColumn` gets its reader. */

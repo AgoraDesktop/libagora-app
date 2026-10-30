@@ -2450,3 +2450,22 @@ left gives it up rather than handing it to its own chrome. (A real desktop never
 window is always there.)
 
 ## Keeping in sync
+## 78. A right-click's menu ate the first left click, and the link up named the wrong kind of object
+
+**TWO DEFECTS IN ONE SESSION'S WORTH OF STATE, AND BOTH WERE MEASURED FROM A DOCK TILE'S MENU.** The first was
+reported by a person driving a live session: the Dock's `Remove from Dock` row did nothing on the first click and acted
+on the second. The session keeps `-openedByPress` so that the press that opened a menu cannot pick the row under the
+pointer — and it cleared that flag only on an `NSLeftMouseUp`. A menu opened by a RIGHT press releases the RIGHT
+button, so the flag survived the gesture it exists for and ate the next left release instead: the same "the first
+click on a menu item is ignored" the flag was added to prevent, arriving from the other side. It is now cleared by
+whichever mouse-up comes first — the opening release is a release, not a left release.
+
+**THE SECOND WAS FOUND BY THE TEST THAT PINS THE FIRST.** Keeping a self-driving menu session open in a probe means
+opening it as a SUBMENU of a tracking parent (a root menu with no run loop closes itself at once), and that path asked
+`((NSMenu *)_supermenu)->_tracking` — while `_supermenu` held the NSMenuItem whose submenu this menu is. Reverting the
+first fix to prove the test had teeth made it crash with `-[NSMenuItem cg_isTracking] is not implemented`: the cast was
+reading a menu's field out of an item, which is garbage when it reads the ivar and an exception once the read goes
+through a door. The link now holds the parent MENU, which is what Apple's `-supermenu` answers ("the menu that contains
+the receiver"), and the three places that ask whether it is tracking share one door (`-cg_supermenuIsTracking`) rather
+than three copies of a cast. `tests/menu_pick_dismisses.m`'s fourth case holds both halves: the right release is
+consumed and picks nothing, and the first left release after it picks.

@@ -12,6 +12,12 @@
  *
  * The claim is read from INSIDE the action, which is the only place it matters: at that moment the menu must no longer
  * be tracking. A torn-off menu is the one exception, and it is asserted too — the palette sends and stays.
+ *
+ * **AND THE RELEASE THAT OPENED THE MENU IS THE GESTURE THAT IS CONSUMED, WHICHEVER BUTTON MADE IT.** The session keeps
+ * `_openedByPress` so that the press that opened it does not pick the row under the pointer — and that release is a
+ * LEFT one only for a menu opened by a click on a title. A right-click opens a context menu with a right press, and
+ * the flag used to survive it, eating the NEXT left release instead: MEASURED in a session, the first click on a Dock
+ * tile's `Remove from Dock` did nothing and the second one acted. The last case below is that click.
  */
 #import <AppKit/AppKit.h>
 #import <Foundation/Foundation.h>
@@ -59,6 +65,13 @@ static void check(int ok, const char *what)
 static NSEvent *fn_mouse_up(NSPoint at, NSInteger windowNumber)
 {
 	return [NSEvent mouseEventWithType:NSLeftMouseUp location:at modifierFlags:0 timestamp:0.0
+			      windowNumber:windowNumber context:nil eventNumber:0 clickCount:1 pressure:1.0];
+}
+
+/* THE RELEASE OF A RIGHT PRESS, which is the gesture that opens a context menu. */
+static NSEvent *fn_right_mouse_up(NSPoint at, NSInteger windowNumber)
+{
+	return [NSEvent mouseEventWithType:NSRightMouseUp location:at modifierFlags:0 timestamp:0.0
 			      windowNumber:windowNumber context:nil eventNumber:0 clickCount:1 pressure:1.0];
 }
 
@@ -126,6 +139,47 @@ int main(void)
 			check(![empty cg_isTracking], "with the menu dismissed");
 			[empty release];
 			[third release];
+		}
+
+		/* 4. **THE RELEASE THAT OPENED A RIGHT-CLICK'S MENU IS A RIGHT ONE.** A session that drives itself keeps the
+		 * `_openedByPress` flag so its opening release cannot pick a row — and the case that goes wrong is the one
+		 * nobody wrote down: a context menu opened by a RIGHT press releases the right button, so a flag cleared only
+		 * by a left release stays set and eats the first click on a row. The session here is a SUBMENU whose parent is
+		 * tracking, which is the only way a probe can hold a self-driving session open without an application loop
+		 * (see `-popUpMenuPositioningItem:`'s own note on that). */
+		{
+			AGMenuRecorder *fourth = [[AGMenuRecorder alloc] init];
+			NSMenu *parent = [[NSMenu alloc] initWithTitle:@"Parent"];
+			NSMenu *child = fn_menu(fourth, @selector(takePick:tracking:));
+			NSMenuItem *holder = [[NSMenuItem alloc] initWithTitle:@"More" action:NULL keyEquivalent:@""];
+			NSRect frame;
+
+			fourth->menu = child;
+			/* THE PAIRING DOOR, BOTH WAYS: an item that holds a menu and a menu that knows its holder. The
+			 * one-directional `-setSubmenu:` on the item leaves the menu a root, and a root that drives itself closes
+			 * at once in a process with no run loop. */
+			[parent addItem:holder];
+			[parent setSubmenu:child forItem:holder];
+			[holder release];
+			[parent cg_beginSessionAt:NSMakePoint(40.0, 40.0)];
+			[child popUpMenuPositioningItem:nil atLocation:NSMakePoint(120.0, 120.0) inView:nil];
+			check([child cg_isTracking], "a submenu opened over a tracking parent is a session of its own");
+			frame = [child cg_trackingFrame];
+			{
+				/* THE EVENT SPEAKS THE WINDOW'S OWN SPACE, and `-cg_itemAtPoint:` adds the frame's origin to it —
+				 * so a point in the middle of the frame's SIZE is the middle of the row, while the frame's
+				 * midpoint in SCREEN coordinates would be one frame too far. */
+				NSPoint row = NSMakePoint(NSWidth(frame) / 2.0, NSHeight(frame) / 2.0);
+
+				check([child cg_trackOneEvent:fn_right_mouse_up(row, 0)] == YES && fourth->picks == 0,
+				      "the right release that opened the menu is consumed and picks nothing");
+				check([child cg_trackOneEvent:fn_mouse_up(row, 0)] == NO && fourth->picks == 1,
+				      "and the FIRST left release after it is the pick, not the second");
+			}
+			[child cancelTracking];
+			[parent cancelTracking];
+			[parent release];
+			[fourth release];
 		}
 
 		[menu release];
