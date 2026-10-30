@@ -664,6 +664,86 @@ int main(void)
 	[window cg_performChromeButton:AGChromeButtonMenu];
 	check([toolbar isVisible], "and toggles it back");
 
+	/* 10a. **A CUSTOM VIEW'S LABEL IS DRAWN UNDER IT, IN THE BAND'S OWN ROW.** Its view IS its picture, so the words
+	 * say what the control is for — and a segmented control of two pictures, which is Forge's `Code | Info` switch, has
+	 * nothing else to say it. This tier skipped view items entirely, so the label such an item carries was never drawn:
+	 * MEASURED, the caption that was meant to sit under the switch existed and was invisible.
+	 *
+	 * The ink is counted over the ITEM'S CELL rather than over a guessed row, so the check does not depend on which end
+	 * of a bitmap the band's rows are at: with a label there is more ink in that cell than without one. */
+	{
+		NSView *view = [[[NSView alloc] initWithFrame:NSMakeRect(0.0, 0.0, 70.0, 24.0)] autorelease];
+		NSToolbarItem *labelled = [[[NSToolbarItem alloc] initWithItemIdentifier:@"custom"] autorelease];
+		const int band = (int)[toolbar cg_toolbarHeight];
+		unsigned char *withLabel;
+		unsigned char *withoutLabel;
+		NSRect cell;
+		long inkWith = 0, inkWithout = 0;
+		int x, y;
+
+		[labelled setLabel:@"Caption"];
+		[labelled setView:view];
+		[labelled setMinSize:NSMakeSize(70.0, 24.0)];
+		[labelled setMaxSize:NSMakeSize(70.0, 24.0)];
+		delegate->customItem = labelled;
+		[toolbar insertItemWithItemIdentifier:@"custom" atIndex:0];
+		/* **AND THE VIEW KEEPS THE HEIGHT IT ASKED FOR, WITH THE ROW BESIDE IT.** The CELL carries the label row — it is
+		 * what the pointer hit-tests — while the view itself stays 24 points tall, above the words. */
+		check(near([view frame].size.height, 24.0), "a labelled custom view keeps the height it asked for");
+		check([view frame].origin.y >= 15.0 && [view frame].origin.y + [view frame].size.height <= (CGFloat)band,
+		      "and it sits above the label row rather than on top of the words");
+
+		{
+			NSBitmapImageRep *shot = new_rep(TW, band);
+			NSGraphicsContext *context = [NSGraphicsContext graphicsContextWithBitmapImageRep:shot];
+
+			[NSGraphicsContext saveGraphicsState];
+			[NSGraphicsContext setCurrentContext:context];
+			[[NSColor whiteColor] setFill];
+			[[NSBezierPath bezierPathWithRect:NSMakeRect(0.0, 0.0, (CGFloat)TW, (CGFloat)band)] fill];
+			[toolbarView displayRect:[toolbarView bounds]];
+			[NSGraphicsContext restoreGraphicsState];
+			withLabel = [shot bitmapData];
+			cell = [view frame];
+			for (y = 0; y < band; y++) {
+				for (x = (int)cell.origin.x; x < (int)(cell.origin.x + cell.size.width); x++) {
+					unsigned char *p = withLabel + ((size_t)y * (size_t)TW + (size_t)x) * 4u;
+
+					if (p[0] < 128) inkWith++;
+				}
+			}
+			[shot release];
+		}
+
+		/* THE SAME ITEM WITH NO LABEL: the words are the difference, so the ink is what proves they are painted. */
+		[labelled setLabel:nil];
+		[toolbarView displayRect:[toolbarView bounds]];
+		{
+			NSBitmapImageRep *shot = new_rep(TW, band);
+			NSGraphicsContext *context = [NSGraphicsContext graphicsContextWithBitmapImageRep:shot];
+
+			[NSGraphicsContext saveGraphicsState];
+			[NSGraphicsContext setCurrentContext:context];
+			[[NSColor whiteColor] setFill];
+			[[NSBezierPath bezierPathWithRect:NSMakeRect(0.0, 0.0, (CGFloat)TW, (CGFloat)band)] fill];
+			[toolbarView displayRect:[toolbarView bounds]];
+			[NSGraphicsContext restoreGraphicsState];
+			withoutLabel = [shot bitmapData];
+			for (y = 0; y < band; y++) {
+				for (x = (int)cell.origin.x; x < (int)(cell.origin.x + cell.size.width); x++) {
+					unsigned char *p = withoutLabel + ((size_t)y * (size_t)TW + (size_t)x) * 4u;
+
+					if (p[0] < 128) inkWithout++;
+				}
+			}
+			[shot release];
+		}
+		check(inkWith > inkWithout + 20, "a custom view's LABEL is DRAWN under the view");
+
+		[toolbar removeItemAtIndex:0];
+		delegate->customItem = nil;
+	}
+
 	/* 10b. **A BAND THAT DRAWS NO LABELS IS A BAND WITHOUT THE LABEL ROW.** `IconOnly` is the mode a person puts a toolbar
 	 * in when they want the verbs and not their words, and the 15 points the words lived in are height the CONTENT should
 	 * have: MEASURED in Forge, the strip stayed 52 points tall with its label row blank. The question is asked of the items

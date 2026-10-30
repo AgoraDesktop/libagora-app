@@ -199,6 +199,16 @@ static NSToolbarDisplayMode fn_effective_display(NSToolbarItem *item, NSToolbarD
 	BOOL hasLabel = ([item label] != nil && [[item label] length] > 0);
 	NSToolbarDisplayMode effective = display;
 
+	/* **A CUSTOM VIEW IS ITS OWN PICTURE, SO THE ONLY QUESTION LEFT IS WHETHER ITS LABEL GOES UNDER IT.** It has no
+	 * `-image`, and the fallbacks below would read that as "a label with nothing beside it" and take the whole cell for
+	 * the words. macOS draws a view item's label in the band's own row like any other, and the view sits above it. */
+	if ([item view] != nil) {
+		if (effective == NSToolbarDisplayModeDefault) {
+			effective = NSToolbarDisplayModeIconAndLabel;
+		}
+		return (effective != NSToolbarDisplayModeIconOnly && hasLabel) ? NSToolbarDisplayModeIconAndLabel
+									      : NSToolbarDisplayModeIconOnly;
+	}
 	if (effective == NSToolbarDisplayModeDefault) {
 		effective = NSToolbarDisplayModeIconAndLabel;
 	}
@@ -213,10 +223,10 @@ static NSToolbarDisplayMode fn_effective_display(NSToolbarItem *item, NSToolbarD
 
 /* **AND WHETHER ANYTHING ON THE STRIP WILL DRAW A LABEL, WHICH IS WHAT THE BAND'S HEIGHT ASKS.** THREE conditions, because
  * each is a way the row can be wasted: the item must HAVE a label (a separator and a flexible space have none, and would
- * otherwise keep the row for the whole strip — MEASURED: Forge's toolbar has separators between its verbs); it must not be
- * a CUSTOM VIEW, whose view IS the item and whose label the painter never draws (`-NSToolbarView -drawRect:` skips such an
- * item — MEASURED: Forge's Code | Info switch is one, with a label and no picture, and it held the row open on its own);
- * and its effective mode must not be icon-only. An empty toolbar — the state before the delegate's items are loaded — answers YES,
+ * otherwise keep the row for the whole strip — MEASURED: Forge's toolbar has separators between its verbs); and its
+ * effective mode must not be icon-only, which for a CUSTOM VIEW means the words are under the view rather than instead of
+ * it (`-fn_effective_display`). A view item with NO label still reserves nothing, which is what lets Forge's bare switch
+ * leave the row alone. An empty toolbar — the state before the delegate's items are loaded — answers YES,
  * so the ordinary band is what a window is given first and the strip only gets shorter once there are items to decide with. */
 static BOOL fn_band_reserves_label_row(NSArray *items, NSToolbarDisplayMode display)
 {
@@ -229,9 +239,6 @@ static BOOL fn_band_reserves_label_row(NSArray *items, NSToolbarDisplayMode disp
 		NSToolbarItem *item = [items objectAtIndex:i];
 		NSString *label = [item label];
 
-		if ([item view] != nil) {
-			continue;
-		}
 		if (label == nil || [label length] == 0) {
 			continue;
 		}
@@ -266,6 +273,30 @@ static void fn_item_rects(NSToolbarItem *item, NSRect rect, NSToolbarDisplayMode
 		*labelRect = NSMakeRect(rect.origin.x + fn_TOOLBAR_ITEM_AIR, rect.origin.y + 2.0,
 				       rect.size.width - 2.0 * fn_TOOLBAR_ITEM_AIR, rect.size.height - 4.0);
 	}
+}
+
+/* **ONE LABEL PAINTER, BECAUSE THE BAND HAS TWO KINDS OF ITEM AND THEY DRAW THE SAME WORDS.** A standard item's label
+ * sits under its picture; a custom VIEW's sits under the view, in the same row, from the same rects — so the font, the ink
+ * and the centring are stated once rather than twice (the second copy is how a caption ends up a point off its
+ * neighbours). */
+static void fn_draw_label(NSToolbarItem *item, NSRect labelRect, NSFont *font)
+{
+	NSString *label = [item label];
+	NSDictionary *attrs;
+	NSSize size;
+	CGFloat ascender, descent, baseline;
+
+	if (label == nil || [label length] == 0 || labelRect.size.width <= 0.0) {
+		return;
+	}
+	attrs = [NSDictionary dictionaryWithObjectsAndKeys:font, NSFontAttributeName,
+		 fn_item_ink([item isEnabled]), NSForegroundColorAttributeName, nil];
+	size = [label sizeWithAttributes:attrs];
+	ascender = [font ascender];
+	descent = (CGFloat)fabs((double)[font descender]);
+	baseline = labelRect.origin.y + (labelRect.size.height - (ascender + descent)) / 2.0 + descent;
+	[label drawAtPoint:NSMakePoint(labelRect.origin.x + (labelRect.size.width - size.width) / 2.0, baseline)
+	    withAttributes:attrs];
 }
 
 @implementation NSToolbarView
@@ -476,7 +507,16 @@ static CGFloat fn_standard_width(NSToolbarItem *item, NSToolbarDisplayMode displ
 			/* A CUSTOM VIEW KEEPS ITS OWN HEIGHT, CENTRED IN THE BAND. A standard face fills the strip; a control a
 			 * caller supplied is as tall as it said, which is the whole reason it has a min/max pair. */
 			if ([item view] != nil) {
-				itemHeight = fn_custom_height(item);
+				/* **A LABELLED VIEW'S CELL CARRIES THE LABEL ROW UNDER IT**, so the words are inside the cell the pointer
+				 * hit-tests and the plate covers — a click on the caption is a click on the control — while the VIEW keeps
+				 * the height it asked for and sits above the row. */
+				CGFloat labelRow = 0.0;
+
+				if (fn_effective_display(item, [_toolbar displayMode]) == NSToolbarDisplayModeIconAndLabel) {
+					labelRow = ([_toolbar sizeMode] == NSToolbarSizeModeSmall) ? fn_TOOLBAR_LABEL_ROW_SMALL
+												 : fn_TOOLBAR_LABEL_ROW_REGULAR;
+				}
+				itemHeight = fn_custom_height(item) + labelRow;
 				if (itemHeight <= 0.0 || itemHeight > height) {
 					itemHeight = height;
 				}
@@ -516,6 +556,20 @@ static CGFloat fn_standard_width(NSToolbarItem *item, NSToolbarDisplayMode displ
 
 			if (index != NSNotFound) {
 				rect = [[_itemRects objectAtIndex:index] rectValue];
+			}
+			/* **AND A LABELLED VIEW SITS ABOVE ITS WORDS, IN THE SAME ROW THEY ARE DRAWN IN.** The CELL stays whole — it
+			 * is what the pointer hit-tests and what the plate covers, so a click on the caption is a click on the
+			 * control — while the view itself takes the room over the label row, centred there, exactly as a picture
+			 * does. Without this the caption would be painted across the bottom of the switch. */
+			if (viewItem != nil && rect.size.height > 0.0 &&
+			    fn_effective_display(viewItem, [_toolbar displayMode]) == NSToolbarDisplayModeIconAndLabel) {
+				CGFloat labelRow = ([_toolbar sizeMode] == NSToolbarSizeModeSmall) ? fn_TOOLBAR_LABEL_ROW_SMALL
+												  : fn_TOOLBAR_LABEL_ROW_REGULAR;
+
+				/* THE ROW UNDER IT IS THE WORDS': the view gives it up and moves UP by it, or the caption would be
+				 * painted across the bottom of the control. */
+				rect.size.height -= labelRow;
+				rect.origin.y += labelRow;
 			}
 			[view setFrame:rect];
 		}
@@ -642,13 +696,21 @@ static CGFloat fn_standard_width(NSToolbarItem *item, NSToolbarDisplayMode displ
 			}
 		}
 		if ([item view] != nil) {
+			/* **AND A CUSTOM VIEW'S LABEL IS THE BAND'S, NOT THE VIEW'S.** Its content is the view; the words under it say
+			 * what the control is for, which is what a segmented control of two pictures needs — MEASURED: Forge's
+			 * `Code | Info` switch, two pictures and no caption, with the label it was given never drawn. The rects come
+			 * from `-fn_item_rects` like every other item, so the row is the same row. */
+			NSRect imageRect, labelRect;
+
+			if ([item label] != nil && [[item label] length] > 0) {
+				fn_item_rects(item, rect, display, mode, &imageRect, &labelRect);
+				fn_draw_label(item, labelRect, font);
+			}
 			continue;
 		}
 		{
 			NSRect imageRect, labelRect;
 			NSImage *image = [item image];
-			NSString *label = [item label];
-			NSDictionary *attrs;
 
 			fn_item_rects(item, rect, display, mode, &imageRect, &labelRect);
 			if (image != nil && imageRect.size.width > 0.0 && imageRect.size.height > 0.0) {
@@ -671,21 +733,7 @@ static CGFloat fn_standard_width(NSToolbarItem *item, NSToolbarDisplayMode displ
 					CGContextSetAlpha(c, 1.0);
 				}
 			}
-			if (label == nil || [label length] == 0 || labelRect.size.width <= 0.0) {
-				continue;
-			}
-			attrs = [NSDictionary dictionaryWithObjectsAndKeys:font, NSFontAttributeName,
-				 fn_item_ink([item isEnabled]), NSForegroundColorAttributeName, nil];
-			{
-				NSSize size = [label sizeWithAttributes:attrs];
-				CGFloat ascender = [font ascender];
-				CGFloat descent = (CGFloat)fabs((double)[font descender]);
-				CGFloat baseline = labelRect.origin.y + (labelRect.size.height - (ascender + descent)) / 2.0 + descent;
-
-				[label drawAtPoint:NSMakePoint(labelRect.origin.x + (labelRect.size.width - size.width) / 2.0,
-							       baseline)
-				    withAttributes:attrs];
-			}
+			fn_draw_label(item, labelRect, font);
 		}
 	}
 
