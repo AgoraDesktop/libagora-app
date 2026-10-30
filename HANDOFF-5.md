@@ -32,7 +32,7 @@ gitlink advance in `$AGORA_ROOT`), and each ended green. **The thirteenth throug
 | `fe3cc3c` | **The browser is COMPLETE** (120/120): the drag quartet, the reload trio, display and scroll, the flags with readers, the width autosave, and five refusals (the matrix quartet, because its columns are tables; `-setReusesColumns:`). |
 | `887965e` | **The menu view is COMPLETE** (42/42): the geometry the drawing already used, the seven metrics measured across the rows, the item lifecycle reached through `NSMenu`'s own notifications, the highlight by index — and ten refusals (`NSMenu` owns the tracking window; tear-off menus are dead). |
 | `fac78a4` | **`NSText`'s own surface — COMPLETE** (70/70): one run, the automatic fit, the RTF/RTFD round trips, the font pasteboard, the spelling check that selects. |
-| `bad047b` | **`NSFont` — COMPLETE** (71/71): every metric from the FACE, the screen/printer variants that ARE the receiver, the user-font defaults that survive a missing `$FNX_CONFIG_ROOT`, and eight refusals. |
+| `bad047b` | **`NSFont` — COMPLETE** (71/71): every metric from the FACE, the screen/printer variants that ARE the receiver, the user-font defaults that survive a missing `$AGORA_CONFIG_ROOT`, and eight refusals. |
 | `e25be8e` | **`NSWorkspace`'s file operations** (57/58): the five verbs, the modern recycle/duplicate pair, `-openTempFile`, the volumes, the labels, the desktop-picture store, the change notifications — and thirteen refusals. **The per-volume trash rule, found by `EXDEV`.** |
 | `7a447cb` | **`NSTextView` — COMPLETE** (186/186): document background, links (delegate first, URL second), word completion — and thirty refusals, four of them because their bit would have no reader. |
 | `182bcd4` | **The slider pair — COMPLETE** (`NSSlider` 30/30, `NSSliderCell` 35/35): the tick marks as VALUES with a snap, the title as a CELL in a band taken off the top, the two no-argument ink doors answered from the control view, the background image drawn, and **a flipped vertical scale that was upside down** (§9). |
@@ -192,7 +192,7 @@ Each cost time; each is the same shape as a trap in `HANDOFF-2.md` §4. The long
 
 * **`NSApp` IS NULL UNTIL `-sharedApplication` RUNS** — `[NSApp sendAction:…]` on the global returns `NO` without a
   message. Ask the CLASS for the instance (`[NSApplication sharedApplication]`), as the rest of the tree does.
-* **`NSUserDefaults` WRITES UNDER `$FNX_CONFIG_ROOT/…` AND THROWS WITHOUT IT.** A defaults write that cannot land must not
+* **`NSUserDefaults` WRITES UNDER `$AGORA_CONFIG_ROOT/…` AND THROWS WITHOUT IT.** A defaults write that cannot land must not
   abort a caller: the four `NSFont` user-font doors catch it (the preference does not persist, which is honest), and a
   PROBE that measures persistence sets a root first — that is a launcher's job, not a library's.
 * **`NSTemporaryDirectory()` ANSWERS `/System/Temporary Files/`**, which need not exist — `-openTempFile` tries `$TMPDIR`,

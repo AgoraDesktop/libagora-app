@@ -159,10 +159,10 @@ int main(void)
 	NSAutoreleasePool *pool;
 
 	/* **THE DEFAULTS ROOT IS A TEMP DIRECTORY, NOT THE TEST RUNNER'S `/Users/...`.** `NSUserDefaults` writes
-	 * under `FNX_CONFIG_ROOT`, which is empty by default — the same environment the table's and split view's autosave
+	 * under `AGORA_CONFIG_ROOT`, which is empty by default — the same environment the table's and split view's autosave
 	 * probes set, and the reason this probe can exercise a real save and load without touching anything of the
 	 * user's. */
-	setenv("FNX_CONFIG_ROOT", "/tmp/agora-search-field-defaults", 1);
+	setenv("AGORA_CONFIG_ROOT", "/tmp/agora-search-field-defaults", 1);
 	pool = [[NSAutoreleasePool alloc] init];
 	NSWindow *window = [[NSWindow alloc] initWithContentRect:NSMakeRect(0.0, 0.0, 360.0, 160.0)
 						       styleMask:NSBorderlessWindowMask

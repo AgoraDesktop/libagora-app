@@ -3271,7 +3271,7 @@ face CAN answer is answered: `-positionOfGlyph:precededByGlyph:isNominal:` is th
 
 **AND THE USER-FONT DEFAULTS ROUND-TRIP**: `+setUserFont:`/`+setUserFixedPitchFont:` store the face's name and size in
 `NSUserDefaults`, and `+userFontOfSize:`/`+userFixedPitchFontOfSize:` read them back (falling back to the platform's UI
-face). A defaults write that cannot land — this tree's defaults need `$FNX_CONFIG_ROOT` — **does not abort a caller**: the
+face). A defaults write that cannot land — this tree's defaults need `$AGORA_CONFIG_ROOT` — **does not abort a caller**: the
 doors catch it and the value simply does not persist.
 
 `tests/font_surface.m` asserts it in 37 checks — relations rather than literals, because a number copied from the face

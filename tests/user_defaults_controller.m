@@ -112,7 +112,7 @@ int main(void)
 			printf("user_defaults_controller: cannot make a scratch directory\n");
 			return 1;
 		}
-		setenv("FNX_CONFIG_ROOT", scratch, 1);
+		setenv("AGORA_CONFIG_ROOT", scratch, 1);
 		store = [[NSUserDefaults alloc] initWithSuiteName:@"AgoraDefaultsControllerProbe"];
 		starts = [NSMutableDictionary dictionaryWithObjectsAndKeys:
 			@"fallback", @"onlyInitial", @"forty", @"size", @"goneValue", @"gone", nil];

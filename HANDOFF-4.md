@@ -840,7 +840,7 @@ anything answerable from a descriptor is answered from the face instead.
 attributes, and a door that wrote one would be the stored bit nobody reads.
 
 **AND A DEFAULTS WRITE THAT CANNOT LAND MUST NOT ABORT A CALLER.** This tree's `NSUserDefaults` writes under
-`$FNX_CONFIG_ROOT/…`; without it `-setObject:forKey:` THROWS (measured — the probe aborted inside a font lookup). The four
+`$AGORA_CONFIG_ROOT/…`; without it `-setObject:forKey:` THROWS (measured — the probe aborted inside a font lookup). The four
 user-font doors catch it: the preference does not persist, which is the honest outcome, and the probe sets a root (a
 launcher's job) to measure the round trip.
 

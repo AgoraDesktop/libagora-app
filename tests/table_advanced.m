@@ -241,7 +241,7 @@ int main(void)
 
 	setvbuf(stdout, NULL, _IONBF, 0);
 	/* The autosave half needs a writable defaults root; the tree's Foundation resolves it from this variable. */
-	setenv("FNX_CONFIG_ROOT", "/tmp/agora-table-advanced-defaults", 1);
+	setenv("AGORA_CONFIG_ROOT", "/tmp/agora-table-advanced-defaults", 1);
 	[application finishLaunching];
 
 	table = make_table(source, &window, &scroll);

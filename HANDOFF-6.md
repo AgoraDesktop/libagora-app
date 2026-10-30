@@ -237,7 +237,7 @@ Each cost time; each is the same shape as a trap in `HANDOFF-2.md` §4. The long
 * **`-isFilePackageAtPath:` IS STRICTER THAN THE EXTENSION.** It needs a known extension (`.app`, `.bundle`,
   `.framework`, `.plugin`, `.kext`) **and** a `Contents` child. The save-panel probe's first package had a made-up
   extension and was not recognized.
-* **`NSApp` IS NULL UNTIL `-sharedApplication` RUNS**; `NSUserDefaults` writes under `$FNX_CONFIG_ROOT` and throws
+* **`NSApp` IS NULL UNTIL `-sharedApplication` RUNS**; `NSUserDefaults` writes under `$AGORA_CONFIG_ROOT` and throws
   without it; `/proc/mounts` reads as zero bytes through the string door; a rename cannot cross a device (`EXDEV`), which
   is why the trash rule is per-volume.
 

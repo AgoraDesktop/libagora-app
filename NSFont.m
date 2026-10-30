@@ -838,7 +838,7 @@ static NSFont *apk_ui_font(CTFontUIFontType type, CGFloat size)
  * `…OfSize:` constructors already in this class read them.
  */
 /* **A DEFAULTS WRITE THAT CANNOT LAND IS NOT A REASON TO ABORT A CALLER.** This tree's `NSUserDefaults` writes under
- * `$FNX_CONFIG_ROOT/Users/<name>/Configuration` (libagora-base's rule), so a process launched without that variable — a
+ * `$AGORA_CONFIG_ROOT/Users/<name>/Configuration` (libagora-base's rule), so a process launched without that variable — a
  * probe, a command-line tool, an application whose launcher forgot it — throws from `-setObject:forKey:`. The doors below
  * catch that and carry on: the value simply does not persist, which is the honest outcome and not a crash in a font
  * preference. It is the same rule the rest of this library states about platform pieces: answer, and say what is missing. */

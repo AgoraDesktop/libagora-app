@@ -265,7 +265,7 @@ int main(void)
 	setvbuf(stdout, NULL, _IONBF, 0);
 	/* NSUserDefaults resolves a config root from this environment variable; without it the Foundation defaults to a
 	 * path that is not writable here. The autosave check needs a real defaults store, so it gets a temporary one. */
-	setenv("FNX_CONFIG_ROOT", "/tmp/agora-split-view-defaults", 1);
+	setenv("AGORA_CONFIG_ROOT", "/tmp/agora-split-view-defaults", 1);
 	[application finishLaunching];
 
 	/* 1. THE DEFAULT ORIENTATION, THE FLIPPED COORDINATES AND THE THREE THICKNESSES. */
