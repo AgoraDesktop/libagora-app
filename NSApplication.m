@@ -37,6 +37,9 @@
 /* THE PIECES THE BAR IS MADE OF, named here because this file is where they are used: the seam (for the region the
  * server owns), the window (which owns the connection), and the view that lays a bar out. */
 #include "AGWindowServer.h"
+/* **THE LAUNCHER'S GRAVE.** A bundle opened from here is a child of this process, and `posix_spawn`'s children have to
+ * be collected or they are zombies — see the reap in `-nextEventMatchingMask:`. */
+#import <LaunchServices/LSOpen.h>
 #import "NSWindow.h"
 #import "NSMenuView.h"
 /* **THE MENU'S OWN HEADER, NOT JUST ITS ITEMS'.** `NSMenu` was forward-declared here — enough to write
@@ -942,6 +945,13 @@ static double s_last_report;
 	if (_mainMenu != nil && _menuBarWindow == nil) {
 		[self cg_updateMenuBarWindow];
 	}
+	/* **AND THE LAUNCHES THIS PROCESS MADE ARE COLLECTED HERE, ONCE PER PASS.** `posix_spawn` leaves a child whose exit
+	 * nobody collects unless somebody waits, and every launch the desktop performs is one — the Dock starting an
+	 * application is the ordinary case, and it is asynchronous by design (the application outlives the click). A child
+	 * nobody waits on is a ZOMBIE for as long as this process lives: MEASURED, `[Forge] <defunct>` stayed in the
+	 * process table after a Dock-launched Forge was quit, so a process list could not say whether Forge was running.
+	 * The loop is the only thing here that runs often enough to collect them without blocking anyone. */
+	(void)LSOpenReapLaunchedChildren();
 	/* **THE MODE, WHICH THIS DOOR USED TO DROP ON THE FLOOR.** It is `NSDefaultRunLoopMode` when the caller passed
 	 * nil (Apple's own reading), and it is what the run-loop pass below this door belongs to: a tracking loop that
 	 * asks for `NSEventTrackingRunLoopMode` gets that mode's timers and not the default ones. */
