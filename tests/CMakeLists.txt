@@ -731,6 +731,20 @@ add_test(NAME appkit-runloop-connection
 set_tests_properties(appkit-runloop-connection PROPERTIES SKIP_RETURN_CODE 77
   ENVIRONMENT "${_agora_app_test_env}")
 
+# **AND A MODAL SESSION IS A FRAME TOO.** `-runModalSession:` did not run the update pass `-run` runs, so a view marked
+# for display inside a modal loop (an open panel's table after a double-click on a folder, a sheet's control) waited for
+# an unrelated event: MEASURED as a panel whose listing did not change until the pointer scrolled it. The case marks a
+# view from OUTSIDE any event and runs one pass; a draw can only come from the pass. Needs a compositor (the runner
+# supplies one, else SKIP 77).
+add_executable(appkit_modal_paint appkit_modal_paint.m)
+target_link_libraries(appkit_modal_paint PRIVATE App)
+
+add_test(NAME appkit-modal-paint
+  COMMAND "${CMAKE_CURRENT_SOURCE_DIR}/run-appkit-headless.sh" "$<TARGET_FILE:appkit_modal_paint>" 3
+	  "all checks passed")
+set_tests_properties(appkit-modal-paint PROPERTIES SKIP_RETURN_CODE 77
+  ENVIRONMENT "${_agora_app_test_env}")
+
 # **THE COMMIT NAMES ITS DAMAGE, INSTEAD OF THE WHOLE BUFFER.** A strip repaint must reach the seam as a strip — asked
 # through `AGWindowLastDamage`, so the assertion is about what the compositor was told rather than what the AppKit
 # meant. The headless runner supplies the compositor; without one the case SKIPS (77).

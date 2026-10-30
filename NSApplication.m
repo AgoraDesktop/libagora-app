@@ -2180,6 +2180,15 @@ struct AGModalSession {
 						dequeue:YES];
 		}
 	}
+	/* **AND THE WINDOWS ARE PAINTED, WHICH IS THE ONE THING A MODAL PASS DID NOT DO.** `-run` ends every pass with
+	 * `-updateWindows` and says why: a frame callback now declines to draw a window that is not needy, so SOMETHING has
+	 * to act on "needy" — and the run loop is that thing. A modal session is a frame too, and it was not doing it, so
+	 * every view marked for display inside one waited for an unrelated event: MEASURED as an open panel whose listing
+	 * did not change after a double-click on a folder until the pointer scrolled the table or a click landed somewhere —
+	 * the reload had marked the table needy and nothing painted it, because a compositor only offers a frame when
+	 * something else has changed first. A panel that waits for input to show what its own selection did is the shape of
+	 * this bug, and every sheet and alert shares the loop it was in. */
+	[self updateWindows];
 	/* AND THE APPLICATION BEING STOPPED ENDS THE SESSION TOO — otherwise `-stop:` while a modal loop is running
 	 * would leave it spinning with nothing to stop it. */
 	if (_stopped) {

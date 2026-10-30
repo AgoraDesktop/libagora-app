@@ -2496,3 +2496,24 @@ before any coordinate is read (`-cg_eventIsInAnotherWindow:`), and `-dismissedAt
 reader is the menu bar, which needs a point in its own space. `tests/appkit_activation.m`'s eighth section is the case,
 on a real compositor with a real tracking window: the press is addressed to the key window at a point that IS inside the
 menu, and the assertions are that the menu closes and that the application in front is still in front.
+
+## 80. A modal session was a loop that never painted
+
+**REPORTED AS "THE OPEN DIALOG DOES NOT REFRESH AFTER DOUBLE-CLICKING A FOLDER UNTIL YOU SCROLL OR CLICK
+SOMETHING"**, and the panel was the victim rather than the cause. `-[NSApplication run]` ends every pass with
+`-updateWindows`, and its own note says why: a frame callback now declines to draw a window that is not needy, so
+SOMETHING has to act on "needy", and the run loop is that something. `-runModalSession:` — the loop every panel, sheet
+and alert runs in — did not. So a view marked for display inside a modal loop weighed nothing: the open panel's
+`-reloadEntries` marked its table needy (the table's own `-reloadData` calls `-setNeedsDisplay:`), and nothing between
+that flag and the pixels ever asked for a paint. A compositor only offers a frame when something else has changed
+first, which is exactly why the listing appeared the moment the pointer scrolled the table (a scroll damages the
+window) or a click landed somewhere (an input-driven composite), and never before.
+
+**THE FIX IS THE LINE THE RUN LOOP ALREADY HAD**: `-runModalSession:` paints the windows at the end of its pass. It is
+one call, and it repairs every modal surface this tier has — the open and save panels, the alert panel, a sheet's
+controls — because the bug was in the loop they share and not in any of them.
+
+**AND THE TEST IS CAUSAL, AGAINST A REAL COMPOSITOR** (`tests/appkit_modal_paint.m`, headless runner). After the passes
+that may paint because the window was just ordered front have settled, a view is marked for display from OUTSIDE any
+event and ONE modal pass is run: no event is sent, no timer fires, and no frame is pumped by hand, so a draw can only
+come from the pass. MEASURED both ways: without the line the count is zero, deterministically; with it the view paints.
