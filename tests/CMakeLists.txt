@@ -549,7 +549,11 @@ set_tests_properties(appkit-button-sweep PROPERTIES ENVIRONMENT "${_agora_app_te
 add_executable(system_images system_images.m)
 target_link_libraries(system_images PRIVATE App m)
 add_test(NAME appkit-system-images COMMAND system_images)
-set_tests_properties(appkit-system-images PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
+# **AND THE CHECKOUT'S THEMES, NOT AN INSTALLED ONES.** The fifth case asks the system themes for a symbol, so the
+# theme in charge is named here — the same door the iconservices suite uses — and its sibling `Tabler` is found beside
+# it in the checkout. Pointing at the install would make this suite need one.
+set_tests_properties(appkit-system-images PROPERTIES ENVIRONMENT
+    "${_agora_app_test_env};AGORA_ICON_THEME=${CMAKE_CURRENT_SOURCE_DIR}/../../libagora-iconservices/themes/Frost")
 
 # **AND THE HALF OF "DRAW ONLY WHAT CHANGED" NOTHING CAN SEE FROM OUTSIDE: THE CLIP.** A window hands `-displayRect:`
 # the union of what was invalidated; the tree draws anyway, so unless that rectangle is a CLIP each `-drawRect:` paints

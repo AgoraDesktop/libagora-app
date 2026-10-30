@@ -156,6 +156,37 @@ int main(void)
 		check([NSImage imageNamed:NSImageNameMobileMe] == nil,
 		      "a name this tier does not draw falls through to the bundle lookup and answers nil");
 		check([NSImage imageNamed:@"NotAnImageNameAtAll"] == nil, "and so does a name nobody has");
+
+		/* 5. **AND THEN THE SYSTEM'S THEMES, WHICH IS WHERE A SYMBOL COMES FROM.** `hammer` is not one of AppKit's
+		 * names and not a resource of this program, so it can only be answered by the installed themes — and the test
+		 * runs with `AGORA_ICON_THEME` at the CHECKOUT's Frost, so it is the SIBLING `Tabler` that answers it. That is
+		 * the arrangement the desktop ships: nine symbols are no longer compiled into every application that wants them.
+		 *
+		 * The PIXELS are asserted as well as the answer, because a theme icon arrives as a `CGImage` and the first
+		 * version of this door made a representation that BORROWED it: `-bitmapData` answered NULL and every caller that
+		 * read a pixel — `-setTemplate:`'s own stencil extraction, two of Forge's tests — crashed. A 24-point image
+		 * backed by a 96-pixel painting, owning those pixels, is the contract. */
+		{
+			NSImage *symbol = [NSImage imageNamed:@"hammer"];
+			NSArray *reps = [symbol representations];
+			NSBitmapImageRep *rep = (reps != nil && [reps count] > 0)
+				? (NSBitmapImageRep *)[reps lastObject] : nil;
+
+			check(symbol != nil, "a symbol is answered by the SYSTEM'S THEMES, by name");
+			check(symbol != nil && [symbol isTemplate],
+			      "as a TEMPLATE, which is what lets a toolbar ink it and grey its disabled items");
+			check(symbol != nil && [symbol size].width == 24.0 && [symbol size].height == 24.0,
+			      "at the 24 points a Tabler symbol is drawn for");
+			check([symbol name] != nil && [[symbol name] isEqualToString:@"hammer"],
+			      "keeping the name it was asked for");
+			check(rep != nil && [rep pixelsWide] == 96 && [rep pixelsHigh] == 96,
+			      "backed by the theme's 96-pixel painting, so every display scale is a downscale");
+			check(rep != nil && [rep bitmapData] != NULL,
+			      "and the representation OWNS its pixels — a borrowed picture cannot be a template");
+
+			/* A name the theme IN CHARGE carries is answered from it, so the fallback does not shadow Frost's art. */
+			check([NSImage imageNamed:@"folder"] != nil, "and a name Frost carries is answered from Frost");
+		}
 	}
 	return s_failed != 0;
 }

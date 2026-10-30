@@ -20,6 +20,9 @@
 #import <CoreGraphics/CGColorSpace.h>
 #import <AppKit/NSBezierPath.h>
 #import <AppKit/NSGraphics.h>	/* NSRectFill, the background a composite puts down first */
+/* **AND THE SYSTEM ICON THEMES**, for the name lookup that makes a vendored symbol a system resource: the same door
+ * `NSWorkspace` uses to turn a type or a URL into an icon. */
+#import <IconServices/IconServices.h>
 #import <CoreGraphics/CGContext.h>
 #import "AGSystemImages.h"
 #import "NSImage_internal.h"
@@ -169,10 +172,46 @@ NSString *NSImageNameUserGuest = @"NSImageNameUserGuest";
 		return system;
 	}
 	path = [[NSBundle mainBundle] pathForImageResource:name];
-	if (path == nil) {
-		return nil;
+	if (path != nil) {
+		return [[[NSImage alloc] initWithContentsOfFile:path] autorelease];
 	}
-	return [[[NSImage alloc] initWithContentsOfFile:path] autorelease];
+	/* **AND THE SYSTEM'S ICON THEMES, WHICH IS WHAT MAKES A SYMBOL A SYSTEM RESOURCE.** A name that is neither one of
+	 * AppKit's nor a resource of the application's is asked of the installed themes — the one `AGORA_ICON_THEME` names
+	 * and its sibling `Tabler` — so `[NSImage imageNamed:@"hammer"]` answers the vendored Tabler artwork from any
+	 * application, and the art is a fact about the SYSTEM rather than something each program compiles in. The image is a
+	 * TEMPLATE (black ink, alpha elsewhere), which is what lets a toolbar draw it in its own ink and grey its disabled
+	 * items; its point size is the smallest painting the theme has (a Tabler symbol is designed on a 24-point grid) and
+	 * it is backed by the LARGEST one, so every display scale is a downscale. NULL for a name no theme carries, which
+	 * leaves the caller's own drawing in charge — the same answer this door gave before the themes existed. */
+	{
+		IconRef icon = AGIconCreateWithName((CFStringRef)name);
+
+		if (icon != NULL) {
+			CGSize natural = AGIconGetNaturalSize(icon);
+			CGSize best = AGIconGetBestSize(icon);
+			CGImageRef raster = AGIconCopyImage(icon, best);
+
+			AGIconRelease(icon);
+			if (raster != NULL) {
+				NSSize points = NSMakeSize(natural.width, natural.height);
+				NSBitmapImageRep *rep = fn_rep_with_raster(raster, points);
+				NSImage *themed = nil;
+
+				if (rep != nil) {
+					themed = [[NSImage alloc] initWithSize:points];
+					[themed addRepresentation:rep];
+					/* **AND IT IS A TEMPLATE, WHICH IS THE WHOLE POINT OF ASKING THE THEME FOR IT**: `-setTemplate:` lifts
+					 * its stencil out of the alpha channel of the rep above, so a toolbar draws the symbol in its own ink and a
+					 * disabled item's is the grey of its own label. */
+					[themed setTemplate:YES];
+					[themed setName:name];
+				}
+				CGImageRelease(raster);
+				return [themed autorelease];
+			}
+		}
+	}
+	return nil;
 }
 
 
@@ -507,6 +546,13 @@ static CGImageRef fn_mask_from_bitmap_alpha(NSBitmapImageRep *rep)
 	if (side <= 0 || [rep pixelsHigh] != side || [rep samplesPerPixel] < 2) {
 		return NULL;
 	}
+	/* **A REP THAT BORROWS ITS PICTURE HAS NO PIXELS TO LIFT A STENCIL FROM.** `-initWithCGImage:` keeps the image and
+	 * answers NULL for `-bitmapData` (it says so), so this used to dereference nothing: MEASURED, `-setTemplate:YES` on an
+	 * image built from a `CGImage` — which is what `-imageNamed:`'s theme path and `NSWorkspace`'s icon path both make —
+	 * took the process with it. The stencil is absent, and drawing falls back to the raw picture for this rep. */
+	if ([rep bitmapData] == NULL) {
+		return NULL;
+	}
 	samples = (unsigned char *)malloc((size_t)(side * side));
 	if (samples == NULL) {
 		return NULL;
@@ -528,6 +574,54 @@ static CGImageRef fn_mask_from_bitmap_alpha(NSBitmapImageRep *rep)
 	mask = CGImageMaskCreate((size_t)side, (size_t)side, 8, 8, (size_t)side, provider, NULL, true);
 	CGDataProviderRelease(provider);
 	return mask;
+}
+
+/* **A REP THAT OWNS ITS PIXELS, FROM A PICTURE.** A theme icon arrives as a `CGImage` — decoded from the theme's PNG —
+ * and a rep made by `-initWithCGImage:` BORROWS it and answers NULL for `-bitmapData` (it says so). That is enough to
+ * DRAW and not enough for anything that reads the pixels: `-setTemplate:` lifts its stencil out of the alpha channel, and
+ * a caller's own comparison of two pictures reads the buffer. MEASURED: both crashed on an icon from the theme. So the
+ * picture is drawn once into a rep this function owns, in this class's own layout (alpha LAST, premultiplied), through
+ * the graphics context that knows that layout — a `CGBitmapContext` would write alpha FIRST and the stencil would then
+ * be read out of the wrong channel.
+ *
+ * The REP's size is set to the icon's POINT size while its pixels stay at the painting's, which is what makes a 24-point
+ * image backed by a 96-pixel painting draw sharp on a 2× display. */
+static NSBitmapImageRep *fn_rep_with_raster(CGImageRef raster, NSSize points)
+{
+	NSInteger width = (NSInteger)CGImageGetWidth(raster);
+	NSInteger height = (NSInteger)CGImageGetHeight(raster);
+	NSBitmapImageRep *rep;
+	NSImage *scratch;
+	NSGraphicsContext *context;
+
+	if (width <= 0 || height <= 0) {
+		return nil;
+	}
+	rep = [[NSBitmapImageRep alloc] initWithBitmapDataPlanes:NULL
+						     pixelsWide:width pixelsHigh:height
+						     bitsPerSample:8 samplesPerPixel:4 hasAlpha:YES
+						       isPlanar:NO colorSpaceName:NSCalibratedRGBColorSpace
+						     bytesPerRow:width * 4 bitsPerPixel:32];
+	if (rep == nil) {
+		return nil;
+	}
+	scratch = [[NSImage alloc] initWithCGImage:raster size:NSMakeSize((CGFloat)width, (CGFloat)height)];
+	context = [NSGraphicsContext graphicsContextWithBitmapImageRep:rep];
+	if (scratch == nil || context == nil) {
+		[scratch release];
+		[rep release];
+		return nil;
+	}
+	[NSGraphicsContext saveGraphicsState];
+	[NSGraphicsContext setCurrentContext:context];
+	[scratch drawInRect:NSMakeRect(0.0, 0.0, (CGFloat)width, (CGFloat)height)
+		   fromRect:NSMakeRect(0.0, 0.0, (CGFloat)width, (CGFloat)height)
+		  operation:NSCompositeCopy
+		   fraction:1.0];
+	[NSGraphicsContext restoreGraphicsState];
+	[scratch release];
+	[rep setSize:points];
+	return [rep autorelease];
 }
 
 - (void)cg_setTemplateMask:(CGImageRef)mask forSize:(NSInteger)points
