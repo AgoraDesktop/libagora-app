@@ -2006,6 +2006,13 @@ target_link_libraries(open_panel_accept PRIVATE App)
 add_test(NAME appkit-open-panel-accept COMMAND open_panel_accept)
 set_tests_properties(appkit-open-panel-accept PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
 
+# **A QUIT ARRIVES FROM SEVERAL PLACES AT ONCE** — the menu, a Dock's tile, and every window of an application whose
+# tile groups two processes. The first terminates it; the rest must not announce `-applicationWillTerminate:` again.
+add_executable(app_terminate_once app_terminate_once.m)
+target_link_libraries(app_terminate_once PRIVATE App)
+add_test(NAME appkit-terminate-once COMMAND app_terminate_once)
+set_tests_properties(appkit-terminate-once PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
+
 # **THE TEXT BEING EDITED SITS WHERE THE SAME CELL DRAWS IT.** A field editor insets its own text by `NS_TEXT_INSET`
 # and the cell's `-drawingRectForBounds:` adds the same air — giving the editor the drawing rect paid the padding twice,
 # and the text dropped four points with its caret (MEASURED in Forge's info pane). The claim is the equality of the two

@@ -478,8 +478,24 @@ static NSInteger fn_architecture_of_elf(const char *path)
 	 * (Workspace's desktop): the desktop closed and the application went on drawing it, so a Dock's Restart could not
 	 * work. `AGWindowRequestQuit` is `agora-shell` 12's `quit_window`, and a compositor older than that answers 0 — in
 	 * which case the windows are asked instead, which is exactly the behaviour that existed before. */
-	if (AGWindowRequestQuit(server, [[_windowIDs lastObject] unsignedIntValue])) {
-		return YES;
+	/* **EVERY WINDOW, BECAUSE A TILE IS AN APPLICATION AND A TILE CAN BE TWO PROCESSES.** The Dock groups by bundle
+	 * identifier, so two launches of one bundle share one tile — and `quit_window` is addressed to a WINDOW, so
+	 * `-lastObject` is one process's. MEASURED: with two Forge instances running, one press of the tile's Quit ended one
+	 * of them and left the other, so the tile went on offering Quit and the press looked like it had done nothing. The
+	 * request is a REQUEST — the first to arrive terminates the application and `-terminate:` ignores the rest — and a
+	 * window the application has already destroyed is ignored by the server, so asking all of them is safe. */
+	{
+		NSUInteger i;
+		BOOL sent = NO;
+
+		for (i = 0; i < [_windowIDs count]; i++) {
+			if (AGWindowRequestQuit(server, [[_windowIDs objectAtIndex:i] unsignedIntValue])) {
+				sent = YES;
+			}
+		}
+		if (sent) {
+			return YES;
+		}
 	}
 	{
 		NSUInteger i;

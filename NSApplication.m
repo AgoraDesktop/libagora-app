@@ -802,6 +802,13 @@ static double s_last_report;
 - (void)terminate:(id)sender
 {
 	(void)sender;
+	/* **AN APPLICATION THAT IS ALREADY STOPPING DOES NOT STOP TWICE.** A quit can arrive from several places at once:
+	 * the menu, a Dock's Quit, and — now that a shell asks every window of an application it groups by identifier — a
+	 * second one for a window of the same process. Announcing `NSApplicationWillTerminateNotification` twice is an
+	 * application saving its state twice for one ending, which is the sort of thing a real application notices. */
+	if (_stopped) {
+		return;
+	}
 	/* **THE APPLICATION IS ASKED BEFORE IT STOPS, AND THE ANSWER CAN STOP IT.** This is why the delegate's
 	 * termination callback returns a VALUE: an application with unsaved work refuses here, and a door that asked
 	 * and ignored the answer would be worse than one that never asked. */
