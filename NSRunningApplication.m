@@ -431,10 +431,20 @@ static NSInteger fn_architecture_of_elf(const char *path)
 		}
 		return YES;
 	}
-	/* **NOTHING A PERSON CAN WORK IN: ASK THE APPLICATION FOR ONE.** This is the state a Workspace is in whenever its
-	 * desktop is showing and no file window is — its windows are all furniture — and the click still means something
-	 * on the Mac. The address is the frontmost window the application has, because a window id is the only name the
-	 * two sides share; what comes of it is the application's answer, and it need not be that window. */
+	/* **AN APPLICATION WITH NOTHING TO RAISE IS STILL AN APPLICATION, AND A CLICK ON ITS TILE ACTIVATES IT.** Its only
+	 * window may be its MENU BAR — a bar never takes the keyboard from a click, which is what keeps a click on
+	 * furniture from moving the keyboard away from the application a person is working in — so the activation is asked
+	 * for as a DECISION rather than as a click: `AGWindowServerActivateApplication` is `agora-shell` 13's
+	 * `activate_application`, and what it buys is exactly the Mac's answer to this click, the application's menus in
+	 * the strip. MEASURED before it existed: a tile click on a running application with no ordinary windows did nothing
+	 * at all — no bar, no keyboard, no window.
+	 *
+	 * AND THE REOPEN ASK STILL FOLLOWS IT, which is the other half of the same click and the older half of this
+	 * method: an application that HAS a window to offer (Workspace opening a file window, an editor its open panel)
+	 * opens it, and the new window takes the keyboard from the bar it just gave it. An application that does not is
+	 * left active with its menus up, which is what "at minimum" means. A compositor older than 13 answers 0 and gets
+	 * this door's old behaviour — the reopen alone. */
+	(void)AGWindowServerActivateApplication(server, [[_windowIDs lastObject] unsignedIntValue]);
 	AGWindowReopen(server, [[_windowIDs lastObject] unsignedIntValue]);
 	return YES;
 }

@@ -589,6 +589,14 @@ int AGWindowSetDockBadge(AGWindowServer *server, unsigned int id, const char *la
  * refuses stays open, exactly as it does when its close button is pressed. An id nothing answers is ignored. */
 void AGWindowActivate(AGWindowServer *server, unsigned int id);
 void AGWindowRequestClose(AGWindowServer *server, unsigned int id);
+/* **AND THE ONE THAT MAKES AN APPLICATION THE ACTIVE ONE WHEN IT HAS NO WINDOW TO WORK IN.** `AGWindowActivate` raises
+ * a window and gives it the keyboard, which is the whole of a tile click for an application that has something to raise.
+ * An application with nothing but its MENU BAR cannot be reached that way — a bar never takes the keyboard from a click,
+ * by design — so this asks the shell to make the DESKTOP'S DECISION instead: the application becomes the active one, its
+ * menus appear, and the application that had the keyboard is told it lost it. The window is the address, as it is
+ * everywhere else. Answers 1 when the request went out and 0 against a compositor older than `agora-shell` 13, so a
+ * caller can fall back to asking for a window. */
+int AGWindowServerActivateApplication(AGWindowServer *server, unsigned int id);
 /* **AND THE ONE THAT ASKS AN APPLICATION TO SHOW SOMETHING.** `AGWindowActivate` moves a window; this asks the
  * application behind one to reopen, which is what a tile click means when there is nothing to raise. The id is an
  * ADDRESS rather than a subject — the application decides what opens — and a compositor that does not speak

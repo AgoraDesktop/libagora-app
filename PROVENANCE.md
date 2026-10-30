@@ -2517,3 +2517,42 @@ controls — because the bug was in the loop they share and not in any of them.
 that may paint because the window was just ordered front have settled, a view is marked for display from OUTSIDE any
 event and ONE modal pass is run: no event is sent, no timer fires, and no frame is pumped by hand, so a draw can only
 come from the pass. MEASURED both ways: without the line the count is zero, deterministically; with it the view paints.
+
+## 81. A tile click on an application with nothing to raise did nothing at all
+
+**REPORTED AS "CLICKING A DOCK TILE SHOULD ACTIVATE AN APPLICATION EVEN IF IT HAS NO WINDOWS; IT SHOULD AT MINIMUM
+PRESENT THE ACTIVATED APP'S MENUBAR."** It did not, and the reason was a chain of three correct decisions meeting.
+
+`NSRunningApplication -activateWithOptions:` raised the application's ordinary windows; with none it asked the
+application to REOPEN (Workspace opens a file window, which is the Mac's own answer to that click); and with NO windows
+at all — a running application whose only window is its MENU BAR — it answered NO and did nothing: no bar, no keyboard,
+no window. MEASURED in this test's fixture, which now asserts the state before and after.
+
+**AND IT COULD NOT BE FIXED BY A CLICK, BECAUSE A BAR MUST NEVER TAKE THE KEYBOARD FROM ONE.** That rule is deliberate
+and stays: the server hands the keyboard to the window a press lands on, and a press on furniture must not move it away
+from the application a person is working in — which is also why the bar, a status item and the Dock's strip all say
+`set_activatable 0`. What a tile click means is a different question: it is a decision about WHICH APPLICATION IS IN
+FRONT, and nothing about where the pointer went.
+
+So `agora-shell` 13 added `activate_application`: a shell names any window of the application — in practice its bar —
+and the seat gives it the keyboard with the "never from a click" rule WAIVED, which is the one place that waiver exists.
+The waiver buys the rest of the machinery for free: the same leave/enter pair runs, so the application that had the
+keyboard is told it lost it and exactly one application is active afterwards (a second notion of "active" beside the
+keyboard would have left two bars in the strip). The AppKit's answer is `-[NSApplication activate]`, so the bar is
+ordered front — and the reopen ask still follows, which is how an application that HAS a window to offer opens it and
+the new window takes the keyboard from the bar it just took it from.
+
+**AND THE SEAT HAS TO REMEMBER THE WAIVER, WHICH THE FIRST VERSION DID NOT.** MEASURED in a live session with a
+windowless application: the door worked — the bar took the keyboard — and one frame later the keyboard was back on the
+desktop. The application had painted its menu bar, and `set_visible` runs `aws_seat_reassign_keyboard_focus`, whose test
+for "is the focused window still a window to give the keyboard to" includes `activatable` — so a deliberately activated
+bar was judged invalid and the focus was handed to the topmost ordinary window. The seat now carries
+`keyboard_focus_deliberate`, set by the door and consulted by the reassignment; `set_activatable 0` on a NORMALLY
+focused window still takes the keyboard away, which is the case that rule exists for.
+
+`tests/window_list.c` holds the compositor's half: `activate_window` on a non-activatable window is refused,
+`activate_application` on the same window activates it and takes the keyboard back from the application that had it, and
+the application's own `set_visible` does not undo it (the case the live session found).
+`tests/appkit_activation.m`'s section 6b holds the AppKit's: an application object whose windows are the bar alone
+answers `-activateWithOptions:` YES, the compositor gives the BAR the keyboard, and the bar is on the glass. Removing the
+door fails that case and nothing else.

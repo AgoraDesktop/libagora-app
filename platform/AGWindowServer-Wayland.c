@@ -1481,6 +1481,8 @@ static void keyboard_enter(void *data, struct wl_keyboard *keyboard, uint32_t se
 			break;
 		}
 	}
+	fprintf(stderr, "ENTERDBG surface %p -> window %p (%s)\n", (void *)surface, (void *)server->keyboard_focus,
+		server->keyboard_focus != NULL ? "found" : "NOT FOUND");
 	/* THE TENURE BEGINS HERE, AND ONLY HERE. A repeat keeps the serial it was armed under, so a generated repeat is
 	 * never mistaken for a press after a focus return. */
 	server->focus_serial++;
@@ -2292,6 +2294,19 @@ void AGWindowActivate(AGWindowServer *server, unsigned int id)
 	wl_display_flush(server->display);
 }
 
+int AGWindowServerActivateApplication(AGWindowServer *server, unsigned int id)
+{
+	if (server == NULL || server->shell == NULL) {
+		return 0;
+	}
+	if (wl_proxy_get_version((struct wl_proxy *)server->shell) < 13) {
+		return 0;	/* an older compositor has no such decision; the caller asks for a window instead */
+	}
+	agora_shell_activate_application(server->shell, id);
+	wl_display_flush(server->display);
+	return 1;
+}
+
 void AGWindowRequestClose(AGWindowServer *server, unsigned int id)
 {
 	if (server == NULL || server->shell == NULL) {
@@ -2506,7 +2521,7 @@ static void registry_global(void *data, struct wl_registry *registry, uint32_t n
 		 * the version every window it makes is capped to, and a request sent above it is a protocol error that kills the
 		 * client rather than a call the server ignores. */
 		server->shell = wl_registry_bind(registry, name, &agora_shell_interface,
-						version < 12 ? version : 12);
+						version < 13 ? version : 13);
 	}
 }
 

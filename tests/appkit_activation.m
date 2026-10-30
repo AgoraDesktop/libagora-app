@@ -29,6 +29,10 @@
  *   7a. **AND A PRESS OUTSIDE AN OPEN MENU DOES NOT EITHER.** A click on another window — the desktop, another
  *      application, or the invisible window a Dock puts up to catch it — dismisses a pop-up menu without making the
  *      window it landed on the active one. Read from the menu's own session step and from the application's state.
+ *   6b. **AN APPLICATION WITH NOTHING BUT ITS MENU BAR IS STILL AN APPLICATION.** A tile click on one has to make it the
+ *       active application and put its menus in the strip (the keyboard goes to the bar, which a CLICK may never do). Read
+ *       from both halves: the shell's own door, and `NSRunningApplication -activateWithOptions:` with nothing but a bar
+ *       in its window list, which is the door a Dock's tile calls.
  *   7. **CLICKING A MENU ITEM DOES NOT CHANGE THE APPLICATION THAT HAS THE KEYBOARD.** A picked row is a press on
  *      the menu's own window, and a press is what gives a window the keyboard — so a menu that said nothing took it
  *      for as long as it was up and handed it on when it went away, which is exactly "choosing File > New left
@@ -41,6 +45,7 @@
 #import <AppKit/NSMenu.h>
 #import <AppKit/NSMenuItem.h>
 #import <AppKit/NSEvent.h>
+#import <AppKit/NSRunningApplication.h>
 #import <Foundation/Foundation.h>
 
 #include "AGWindowServer.h"
@@ -87,6 +92,23 @@ static void fn_window_list(void *context, const AGWindowInfo *windows, int count
  * `active` flag is the same answer a Dock draws its indicator from, and it is per WINDOW rather than per client —
  * which is what makes it able to see a menu stealing the keyboard at all, since the menu and the window it was
  * opened from belong to one application. */
+/* **THE COMPOSITOR'S OWN NAME FOR A WINDOW AT A LEVEL** — the bar is the only window at `NSMainMenuWindowLevel`, and its
+ * SERVER id is what a shell door takes. `-[NSWindow windowNumber]` is this tier's own sequence: the two agree in a
+ * single-client fixture only because both count in creation order, and a test that wants the compositor's answer has to
+ * ask the compositor. */
+static unsigned int fn_window_id_at_level(AGWindowServer *server, NSInteger level)
+{
+	int count = 0, i;
+	const AGWindowInfo *rows = AGWindowListRows(server, &count);
+
+	for (i = 0; i < count; i++) {
+		if (rows[i].level == (int)level) {
+			return rows[i].id;
+		}
+	}
+	return 0;
+}
+
 static unsigned int fn_keyboard_owner(AGWindowServer *server)
 {
 	int count = 0, i;
@@ -238,6 +260,45 @@ int main(void)
 			/* AND SAID BACK ON, because a bar window that is not on the glass is not a bar window. */
 			[app activate];
 			fn_pump(app, 10);
+		}
+
+		/* 6b. **AN APPLICATION WITH NOTHING BUT ITS MENU BAR IS STILL AN APPLICATION.** Section 6 left this one with no
+		 * window left, and the keyboard given up by the COMPOSITOR — which is the genuine "running, nothing to raise"
+		 * state, and the one a Dock tile click has to do something with. The click's door is
+		 * `-activateWithOptions:` on an application object whose windows are the bar alone: it cannot raise a window,
+		 * and the bar itself may never take the keyboard from a click, so the activation is asked for as a DECISION
+		 * (`agora-shell` 13's `activate_application`) — and the answer a person sees is the application's menus in the
+		 * strip. MEASURED before it existed: nothing at all happened, no bar and no window. */
+		{
+			AGWindowServer *server = AGWindowServerShared();
+			NSRunningApplication *windowless = [[[NSRunningApplication alloc] cg_initWithBundleIdentifier:
+								@"io.github.agoradesktop.windowless"] autorelease];
+			unsigned int barID = 0;
+
+			if (server != NULL) {
+				AGWindowListSetHandler(server, fn_window_list, NULL);
+				fn_pump(app, 20);
+				barID = fn_window_id_at_level(server, NSMainMenuWindowLevel);
+			}
+			check(barID != 0, "the compositor lists the application's BAR as a window of its own");
+			/* **THE STARTING STATE IS THE COMPOSITOR'S, NOT THIS CLASS'S `-isActive`.** Section 6 ended by asking the
+			 * application to activate itself locally (so that it HAS a bar window at all), and what a Dock click has
+			 * to change is the compositor's answer: the bar must not be the window holding the keyboard, because a
+			 * click may never give it one. */
+			check(server != NULL && fn_keyboard_owner(server) != barID,
+			      "the case starts with the bar NOT holding the keyboard");
+			if (barID != 0) {
+				[windowless cg_setWindowIDs:[NSArray arrayWithObject:
+					[NSNumber numberWithUnsignedInt:barID]]];
+				[windowless cg_setOrdinaryWindowIDs:[NSArray array]];
+				check([windowless activateWithOptions:NSApplicationActivateAllWindows],
+				      "a windowless application's activation is ANSWERED, not refused");
+				fn_pump(app, 30);
+				check(fn_keyboard_owner(server) == barID,
+				      "and the compositor gave the keyboard to the bar — the decision the click asked for");
+				check([app isActive] && [barWindow isVisible],
+				      "so the application is the active one and its menu bar is on the glass");
+			}
 		}
 
 		/* 7. **A MENU IS NOT A PLACE TO PUT THE KEYBOARD EITHER.** A picked row is a press on the menu's own window,
