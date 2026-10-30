@@ -43,6 +43,7 @@
 #import <AppKit/NSWindow.h>
 #import <AppKit/NSView.h>
 #import <AppKit/NSMenu.h>
+#import <AppKit/NSMenuView.h>	/* the bar, whose title is the state the last case reads */
 #import <AppKit/NSMenuItem.h>
 #import <AppKit/NSEvent.h>
 #import <AppKit/NSRunningApplication.h>
@@ -51,6 +52,29 @@
 #include "AGWindowServer.h"
 
 #include <stdio.h>
+
+/* **THE ONE THING AN ACTION NEEDS TO KNOW ABOUT THE BAR: what it was showing WHEN THE ACTION RAN.** Read from inside
+ * the send, which is the only moment that matters — a title still lit there stays lit for as long as a modal action
+ * is up, which is what Forge's File > Open measured. */
+@interface AGPickRecorder : NSObject
+{
+@public
+	int picks;
+	id highlightedWhenSent;
+	NSMenuView *barView;
+}
+@end
+
+@implementation AGPickRecorder
+
+- (void)takePick:(id)sender
+{
+	(void)sender;
+	picks++;
+	highlightedWhenSent = [barView highlightedItem];
+}
+
+@end
 
 static int g_failed;
 
@@ -422,6 +446,35 @@ int main(void)
 				      "and the window the press landed in did not take the keyboard");
 			}
 			[popup release];
+		}
+
+		/* 9. **THE BAR'S TITLE IS DOWN BEFORE THE PICKED ITEM'S ACTION RUNS.** The menu ends its session and THEN performs
+		 * the item — the order that keeps a menu off a modal panel — but the title's highlight is the BAR's, and it used to
+		 * come down after the session's loop returned, which a modal action never does until it is answered: MEASURED in a
+		 * live session, File > Open left the File title lit for as long as the open panel was up. Read from INSIDE the
+		 * action, because that is the moment the panel would have started. */
+		{
+			AGPickRecorder *recorder = [[AGPickRecorder alloc] init];
+			NSMenuView *barView = (NSMenuView *)[barWindow contentView];
+			NSMenuItem *title = (NSMenuItem *)[[barView menu] itemAtIndex:1];	/* 0 is the application menu */
+			NSMenu *contents = [[NSMenu alloc] initWithTitle:@"File"];
+			NSMenuItem *row = [[NSMenuItem alloc] initWithTitle:@"Open" action:@selector(takePick:)
+									keyEquivalent:@""];
+
+			recorder->barView = barView;
+			[row setTarget:recorder];
+			[contents addItem:row];
+			[row release];
+			[title setSubmenu:contents];
+			/* THE STATE A BAR SESSION LEAVES IT IN: the title lit while its menu is open. */
+			[barView setHighlightedItem:title];
+			check([barView highlightedItem] == title, "the picked title is LIT while its menu is up");
+			[contents performActionForItemAtIndex:0];
+			check(recorder->picks == 1, "the pick sent its action");
+			check(recorder->highlightedWhenSent == nil,
+			      "and the bar's title was ALREADY down, so a modal action cannot hold it lit");
+			[contents release];
+			[recorder release];
 		}
 
 		/* **AND THE APPLICATION'S SEVEN SWEEP DOORS.** Three are questions about the responder chain and a string, two

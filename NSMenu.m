@@ -47,6 +47,13 @@
 - (void)cg_removeWindow:(NSWindow *)aWindow;
 @end
 
+/* **AND THE BAR'S TITLE, WHICH A PICK TAKES DOWN BEFORE ITS ACTION RUNS.** The bar's highlight is the application's,
+ * not the menu's, so the menu asks rather than reaching into another class's window. Declared here for the same
+ * reason the registry above is: this file is where it is called. */
+@interface NSApplication (APPKITMenuBarSession)
+- (void)cg_menuBarWillSendAction;
+@end
+
 /* **THE POINTER'S FALLBACK, WHICH A MENU'S TRACKING WINDOW TAKES WHILE IT IS UP.** Declared here for the same
  * reason the registry above is: this file is where it is called. While a menu is tracking it holds the fallback,
  * so a click on the DESKTOP — where the compositor has no surface to give it to — arrives at the menu and
@@ -525,6 +532,12 @@ static NSString * const AGCoderMenuChangedMessagesKey = @"menuChangedMessagesEna
 	if (item == nil) {
 		return NO;
 	}
+	/* **AND THE BAR'S TITLE COMES UP HERE, BEFORE ANYTHING CAN RUN.** A pick is the one path that ends a session and
+	 * then BLOCKS: an action that opens a modal panel does not return until it is answered, and a title left lit for
+	 * that whole time is a bar still saying which menu was picked after the menu itself is gone. The session is over
+	 * before the action runs (see `-cg_trackOneEvent:`), so the highlight comes down in the same breath. The bar owns
+	 * that highlight, so the application is asked rather than reached into from here. */
+	[[NSApplication sharedApplication] cg_menuBarWillSendAction];
 	/* THE WILL-SEND NOTICE GOES OUT BEFORE THE SEND, which is what makes it useful for a caller that wants to
 	 * know an action is about to happen, and the DID-SEND one after — Apple's pair, in Apple's order. */
 	[[NSNotificationCenter defaultCenter] postNotificationName:NSMenuWillSendActionNotification object:item];

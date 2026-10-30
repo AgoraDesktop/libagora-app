@@ -1255,6 +1255,24 @@ static double s_last_report;
 	return _servicesMenu;
 }
 
+/* **THE BAR'S TITLE COMES UP BEFORE THE ACTION RUNS, WHICH IS THE ORDER A MENU'S SESSION ENDS IN.** `NSMenu` ends the
+ * session and then performs the item, so an action that opens a MODAL panel — Forge's File > Open — is running while
+ * the bar is still showing which menu the person picked. The title's highlight is this class's, not the menu's, and it
+ * used to come down after the session loop returned, which a modal action never does until it is answered: MEASURED,
+ * the File title stayed lit for the panel's whole life. A pick is the one path that needs the door, because it is the
+ * one that blocks; a DISMISSAL returns to the loop, whose own tail clears the highlight on the way out. */
+- (void)cg_menuBarWillSendAction
+{
+	if (_menuBarView == nil || [(NSMenuView *)_menuBarView highlightedItem] == nil) {
+		return;		/* a pop-up menu's pick, or a key equivalent with the bar idle: nothing is lit */
+	}
+	[(NSMenuView *)_menuBarView setHighlightedItem:nil];
+	[_menuBarWindow setNeedsDisplay:YES];
+	/* PAINTED HERE AND NOT ONLY MARKED, because the action is about to run and may not return for a long time.
+	 * A mark would leave the lit title on the glass for exactly as long as the bug did. */
+	[_menuBarWindow displayIfNeeded];
+}
+
 /* **THE MENU BAR'S SHAPE, WHICH IS THE HIG'S AND NOT EACH APPLICATION'S TO GET RIGHT.** Two rules, and both are
  * about a menu the application did not write:
  *
