@@ -507,20 +507,22 @@ static CGFloat fn_standard_width(NSToolbarItem *item, NSToolbarDisplayMode displ
 			/* A CUSTOM VIEW KEEPS ITS OWN HEIGHT, CENTRED IN THE BAND. A standard face fills the strip; a control a
 			 * caller supplied is as tall as it said, which is the whole reason it has a min/max pair. */
 			if ([item view] != nil) {
-				/* **A LABELLED VIEW'S CELL CARRIES THE LABEL ROW UNDER IT**, so the words are inside the cell the pointer
-				 * hit-tests and the plate covers — a click on the caption is a click on the control — while the VIEW keeps
-				 * the height it asked for and sits above the row. */
-				CGFloat labelRow = 0.0;
-
+				/* **A LABELLED VIEW TAKES THE BAND'S WHOLE HEIGHT, LIKE EVERY STANDARD ITEM, AND THAT IS WHAT PUTS ITS
+				 * CAPTION ON THE SAME LINE AS THEIRS.** The label's row is measured from the CELL's bottom, so a cell
+				 * that was only as tall as the view (centred) set its caption lower than every other item's: MEASURED,
+				 * `Pane` sat a few points under `Export` and its neighbours. The cell is also what the pointer hit-tests
+				 * and what the plate covers, so a click on the caption is a click on the control either way. An
+				 * UNLABELLED view keeps the tight cell it always had — a bare control is centred, with no row to carry. */
 				if (fn_effective_display(item, [_toolbar displayMode]) == NSToolbarDisplayModeIconAndLabel) {
-					labelRow = ([_toolbar sizeMode] == NSToolbarSizeModeSmall) ? fn_TOOLBAR_LABEL_ROW_SMALL
-												 : fn_TOOLBAR_LABEL_ROW_REGULAR;
-				}
-				itemHeight = fn_custom_height(item) + labelRow;
-				if (itemHeight <= 0.0 || itemHeight > height) {
 					itemHeight = height;
+					itemY = 0.0;
+				} else {
+					itemHeight = fn_custom_height(item);
+					if (itemHeight <= 0.0 || itemHeight > height) {
+						itemHeight = height;
+					}
+					itemY = (height - itemHeight) / 2.0;
 				}
-				itemY = (height - itemHeight) / 2.0;
 				[wantedViews addObject:[item view]];
 			}
 			[_itemRects addObject:[NSValue valueWithRect:NSMakeRect(x, itemY, itemWidth, itemHeight)]];
@@ -565,11 +567,21 @@ static CGFloat fn_standard_width(NSToolbarItem *item, NSToolbarDisplayMode displ
 			    fn_effective_display(viewItem, [_toolbar displayMode]) == NSToolbarDisplayModeIconAndLabel) {
 				CGFloat labelRow = ([_toolbar sizeMode] == NSToolbarSizeModeSmall) ? fn_TOOLBAR_LABEL_ROW_SMALL
 												  : fn_TOOLBAR_LABEL_ROW_REGULAR;
+				/* THE ROW UNDER IT IS THE WORDS', and the three points of air inside it are `-fn_item_rects`'s own —
+				 * `labelRect.y` is the cell's bottom plus three. The view keeps the height it asked for and is centred
+				 * in what is left, so it neither covers the caption nor is stretched to fill the cell. */
+				CGFloat inset = labelRow + 3.0;
+				CGFloat band = rect.size.height - inset;
+				CGFloat viewHeight = fn_custom_height(viewItem);
 
-				/* THE ROW UNDER IT IS THE WORDS': the view gives it up and moves UP by it, or the caption would be
-				 * painted across the bottom of the control. */
-				rect.size.height -= labelRow;
-				rect.origin.y += labelRow;
+				if (band < 0.0) {
+					band = 0.0;
+				}
+				if (viewHeight <= 0.0 || viewHeight > band) {
+					viewHeight = band;
+				}
+				rect = NSMakeRect(rect.origin.x, rect.origin.y + inset + (band - viewHeight) / 2.0, rect.size.width,
+						  viewHeight);
 			}
 			[view setFrame:rect];
 		}

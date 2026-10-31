@@ -681,7 +681,9 @@ int main(void)
 		long inkWith = 0, inkWithout = 0;
 		int x, y;
 
-		[labelled setLabel:@"Caption"];
+		/* NO DESCENDERS IN THE WORD: the rows the ink covers are the check below, and a `p` or a `g` would reach below
+		 * the baseline every other label here sits on — `Pane`, the caption this exists for, has none. */
+		[labelled setLabel:@"Text"];
 		[labelled setView:view];
 		[labelled setMinSize:NSMakeSize(70.0, 24.0)];
 		[labelled setMaxSize:NSMakeSize(70.0, 24.0)];
@@ -696,6 +698,7 @@ int main(void)
 		{
 			NSBitmapImageRep *shot = new_rep(TW, band);
 			NSGraphicsContext *context = [NSGraphicsContext graphicsContextWithBitmapImageRep:shot];
+			int captionTop = -1, captionBottom = -1, othersTop = -1, othersBottom = -1;
 
 			[NSGraphicsContext saveGraphicsState];
 			[NSGraphicsContext setCurrentContext:context];
@@ -705,13 +708,30 @@ int main(void)
 			[NSGraphicsContext restoreGraphicsState];
 			withLabel = [shot bitmapData];
 			cell = [view frame];
+			/* **AND THE CAPTION IS ON THE SAME LINE AS EVERY OTHER LABEL**, which is a question about ROWS: the rows the
+			 * words under this view ink must be rows some other item's label inks too. A cell that is only as tall as the
+			 * view sets its row lower than the band's, and the caption then sits a few points under its neighbours —
+			 * MEASURED, `Pane` under `Export`'s line. */
 			for (y = 0; y < band; y++) {
-				for (x = (int)cell.origin.x; x < (int)(cell.origin.x + cell.size.width); x++) {
+				for (x = 0; x < TW; x++) {
 					unsigned char *p = withLabel + ((size_t)y * (size_t)TW + (size_t)x) * 4u;
+					BOOL inCell = (x >= (int)cell.origin.x && x < (int)(cell.origin.x + cell.size.width));
 
-					if (p[0] < 128) inkWith++;
+					if (p[0] >= 128) {
+						continue;
+					}
+					if (inCell) {
+						inkWith++;
+						if (captionTop < 0) captionTop = y;
+						captionBottom = y;
+					} else {
+						if (othersTop < 0) othersTop = y;
+						othersBottom = y;
+					}
 				}
 			}
+			check(captionTop >= othersTop - 1 && captionBottom <= othersBottom + 1,
+			      "the view's caption is on the SAME ROWS as the labels of the other items");
 			[shot release];
 		}
 
