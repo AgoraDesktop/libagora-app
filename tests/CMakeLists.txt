@@ -154,6 +154,16 @@ target_link_libraries(focus_ring PRIVATE App m)
 add_test(NAME appkit-focus-ring COMMAND focus_ring)
 set_tests_properties(appkit-focus-ring PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
 
+# **AND THE DRAG THAT CROSSES A PROCESS BOUNDARY, ANSWERED WITH APPKIT'S OWN PROTOCOL.** The compositor names a window and
+# a point; a view expects `-draggingEntered:`, a `draggingLocation` and a pasteboard. This drives the eight doors of that
+# translation directly — the drop's four doors in order, a refused prepare, a window that is not ours, a view registered
+# for other types — and the payload read's honest nil with no compositor to ask. The window lookup is the test's, because
+# a window number is assigned by the compositor and a probe with no display has none.
+add_executable(external_drag external_drag.m)
+target_link_libraries(external_drag PRIVATE App m)
+add_test(NAME appkit-external-drag COMMAND external_drag)
+set_tests_properties(appkit-external-drag PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
+
 # **THE TOOL TIPS: THE REGION, THE WALK AND THE PLATE.** A `-setToolTip:` view, a `-addToolTipRect:owner:userData:`
 # region answered by its owner, and the engine's delay — which is a real wait, so this test takes a second per tip it
 # earns. It runs offscreen: a plate is a window, and a window with no display still holds the state a test asserts.

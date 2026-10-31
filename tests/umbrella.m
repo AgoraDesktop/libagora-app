@@ -33,6 +33,9 @@ static const char *s_internal[] = {
 	"NSWindow_internal",
 	/* This tier's own machinery, below the Cocoa names. */
 	"AGAppleNib", "AGCandidateListView", "AGCandidateWindow", "AGChromeTheme", "AGComboListCell", "AGComboListView",
+	/* The drag that arrives from another application: the seam's translation into `NSDraggingInfo`, and nothing a
+	 * client calls — it installs itself with the application. */
+	"AGExternalDrag",
 	"AGInputMethod", "AGStatusBarItemView", "AGSwitch", "AGSwitchCell", "AGSystemImages", "AGToolTipWindow",
 	"AGVariantsInputMethod", "AGXPM",
 	/* The icon catalogue's naming tables, which `AGSystemImages` reads. */

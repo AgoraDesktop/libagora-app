@@ -26,6 +26,9 @@
  * them, and `README.md` records the slice as the application half of W7.
  */
 #import <AppKit/NSDragging.h>
+
+#import "AGExternalDrag.h"
+#import "platform/AGWindowServer.h"
 #import <AppKit/NSView.h>
 #import <AppKit/NSWindow.h>
 #import <AppKit/NSApplication.h>
@@ -310,18 +313,10 @@ static BOOL fn_types_intersect(NSArray *registered, NSArray *dragged)
  * the last chance, and its content view is the view that answers. */
 static NSView *fn_destination_view(NSWindow *window, NSPoint windowPoint, NSArray *types)
 {
-	NSView *view = [[window contentView] hitTest:windowPoint];
-
-	while (view != nil) {
-		if ([view cg_acceptsDraggedTypes:types]) {
-			return view;
-		}
-		view = [view superview];
-	}
-	if (fn_types_intersect([window cg_registeredDraggedTypes], types)) {
-		return [window contentView];
-	}
-	return nil;
+	/* **THE RULE LIVES ON THE WINDOW NOW**, because a drag arriving from ANOTHER application has to reach the same
+	 * answer: one search, or a view accepts a gesture on one side of the seam and never hears about it on the other. */
+	(void)fn_types_intersect;
+	return [window cg_destinationViewAtPoint:windowPoint forDraggedTypes:types];
 }
 
 /* THE MODIFIER RULE, STATED RATHER THAN LEFT TO A FEELING. Option turns a permitted MOVE into a COPY when the
@@ -399,6 +394,11 @@ static NSDragOperation fn_apply_modifiers(NSDragOperation operation, NSDragOpera
 	 * no destination for a drop that happened under one. */
 	[session cg_updateDestinationAtPoint:[session draggingLocation] event:event];
 	[[view window] cg_setPointerCapture:YES];
+	/* **AND THE GESTURE IS ANNOUNCED TO THE COMPOSITOR, WHICH IS WHAT MAKES IT CROSS A PROCESS BOUNDARY.** The local
+	 * search above finds this application's own windows and nothing else — the registry holds only windows this process
+	 * made — so without this call a drag released over another application's window would end in mid-air. The types are
+	 * the pasteboard's own, unsullied by a MIME translation: every application here speaks the same names. */
+	[session cg_announceToCompositor];
 
 	if ([source respondsToSelector:@selector(draggingSession:willBeginAtPoint:)]) {
 		[source draggingSession:session willBeginAtPoint:[session draggingLocation]];
@@ -754,6 +754,20 @@ static NSDragOperation fn_apply_modifiers(NSDragOperation operation, NSDragOpera
 		[self cg_clearDestination];	/* no `-draggingExited:` after a drop, which is Apple's sequence */
 	}
 
+	/* **A CANCELLED DRAG TELLS THE COMPOSITOR, AND A FINISHED ONE DOES NOT NEED TO**: the release the compositor routed
+	 * to this client is the same release that ends this session, so the server has already finished the claim and cleared
+	 * its own state. An abandoned gesture — Escape, a source's own refusal — produces no such release, so it is said out
+	 * loud or a destination would keep an insertion mark up for a drag nobody is making. */
+	if (AGWindowServerShared() != NULL) {
+		if (cancelled) {
+			AGWindowServerCancelDrag(AGWindowServerShared());
+		} else {
+			/* **AND A COMPLETED DRAG SAYS SO AT THE SAME MOMENT.** The destination fetched what it needed from its drop
+			 * handler before this ran — it is the same release — so the claim has done its work and the compositor is told
+			 * to forget it rather than keep a source alive for a gesture that is over. */
+			AGWindowServerFinishDrag(AGWindowServerShared());
+		}
+	}
 	_state = NSDragStateDone;
 	/* **THE ACTIVE SLOT IS CLEARED BEFORE THE CALLBACKS, NOT AFTER.** A source that begins the next drag from its
 	 * ended callback would otherwise have that new session nil'd out by this one's cleanup. The tier's own retain is
@@ -778,6 +792,37 @@ static NSDragOperation fn_apply_modifiers(NSDragOperation operation, NSDragOpera
 - (void)cg_finish
 {
 	[self cg_endAtPoint:_location cancelled:YES];
+}
+
+/* ---- THE OTHER APPLICATION'S HALF ------------------------------------------------------------ */
+
+/* **THE TYPES GO OVER AS THEY ARE.** `NSPasteboard`'s type names are the protocol's type strings — `NSFilenamesPboardType`
+ * is a name this tree's own pair of applications agree on, and a translation table would be a place for the two to
+ * disagree. A drag whose pasteboard declares nothing is not announced: there is nothing to offer. */
+- (void)cg_announceToCompositor
+{
+	NSArray *types = [_pasteboard types];
+	AGWindowServer *server = AGWindowServerShared();
+	const char **names;
+	int count;
+	int i;
+
+	if (server == NULL || [types count] == 0) {
+		return;
+	}
+	/* A drag is a gesture some view began, so the destination's drop handler needs the handler set installed even if
+	 * this application has never been a destination before. */
+	[AGExternalDrag cg_install];
+	count = (int)[types count];
+	names = (const char **)calloc((size_t)count, sizeof *names);
+	if (names == NULL) {
+		return;
+	}
+	for (i = 0; i < count; i++) {
+		names[i] = [[types objectAtIndex:i] UTF8String];
+	}
+	AGWindowServerStartDrag(server, names, count, (uint32_t)_sourceMask);
+	free(names);
 }
 
 /* ---- THE EVENT DOOR ------------------------------------------------------------------------- */

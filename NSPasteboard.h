@@ -85,6 +85,11 @@ extern NSString *NSInkTextPboardType;
 	BOOL _remoteAnswered;
 	BOOL _remoteRefused;
 	int _remoteReason;
+	/* **AND WHETHER THIS BOARD IS A DRAG'S DESTINATION SIDE.** A drag's payload is not the selection: it is offered to
+	 * one destination for the length of one gesture, from the source's own pasteboard. A board made for that answers
+	 * `-types` from the drag's offer and `-dataForType:` from the drag's channel — the same fd mechanism, a different
+	 * claim — and it is not in `+pasteboardWithName:`'s registry, because a drag belongs to one view for a few seconds. */
+	BOOL _dragDestination;
 }
 
 /* THE FIVE SHARED BOARDS BY NAME, and one unique to this process. */

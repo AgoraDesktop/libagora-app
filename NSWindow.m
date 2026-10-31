@@ -2906,6 +2906,53 @@ static CGFloat fn_clamp_axis(CGFloat v, CGFloat lo, CGFloat hi)
 	return out;
 }
 
+/* THE DESTINATION SEARCH, ONE RULE FOR BOTH SIDES OF A DRAG. See the header. */
+- (NSView *)cg_destinationViewAtPoint:(NSPoint)windowPoint forDraggedTypes:(NSArray *)types
+{
+	NSView *view = [[self contentView] hitTest:windowPoint];
+	NSUInteger i;
+
+	/* A nil list intersects nothing, so a view that registered nothing is never a destination. */
+	if (types == nil) {
+		return nil;
+	}
+	while (view != nil) {
+		if ([view cg_acceptsDraggedTypes:types]) {
+			return view;
+		}
+		view = [view superview];
+	}
+	for (i = 0; i < [[self cg_registeredDraggedTypes] count]; i++) {
+		if ([types containsObject:[[self cg_registeredDraggedTypes] objectAtIndex:i]]) {
+			return [self contentView];
+		}
+	}
+	return nil;
+}
+
+- (unsigned int)cg_surfaceId
+{
+	return (_agwindow != NULL) ? AGWindowGetSurfaceId(_agwindow) : 0;
+}
+
++ (NSWindow *)cg_windowWithSurfaceId:(unsigned int)surfaceId
+{
+	NSArray *windows = [[NSApplication sharedApplication] windows];
+	NSUInteger i;
+
+	if (surfaceId == 0) {
+		return nil;
+	}
+	for (i = 0; i < [windows count]; i++) {
+		NSWindow *window = [windows objectAtIndex:i];
+
+		if ([window cg_surfaceId] == surfaceId) {
+			return window;
+		}
+	}
+	return nil;
+}
+
 + (NSInteger)windowNumberAtPoint:(NSPoint)point belowWindowWithWindowNumber:(NSInteger)windowNumber
 {
 	NSApplication *app = [NSApplication sharedApplication];

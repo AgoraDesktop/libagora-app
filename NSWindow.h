@@ -983,6 +983,21 @@ typedef NSUInteger NSWindowSharingType;
 - (BOOL)cg_useOptimizedDrawing;
 - (nullable NSArray *)cg_registeredDraggedTypes;
 
+/* **THE VIEW THAT WOULD TAKE A DRAG AT A POINT, WHICH THE DESTINATION SEARCH NEEDS IN TWO PLACES.** A drag begun in
+ * this application asks it from `NSDraggingSession`; a drag that arrives from ANOTHER application asks it from the
+ * drag's own destination layer, and the two must answer the same way or a view would accept a gesture it cannot
+ * receive. The walk climbs from the hit test, so a registered container catches a drag over an unregistered child, and
+ * a window's own registration falls to its content view. */
+- (nullable NSView *)cg_destinationViewAtPoint:(NSPoint)windowPoint forDraggedTypes:(nullable NSArray *)types;
+
+/* **AND THE SEAM'S OWN HANDLE FOR THIS WINDOW, WHICH IS NOT `-windowNumber`.** Apple's number is unique WITHIN the
+ * application and this tier counts them per process; the compositor knows a surface by the object the client made, and
+ * that is what a drag arriving from another application names. 0 when the window has no compositor at all. */
+- (unsigned int)cg_surfaceId;
+
+/* The window that answers `-cg_surfaceId:` with this number, or nil. Only this application's windows are searched. */
++ (nullable NSWindow *)cg_windowWithSurfaceId:(unsigned int)surfaceId;
+
 
 /* **AND THE LEVEL ITSELF, WHICH IS WHERE THOSE CONSTANTS ARE USED.** Apple's header says nothing about it beyond the
  * declaration, and what it means is a place in the stack ABOVE OR BELOW other windows — which in this tier is the

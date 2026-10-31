@@ -253,6 +253,64 @@ int AGWindowServerRequestSelection(AGWindowServer *server, const char *mime_type
 /* Install the five callbacks. They are called from the dispatch, like every other handler here. */
 void AGWindowServerSetSelectionHandlers(AGWindowServer *server, const AGSelectionHandlers *handlers);
 
+/* ============================================================================================ *
+ * THE DRAG — A GESTURE THAT CROSSES APPLICATIONS, AND DELIBERATELY NOT THE CLIPBOARD.                  *
+ *                                                                                                *
+ * A person dragging a file has copied nothing, so a drag must not claim the selection: the two are  *
+ * separate claims, with separate types and separate payload paths, on the same fd mechanism. See   *
+ * `agora-shell.xml` version 15 for the wire and `window-server/README.md` for the routing.          *
+ *                                                                                                *
+ * **A DRAG HAS TWO ENDS AND ONE PROCESS IS ONE OF THEM.** A source calls `AGWindowServerStartDrag`  *
+ * with the types its pasteboard offers, hears `dataRequested` for each type a destination asks     *
+ * for, and `finished` when the gesture is over. A destination hears `enter`, `motion`, `leave`     *
+ * and `drop` for drags over ITS OWN windows and nobody else's — and never for a drag that began in *
+ * this same process, which the application resolves itself.                                        *
+ * ============================================================================================ */
+enum {
+	/* Nothing is being dragged — the same three reasons the selection has, because one server answers both. */
+	AGDragRefusalNoOwner = 0,
+	AGDragRefusalWrongType = 1,
+	AGDragRefusalOwnerGone = 2
+};
+
+typedef struct AGDragHandlers {
+	void *context;
+	/* **TO THE DESTINATION.** A drag from another application is over the surface `window_id`, at `x`, `y` in that
+	 * surface's own coordinates, offering `types` and permitting `source_mask` of `NSDragOperation`'s bits.
+	 *
+	 * **`window_id` IS THE SURFACE'S ID ON THIS CONNECTION**, not the compositor's window-list id: the wire carries the
+	 * object the client made (`wl_surface`), because a client has never been told its own window handle and an id it
+	 * cannot resolve would name nothing. `AGWindowGetSurfaceId` is what a window answers with, and it is the number to
+	 * compare against. `types` is an array of C strings only valid for the length of this call. */
+	void (*enter)(void *context, uint32_t window_id, int x, int y, const char *const *types, int count,
+		      uint32_t source_mask);
+	void (*motion)(void *context, int x, int y);
+	void (*leave)(void *context);
+	/* The release happened here. The payload is asked for afterwards, from the drop handler's own pasteboard. */
+	void (*drop)(void *context, int x, int y);
+	/* **TO THE SOURCE.** The gesture is over: a drop happened, or it was cancelled. */
+	void (*finished)(void *context);
+	/* **TO THE SOURCE: somebody wants this type.** Write it into `fd` and close it; the reader holds the other end. */
+	void (*dataRequested)(void *context, const char *mime_type, int fd);
+	/* **TO THE DESTINATION: here is the descriptor the source will write into.** EOF is the end of the payload. */
+	void (*dataReceived)(void *context, const char *mime_type, int fd);
+	/* The request produced no descriptor, and this is which of the three reasons it was. */
+	void (*refused)(void *context, const char *mime_type, uint32_t reason);
+} AGDragHandlers;
+
+/* Claim that this application is dragging these types, in this order of preference, permitting `source_mask` of
+ * `NSDragOperation`'s bits. 0 on success, -1 when the compositor does not speak the drag (a server below version 14). */
+int AGWindowServerStartDrag(AGWindowServer *server, const char *const *types, int count, uint32_t source_mask);
+/* The gesture was abandoned before a release. The destination, if any, hears `leave` and no drop. */
+void AGWindowServerCancelDrag(AGWindowServer *server);
+/* **THE GESTURE IS OVER AND THE CLAIM MAY GO.** A destination reads the payload from its drop handler, so the claim has to
+ * outlive the release; the source says when it is done with it, which is when its own session has ended. */
+void AGWindowServerFinishDrag(AGWindowServer *server);
+/* Ask for one type's payload. The answer arrives as `dataReceived` (with a descriptor) or `refused`, never as silence. */
+int AGWindowServerRequestDragData(AGWindowServer *server, const char *mime_type);
+/* Install the eight callbacks. They are called from the dispatch, like every other handler here. */
+void AGWindowServerSetDragHandlers(AGWindowServer *server, const AGDragHandlers *handlers);
+
 
 /* Connect to the display named by $WAYLAND_DISPLAY, or the default one. NULL if there is none. **THIS MAKES A NEW,
  * INDEPENDENT CONNECTION** and the caller owns it — which is what a test or a probe wants. An application wants
@@ -382,6 +440,11 @@ double AGWindowServerScale(AGWindowServer *server);
  * --------------------------------------------------------------------------------------------------- */
 
 typedef struct AGWindow AGWindow;
+
+/* **A WINDOW'S SURFACE ID ON THIS CONNECTION**, or 0 when it has none — the number `AGDragHandlers.enter` names, so an
+ * application can map a drag that arrives back to the window it owns. The compositor's window-list ids are its own
+ * handles and are not these. */
+unsigned int AGWindowGetSurfaceId(AGWindow *window);
 
 /* **THE SCALE THIS WINDOW'S BUFFERS ARE MADE AT**, which is the server's until an output says otherwise. Read it
  * before drawing: a context over a buffer of `round(frame x scale)` pixels must be scaled by this or every view draws

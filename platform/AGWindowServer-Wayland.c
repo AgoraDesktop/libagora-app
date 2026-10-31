@@ -290,6 +290,12 @@ struct AGWindowServer {
 	/* **THE SELECTION'S FIVE CALLBACKS AND THEIR CONTEXT**, installed by whoever wants the clipboard. Held here rather
 	 * than per-window because a selection belongs to the application, not to a surface. */
 	AGSelectionHandlers selection;
+	/* **AND THE DRAG'S EIGHT, ON THE SAME CONNECTION AND FOR THE SAME REASON**: a drag belongs to the application, not to
+	 * a surface, and a second connection would be a second event queue. */
+	AGDragHandlers drag;
+	/* **THE SHELL'S LISTENER IS ADDED ONCE AND CARRIES BOTH THE SELECTION'S FIVE EVENTS AND THE DRAG'S EIGHT.** A proxy
+	 * takes one listener; two registrations would make the second fail and silently lose whichever it carried. */
+	int shell_listener_installed;
 	/* **ONE KEYBOARD TENURE AT A TIME, AND IT IS NUMBERED.** Raised on every `wl_keyboard.enter` and by nothing else,
 	 * so two events with the same number were delivered without the keyboard leaving this application in between. */
 	uint32_t focus_serial;
@@ -2519,7 +2525,7 @@ static void registry_global(void *data, struct wl_registry *registry, uint32_t n
 		 * the version every window it makes is capped to, and a request sent above it is a protocol error that kills the
 		 * client rather than a call the server ignores. */
 		server->shell = wl_registry_bind(registry, name, &agora_shell_interface,
-						version < 13 ? version : 13);
+						version < 15 ? version : 15);
 	}
 }
 
@@ -2583,12 +2589,145 @@ static void selection_refused(void *data, struct agora_shell *shell, const char 
 	}
 }
 
+/* ==================================================================================================
+ * THE DRAG — eight events, eight calls, and every descriptor handed straight on.
+ * ================================================================================================== */
+
+/* **THE TYPES ARRIVE AS BYTES, SO THEY ARE UNPACKED HERE RATHER THAN IN EVERY HANDLER.** An `array` is the strings'
+ * NUL-terminated bytes back to back; a handler wants an array of `const char *`, and the unpacking is this file's because
+ * this file is the one that knows the protocol's encoding. The array and the strings it points into are the wire's
+ * buffer, valid only for the length of the call. */
+static int fn_types_from_array(struct wl_array *types, const char **out, int capacity)
+{
+	const char *cursor;
+	int count = 0;
+
+	if (types == NULL || types->data == NULL) {
+		return 0;
+	}
+	for (cursor = (const char *)types->data; cursor < (const char *)types->data + types->size && count < capacity;
+	     cursor += strlen(cursor) + 1) {
+		out[count++] = cursor;
+	}
+	return count;
+}
+
+static void drag_enter(void *data, struct agora_shell *shell, struct wl_surface *surface, int32_t x, int32_t y,
+		       struct wl_array *types, uint32_t source_mask)
+{
+	AGWindowServer *server = data;
+	const char *list[64];
+	int count;
+
+	(void)shell;
+	if (server->drag.enter == NULL) {
+		return;	/* nobody wants drags, which is every program that never asks for one */
+	}
+	count = fn_types_from_array(types, list, (int)(sizeof list / sizeof list[0]));
+	if (getenv("AGORA_DRAG_DIAG") != NULL) {
+		fprintf(stderr, "  DIAG drag: client enter, %d type(s), surface id %u\n", count,
+			(surface != NULL) ? (unsigned)wl_proxy_get_id((struct wl_proxy *)surface) : 0u);
+	}
+	/* **THE OBJECT GOES ON AS ITS ID ON THIS CONNECTION**, which is what the window it belongs to can answer with:
+	 * `AGWindowGetSurfaceId`. */
+	server->drag.enter(server->drag.context,
+			   (surface != NULL) ? (uint32_t)wl_proxy_get_id((struct wl_proxy *)surface) : 0,
+			   (int)x, (int)y, list, count, source_mask);
+}
+
+static void drag_motion(void *data, struct agora_shell *shell, int32_t x, int32_t y)
+{
+	AGWindowServer *server = data;
+
+	(void)shell;
+	if (server->drag.motion != NULL) {
+		server->drag.motion(server->drag.context, (int)x, (int)y);
+	}
+}
+
+static void drag_leave(void *data, struct agora_shell *shell)
+{
+	AGWindowServer *server = data;
+
+	(void)shell;
+	if (server->drag.leave != NULL) {
+		server->drag.leave(server->drag.context);
+	}
+}
+
+static void drag_drop(void *data, struct agora_shell *shell, int32_t x, int32_t y)
+{
+	AGWindowServer *server = data;
+
+	(void)shell;
+	if (server->drag.drop != NULL) {
+		if (getenv("AGORA_DRAG_DIAG") != NULL) {
+		fprintf(stderr, "  DIAG drag: client drop (%d,%d)\n", (int)x, (int)y);
+	}
+	server->drag.drop(server->drag.context, (int)x, (int)y);
+	}
+}
+
+static void drag_finished(void *data, struct agora_shell *shell)
+{
+	AGWindowServer *server = data;
+
+	(void)shell;
+	if (server->drag.finished != NULL) {
+		server->drag.finished(server->drag.context);
+	}
+}
+
+/* **THE DESCRIPTOR GOES TO THE HANDLER, WHICH OWNS IT** — the same rule the selection's two follow, and for the same
+ * reason: closing it here would leave the other end writing into a pipe nobody reads. */
+static void drag_data_requested(void *data, struct agora_shell *shell, const char *mime_type, int32_t fd)
+{
+	AGWindowServer *server = data;
+
+	(void)shell;
+	if (server->drag.dataRequested != NULL) {
+		server->drag.dataRequested(server->drag.context, mime_type, (int)fd);
+		return;
+	}
+	close(fd);
+}
+
+static void drag_data(void *data, struct agora_shell *shell, const char *mime_type, int32_t fd)
+{
+	AGWindowServer *server = data;
+
+	(void)shell;
+	if (server->drag.dataReceived != NULL) {
+		server->drag.dataReceived(server->drag.context, mime_type, (int)fd);
+		return;
+	}
+	close(fd);
+}
+
+static void drag_refused(void *data, struct agora_shell *shell, const char *mime_type, uint32_t reason)
+{
+	AGWindowServer *server = data;
+
+	(void)shell;
+	if (server->drag.refused != NULL) {
+		server->drag.refused(server->drag.context, mime_type, reason);
+	}
+}
+
 static const struct agora_shell_listener shell_listener = {
 	selection_offer,
 	selection_lost,
 	selection_requested,
 	selection_sent,
 	selection_refused,
+	drag_enter,
+	drag_motion,
+	drag_leave,
+	drag_drop,
+	drag_finished,
+	drag_data_requested,
+	drag_data,
+	drag_refused,
 };
 
 static void registry_global_remove(void *data, struct wl_registry *registry, uint32_t name)
@@ -2945,6 +3084,17 @@ void AGWindowServerSetActivationHandler(AGWindowServer *server, AGActivationFunc
  * THE SELECTION'S PUBLIC DOORS
  * ================================================================================================== */
 
+/* **ONE LISTENER PER CONNECTION, INSTALLED BY WHICHEVER HALF ASKS FIRST.** See the flag's declaration. */
+static void fn_install_shell_listener(AGWindowServer *server)
+{
+	if (server->shell_listener_installed || server->shell == NULL ||
+	    wl_proxy_get_version((struct wl_proxy *)server->shell) < 7) {
+		return;
+	}
+	agora_shell_add_listener(server->shell, &shell_listener, server);
+	server->shell_listener_installed = 1;
+}
+
 void AGWindowServerSetSelectionHandlers(AGWindowServer *server, const AGSelectionHandlers *handlers)
 {
 	if (server == NULL) {
@@ -2956,7 +3106,7 @@ void AGWindowServerSetSelectionHandlers(AGWindowServer *server, const AGSelectio
 	if (handlers != NULL && server->shell != NULL &&
 	    wl_proxy_get_version((struct wl_proxy *)server->shell) >= 7) {
 		server->selection = *handlers;
-		agora_shell_add_listener(server->shell, &shell_listener, server);
+		fn_install_shell_listener(server);
 	} else if (handlers == NULL) {
 		memset(&server->selection, 0, sizeof server->selection);
 	}
@@ -3014,6 +3164,99 @@ int AGWindowServerRequestSelection(AGWindowServer *server, const char *mime_type
 	return 0;
 }
 
+/* ==================================================================================================
+ * THE DRAG'S PUBLIC DOORS
+ * ================================================================================================== */
+
+void AGWindowServerSetDragHandlers(AGWindowServer *server, const AGDragHandlers *handlers)
+{
+	if (server == NULL) {
+		return;
+	}
+	/* **THE EIGHT EVENTS ARE ONLY DELIVERED IF THE SHELL SPEAKS THEM, AND THE LISTENER IS ADDED ONCE.** The selection
+	 * installs its own listener when it is asked for; the shell has ONE listener per proxy, so this one carries the
+	 * selection's five too — which is why the listener below is the union and not two registrations. A program that
+	 * asks for the drag alone still hears the selection, harmlessly, because its handler slots are nil. */
+	if (handlers != NULL && server->shell != NULL &&
+	    wl_proxy_get_version((struct wl_proxy *)server->shell) >= 14) {
+		server->drag = *handlers;
+		fn_install_shell_listener(server);
+	} else if (handlers == NULL) {
+		memset(&server->drag, 0, sizeof server->drag);
+	}
+}
+
+/* **ONE ARRAY OF THE STRINGS' BYTES, NOT A LIST OF POINTERS** — an `array` is opaque to Wayland, so marshalling a
+ * `char **` would send this process's addresses. The selection's `-setSelection:` packs the same way. */
+static int fn_pack_types(struct wl_array *array, const char *const *types, int count)
+{
+	int i;
+
+	wl_array_init(array);
+	for (i = 0; i < count; i++) {
+		size_t length;
+		char *slot;
+
+		if (types[i] == NULL) {
+			continue;
+		}
+		length = strlen(types[i]) + 1;
+		slot = (char *)wl_array_add(array, length);
+		if (slot == NULL) {
+			wl_array_release(array);
+			return -1;
+		}
+		memcpy(slot, types[i], length);
+	}
+	return 0;
+}
+
+int AGWindowServerStartDrag(AGWindowServer *server, const char *const *types, int count, uint32_t source_mask)
+{
+	struct wl_array array;
+
+	if (server == NULL || server->shell == NULL || count <= 0 || types == NULL ||
+	    wl_proxy_get_version((struct wl_proxy *)server->shell) < 14) {
+		return -1;
+	}
+	if (fn_pack_types(&array, types, count) != 0) {
+		return -1;
+	}
+	agora_shell_start_drag(server->shell, 0, &array, source_mask);
+	wl_array_release(&array);
+	return 0;
+}
+
+void AGWindowServerCancelDrag(AGWindowServer *server)
+{
+	if (server == NULL || server->shell == NULL ||
+	    wl_proxy_get_version((struct wl_proxy *)server->shell) < 14) {
+		return;
+	}
+	agora_shell_cancel_drag(server->shell);
+}
+
+void AGWindowServerFinishDrag(AGWindowServer *server)
+{
+	if (server == NULL || server->shell == NULL ||
+	    wl_proxy_get_version((struct wl_proxy *)server->shell) < 17) {
+		/* A compositor older than the request cannot be told, and its own clear on the release is what it does — the
+		 * destination's read may then be refused, which is that version's behaviour and not a bug here. */
+		return;
+	}
+	agora_shell_finish_drag(server->shell);
+}
+
+int AGWindowServerRequestDragData(AGWindowServer *server, const char *mime_type)
+{
+	if (server == NULL || server->shell == NULL || mime_type == NULL ||
+	    wl_proxy_get_version((struct wl_proxy *)server->shell) < 14) {
+		return -1;
+	}
+	agora_shell_request_drag_data(server->shell, mime_type);
+	return 0;
+}
+
 uint32_t AGWindowServerFocusSerial(AGWindowServer *server)
 {
 	return (server != NULL) ? server->focus_serial : 0;
@@ -3022,6 +3265,14 @@ uint32_t AGWindowServerFocusSerial(AGWindowServer *server)
 double AGWindowServerScale(AGWindowServer *server)
 {
 	return (server != NULL && server->scale > 0.0) ? server->scale : 1.0;
+}
+
+unsigned int AGWindowGetSurfaceId(AGWindow *window)
+{
+	if (window == NULL || window->surface == NULL) {
+		return 0;
+	}
+	return (unsigned int)wl_proxy_get_id((struct wl_proxy *)window->surface);
 }
 
 double AGWindowBufferScale(AGWindow *window)

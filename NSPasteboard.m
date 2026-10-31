@@ -135,6 +135,9 @@ static NSPasteboard *s_remote_board;
  * in the header would hand every client this pasteboard's innards to save five methods. */
 @interface NSPasteboard (AGRemote)
 - (NSData *)cg_remoteReadType:(NSString *)type;
+- (void)cg_beginDragWithTypes:(NSArray *)types;
+- (void)cg_endDrag;
+- (NSData *)cg_dragReadType:(NSString *)type;
 - (void)cg_remoteOfferType:(NSString *)type;
 - (void)cg_remoteLost;
 - (NSData *)cg_remoteDataForType:(NSString *)type;
@@ -353,6 +356,97 @@ static void fn_remote_refused(void *context, const char *mime_type, uint32_t rea
 	return data;
 }
 
+/* ==================================================================================================
+ * THE DRAG'S DESTINATION SIDE
+ * ================================================================================================== */
+
+/* **AND THE ONE A DRAG'S DESTINATION IS HANDED.** Fresh, unshared and unregistered: it belongs to one gesture and lives
+ * as long as the view that took it. `NSDragPboard` is the SOURCE's board and a different object on purpose — a name maps
+ * to one board per process, and two ends of a gesture sharing one would let a destination see its own source's store. */
++ (NSPasteboard *)cg_dragDestinationBoard
+{
+	return [[[NSPasteboard alloc] cg_initWithName:@"NSDragPboard (destination)"] autorelease];
+}
+
+/* **A DRAG BOARD IS MADE, NOT LOOKED UP.** No name, no registry, no sharing: it exists from the moment a drag enters a
+ * view of this application until the drop is concluded, and its types are the drag's own offer. */
+- (void)cg_beginDragWithTypes:(NSArray *)types
+{
+	[_types removeAllObjects];	/* it never has any; stated so a reused board cannot keep an old drag's */
+	[_remoteTypes removeAllObjects];
+	[_remoteTypes addObjectsFromArray:types];
+	_dragDestination = YES;
+	_changeCount++;
+}
+
+- (void)cg_endDrag
+{
+	_dragDestination = NO;
+	[_remoteTypes removeAllObjects];
+	_remoteFd = -1;
+	_remoteAnswered = NO;
+	_remoteRefused = NO;
+}
+
+/* **THE DRAG'S READ, AND IT IS THE SELECTION'S READ WITH A DIFFERENT REQUEST BEHIND IT** — the same bounded pump, the
+ * same descriptor, the same three answers. It exists rather than being shared because the request itself is the
+ * difference, and a boolean threaded through the selection's read would make one door speak for two claims. */
+- (NSData *)cg_dragReadType:(NSString *)dataType
+{
+	AGWindowServer *server = AGWindowServerShared();
+	NSMutableData *data;
+	long deadline_ms = 250;
+	char buffer[4096];
+
+	if (getenv("AGORA_DRAG_DIAG") != NULL) {
+		fprintf(stderr, "  DIAG drag: reading %s (server %p)\n", [dataType UTF8String], (void *)server);
+	}
+	if (server == NULL || dataType == nil || AGWindowServerRequestDragData(server, [dataType UTF8String]) != 0) {
+		return nil;
+	}
+	_remoteAnswered = NO;
+	_remoteRefused = NO;
+	_remoteFd = -1;
+	_remoteReason = -1;
+	while (!_remoteAnswered && !_remoteRefused && deadline_ms > 0) {
+		if (AGWindowServerDispatchTimeout(server, 1) < 0) {
+			break;
+		}
+		deadline_ms--;
+	}
+	if (!_remoteAnswered || _remoteFd < 0) {
+		if (getenv("AGORA_DRAG_DIAG") != NULL) {
+			fprintf(stderr, "  DIAG drag: no %s (answered %d, refused %d, reason %d)\n",
+				[dataType UTF8String], (int)_remoteAnswered, (int)_remoteRefused, _remoteReason);
+		}
+		if (getenv("AG_PASTEBOARD_DIAG") != NULL) {
+			fprintf(stderr, "  DIAG drag: no %s within the deadline (refused %d, reason %d)\n",
+				[dataType UTF8String], (int)_remoteRefused, _remoteReason);
+		}
+		return nil;
+	}
+	data = [NSMutableData data];
+	for (;;) {
+		ssize_t got_bytes = read(_remoteFd, buffer, sizeof buffer);
+
+		if (got_bytes <= 0) {
+			break;
+		}
+		[data appendBytes:buffer length:(NSUInteger)got_bytes];
+	}
+	close(_remoteFd);
+	_remoteFd = -1;
+	if (getenv("AGORA_DRAG_DIAG") != NULL) {
+		fprintf(stderr, "  DIAG drag: read %lu byte(s) of %s\n", (unsigned long)[data length],
+			[dataType UTF8String]);
+	}
+	/* **AND IT IS KEPT.** A drag's types are asked for more than once — a destination's `-draggingEntered:` decides and its
+	 * `-performDragOperation:` reads — and a second round trip would need the source's claim to still be there. The payload
+	 * is this process's copy now, and a gesture is short enough that keeping it is cheaper than asking again. */
+	[_data setObject:data forKey:dataType];
+	return (NSData *)data;
+}
+
 - (void)cg_remoteTakeFd:(int)fd
 {
 	_remoteFd = fd;
@@ -527,6 +621,12 @@ static void fn_remote_refused(void *context, const char *mime_type, uint32_t rea
 	local = [_data objectForKey:dataType];
 	if (local != nil) {
 		return local;
+	}
+	/* **A DRAG'S PAYLOAD COMES FROM THE DRAG'S OWN CLAIM, NOT THE CLIPBOARD'S.** The board a destination is handed says
+	 * so about itself, so a pasteboard read during a drop asks the source through `request_drag_data` — and a drag that
+	 * ends takes the offer with it rather than leaving a stale clipboard behind. */
+	if (_dragDestination) {
+		return [self cg_dragReadType:dataType];
 	}
 	/* **THIS PROCESS'S OWN CONTENTS FIRST, THEN THE OTHER APPLICATION'S.** A pasteboard that declared types is the owner
 	 * and answers from its own store; one that declared nothing is a reader, and the only reader that has a

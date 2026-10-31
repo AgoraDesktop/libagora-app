@@ -33,6 +33,7 @@
  * waits when none has anything — which is what makes a window's pump part of a program rather than a probe.
  */
 #import "AppKitRefusal.h"
+#import "AGExternalDrag.h"
 
 /* THE PIECES THE BAR IS MADE OF, named here because this file is where they are used: the seam (for the region the
  * server owns), the window (which owns the connection), and the view that lays a bar out. */
@@ -408,6 +409,10 @@ BOOL NSApplicationLoad(void)
 	_windows = [[NSMutableArray alloc] init];
 	_eventQueue = [[NSMutableArray alloc] init];
 	_activationPolicy = NSApplicationActivationPolicyRegular;
+	/* **A DRAG FROM ANOTHER APPLICATION NEEDS SOMEBODY LISTENING BEFORE THE FIRST ONE ARRIVES**, and the application is the
+	 * one object every program has. The call is idempotent and a no-op without a compositor, so a headless probe neither
+	 * opens a connection nor hears anything. */
+	[AGExternalDrag cg_install];
 	return self;
 }
 
@@ -990,6 +995,11 @@ static double s_last_report;
 	}
 	for (;;) {
 		NSUInteger i;
+
+		/* **AND A DRAG THAT ARRIVED ON THE CONNECTION IS ANSWERED HERE**, outside the dispatch it was delivered in: a
+		 * drop's handler reads its payload over that same connection, and a pump inside a dispatch is a re-entrant
+		 * dispatch. The seam's callbacks recorded what happened; this is where AppKit hears it. */
+		[AGExternalDrag cg_processPendingEvents];
 
 		/* THE POSTED QUEUE FIRST: an event a caller made did not come from the server and must not wait
 		 * behind one that has not arrived. */
