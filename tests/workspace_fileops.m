@@ -172,6 +172,23 @@ int main(void)
 			check(![workspace isFilePackageAtPath:plain], "and an ordinary directory is not");
 			check(![workspace isFilePackageAtPath:[scratch stringByAppendingPathComponent:@"missing.app"]],
 			      "and neither is a path that is not there");
+
+			/* **AND THE ANSWER IS ABOUT THE NAME, NOT ABOUT THE CASING OR WHAT IS INSIDE.** A bundle's extension is
+			 * what makes it a bundle: `Upper.APP` is one on a case-insensitive volume and to every other part of this
+			 * stack (Icon Services reads its icon, Launch Services launches it), and `Empty.app` is one before its
+			 * `Contents` has been written. The rule used to demand lower case AND a `Contents` child, so both of these
+			 * were folders to a double-click and applications to everything else. */
+			{
+				NSString *upper = [scratch stringByAppendingPathComponent:@"Upper.APP"];
+				NSString *empty = [scratch stringByAppendingPathComponent:@"Empty.app"];
+
+				(void)[manager createDirectoryAtPath:upper withIntermediateDirectories:YES attributes:nil error:NULL];
+				(void)[manager createDirectoryAtPath:empty withIntermediateDirectories:YES attributes:nil error:NULL];
+				check([workspace isFilePackageAtPath:upper], "an Upper.APP directory is a package too");
+				check([workspace isFilePackageAtPath:empty], "and so is an Empty.app with nothing inside it yet");
+				check(![workspace isFilePackageAtPath:[scratch stringByAppendingPathComponent:@"Empty.folder"]],
+				      "while an unknown extension is still an ordinary directory");
+			}
 		}
 	}
 

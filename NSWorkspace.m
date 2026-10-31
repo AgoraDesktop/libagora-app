@@ -1402,10 +1402,25 @@ static NSString *fn_unique_destination(NSString *directory, NSString *name, NSFi
 /* **A PACKAGE IS A DIRECTORY WITH A `.app`-shaped NAME**, which is this tier's whole notion of one: the extension is what
  * a person sees and what `-getInfoForFile:` reports, so a bundle with a `Contents` directory inside is a package and a
  * plain directory is not. */
+/* **A BUNDLE IS A DIRECTORY WHOSE NAME SAYS SO, WHEREVER IT SITS — AND THAT IS THE WHOLE RULE.** It used to be two
+ * conditions more than that: the extension had to be spelled in LOWER CASE, and the directory had to hold a `Contents`
+ * child already. Both are wrong the same way, because both make the answer depend on something other than what the
+ * thing IS:
+ *
+ *   - `Upper.APP` is a bundle on a case-insensitive volume and to every other part of this stack — Icon Services reads
+ *     the bundle's own icon for it and Launch Services launches it — so a case-sensitive match here meant a directory
+ *     that wore an application's icon, LAUNCHED like an application, and opened like a folder when double-clicked.
+ *   - `Bare.app` with nothing inside is a bundle half-written (an export that stopped, a bundle being assembled), and
+ *     macOS treats it as one: the extension is what a bundle is, and "is it complete?" is a question about the
+ *     application, not about the package.
+ *
+ * What is NOT a bundle is unchanged: an ordinary directory, a file, or a path that is not there. */
 - (BOOL)isFilePackageAtPath:(NSString *)fullPath
 {
+	static NSString *const extensions[] = { @"app", @"bundle", @"framework", @"plugin", @"kext", nil };
 	BOOL isDirectory = NO;
 	NSString *extension;
+	NSUInteger i;
 
 	if (fullPath == nil || ![[NSFileManager defaultManager] fileExistsAtPath:fullPath isDirectory:&isDirectory]) {
 		return NO;
@@ -1414,13 +1429,12 @@ static NSString *fn_unique_destination(NSString *directory, NSString *name, NSFi
 		return NO;
 	}
 	extension = [fullPath pathExtension];
-	if (![extension isEqualToString:@"app"] && ![extension isEqualToString:@"bundle"] &&
-	    ![extension isEqualToString:@"framework"] && ![extension isEqualToString:@"plugin"] &&
-	    ![extension isEqualToString:@"kext"]) {
-		return NO;
+	for (i = 0; extensions[i] != nil; i++) {
+		if ([extension caseInsensitiveCompare:extensions[i]] == NSOrderedSame) {
+			return YES;
+		}
 	}
-	return [[NSFileManager defaultManager] fileExistsAtPath:
-		[fullPath stringByAppendingPathComponent:@"Contents"]];
+	return NO;
 }
 
 /* ---- AND THE THIRTEEN THAT REFUSE ------------------------------------------------------------------ */
