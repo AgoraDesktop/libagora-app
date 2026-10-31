@@ -92,6 +92,11 @@ static BOOL installed(NSTabView *tabs, NSView *view)
 	return [[tabs subviews] containsObject:view];
 }
 
+/* THE STRIP'S OWN GEOMETRY, DECLARED HERE BECAUSE A PROBE THAT WANTS TO LOOK AT ONE CHIP HAS TO KNOW WHERE IT IS. */
+@interface NSTabView (APPKITTabs)
+- (NSRect)cg_rectForTabAtIndex:(NSUInteger)index;
+@end
+
 int main(void)
 {
 	@autoreleasepool {
@@ -263,6 +268,48 @@ int main(void)
 			check([one sizeOfLabel:NO].width > 0.0 && [one sizeOfLabel:NO].height > 0.0,
 			      "an item measures its own label");
 			check([two sizeOfLabel:NO].width >= 42.0, "and a short label still gets the least tab width");
+
+			/* **AND THE LABEL SITS IN THE MIDDLE OF ITS CHIP.** `-drawAtPoint:` takes a BASELINE, and the arithmetic here
+			 * used to hand it the bottom of the line box — with a signed descender that is a whole descent too low, which
+			 * is what a person sees as "the text in the tabs is too low" (MEASURED at about six points on a 12-point
+			 * face). The two margins of the label's own ink are compared with each other, so the check is "is it
+			 * centred" rather than a guess at a number of points. */
+			{
+				NSBitmapImageRep *rep = [[NSBitmapImageRep alloc] initWithBitmapDataPlanes:NULL
+					pixelsWide:300 pixelsHigh:200 bitsPerSample:8 samplesPerPixel:4 hasAlpha:YES
+					isPlanar:NO colorSpaceName:NSCalibratedRGBColorSpace bytesPerRow:1200 bitsPerPixel:32];
+				NSRect tab = [tabs cg_rectForTabAtIndex:0];	/* the strip runs along the TOP */
+				int x, y, top = -1, bottom = -1;
+				int iy1 = (int)NSMinY(tab) + 3, iy2 = (int)NSMaxY(tab) - 3;
+				int ix1 = (int)NSMinX(tab) + 4, ix2 = (int)NSMaxX(tab) - 4;
+
+				[NSGraphicsContext setCurrentContext:[NSGraphicsContext graphicsContextWithBitmapImageRep:rep]];
+				[tabs displayRect:[tabs bounds]];
+				for (y = iy1; y < iy2; y++) {
+					for (x = ix1; x < ix2; x++) {
+						NSColor *c = [rep colorAtX:x y:199 - y];	/* the bitmap's rows grow down */
+
+						if (c != nil && [c redComponent] < 0.6) {
+							if (top < 0) {
+								top = y;
+							}
+							bottom = y;
+						}
+					}
+				}
+				check(top >= 0 && bottom >= top, "the label inks something inside its chip");
+				if (top >= 0 && bottom >= top) {
+					/* THE VIEW'S COORDINATES GROW UPWARD, so these are margins from the chip's FLOOR and CEILING —
+					 * and the floor's is the one a person reads as "the text is too low". */
+					int fromFloor = top - (int)NSMinY(tab);
+					int fromCeiling = (int)NSMaxY(tab) - 1 - bottom;
+
+					printf("  [diag] tab label rows %d..%d, %d above the floor, %d below the ceiling\n", top,
+					       bottom, fromFloor, fromCeiling);
+					check(abs(fromFloor - fromCeiling) <= 3, "and its ink is CENTRED in the chip");
+				}
+				[rep release];
+			}
 
 			/* **THE INK**: the view renders, and the selected tab's face is not the background. */
 			{

@@ -136,8 +136,13 @@
 		(_tabState == NSSelectedTab) ? [NSColor controlTextColor] : [NSColor disabledControlTextColor],
 		NSForegroundColorAttributeName, nil];
 	size = [[self label] sizeWithAttributes:attributes];
+	/* **THE BASELINE, NOT THE MIDDLE OF THE LINE BOX — `-drawAtPoint:` TAKES A BASELINE.** The old arithmetic here was
+	 * `mid - (asc - desc)/2 + desc`, and with this tier's signed descender (`-descender` is Core Text's descent negated,
+	 * so it is negative) that lands the baseline a whole DESCENT too low: MEASURED, a tab's label sat about six points
+	 * under the middle of its chip. Centring the glyph box about the tab's middle is `mid - (asc + desc)/2`, which is
+	 * the same rule the toolbar's labels and the tool tip's plate use. */
 	where = NSMakePoint(NSMidX(tabRect) - size.width / 2.0,
-			    NSMidY(tabRect) - (([font ascender] - [font descender]) / 2.0 - [font descender]));
+			    NSMidY(tabRect) - ([font ascender] + [font descender]) / 2.0);
 	[[self label] drawAtPoint:where withAttributes:attributes];
 }
 
