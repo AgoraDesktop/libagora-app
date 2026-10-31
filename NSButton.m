@@ -274,6 +274,44 @@ static NSString * const AGCoderButtonSpringLoadedKey = @"springLoaded";
 
 /* ---- THE KEY EQUIVALENT'S MASK, THE PERIODIC PAIR, AND THE STATE WALK --------------------------------- */
 
+/* **A PRESS ON A BUTTON IS NOT TYPING, SO IT DOES NOT PULL A UTILITY PANEL'S KEYBOARD.** `NSControl`'s answer to this
+ * door is its `-acceptsFirstResponder` — "the keyboard is useful to this control, so a click should bring the key here" —
+ * which became YES for buttons when they learned to hold focus. But the two questions are not the same one: a panel that
+ * `-becomesKeyOnlyIfNeeded` is protecting the keyboard of whatever the person is TYPING into, and a click on a button
+ * starts no session, so it is exactly the click that must not take it. MEASURED before the earlier fix: a click on a
+ * utility panel's button took the keyboard away from the field the person was typing in. Tabbing to a button still makes
+ * it the first responder (and the window key, if it asks); it is only the click that stays out of the way. */
+- (BOOL)needsPanelToBecomeKey
+{
+	return NO;
+}
+
+/* **AND A FOCUSED BUTTON IS PRESSED WITH THE SPACE BAR, WHICH IS THE ONLY REASON TAKING THE KEYBOARD MEANS ANYTHING.**
+ * `NSButtonCell -acceptsFirstResponder` lets a button hold the keyboard (full keyboard access, always on in this tier);
+ * this is the other half of that door — Apple's rule is that Space activates the focused control, while Return is the
+ * DEFAULT BUTTON's key equivalent and travels through the menu/key-equivalent path instead of the responder chain.
+ *
+ * ANYTHING ELSE IS PASSED ON, which is what keeps a Tab and the arrows moving through the key view loop: an override
+ * that swallowed every key would make a focused button a keyboard trap.
+ *
+ * THE FLASH OF THE PRESSED FACE COMES FROM THE CELL, not from here: `-setHighlighted:` is what a pointer press uses, and
+ * a momentary button paints the down face only while it is set. It is set and cleared around the click so the button
+ * looks pressed — without it, Space would fire an action with no visible cause. */
+- (void)keyDown:(NSEvent *)event
+{
+	NSString *characters = [event characters];
+
+	if ([self isEnabled] && ![_cell isHighlighted] && [characters isEqualToString:@" "]) {
+		[_cell setHighlighted:YES];
+		[self setNeedsDisplay:YES];
+		[self performClick:self];
+		[_cell setHighlighted:NO];
+		[self setNeedsDisplay:YES];
+		return;
+	}
+	[super keyDown:event];
+}
+
 - (NSUInteger)keyEquivalentModifierMask
 {
 	return [(NSButtonCell *)[self cell] keyEquivalentModifierMask];

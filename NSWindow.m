@@ -191,6 +191,13 @@
  * (`-cg_toolTipStringAtWindowPoint:`); what the window adds is `-hitTest:` and the walk up the tree, which is why this
  * door is here and not there. */
 - (void)cg_updateToolTipAtPoint:(NSPoint)windowPoint;
+/* **AND THE FOCUS RING'S TWO: WHICH CONTROL WEARS ONE, AND THE INK ITSELF.** Both are the window's for the same reason
+ * the tool tip's walk is — the first is a question about the responder chain and which window is key, and the second is
+ * painted over the whole content AFTER the view tree has drawn, which is the only place in this tier where nothing
+ * below can be painted over it. */
+- (nullable NSView *)cg_focusRingView;
+- (void)cg_drawFocusRingInContext:(nullable CGContextRef)c clip:(NSRect)clip;
+- (void)cg_damageFocusRingForView:(nullable NSView *)view rectangular:(BOOL)whole;
 - (nullable NSString *)cg_toolTipStringAtWindowPoint:(NSPoint)windowPoint;
 /* **AND THE DRAG'S MOVE, MADE ONCE PER PASS AT THE LATEST POINTER RATHER THAN PER EVENT.** The window is moved to
  * the pointer, so applying every motion inside a frame would walk it along the sampled PATH — a fast flick's
@@ -3230,6 +3237,8 @@ static CGFloat fn_clamp_axis(CGFloat v, CGFloat lo, CGFloat hi)
 	/* AND A TIP IS THE KEY WINDOW'S, so the plate goes with the status — a tip hanging over a window nobody is working
 	 * in is explaining a control that is not the one the hand is about to use. */
 	[[AGToolTipController sharedController] hideTipForWindow:self];
+	/* AND A RING IS THE KEY WINDOW'S, so it goes with the status and comes back with it. */
+	[self cg_damageFocusRingForView:nil rectangular:YES];
 	fn_announce(self, NSWindowDidResignKeyNotification, @selector(windowDidResignKey:));
 	[self cg_updateDrawers];
 }
@@ -3377,6 +3386,11 @@ static CGFloat fn_clamp_axis(CGFloat v, CGFloat lo, CGFloat hi)
 	 * nothing in this tier ever called it, so every field was permanently "not editing" and a delegate's
 	 * `-textShouldBeginEditing:` was never consulted either. */
 	NSResponder *previous = _firstResponder;
+	/* **THE RING THE KEYBOARD IS LEAVING IS WORKED OUT BEFORE ANYTHING IS ASKED TO LET GO.** Resigning is what ENDS a
+	 * field's session, and ending it takes the window's field editor out of the field — after which the responder is an
+	 * editor whose superview is nil and the ring's target cannot be named at all. MEASURED: the old band was missing from
+	 * the damage list for exactly this reason, and the ring it belonged to stayed on the glass. */
+	NSView *oldRingView = [self cg_focusRingView];
 
 	/* THE ORDER IS THE CONTRACT. The newcomer is asked whether it wants the keyboard FIRST, so a view that declines
 	 * is never asked to become anything; the incumbent is asked to let go SECOND, and a refusal ABANDONS the whole
@@ -3412,6 +3426,13 @@ static CGFloat fn_clamp_axis(CGFloat v, CGFloat lo, CGFloat hi)
 			[previous becomeFirstResponder];
 		}
 		return NO;
+	}
+	/* **AND BOTH BANDS ARE DAMAGED ONCE THE MOVE HAS ACTUALLY HAPPENED**, so a refusal above costs no repaint: the one
+	 * the keyboard left and the one it arrived at. Both are named as VIEW damage, which is the damage the partial paint
+	 * consults — see `-cg_damageFocusRingForView:rectangular:`. */
+	if ([self isKeyWindow]) {
+		[self cg_damageFocusRingForView:oldRingView rectangular:NO];
+		[self cg_damageFocusRingForView:[self cg_focusRingView] rectangular:NO];
 	}
 	return YES;
 }
@@ -4202,6 +4223,147 @@ static CGFloat fn_clamp_axis(CGFloat v, CGFloat lo, CGFloat hi)
 		}
 	}
 	[hits release];
+}
+
+/* ============================================================================================ *
+ * THE FOCUS RING.                                                                                *
+ *                                                                                                *
+ * **A RING IS THE WINDOW'S RATHER THAN THE CONTROL'S, AND THE CLIP IS THE WHOLE REASON.** Every subview is clipped to
+ * its own frame (`NSView -displayRect:` — a subclass may not draw outside itself), so a control that drew its own ring
+ * would have ALL of it thrown away: the ring lives outside the frame by definition. A ring drawn INSIDE is a second
+ * bezel, not a highlight. So the ring is painted by the window, after the content walk, over the control the keyboard
+ * is in — the one place where "everything underneath has been drawn" is true, and the same order Apple's own ring pass
+ * has. A test can drive it through `-cg_drawContentInContext:` like the toolbar's band.
+ *
+ * WHAT WEARS ONE: a CONTROL that holds the keyboard, and the window it is in must be KEY. A field that is being typed
+ * into has the FIELD EDITOR as its first responder rather than the field (`NSTextField -becomeFirstResponder` opens a
+ * session and the window's editor becomes the responder), and the editor is a subview OF THE FIELD — so the ring goes
+ * around the field, which is the thing a person sees, not around the text inside it.
+ *
+ * THE INK IS A GLOW: four one-point rounded strokes stepping outward from the frame and fading, which is what "a shadow
+ * in the accent colour" is on a desktop with no blurred shadows in its rasterizer (`CGContextSetShadowWithColor`
+ * keeps its blur state for the PDF writer only). Four passes of a stroke is also the cheapest honest way to get a soft
+ * edge out of a renderer that has one — the alternative is a blurred mask, which this tree has no door for.
+ * ============================================================================================ */
+
+/* HOW FAR OUT THE GLOW REACHES, AND HOW EACH ONE-POINT BAND FADES. The innermost band is the ring itself — nearly solid
+ * accent — and each band beyond it is weaker, so the edge is soft rather than a drawn border. Four points at the
+ * standard control corner radius (`NS_CELL_BEZEL_RADIUS`) reads as a highlight around a bezel rather than a box. */
+/* THE CONTROL CORNER THE RING FOLLOWS, WHICH IS THE BEZEL'S OWN RADIUS — `NS_CELL_BEZEL_RADIUS` in `NSButtonCell.m` is
+ * this same four, and a ring with a different corner would read as a second, disagreeing box. */
+static const CGFloat AGFocusRingRadius = 4.0;
+static const CGFloat AGFocusRingAlpha[] = { 0.85, 0.55, 0.32, 0.16 };
+
+/* AND THE REACH IS HOW MANY OF THOSE BANDS THERE ARE, so the loop and the ink cannot disagree about how far out a ring
+ * goes. */
+#define AGFocusRingReach ((NSInteger)(sizeof(AGFocusRingAlpha) / sizeof(AGFocusRingAlpha[0])))
+
+/* **WHICH CONTROL WEARS THE RING, WHICH IS A QUESTION ABOUT THE RESPONDER CHAIN.** A responder that is not a view wears
+ * nothing (a window, the application). A view that is an editor INSIDE a control — the window's field editor standing in
+ * a text field — wears the ring as its CONTROL, because that is the rectangle a person reads as "this is where the
+ * typing goes". Anything else that holds the keyboard wears its own, which includes a button once it can take focus at
+ * all (see `NSButtonCell -acceptsFirstResponder`). */
+- (NSView *)cg_focusRingView
+{
+	NSResponder *responder = [self firstResponder];
+	NSView *view;
+	NSView *parent;
+
+	if (![responder isKindOfClass:[NSView class]]) {
+		return nil;
+	}
+	view = (NSView *)responder;
+	/* THE EDITOR FIRST, BECAUSE IT IS THE RESPONDER THAT IS NOT A CONTROL: it is the window's `NSText` standing inside
+	 * the field being typed into, and the ring belongs around the field. */
+	parent = [view superview];
+	if (parent != nil && [parent isKindOfClass:[NSControl class]]
+	    && [[(NSControl *)parent currentEditor] isEqual:view]) {
+		return parent;
+	}
+	/* AND THEN THE CONTROL ITSELF — a field whose session has not opened (focus landed on the field before a caret
+	 * existed) and any other control that takes the keyboard, which in this tier is a button. */
+	if ([view isKindOfClass:[NSControl class]]) {
+		return view;
+	}
+	return nil;
+}
+
+/* **AND THE RING'S AREA IS DAMAGED AS VIEW DAMAGE, WHICH IS THE ONLY DAMAGE THAT SURVIVES A PARTIAL PAINT.** Marking
+ * the WINDOW stale was the first version of this door and it was not enough: `-displayIfNeeded` prefers the partial path
+ * the moment any view has a rectangle of its own, and a focus change always does — the field being left marks its own
+ * caret and selection — so the pass painted the fields and *the ring around the one that had lost the keyboard was never
+ * in the paint list at all*. It stayed on the glass until something unrelated repainted that corner: MEASURED, exactly
+ * "the ring is not clearing on the old target".
+ *
+ * So the band is named where the paint list is built, on the content view every view's damage climbs to, and both ends
+ * of a change are named: the ring that must go and the ring that must appear. The band is the control's rectangle grown
+ * by the ring's reach plus a point for the outer band's antialiased edge, clipped to the content because a control at
+ * the window's edge has no pixels further out. */
+- (void)cg_damageFocusRingForView:(NSView *)view rectangular:(BOOL)whole
+{
+	NSRect frame;
+	NSRect band;
+
+	if (_contentView == nil) {
+		return;
+	}
+	if (whole) {
+		/* **A RING THAT IS COMING OR GOING TAKES THE WHOLE CONTENT**, because it is the sure way nothing of it
+		 * survives in a corner this pass does not otherwise touch — see the callers: the key status changing means
+		 * every control's ring in this window appears or vanishes at once, so there is no useful rectangle to name. A
+		 * move from one control to another names the two bands instead. THE INVALIDATION IS THE CONTENT VIEW'S, and not
+		 * the window's stale flag, for the reason in the note above: a window-level mark loses to the partial path. */
+		[_contentView setNeedsDisplayInRect:[_contentView bounds]];
+		return;
+	}
+	if (view == nil) {
+		return;
+	}
+	frame = [view convertRect:[view bounds] toView:_contentView];
+	band = NSInsetRect(frame, -(CGFloat)AGFocusRingReach - 1.0, -(CGFloat)AGFocusRingReach - 1.0);
+	band = NSIntersectionRect(band, [_contentView bounds]);
+	if (!NSIsEmptyRect(band)) {
+		[_contentView setNeedsDisplayInRect:band];
+	}
+}
+
+- (void)cg_drawFocusRingInContext:(CGContextRef)c clip:(NSRect)clip
+{
+	NSView *target;
+	NSRect frame;
+	NSUInteger i;
+
+	if (c == NULL || ![self isKeyWindow]) {
+		return;
+	}
+	target = [self cg_focusRingView];
+	if (target == nil || _contentView == nil) {
+		return;
+	}
+	/* THE CONTROL'S RECTANGLE, IN THE COORDINATES THE CONTENT WAS DRAWN IN — the same rectangle `-displayRect:` gave
+	 * its views, converted rather than recomputed, so a scrolled or nested control cannot disagree with the ring. */
+	frame = [target convertRect:[target bounds] toView:_contentView];
+	CGContextSaveGState(c);
+	if (!NSIsEmptyRect(clip)) {
+		/* **A PARTIAL PAINT IS CLIPPED TO WHAT IT PAINTED.** The pieces of a dirty pass are what the compositor is
+		 * told about afterwards, so the ring may only touch pixels inside them — anything beyond would be drawn and
+		 * never reported, which is a highlight that appears a frame late or not at all. */
+		CGContextClipToRect(c, CGRectMake(clip.origin.x, clip.origin.y, clip.size.width, clip.size.height));
+	}
+	/* **EACH BAND IS A ONE-POINT STROKE CENTRED ON A PATH** `outward` points outside the frame, so band `i` covers
+	 * exactly `i` to `i + 1` points out. The corner radius grows with the band, which is what keeps the glow an
+	 * offset of the control's own shape rather than a rectangle drawn around a rounded one. */
+	for (i = 0; i < (NSUInteger)AGFocusRingReach; i++) {
+		CGFloat outward = (CGFloat)i + 0.5;
+		CGFloat radius = AGFocusRingRadius + outward;
+		NSBezierPath *path = [NSBezierPath bezierPathWithRoundedRect:NSInsetRect(frame, -outward, -outward)
+								     xRadius:radius yRadius:radius];
+
+		[[[NSColor cg_accentColor] colorWithAlphaComponent:AGFocusRingAlpha[i]] setStroke];
+		[path setLineWidth:1.0];
+		[path stroke];
+	}
+	CGContextRestoreGState(c);
 }
 
 /* **THE TIP UNDER A POINT: THE DEEPEST VIEW THAT HAS ONE, ASKED FROM THE HIT VIEW UP.** A hit test finds the view the
@@ -5184,6 +5346,9 @@ static CGFloat fn_clamp_axis(CGFloat v, CGFloat lo, CGFloat hi)
 		for (i = 0; i < paintCount; i++) {
 			[_contentView displayRect:[self cg_deviceOutward:paint[i]]];
 		}
+		/* **AND THE RING, CLIPPED TO WHAT THIS PASS PAINTED** — see the note on `-cg_drawFocusRingInContext:clip:`: a
+		 * pixel drawn outside the pieces is a pixel the compositor is never told about. */
+		[self cg_drawFocusRingInContext:c clip:dirty];
 		[self cg_drawDragGuideInContext:c];
 		[NSGraphicsContext setCurrentContext:previous];
 		[previous release];
@@ -5958,6 +6123,8 @@ static NSWindow *fn_main_window(NSWindow *except)
 	 * keep the old state until a pointer motion happens to invalidate the hover, which is the bug a person sees as
 	 * "the lights only change when the mouse moves over them". */
 	[self setNeedsDisplay:YES];
+	/* AND THE RINGS COME BACK WITH THE STATUS, as they go with it on the way out. */
+	[self cg_damageFocusRingForView:nil rectangular:YES];
 	/* AND THE SAME RE-EVALUATION ON THE WAY IN: the areas that were dead a moment ago are live again, so a control the
 	 * pointer is already resting on lights up without waiting for the hand to move. */
 	[self cg_updateTrackingForPoint:[self mouseLocationOutsideOfEventStream]];
@@ -6505,6 +6672,19 @@ static NSUInteger fn_edge_index(NSRectEdge edge)
 	 * begun by a caller) still had a session to close. Leaving it open is the bug a person sees as TWO CARETS: the
 	 * first cell still believes it is editing, so it draws no words of its own and never repaints the caret the editor
 	 * left behind. MEASURED, and the reason the cell's `-endEditing:` marks its control dirty. */
+	/* **AND THE RING AROUND THAT FIELD IS DAMAGED BEFORE ITS SESSION IS TORN DOWN**, because the teardown is what makes
+	 * the target unknowable: `-endEditing:` takes the editor out of the field, and a ring's target is found by asking the
+	 * responder and its superview — so by the time the responder is cleared below, the editor has no field to name and
+	 * the ring around it can no longer be found. MEASURED, that is the live path from one field to another: the click
+	 * hands the window's ONE editor over, the handover ends the old session, and the ring around the field it was
+	 * editing stayed on the glass while the new field got its own. */
+	{
+		NSView *ringView = [self cg_focusRingView];
+
+		if (ringView != nil && [self isKeyWindow]) {
+			[self cg_damageFocusRingForView:ringView rectangular:NO];
+		}
+	}
 	if (anObject != nil && [anObject respondsToSelector:@selector(currentEditor)]) {
 		NSText *editor = [(NSControl *)anObject currentEditor];
 
@@ -6778,6 +6958,11 @@ static NSUInteger fn_edge_index(NSRectEdge edge)
 	visible = [_contentView bounds];
 	visible.size.height += fn_toolbar_height(self);
 	[_contentView displayRect:visible];
+	/* **AND THE FOCUS RING LAST, OVER A WHOLE FRAME THAT IS NOW COMPLETE.** No clip: this pass painted every pixel, so
+	 * every pixel of the ring is both painted and reported. **THE CONTEXT THE CALLER GAVE IS THE ONE THE RING DRAWS
+	 * INTO** — `_surface` happens to be the same object on a live paint, and a caller with a bitmap of its own (a test,
+	 * a `-display`-shaped door) would otherwise get a ring drawn nowhere. */
+	[self cg_drawFocusRingInContext:(CGContextRef)[context graphicsPort] clip:NSZeroRect];
 	[self cg_drawDragGuideInContext:(CGContextRef)_surface];
 	[NSGraphicsContext setCurrentContext:previous];
 	[previous release];

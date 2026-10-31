@@ -146,6 +146,14 @@ target_link_libraries(segmented_control PRIVATE App m)
 add_test(NAME appkit-segmented-control COMMAND segmented_control)
 set_tests_properties(appkit-segmented-control PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
 
+# **THE FOCUS RING: WHICH CONTROL WEARS ONE, AND THAT IT IS INK OUTSIDE THE FRAME.** The ring is the window's because
+# every subview is clipped to its own bounds, so this probe drives the content walk and counts accent pixels in the band
+# around each control — unfocused, focused, moved, on a button, disabled, and in a window that is not key.
+add_executable(focus_ring focus_ring.m)
+target_link_libraries(focus_ring PRIVATE App m)
+add_test(NAME appkit-focus-ring COMMAND focus_ring)
+set_tests_properties(appkit-focus-ring PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
+
 # **THE TOOL TIPS: THE REGION, THE WALK AND THE PLATE.** A `-setToolTip:` view, a `-addToolTipRect:owner:userData:`
 # region answered by its owner, and the engine's delay — which is a real wait, so this test takes a second per tip it
 # earns. It runs offscreen: a plate is a window, and a window with no display still holds the state a test asserts.

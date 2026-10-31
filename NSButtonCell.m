@@ -34,6 +34,22 @@
 
 @implementation NSButtonCell
 
+/* **A BUTTON TAKES THE KEYBOARD — WHICH IS THE ERA'S ANSWER WITH FULL KEYBOARD ACCESS ON.** Apple gates this on
+ * `NSFullKeyboardAccessEnabled`, and this tier answers NO to that preference because it reads no system preferences at
+ * all (`NSApplication -isFullKeyboardAccessEnabled` says so). With the gate closed, no button could ever be a first
+ * responder, so nothing a person Tabs to would wear the focus ring the window paints — the ring would exist for text
+ * fields and be unreachable for every other control. The door is therefore open, and `-keyDown:` in `NSButton` is what
+ * makes it mean something: a control that can hold the keyboard must be able to be USED with it, or accepting the
+ * keyboard is decoration.
+ *
+ * THE FIRST RESPONDER IS NOT "THE BUTTON WAS CLICKED" — a press does not move the keyboard (`NSWindow -sendEvent:` only
+ * makes a window key, and `NSTextField` moves focus from its own `-mouseDown:`), so a clicked button stays unfocused and
+ * only a Tab (or `-makeFirstResponder:`) puts a ring on one. That is the same shape a field has. */
+- (BOOL)acceptsFirstResponder
+{
+	return [self isEnabled];
+}
+
 /* ============================================================================================
  * ARCHIVING: A BUTTON'S TWO TITLES, ITS TWO IMAGES AND ITS BEZEL.
  * ============================================================================================ */
