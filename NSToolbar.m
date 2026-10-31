@@ -159,13 +159,19 @@ static void fn_announce(NSToolbar *toolbar, NSString *name, NSToolbarItem *item)
 - (NSToolbarItem *)itemForView:(NSView *)view;
 @end
 
-/* THE FONT AND INK AN ITEM IS DRAWN IN. The size mode chooses the face; enabledness chooses the ink, which is the
- * same pair `NSButtonCell -cg_inkColor` uses for the same reason. */
+/* **THE FONT AND INK AN ITEM IS DRAWN IN — AND THE SIZE MODE IS THE ICONS', NOT THE WORDS'.** A toolbar's two size modes
+ * change the PICTURES (16 points against 24, see `fn_item_rects`); the label under them is the small system face at
+ * both, which is Apple's own rule and the reason a regular strip is taller without its caption being bigger.
+ * MEASURED before this: the regular band drew its labels at the 13-point system face — a control's own text size — so
+ * `New` and `Open` came out as large as the words inside the editor below them, and the strip read as a row of buttons
+ * with captions rather than as a toolbar. Enabledness chooses the ink, which is the same pair
+ * `NSButtonCell -cg_inkColor` uses for the same reason. */
 static NSFont *fn_item_font(NSToolbarSizeMode mode)
 {
-	CGFloat size = (mode == NSToolbarSizeModeSmall) ? [NSFont smallSystemFontSize] : [NSFont systemFontSize];
-
-	return [NSFont systemFontOfSize:size];
+	/* THE ARGUMENT IS KEPT FOR THE CALLERS' SHAPE — `-fn_label_width` and the painter both pass the mode, and one of
+	 * them would otherwise have to know that the face no longer depends on it. */
+	(void)mode;
+	return [NSFont systemFontOfSize:[NSFont smallSystemFontSize]];
 }
 
 static NSColor *fn_item_ink(BOOL enabled)
