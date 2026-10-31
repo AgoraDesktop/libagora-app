@@ -463,6 +463,12 @@ typedef NSUInteger NSWindowSharingType;
 	 * responder is NOT (it is a view inside the content, and a window that retained it would keep a whole
 	 * subtree alive through one pointer). */
 	NSView *_contentView;
+	/* **THE VIEW THAT TOOK THE PRESS, WHICH IS WHERE THE REST OF THAT PRESS GOES.** AppKit's rule is that a mouse-down,
+	 * the drags that follow it and the release all belong to ONE view — the one the press hit — and this window used to
+	 * hit-test every event of the gesture separately. MEASURED: a rubber band dragged out of an icon view and released
+	 * over the sidebar was never told the gesture had ended, so its rectangle stayed on the screen; the same press-and-
+	 * release slightly outside a button never pressed it. RETAINED for the length of the press. */
+	NSView *_cg_mouseDownTarget;
 	/* **THE WINDOW'S OWN BACKGROUND COLOUR, WHICH IS A DOOR APPLE HAS AND THIS TIER DID NOT.** The frame's fill has
 	 * always been `+[NSColor windowBackgroundColor]`; a window that is part of a surface it does not own — an
 	 * application's menus, sitting in the menu bar — has to BE that surface's colour instead, and the only way to

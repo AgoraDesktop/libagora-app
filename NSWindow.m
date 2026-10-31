@@ -1524,6 +1524,8 @@ static NSString * const AGCoderWindowToolbarKey = @"toolbar";
 
 - (void)dealloc
 {
+	[_cg_mouseDownTarget release];
+	_cg_mouseDownTarget = nil;
 	/* **THE RELATIONSHIPS END BEFORE THE WINDOW DOES, AND TWO OF THEM WERE LEAKING.** `_cg_childWindows` was never
 	 * released at all, and a child that survived its parent kept a pointer to a window that no longer existed — the
 	 * next `-orderOut:` on it would reach freed memory. The drawers come first because detaching one takes its child
@@ -3939,7 +3941,22 @@ static CGFloat fn_clamp_axis(CGFloat v, CGFloat lo, CGFloat hi)
 		 * `NSView`'s own `-hitTest:`; and a view that does not implement the selector still gets it, because
 		 * `NSResponder` implements every one of them as a FORWARD to the next responder — which is how a
 		 * click on a plain subview walks up to the content view and the window by itself. */
-		target = [_contentView hitTest:[theEvent locationInWindow]];
+		/* **A LEFT PRESS BINDS THE GESTURE TO THE VIEW IT HIT.** The press, every drag after it and the release are one
+		 * gesture with one view, which is Apple's rule and the reason a view may draw something that outlives a motion.
+		 * This door hit-tested each event on its own, so a band dragged out of a view and let go over a neighbour was
+		 * never told it had ended (MEASURED: the rectangle stayed on the screen), and a press released a point outside a
+		 * button was a press that never happened. A middle or right press keeps the per-event hit test, because that is
+		 * what those gestures are for. */
+		if ([theEvent type] == NSLeftMouseDown) {
+			[_cg_mouseDownTarget release];
+			_cg_mouseDownTarget = [[_contentView hitTest:[theEvent locationInWindow]] retain];
+			target = _cg_mouseDownTarget;
+		} else if ((_cg_mouseDownTarget != nil)
+			   && ([theEvent type] == NSLeftMouseDragged || [theEvent type] == NSLeftMouseUp)) {
+			target = _cg_mouseDownTarget;
+		} else {
+			target = [_contentView hitTest:[theEvent locationInWindow]];
+		}
 		if (target == nil) {
 			/* A point outside the content — the window's own chrome — is this window's business. */
 			target = _contentView;
@@ -3960,6 +3977,11 @@ static CGFloat fn_clamp_axis(CGFloat v, CGFloat lo, CGFloat hi)
 	}
 	if (target != nil && [target respondsToSelector:sel]) {
 		[target performSelector:sel withObject:theEvent];
+	}
+	/* THE GESTURE IS OVER WITH THE RELEASE, whatever the release's position was. */
+	if ([theEvent type] == NSLeftMouseUp) {
+		[_cg_mouseDownTarget release];
+		_cg_mouseDownTarget = nil;
 	}
 }
 

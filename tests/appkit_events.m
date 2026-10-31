@@ -81,6 +81,7 @@ static void check(int ok, const char *what)
 	int keyUps;
 	int flagsChangeds;
 	int mouseDowns;
+	int mouseDraggeds;	/* **AND THE DRAGS BETWEEN THEM**, which is where a press's binding to its view is measurable */
 	int mouseUps;
 	int mouseMoveds;
 	NSString *lastCharacters;
@@ -133,6 +134,12 @@ static void check(int ok, const char *what)
 {
 	mouseDowns++;
 	lastPoint = [event locationInWindow];
+}
+
+- (void)mouseDragged:(NSEvent *)event
+{
+	(void)event;
+	mouseDraggeds++;
 }
 
 - (void)mouseUp:(NSEvent *)event
@@ -254,6 +261,7 @@ int main(void)
 		NSWindow *window;
 		AGRecordingView *content;
 		AGRecordingView *inner;
+		AGRecordingView *elsewhere;
 		AGPassiveView *passive;
 		AGEvent event;
 		int before;
@@ -274,8 +282,12 @@ int main(void)
 		/* ONE SUBVIEW THAT HANDLES THE EVENT, and one that does not, so bubbling is measurable and not assumed. */
 		inner = [[AGRecordingView alloc] initWithFrame:NSMakeRect(10.0, 10.0, 100.0, 50.0)];
 		passive = [[AGPassiveView alloc] initWithFrame:NSMakeRect(150.0, 10.0, 100.0, 50.0)];
+		/* **A SECOND RECORDING VIEW, BESIDE THE FIRST**, so "the pointer went somewhere else" is a real hit test rather
+		 * than a point in the gap. */
+		elsewhere = [[AGRecordingView alloc] initWithFrame:NSMakeRect(300.0, 200.0, 120.0, 60.0)];
 		[content addSubview:inner];
 		[content addSubview:passive];
+		[content addSubview:elsewhere];
 		[window orderFront:nil];
 
 		/* LET THE COMPOSITOR CONFIGURE IT, because the seam's coordinates are the frame's and the frame is not
@@ -591,6 +603,44 @@ int main(void)
 		      "the clicked window becomes KEY, and the application agrees");
 		check([application mainWindow] == window && [window isMainWindow],
 		      "and MAIN, through the doors that announce it");
+
+		/* 3b. **A PRESS BINDS THE WHOLE GESTURE TO THE VIEW IT HIT.** Apple's rule, and this window used to hit-test
+		 * every event of a gesture on its own: a rubber band dragged out of a view was never told it had ended (the
+		 * rectangle stayed on the screen), and a press released a point outside a control was a press that never
+		 * happened. So the press lands on `inner`, the drag and the release land on `elsewhere` — and `inner` hears all
+		 * three while `elsewhere` hears none of them. */
+		{
+			int innerDowns = inner->mouseDowns;
+			int innerDrags = inner->mouseDraggeds;
+			int innerUps = inner->mouseUps;
+			int otherDowns = elsewhere->mouseDowns;
+			int otherDrags = elsewhere->mouseDraggeds;
+			int otherUps = elsewhere->mouseUps;
+			AGEvent press = click_at_content_point(window, 40.0, 30.0);	/* inside `inner` */
+			AGEvent drag = motion_at_content_point(window, 340.0, 230.0);	/* over `elsewhere` */
+			AGEvent release = click_at_content_point(window, 340.0, 230.0);	/* and let go there */
+
+			release.pressed = 0;
+
+			deliver(application, window, &press);
+			deliver(application, window, &drag);
+			deliver(application, window, &release);
+			check(inner->mouseDowns == innerDowns + 1, "the press lands on the view it hit");
+			check(inner->mouseDraggeds == innerDrags + 1, "the drag AFTER it goes to that same view, though the pointer left");
+			check(inner->mouseUps == innerUps + 1, "and so does the release, wherever the hand let go");
+			check(elsewhere->mouseDowns == otherDowns && elsewhere->mouseDraggeds == otherDrags
+			      && elsewhere->mouseUps == otherUps,
+			      "and the view the pointer moved over hears nothing of a gesture it did not start");
+
+			/* AND THE BINDING IS THE PRESS'S, NOT A LATCH: the next press is answered by where it lands. */
+			press = click_at_content_point(window, 340.0, 230.0);	/* now inside `elsewhere` */
+			deliver(application, window, &press);
+			release = press;
+			release.pressed = 0;
+			deliver(application, window, &release);
+			check(elsewhere->mouseDowns == otherDowns + 1 && elsewhere->mouseUps == otherUps + 1,
+			      "a later press is answered by where IT lands");
+		}
 
 		/* 4. AND A VIEW THAT DOES NOT HANDLE IT BUBBLES UP THE CHAIN. */
 		before = content->mouseDowns;
