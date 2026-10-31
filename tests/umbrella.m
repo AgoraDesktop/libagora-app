@@ -33,8 +33,8 @@ static const char *s_internal[] = {
 	"NSWindow_internal",
 	/* This tier's own machinery, below the Cocoa names. */
 	"AGAppleNib", "AGCandidateListView", "AGCandidateWindow", "AGChromeTheme", "AGComboListCell", "AGComboListView",
-	"AGInputMethod", "AGStatusBarItemView", "AGSwitch", "AGSwitchCell", "AGSystemImages", "AGVariantsInputMethod",
-	"AGXPM",
+	"AGInputMethod", "AGStatusBarItemView", "AGSwitch", "AGSwitchCell", "AGSystemImages", "AGToolTipWindow",
+	"AGVariantsInputMethod", "AGXPM",
 	/* The icon catalogue's naming tables, which `AGSystemImages` reads. */
 	"SystemImageMasks", "SystemImageNames",
 	NULL,

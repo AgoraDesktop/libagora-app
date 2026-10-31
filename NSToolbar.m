@@ -587,6 +587,18 @@ static CGFloat fn_standard_width(NSToolbarItem *item, NSToolbarDisplayMode displ
 		}
 	}
 	[wantedViews release];
+
+	/* **AND THE BAND ANSWERS FOR ITS ITEMS, BECAUSE AN ITEM IS NOT A VIEW.** `-setToolTip:` belongs to `NSView`, and
+	 * a toolbar item — the thing that actually has a `-toolTip` in macOS — is not one, so the band registers ITSELF as
+	 * the owner of one region covering the strip and answers per point. That is the door
+	 * `-view:stringForToolTip:point:userData:` was invented for: one owner, many regions' worth of rectangles, and the
+	 * point is what tells them apart here.
+	 *
+	 * RE-REGISTERED ON EVERY LAYOUT rather than once at construction, because the region is the band's CURRENT bounds
+	 * and the band is the thing that just changed size. A region holding last layout's rectangle would answer for space
+	 * the strip no longer covers — and would miss the item that moved there. */
+	[self removeAllToolTips];
+	[self addToolTipRect:[self bounds] owner:self userData:NULL];
 }
 
 - (NSToolbarItem *)itemForView:(NSView *)view
@@ -768,6 +780,29 @@ static CGFloat fn_standard_width(NSToolbarItem *item, NSToolbarDisplayMode displ
 		}
 	}
 	return -1;
+}
+
+/* **AND THE BAND'S ANSWER TO "WHAT IS UNDER THE POINTER?" — AN ITEM'S OWN TOOL TIP, OR NOTHING.** The tag and the
+ * caller's `-userData` are not read: this view registers one region and the POINT is what identifies the item, which is
+ * the same lookup the pointer's prelight and a press already do. A separator, a space and the bare strip between two
+ * items answer nil, so the plate does not appear where a click would do nothing.
+ *
+ * A CUSTOM VIEW ITEM NEEDS NOTHING HERE. Its view is in the tree, so the window's walk reaches it first and ITS
+ * `-toolTip` wins — the item's is the band's business only because the item has no view of its own. */
+- (NSString *)view:(NSView *)view stringForToolTip:(NSToolTipTag)tag point:(NSPoint)point userData:(void *)data
+{
+	NSInteger index = [self indexAtPoint:point];
+	NSToolbarItem *item;
+
+	(void)view; (void)tag; (void)data;
+	if (index < 0 || (NSUInteger)index >= [_layoutItems count]) {
+		return nil;
+	}
+	item = [_layoutItems objectAtIndex:index];
+	if (item == nil) {
+		return nil;
+	}
+	return [item toolTip];
 }
 
 /* **WHETHER THE POINT IS ON SOMETHING THE POINTER CAN USE, WHICH IS NOT THE SAME AS "ON AN ITEM".** A separator and

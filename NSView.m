@@ -162,6 +162,63 @@ static NSRect fn_intersect(NSRect a, NSRect b)
 - (void)cg_regionAdd:(NSRect)rect to:(NSRect *)out max:(NSUInteger)max count:(NSUInteger *)count;
 @end
 
+/* **A TOOL-TIP REGION: THE RECT, THE OWNER WHO ANSWERS FOR IT, AND THE CALLER'S OWN POINTER.** That is the whole object,
+ * and it is an object rather than three parallel arrays because the three travel together — an owner with another
+ * region's rect is the bug a tag is meant to prevent, not one the storage should be able to express. THE OWNER IS NOT
+ * RETAINED, the same rule an `NSTrackingArea` follows and the same one this tree applies to every back-reference.
+ *
+ * `-userData` is the caller's, handed back to it in the owner's notification, which is how one owner serving several
+ * regions tells them apart. */
+@interface AGToolTipRegion : NSObject
+{
+	NSRect _rect;
+	id _owner;			/* NOT RETAINED */
+	void *_userData;
+}
+- (instancetype)initWithRect:(NSRect)rect owner:(id)owner userData:(void *)data;
+- (NSRect)rect;
+- (id)owner;
+- (void *)userData;
+@end
+
+@implementation AGToolTipRegion
+
+- (instancetype)initWithRect:(NSRect)rect owner:(id)owner userData:(void *)data
+{
+	self = [super init];
+	if (self != nil) {
+		_rect = rect;
+		_owner = owner;
+		_userData = data;
+	}
+	return self;
+}
+
+- (NSRect)rect
+{
+	return _rect;
+}
+
+- (id)owner
+{
+	return _owner;
+}
+
+- (void *)userData
+{
+	return _userData;
+}
+
+@end
+
+/* **AND THE WINDOW'S DOOR IN, WHICH IS ONE QUESTION ASKED OF EACH VIEW ON THE WAY UP THE TREE.** Declared here because
+ * this file is where the regions live, and declared again in `NSWindow.m`, which is where the walk happens — this
+ * tree's shape for a `cg_` door that is nobody's API but the tier's own. The point is in WINDOW coordinates, because
+ * that is what the window has; converting it is the view's job, since only the view knows where it is. */
+@interface NSView (APPKITToolTips)
+- (nullable NSString *)cg_toolTipStringAtWindowPoint:(NSPoint)windowPoint;
+@end
+
 /* **THE TRACKING ENGINE'S DOOR INTO AN AREA, declared here because this is the file that writes the verdict.** The
  * bit lives on the area (see `NSTrackingArea.m`), and only two objects ever touch it: the window's engine, which
  * decides whether the pointer moved in or out, and the door below, which clears it on removal. Declared in `NSView.m`
@@ -932,13 +989,18 @@ static NSString * const AGCoderConstraintsKey = @"constraints";
 	[_trackingAreas removeObject:trackingArea];	/* RELEASED by the array */
 }
 
+/* **A TOOL-TIP RECT IS A REGION WITH AN OWNER, AND THIS DOOR USED TO THROW ALL THREE AWAY** — it stored a null pointer
+ * per call, so the tags existed and nothing behind them did. The tag is the region's place in this list (one-based,
+ * which is what a tag is), and the region itself is what the window's walk reads. */
 - (NSToolTipTag)addToolTipRect:(NSRect)aRect owner:(id)anObject userData:(void *)data
 {
-	(void)aRect; (void)anObject; (void)data;
+	AGToolTipRegion *region = [[AGToolTipRegion alloc] initWithRect:aRect owner:anObject userData:data];
+
 	if (_toolTips == nil) {
 		_toolTips = [[NSMutableArray alloc] init];
 	}
-	[_toolTips addObject:[NSValue valueWithPointer:(const void *)NULL]];
+	[_toolTips addObject:region];		/* RETAINED by the array */
+	[region release];
 	return (NSToolTipTag)[_toolTips count];
 }
 
@@ -952,6 +1014,45 @@ static NSString * const AGCoderConstraintsKey = @"constraints";
 - (void)removeAllToolTips
 {
 	[_toolTips removeAllObjects];
+}
+
+/* **WHAT THE POINTER IS RESTING ON, ANSWERED BY THE VIEW THAT OWNS THE REGION.** The window walks the tree from the hit
+ * view up and takes the first non-empty answer, so this is asked about ONE view at a point and answers for it alone:
+ * its own regions first — a region is a smaller thing than a view, so the region's owner is the more specific answer —
+ * and then `-toolTip`, which is the whole view's and is what `-setToolTip:` means.
+ *
+ * THE OWNER ANSWERS THROUGH `-view:stringForToolTip:point:userData:`, which is where a view that serves many regions
+ * says which one the pointer is over; an owner that does not implement it declines the region, and a declining region
+ * is skipped rather than ending the search. The point handed over is in THIS VIEW's coordinates, which is what a caller
+ * comparing against its own geometry expects. */
+- (NSString *)cg_toolTipStringAtWindowPoint:(NSPoint)windowPoint
+{
+	NSPoint local = [self convertPoint:windowPoint fromView:nil];
+	NSUInteger i;
+
+	for (i = 0; i < [_toolTips count]; i++) {
+		AGToolTipRegion *region = [_toolTips objectAtIndex:i];
+		id owner = [region owner];
+
+		if (!NSPointInRect(local, [region rect])) {
+			continue;
+		}
+		if ([owner respondsToSelector:@selector(view:stringForToolTip:point:userData:)]) {
+			NSString *tip = [owner view:self stringForToolTip:(NSToolTipTag)(i + 1)
+					      point:local userData:[region userData]];
+
+			if (tip != nil && [tip length] > 0) {
+				return tip;
+			}
+		}
+	}
+	/* **THE VIEW'S OWN TIP IS ITS WHOLE BOUNDS**, which is the meaning of `-setToolTip:` — and a point OUTSIDE the view
+	 * is not in its tip, even though this method was called at all: the walk starts at whatever `-hitTest:` found, so a
+	 * caller asking a parent about a point over a child would otherwise get the parent's words from anywhere. */
+	if (_toolTip != nil && [_toolTip length] > 0 && NSPointInRect(local, [self bounds])) {
+		return _toolTip;
+	}
+	return nil;
 }
 
 /* ---- AND THE HANDS AND FLAGS THAT ANSWER FOR THEMSELVES ---------------------------------------------- */

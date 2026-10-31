@@ -146,6 +146,14 @@ target_link_libraries(segmented_control PRIVATE App m)
 add_test(NAME appkit-segmented-control COMMAND segmented_control)
 set_tests_properties(appkit-segmented-control PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
 
+# **THE TOOL TIPS: THE REGION, THE WALK AND THE PLATE.** A `-setToolTip:` view, a `-addToolTipRect:owner:userData:`
+# region answered by its owner, and the engine's delay — which is a real wait, so this test takes a second per tip it
+# earns. It runs offscreen: a plate is a window, and a window with no display still holds the state a test asserts.
+add_executable(tooltips tooltips.m)
+target_link_libraries(tooltips PRIVATE App m)
+add_test(NAME appkit-tooltips COMMAND tooltips)
+set_tests_properties(appkit-tooltips PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
+
 # **THE TABLE'S OTHER HALF: VARIABLE HEIGHTS, TYPE-SELECT, REORDERING, AUTOSAVE AND EDITING.** Offscreen, with a
 # scroll view and a window for the header's coordinate root and the field editor.
 add_executable(table_advanced table_advanced.m)

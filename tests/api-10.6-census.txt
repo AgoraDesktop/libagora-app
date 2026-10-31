@@ -49,6 +49,11 @@
 # measured here for the first time. Those doors are this tree's, not Apple's, and `sel:NSCursor` (a manifest-driven count
 # of Apple's surface) stays at 35: a surface this tree adds is measured, and it is not mistaken for surface Apple has.
 #
+# **AND THE FIFTH IS NINE DOORS OF `AGToolTipWindow`'s OWN** — the plate, its tip, its size, and the engine's five — for
+# the same reason: tool tips were a string nobody displayed, and the eleven lines that display them are this tree's
+# machinery rather than a 10.6 selector. The toolbar's half of the same feature is on `NSView` (`-cg_toolTipStringAtWindowPoint:`
+# is a `cg_` seam and is not declared in a public header), so its count is unchanged.
+#
 # **A FIFTH, FOR `NSMenu -cg_isTracking`.** A caller that drives a menu's session one event at a time — the menu bar, a
 # combo box's chip, a test — has to know when the session ended, and it was reading a private field to find out. The door
 # is this tree's and not Apple's (`sel:NSMenu` is unchanged), and it is what makes the order the pick follows assertable
@@ -235,7 +240,7 @@ functions-defined-not-declared 0
 functions-missing 0
 functions-offered 86
 functions-present 86
-methods-declared 5426
+methods-declared 5435
 methods-declared-not-implemented 0
 methods-informal 0
 methods-external 0

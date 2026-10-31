@@ -203,6 +203,13 @@ static NSEvent *mouse(int type, NSPoint where, NSInteger windowNumber)
 	return mouse_at(type, where, windowNumber, 0.0);
 }
 
+/* **THE VIEW'S TOOL-TIP DOOR, DECLARED HERE AS THE TIER DECLARES ITS OWN `cg_` SEAMS.** It is `NSView`'s answer for one
+ * view at one point, and asking the band directly is asking it what it would tell the pointer — the window's walk up the
+ * tree is what a live session does with the answer. */
+@interface NSView (APPKITToolTips)
+- (NSString *)cg_toolTipStringAtWindowPoint:(NSPoint)windowPoint;
+@end
+
 int main(void)
 {
 	NSApplication *application = [NSApplication sharedApplication];
@@ -847,6 +854,27 @@ int main(void)
 			delegate->customItem = nil;
 		}
 		[loose release];
+	}
+
+	/* 10d. **AND THE BAND ANSWERS FOR ITS ITEMS' TOOL TIPS, BECAUSE AN ITEM IS NOT A VIEW.** A toolbar item is where a
+	 * tool tip belongs in this tier (`NSToolbarItem -toolTip`), and an item has no view of its own to hang one on — so
+	 * the band registers itself as the owner of one region and answers per POINT. MEASURED before this: Forge set a
+	 * tool tip on every button in its strip and none of them could ever appear. */
+	{
+		NSToolbarItem *item = [[toolbar items] objectAtIndex:0];
+		/* THE POINT IS NAMED IN THE BAND'S OWN COORDINATES AND CONVERTED: the band sits at the top of the frame, so a
+		 * hand-written window point is a point below the content — MEASURED, it landed at y = -274. */
+		NSPoint centre = [toolbarView convertPoint:NSMakePoint(8.0 + 20.0, [toolbarView bounds].size.height / 2.0)
+						    toView:nil];
+
+		[item setToolTip:@"the first item"];
+		check([[toolbarView cg_toolTipStringAtWindowPoint:centre] isEqualToString:@"the first item"],
+		      "an item's toolTip is answered for a point on the item");
+		check([toolbarView cg_toolTipStringAtWindowPoint:NSMakePoint(-5000.0, -5000.0)] == nil,
+		      "and a point on no item answers nothing");
+		[item setToolTip:nil];
+		check([toolbarView cg_toolTipStringAtWindowPoint:centre] == nil,
+		      "an item without a toolTip has nothing to say");
 	}
 
 	/* 11. REMOVING THE TOOLBAR GIVES THE BAND BACK. */

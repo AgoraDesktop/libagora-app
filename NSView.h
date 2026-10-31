@@ -470,7 +470,16 @@ extern const CGFloat NSViewNoInstrinsicMetric;
  * THE TRACKING-RECT PAIR IS THE PRE-10.5 FORM OF THE SAME IDEA AND STILL STORES TAGS RATHER THAN FIRING CALLBACKS,
  * which is stated rather than implied: the areas are the engine it will be built on, and until that is done a caller
  * who wants enter and exit gets them from an area. Its tags live in their OWN list, because the two doors shared one
- * array and mixing tags with areas is how `-trackingAreas` would have started answering a mixture of two types. */
+ * array and mixing tags with areas is how `-trackingAreas` would have started answering a mixture of two types.
+ *
+ * **AND THE TOOL-TIP TRIO IS A REAL MECHANISM NOW TOO: A REGION, AN OWNER, AND A PLATE THAT APPEARS.** `-setToolTip:`
+ * is the whole view; `-addToolTipRect:owner:userData:` is a region of it, and the OWNER is asked
+ * `-view:stringForToolTip:point:userData:` when the pointer rests inside it — which is how one view that serves several
+ * regions (a toolbar is a band of items) says which one the pointer is over. Neither the owner nor its data is
+ * retained. An owner that does not implement that door declines its region rather than crashing the walk, and a view
+ * with neither a region nor a `-toolTip` simply has nothing to say. WHERE the plate appears and HOW LONG the wait is
+ * belong to `AGToolTipWindow.h`, not here: this class knows what the pointer is over, that class knows what to do
+ * about it. */
 - (NSTrackingRectTag)addTrackingRect:(NSRect)aRect owner:(nullable id)anObject userData:(nullable void *)data assumeInside:(BOOL)flag;
 - (void)removeTrackingRect:(NSTrackingRectTag)tag;
 - (void)addTrackingArea:(NSTrackingArea *)trackingArea;

@@ -63,6 +63,7 @@
 #import <AppKit/NSWindow.h>
 #import <AppKit/NSPrintOperation.h>
 #import <AppKit/NSTrackingArea.h>
+#import "AGToolTipWindow.h"	/* the plate, and the delay that earns it */
 
 /* **THE DRAWER SYNC IS DECLARED HERE RATHER THAN IN THE PUBLIC HEADER.** It is the window's half of a relationship
  * `NSDrawer` owns — the layout rule and the list live in `NSDrawer.m` — and the doors below are the only callers. A
@@ -186,6 +187,11 @@
 - (void)cg_updateTrackingForPoint:(NSPoint)windowPoint;
 - (void)cg_updateTrackingIfMovedToPoint:(NSPoint)windowPoint;
 - (void)cg_clearTracking;
+/* **AND THE TOOL TIP, WHICH IS THE SAME WALK SEEN AS A QUESTION RATHER THAN A CALLBACK.** The regions live on the view
+ * (`-cg_toolTipStringAtWindowPoint:`); what the window adds is `-hitTest:` and the walk up the tree, which is why this
+ * door is here and not there. */
+- (void)cg_updateToolTipAtPoint:(NSPoint)windowPoint;
+- (nullable NSString *)cg_toolTipStringAtWindowPoint:(NSPoint)windowPoint;
 /* **AND THE DRAG'S MOVE, MADE ONCE PER PASS AT THE LATEST POINTER RATHER THAN PER EVENT.** The window is moved to
  * the pointer, so applying every motion inside a frame would walk it along the sampled PATH — a fast flick's
  * intermediate points — instead of straight to where the hand is. */
@@ -222,6 +228,14 @@
  * it — a window whose document has unsaved changes must not close because a hand found the X. */
 - (void)cg_performChromeButton:(NSInteger)index;
 @end
+
+/* **THE TOOL TIP WALK'S DOOR INTO A VIEW**, declared here as well as in `NSView.m` for the same reason every other
+ * `cg_` seam is declared twice: it is the tier's own passage between two files and nobody's API. The point is in
+ * WINDOW coordinates, because that is what the window has; converting it is the view's business. */
+@interface NSView (APPKITToolTips)
+- (nullable NSString *)cg_toolTipStringAtWindowPoint:(NSPoint)windowPoint;
+@end
+
 
 /* The engine's doors into an area and into the event it builds: declared in every file that uses them and DEFINED by
  * the class that owns the storage — this tree's shape for a `cg_` door that is the tier's own business rather than
@@ -3075,6 +3089,7 @@ static CGFloat fn_clamp_axis(CGFloat v, CGFloat lo, CGFloat hi)
 	 * repainting the whole stack every pass — which is what "the menus never close" and "it gets slower and slower"
 	 * both were. */
 	_visible = NO;
+	[[AGToolTipController sharedController] hideTipForWindow:self];
 	if (_agwindow != NULL) {
 		AGWindowHide(_agwindow);
 	}
@@ -3212,6 +3227,9 @@ static CGFloat fn_clamp_axis(CGFloat v, CGFloat lo, CGFloat hi)
 	 * changed is the WINDOW's. Re-running the engine at the pointer's last known position is what turns that into the
 	 * exits the owners are owed. */
 	[self cg_updateTrackingForPoint:[self mouseLocationOutsideOfEventStream]];
+	/* AND A TIP IS THE KEY WINDOW'S, so the plate goes with the status — a tip hanging over a window nobody is working
+	 * in is explaining a control that is not the one the hand is about to use. */
+	[[AGToolTipController sharedController] hideTipForWindow:self];
 	fn_announce(self, NSWindowDidResignKeyNotification, @selector(windowDidResignKey:));
 	[self cg_updateDrawers];
 }
@@ -3226,6 +3244,10 @@ static CGFloat fn_clamp_axis(CGFloat v, CGFloat lo, CGFloat hi)
 	    && [[NSDraggingSession cg_activeSession] cg_sourceWindow] == self) {
 		[[NSDraggingSession cg_activeSession] cg_finish];
 	}
+	/* **AND ITS TOOL TIP GOES WITH IT**, before anything else can be asked about a window that is on its way out: the
+	 * engine holds the window as a BACK-REFERENCE, and a plate left hanging for a freed window would be the one way this
+	 * feature could crash. */
+	[[AGToolTipController sharedController] hideTipForWindow:self];
 	/* THE DELEGATE IS TOLD BEFORE THE WINDOW GOES**, which is the whole point of a `will` callback: after it, the
 	 * window is gone and the numbers are meaningless. */
 	fn_announce(self, NSWindowWillCloseNotification, @selector(windowWillClose:));
@@ -3630,6 +3652,18 @@ static CGFloat fn_clamp_axis(CGFloat v, CGFloat lo, CGFloat hi)
 	if ([NSDraggingSession cg_activeSession] != nil
 	    && [[NSDraggingSession cg_activeSession] cg_handleEvent:theEvent]) {
 		return;
+	}
+	/* **A PRESS, A KEY OR A WHEEL ENDS A TOOL TIP BEFORE ANYTHING ELSE SEES THE EVENT.** A tip explains a control to a
+	 * hand that is still; the moment the hand does something the question has been answered, and a plate left over the
+	 * window while a menu opened or a document scrolled is furniture in the way. It is dropped HERE rather than in each
+	 * view's door because it is the WINDOW's — it belongs to no view, and no view may veto it. */
+	switch ([theEvent type]) {
+	case NSLeftMouseDown: case NSRightMouseDown: case NSOtherMouseDown:
+	case NSKeyDown: case NSFlagsChanged: case NSScrollWheel:
+		[[AGToolTipController sharedController] hideTipForWindow:self];
+		break;
+	default:
+		break;
 	}
 
 	switch ([theEvent type]) {
@@ -4145,6 +4179,14 @@ static CGFloat fn_clamp_axis(CGFloat v, CGFloat lo, CGFloat hi)
 			break;
 		}
 	}
+	/* **AND THE TOOL TIP, ASKED ON EVERY MOTION EVEN WHEN NOTHING ENTERED OR LEFT.** A region's bit tells an owner the
+	 * pointer arrived; a tip needs the STRING, and a string belongs to a view rather than to a region's state, so the
+	 * walk is re-done and the engine behind it decides — see `-cg_updateToolTipAtPoint:`. A held button means a drag,
+	 * and a drag's destination is not a thing to explain, so nothing is asked then (and any tip already up was dropped
+	 * when the press arrived). */
+	if (![self cg_mouseButtonDown]) {
+		[self cg_updateToolTipAtPoint:windowPoint];
+	}
 	/* **AND THE CHROME'S OWN BUTTONS, WHICH ARE NOT VIEWS AND SO HAVE NO TRACKING AREA.** The pointer's position
 	 * is all this needs: which button contains it decides the prelight, and a CHANGE of answer is the only thing
 	 * that asks for a redraw — a re-evaluation that answers the same button must not repaint the bar. */
@@ -4160,6 +4202,38 @@ static CGFloat fn_clamp_axis(CGFloat v, CGFloat lo, CGFloat hi)
 		}
 	}
 	[hits release];
+}
+
+/* **THE TIP UNDER A POINT: THE DEEPEST VIEW THAT HAS ONE, ASKED FROM THE HIT VIEW UP.** A hit test finds the view the
+ * pointer is IN, and a tip belongs to the smallest thing that claims it — a button inside a box inside a window is the
+ * button's, and a view with nothing to say lets its ancestor answer, which is why the walk CONTINUES rather than
+ * stopping at the first view. The answer is converted to SCREEN coordinates here, because the plate hangs off the
+ * pointer and the engine has no window of its own to convert through.
+ *
+ * **A POINTER WITH NO TIP IS THE SAME DOOR WITH A NIL STRING, AND THAT IS WHAT MAKES THE PLATE GO AWAY.** There is no
+ * "exit a tip" event in this tier and the engine does not need one: "the answer is now nothing" is exactly the fact —
+ * over the content, over the empty part of a band, or off the window entirely (see `-cg_clearTracking`, which asks
+ * about a point no view can contain). */
+- (NSString *)cg_toolTipStringAtWindowPoint:(NSPoint)windowPoint
+{
+	NSView *view = (_contentView != nil) ? [_contentView hitTest:windowPoint] : nil;
+
+	while (view != nil) {
+		NSString *tip = [view cg_toolTipStringAtWindowPoint:windowPoint];
+
+		if (tip != nil) {
+			return tip;
+		}
+		view = [view superview];
+	}
+	return nil;
+}
+
+- (void)cg_updateToolTipAtPoint:(NSPoint)windowPoint
+{
+	[[AGToolTipController sharedController] showTip:[self cg_toolTipStringAtWindowPoint:windowPoint]
+					    fromWindow:self
+				      atScreenPoint:[self convertBaseToScreen:windowPoint]];
 }
 
 /* **THE POINTER LEAVING THE WINDOW, WHICH THE SEAM REPORTS WITHOUT A POSITION.** Fed a point that cannot be inside any
