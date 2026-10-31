@@ -784,7 +784,7 @@ int main(void)
 		CGFloat contentTall = [window contentRectForFrameRect:[window frame]].size.height;
 		NSUInteger k;
 
-		check(near(tall, 52.0), "the ordinary band is 52 points");
+		check(near(tall, 50.0), "the ordinary band is 50 points");
 
 		/* THE DELEGATE'S ITEMS HAVE LABELS AND NO PICTURES, so `IconOnly` changes nothing: they fall back to their words
 		 * and the row has to stay. */
@@ -826,9 +826,9 @@ int main(void)
 			[[looseItems objectAtIndex:k] setImage:picture];
 		}
 		[loose setSizeMode:NSToolbarSizeModeSmall];
-		check(near([loose cg_toolbarHeight], 38.0), "the small band is 38 points with its labels showing");
+		check(near([loose cg_toolbarHeight], 36.0), "the small band is 36 points with its labels showing");
 		[loose setDisplayMode:NSToolbarDisplayModeIconOnly];
-		check(near([loose cg_toolbarHeight], 38.0 - 12.0),
+		check(near([loose cg_toolbarHeight], 36.0 - 12.0),
 		      "and the small band loses its own 12-point row, not the regular band's 15");
 
 		/* **AND A CUSTOM-VIEW ITEM DOES NOT HOLD THE ROW OPEN.** Its view IS the item — the painter skips such an item
@@ -836,7 +836,7 @@ int main(void)
 		 * MEASURED: Forge's `Code | Info` switch is one, with a label and no picture, and the strip stayed 52 points. */
 		[loose setSizeMode:NSToolbarSizeModeRegular];
 		[loose setDisplayMode:NSToolbarDisplayModeIconAndLabel];
-		check(near([loose cg_toolbarHeight], 52.0), "the ordinary band is back before the custom view goes in");
+		check(near([loose cg_toolbarHeight], 50.0), "the ordinary band is back before the custom view goes in");
 		{
 			NSView *view = [[[NSView alloc] initWithFrame:NSMakeRect(0.0, 0.0, 60.0, 24.0)] autorelease];
 			NSToolbarItem *custom = [[[NSToolbarItem alloc] initWithItemIdentifier:@"custom"] autorelease];
@@ -848,7 +848,7 @@ int main(void)
 			delegate->customItem = custom;
 			[loose insertItemWithItemIdentifier:@"custom" atIndex:0];
 			[loose setDisplayMode:NSToolbarDisplayModeIconOnly];
-			check(near([loose cg_toolbarHeight], 52.0 - 15.0),
+			check(near([loose cg_toolbarHeight], 50.0 - 15.0),
 			      "a custom view's label is not drawn, so it does not keep the label row either");
 			[loose removeItemAtIndex:0];
 			delegate->customItem = nil;

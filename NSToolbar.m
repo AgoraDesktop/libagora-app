@@ -76,8 +76,18 @@ NSString *NSToolbarAllowsUserCustomizationKey = @"NSToolbarAllowsUserCustomizati
  * heights rather than inside `fn_item_rects` as a local: the band's height and the text in it have to be the same fact.
  * MEASURED in Forge, whose View menu now hides the words: the strip kept its 52 points with the label row empty, so the
  * toolbar was a taller band of nothing over the editor. */
-static const CGFloat fn_TOOLBAR_HEIGHT_REGULAR = 52.0;
-static const CGFloat fn_TOOLBAR_HEIGHT_SMALL = 38.0;
+/* **AND THE TWO HEIGHTS ARE THE PARTS ADDED UP, WHICH IS WHY THEY ARE NOT TWO MORE INVENTED NUMBERS.** A band is the
+ * air above the picture, the picture, the air between the picture and the words, the words' row, and the air under it:
+ *
+ *        regular  6 + 24 + 2 + 15 + 3 = 50
+ *        small    4 + 16 + 1 + 12 + 3 = 36
+ *
+ * MEASURED at 4 and 3 points of air between picture and words, that gap was a visible seam — the words read as a
+ * separate line under the strip rather than as the item's caption — so it came down to 2 (regular) and 1 (small) and the
+ * band lost exactly those two points. Everything else in the sum is unchanged, so the picture keeps its distance from the
+ * top and the words their row and their three points of air. */
+static const CGFloat fn_TOOLBAR_HEIGHT_REGULAR = 50.0;
+static const CGFloat fn_TOOLBAR_HEIGHT_SMALL = 36.0;
 static const CGFloat fn_TOOLBAR_LABEL_ROW_REGULAR = 15.0;
 static const CGFloat fn_TOOLBAR_LABEL_ROW_SMALL = 12.0;
 
