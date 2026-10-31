@@ -232,6 +232,27 @@ static NSPoint fn_screen_from_view(NSView *view, NSPoint point)
 	return NSMakePoint(frame.origin.x + inWindow.x, frame.origin.y + inWindow.y);
 }
 
+/* **AND A RECT IS CONVERTED AS A RECT, WHICH A FLIPPED VIEW MAKES UNAVOIDABLE.** Converting an item's frame ORIGIN as a
+ * point answers the wrong corner in a view whose y grows downward: the point is the item's TOP-left there, and using it
+ * as the unflipped rect's BOTTOM-left lifts the image by the item's own height. `-convertRect:toView:` converts both
+ * corners and standardises the result, so a flipped source view puts its image where its icon is drawn. */
+static NSRect fn_screen_rect_from_view(NSView *view, NSRect rect)
+{
+	NSWindow *window = [view window];
+	NSRect inWindow;
+
+	if (window == nil) {
+		return rect;
+	}
+	inWindow = [view convertRect:rect toView:nil];
+	{
+		NSRect frame = [window frame];
+
+		return NSMakeRect(frame.origin.x + inWindow.origin.x, frame.origin.y + inWindow.origin.y,
+				  inWindow.size.width, inWindow.size.height);
+	}
+}
+
 static BOOL fn_point_in_rect(NSPoint point, NSRect rect)
 {
 	return point.x >= rect.origin.x && point.x < (rect.origin.x + rect.size.width)
@@ -418,7 +439,16 @@ static NSDragOperation fn_apply_modifiers(NSDragOperation operation, NSDragOpera
 		if ([event cg_hasGlobalPoint]) {
 			_initialLocation = [event cg_globalPoint];
 		} else {
-			_initialLocation = fn_screen_from_view(view, [event locationInWindow]);
+			/* **THE EVENT'S POINT IS IN THE WINDOW'S SPACE AND `-fn_screen_from_view` TAKES THE VIEW'S, SO IT IS
+			 * CONVERTED HERE FIRST.** This used to hand a window point straight to a function that converts FROM the
+			 * view — invisible while the source view is unflipped and fills its window (window and view space are then
+			 * the same numbers), and badly wrong the moment the view is FLIPPED: the pointer's y was mirrored, so the
+			 * offset between pointer and image came out as (10, -170) instead of (10, 10) and the floating icon flew to
+			 * the top of the screen the instant the drag moved. MEASURED in Workspace's icon view, whose grid is
+			 * flipped: the image hung a whole view-height above the pointer. */
+			NSPoint inView = [view convertPoint:[event locationInWindow] fromView:nil];
+
+			_initialLocation = fn_screen_from_view(view, inView);
 		}
 	}
 	_location = _initialLocation;
@@ -510,9 +540,7 @@ static NSDragOperation fn_apply_modifiers(NSDragOperation operation, NSDragOpera
 
 	for (i = 0; i < [_items count]; i++) {
 		NSDraggingItem *item = [_items objectAtIndex:i];
-		NSRect frame = [item draggingFrame];
-		NSPoint origin = fn_screen_from_view(_sourceView, frame.origin);
-		NSRect screenFrame = NSMakeRect(origin.x, origin.y, frame.size.width, frame.size.height);
+		NSRect screenFrame = fn_screen_rect_from_view(_sourceView, [item draggingFrame]);
 
 		unionRect = first ? screenFrame : NSUnionRect(unionRect, screenFrame);
 		first = NO;
@@ -538,11 +566,11 @@ static NSDragOperation fn_apply_modifiers(NSDragOperation operation, NSDragOpera
 			continue;
 		}
 		{
-			NSPoint origin = fn_screen_from_view(_sourceView, frame.origin);
+			NSRect screenFrame = fn_screen_rect_from_view(_sourceView, frame);
 
-			[contents drawInRect:NSMakeRect(origin.x - unionRect.origin.x,
-							origin.y - unionRect.origin.y,
-							frame.size.width, frame.size.height)];
+			[contents drawInRect:NSMakeRect(screenFrame.origin.x - unionRect.origin.x,
+							screenFrame.origin.y - unionRect.origin.y,
+							screenFrame.size.width, screenFrame.size.height)];
 		}
 	}
 	[image unlockFocus];

@@ -45,6 +45,14 @@ static int near(double a, double b)
 @implementation AGSeamView
 @end
 
+/* **A FLIPPED VIEW, WHICH IS THE SHAPE AN ICON GRID HAS.** Its y grows downward, so a point in it and the same point in
+ * the window's space differ by a mirror — which is exactly the difference that used to be lost. */
+@interface AGFlippedView : AGSeamView
+@end
+@implementation AGFlippedView
+- (BOOL)isFlipped { return YES; }
+@end
+
 @interface AGSeamSource : NSObject <NSDraggingSource>
 @end
 @implementation AGSeamSource
@@ -117,6 +125,56 @@ int main(void)
 	check([NSDraggingSession cg_activeSession] == nil, "the release ends the session");
 	check(![dragWindow isVisible], "and the image window is ordered out");
 	[dragWindow release];
+
+	/* **AND A FLIPPED SOURCE VIEW — THE SHAPE EVERY ICON GRID IN THIS TREE HAS — PUTS ITS IMAGE UNDER THE HAND.** Two
+	 * things were wrong for it, and both were invisible while the source was an unflipped view filling its window:
+	 *
+	 *   - the drag's starting point was handed over in the WINDOW's space and read as the VIEW's, so a flipped view
+	 *     mirrored it and the offset between pointer and image came out as (10, -170) — the floating icon flew to the
+	 *     top of the screen the moment the hand moved;
+	 *   - the item's frame was converted by its ORIGIN alone, which in a y-down view is the item's TOP-left corner;
+	 *     used as an unflipped rect's bottom-left it lifted the image by the item's own height.
+	 *
+	 * Here the view is flipped, the item sits 10 points down from its top, and the pointer is 10 points inside it — so
+	 * the image must start on the icon and stay there. One session at a time, so this waits for the first to end. */
+	{
+		/* **THE FLIPPED VIEW IS A SUBVIEW OF A PLAIN CONTENT VIEW, WHICH IS THE SHAPE WORKSPACE ACTUALLY HAS** — a
+		 * window's content is not flipped and an icon grid inside it is — because this tier defines the null view's
+		 * space as the ROOT's own, so a flipped ROOT would be a different question. */
+		NSView *plainContent = [[NSView alloc] initWithFrame:NSMakeRect(0.0, 0.0, 300.0, 200.0)];
+		AGFlippedView *flipped = [[AGFlippedView alloc] initWithFrame:NSMakeRect(0.0, 0.0, 300.0, 200.0)];
+		NSDraggingItem *frameItem = [[[NSDraggingItem alloc] initWithPasteboardWriter:nil] autorelease];
+		NSWindow *second = [[NSWindow alloc] initWithContentRect:NSMakeRect(0.0, 0.0, 300.0, 200.0)
+							       styleMask:NSBorderlessWindowMask
+								backing:NSBackingStoreBuffered defer:NO];
+		NSDraggingSession *secondSession;
+		NSWindow *secondWindow;
+
+		[second setContentView:plainContent];
+		[plainContent addSubview:flipped];
+		[second orderFront:nil];
+		[frameItem setDraggingFrame:NSMakeRect(10.0, 10.0, 40.0, 20.0) contents:image];
+		/* THE POINTER IS AT WINDOW (20,180), WHICH IS VIEW (20,20) — 10 points inside the item's top-left corner. */
+		secondSession = [flipped beginDraggingSessionWithItems:[NSArray arrayWithObject:frameItem]
+								event:mouse(NSLeftMouseDown, NSMakePoint(20.0, 180.0))
+							       source:source];
+		check(secondSession != nil, "a flipped source view begins a session too");
+		secondWindow = [[secondSession cg_draggingWindow] retain];
+		check(secondWindow != nil && near([secondWindow frame].origin.x, 10.0)
+		      && near([secondWindow frame].origin.y, 170.0),
+		      "the image starts where the item is, 170 points up from the window's floor");
+		[second sendEvent:mouse(NSLeftMouseDragged, NSMakePoint(120.0, 140.0))];
+		check(secondWindow != nil && near([secondWindow frame].origin.x, 110.0)
+		      && near([secondWindow frame].origin.y, 130.0),
+		      "and it stays the same 10 points under the pointer when the hand moves");
+		[second sendEvent:mouse(NSLeftMouseUp, NSMakePoint(120.0, 140.0))];
+		[secondWindow release];
+		[second close];
+		[second release];
+		[flipped release];
+		[plainContent release];
+	}
+
 
 	[source release];
 	[view release];
