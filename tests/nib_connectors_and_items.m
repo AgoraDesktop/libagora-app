@@ -139,7 +139,7 @@ int main(void)
 			[connector setDestination:target];
 			[connector setLabel:@"stepped:"];
 			[connector establishConnection];
-			check([button target] == target && [button action] == @selector(stepped:),
+			check([button target] == target && sel_isEqual([button action], @selector(stepped:)),
 			      "a control connector sets the target AND the selector its label names");
 
 			/* AND THE SELECTOR IS THE ONE THE NAME SPELLS. **COMPARED BY NAME, NOT BY POINTER**: this runtime keeps

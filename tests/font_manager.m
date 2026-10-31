@@ -350,7 +350,7 @@ static void test_action(void)
 	target->stored = [base retain];
 	[manager setTarget:target];
 	[manager setAction:@selector(changeFont:)];
-	check([manager target] == target && [manager action] == @selector(changeFont:),
+	check([manager target] == target && sel_isEqual([manager action], @selector(changeFont:)),
 	      "the manager keeps the target and action it was given");
 
 	/* THE PANEL'S CHOICE: the selected font's family, at the target font's size. */

@@ -877,9 +877,43 @@ int main(void)
 		      "an item without a toolTip has nothing to say");
 	}
 
+	/* 10f. **AND THE ONE MENU ROW A WINDOW ANSWERS SAYS WHICH WAY THE BAND IS.** `-toggleToolbarShown:` is the window's
+	 * own door, so its tick is the window's answer — the row a Mac application puts in its View menu, in Everys application
+	 * that has a toolbar and a menu. Deriving the state here is what stops each of them growing a validator for a state it
+	 * does not own; and a window with NO toolbar greys the row, because there is nothing to show or hide. */
+	{
+		NSMenuItem *row = [[NSMenuItem alloc] initWithTitle:@"Show Toolbar"
+							     action:@selector(toggleToolbarShown:)
+						      keyEquivalent:@""];
+
+		printf("  [diag] toolbar %p its visible %d answer %d state %ld\n", (void *)[window toolbar],
+		       (int)[[window toolbar] isVisible], (int)[window validateMenuItem:row], (long)[row state]);
+		check([window validateMenuItem:row], "a window with a toolbar answers the row");
+		check([row state] == NSOnState, "and its tick says the band is showing");
+		[[window toolbar] setVisible:NO];
+		check([window validateMenuItem:row] && [row state] == NSOffState,
+		      "a hidden band ticks OFF, still answered");
+		[[window toolbar] setVisible:YES];
+		check([window validateMenuItem:row] && [row state] == NSOnState, "and putting it back ticks ON again");
+		[row release];
+	}
+
 	/* 11. REMOVING THE TOOLBAR GIVES THE BAND BACK. */
 	frame = [window frame];
 	[window setToolbar:nil];
+	{
+		/* AND THE ROW GOES WITH IT: a window with no toolbar has nothing to show or hide, so it refuses and the menu
+		 * greys the row rather than offering an action that would do nothing. */
+		NSMenuItem *row = [[NSMenuItem alloc] initWithTitle:@"Show Toolbar"
+							     action:@selector(toggleToolbarShown:)
+						      keyEquivalent:@""];
+
+		printf("  [diag] after detach toolbar %p answer %d\n", (void *)[window toolbar],
+		       (int)[window validateMenuItem:row]);
+		check(![window validateMenuItem:row], "a window with no toolbar refuses the row");
+		check([row state] == NSOffState, "and its tick says there is nothing showing");
+		[row release];
+	}
 	check([window toolbar] == nil, "a window can lose its toolbar");
 	check([window frame].size.height == frame.size.height - [toolbar cg_toolbarHeight],
 	      "and the frame gives the band back");

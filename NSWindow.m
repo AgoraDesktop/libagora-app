@@ -6571,6 +6571,29 @@ static NSUInteger fn_edge_index(NSRectEdge edge)
 	}
 }
 
+/* **AND THE ONE ROW A WINDOW ANSWERS BY TOGGLING SOMETHING IS TOLD WHICH WAY IT IS.** `-toggleToolbarShown:` is the
+ * window's own door — a menu item, the toolbar's pill and the title bar's double-click all end there — so the TICK is the
+ * window's answer too. Deriving it here is what makes every application's "Show Toolbar" row agree with its band without
+ * each one growing a validator for a state it does not own, and it is the same reason the door itself lives here.
+ *
+ * **A WINDOW WITH NO TOOLBAR ANSWERS NO**, so the row is grey: there is nothing to show or hide. Anything else is the
+ * default the menu's walk already applied before this method existed — enabled exactly when this window answers the
+ * action — and keeping that identical is why the last line asks rather than saying YES. */
+- (BOOL)validateMenuItem:(NSMenuItem *)item
+{
+	/* **AND THE COMPARISON IS `sel_isEqual`, NOT `==`, WHICH IS THE RULE FOR EVERY ACTION IN THIS TREE.** This runtime
+	 * uniques a selector by its NAME AND ITS TYPE ENCODING (`libagora-objc/selector_table.cc`), so `@selector(foo)` written
+	 * in one file and the action a menu item carries can be two different pointers that name the same message: MEASURED,
+	 * `sel_isEqual([item action], @selector(toggleToolbarShown:))` was FALSE for a row built in a test while `sel_isEqual` was TRUE,
+	 * and the tick this method sets therefore never happened. Apple's runtime uniques by name alone, which is why the two
+	 * comparisons are interchangeable there and are not here. */
+	if (sel_isEqual([item action], @selector(toggleToolbarShown:))) {
+		[item setState:(_toolbar != nil && [_toolbar isVisible]) ? NSOnState : NSOffState];
+		return _toolbar != nil ? YES : NO;
+	}
+	return ([item action] != NULL && [self respondsToSelector:[item action]]) ? YES : NO;
+}
+
 - (void)runToolbarCustomizationPalette:(id)sender
 {
 	/* **THE WINDOW OWNS NO PALETTE: THE TOOLBAR DOES, AND IT REFUSES BY NAME.** A window with no toolbar has nothing
