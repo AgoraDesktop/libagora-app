@@ -1845,7 +1845,14 @@ static void fn_draw_mark(CGContextRef c, CGRect box, AGChromeButton button, AGCh
  * **THE HALF-POINT INSETS ARE THE WHOLE OF WHY THIS IS CRISP.** A one-point stroke is centred on its path, so a path
  * on the shape's own edge covers half a pixel inside and half outside and renders as two grey rows. The outline is
  * therefore drawn on a path inset by HALF its width, with its radius brought down to match so the corner stays
- * concentric, and the highlight on a path inset by one and a half. */
+ * concentric with the window's own shape.
+ *
+ * **THE HIGHLIGHT DOES NOT FOLLOW THE CORNER, AND THAT IS THE POINT.** It used to: a second rounded path inset by one
+ * and a half, at the radius brought down to match — concentric, and therefore parallel, one point apart. On the flat
+ * part that reads as a bevel; round a five-point corner two parallel arcs read as TWO CORNERS, one inside the other,
+ * and at a fractional output scale each stroke covers 1.33 device rows, so the pair antialiases into two distinct grey
+ * edges rather than one crisp one. So the light row is a STRAIGHT line, inset by one and a half from each end, that
+ * meets the outline's arc where the arc comes down to it and stops there: one corner, with a highlight on the flat. */
 static void fn_chrome_edge_path(CGContextRef c, CGFloat width, CGFloat top, CGFloat radius, CGFloat inset)
 {
 	CGFloat left = inset;
@@ -1884,9 +1891,11 @@ static void fn_draw_chrome_edges(CGContextRef c, CGFloat width, CGFloat top)
 	CGContextSetStrokeColorWithColor(c, [[NSColor colorWithCalibratedWhite:fn_BAR_EDGE alpha:1.0] CGColor]);
 	CGContextStrokePath(c);
 
-	/* 2. AND THE LIGHT ROW UNDER IT, one point further in. */
+	/* 2. AND THE LIGHT ROW UNDER IT, one point further in — STRAIGHT, because a second arc at the corner is a second
+	 * corner. It runs between the points where the outline's own arcs have come down to its height. */
 	CGContextBeginPath(c);
-	fn_chrome_edge_path(c, width, top, radius, w * 1.5);
+	CGContextMoveToPoint(c, w * 1.5, top - w * 1.5);
+	CGContextAddLineToPoint(c, width - w * 1.5, top - w * 1.5);
 	CGContextSetLineWidth(c, w);
 	CGContextSetStrokeColorWithColor(c, [[NSColor whiteColor] CGColor]);
 	CGContextStrokePath(c);
