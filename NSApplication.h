@@ -651,6 +651,9 @@ extern NSString *NSApplicationWillTerminateNotification;
 - (NSApplicationTerminateReply)applicationShouldTerminate:(NSApplication *)sender;
 - (BOOL)applicationShouldTerminateAfterLastWindowClosed:(NSApplication *)sender;
 - (BOOL)applicationShouldHandleReopen:(NSApplication *)sender hasVisibleWindows:(BOOL)flag;
+/* **AND THE ONE A SHELL ASKS WITH A PATH: THE DOCK'S TRASH TILE IS THE FIRST CALLER.** Apple declares it optional, and
+ * this tier ASKS it (see `-cg_handleOpenFile:`): a folder is a window on it, a document goes to whatever owns it. */
+- (BOOL)application:(NSApplication *)sender openFile:(NSString *)filename;
 - (BOOL)applicationShouldOpenUntitledFile:(NSApplication *)sender;
 - (BOOL)applicationOpenUntitledFile:(NSApplication *)sender;
 /* THE PRINTING ONE, WHOSE SIGNATURE IS ALSO A TRANSCRIPTION — and whose name is the ledger's bare `-application`,

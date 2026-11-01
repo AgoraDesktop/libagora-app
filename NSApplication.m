@@ -1753,6 +1753,22 @@ static double s_last_report;
 	[self terminate:nil];
 }
 
+/* **AND THE ONE A SHELL ASKS WITH A PATH IN HAND.** The delegate's door, as Apple declares it — optional, so an
+ * application that opens nothing says so by not implementing it — and the answer is the delegate's. MEASURED as the
+ * reason this exists: a Dock whose trash tile has a click meaning of its own has to be able to say WHICH folder, and a
+ * reopen with no subject says "a window", not "the trash". */
+- (void)cg_handleOpenFile:(NSString *)path
+{
+	id <NSApplicationDelegate> delegate = _delegate;
+
+	if (path == nil) {
+		return;
+	}
+	if ([delegate respondsToSelector:@selector(application:openFile:)]) {
+		(void)[delegate application:self openFile:path];
+	}
+}
+
 - (BOOL)cg_handleReopen
 {
 	BOOL hasVisibleWindows = NO;

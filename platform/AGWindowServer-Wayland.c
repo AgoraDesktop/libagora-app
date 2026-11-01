@@ -2110,6 +2110,21 @@ static void agora_window_reopen(void *data, struct agora_window *window)
 	ag_window_deliver(w, &event);
 }
 
+/* **A SHELL ASKING THIS APPLICATION TO OPEN A PATH.** The answer is the application's — a folder is a window on it —
+ * so the path goes up with the event and nothing is decided here. The string points into the listener's own message,
+ * which is alive for the length of this call: `-copy` is the AppKit's business. */
+static void agora_window_open_file(void *data, struct agora_window *window, const char *path)
+{
+	AGWindow *w = data;
+	AGEvent event;
+
+	(void)window;
+	memset(&event, 0, sizeof event);
+	event.type = AGEventOpenFile;
+	event.path = path;
+	ag_window_deliver(w, &event);
+}
+
 /* **AND A SHELL ASKING FOR THIS APPLICATION'S DOCK MENU.** The answer is the application's — its delegate's
  * `-applicationDockMenu:` — so this hands the question up and says nothing itself; `AGWindowSetDockMenu` is the way
  * back. The AppKit answers from its own window-level handler, which is why the seam has no opinion here. */
@@ -2137,12 +2152,14 @@ static void agora_window_dock_menu_action(void *data, struct agora_window *windo
 
 static const struct agora_window_listener agora_window_listener = {
 	/* IN THE PROTOCOL'S OWN ORDER, which is what a Wayland listener table is:
-	 * `close`, `work_area_changed`, `pointer_global`, `reopen`, `dock_menu_requested`, `dock_menu_action`, `quit`. */
+	 * `close`, `work_area_changed`, `pointer_global`, `reopen`, `dock_menu_requested`, `open_file`, `dock_menu_action`,
+	 * `quit`. */
 	agora_window_close,
 	agora_window_work_area_changed,
 	agora_window_pointer_global,
 	agora_window_reopen,
 	agora_window_dock_menu_requested,
+	agora_window_open_file,
 	agora_window_dock_menu_action,
 	agora_window_quit,
 };
@@ -2296,6 +2313,22 @@ void AGWindowActivate(AGWindowServer *server, unsigned int id)
 	}
 	agora_shell_activate_window(server->shell, id);
 	wl_display_flush(server->display);
+}
+
+/* **AND THE SAME DOOR WITH A SUBJECT: THE PATH A SHELL WANTS SHOWN.** `activate_application` asks "bring this one
+ * forward"; this asks "open this", and the application answers by whatever opening means to it. A compositor older
+ * than the request has no door for it, which is answered 0 rather than by pretending. */
+int AGWindowServerOpenFile(AGWindowServer *server, uint32_t windowID, const char *path)
+{
+	if (server == NULL || server->shell == NULL || path == NULL || windowID == 0) {
+		return 0;
+	}
+	if (wl_proxy_get_version((struct wl_proxy *)server->shell) < 18) {
+		return 0;
+	}
+	agora_shell_open_file(server->shell, windowID, path);
+	wl_display_flush(server->display);
+	return 1;
 }
 
 int AGWindowServerActivateApplication(AGWindowServer *server, unsigned int id)
@@ -2524,8 +2557,12 @@ static void registry_global(void *data, struct wl_registry *registry, uint32_t n
 		 * what this seam understands matters here for the same reason it does at nine: the version a shell is bound at is
 		 * the version every window it makes is capped to, and a request sent above it is a protocol error that kills the
 		 * client rather than a call the server ignores. */
+		/* **THE CAP IS THE HIGHEST REQUEST THIS SEAM SENDS**, which is `open_file` at 18 — a trash tile asking for the
+		 * file manager's window. It was 15, the highest when the cap was written, and an older cap makes a newer request
+		 * silently unreachable: the proxy's version is the bind's, so `AGWindowServerOpenFile` answered 0 for a server
+		 * that had the door all along. A window's own version is unaffected — the server caps it at `agora_window`'s. */
 		server->shell = wl_registry_bind(registry, name, &agora_shell_interface,
-						version < 15 ? version : 15);
+						version < 18 ? version : 18);
 	}
 }
 

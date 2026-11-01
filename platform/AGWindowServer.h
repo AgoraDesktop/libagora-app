@@ -86,6 +86,10 @@ typedef enum {
 	 * axes arrives as TWO of these, in the same native frame, because a client's scroll handler is per axis and a
 	 * single event carrying both would have to choose which one `-scrollingDeltaY` means. */
 	AGEventPointerAxis,
+	/* **THE SHELL ASKED THIS APPLICATION TO OPEN A PATH** — the Dock's trash tile, an item a shell has in hand. The
+	 * window is the ADDRESS and not the subject, exactly as `AGEventReopen`'s is, and what opening means is the
+	 * application's answer: a folder is a window on it, a document goes to whatever owns it. `path` is the argument. */
+	AGEventOpenFile,
 } AGEventType;
 
 /* **WHERE A SCROLL CAME FROM, WHICH IS ALSO WHAT ITS UNITS MEAN.** A wheel moves in STEPS: one notch is 120
@@ -158,6 +162,10 @@ typedef struct AGEvent {
 	 * IT IS 0 (`XKB_KEY_NoSymbol`) when the keymap defines no symbol for the code. `AGKeyboard.h` produces it, so
 	 * this header names no xkb type: the seam is a C struct and the number is a `uint32_t` whatever wrote it. */
 	uint32_t keysym;		/* an xkb keysym (XKB_KEY_…); 0 when the keymap has no symbol for the code */
+	/* **THE PATH A SHELL ASKED THIS APPLICATION TO OPEN**, meaningful only for `AGEventOpenFile`. It points into the
+	 * seam's own buffer and is valid for the length of the handler's call, which is the same rule an event's other
+	 * borrowed strings follow: a handler that needs it later copies it. */
+	const char *path;
 	/* **AND THE SCROLL'S OWN FOUR NUMBERS**, meaningful only for `AGEventPointerAxis`. `delta` is the precise
 	 * distance along `axis` in the compositor's unit — where one wheel notch is 15.0 — and it is the ONLY distance:
 	 * a client must not add `discrete` to it, because they are the same motion said twice, once continuously and
@@ -600,6 +608,11 @@ int AGWindowHeight(const AGWindow *window);
 int AGWindowIsConfigured(const AGWindow *window);
 
 void AGWindowSetEventHandler(AGWindow *window, AGEventFunction function, void *context);
+
+/* **ASK AN APPLICATION TO OPEN A PATH, BY NAMING ANY OF ITS WINDOWS.** The shell half of the request the Dock's
+ * trash tile makes: `windowID` is an id from the window list, and the application decides what opening means. A
+ * window server older than the request has no door for it, and this answers 0 rather than lying. */
+int AGWindowServerOpenFile(AGWindowServer *server, uint32_t windowID, const char *path);
 void AGWindowSetFrameHandler(AGWindow *window, AGFrameFunction function, void *context);
 
 /* ============================================================================================ *

@@ -4648,6 +4648,12 @@ static const CGFloat AGFocusRingAlpha[] = { 0.85, 0.55, 0.32, 0.16 };
 		 * does. */
 		[[NSApplication sharedApplication] cg_handleQuit];
 		break;
+	case AGEventOpenFile:
+		/* **THE SAME ADDRESS, WITH A SUBJECT.** The shell named this window to reach the application, so the path goes
+		 * where `reopen`'s question goes: to the delegate, which is the only thing that knows what opening means. */
+		[[NSApplication sharedApplication] cg_handleOpenFile:
+			(event->path != NULL) ? [NSString stringWithUTF8String:event->path] : nil];
+		break;
 	case AGEventReopen:
 		/* **A DOCK CLICK WITH NOTHING TO RAISE, ASKED OF THIS WINDOW BECAUSE A WINDOW IS THE ADDRESS.** The answer
 		 * is the application's — its delegate's, and ultimately its own — so the window hands it straight on and
