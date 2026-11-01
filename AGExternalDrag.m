@@ -67,6 +67,19 @@ static NSMutableArray *s_pending;
  * no compositor replaces it, which is the only way an enter can be driven without a display. */
 static AGExternalDragWindowLookup s_lookup;
 
+/* **THE COMPOSITOR MEASURES DOWN FROM THE TOP OF A SURFACE; A WINDOW'S OWN COORDINATES RUN UP FROM ITS BOTTOM.** A
+ * `drag_enter` names a point in the surface's space, which is what a Wayland client is given, and every view that asks
+ * `-draggingLocation` then converts it with `-convertPoint:fromView:` — which assumes the window's base space. Passing
+ * the wire's number straight through made a destination's hit test MIRRORED: MEASURED, a drop on the Dock's trash tile
+ * (near the screen's bottom) read as a point near the top, the tile was never the one under the pointer, and the drag
+ * was refused with nothing in the log to say why. */
+static NSPoint fn_window_point_from_wire(NSWindow *window, int x, int y)
+{
+	CGFloat height = (window != nil) ? [window frame].size.height : 0.0;
+
+	return NSMakePoint((CGFloat)x, height - (CGFloat)y);
+}
+
 static NSWindow *fn_lookup_window(uint32_t windowId)
 {
 	if (s_lookup != NULL) {
@@ -200,7 +213,7 @@ static void fn_queue(NSString *kind, int a, int b, id payload)
 	s_view = [view retain];
 	s_pasteboard = [[NSPasteboard cg_dragDestinationBoard] retain];
 	[s_pasteboard cg_beginDragWithTypes:types];
-	s_point = NSMakePoint((CGFloat)x, (CGFloat)y);
+	s_point = fn_window_point_from_wire(window, x, y);
 	s_mask = (NSDragOperation)mask;
 	s_sequence++;
 
@@ -227,7 +240,7 @@ static void fn_queue(NSString *kind, int a, int b, id payload)
 	if (!s_entered || s_view == nil || s_dropped) {
 		return;
 	}
-	s_point = NSMakePoint((CGFloat)x, (CGFloat)y);
+	s_point = fn_window_point_from_wire(s_window, x, y);
 	info = [[[AGExternalDraggingInfo alloc] init] autorelease];
 	if ([s_view respondsToSelector:@selector(draggingUpdated:)]) {
 		s_operation = [s_view draggingUpdated:info] & s_mask;
@@ -260,7 +273,7 @@ static void fn_queue(NSString *kind, int a, int b, id payload)
 	BOOL prepared = YES;
 	BOOL performed = NO;
 
-	s_point = NSMakePoint((CGFloat)x, (CGFloat)y);
+	s_point = fn_window_point_from_wire(s_window, x, y);
 	s_dropped = YES;
 	if (getenv("AGORA_DRAG_DIAG") != NULL) {
 		fprintf(stderr, "  DIAG drag: destination drop, view %p, operation %lu\n", (void *)s_view,

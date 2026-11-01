@@ -202,13 +202,16 @@ int main(void)
 
 	printf("external_drag: a drag from another application\n");
 
-	/* 1. **AN ENTER IS THE VIEW'S `-draggingEntered:`, ONCE, IN WINDOW COORDINATES.** The number the compositor sent is
-	 * window space already, so a destination that had to convert would be converting twice. */
+	/* 1. **AN ENTER IS THE VIEW'S `-draggingEntered:`, ONCE, IN THE WINDOW'S OWN COORDINATES.** The compositor measures
+	 * DOWN from a surface's top, as a Wayland client is given; a window's coordinates run UP from its bottom, which is what
+	 * `-convertPoint:fromView:` assumes and what every hit test in this tier is written in. The seam converts, so a
+	 * destination does not have to know which side of the seam its drag came from: the point (30, 40) from the wire is
+	 * (30, 160) in a 200-point-tall window. */
 	reset();
 	fn_enter(30, 40);
 	check(calls_are([NSArray arrayWithObject:@"entered"]), "an enter is one -draggingEntered: and nothing else");
-	check([s_destination location].x == 30.0 && [s_destination location].y == 40.0,
-	      "the location is the point the compositor named, in window space");
+	check([s_destination location].x == 30.0 && [s_destination location].y == 160.0,
+	      "the location is the point the compositor named, measured up from the window's bottom");
 	check([[s_destination seenTypes] isEqualToArray:types],
 	      "the drag's types are on the pasteboard without a round trip");
 	check([s_destination seenMask] == NSDragOperationCopy,
@@ -221,8 +224,8 @@ int main(void)
 	[AGExternalDrag cg_processPendingEvents];
 	check(calls_are([NSArray arrayWithObjects:@"entered", @"updated", nil]),
 	      "a motion is one -draggingUpdated:, after the enter");
-	check([s_destination location].x == 50.0 && [s_destination location].y == 60.0,
-	      "with the new point");
+	check([s_destination location].x == 50.0 && [s_destination location].y == 140.0,
+	      "with the new point, in the same coordinates");
 
 	/* 3. **LEAVING IS ONE EXIT AND THE END OF THE CLAIM.** A strip that drew a mark takes it away on the exit, and a
 	 * second exit would be a second cleanup of something already cleaned. */
@@ -240,8 +243,8 @@ int main(void)
 	[AGExternalDrag cg_processPendingEvents];
 	check(calls_are([NSArray arrayWithObjects:@"entered", @"prepare", @"perform", @"conclude", @"ended", nil]),
 	      "the drop runs prepare, perform, conclude and ended, in that order");
-	check([s_destination dropPoint].x == 120.0 && [s_destination dropPoint].y == 130.0,
-	      "and -performDragOperation: is told where the hand let go");
+	check([s_destination dropPoint].x == 120.0 && [s_destination dropPoint].y == 70.0,
+	      "and -performDragOperation: is told where the hand let go, in the window's coordinates");
 	check(![AGExternalDrag cg_isDragging], "the drag is over");
 
 	/* 5. **A `-prepareForDragOperation:` THAT SAYS NO ENDS IT THERE.** A view that refused the gesture in the prepare has
