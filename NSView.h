@@ -490,7 +490,7 @@ extern const CGFloat NSViewNoInstrinsicMetric;
 
 /* AND THE FOUR ANSWERED HANDS AND FLAGS, each for its own reason: `-acceptsFirstMouse:` is NO for a plain view
  * (Apple's own default, an override point), `-shouldDelayWindowOrderingForEvent:` likewise, `-shouldDrawColor` is
- * YES, `-menuForEvent:` is nil because a plain view is given no menu of its OWN — `NSMenu` has shipped since stage D
+ * YES, `-menuForEvent:` is the menu the view HOLDS (`NSResponder`'s `-menu`, which is what `-setMenu:` writes) — `NSMenu` has shipped since stage D
  * and this sentence used to say the tier had none, which stopped being true several stages ago — `-makeBackingLayer`
  * is nil because it has no layers,
  * and `-mouse:inRect:` — the pre-10.0 door — reports that the point was outside the rectangle rather than
@@ -499,6 +499,11 @@ extern const CGFloat NSViewNoInstrinsicMetric;
 - (BOOL)shouldDelayWindowOrderingForEvent:(nullable NSEvent *)theEvent;
 - (BOOL)shouldDrawColor;
 - (nullable id)menuForEvent:(nullable NSEvent *)theEvent;
+/* **AND ASKING IS HALF OF IT: A RIGHT-CLICK IS WHAT PUTS THE ANSWER ON THE SCREEN.** Apple's`-rightMouseDown:`default
+ * is this pair — ask `-menuForEvent:`, open what comes back — and without it a context menu is a menu nobody can reach:
+ * the event would forward up the responder chain, as it did, and the question was never asked. A view with NO menu
+ * still forwards, so a plain view behaves exactly as it did. */
+- (void)rightMouseDown:(nullable NSEvent *)theEvent;
 - (nullable id)makeBackingLayer;
 - (BOOL)mouse:(NSPoint)aPoint inRect:(NSRect)aRect;
 

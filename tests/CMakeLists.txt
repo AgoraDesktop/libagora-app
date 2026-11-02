@@ -1339,6 +1339,14 @@ target_link_libraries(menu_placement PRIVATE App)
 add_test(NAME appkit-menu-placement COMMAND menu_placement)
 set_tests_properties(appkit-menu-placement PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
 
+# **AND THE CLICK THAT ASKS.** `-menuForEvent:` was answered by views and asked by nobody: `NSView` did not implement
+# `-rightMouseDown:`, so a context menu had no gesture. This is the pair — the menu opens at the click, and a view with
+# no menu still forwards.
+add_executable(context_menu context_menu.m)
+target_link_libraries(context_menu PRIVATE App)
+add_test(NAME appkit-context-menu COMMAND context_menu)
+set_tests_properties(appkit-context-menu PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
+
 # **AND THE TWO CONTROLS THAT RAISE ONE, WHICH SHARE AN ANCHOR.** `NSMenu` takes the point in the VIEW's coordinates;
 # the pop-up button and the combo box both used to carry it into the window first, so their menus opened one
 # window-origin too far right and up. This asserts the shared anchor and the panel each cell raises.

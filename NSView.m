@@ -25,6 +25,7 @@
 #import <AppKit/NSGraphicsContext.h>
 #import <AppKit/NSPasteboard.h>
 #import <AppKit/NSImage.h>
+#import <AppKit/NSMenu.h>
 #import <AppKit/NSTextInputContext.h>
 #import <AppKit/NSTextInput.h>
 #import <AppKit/NSEvent.h>
@@ -1079,11 +1080,26 @@ static NSString * const AGCoderConstraintsKey = @"constraints";
 - (nullable id)menuForEvent:(NSEvent *)theEvent
 {
 	(void)theEvent;
-	/* **AND THE REASON IS THE VIEW'S OWN MENU RATHER THAN A MISSING SUBSYSTEM.** This said "no NSMenu in this tier",
-	 * which stopped being true at stage D: menus exist, they are drawn, and the pop-up button beside them raises one.
-	 * What a view answers here is ITS OWN menu, and this class gives a caller no way to set one — so nil is the truth
-	 * for a plain view either way, and the note now says which truth it is. */
-	return nil;
+	/* **AND THE ANSWER IS THE MENU THIS VIEW HOLDS.** This said nil, on the ground that a plain view is given no way to
+	 * hold one — which stopped being true when `NSResponder` gained `-menu`/`-setMenu:`: the ivar is there, it is
+	 * retained and archived, and nothing read it. Apple's default is this menu, and answering nil while a caller's
+	 * `-setMenu:` sat in an ivar is a door with a writer and no reader. */
+	return [self menu];
+}
+
+- (void)rightMouseDown:(NSEvent *)theEvent
+{
+	/* **THE CLICK IS WHAT ASKS.** `-menuForEvent:` is the question a view answers and this is the act that puts the
+	 * answer on the screen — Apple's own default, and the half this tier was missing: the event forwarded up the
+	 * responder chain and the question was never asked, so a view could carry a menu and no gesture could reach it.
+	 * A view with NO menu forwards exactly as before, which is what keeps a plain view unchanged. */
+	id menu = [self menuForEvent:theEvent];
+
+	if (menu == nil) {
+		[super rightMouseDown:theEvent];
+		return;
+	}
+	[NSMenu popUpContextMenu:menu withEvent:theEvent forView:self];
 }
 
 - (nullable id)makeBackingLayer

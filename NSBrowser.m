@@ -559,6 +559,7 @@ static NSString * const AGCoderBrowserCellPrototypeKey = @"cellPrototype";
 	[_columnCounts release];
 	[_selectedRows release];
 	[_titles release];
+	[_cg_registeredDragTypes release];
 	[_scrollView release];
 	[_documentView release];
 	[_cellPrototype release];
@@ -835,6 +836,10 @@ static NSString * const AGCoderBrowserCellPrototypeKey = @"cellPrototype";
 	[table setAllowsTypeSelect:_allowsTypeSelect];
 	[table setDraggingSourceOperationMask:_localDragMask forLocal:YES];
 	[table setDraggingSourceOperationMask:_nonLocalDragMask forLocal:NO];
+	/* **A TYPE REGISTERED ON THE BROWSER IS REGISTERED ON ITS COLUMNS.** A drop lands on a column's table, not on this
+	 * view, so without this a caller's `-registerForDraggedTypes:` would describe a destination that never receives
+	 * anything. */
+	[table registerForDraggedTypes:_cg_registeredDragTypes];
 	/* **ONE SCROLL VIEW PER COLUMN, AND IT IS THE VERTICAL ONE.** It is the document of the browser's outer
 	 * scroll view, not a sibling of it: the outer view still owns the horizontal travel across the columns. A
 	 * slot starts at ITS OWN x, not at zero: the pool is built before the first tile, and a column left at zero
@@ -2509,6 +2514,92 @@ static NSString * const AGCoderBrowserCellPrototypeKey = @"cellPrototype";
 		return;
 	}
 	[table editColumn:0 row:row withEvent:event select:select];
+}
+
+/* **THE BROWSER IS THE COLUMNS' DATA SOURCE, SO THE TABLE'S DRAG QUESTIONS ARRIVE HERE.** The three forwards below are
+ * what makes a browser a drag source and a drop destination at all: the table asks its data source, the data source is
+ * this class, and the answer belongs to the delegate — mapped from a TABLE back to its COLUMN by identity, which is the
+ * one thing the browser knows and a table cannot tell it.
+ *
+ * **AND A REGISTERED TYPE REACHES EVERY COLUMN.** The tables are made lazily as columns are loaded, so a type stored here
+ * is applied both to the ones that exist and to the ones made later (see `-tile`/`fn_makeColumn`). */
+
+- (void)registerForDraggedTypes:(NSArray *)newTypes
+{
+	NSUInteger i;
+
+	[super registerForDraggedTypes:newTypes];
+	[_cg_registeredDragTypes release];
+	_cg_registeredDragTypes = [newTypes copy];
+	for (i = 0; i < [_tables count]; i++) {
+		[[_tables objectAtIndex:i] registerForDraggedTypes:_cg_registeredDragTypes];
+	}
+}
+
+- (BOOL)tableView:(NSTableView *)tableView writeRowsWithIndexes:(NSIndexSet *)rowIndexes
+   toPasteboard:(NSPasteboard *)pasteboard
+{
+	NSInteger column = [self columnForTable:tableView];
+
+	if (column < 0 || rowIndexes == nil || [rowIndexes count] == 0) {
+		return NO;
+	}
+	if (_delegate != nil
+	    && [_delegate respondsToSelector:@selector(browser:writeRowsWithIndexes:inColumn:toPasteboard:)]) {
+		return [_delegate browser:self writeRowsWithIndexes:rowIndexes inColumn:column
+			     toPasteboard:pasteboard];
+	}
+	return NO;
+}
+
+- (NSDragOperation)tableView:(NSTableView *)tableView validateDrop:(id <NSDraggingInfo>)info
+		 proposedRow:(NSInteger)row proposedDropOperation:(NSTableViewDropOperation)dropOperation
+{
+	NSInteger column = [self columnForTable:tableView];
+	NSInteger proposedRow = row;
+	NSInteger proposedColumn = column;
+	NSBrowserDropOperation proposed = (dropOperation == NSTableViewDropOn) ? NSBrowserDropOn
+									     : NSBrowserDropAbove;
+
+	(void)dropOperation;
+	if (column < 0) {
+		return NSDragOperationNone;
+	}
+	if (_delegate != nil
+	    && [_delegate respondsToSelector:
+		@selector(browser:validateDrop:proposedRow:column:proposedDropOperation:)]) {
+		NSDragOperation operation = [_delegate browser:self validateDrop:info proposedRow:&proposedRow
+						       column:&proposedColumn proposedDropOperation:&proposed];
+
+		/* **AND A DELEGATE THAT RE-TARGETS IS HONOURED.** The browser's own report is the table's, so a delegate that
+		 * moved the row or the column is telling the table where the drop is: the row within THIS column is the
+		 * table's, and a re-targeted column is the browser's to select. */
+		if (proposedColumn != column) {
+			[self selectRow:((proposedRow >= 0) ? proposedRow : row) inColumn:proposedColumn];
+		}
+		[tableView setDropRow:proposedRow
+			dropOperation:(proposed == NSBrowserDropOn) ? NSTableViewDropOn : NSTableViewDropAbove];
+		return operation;
+	}
+	return NSDragOperationNone;
+}
+
+- (BOOL)tableView:(NSTableView *)tableView acceptDrop:(id <NSDraggingInfo>)info
+	       row:(NSInteger)row dropOperation:(NSTableViewDropOperation)dropOperation
+{
+	NSInteger column = [self columnForTable:tableView];
+	NSBrowserDropOperation operation = (dropOperation == NSTableViewDropOn) ? NSBrowserDropOn
+									       : NSBrowserDropAbove;
+
+	(void)dropOperation;
+	if (column < 0) {
+		return NO;
+	}
+	if (_delegate != nil
+	    && [_delegate respondsToSelector:@selector(browser:acceptDrop:row:column:dropOperation:)]) {
+		return [_delegate browser:self acceptDrop:info row:row column:column dropOperation:operation];
+	}
+	return NO;
 }
 
 /* ---- THE DRAG SOURCE -------------------------------------------------------------------------- */

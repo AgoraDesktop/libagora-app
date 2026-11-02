@@ -52,16 +52,18 @@ NS_ASSUME_NONNULL_BEGIN
 @class NSView;
 
 typedef NSInteger NSBrowserColumnResizingType;
-enum {
-	NSBrowserNoColumnResizing = 0,
-	NSBrowserAutoColumnResizing = 1,
-	NSBrowserUserColumnResizing = 2
-};
 
+/* **WHERE A DROP LANDS: ON A ROW, OR ABOVE IT.** Apple's pair for the browser, and the browser's delegate answers with
+ * the same two the table underneath proposes. */
 typedef NSInteger NSBrowserDropOperation;
 enum {
 	NSBrowserDropOn = 0,
 	NSBrowserDropAbove = 1
+};
+enum {
+	NSBrowserNoColumnResizing = 0,
+	NSBrowserAutoColumnResizing = 1,
+	NSBrowserUserColumnResizing = 2
 };
 
 /* ==================================================================================================================
@@ -114,6 +116,25 @@ enum {
 	      inColumn:(NSInteger)column
 	     withEvent:(nullable NSEvent *)event;
 
+/* **WHAT THE ROWS OFFER, AND WHAT A DROP ON THEM MEANS.** The three halves of a drag a browser's delegate supplies. The
+ * browser's columns are tables, so the AppKit asks THE TABLE for these — the browser is its data source and forwards them
+ * here, which is what makes a drag out of a column and a drop into one possible at all (before this the forwards did not
+ * exist and a browser could neither start a drag nor receive one). */
+- (BOOL)browser:(NSBrowser *)browser
+    writeRowsWithIndexes:(NSIndexSet *)rowIndexes
+	      inColumn:(NSInteger)column
+	toPasteboard:(NSPasteboard *)pasteboard;
+- (NSDragOperation)browser:(NSBrowser *)browser
+	       validateDrop:(id <NSDraggingInfo>)info
+	 proposedRow:(NSInteger *)row
+	      column:(NSInteger *)column
+   proposedDropOperation:(NSBrowserDropOperation *)dropOperation;
+- (BOOL)browser:(NSBrowser *)browser
+      acceptDrop:(id <NSDraggingInfo>)info
+	     row:(NSInteger)row
+	  column:(NSInteger)column
+   dropOperation:(NSBrowserDropOperation)dropOperation;
+
 /* ---- THE CELL-BASED CONTRACT, KEPT AS THE FALLBACK ------------------------------------------------------------ */
 /* Rows per column, for a delegate that does not answer `-browser:numberOfChildrenOfItem:`. */
 - (NSInteger)browser:(NSBrowser *)sender numberOfRowsInColumn:(NSInteger)column;
@@ -155,6 +176,7 @@ enum {
 	NSBrowserColumnResizingType _columnResizingType;
 	NSString *_pathSeparator;		/* COPIED */
 	SEL _doubleAction;
+	NSArray *_cg_registeredDragTypes;	/* RETAINED: what a caller registered, applied to each column's table */
 	BOOL _separatesColumns;
 	BOOL _allowsMultipleSelection;
 	BOOL _allowsEmptySelection;

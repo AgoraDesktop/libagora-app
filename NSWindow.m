@@ -1588,7 +1588,15 @@ static NSString * const AGCoderWindowToolbarKey = @"toolbar";
 	[_keyViewLoop release];
 	[_fieldEditor release];
 	/* AND THE CONTENT VIEW, WHICH THE WINDOW RETAINED WHEN IT WAS SET. It was leaked here while the window owned it:
-	 * a window is the content view's only owner, so nothing else can release it. */
+	 * a window is the content view's only owner, so nothing else can release it.
+	 *
+	 * **AND THE VIEW IS TOLD THE WINDOW IS GONE FIRST, BECAUSE ITS `window` IS NOT RETAINED.** `-setContentView:` gives
+	 * the whole subtree this window (`-cg_setWindow:`), and nothing took it back: a view that OUTLIVED its window kept
+	 * a pointer to freed memory, and the very next `-setNeedsDisplay:` — which messages `[self window]` — was a
+	 * use-after-free. MEASURED, as a SIGSEGV inside `-_setViewsNeedDisplay:` when a desktop view (kept alive by its own
+	 * work-area timer) repainted after its window was released. This is the same two-sided clear `-removeFromSuperview`
+	 * does, and it is what makes "a view whose window is gone answers nil" true. */
+	[_contentView cg_setWindow:nil];
 	[_contentView release];
 	/* AND THE TOOLBAR, WHICH THE WINDOW OWNS. Its own `-cg_setWindow:nil` is what takes its view out of the content
 	 * tree; releasing it here is safe because nothing else retains it after this window goes. */
