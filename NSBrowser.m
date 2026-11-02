@@ -928,6 +928,10 @@ static NSString * const AGCoderBrowserCellPrototypeKey = @"cellPrototype";
 	if (_selectedColumn > column) {
 		_selectedColumn = (column >= 0 && column < (NSInteger)[_tables count]) ? column : -1;
 	}
+	/* THE CHAIN POINTER FOLLOWS THE ROWS IT CLEARED, or a column that was emptied here would still count as active. */
+	if (_lastColumn > column) {
+		_lastColumn = column;
+	}
 }
 
 - (void)loadColumnZero
@@ -1009,14 +1013,23 @@ static NSString * const AGCoderBrowserCellPrototypeKey = @"cellPrototype";
 
 - (NSInteger)cg_activeColumnCount
 {
+	NSInteger byRows = 0;
 	NSInteger i;
 
 	for (i = (NSInteger)[_columnCounts count] - 1; i >= 0; i--) {
 		if ([[_columnCounts objectAtIndex:(NSUInteger)i] integerValue] > 0) {
-			return i + 1;
+			byRows = i + 1;
+			break;
 		}
 	}
-	return 0;
+	/* **AND A COLUMN THE BROWSER HAS OPENED IS ACTIVE EVEN WHEN IT HAS NO ROWS.** Selecting an empty folder opens the
+	 * column after it — `-addColumn:` makes it, states its zero rows and moves `_lastColumn` onto it — and counting only
+	 * columns with rows threw that away, so an empty folder showed no column at all: "when the selected directory is
+	 * empty, there is no column shown for it". Apple's browser shows the column, empty, with its title. */
+	if ([self lastColumn] + 1 > byRows) {
+		byRows = [self lastColumn] + 1;
+	}
+	return byRows;
 }
 
 /* ---- THE SELECTION --------------------------------------------------------------------------- */
@@ -1276,6 +1289,25 @@ static NSString * const AGCoderBrowserCellPrototypeKey = @"cellPrototype";
 	return proposedSelectionIndexes;
 }
 
+/* **IS THIS ROW A BRANCH?**, asked the way the browser knows how to ask it: an item-based delegate answers through
+ * `-browser:isLeafItem:`, and a CELL-based one has already stated it on the cell it prepared for the row — the leaf fact
+ * travels with the cell in this era, and `NSCell -isLeaf` is where. A cell that cannot say is treated as a leaf, so the
+ * browser opens no column rather than an empty one it cannot name. */
+- (BOOL)cg_rowIsBranch:(NSInteger)row inColumn:(NSInteger)column table:(NSTableView *)table
+{
+	if ([self cg_isItemBased]) {
+		return ![self isLeafItem:[self itemAtRow:row inColumn:column]];
+	}
+	if (table != nil) {
+		NSCell *cell = [table preparedCellAtColumn:0 row:row];
+
+		if (cell != nil && [cell respondsToSelector:@selector(isLeaf)]) {
+			return ![cell isLeaf];
+		}
+	}
+	return NO;
+}
+
 - (void)tableViewSelectionDidChange:(NSNotification *)notification
 {
 	NSTableView *table = [notification object];
@@ -1298,6 +1330,15 @@ static NSString * const AGCoderBrowserCellPrototypeKey = @"cellPrototype";
 		nextRows = [self rowsForColumn:column + 1];
 		if (nextRows > 0) {
 			[self ensureColumn:column + 1 rows:nextRows];
+			_lastColumn = column + 1;
+		} else if ([self cg_rowIsBranch:row inColumn:column table:table]) {
+			/* **AN EMPTY BRANCH STILL OPENS ITS COLUMN.** A folder with nothing in it is a place a person went, and
+			 * Apple's browser shows the column beside it with a blank list and the folder's name on it. Asking the
+			 * item model whether the row is a LEAF is what tells the two zero-row cases apart: a file opens nothing,
+			 * an empty folder opens an empty column. MEASURED as "when the selected directory is empty, there is no
+			 * column shown for it". */
+			[self ensureColumn:column + 1 rows:0];
+			_lastColumn = column + 1;
 		}
 	}
 	[self tile];
@@ -2310,14 +2351,14 @@ static NSString * const AGCoderBrowserCellPrototypeKey = @"cellPrototype";
 	}
 	rows = [_delegate browser:self numberOfChildrenOfItem:item];
 	[self truncateColumnsAfter:column];
-	if (rows > 0) {
-		[self ensureColumn:column + 1 rows:rows];
-		if (column + 1 < (NSInteger)[_columnCounts count]) {
-			[_columnCounts replaceObjectAtIndex:(NSUInteger)(column + 1)
-						 withObject:[NSNumber numberWithInteger:rows]];
-			[[_tables objectAtIndex:(NSUInteger)(column + 1)] reloadData];
-		}
+	/* THE BRANCH OPENS ITS COLUMN EVEN WITH NO CHILDREN, for the same reason a selected empty folder does. */
+	[self ensureColumn:column + 1 rows:rows];
+	if (column + 1 < (NSInteger)[_columnCounts count]) {
+		[_columnCounts replaceObjectAtIndex:(NSUInteger)(column + 1)
+					 withObject:[NSNumber numberWithInteger:rows]];
+		[[_tables objectAtIndex:(NSUInteger)(column + 1)] reloadData];
 	}
+	_lastColumn = column + 1;
 	[self tile];
 	[self scrollColumnToVisible:column + 1];
 }
