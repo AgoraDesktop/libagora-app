@@ -179,6 +179,13 @@
 			[path setLineWidth:1.0];
 			[path stroke];
 		}
+		/* **AND EACH COLUMN'S EDGE CARRIES THE SAME ONE-POINT HAIRLINE THE PANE SPLITTER DRAWS.** The gutter is the
+		 * split view's grip and it should read like one: a band of the window's face with a line down each side of it,
+		 * not a white column dissolving into grey. */
+		[ink setFill];
+		[[NSBezierPath bezierPathWithRect:NSMakeRect(NSMinX(gap), NSMinY(gap), 1.0, NSHeight(gap))] fill];
+		[[NSBezierPath bezierPathWithRect:NSMakeRect(NSMaxX(gap) - 1.0, NSMinY(gap), 1.0,
+							   NSHeight(gap))] fill];
 		x += frameWidth + AG_BROWSER_GAP;
 	}
 	}

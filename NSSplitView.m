@@ -317,6 +317,22 @@ static NSString * const AGCoderSplitAutosaveKey = @"autosaveName";
 			[path setLineWidth:1.0];
 			[path stroke];
 		}
+		/* **AND EACH PANE'S EDGE CARRIES THE TIER'S ONE-POINT HAIRLINE**, which is what this style's own notes assume
+		 * when they snap the panes to whole points "because a border drawn on a fractional edge is antialiased into a
+		 * lighter grey" — a border nothing drew until now. The gutter is eighteen points of the window's face with a
+		 * line down each side of it, so the panes are closed off the way every other surface in this tier is. */
+		[color setFill];
+		if (_vertical) {
+			[[NSBezierPath bezierPathWithRect:NSMakeRect(NSMinX(rect), NSMinY(rect), 1.0,
+								   NSHeight(rect))] fill];
+			[[NSBezierPath bezierPathWithRect:NSMakeRect(NSMaxX(rect) - 1.0, NSMinY(rect), 1.0,
+								   NSHeight(rect))] fill];
+		} else {
+			[[NSBezierPath bezierPathWithRect:NSMakeRect(NSMinX(rect), NSMinY(rect),
+								   NSWidth(rect), 1.0)] fill];
+			[[NSBezierPath bezierPathWithRect:NSMakeRect(NSMinX(rect), NSMaxY(rect) - 1.0,
+								   NSWidth(rect), 1.0)] fill];
+		}
 		return;
 	}
 	[color setFill];

@@ -651,7 +651,9 @@ int main(void)
 		for (y = 0; y < h; y++) {
 			BOOL dark = NO;
 
-			for (x = 80; x < 98; x++) {
+			/* THE EDGE COLUMNS ARE EXCLUDED: the pane splitter draws a hairline down each side of its gutter, so
+			 * every row has dark ink at x = 80 and x = 97 and a scan over the whole gutter would read one band. */
+			for (x = 81; x < 97; x++) {
 				if (lum([rep colorAtX:x y:y]) < 0.85) {
 					dark = YES;
 					break;
@@ -675,6 +677,28 @@ int main(void)
 			bandCount++;
 		}
 		check(bandCount == 3, "the pane splitter draws exactly three rings");
+
+		/* **AND EACH PANE'S EDGE IS CLOSED OFF WITH THE TIER'S ONE-POINT HAIRLINE.** The style snaps its panes to
+		 * whole points "because a border drawn on a fractional edge is antialiased into a lighter grey" — the border
+		 * itself was never drawn, so the gutter was the only place in a window where two surfaces met without a line. */
+		{
+			int probeY[3];
+			int ok = 1;
+
+			probeY[0] = 5;
+			probeY[1] = h / 2;
+			probeY[2] = h - 5;
+			for (i = 0; i < 3; i++) {
+				if (lum([rep colorAtX:80 y:probeY[i]]) > 0.8 || lum([rep colorAtX:97 y:probeY[i]]) > 0.8) {
+					ok = 0;
+				}
+			}
+			printf("  (note: gutter edges at x=80 and x=97, middle x=89 reads %g)\n",
+			       (double)lum([rep colorAtX:89 y:h / 2]));
+			check(ok, "both sides of the gutter carry a one-point hairline, top to bottom");
+			check(lum([rep colorAtX:89 y:h / 2]) > 0.85,
+			      "and the middle of the gutter stays the window's face, so the grip still reads");
+		}
 		for (i = 0; i < bandCount && i < 3; i++) {
 			int center = (bandStarts[i] + bandEnds[i]) / 2;
 			int want = 52 + i * 8;

@@ -410,7 +410,9 @@ int main(void)
 					for (y = 0; y < h; y++) {
 						BOOL dark = NO;
 
-						for (x = (NSInteger)NSMinX(gutter); x < (NSInteger)NSMaxX(gutter); x++) {
+						/* THE EDGE COLUMNS ARE EXCLUDED: the gutter wears a hairline down each side, so a scan
+					 * over the whole band would find one run of dark rows instead of three rings. */
+					for (x = (NSInteger)NSMinX(gutter) + 1; x < (NSInteger)NSMaxX(gutter) - 1; x++) {
 							unsigned char *p = px + (size_t)y * (size_t)stride + (size_t)x * 4u;
 
 							if ((p[0] + p[1] + p[2]) / 3 < 220) {
@@ -426,6 +428,27 @@ int main(void)
 						}
 					}
 					check(runs == 3, "and it carries the split view's three rings");
+
+					/* **AND BOTH SIDES OF THE GUTTER WEAR THE SAME HAIRLINE THE PANE SPLITTER DRAWS.** A column
+					 * is a pane: white dissolving into an eighteen-point grey band with no line is the one edge in
+					 * this window a person cannot name. */
+					{
+						int edgeX[2];
+						int ok = 1;
+						NSInteger k;
+
+						edgeX[0] = (NSInteger)NSMinX(gutter);
+						edgeX[1] = (NSInteger)NSMaxX(gutter) - 1;
+						for (k = 0; k < 2; k++) {
+							unsigned char *p = px + (size_t)(h / 2) * (size_t)stride
+								+ (size_t)edgeX[k] * 4u;
+
+							if ((p[0] + p[1] + p[2]) / 3 >= 220) {
+								ok = 0;
+							}
+						}
+						check(ok, "and a one-point hairline down each side of it, as the pane splitter has");
+					}
 				}
 				[rep release];
 			}
