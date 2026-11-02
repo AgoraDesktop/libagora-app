@@ -532,6 +532,17 @@ int main(void)
 		}
 		check(ink > 0, "the header draws its column titles");
 
+		/* **AND THE HEADER IS INVALIDATED WHEN THE SORT CHANGES.** The mark is drawn by the header view, which is a view of
+		 * its own: a sort change that only redraws the TABLE leaves the mark wherever it was first drawn — MEASURED as "the
+		 * triangle is stuck in the name column, and never changes direction". */
+		{
+			[header setNeedsDisplay:NO];
+			[table setSortDescriptors:[NSArray arrayWithObject:
+				[NSSortDescriptor sortDescriptorWithKey:@"date" ascending:NO]]];
+			check([header needsDisplay],
+			      "changing the sort marks the header for redraw, so the mark cannot stay where it was");
+		}
+
 		/* **AND THE SORT MARK NAMES THE COLUMN THE TABLE IS SORTED BY, AND POINTS THE WAY IT IS SORTED.** The header
 		 * view draws it — it is the only object that knows which column a descriptor names — and the mark moves with the
 		 * direction. MEASURED as "the triangle is stuck in the name column, and never changes direction": the header CELL

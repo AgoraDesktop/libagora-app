@@ -1005,6 +1005,10 @@ static NSString * const AGCoderTableVerticalMotionKey = @"verticalMotionCanBegin
 
 	_sortDescriptors = copy;
 	[self setNeedsDisplay:YES];
+	/* **AND THE HEADER IS A VIEW OF ITS OWN, SO IT IS INVALIDATED SEPARATELY.** MEASURED as "the triangle is stuck in the
+	 * name column, and never changes direction": the mark is drawn by `NSTableHeaderView`, the descriptor changed, and the
+	 * header was never told to repaint — so the mark stayed wherever it was last drawn until something else damaged it. */
+	[_headerView setNeedsDisplay:YES];
 	[self cg_saveAutosave];
 	[self cg_announceSortDescriptorsChangedFrom:old];
 	[old release];
