@@ -1010,6 +1010,23 @@ static CGFloat fn_standard_width(NSToolbarItem *item, NSToolbarDisplayMode displ
 	[self cg_relayout];
 }
 
+/* **AND THE BAND IS RESIZED WITH `-setFrame:`, WHICH NEVER CALLS `-setFrameSize:`.** `NSWindow` writes the band's
+ * geometry with one `-setFrame:` per layout pass, and this class's only hook was the piecewise door — so a window resize
+ * moved the band's frame and left every item where the OLD width had put them: MEASURED, "it's still not expanding the
+ * spacer", a 1100-point band whose right edge answered no item at all (the flexible spacer and the view switcher were
+ * still laid out for 900). `-cg_frameDidChangeFrom:` is the hook the whole class tree notices a frame through, so the
+ * relayout hangs on it and covers both doors. */
+- (void)cg_frameDidChangeFrom:(NSRect)previousFrame
+{
+	NSSize was = previousFrame.size;
+	NSSize now = [self bounds].size;
+
+	[super cg_frameDidChangeFrom:previousFrame];
+	if (was.width != now.width || was.height != now.height) {
+		[self cg_relayout];
+	}
+}
+
 @end
 
 /* ============================================================================================ *
