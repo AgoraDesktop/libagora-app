@@ -58,33 +58,6 @@
 	[[NSBezierPath bezierPathWithRect:NSMakeRect(NSMaxX(cellFrame) - 1.0, NSMinY(cellFrame),
 						     1.0, NSHeight(cellFrame))] fill];
 	[self drawInteriorWithFrame:cellFrame inView:controlView];
-	/* **AND THE INDICATOR, WHEN THIS COLUMN IS THE ONE SORTED.** `-drawSortIndicatorWithFrame:…` has been on this class
-	 * since it was written and nothing called it: a header could sort a table and never say so, which reads as a header
-	 * that did nothing. The column knows its own prototype, so the match is between that key and the table's first
-	 * descriptor — Apple's rule, and the one a click produces. */
-	{
-		NSTableHeaderView *header = [controlView isKindOfClass:[NSTableHeaderView class]]
-			? (NSTableHeaderView *)controlView : nil;
-		NSTableView *table = [header tableView];
-		NSSortDescriptor *first = ([[table sortDescriptors] count] > 0)
-			? [[table sortDescriptors] objectAtIndex:0] : nil;
-		NSTableColumn *column = nil;
-		NSUInteger i;
-
-		if (table != nil && first != nil) {
-			for (i = 0; i < [[table tableColumns] count] && column == nil; i++) {
-				NSTableColumn *candidate = [[table tableColumns] objectAtIndex:i];
-
-				if ([candidate headerCell] == self) {
-					column = candidate;
-				}
-			}
-		}
-		if (column != nil && [[[column sortDescriptorPrototype] key] isEqual:[first key]]) {
-			[self drawSortIndicatorWithFrame:cellFrame inView:controlView ascending:[first ascending]
-						priority:0];
-		}
-	}
 }
 
 /* **THE WORD IS CENTRED HERE RATHER THAN BY `NSTextFieldCell`.** A field draws from its left inset, which is right

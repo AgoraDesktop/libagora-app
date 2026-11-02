@@ -19,6 +19,7 @@
 #import <AppKit/NSClipView.h>
 #import <AppKit/NSTableView.h>
 #import <AppKit/NSTableColumn.h>
+#import <AppKit/NSTableHeaderCell.h>
 #import <AppKit/NSTableHeaderView.h>
 #import <AppKit/NSScrollView_internal.h>
 #import <AppKit/NSColor.h>
@@ -223,6 +224,48 @@ static NSEvent *mouseWithFlags(int type, NSPoint where, NSInteger windowNumber, 
 	return [NSEvent mouseEventWithType:(NSEventType)type location:where modifierFlags:flags
 				 timestamp:0.0 windowNumber:windowNumber context:nil
 				 eventNumber:0 clickCount:1 pressure:1.0f];
+}
+
+/* **THE HEADER'S INK, IN ONE RECTANGLE.** The header is painted into the probe's own bitmap (the helper the title check
+ * above uses), and the dark pixels inside `rect` are counted — the sort mark is the only dark thing in that right-hand
+ * zone, which is what makes "is it there, and which way does it point" answerable without a screenshot. */
+/* **THE MARK'S INK IN ONE COLUMN'S RIGHT-HAND ZONE.** The header is painted into the probe's own bitmap (the same door
+ * the title check uses) and the dark pixels inside the column's last fourteen points are counted — clear of the centred
+ * title, inside the one-point edge, which is the strip a sort mark lives in. `centroidY`, when wanted, is the mean y of
+ * that ink, so "is it there" and "which way does it point" are one measurement. */
+static int headerMarkInk(NSView *header, NSBitmapImageRep *rep, NSInteger column, CGFloat *centroidY)
+{
+	NSGraphicsContext *ctx = [NSGraphicsContext graphicsContextWithBitmapImageRep:rep];
+	NSRect rect = [(NSTableHeaderView *)header headerRectOfColumn:column];
+	int x, y, ink = 0;
+	long sumY = 0;
+
+	[NSGraphicsContext setCurrentContext:ctx];
+	[[NSColor whiteColor] setFill];
+	[[NSBezierPath bezierPathWithRect:[header bounds]] fill];
+	{
+		CGContextRef cg = (CGContextRef)[ctx graphicsPort];
+
+		CGContextTranslateCTM(cg, 0.0, [header bounds].size.height);
+		CGContextScaleCTM(cg, 1.0, -1.0);
+	}
+	[header displayRect:[header bounds]];
+	for (x = (int)(NSMaxX(rect) - 14.0); x < (int)NSMaxX(rect) - 1; x++) {
+		for (y = 0; y < (int)NSHeight([header bounds]); y++) {
+			NSColor *pixel = (x >= 0 && x < (int)[rep pixelsWide] && y < (int)[rep pixelsHigh])
+				? [rep colorAtX:x y:y] : nil;
+
+			if (pixel != nil && [pixel redComponent] < 0.4 && [pixel greenComponent] < 0.4
+			    && [pixel blueComponent] < 0.4) {
+				ink++;
+				sumY += y;
+			}
+		}
+	}
+	if (centroidY != NULL) {
+		*centroidY = (ink > 0) ? (CGFloat)sumY / (CGFloat)ink : 0.0;
+	}
+	return ink;
 }
 
 int main(void)
@@ -488,7 +531,31 @@ int main(void)
 			}
 		}
 		check(ink > 0, "the header draws its column titles");
-		[rep release];
+
+		/* **AND THE SORT MARK NAMES THE COLUMN THE TABLE IS SORTED BY, AND POINTS THE WAY IT IS SORTED.** The header
+		 * view draws it — it is the only object that knows which column a descriptor names — and the mark moves with the
+		 * direction. MEASURED as "the triangle is stuck in the name column, and never changes direction": the header CELL
+		 * used to guess its own column and left a second, motionless mark on the first one.
+		 *
+		 * The mark lives in the column's right-hand zone, clear of the centred title and inside the one-point edge, so
+		 * that band is where the ink is counted — and WHERE in it (the mean y) is the direction. */
+		{
+			int sizeInk, nameInk, upInk;
+			CGFloat downCentroid = 0.0, upCentroid = 0.0;
+
+			[table setSortDescriptors:[NSArray arrayWithObject:
+				[NSSortDescriptor sortDescriptorWithKey:@"date" ascending:YES]]];
+			sizeInk = headerMarkInk(header, rep, 1, &downCentroid);
+			nameInk = headerMarkInk(header, rep, 0, NULL);
+			check(sizeInk > 0, "the sorted column wears the sort mark");
+			check(nameInk == 0, "and the name column does not wear one");
+
+			[table setSortDescriptors:[NSArray arrayWithObject:
+				[NSSortDescriptor sortDescriptorWithKey:@"date" ascending:NO]]];
+			upInk = headerMarkInk(header, rep, 1, &upCentroid);
+			check(upInk > 0 && fabs((double)(upCentroid - downCentroid)) > 1.0,
+			      "and the mark moves when the direction does, rather than standing still");
+		}
 	}
 
 	/* 8. A HIDDEN COLUMN TAKES NO WIDTH. */
