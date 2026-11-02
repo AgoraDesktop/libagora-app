@@ -159,7 +159,7 @@ int main(void)
 
 		/* 5. **AND THEN THE SYSTEM'S THEMES, WHICH IS WHERE A SYMBOL COMES FROM.** `hammer` is not one of AppKit's
 		 * names and not a resource of this program, so it can only be answered by the installed themes — and the test
-		 * runs with `AGORA_ICON_THEME` at the CHECKOUT's Frost, so it is the SIBLING `Tabler` that answers it. That is
+		 * runs with `AGORA_ICON_THEME` at the CHECKOUT's `Tabler`, the one theme this tree still vendors. That is
 		 * the arrangement the desktop ships: nine symbols are no longer compiled into every application that wants them.
 		 *
 		 * The PIXELS are asserted as well as the answer, because a theme icon arrives as a `CGImage` and the first
@@ -184,8 +184,11 @@ int main(void)
 			check(rep != nil && [rep bitmapData] != NULL,
 			      "and the representation OWNS its pixels — a borrowed picture cannot be a template");
 
-			/* A name the theme IN CHARGE carries is answered from it, so the fallback does not shadow Frost's art. */
-			check([NSImage imageNamed:@"folder"] != nil, "and a name Frost carries is answered from Frost");
+			/* **AND A NAME NO THEME CARRIES IS STILL AN IMAGE.** `folder` is not in `Tabler` (places art is the theme in
+			 * charge's, and the desktop's own is rendered rather than installed), so this asks what a caller gets when the
+			 * theme has nothing: the drawn generic, which is the same floor every name has. */
+			check([NSImage imageNamed:@"folder"] != nil,
+			      "and a name the theme does not carry is answered by the drawn generic");
 		}
 	}
 	return s_failed != 0;
