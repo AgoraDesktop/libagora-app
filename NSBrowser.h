@@ -466,6 +466,11 @@ enum {
  * the strip, centred on it. */
 + (CGFloat)cg_titleBaselineInRect:(NSRect)rect font:(nullable NSFont *)font;
 
+/* **WHERE THE STRIP'S HAIRLINE GOES, ANSWERED THE SAME WAY.** The rule belongs on the edge the list is under — the LARGER
+ * y in the browser's flipped document, the smaller one in an unflipped caller's surface — and the door asks the caller
+ * which of the two it is drawing in rather than reading it from the context itself, so a probe can hold both answers. */
++ (NSRect)cg_titleRuleRectInRect:(NSRect)rect flipped:(BOOL)flipped;
+
 @end
 
 NS_ASSUME_NONNULL_END

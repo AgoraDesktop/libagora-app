@@ -321,6 +321,27 @@ int main(void)
 			      "and the box is centred on the strip's middle, not pushed against either edge");
 		}
 
+		/* **AND THE HAIRLINE IS ON THE EDGE THE LIST IS UNDER.** The browser's document view is FLIPPED, so the list begins
+		 * at the strip's LARGER y; a rule drawn at the smaller one lands on the strip's TOP, where the path bar's own
+		 * hairline already is — a doubled line, and nothing at all between the band and the list. MEASURED on the glass as
+		 * "the uneven application of the border hairline at the edges of things". */
+		{
+			NSRect strip = NSMakeRect(10.0, 4.0, 120.0, 18.0);
+			NSRect flippedRule = [NSBrowser cg_titleRuleRectInRect:strip flipped:YES];
+			NSRect uprightRule = [NSBrowser cg_titleRuleRectInRect:strip flipped:NO];
+
+			printf("  (note: flipped rule %g..%g, upright rule %g..%g, strip %g..%g)\n",
+			       (double)NSMinY(flippedRule), (double)NSMaxY(flippedRule),
+			       (double)NSMinY(uprightRule), (double)NSMaxY(uprightRule),
+			       (double)NSMinY(strip), (double)NSMaxY(strip));
+			check(near_enough(NSMaxY(flippedRule), NSMaxY(strip)) && near_enough(NSHeight(flippedRule), 1.0),
+			      "in the browser's flipped document the rule is on the strip's larger y, which is where its list begins");
+			check(near_enough(NSMinY(uprightRule), NSMinY(strip)) && near_enough(NSHeight(uprightRule), 1.0),
+			      "and in an unflipped caller's own surface it is on the smaller y, which is where its list is");
+			check(near_enough(NSMinX(flippedRule), NSMinX(strip)) && near_enough(NSWidth(flippedRule), NSWidth(strip)),
+			      "either way it spans the strip's width, from the strip's own left edge");
+		}
+
 		/* THE NEGATIVE CONTROL: the SAME band with no title draws no text. */
 		{
 			NSBitmapImageRep *bare = new_rep(160, 20);

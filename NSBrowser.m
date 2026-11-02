@@ -1524,6 +1524,17 @@ static NSString * const AGCoderBrowserCellPrototypeKey = @"cellPrototype";
 	return NSMidY(rect) + (ascender - descent) / 2.0;
 }
 
++ (NSRect)cg_titleRuleRectInRect:(NSRect)rect flipped:(BOOL)flipped
+{
+	/* **THE RULE IS ON THE EDGE THE LIST IS UNDER, AND WHICH EDGE THAT IS DEPENDS ON THE CONTEXT.** The document view is
+	 * FLIPPED, so its y grows downwards and the list is under the strip's LARGER y; a caller drawing in its own y-up
+	 * surface has the list above it. MEASURED on the glass before this: the strip wore the rule at its TOP — where the
+	 * path bar's own hairline already is, a doubled line — and nothing where the list began, so the browser's bands were
+	 * the only ones in the window not closed off. */
+	return NSMakeRect(NSMinX(rect), (flipped ? NSMaxY(rect) : NSMinY(rect)) - (flipped ? 1.0 : 0.0),
+			  NSWidth(rect), 1.0);
+}
+
 - (void)drawTitleOfColumn:(NSInteger)column inRect:(NSRect)rect
 {
 	NSString *title;
@@ -1534,8 +1545,19 @@ static NSString * const AGCoderBrowserCellPrototypeKey = @"cellPrototype";
 	}
 	[[NSColor colorWithCalibratedWhite:0.92 alpha:1.0] setFill];
 	[[NSBezierPath bezierPathWithRect:rect] fill];
-	[[NSColor controlDarkShadowColor] setFill];
-	[[NSBezierPath bezierPathWithRect:NSMakeRect(NSMinX(rect), NSMinY(rect), NSWidth(rect), 1.0)] fill];
+	/* **AND THE HAIRLINE IS ON THE EDGE THE LIST IS UNDER, which the TRANSFORM says and `-isFlipped` does not.** The
+	 * browser's document view is flipped and the context it draws in still answers NO, because the mirror lives in the
+	 * CTM — the same reason the cell classes read `CGContextGetCTM`. A POSITIVE `d` is the downward one here, because
+	 * the renderer's canvas is itself y-down. MEASURED before this: the strip wore its rule at its TOP, doubling the
+	 * path bar's own hairline, and nothing where the list began. */
+	{
+		CGContextRef cg = (CGContextRef)[[NSGraphicsContext currentContext] graphicsPort];
+		CGAffineTransform transform = (cg != NULL) ? CGContextGetCTM(cg) : CGAffineTransformIdentity;
+
+		[[NSColor controlDarkShadowColor] setFill];
+		[[NSBezierPath bezierPathWithRect:[NSBrowser cg_titleRuleRectInRect:rect
+			flipped:(transform.d > 0.0)]] fill];
+	}
 
 	title = [self titleOfColumn:column];
 	if (title == nil || [title length] == 0) {
