@@ -3054,11 +3054,80 @@ const CGFloat NSFullScreenModeWindowLevel = 100.0;
 	}
 }
 
+/* ============================================================================================
+ * THE LAYOUT HOLD: ONE PASS FOR A BURST OF FRAME WRITES.
+ *
+ * A hold is a depth, because the code that rearranges one subtree is itself called from code that rearranges another.
+ * The roots that asked are kept in order and by identity, so a window asked twice is solved once.
+ * ============================================================================================ */
+#define AG_LAYOUT_HOLD_ROOTS	8
+
+static NSUInteger sLayoutHoldDepth = 0;
+static NSView *sLayoutHoldRoots[AG_LAYOUT_HOLD_ROOTS];
+static NSUInteger sLayoutHoldRootCount = 0;
+
+static NSUInteger cg_layout_hold_depth(void)
+{
+	return sLayoutHoldDepth;
+}
+
+static void cg_layout_hold_root(NSView *view)
+{
+	NSView *root = view;
+	NSUInteger i;
+
+	while ([root superview] != nil) {
+		root = [root superview];
+	}
+	for (i = 0; i < sLayoutHoldRootCount; i++) {
+		if (sLayoutHoldRoots[i] == root) {
+			return;
+		}
+	}
+	if (sLayoutHoldRootCount < AG_LAYOUT_HOLD_ROOTS) {
+		sLayoutHoldRoots[sLayoutHoldRootCount++] = root;
+	}
+}
+
++ (void)cg_beginLayoutHold
+{
+	sLayoutHoldDepth++;
+}
+
++ (void)cg_endLayoutHold
+{
+	NSUInteger i, count;
+
+	if (sLayoutHoldDepth == 0) {
+		return;
+	}
+	sLayoutHoldDepth--;
+	if (sLayoutHoldDepth > 0) {
+		return;
+	}
+	count = sLayoutHoldRootCount;
+	sLayoutHoldRootCount = 0;
+	for (i = 0; i < count; i++) {
+		NSView *root = sLayoutHoldRoots[i];
+
+		sLayoutHoldRoots[i] = nil;
+		[root cg_runLayoutPass];
+	}
+}
+
 - (void)cg_requestLayout
 {
 	NSView *root;
 
 	if (AGLayoutIsInPass()) {
+		return;
+	}
+	/* **A VIEW THAT IS REARRANGING A SUBTREE IS NOT ASKING FOR THE WINDOW'S EQUATIONS.** Some doors write a dozen frames
+	 * in a row — a browser tiling its columns, a table laying out its rows — and every one of them used to solve the whole
+	 * window's constraints by itself: MEASURED, 160 passes of 18 ms behind one folder creation, which is the second or two
+	 * "before it shows up". A hold collects the roots that asked and runs one pass for each when it is released. */
+	if (cg_layout_hold_depth() > 0) {
+		cg_layout_hold_root(self);
 		return;
 	}
 	/* **NO ACTIVE CONSTRAINT ANYWHERE IS THE FAST PATH, AND IT IS THE COMMON ONE.** Every frame set in this tier asks

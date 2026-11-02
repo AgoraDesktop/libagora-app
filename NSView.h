@@ -298,6 +298,13 @@ extern NSString *NSDefinitionPresentationTypeOverlay;
 	NSSize _cg_autoresizingParentSize;
 }
 
+/* **A BURST OF FRAME WRITES ASKS FOR ONE LAYOUT PASS, NOT ONE PER FRAME.** Every `-setFrame:` in this tier solves the
+ * window's equations, which is right for a person resizing one window and wrong for a view tiling a dozen children — a
+ * browser's columns and a table's rows both do that. A hold collects the roots that asked and flushes one pass each on
+ * release; holds nest, because the code rearranging one subtree is called from code rearranging another. */
++ (void)cg_beginLayoutHold;
++ (void)cg_endLayoutHold;
+
 /* **THE ONE METRIC THAT IS NOT A NUMBER.** Apple's intrinsic size has a sentinel for "this view has no opinion" —
  * -1 — and its 10.7 spelling was misspelled (`NSViewNoInstrinsicMetric`). Both names are defined so a ported caller
  * can use either; the value is the same and the engine compares against it rather than against zero, because a

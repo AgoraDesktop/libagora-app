@@ -1830,6 +1830,9 @@ static NSString * const AGCoderBrowserCellPrototypeKey = @"cellPrototype";
 
 - (void)tile
 {
+	/* **THE COLUMNS ARE ONE LAYOUT, NOT A DOZEN.** Every frame written below would otherwise solve the window's
+	 * constraints on its own; the hold makes the whole tiling one pass. */
+	[NSView cg_beginLayoutHold];
 	CGFloat gap = _separatesColumns ? AG_BROWSER_GAP : 0.0;
 	NSSize available = [NSScrollView contentSizeForFrameSize:[self bounds].size
 							  hasHorizontalScroller:_hasHorizontalScroller
@@ -1928,6 +1931,7 @@ static NSString * const AGCoderBrowserCellPrototypeKey = @"cellPrototype";
 		[[_documentView window] invalidateCursorRectsForView:_documentView];
 	}
 	_firstVisibleColumn = [self firstVisibleColumn];
+	[NSView cg_endLayoutHold];
 }
 
 - (void)resizeSubviewsWithOldSize:(NSSize)oldSize

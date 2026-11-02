@@ -38,6 +38,7 @@
 #import <AppKit/NSTextField.h>
 #import <AppKit/NSLayoutConstraint.h>
 #import <AppKit/NSLayoutAnchor.h>
+#import <AppKit/NSWindow.h>
 #import <Foundation/Foundation.h>
 
 #include <math.h>
@@ -119,6 +120,41 @@ static int rect_is(NSRect r, CGFloat x, CGFloat y, CGFloat w, CGFloat h)
 int main(void)
 {
 	@autoreleasepool {
+		/* **A LAYOUT HOLD: ONE PASS FOR A BURST OF FRAME WRITES.** A view that rearranges a dozen children writes a dozen
+		 * frames, and every one of them used to solve the window's equations by itself — MEASURED as 160 passes behind one
+		 * folder creation, the second or two before a new folder appeared in a browser. Inside a hold nothing is solved;
+		 * the release solves once, and the view a constraint pins is where the equations put it. */
+		{
+			NSWindow *window = [[NSWindow alloc] initWithContentRect:NSMakeRect(0.0, 0.0, 300.0, 200.0)
+				styleMask:NSBorderlessWindowMask backing:NSBackingStoreBuffered defer:YES];
+			NSView *content = [[NSView alloc] initWithFrame:NSMakeRect(0.0, 0.0, 300.0, 200.0)];
+			NSView *pinned = [[NSView alloc] initWithFrame:NSMakeRect(0.0, 0.0, 10.0, 10.0)];
+
+			[window setContentView:content];
+			[content addSubview:pinned];
+			[pinned setTranslatesAutoresizingMaskIntoConstraints:NO];
+			[NSLayoutConstraint activateConstraints:[NSArray arrayWithObjects:
+				[[pinned trailingAnchor] constraintEqualToAnchor:[content trailingAnchor] constant:-10.0],
+				[[pinned topAnchor] constraintEqualToAnchor:[content topAnchor] constant:10.0],
+				[[pinned widthAnchor] constraintEqualToConstant:10.0],
+				[[pinned heightAnchor] constraintEqualToConstant:10.0],
+				nil]];
+			check(near([pinned frame].origin.x, 280.0), "a pinned view starts where its equations put it");
+
+			[NSView cg_beginLayoutHold];
+			[content setFrameSize:NSMakeSize(400.0, 200.0)];
+			printf("  (note: inside the hold the pinned view is at x=%g, with the content %g wide)\n",
+			       (double)[pinned frame].origin.x, (double)[content frame].size.width);
+			check(near([pinned frame].origin.x, 280.0),
+			      "inside a hold a frame change does NOT solve the equations");
+			[NSView cg_endLayoutHold];
+			check(near([pinned frame].origin.x, 380.0),
+			      "and the release solves them once, so the pinned view follows the wider content");
+			[pinned release];
+			[content release];
+			[window release];
+		}
+
 		/* 1. THE CLASS. */
 		{
 			NSView *a = [[NSView alloc] initWithFrame:NSMakeRect(0.0, 0.0, 10.0, 10.0)];
