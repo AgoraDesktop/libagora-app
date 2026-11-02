@@ -196,6 +196,12 @@ extern NSString *NSTableViewColumnDidResizeNotification;
 	NSPasteboard *_cgDragPasteboard;	/* RETAINED while a drag is in flight */
 	NSPoint _cgDragStartPoint;
 	BOOL _cgDragging;
+	/* **WHETHER A PRESS THIS TABLE HANDLED IS STILL OPEN.** A subclass may consume a press and never call
+	 * `-mouseDown:` — `NSOutlineView` does exactly that for its disclosure triangle — and the window still sends the
+	 * drags and the release of that gesture HERE, because the gesture belongs to the view it hit. Without this a
+	 * jitter after a triangle click started a drag from whatever row the LAST ordinary click had set, and the next
+	 * click dropped it: files moved when a folder was opened. */
+	BOOL _cgPressActive;
 	NSTableViewColumnAutoresizingStyle _columnAutoresizingStyle;
 	/* THE DEPRECATED AUTORESIZE FLAG IS A SPELLING OF THE STYLE, and `tile` is the reader of both: Uniform fills the
 	 * width proportionally, LastColumnOnly gives the difference to the last column, and the sequential pair walks from

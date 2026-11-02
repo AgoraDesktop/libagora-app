@@ -139,6 +139,7 @@ static int text_band_in_row(NSTableView *table, BOOL flip, int row, double *cent
 	int willDisplay;
 	int sortChanges;
 	int selectionChanges;
+	int dragWrites;		/* how many times the drag source was asked for rows */
 }
 @end
 
@@ -186,6 +187,16 @@ static int text_band_in_row(NSTableView *table, BOOL flip, int row, double *cent
 	return row != 4;	/* one row refuses, so the delegate's answer is exercised */
 }
 
+- (BOOL)tableView:(NSTableView *)tableView writeRowsWithIndexes:(NSIndexSet *)rowIndexes
+   toPasteboard:(NSPasteboard *)pasteboard
+{
+	(void)tableView;
+	(void)rowIndexes;
+	(void)pasteboard;
+	dragWrites++;
+	return YES;
+}
+
 - (void)tableViewSelectionDidChange:(NSNotification *)notification
 {
 	(void)notification;
@@ -203,6 +214,13 @@ static int text_band_in_row(NSTableView *table, BOOL flip, int row, double *cent
 static NSEvent *mouse(int type, NSPoint where, NSInteger windowNumber)
 {
 	return [NSEvent mouseEventWithType:(NSEventType)type location:where modifierFlags:0
+				 timestamp:0.0 windowNumber:windowNumber context:nil
+				 eventNumber:0 clickCount:1 pressure:1.0f];
+}
+
+static NSEvent *mouseWithFlags(int type, NSPoint where, NSInteger windowNumber, NSUInteger flags)
+{
+	return [NSEvent mouseEventWithType:(NSEventType)type location:where modifierFlags:flags
 				 timestamp:0.0 windowNumber:windowNumber context:nil
 				 eventNumber:0 clickCount:1 pressure:1.0f];
 }
@@ -309,6 +327,51 @@ int main(void)
 	      "a multiple selection keeps the rows the delegate allows and drops the one it refuses");
 	[table deselectAll:nil];
 	check([table numberOfSelectedRows] == 0, "deselectAll: clears the selection");
+
+	/* 3a. **A CONTROL-CLICK TOGGLES A ROW, WHICH IS WHAT IT DOES EVERYWHERE ELSE.** Command is the Mac's spelling of
+	 * "add this one too" and Control is every other desktop's; both must reach the same selection rule, or a person who
+	 * pressed the one their habits taught them gets nothing. Shift-click is the run between the anchor and the row. */
+	{
+		/* Row 1 is 20 points tall at y = 22, so 32 is inside it; row 2 starts at 44. */
+		NSPoint rowOne = [table convertPoint:NSMakePoint(10.0, 32.0) toView:nil];
+		NSInteger number = [window windowNumber];
+
+		[table selectRowIndexes:[NSIndexSet indexSetWithIndex:2] byExtendingSelection:NO];
+		[table mouseDown:mouseWithFlags(NSLeftMouseDown, rowOne, number, NSControlKeyMask)];
+		check([table numberOfSelectedRows] == 2 && [table isRowSelected:1] && [table isRowSelected:2],
+		      "a Control-click adds a row to the selection, as a Command-click does");
+		[table mouseDown:mouseWithFlags(NSLeftMouseDown, rowOne, number, NSControlKeyMask)];
+		check([table numberOfSelectedRows] == 1 && ![table isRowSelected:1] && [table isRowSelected:2],
+		      "and a second one on the same row takes it away again");
+		[table mouseDown:mouseWithFlags(NSLeftMouseDown, rowOne, number, NSCommandKeyMask)];
+		check([table numberOfSelectedRows] == 2 && [table isRowSelected:1] && [table isRowSelected:2],
+		      "a Command-click toggles too, so neither modifier is the only one that works");
+		[table deselectAll:nil];
+		[table selectRowIndexes:[NSIndexSet indexSetWithIndex:2] byExtendingSelection:NO];
+		[table mouseDown:mouseWithFlags(NSLeftMouseDown, rowOne, number, NSShiftKeyMask)];
+		check([table numberOfSelectedRows] == 2 && [table isRowSelected:1] && [table isRowSelected:2],
+		      "and a Shift-click takes the run between the anchor and the row clicked");
+		[table deselectAll:nil];
+	}
+
+	/* 3b. **A CLICK CANNOT BECOME A DRAG.** The threshold is the row: a hand's tremor during an ordinary click crosses a
+	 * four-point threshold, and in a file manager a table drag that ends one row lower MOVES the file into that row's
+	 * folder — MEASURED on this machine, a click whose pointer drifted sixteen device pixels took a folder into the
+	 * folder below it. So a press whose pointer stays inside its own row writes nothing to the pasteboard and starts no
+	 * session; only leaving the row can begin one. */
+	{
+		NSPoint press = [table convertPoint:NSMakePoint(10.0, 54.0) toView:nil];	/* inside row 2 */
+		NSPoint within = [table convertPoint:NSMakePoint(24.0, 58.0) toView:nil];	/* still row 2 */
+		NSInteger before = probe->dragWrites;
+
+		[table selectRowIndexes:[NSIndexSet indexSetWithIndex:2] byExtendingSelection:NO];
+		[table mouseDown:mouseWithFlags(NSLeftMouseDown, press, [window windowNumber], 0)];
+		[table mouseDragged:mouse(NSLeftMouseDragged, within, [window windowNumber])];
+		check(probe->dragWrites == before,
+		      "a drag that never leaves the row it began in writes nothing: a click cannot move a row");
+		check([table numberOfSelectedRows] == 1 && [table isRowSelected:2],
+		      "and the selection is the row that was clicked");
+	}
 
 	/* 4. THE HEADER'S DIVIDER DRAG. */
 	{

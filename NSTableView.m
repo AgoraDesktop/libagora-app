@@ -272,6 +272,7 @@ static NSString * const AGCoderTableVerticalMotionKey = @"verticalMotionCanBegin
 		_cgDragRows = nil;
 		_cgDragPasteboard = nil;
 		_cgDragging = NO;
+		_cgPressActive = NO;
 		_intercellSpacing = NSMakeSize(3.0, 2.0);
 		_gridStyleMask = NSTableViewGridNone;
 		_columnAutoresizingStyle = NSTableViewNoColumnAutoresizing;
@@ -1677,6 +1678,9 @@ static NSString * const AGCoderTableVerticalMotionKey = @"verticalMotionCanBegin
 	NSPoint point = [self convertPoint:[event locationInWindow] fromView:nil];
 	NSUInteger modifiers = [event modifierFlags];
 
+	/* **THIS PRESS IS THIS TABLE'S.** Only a press that comes through here may start a drag; see `_cgPressActive`. */
+	_cgPressActive = YES;
+
 	[_cgTypeSelectString setString:@""];
 	_cgTypeSelectTime = 0.0;
 	_cgDragStartPoint = point;
@@ -1697,7 +1701,12 @@ static NSString * const AGCoderTableVerticalMotionKey = @"verticalMotionCanBegin
 		return;
 	}
 	[self fn_announceSelectionIsChanging];
-	if ((modifiers & NSCommandKeyMask) != 0) {
+	/* **COMMAND AND CONTROL ARE THE SAME MODIFIER HERE, AND THAT IS DELIBERATE.** Apple's table toggles a row on a
+	 * Command-click; on this desktop a person coming from Linux presses Control, because that is what every list on
+	 * that side of the fence does. Accepting either is one selection rule with two spellings rather than a second
+	 * gesture to document; Control-click no longer opens the context menu, which this interface never did — the menu
+	 * is the right button's, everywhere. */
+	if ((modifiers & (NSCommandKeyMask | NSControlKeyMask)) != 0) {
 		NSMutableIndexSet *next = [[NSMutableIndexSet alloc] init];
 
 		[next addIndexes:_selectedRowIndexes];
@@ -1829,6 +1838,14 @@ static NSString * const AGCoderTableVerticalMotionKey = @"verticalMotionCanBegin
 	return image;
 }
 
+- (void)mouseUp:(NSEvent *)event
+{
+	/* **THE GESTURE IS OVER.** The window binds the press, the drags and the release to the view it hit, so this is the
+	 * end of a press this table saw — or of one a subclass consumed, in which case there was nothing to end. */
+	_cgPressActive = NO;
+	[super mouseUp:event];
+}
+
 - (void)mouseDragged:(NSEvent *)event
 {
 	NSPoint point;
@@ -1843,8 +1860,29 @@ static NSString * const AGCoderTableVerticalMotionKey = @"verticalMotionCanBegin
 		}
 		return;
 	}
+	/* **AND THE DRAG BELONGS TO A PRESS THAT IS STILL OPEN.** Without this, a press a SUBCLASS consumed — the outline's
+	 * disclosure triangle toggles and returns without calling `-mouseDown:` — left `_clickedRow` and the drag's start
+	 * point from the last ordinary click, so a twitch of the hand after opening a folder began a drag of that stale row
+	 * and the next click completed it as a DROP. MEASURED as "opening a disclosure triangle moves files". */
+	if (!_cgPressActive) {
+		[super mouseDragged:event];
+		return;
+	}
 	point = [self convertPoint:[event locationInWindow] fromView:nil];
 	if (_verticalMotionCanBeginDrag) {
+		/* **A DRAG HAS TO LEAVE THE ROW THE PRESS LANDED IN.** A four-point threshold is what Apple's tables use, and
+		 * on a trackpad it is crossed by the hand's own tremor during an ordinary click — which turns a click into a
+		 * drag, and in a file manager a drag that ends one row lower MOVES the item into that row's folder. MEASURED
+		 * on this machine: a click whose pointer drifted sixteen device pixels down took a folder into its neighbour.
+		 *
+		 * The row is the honest threshold for a table, because a drag that stays inside its own row means nothing here
+		 * either way: dropping there is refused (the folder is the one the item already lives in), so the only drag a row
+		 * can start is one that reaches another row — and requiring that is exactly requiring the pointer to leave the
+		 * row before a session may begin. A click can then never move anything: it would have to become a real drag
+		 * first, which is a gesture a person can see. */
+		if ([self rowAtPoint:point] == [self rowAtPoint:_cgDragStartPoint]) {
+			return;
+		}
 		if (fabs((double)(point.x - _cgDragStartPoint.x)) < 4.0
 		    && fabs((double)(point.y - _cgDragStartPoint.y)) < 4.0) {
 			return;

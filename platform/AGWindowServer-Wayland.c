@@ -1647,6 +1647,18 @@ static void pointer_leave(void *data, struct wl_pointer *pointer, uint32_t seria
 	server->pointer_focus = NULL;
 }
 
+/* **THE MODIFIERS A POINTER EVENT CARRIES, WHICH THE PROTOCOL DOES NOT SEND WITH IT.** `wl_pointer` has no modifier
+ * state — the keyboard owns it — so every mouse event that reaches AppKit has to be stamped from this client's own
+ * keyboard state, fed by the compositor's `wl_keyboard.modifiers`. THE BUTTON AND MOTION HANDLERS USED TO LEAVE THAT
+ * FIELD AT ZERO, and the consequence was not subtle: every `-mouseDown:` in a live session had `-modifierFlags` of 0,
+ * so Shift-click, Command-click and Control-click did nothing at all while the suites — which build their own
+ * `NSEvent`s — passed. The wheel had already been fixed this way (see `pointer_frame`); this is the same answer for
+ * the two events that decide a selection. */
+static uint32_t pointer_event_modifiers(AGWindowServer *server)
+{
+	return (server->keyboard_state != NULL) ? AGKeyboardModifiers(server->keyboard_state) : 0;
+}
+
 static void pointer_motion(void *data, struct wl_pointer *pointer, uint32_t time, wl_fixed_t sx, wl_fixed_t sy)
 {
 	AGWindowServer *server = data;
@@ -1658,6 +1670,7 @@ static void pointer_motion(void *data, struct wl_pointer *pointer, uint32_t time
 	memset(&event, 0, sizeof event);
 	event.type = AGEventPointerMotion;
 	event.time_ms = time != 0 ? time : ag_now_ms();
+	event.modifiers = pointer_event_modifiers(server);
 	event.x = server->pointer_x;
 	event.y = server->pointer_y;
 	/* THE ABSOLUTE POSITION THE COMPOSITOR LAST SENT FOR THIS WINDOW, attached so the two travel together. */
@@ -1681,6 +1694,7 @@ static void pointer_button(void *data, struct wl_pointer *pointer, uint32_t seri
 	event.time_ms = time != 0 ? time : ag_now_ms();
 	event.button = button;
 	event.pressed = state == WL_POINTER_BUTTON_STATE_PRESSED;
+	event.modifiers = pointer_event_modifiers(server);
 	event.x = server->pointer_x;
 	event.y = server->pointer_y;
 	/* AND WITH A BUTTON TOO, because a drag's GRAB POINT is a press. */
@@ -1749,8 +1763,7 @@ static void pointer_frame(void *data, struct wl_pointer *pointer)
 		 * no modifier state — the protocol keeps modifiers on the KEYBOARD — so a client that wanted to turn Shift
 		 * plus a vertical wheel into a horizontal scroll had nothing to test. The state is this client's own, from
 		 * the compositor's `wl_keyboard.modifiers`, which is the same source every other event's flags come from. */
-		event.modifiers = (server->keyboard_state != NULL)
-			? AGKeyboardModifiers(server->keyboard_state) : 0;
+		event.modifiers = pointer_event_modifiers(server);
 		event.x = server->pointer_x;
 		event.y = server->pointer_y;
 		ag_window_deliver(server->pointer_focus, &event);
@@ -1764,8 +1777,7 @@ static void pointer_frame(void *data, struct wl_pointer *pointer)
 		event.discrete = server->axis.horizontal_discrete;
 		event.value120 = server->axis.horizontal120;
 		event.has_discrete = server->axis.have_discrete;
-		event.modifiers = (server->keyboard_state != NULL)
-			? AGKeyboardModifiers(server->keyboard_state) : 0;
+		event.modifiers = pointer_event_modifiers(server);
 		event.x = server->pointer_x;
 		event.y = server->pointer_y;
 		ag_window_deliver(server->pointer_focus, &event);

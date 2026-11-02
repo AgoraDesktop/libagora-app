@@ -4692,6 +4692,15 @@ static const CGFloat AGFocusRingAlpha[] = { 0.85, 0.55, 0.32, 0.16 };
 			_cg_pointer = p;
 			_cg_hasPointer = YES;
 		}
+		/* **THE POINTER COMING BACK TO THIS WINDOW MEANS NO PRESS OF OURS IS STILL OPEN.** A press belongs to the window
+		 * it landed on until it is released, and the compositor holds the pointer there for the whole gesture — so a
+		 * pointer that RE-ENTERS this window with a button still "down" here is one whose release went somewhere else.
+		 * Keeping that state turned every later motion into `NSLeftMouseDragged`, which is a drag the hand never made
+		 * and whose next click was a DROP: MEASURED in Workspace as files moving on their own. The compositor's implicit
+		 * grab is the fix; this is the belt that makes a lost release harmless rather than destructive. */
+		if (event->type == AGEventPointerEnter && event->pressed && _cg_mouseButtonDown) {
+			_cg_mouseButtonDown = NO;
+		}
 		if (event->type == AGEventPointerButton) {
 			_cg_mouseButtonDown = event->pressed;
 		}
