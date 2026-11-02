@@ -668,6 +668,20 @@ static NSString * const AGCoderOutlineAutosaveKey = @"autosaveExpandedItems";
 	[super drawRow:row clipRect:clipRect];
 }
 
+/* **AN OUTLINE'S SORT IS THE DELEGATE'S, NOT THE DATA SOURCE'S.** Apple declares
+ * `-outlineView:sortDescriptorsDidChange:` on `NSOutlineViewDelegate` and `-tableView:sortDescriptorsDidChange:` on
+ * `NSTableViewDataSource`; a view that is both (Workspace's list is) would otherwise be told in a spelling it does not
+ * implement, and a header click would change the descriptors and nothing else — MEASURED as "the column headers do not
+ * sort the list". A delegate that does not answer the outline door falls back to the table one. */
+- (void)cg_announceSortDescriptorsChangedFrom:(NSArray *)old
+{
+	if (_delegate != nil && [_delegate respondsToSelector:@selector(outlineView:sortDescriptorsDidChange:)]) {
+		[_delegate outlineView:self sortDescriptorsDidChange:old];
+		return;
+	}
+	[super cg_announceSortDescriptorsChangedFrom:old];
+}
+
 - (void)mouseDown:(NSEvent *)event
 {
 	NSPoint point = [self convertPoint:[event locationInWindow] fromView:nil];

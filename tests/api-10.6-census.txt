@@ -64,6 +64,12 @@
 # that was missing, since a view could carry a menu and no gesture could reach it (the event simply forwarded up the
 # responder chain). Declaring the override is what makes it a door this tree says it has.
 #
+# **AND A SEVENTH, FOR `NSTableView -cg_announceSortDescriptorsChangedFrom:`.** This one is NOT Apple's selector and the
+# surface did not move: it is the HOOK that says who hears a sort change — a table's data source (Apple's
+# `-tableView:sortDescriptorsDidChange:`) or, for `NSOutlineView`, its delegate (`-outlineView:sortDescriptorsDidChange:`).
+# A header click used to set the descriptors and tell nobody, because a view that is both was told in the spelling it does
+# not implement. The hook is declared so the outline can override it; `cg_` marks it as this tree's own.
+#
 classes-missing 20
 classes-offered 168
 classes-present 148
@@ -245,7 +251,7 @@ functions-defined-not-declared 0
 functions-missing 0
 functions-offered 86
 functions-present 86
-methods-declared 5451
+methods-declared 5452
 methods-declared-not-implemented 0
 methods-informal 0
 methods-external 0

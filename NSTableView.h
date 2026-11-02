@@ -300,6 +300,11 @@ extern NSString *NSTableViewColumnDidResizeNotification;
 - (void)setDoubleAction:(nullable SEL)aSelector;
 - (nullable SEL)doubleAction;
 - (void)setSortDescriptors:(NSArray *)array;
+/* **THE ANNOUNCEMENT, AS A HOOK.** A table tells its DATA SOURCE that the sort descriptors changed (Apple's declaration);
+ * `NSOutlineView` tells its DELEGATE instead, because that is the contract Apple gave IT. Overriding this is how the
+ * subclass says which of the two it is, and the setter stays the one place that knows a change happened — a header click
+ * and a programmatic set both arrive here. */
+- (void)cg_announceSortDescriptorsChangedFrom:(nullable NSArray *)old;
 - (NSArray *)sortDescriptors;
 - (void)setHighlightedTableColumn:(nullable NSTableColumn *)tableColumn;
 - (nullable NSTableColumn *)highlightedTableColumn;

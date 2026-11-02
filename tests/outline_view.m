@@ -85,6 +85,7 @@ static int near(double a, double b)
 	int didCollapse;
 	int willDisplay;
 	int selectionChanges;
+	int sortChanges;		/* how many times the DELEGATE's outline sort door was asked */
 	BOOL refuseExpand;
 }
 @end
@@ -193,6 +194,13 @@ static int near(double a, double b)
 	(void)outlineView;
 	return item != C;
 }
+- (void)outlineView:(NSOutlineView *)outlineView sortDescriptorsDidChange:(NSArray *)oldDescriptors
+{
+	(void)outlineView;
+	(void)oldDescriptors;
+	sortChanges++;
+}
+
 - (void)outlineViewSelectionDidChange:(NSNotification *)notification
 {
 	(void)notification;
@@ -305,6 +313,8 @@ int main(void)
 	kind = [[NSTableColumn alloc] initWithIdentifier:@"kind"];
 	[name setWidth:200.0];
 	[kind setWidth:100.0];
+	[name setSortDescriptorPrototype:[NSSortDescriptor sortDescriptorWithKey:@"name" ascending:YES]];
+	[kind setSortDescriptorPrototype:[NSSortDescriptor sortDescriptorWithKey:@"kind" ascending:YES]];
 	[outline addTableColumn:name];
 	[outline addTableColumn:kind];
 	[outline setOutlineTableColumn:name];
@@ -442,6 +452,30 @@ int main(void)
 	[scroll release];
 	[window release];
 	[probe release];
+	/* **AN OUTLINE'S SORT IS ANNOUNCED THROUGH ITS OWN DOOR.** A table's data source hears
+	 * `-tableView:sortDescriptorsDidChange:`; an outline's DELEGATE hears `-outlineView:sortDescriptorsDidChange:`, which is
+	 * the contract Apple gave it. A view that is both — the file manager's list is — used to be told in a spelling it does
+	 * not implement, so a header click set the descriptors and changed nothing: MEASURED as "the column headers in list
+	 * view do not sort". The click itself is the table suite's subject (it drives that header); what is measured here is
+	 * that the announcement reaches an OUTLINE's delegate, once per change. */
+	{
+		NSSortDescriptor *byKind = [NSSortDescriptor sortDescriptorWithKey:@"kind" ascending:YES];
+		NSSortDescriptor *byKindDown = [NSSortDescriptor sortDescriptorWithKey:@"kind" ascending:NO];
+
+		probe->sortChanges = 0;
+		[outline setSortDescriptors:[NSArray arrayWithObject:byKind]];
+		check(probe->sortChanges == 1, "setting an outline's sort descriptors tells its DELEGATE, once");
+		check([[outline sortDescriptors] count] == 1
+		      && [[[[outline sortDescriptors] objectAtIndex:0] key] isEqual:@"kind"]
+		      && [[[outline sortDescriptors] objectAtIndex:0] ascending] == YES,
+		      "and the descriptors are the ones it was given");
+
+		[outline setSortDescriptors:[NSArray arrayWithObject:byKindDown]];
+		check(probe->sortChanges == 2
+		      && [[[outline sortDescriptors] objectAtIndex:0] ascending] == NO,
+		      "a second change is a second announcement, and it is the direction the caller asked for");
+	}
+
 	printf("outline_view: %s\n", s_failed == 0 ? "all checks passed" : "FAILURES");
 	return s_failed == 0 ? 0 : 1;
 }

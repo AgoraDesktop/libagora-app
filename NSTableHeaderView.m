@@ -334,7 +334,9 @@
 		if ([[_tableView delegate] respondsToSelector:@selector(tableView:didClickTableColumn:)]) {
 			[[_tableView delegate] tableView:_tableView didClickTableColumn:tableColumn];
 		}
-		/* A SORT PROTOTYPE IS THE COLUMN'S PERMISSION TO SORT, and the header is the click that uses it. */
+		/* **A SORT PROTOTYPE IS THE COLUMN'S PERMISSION TO SORT, AND THE CLICK IS THE GESTURE THAT USES IT.** The
+		 * descriptors are the table's, so setting them is the whole act: the table announces the change (to its data
+		 * source, or — for an outline — to its delegate), and the header does not need to say it a second time. */
 		if ([tableColumn sortDescriptorPrototype] != nil) {
 			NSArray *old = [_tableView sortDescriptors];
 			NSSortDescriptor *prototype = [tableColumn sortDescriptorPrototype];
@@ -346,9 +348,6 @@
 			}
 			[_tableView setSortDescriptors:[NSArray arrayWithObject:
 				[NSSortDescriptor sortDescriptorWithKey:[prototype key] ascending:ascending]]];
-			if ([[_tableView dataSource] respondsToSelector:@selector(tableView:sortDescriptorsDidChange:)]) {
-				[[_tableView dataSource] tableView:_tableView sortDescriptorsDidChange:old];
-			}
 		}
 	}
 	_pressedColumn = -1;

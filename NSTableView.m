@@ -986,14 +986,28 @@ static NSString * const AGCoderTableVerticalMotionKey = @"verticalMotionCanBegin
 - (void)setDoubleAction:(SEL)aSelector { _doubleAction = aSelector; }
 - (SEL)doubleAction { return _doubleAction; }
 
+/* **A SORT CHANGE IS ANNOUNCED WHERE IT HAPPENS, NOT BY THE CLICK THAT CAUSED IT.** Apple declares
+ * `-tableView:sortDescriptorsDidChange:` on the DATA SOURCE, so that is who hears it here — and a descriptor set from
+ * code reaches the data source the same way a header click does, which is what makes one door rather than two. The
+ * outline view overrides the announcement (its own contract is a DELEGATE method, `-outlineView:sortDescriptorsDidChange:`),
+ * which is why this is a hook and not a call. */
+- (void)cg_announceSortDescriptorsChangedFrom:(NSArray *)old
+{
+	if (_dataSource != nil && [_dataSource respondsToSelector:@selector(tableView:sortDescriptorsDidChange:)]) {
+		[_dataSource tableView:self sortDescriptorsDidChange:old];
+	}
+}
+
 - (void)setSortDescriptors:(NSArray *)array
 {
 	NSArray *copy = [array copy];
+	NSArray *old = _sortDescriptors;
 
-	[_sortDescriptors release];
 	_sortDescriptors = copy;
 	[self setNeedsDisplay:YES];
 	[self cg_saveAutosave];
+	[self cg_announceSortDescriptorsChangedFrom:old];
+	[old release];
 }
 
 - (NSArray *)sortDescriptors { return _sortDescriptors; }
