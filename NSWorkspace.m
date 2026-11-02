@@ -800,9 +800,18 @@ static NSDictionary *fn_dictionaryForApplication(NSRunningApplication *applicati
 	if (icon == NULL) {
 		return nil;
 	}
+	/* **THE RASTER IS THE SIZE A CALLER DRAWS AT, NOT THE LARGEST REPRESENTATION.** This used to hand back the biggest
+	 * rep the theme carries — 512 pixels for a desktop theme, and MORE for an application bundle's own `.icns` — and a
+	 * caller that draws a 48-point tile then reduces it eight times: MEASURED as "the Dock's icons are badly resized",
+	 * because this CG's sampler is one bilinear tap. `WORKSPACE_ICON_POINT_SIZE` was declared for exactly this and was
+	 * never read. A rep smaller than that is not upscaled: `AGIconCopyImage` scales down, and blowing up a 32-pixel
+	 * picture to a nominal 128 only invents detail. */
 	best = AGIconGetBestSize(icon);
 	if (best.width <= 0.0 || best.height <= 0.0) {
 		best = CGSizeMake(WORKSPACE_ICON_POINT_SIZE, WORKSPACE_ICON_POINT_SIZE);
+	} else if (best.width > WORKSPACE_ICON_POINT_SIZE) {
+		best.height = best.height * (WORKSPACE_ICON_POINT_SIZE / best.width);
+		best.width = WORKSPACE_ICON_POINT_SIZE;
 	}
 	raster = AGIconCopyImage(icon, best);
 	AGIconRelease(icon);

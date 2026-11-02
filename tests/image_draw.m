@@ -394,6 +394,60 @@ int main(void)
 		[rep release];
 		CGImageRelease(image);
 	}
+		/* **AND A REDUCTION OF MORE THAN TWO IS A BOX FILTER, NOT ONE TAP.** An icon comes to a caller as a large
+		 * raster — 512 pixels is ordinary — and is drawn into a 48-point tile; this CG's sampler is one bilinear tap
+		 * whatever the quality, so at 8:1 it reads four of the sixty-four source pixels behind each destination pixel
+		 * and a folder's rounded corners arrive as STAIR-STEPS. MEASURED as "the Dock's icons are badly resized". The
+		 * picture is a white page with one black pixel in every eight-by-eight block: a box filter over 8:1 averages that
+		 * pixel into every destination pixel (never pure white), and a single 2x2 tap behind each destination pixel never
+		 * sees it at all. */
+		{
+			const size_t side = 512;
+			const size_t out = 64;
+			CGColorSpaceRef space = CGColorSpaceCreateDeviceRGB();
+			CGContextRef src = CGBitmapContextCreate(NULL, side, side, 8, side * 4, space,
+								 kCGImageAlphaPremultipliedFirst | kCGBitmapByteOrder32Little);
+			CGImageRef checker;
+			NSImage *big;
+			CGContextRef dst;
+			unsigned char *px;
+			size_t i;
+			int darkest = 255, lightest = 0;
+
+			for (size_t y = 0; y < side; y++) {
+				for (size_t x = 0; x < side; x++) {
+					unsigned char *p = CGBitmapContextGetData(src) + (y * side + x) * 4;
+					/* ONE BLACK PIXEL IN EVERY EIGHT-BY-EIGHT BLOCK: a box filter over 8:1 averages it
+					 * into every destination pixel, and a single 2x2 tap misses it entirely. */
+					int white = !((x % 8) == 0 && (y % 8) == 0);
+
+					p[0] = p[1] = p[2] = white ? 255 : 0;
+					p[3] = 255;
+				}
+			}
+			checker = CGBitmapContextCreateImage(src);
+			CGContextRelease(src);
+			big = [[NSImage alloc] initWithCGImage:checker size:NSMakeSize((CGFloat)side, (CGFloat)side)];
+			CGImageRelease(checker);
+			dst = CGBitmapContextCreate(NULL, out, out, 8, out * 4, space,
+						    kCGImageAlphaPremultipliedFirst | kCGBitmapByteOrder32Little);
+			CGColorSpaceRelease(space);
+			drawWith(dst, NO, big, NSMakeRect(0.0, 0.0, (CGFloat)out, (CGFloat)out), NSZeroRect,
+				 NSCompositingOperationCopy, 1.0, YES, nil);
+			px = CGBitmapContextGetData(dst);
+			for (i = 0; i < out * out; i++) {
+				int value = px[i * 4 + 2];	/* the red channel: grey in, grey out */
+
+				if (value < darkest) darkest = value;
+				if (value > lightest) lightest = value;
+			}
+			printf("  (note: 512px checkerboard into 64px: values %d..%d)\n", darkest, lightest);
+			check(darkest > 192 && lightest < 255,
+			      "a 512-pixel picture drawn at 64 is BOX-FILTERED: every pixel carries the dot it averaged");
+			CGContextRelease(dst);
+			[big release];
+		}
+
 	printf("image_draw: %d check(s) failed\n", s_failed);
 	return s_failed == 0 ? 0 : 1;
 }

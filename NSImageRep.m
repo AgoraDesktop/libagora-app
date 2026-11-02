@@ -11,7 +11,9 @@
  */
 #import <AppKit/NSImageRep.h>
 #import <AppKit/NSGraphicsContext.h>
+#import <CoreGraphics/CGBitmapContext.h>
 #import <CoreGraphics/CGContext.h>
+#include <math.h>
 
 #include <math.h>
 #include <stdio.h>
@@ -292,6 +294,47 @@ static Class fn_class_for_list_member(SEL sel, NSString *want)
 			fraction:1.0 respectFlipped:YES hints:nil];
 }
 
+/* **A REDUCTION OF MORE THAN TWO IS DONE IN HALVES, WHICH IS WHAT A BOX FILTER IS.** This CG's sampler is one bilinear
+ * tap whatever the quality above `None` (see `CGContext.h`), so a 512-pixel icon drawn into a 48-point tile — the
+ * Dock's tile is exactly that — reads four of the sixty-four source pixels behind each destination pixel, and the
+ * folder's rounded corners arrive as STAIR-STEPS. MEASURED as "the Dock's icons are badly resized". Each halving with
+ * that same tap is an average over the pixels it discards, so the chain is a box filter and the last step is never more
+ * than 2:1. `libagora-iconservices` makes the same argument in `_AGIconRasterize`; this is the AppKit half of it, so any
+ * image drawn smaller goes through it and not only an icon. */
+static CGImageRef fn_halvesToFit(CGImageRef image, double deviceW, double deviceH)
+{
+	CGImageRef current = CGImageRetain(image);
+
+	while (current != NULL && deviceW > 0.0 && deviceH > 0.0) {
+		size_t w = CGImageGetWidth(current), h = CGImageGetHeight(current);
+		size_t halfW = w / 2, halfH = h / 2;
+		CGColorSpaceRef space;
+		CGContextRef ctx;
+		CGImageRef half;
+
+		if ((double)w < deviceW * 2.0 || (double)h < deviceH * 2.0 || halfW == 0 || halfH == 0) {
+			break;
+		}
+		space = CGColorSpaceCreateDeviceRGB();
+		ctx = CGBitmapContextCreate(NULL, halfW, halfH, 8, halfW * 4, space,
+					    kCGImageAlphaPremultipliedFirst | kCGBitmapByteOrder32Little);
+		CGColorSpaceRelease(space);
+		if (ctx == NULL) {
+			break;
+		}
+		CGContextSetInterpolationQuality(ctx, kCGInterpolationMedium);
+		CGContextDrawImage(ctx, CGRectMake(0.0, 0.0, (CGFloat)halfW, (CGFloat)halfH), current);
+		half = CGBitmapContextCreateImage(ctx);
+		CGContextRelease(ctx);
+		if (half == NULL) {
+			break;
+		}
+		CGImageRelease(current);
+		current = half;
+	}
+	return current;
+}
+
 - (BOOL)drawInRect:(NSRect)dstRect
 	  fromRect:(NSRect)srcRect
 	 operation:(NSCompositingOperation)op
@@ -308,6 +351,8 @@ static Class fn_class_for_list_member(SEL sel, NSString *want)
 	CGInterpolationQuality previousQuality = kCGInterpolationDefault;
 	BOOL hadQuality = NO;
 	BOOL resamples = NO;
+	CGImageRef smaller = NULL;	/* the halved copy, when the reduction is more than 2:1 */
+	double deviceW = 0.0, deviceH = 0.0;
 
 	/* NO CONTEXT OR NO PIXELS IS A NO, NOT A RAISE — the same rule the context's own members follow. */
 	if (ctx == nil || img == NULL) {
@@ -326,10 +371,9 @@ static Class fn_class_for_list_member(SEL sel, NSString *want)
 	 * counts — because a 2x context drawing a 128-pixel picture into a 64-point rect is exactly 1:1 and must stay
 	 * untouched, which is what keeps every hi-dpi probe byte-for-byte. A caller that passed
 	 * `NSImageHintInterpolation`, or set the context's quality, still wins. */
+	deviceW = (double)dstRect.size.width * fabs((double)ctm.a);
+	deviceH = (double)dstRect.size.height * fabs((double)ctm.d);
 	if (quality == nil) {
-		double deviceW = (double)dstRect.size.width * fabs((double)ctm.a);
-		double deviceH = (double)dstRect.size.height * fabs((double)ctm.d);
-
 		resamples = (deviceW > 0.0 && deviceH > 0.0 && _pixelsWide > 0 && _pixelsHigh > 0 &&
 			     (fabs((double)_pixelsWide / deviceW - 1.0) > 0.01 ||
 			      fabs((double)_pixelsHigh / deviceH - 1.0) > 0.01));
@@ -358,10 +402,17 @@ static Class fn_class_for_list_member(SEL sel, NSString *want)
 		[ctx setImageInterpolation:(NSImageInterpolation)[quality integerValue]];
 	} else if (resamples) {
 		/* MEDIUM IS WHAT THIS CG HAS: its sampler is one bilinear tap for every quality above None, and saying
-		 * so is more honest than asking for High and getting the same filter. */
+		 * so is more honest than asking for High and getting the same filter. THAT TAP IS ENOUGH FOR 2:1 AND NOT
+		 * FOR MORE, so anything reduced further is halved first (see `fn_halvesToFit`). */
 		previousQuality = CGContextGetInterpolationQuality(cg);
 		hadQuality = YES;
 		CGContextSetInterpolationQuality(cg, kCGInterpolationMedium);
+		if (deviceW > 0.0 && deviceH > 0.0) {
+			smaller = fn_halvesToFit(img, deviceW, deviceH);
+			if (smaller != NULL) {
+				img = smaller;
+			}
+		}
 	}
 	[ctx setCompositingOperation:op];
 	CGContextSetAlpha(cg, delta);
@@ -386,6 +437,9 @@ static Class fn_class_for_list_member(SEL sel, NSString *want)
 	CGContextSetAlpha(cg, 1.0);
 	if (hadQuality) {
 		CGContextSetInterpolationQuality(cg, previousQuality);
+	}
+	if (smaller != NULL) {
+		CGImageRelease(smaller);
 	}
 	if (crop != NULL) {
 		CGImageRelease(crop);
