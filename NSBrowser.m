@@ -100,6 +100,21 @@
 	return YES;
 }
 
+/* **A DOCUMENT VIEW IS NOT MID-DRAG, AND IT SAID SO WRONGLY BY SAYING NOTHING.** `_dragColumn` is the flag every drag
+ * path tests (`< 0` means "no divider drag"), and a view whose ivars are zeroed answers 0 — column zero. So the FIRST
+ * plain click in a column reached `-mouseUp:`, was taken for the end of a drag that never started, and applied a width
+ * of `_dragStartWidth + (_dragPreviewX - _dragStartX)` = the click's own x: MEASURED as "the columns resize when I
+ * click on them", column 0 going from 220 points to 75. Nothing about the drag arithmetic is wrong; it was asked when
+ * no drag existed. */
+- (id)initWithFrame:(NSRect)frame
+{
+	self = [super initWithFrame:frame];
+	if (self != nil) {
+		_dragColumn = -1;
+	}
+	return self;
+}
+
 - (void)setBrowser:(NSBrowser *)browser
 {
 	_browser = browser;
@@ -1501,12 +1516,18 @@ static NSString * const AGCoderBrowserCellPrototypeKey = @"cellPrototype";
  * it and any caller's own when it is called directly; the drawing above is written in the rect's terms and needs no
  * flip of its own. A title nobody set draws the band and the rule and no text, which is what an empty column's header
  * looks like. */
++ (CGFloat)cg_titleBaselineInRect:(NSRect)rect font:(NSFont *)font
+{
+	CGFloat ascender = (font != nil) ? [font ascender] : 0.0;
+	CGFloat descent = (font != nil) ? (CGFloat)fabs((double)[font descender]) : 0.0;
+
+	return NSMidY(rect) + (ascender - descent) / 2.0;
+}
+
 - (void)drawTitleOfColumn:(NSInteger)column inRect:(NSRect)rect
 {
 	NSString *title;
 	NSFont *font;
-	CGFloat textHeight;
-	NSPoint textOrigin;
 
 	if (NSIsEmptyRect(rect)) {
 		return;
@@ -1521,11 +1542,19 @@ static NSString * const AGCoderBrowserCellPrototypeKey = @"cellPrototype";
 		return;
 	}
 	font = [NSFont systemFontOfSize:[NSFont smallSystemFontSize]];
-	textHeight = [font ascender] - [font descender];
-	textOrigin = NSMakePoint(NSMinX(rect) + 6.0, NSMidY(rect) - textHeight / 2.0);
-	[title drawAtPoint:textOrigin withAttributes:[NSDictionary dictionaryWithObjectsAndKeys:
-									font, NSFontAttributeName,
-									[NSColor controlTextColor], NSForegroundColorAttributeName, nil]];
+	{
+		/* **THE TITLE IS CENTRED BY THE FONT'S OWN BOX, AND THE BOX IS PINNED AT ITS BASELINE.** MEASURED on the glass:
+		 * `-drawAtPoint:` sets the BASELINE, and in the browser's document — a FLIPPED view, so y grows downwards — the
+		 * glyphs rise from it. `-titleHeight` (18 points) is too short for a baseline computed from a mid-height less
+		 * half the font's height, which put the title's head above the column and let the split view's top edge cut it
+		 * off: "what is that partially obscured text in the header?". The ascender-to-descender box spans
+		 * `baseline - ascender` to `baseline + |descender|`, so centring it is one addition, not a choice of corner. */
+		CGFloat baseline = [NSBrowser cg_titleBaselineInRect:rect font:font];
+		NSDictionary *attributes = [NSDictionary dictionaryWithObjectsAndKeys:
+			font, NSFontAttributeName, [NSColor controlTextColor], NSForegroundColorAttributeName, nil];
+
+		[title drawAtPoint:NSMakePoint(NSMinX(rect) + 6.0, baseline) withAttributes:attributes];
+	}
 }
 
 /* **THE TWO WIDTH CONVERSIONS ARE ONE NUMBER APART, AND IT IS THE COLUMN'S OWN BAR.** A column's frame width includes the

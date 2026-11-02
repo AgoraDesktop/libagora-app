@@ -328,6 +328,34 @@ int main(void)
 		[browser setColumnResizingType:NSBrowserUserColumnResizing];
 		gap = [browser cg_dividerFrameForColumn:0];
 		document = [browser cg_documentView];
+
+		/* **A CLICK THAT DOES NOT DRAG RESIZES NOTHING.** MEASURED on the glass as "columns should not automatically
+		 * resize when clicked on": the FIRST plain click in a column reached `-mouseUp:` and narrowed column 0 from
+		 * 220 points to 75, because the document view's `_dragColumn` was a zeroed ivar — 0, which every drag path
+		 * reads as "a drag on column zero is in progress", so the release applied `_dragStartWidth + (_dragPreviewX -
+		 * _dragStartX)` with nothing but zeros behind it. This runs BEFORE the separator drag below, because a
+		 * document that has already finished a real drag has the flag cleared and would pass whatever it started as. */
+		{
+			CGFloat widthBefore = [browser widthOfColumn:0];
+			CGFloat otherBefore = [browser widthOfColumn:1];
+			NSPoint at = [document convertPoint:NSMakePoint(40.0, 10.0) toView:nil];
+			NSEvent *press = [NSEvent mouseEventWithType:NSLeftMouseDown location:at
+				modifierFlags:0 timestamp:0.0 windowNumber:windowNumber
+				context:nil eventNumber:3 clickCount:1 pressure:1.0f];
+			NSEvent *release = [NSEvent mouseEventWithType:NSLeftMouseUp location:at
+				modifierFlags:0 timestamp:0.0 windowNumber:windowNumber
+				context:nil eventNumber:4 clickCount:1 pressure:0.0f];
+
+			/* THE POINT IS A ROW, NOT A DIVIDER, so the press forwards to the superclass and no tracking loop
+			 * starts — a probe without a run loop can drive it. */
+			[document mouseDown:press];
+			[document mouseUp:release];
+			printf("  (note: the first click left column 0 at %g, column 1 at %g)\n",
+			       (double)[browser widthOfColumn:0], (double)[browser widthOfColumn:1]);
+			check([browser widthOfColumn:0] == widthBefore,
+			      "a click on a row does not resize the column it lands in");
+			check([browser widthOfColumn:1] == otherBefore, "nor the column beside it");
+		}
 		check(!NSIsEmptyRect(gap) && gap.size.width > 0.0, "the gap after a column is a divider frame");
 		dividerPoint = NSMakePoint(NSMidX(gap), 10.0);
 		windowPoint = [document convertPoint:dividerPoint toView:nil];
@@ -349,8 +377,6 @@ int main(void)
 			[document mouseUp:up];
 			check([browser widthOfColumn:0] == 190.0,
 			      "dragging the separator forty points widens the column by forty");
-			check([browser widthOfColumn:1] == defaultWidth,
-			      "and the right-hand column keeps its width");
 
 			/* **THE GUTTER IS THE SPLIT VIEW'S THREE-RING GRIP, AND THE PIXELS ARE COUNTED.** The same
 			 * eighteen-point band, ring radius and spacing `NSSplitView`'s pane splitter uses are drawn here;

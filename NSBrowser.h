@@ -44,6 +44,7 @@ NS_ASSUME_NONNULL_BEGIN
 @class NSIndexSet;
 @class NSMutableArray;
 @class NSCell;
+@class NSFont;
 @class NSScrollView;
 @class NSTableView;
 @class NSString;
@@ -457,6 +458,13 @@ enum {
 - (nullable NSScrollView *)cg_scrollViewForColumn:(NSInteger)column;
 - (NSRect)cg_dividerFrameForColumn:(NSInteger)column;
 - (nullable NSView *)cg_documentView;
+
+/* **THE BASELINE A COLUMN'S TITLE IS DRAWN AT, ANSWERED BY NAME.** `-drawTitleOfColumn:inRect:` centres the font's
+ * ascender-to-descender box in the strip, and in the browser's FLIPPED document the glyphs rise from the baseline — so
+ * a mid-height less half the font's height puts the title's head above the column, which is what cut it off. The rule is
+ * here rather than inline so a probe can hold it to the one property that matters: the box the baseline pins is INSIDE
+ * the strip, centred on it. */
++ (CGFloat)cg_titleBaselineInRect:(NSRect)rect font:(nullable NSFont *)font;
 
 @end
 

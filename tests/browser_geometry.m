@@ -44,6 +44,7 @@
 
 #include <math.h>
 #include <stdio.h>
+#include <stdlib.h>
 
 #define W 620
 #define H 300
@@ -295,6 +296,30 @@ int main(void)
 			check(textInk > 10, "and the title's own ink is in it, above the bottom rule");
 		}
 		[rep release];
+
+		/* **AND THE BASELINE REALLY PINS A BOX THAT IS INSIDE THE STRIP.** The surface above is painted straight into a
+		 * bitmap context, which is y-UP; the browser's document view is FLIPPED and `-drawAtPoint:` takes a BASELINE, so
+		 * the same arithmetic lands the title's head above the top of the column there — MEASURED on the glass as "what is
+		 * that partially obscured text in the header?", the split view's top edge cutting the title in half. A height is
+		 * not enough to say where a line goes; the box is the font's ascender-to-descender one, and the property asserted
+		 * here is the one a person sees: THAT BOX FITS INSIDE THE STRIP AND IS CENTRED IN IT. */
+		{
+			NSRect rect = NSMakeRect(0.0, 0.0, 160.0, 18.0);
+			NSFont *font = [NSFont systemFontOfSize:[NSFont smallSystemFontSize]];
+			CGFloat ascender = [font ascender];
+			CGFloat descent = (CGFloat)fabs((double)[font descender]);
+			CGFloat baseline = [NSBrowser cg_titleBaselineInRect:rect font:font];
+			CGFloat top = baseline - ascender;
+			CGFloat bottom = baseline + descent;
+
+			printf("  (note: baseline %g, box %g..%g in a strip %g tall)\n",
+			       (double)baseline, (double)top, (double)bottom, (double)NSHeight(rect));
+			check(top >= NSMinY(rect),
+			      "the title's box starts INSIDE the strip, so no part of it is drawn above the column");
+			check(bottom <= NSMaxY(rect), "and ends inside it, so the rule under the strip is not written over");
+			check(fabs((double)((top + bottom) / 2.0) - (double)NSMidY(rect)) < 0.01,
+			      "and the box is centred on the strip's middle, not pushed against either edge");
+		}
 
 		/* THE NEGATIVE CONTROL: the SAME band with no title draws no text. */
 		{
