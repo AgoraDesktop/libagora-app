@@ -486,7 +486,11 @@ static CGFloat fn_standard_width(NSToolbarItem *item, NSToolbarDisplayMode displ
 		}
 	}
 	if (flexCount > 0) {
-		CGFloat left = width - fixed - 2.0 * fn_TOOLBAR_EDGE;
+		/* **THE LEFTOVER IS THE WIDTH LESS BOTH EDGE INSETS, AND `fixed` ALREADY CARRIES BOTH OF THEM.** It starts at
+		 * `2 * fn_TOOLBAR_EDGE` and the measuring pass adds each item's width, so subtracting the pair again left the
+		 * flexible space — and every item after it — two insets short of the band's trailing edge: MEASURED as "the
+		 * segmented control should be pinned to the right of the window", with a sixteen-point gap behind it. */
+		CGFloat left = width - fixed;
 
 		flexible = (left > 0.0) ? left / (CGFloat)flexCount : 0.0;
 	}

@@ -210,6 +210,20 @@ static NSEvent *mouse(int type, NSPoint where, NSInteger windowNumber)
 - (NSString *)cg_toolTipStringAtWindowPoint:(NSPoint)windowPoint;
 @end
 
+/* **THE POINTER'S DOOR ON THE BAND**, which the toolbar view keeps for its own hit-testing and a probe may ask. It is
+ * the only way to say WHERE an item is without publishing the layout, and it is the same door the live window's clicks
+ * go through. */
+@interface NSObject (AGToolbarProbe)
+- (NSInteger)indexAtPoint:(NSPoint)point;
+@end
+
+/* THE BAND'S OWN EDGE INSET is private to the toolbar; the test only needs a point that is INSIDE the last item
+ * whatever the inset is, so it stands this far in from the right edge. */
+static CGFloat fn_edge_guess(void)
+{
+	return 9.0;
+}
+
 int main(void)
 {
 	NSApplication *application = [NSApplication sharedApplication];
@@ -274,6 +288,22 @@ int main(void)
 	toolbarView = [toolbar cg_view];
 	check([toolbarView superview] == content, "the toolbar's view is a real subview of the content view");
 	check([toolbarView frame].origin.y == TH, "and it sits at the content's top edge");
+
+	/* **THE FLEXIBLE SPACE TAKES THE LEFTOVER, SO WHAT FOLLOWS IT ENDS AT THE BAND'S RIGHT EDGE.** It is what a
+	 * flexible spacer is FOR — the workspace puts one before its three-way view switcher so the switcher is pinned to
+	 * the right of the window, and the gap between it and Back/Forward is what a resize expands. MEASURED before this:
+	 * the leftover was computed as the width less the two edge insets after `fixed` had already counted them, so every
+	 * item after the spacer stopped two insets short and the trailing item floated with a sixteen-point gap behind it. */
+	{
+		CGFloat band = [toolbarView frame].size.width;
+		NSPoint nearRight = NSMakePoint(band - fn_edge_guess(), [toolbarView frame].size.height / 2.0);
+		NSInteger hit = [toolbarView indexAtPoint:nearRight];
+
+		printf("  (note: band %g wide, a point %.1f from its right edge is item %ld of %lu)\n",
+		       (double)band, (double)fn_edge_guess(), (long)hit, (unsigned long)[[toolbar items] count]);
+		check(hit == 5,
+		      "the item after the flexible space reaches the band's right edge, so the space between them is the slack");
+	}
 
 	/* 2b. **THE PRELIGHT IS THE ACCENT, AND A DISABLED ITEM DOES NOT TAKE ONE.** A borderless toolbar item's
 	 * background is the band's until the pointer answers it; the prelight this draws is the platform accent at a
