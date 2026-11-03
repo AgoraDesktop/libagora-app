@@ -240,30 +240,32 @@ int main(void)
 
 		[w setTitle:@"Controls"];
 
-		/* 1. **THE CHROME IS ONE SURFACE WITH ONE EDGE: ITS TOP — AND THE INK KEEPS ONE DEVICE PIXEL CLEAR OF IT.**
-		 * The face is `+cg_chromeFaceColor` — the colour the toolbar band is painted with too, which is what makes the
-		 * strip continuous — and inside it, one device pixel in, is a one-point outline with a white highlight under
-		 * that. THE OUTERMOST ROW IS THE SURFACE, which is the fix for corners that looked raggedy: the window's SHAPE
-		 * is the compositor's clip, with its own antialiasing, so ink drawn on the silhouette had its antialiasing
-		 * multiplied by the clip's — a constant along a straight edge and, around the corner's arc, a DASHED line.
-		 * THE EDGE IS THE TOP'S ALONE: it follows the corners and stops, so the ends of the strip are the window's own
-		 * edges and nothing is drawn down them (a line down the ends reads as a border AROUND the chrome). Both of
-		 * those are decisions with reasons, so they are checked as hard as the things that ARE drawn. */
+		/* 1. **THE CHROME IS ONE SURFACE WITH ONE EDGE: ITS TOP.** The face is `+cg_chromeFaceColor` — the colour the
+		 * toolbar band is painted with too, which is what makes the strip continuous — the row above it is a white
+		 * highlight, and above that a one-point outline whose INK IS OPAQUE AT THE WINDOW'S EDGE (it is stroked twice
+		 * as wide as it shows, centred on the shape, so the compositor's clip takes the ink's outer half rather than
+		 * its fading edge). THE EDGE IS THE TOP'S ALONE: it follows the corners and stops, so the ends of the strip are
+		 * the window's own edges and nothing is drawn down them (a line down the ends reads as a border AROUND the
+		 * chrome), and the highlight stops at the corners' tangents rather than running into their arcs. All of those
+		 * are decisions with reasons, so they are checked as hard as the things that ARE drawn. */
 		{
 			NSBitmapImageRep *rep = draw_chrome(w);
 
-			check(is_colour(at(rep, CW / 2, 0), [NSColor cg_chromeFaceColor], 0.02),
-			      "the strip's outermost row is the surface: the outline keeps a device pixel clear of the window's shape");
-			check(is_colour(at(rep, CW / 2, 1), grey(EDGE_L), 0.02),
-			      "and the row inside it is the one-point outline, in the theme's #939393");
-			check(is_colour(at(rep, CW / 2, 2), [NSColor whiteColor], 0.02),
-			      "and the row below that is the white highlight the theme draws there");
+			check(is_colour(at(rep, CW / 2, 0), grey(EDGE_L), 0.02),
+			      "the strip's top row is its one-point outline, in the theme's #939393");
+			check(is_colour(at(rep, CW / 2, 1), [NSColor whiteColor], 0.02),
+			      "and the row below it is the white highlight the theme draws there");
 			check(is_colour(at(rep, CW / 4, 6), [NSColor cg_chromeFaceColor], 0.02),
 			      "and the surface is +cg_chromeFaceColor — the one colour the title bar and the toolbar share");
 			check(is_colour(at(rep, 0, 0), [NSColor cg_chromeFaceColor], 0.02),
 			      "the CORNER's own pixel is the surface, because the top edge is round and does not reach it");
-			check(is_colour(at(rep, 8, 1), grey(EDGE_L), 0.02) && !is_colour(at(rep, 3, 1), grey(EDGE_L), 0.02),
+			check(is_colour(at(rep, 8, 0), grey(EDGE_L), 0.02) && !is_colour(at(rep, 3, 0), grey(EDGE_L), 0.02),
 			      "while the top edge, past the SIX-point corner, IS the outline — so the corner is a shape, not a gap");
+			/* **AND THE HIGHLIGHT STOPS AT THE CORNERS.** It used to run the whole width and end inside each
+			 * corner's arc, half-clipped by the window's shape — a pale stub that read as a second layer. */
+			check(!is_colour(at(rep, 4, 1), [NSColor whiteColor], 0.02)
+			      && is_colour(at(rep, CW / 2, 1), [NSColor whiteColor], 0.02),
+			      "and the white row begins at the corner's tangent, with no pale stub inside the arc");
 			check(is_colour(at(rep, 0, 10), [NSColor cg_chromeFaceColor], 0.02)
 			      && is_colour(at(rep, CW - 1, 10), [NSColor cg_chromeFaceColor], 0.02),
 			      "and NOTHING is drawn down the ends — the strip is the surface to the window's own edges");
