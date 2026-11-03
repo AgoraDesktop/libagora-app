@@ -254,6 +254,36 @@ int main(void)
 	[cell setStringValue:@""];
 	rep = draw_cell(cell);
 	check(ink_in(rep, searchRect) > 0, "the magnifier is DRAWN in its slot");
+	{
+		/* **AND ITS HANDLE FALLS TO THE LOWER RIGHT, WHICH IS THE ONLY THING THAT MAKES IT A MAGNIFIER.** A ring with
+		 * the handle above it is a symbol for "male", and that is what shipped: the direction was read from the CTM with
+		 * the sign inverted, so the handle fell up. The two extreme pixels say it without guessing at centroids — the
+		 * TOPMOST ink is the glass's rim, left of the slot's middle, and the BOTTOMMOST is the handle's tip, right of it
+		 * — and `drawing_y_runs_up()` is the calibration that lets "topmost" and "bottommost" be screen words. */
+		/* **A REP'S ROWS ARE THE PICTURE'S ROWS** — row 0 is its top, the same order a screenshot has, so "topmost"
+		 * below is a screen word and needs no calibration from the graphics state. (That state is what got this wrong
+		 * in the first place: the CTM's `d` was read with the wrong sign, and the live toolbar drew the handle upward.) */
+		int x0 = (int)NSMinX(searchRect), y0 = (int)NSMinY(searchRect);
+		int x1 = (int)NSMaxX(searchRect), y1 = (int)NSMaxY(searchRect);
+		int x, y, top_x = -1, bottom_x = -1, top = -1, bottom = -1;
+
+		for (y = y0; y < y1; y++) {
+			for (x = x0; x < x1; x++) {
+				NSColor *c = (x >= 0 && y >= 0 && x < W && y < H) ? [rep colorAtX:x y:y] : nil;
+
+				if (c == nil || [c redComponent] >= 0.80) {
+					continue;
+				}
+				if (top < 0 || y < top) { top = y; top_x = x; }
+				if (y > bottom) { bottom = y; bottom_x = x; }
+			}
+		}
+		printf("    magnifier: topmost ink at x=%d, bottommost at x=%d, slot middle %.1f\n",
+		       top_x, bottom_x, (double)NSMidX(searchRect));
+		check(top_x > -1 && bottom_x > -1 && top_x < (int)NSMidX(searchRect)
+		      && bottom_x > (int)NSMidX(searchRect),
+		      "and its handle falls to the LOWER RIGHT, so it reads as a magnifier");
+	}
 	check(ink_in(rep, cancelRect) == 0, "and the clear button is not drawn when there is nothing to clear");
 	[rep release];
 	[cell setStringValue:@"abc"];

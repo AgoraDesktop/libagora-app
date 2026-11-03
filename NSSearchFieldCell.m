@@ -61,12 +61,20 @@ typedef enum {
 - (instancetype)initWithGlyph:(AGSearchGlyph)glyph;
 @end
 
+/* **WHICH WAY THIS TIER'S CTM RUNS, ASKED THE WAY THE TEXT CELL ASKS IT.** `transform.d >= 0` is a space whose y runs
+ * DOWN the screen and `d < 0` is one whose y runs up — the opposite of Core Graphics' own reading of the same field, and
+ * the reading `NSTextFieldCell -cg_centredBaselineInFrame:font:` has always used to place a baseline (its text is
+ * upright in both spaces, which is the measurement that settled it).
+ *
+ * MEASURED the other way round: the magnifier's handle came out ABOVE its glass in a file window's toolbar — a symbol
+ * for "male" instead of a spyglass — because this predicate answered "down" for a CTM of `d = -1.33`, and the handle
+ * therefore fell the wrong way. The search field's own suite draws the same mark and now asks where the ink sits. */
 static BOOL fn_is_y_down(void)
 {
 	CGContextRef cg = (CGContextRef)[[NSGraphicsContext currentContext] graphicsPort];
 	CGAffineTransform transform = (cg != NULL) ? CGContextGetCTM(cg) : CGAffineTransformIdentity;
 
-	return transform.d < 0.0;
+	return transform.d >= 0.0;
 }
 
 /* **AND THE INK IS THE CONTROL'S ANSWER RATHER THAN THE ORNAMENT'S OWN.** The two button cells are not the control
