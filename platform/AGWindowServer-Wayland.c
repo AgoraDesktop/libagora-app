@@ -2579,7 +2579,7 @@ static void registry_global(void *data, struct wl_registry *registry, uint32_t n
 		 * seam learns has to raise this number. A window's own version is unaffected — the server caps it at
 		 * `agora_window`'s. */
 		server->shell = wl_registry_bind(registry, name, &agora_shell_interface,
-						version < 19 ? version : 19);
+						version < 20 ? version : 20);
 	}
 }
 
@@ -2782,6 +2782,18 @@ static void system_menu_invoked(void *data, struct agora_shell *shell, int32_t x
 	}
 }
 
+/* **THE CLICK OUTSIDE: THE COMPOSITOR HAS ALREADY DONE ITS PART.** The press was routed to what it was aimed at rather
+ * than to the menu's fallback, so all that is left is to end the session and let the chip go out. */
+static void system_menu_dismissed(void *data, struct agora_shell *shell)
+{
+	AGWindowServer *server = data;
+
+	(void)shell;
+	if (server->system_menu.dismissed != NULL) {
+		server->system_menu.dismissed(server->system_menu.context);
+	}
+}
+
 static const struct agora_shell_listener shell_listener = {
 	selection_offer,
 	selection_lost,
@@ -2796,6 +2808,8 @@ static const struct agora_shell_listener shell_listener = {
 	drag_data_requested,
 	drag_data,
 	drag_refused,
+	/* THE ORDER IS THE PROTOCOL'S: `system_menu_dismissed` was declared before `system_menu_invoked`. */
+	system_menu_dismissed,
 	system_menu_invoked,
 };
 
@@ -3178,6 +3192,19 @@ int AGWindowServerClaimSystemMenu(AGWindowServer *server, const AGSystemMenuHand
 	 * and every event this listener carries is delivered only to a proxy bound high enough to speak it. */
 	fn_install_shell_listener(server);
 	agora_shell_claim_system_menu(server->shell);
+	wl_display_flush(server->display);
+	return 1;
+}
+
+int AGWindowServerSetSystemMenuOpen(AGWindowServer *server, int open, int x, int y, int width, int height)
+{
+	if (server == NULL || server->shell == NULL) {
+		return 0;
+	}
+	if (wl_proxy_get_version((struct wl_proxy *)server->shell) < 20) {
+		return 0;	/* a compositor before version 20 has no chip to light and no rectangle to compare */
+	}
+	agora_shell_set_system_menu_open(server->shell, open, x, y, width, height);
 	wl_display_flush(server->display);
 	return 1;
 }

@@ -270,11 +270,22 @@ typedef struct AGSystemMenuHandlers {
 	void *context;
 	/* The square was clicked. Open the System menu, hanging from its bottom-left. */
 	void (*invoked)(void *context, int x, int y, int width, int height);
+	/* **A CLICK OUTSIDE THE MENU: END THE SESSION.** The compositor has already routed that press to what the click was
+	 * aimed at, so this is the other half of Apple's answer — the menu closes AND the click works. Cancel the tracking
+	 * loop and take the chip down. */
+	void (*dismissed)(void *context);
 } AGSystemMenuHandlers;
 
 /* Claim the square and say where its clicks go. 1 on success; 0 when the compositor is older than `agora_shell`
  * version 19, which has no system menu to forward. */
 int AGWindowServerClaimSystemMenu(AGWindowServer *server, const AGSystemMenuHandlers *handlers);
+
+/* **WHETHER THE SYSTEM MENU IS UP, AND WHERE — which is two facts the compositor cannot read.** The square's highlight
+ * chip is drawn by the SERVER (the square is its furniture), and the rectangle is what tells a press inside the menu
+ * from a press that dismisses it. `x, y, width, height` are in the output's coordinates, top-down, point units — the
+ * menu's own `-cg_trackingFrame` converted. `open` = 0 clears it and the rectangle is ignored. Returns 0 when no
+ * compositor speaks version 20 or this process does not own the square. */
+int AGWindowServerSetSystemMenuOpen(AGWindowServer *server, int open, int x, int y, int width, int height);
 
 /* Claim the selection with these types, in this order of preference. 0 on success, -1 when the compositor does not
  * speak the selection (a server below `agora_shell` version 7). */
