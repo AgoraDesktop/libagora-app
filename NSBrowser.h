@@ -160,6 +160,11 @@ enum {
 	NSMutableArray *_tables;		/* RETAINED: NSTableView, one per column */
 	NSMutableArray *_columnScrollViews;	/* RETAINED: NSScrollView, one per column */
 	NSMutableArray *_columnWidths;		/* RETAINED: NSNumber content width per column */
+	/* **THE WIDTHS A NAME REMEMBERS, KEPT UNTIL THERE ARE COLUMNS TO GIVE THEM TO.** `-setColumnsAutosaveName:` can be
+	 * called before the pool exists — a caller naming its browser as it builds it, which is the natural order — and a load
+	 * that writes into an EMPTY `_columnWidths` loads nothing: MEASURED, a column dragged to 300 came back at 220 because
+	 * the name was set before `-loadColumnZero` created the 256 slots. RETAINED. */
+	NSArray *_cg_autosavedColumnWidths;
 	NSMutableArray *_columnCounts;		/* RETAINED: NSNumber rows per column */
 	NSMutableArray *_selectedRows;		/* RETAINED: NSNumber, -1 when none */
 	NSMutableArray *_titles;		/* RETAINED: NSString or NSNull per column */

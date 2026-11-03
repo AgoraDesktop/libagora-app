@@ -578,6 +578,7 @@ static NSString * const AGCoderBrowserCellPrototypeKey = @"cellPrototype";
 	[_tables release];
 	[_columnScrollViews release];
 	[_columnWidths release];
+	[_cg_autosavedColumnWidths release];
 	[_columnCounts release];
 	[_selectedRows release];
 	[_titles release];
@@ -883,7 +884,13 @@ static NSString * const AGCoderBrowserCellPrototypeKey = @"cellPrototype";
 	[_documentView addSubview:columnScroll];
 	[_tables addObject:table];
 	[_columnScrollViews addObject:columnScroll];
-	[_columnWidths addObject:[NSNumber numberWithDouble:_columnWidth]];
+	/* **A COLUMN BORN AFTER THE NAME WAS SET GETS THE REMEMBERED WIDTH.** See `_cg_autosavedColumnWidths`: the pool is
+	 * made by `-loadColumnZero`, which a caller may well call after naming its browser. */
+	if (_cg_autosavedColumnWidths != nil && (NSUInteger)[_columnWidths count] < [_cg_autosavedColumnWidths count]) {
+		[_columnWidths addObject:[_cg_autosavedColumnWidths objectAtIndex:[_columnWidths count]]];
+	} else {
+		[_columnWidths addObject:[NSNumber numberWithDouble:_columnWidth]];
+	}
 	[columnScroll release];
 	[_columnCounts addObject:[NSNumber numberWithInteger:rows]];
 	[_selectedRows addObject:[NSNumber numberWithInteger:-1]];
@@ -2566,6 +2573,8 @@ static NSString * const AGCoderBrowserCellPrototypeKey = @"cellPrototype";
 		NSArray *widths = [[NSUserDefaults standardUserDefaults] objectForKey:key];
 		NSUInteger i;
 
+		[_cg_autosavedColumnWidths release];
+		_cg_autosavedColumnWidths = [widths copy];
 		for (i = 0; i < [widths count] && i < [_columnWidths count]; i++) {
 			[_columnWidths replaceObjectAtIndex:i
 						 withObject:[NSNumber numberWithDouble:
