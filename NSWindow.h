@@ -1588,6 +1588,14 @@ extern NSString *NSWindowDidChangeScreenProfileNotification;
  * button, and a caller reads it to decide whether to prompt. */
 @property (getter=isDocumentEdited) BOOL documentEdited;
 
+/* **THE POINTER'S TWO DOORS A VIEW NEEDS TO SAY "WORKING" AND THEN STOP SAYING IT.** A view that is about to do seconds
+ * of work — decoding a grid of photographs, say — puts the wait up before it starts and puts the pointer the position
+ * asks for back when it is done. `-cg_applyCursor:` is what a motion would do anyway (it sends the name to the compositor
+ * with a flush, and sends nothing when the name is already in force); `-cg_refreshCursorAtRestingPointer` is the
+ * resolution a person's own position would give, which is the honest answer for "no longer busy". */
+- (void)cg_applyCursor:(nullable NSCursor *)cursor;
+- (void)cg_refreshCursorAtRestingPointer;
+
 @end
 /* ============================================================================================ *
  * THE DELEGATE'S PROTOCOL — AND EVERY METHOD IS OPTIONAL, WHICH IS WHY EVERY SEND IS GUARDED.  *

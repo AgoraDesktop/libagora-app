@@ -211,6 +211,17 @@ static BOOL s_hiddenUntilMouseMoves;
 	return [self cg_sharedCursor:&s named:@"left_ptr"];
 }
 
+/* **THE POINTER THAT SAYS "WORKING", AND IT KEEPS ITS ARROW.** `left_ptr_watch` is the theme's arrow-with-a-spinner: a
+ * bare spinner (`wait`) would take the click target away from what the person is about to click, and a wait over a window
+ * they can still use should not say it is unusable. Apple's name for this one is `+busyButClickableCursor`, which is the
+ * distinction it exists for. */
++ (NSCursor *)busyButClickableCursor
+{
+	static NSCursor *s;
+
+	return [self cg_sharedCursor:&s named:@"left_ptr_watch"];
+}
+
 + (NSCursor *)IBeamCursor
 {
 	static NSCursor *s;

@@ -114,6 +114,8 @@ NS_ASSUME_NONNULL_BEGIN
 
 /* THE SHARED SYSTEM CURSORS, one instance each, created on first ask. Their `-image` is nil: see above. */
 + (NSCursor *)arrowCursor;
+/* THE POINTER THAT SAYS "WORKING", with the arrow still on it: `left_ptr_watch` in the theme. */
++ (NSCursor *)busyButClickableCursor;
 + (NSCursor *)IBeamCursor;
 + (NSCursor *)pointingHandCursor;
 + (NSCursor *)closedHandCursor;
