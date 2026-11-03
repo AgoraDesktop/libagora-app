@@ -293,6 +293,9 @@ struct AGWindowServer {
 	/* **AND THE DRAG'S EIGHT, ON THE SAME CONNECTION AND FOR THE SAME REASON**: a drag belongs to the application, not to
 	 * a surface, and a second connection would be a second event queue. */
 	AGDragHandlers drag;
+	/* **AND THE SYSTEM MENU'S ONE, FOR THE PROCESS THAT DRAWS THE MENU.** The square's pixels are the server's; a menu
+	 * is text and a tracking loop, so the menu is a client's window and this is the callback that opens it. */
+	AGSystemMenuHandlers system_menu;
 	/* **THE SHELL'S LISTENER IS ADDED ONCE AND CARRIES BOTH THE SELECTION'S FIVE EVENTS AND THE DRAG'S EIGHT.** A proxy
 	 * takes one listener; two registrations would make the second fail and silently lose whichever it carried. */
 	int shell_listener_installed;
@@ -2569,12 +2572,14 @@ static void registry_global(void *data, struct wl_registry *registry, uint32_t n
 		 * what this seam understands matters here for the same reason it does at nine: the version a shell is bound at is
 		 * the version every window it makes is capped to, and a request sent above it is a protocol error that kills the
 		 * client rather than a call the server ignores. */
-		/* **THE CAP IS THE HIGHEST REQUEST THIS SEAM SENDS**, which is `open_file` at 18 — a trash tile asking for the
-		 * file manager's window. It was 15, the highest when the cap was written, and an older cap makes a newer request
-		 * silently unreachable: the proxy's version is the bind's, so `AGWindowServerOpenFile` answered 0 for a server
-		 * that had the door all along. A window's own version is unaffected — the server caps it at `agora_window`'s. */
+		/* **THE CAP IS THE HIGHEST REQUEST THIS SEAM SENDS**, which is `claim_system_menu` at 19 — the system UI asking
+		 * for the System menu's clicks. It was 18 (`open_file`) before that and 15 before that, and an older cap makes a
+		 * newer request silently unreachable: the proxy's version is the bind's, so `AGWindowServerOpenFile` answered 0
+		 * for a server that had the door all along, and `AGWindowServerClaimSystemMenu` did the same. Every version this
+		 * seam learns has to raise this number. A window's own version is unaffected — the server caps it at
+		 * `agora_window`'s. */
 		server->shell = wl_registry_bind(registry, name, &agora_shell_interface,
-						version < 18 ? version : 18);
+						version < 19 ? version : 19);
 	}
 }
 
@@ -2763,6 +2768,20 @@ static void drag_refused(void *data, struct agora_shell *shell, const char *mime
 	}
 }
 
+/* **THE SQUARE WAS CLICKED: THE SYSTEM UI'S ONE EVENT.** The server has already consumed the press, so all this does is
+ * hand the geometry to whoever claimed the square. A process that installed no handler hears nothing — the claim is
+ * the handler's. */
+static void system_menu_invoked(void *data, struct agora_shell *shell, int32_t x, int32_t y, int32_t width,
+				int32_t height)
+{
+	AGWindowServer *server = data;
+
+	(void)shell;
+	if (server->system_menu.invoked != NULL) {
+		server->system_menu.invoked(server->system_menu.context, (int)x, (int)y, (int)width, (int)height);
+	}
+}
+
 static const struct agora_shell_listener shell_listener = {
 	selection_offer,
 	selection_lost,
@@ -2777,6 +2796,7 @@ static const struct agora_shell_listener shell_listener = {
 	drag_data_requested,
 	drag_data,
 	drag_refused,
+	system_menu_invoked,
 };
 
 static void registry_global_remove(void *data, struct wl_registry *registry, uint32_t name)
@@ -3142,6 +3162,24 @@ static void fn_install_shell_listener(AGWindowServer *server)
 	}
 	agora_shell_add_listener(server->shell, &shell_listener, server);
 	server->shell_listener_installed = 1;
+}
+
+int AGWindowServerClaimSystemMenu(AGWindowServer *server, const AGSystemMenuHandlers *handlers)
+{
+	if (server == NULL || server->shell == NULL || handlers == NULL) {
+		return 0;
+	}
+	if (wl_proxy_get_version((struct wl_proxy *)server->shell) < 19) {
+		return 0;	/* a compositor before version 19 has no System menu to forward */
+	}
+	server->system_menu = *handlers;
+	/* **THE LISTENER IS INSTALLED HERE RATHER THAN AT CONNECT TIME**, the same rule the selection and the drag follow: a
+	 * program that never claims the square never hears about it. `fn_install_shell_listener` refuses below version 7,
+	 * and every event this listener carries is delivered only to a proxy bound high enough to speak it. */
+	fn_install_shell_listener(server);
+	agora_shell_claim_system_menu(server->shell);
+	wl_display_flush(server->display);
+	return 1;
 }
 
 void AGWindowServerSetSelectionHandlers(AGWindowServer *server, const AGSelectionHandlers *handlers)

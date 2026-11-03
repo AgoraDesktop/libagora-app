@@ -190,6 +190,10 @@ extern NSString *NSMenuDidEndTrackingNotification;
 	 * first repaint, the notification. With this set it RETURNS at the point the loop would start, which is exactly
 	 * "begin a session without running it" and not one line of duplicate work. */
 	BOOL _callerDrives;
+	/* **AND WHETHER THE CLICK THAT OPENED THIS SESSION WAS SOMEBODY ELSE'S.** A press the app never saw has no release
+	 * for the loop to swallow, so the first mouse-up is the person's first real click. See
+	 * `-cg_setOpenedWithoutPress:`. */
+	BOOL _cgOpenedWithoutPress;
 }
 
 /* ============================================================================================ *
@@ -395,6 +399,18 @@ extern NSString *NSMenuDidEndTrackingNotification;
  * assert that a menu opened in a window at x = 1216 is placed at x ≈ 1216 and not at the screen's left edge (which is
  * what it did before the conversion was added). Meaningless before the first `popUp…` of the session. */
 - (NSRect)cg_trackingFrame;
+
+/* **A MENU OPENED BY SOMETHING OTHER THAN A PRESS THIS PROCESS SAW.** The tracking loop treats the first mouse-UP as
+ * "the release that opened me" and swallows it (see `-cg_trackOneEvent:`), which is right when the session was started
+ * by the press that is still down. It is wrong when the click that opened the menu belonged to somebody else: Agora's
+ * System menu is exactly that case — the square is the SERVER's furniture, the press is consumed there and never
+ * reaches this client — so without this the person's FIRST real click on a row would be eaten and the menu would sit
+ * there until they clicked again. MEASURED, before this door: the menu opened, a click on "About this Computer…" did
+ * nothing, and it took a second click to choose it.
+ *
+ * It says nothing about WHO drives the loop: the menu still tracks itself, which is what a pop-up opened from outside
+ * any view needs. Call it BEFORE `-popUpMenuPositioningItem:atLocation:inView:`. */
+- (void)cg_setOpenedWithoutPress:(BOOL)flag;
 
 - (void)cancelTracking;
 

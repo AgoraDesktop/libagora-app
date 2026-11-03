@@ -1003,6 +1003,14 @@ static const CGFloat NSMenuStateColumnWidth = 20.0;
 	if (type == NSLeftMouseDown) {
 		NSPoint at = [event locationInWindow];
 
+		if (getenv("APPKIT_MENU_DIAG") != NULL) {
+			/* A TEMPORARY MEASUREMENT: where the press says it landed, what the frame is, and which row that names. */
+			fprintf(stderr, "  DIAG press-at (%g,%g) frame (%.1f,%.1f %.1fx%.1f) -> row %ld\n",
+				(double)at.x, (double)at.y, (double)_trackingFrame.origin.x,
+				(double)_trackingFrame.origin.y, (double)_trackingFrame.size.width,
+				(double)_trackingFrame.size.height,
+				(long)[_items indexOfObjectIdenticalTo:[self cg_itemAtPoint:at]]);
+		}
 		if ([self cg_itemAtPoint:at] == nil) {
 			_dismissedAt = at;
 			_hasDismissedAt = YES;
@@ -1267,7 +1275,7 @@ static const CGFloat NSMenuStateColumnWidth = 20.0;
 	 * exactly "the first click on a menu item is ignored": the pick happened on the second click, because the
 	 * first release was eaten as if it were the press that opened the menu. A menu that drives ITSELF still needs
 	 * the flag, because the opening release does reach it and must not pick the item under the pointer. */
-	_openedByPress = _callerDrives ? NO : YES;
+	_openedByPress = (_callerDrives || _cgOpenedWithoutPress) ? NO : YES;
 	/* **AND THE DELEGATE IS TOLD THE MENU IS OPENING, AFTER THE UPDATE** — so a delegate that reads the menu in
 	 * `-menuWillOpen:` finds the enabled states the session will actually honour. */
 	if (_delegate != nil && [_delegate respondsToSelector:@selector(menuWillOpen:)]) {
@@ -1355,6 +1363,11 @@ static const CGFloat NSMenuStateColumnWidth = 20.0;
 			}
 		}
 	}
+}
+
+- (void)cg_setOpenedWithoutPress:(BOOL)flag
+{
+	_cgOpenedWithoutPress = flag;
 }
 
 - (NSRect)cg_trackingFrame

@@ -252,6 +252,30 @@ typedef struct AGSelectionHandlers {
 	void (*refused)(void *context, const char *mime_type, uint32_t reason);
 } AGSelectionHandlers;
 
+/* ============================================================================================ *
+ * THE SYSTEM MENU'S SQUARE, WHICH IS THE SERVER'S, AND THE CLICKS ON IT, WHICH ARE THIS   *
+ * PROCESS'S ONCE IT SAYS SO.                                                                   *
+ *                                                                                                *
+ * **THE SPLIT IS THE MAC'S.** The window server owns the strip and the mark at its left — furniture no application
+ * draws — and a MENU is text, a highlight chip and a tracking loop, which are the AppKit's. So the menu itself is a
+ * client's window like any other (at the pop-up level), and the server forwards the square's click and nothing else.
+ * A process that calls the door below with a handler is that client: the SYSTEM UI. One at a time; the last claim
+ * wins, so a restarted helper takes over from the one that died.
+ *
+ * `x, y, width, height` arrive in the OUTPUT's coordinates, top-down, so a menu opened from the square hangs from
+ * `(x, y + height)`. The press is consumed by the server: the click is not delivered to any surface, and neither is
+ * its release.
+ * ============================================================================================ */
+typedef struct AGSystemMenuHandlers {
+	void *context;
+	/* The square was clicked. Open the System menu, hanging from its bottom-left. */
+	void (*invoked)(void *context, int x, int y, int width, int height);
+} AGSystemMenuHandlers;
+
+/* Claim the square and say where its clicks go. 1 on success; 0 when the compositor is older than `agora_shell`
+ * version 19, which has no system menu to forward. */
+int AGWindowServerClaimSystemMenu(AGWindowServer *server, const AGSystemMenuHandlers *handlers);
+
 /* Claim the selection with these types, in this order of preference. 0 on success, -1 when the compositor does not
  * speak the selection (a server below `agora_shell` version 7). */
 int AGWindowServerSetSelection(AGWindowServer *server, const char *const *types, int count);
