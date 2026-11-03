@@ -1879,9 +1879,40 @@ static void fn_chrome_edge_path(CGContextRef c, CGFloat width, CGFloat top, CGFl
 	CGContextAddArcToPoint(c, right, y, right, y - r, r);
 }
 
-/* `top` IS THE WINDOW'S OWN TOP EDGE and `width` its width; the strip's height does not enter, because the edge does
- * not run down it. `scale` is the window's DEVICE PIXELS PER POINT, because both lines below are measured in DEVICE
- * PIXELS — see the note in the body. */
+/* **THE FRAME, CLOSED: ALL FOUR EDGES AND ALL FOUR CORNERS.** `fn_chrome_edge_path` above draws the TOP edge and its two
+ * corners and stops where each arc comes down to the side — which is the shape a bar has, and it leaves the sides with a
+ * stub that ends a few points down. A window's border is a frame: one even stroke around the whole rectangle, inset by
+ * half a device pixel on every side so the compositor's clip takes the stroke's outer half rather than its fading edge.
+ * The four insets are separate arguments because they are measured from four different edges, and at a fractional scale
+ * only one of them (the top) is a fractional device row. */
+static void fn_chrome_frame_path(CGContextRef c, CGFloat width, CGFloat height, CGFloat radius,
+				 CGFloat left, CGFloat right, CGFloat bottom, CGFloat top, CGFloat inset)
+{
+	CGFloat r = radius - inset;
+	CGFloat l = left;
+	CGFloat rt = right;
+	CGFloat b = bottom;
+	CGFloat t = top;
+
+	if (r < 0.0) {
+		r = 0.0;
+	}
+	if (rt <= l || t <= b) {
+		return;
+	}
+	CGContextMoveToPoint(c, l, b + r);
+	CGContextAddArcToPoint(c, l, b, l + r, b, r);
+	CGContextAddLineToPoint(c, rt - r, b);
+	CGContextAddArcToPoint(c, rt, b, rt, b + r, r);
+	CGContextAddLineToPoint(c, rt, t - r);
+	CGContextAddArcToPoint(c, rt, t, rt - r, t, r);
+	CGContextAddLineToPoint(c, l + r, t);
+	CGContextAddArcToPoint(c, l, t, l, t - r, r);
+	CGContextClosePath(c);
+}
+
+/* `top` IS THE WINDOW'S OWN TOP EDGE and `width` its width. `scale` is the window's DEVICE PIXELS PER POINT, because
+ * every line below is measured in DEVICE PIXELS — see the note in the body. */
 static void fn_draw_chrome_edges(CGContextRef c, CGFloat width, CGFloat top, CGFloat scale)
 {
 	CGFloat radius = fn_BAR_RADIUS;
@@ -1904,15 +1935,17 @@ static void fn_draw_chrome_edges(CGContextRef c, CGFloat width, CGFloat top, CGF
 	 * scale that edge is a fractional row (MEASURED: 167 points on a 1.33203 output is 222.45 rows), and a line placed
 	 * in points there straddles two rows and renders at 40%. */
 	CGFloat snapped_top = (CGFloat)((int)(top * scale + 0.5));	/* the top edge's own device row */
-	CGFloat edge_centre = top - (snapped_top - 0.5) / scale;	/* the outline's centre: half a pixel inside */
+	CGFloat half = 0.5 * px;					/* half a device pixel, in points */
+	CGFloat top_inset = top - (snapped_top - 0.5) / scale;		/* the frame's top edge, half a pixel in */
 	CGFloat highlight_centre = top - (snapped_top - 1.5) / scale;	/* the light row: one pixel further in */
 
 	CGContextSaveGState(c);
 	CGContextSetShouldAntialias(c, true);
 
-	/* 1. THE OUTLINE, centred on the shape and twice the width it shows. */
+	/* 1. THE FRAME, ALL FOUR EDGES, centred on the window's shape and twice the width it shows. */
 	CGContextBeginPath(c);
-	fn_chrome_edge_path(c, width, top, radius, edge_centre);
+	/* THE TOP EDGE'S COORDINATE, not its inset: `top_inset` is the air between the edge and the stroke's centre. */
+	fn_chrome_frame_path(c, width, top, radius, half, width - half, half, top - top_inset, half);
 	CGContextSetLineWidth(c, 2.0 * px);
 	CGContextSetStrokeColorWithColor(c, [[NSColor colorWithCalibratedWhite:fn_BAR_EDGE alpha:1.0] CGColor]);
 	CGContextStrokePath(c);

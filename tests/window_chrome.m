@@ -266,9 +266,10 @@ int main(void)
 			check(!is_colour(at(rep, 4, 1), [NSColor whiteColor], 0.02)
 			      && is_colour(at(rep, CW / 2, 1), [NSColor whiteColor], 0.02),
 			      "and the white row begins at the corner's tangent, with no pale stub inside the arc");
-			check(is_colour(at(rep, 0, 10), [NSColor cg_chromeFaceColor], 0.02)
-			      && is_colour(at(rep, CW - 1, 10), [NSColor cg_chromeFaceColor], 0.02),
-			      "and NOTHING is drawn down the ends — the strip is the surface to the window's own edges");
+			check(is_colour(at(rep, 0, 10), grey(EDGE_L), 0.02)
+			      && is_colour(at(rep, CW - 1, 10), grey(EDGE_L), 0.02)
+			      && is_colour(at(rep, CW / 2, FH - 1), grey(EDGE_L), 0.02),
+			      "and the outline is a FRAME: down both ends and along the bottom, in the same ink");
 			check(is_colour(at(rep, CW / 2, STRIP + 6), [NSColor whiteColor], 0.02),
 			      "and the chrome does not run down into the content below it");
 			[rep release];
@@ -489,7 +490,9 @@ int main(void)
 			NSBitmapImageRep *rep = draw_chrome(w);
 			int x, inked = 0;
 
-			for (x = xMenu; x < CW; x++) {
+			/* ONE COLUMN SHORT OF THE EDGE: the outline is a FRAME, so the window's own last column is the theme's
+			 * ink whatever the toolbar does. */
+			for (x = xMenu; x < CW - 2; x++) {
 				if (ink_at(rep, x, 10)) {
 					inked++;
 				}
