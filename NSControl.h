@@ -54,6 +54,11 @@ NS_ASSUME_NONNULL_BEGIN
 	/* THE CELL IS THE ONLY THING THIS CLASS OWNS. Everything else it appears to hold — the value, the target, the
 	 * action, the font, the alignment — is the cell's, and the doors below are forwards. */
 	NSCell *_cell;			/* RETAINED */
+	/* **THE PAIR A CELL-LESS CONTROL STILL NEEDS.** A table, an outline and a browser column are controls with no cell,
+	 * and `-setTarget:` used to write to the cell they do not have; see `NSControl -target` for the measurement. NOT
+	 * RETAINED, which is Apple's rule for a target. */
+	id _cg_target;
+	SEL _cg_action;
 	BOOL _ignoresMultiClick;
 	/* **AND THE TRACKING AREA THAT MAKES THE POINTER VISIBLE TO THE CELL** — installed when the control enters a window
 	 * and taken out when it leaves one (see `-viewDidMoveToWindow`), because an area with a window and no view is

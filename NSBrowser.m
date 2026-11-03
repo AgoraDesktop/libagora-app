@@ -855,6 +855,9 @@ static NSString * const AGCoderBrowserCellPrototypeKey = @"cellPrototype";
 	[table setDataSource:self];
 	[table setDelegate:self];
 	[table setDoubleAction:@selector(cg_tableDoubleClicked:)];
+	/* AND THE BROWSER IS THE ONE THAT ANSWERS IT: a column's table is inside two scroll views and a document view, so
+	 * the responder chain from it does not pass through this object. */
+	[table setTarget:self];
 	[table setAllowsTypeSelect:_allowsTypeSelect];
 	[table setDraggingSourceOperationMask:_localDragMask forLocal:YES];
 	[table setDraggingSourceOperationMask:_nonLocalDragMask forLocal:NO];
@@ -1301,8 +1304,20 @@ static NSString * const AGCoderBrowserCellPrototypeKey = @"cellPrototype";
 	if (table != nil) {
 		NSCell *cell = [table preparedCellAtColumn:0 row:row];
 
-		if (cell != nil && [cell respondsToSelector:@selector(isLeaf)]) {
-			return ![cell isLeaf];
+		if (cell != nil) {
+			/* **THE CELL HAS TO BE CONFIGURED BEFORE IT IS ASKED.** A prepared cell is the prototype until the browser's
+			 * own `-tableView:willDisplayCell:forTableColumn:row:` has handed it to the delegate, and that door is where a
+			 * cell-based surface states its leaf fact: MEASURED, a package (an `.app`) opened an EMPTY COLUMN beside it
+			 * because the cell still answered "not a leaf" — the triangle and the open door disagreed about what the item
+			 * was. Asking the same door the paint uses means the two cannot. */
+			NSInteger atColumn = [self columnForTable:table];
+
+			if (atColumn >= 0) {
+				[self tableView:table willDisplayCell:cell forTableColumn:nil row:row];
+			}
+			if ([cell respondsToSelector:@selector(isLeaf)]) {
+				return ![cell isLeaf];
+			}
 		}
 	}
 	return NO;

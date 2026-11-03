@@ -1706,7 +1706,11 @@ static NSString * const AGCoderTableVerticalMotionKey = @"verticalMotionCanBegin
 	_clickedColumn = [self columnAtPoint:point];
 	if ([event clickCount] >= 2) {
 		if (_doubleAction != NULL) {
-			[[NSApplication sharedApplication] sendAction:_doubleAction to:nil from:self];
+			/* **A CONTROL'S DOUBLE CLICK GOES TO THE CONTROL'S TARGET.** `to:nil` asks the responder chain, which
+			 * answers the KEY WINDOW's first responder — a table inside a browser is not on that walk, so the browser
+			 * never heard its own columns' double clicks: MEASURED as "double clicking a .app in column view does not
+			 * run the app or open the app". A target that was never set still means nil, which is the chain. */
+			[[NSApplication sharedApplication] sendAction:_doubleAction to:[self target] from:self];
 		} else if (_clickedRow >= 0 && _clickedColumn >= 0) {
 			[self editColumn:_clickedColumn row:_clickedRow withEvent:event select:YES];
 		}

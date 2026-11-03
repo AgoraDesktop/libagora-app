@@ -138,24 +138,42 @@ static NSString * const AGCoderIgnoresMultiClickKey = @"ignoresMultiClick";
 
 /* ---- THE TARGET/ACTION PAIR, WHICH IS THE CELL'S ------------------------------------------------ */
 
+/* **A CONTROL WITH NO CELL STILL HAS A TARGET.** Apple's storage rule — the target is the CELL's — holds for a control
+ * that HAS a cell, and the tables, outlines and browser columns of this tier have none: `NSTableView` is an `NSControl`
+ * whose cell is nil, so `-setTarget:` wrote nowhere and `-target` answered nil. MEASURED as a double-click in a browser
+ * column that never reached the browser: the column's table sent its double action "to:nil", the responder chain was
+ * asked, and a table's chain runs through two scroll views and a document view — the browser is not on it. So the
+ * control keeps its own copy (NOT RETAINED, Apple's rule for a target) and answers it when its cell has none. */
 - (id)target
 {
+	if (_cg_target != nil) {
+		return _cg_target;
+	}
 	return _cell != nil ? [_cell target] : nil;
 }
 
 - (void)setTarget:(id)anObject
 {
-	[_cell setTarget:anObject];
+	_cg_target = anObject;
+	if (_cell != nil) {
+		[_cell setTarget:anObject];
+	}
 }
 
 - (SEL)action
 {
+	if (_cg_action != NULL) {
+		return _cg_action;
+	}
 	return _cell != nil ? [_cell action] : NULL;
 }
 
 - (void)setAction:(SEL)aSelector
 {
-	[_cell setAction:aSelector];
+	_cg_action = aSelector;
+	if (_cell != nil) {
+		[_cell setAction:aSelector];
+	}
 }
 
 /* ---- ENABLE, HIGHLIGHT, AND THE REDISPLAY EACH OWES -------------------------------------------- */
