@@ -1880,31 +1880,56 @@ static void fn_chrome_edge_path(CGContextRef c, CGFloat width, CGFloat top, CGFl
 }
 
 /* `top` IS THE WINDOW'S OWN TOP EDGE and `width` its width; the strip's height does not enter, because the edge does
- * not run down it. */
-static void fn_draw_chrome_edges(CGContextRef c, CGFloat width, CGFloat top)
+ * not run down it. `scale` is the window's DEVICE PIXELS PER POINT, because both lines below are measured in DEVICE
+ * PIXELS — see the note in the body. */
+static void fn_draw_chrome_edges(CGContextRef c, CGFloat width, CGFloat top, CGFloat scale)
 {
 	CGFloat radius = fn_BAR_RADIUS;
-	CGFloat w = fn_BAR_BORDER;
+	/* ONE DEVICE PIXEL, IN POINTS. A point is not a pixel: at this tree's 96-dpi panel a device pixel is 0.75 points,
+	 * and a line whose position is stated in points lands astride two pixels there. */
+	CGFloat px = (scale > 0.0) ? 1.0 / scale : 1.0;
+	/* **THE BORDER KEEPS ONE DEVICE PIXEL CLEAR OF THE WINDOW'S SHAPE, AND IS SNAPPED TO THE DEVICE GRID.** Both halves
+	 * are the fix for corners that looked raggedy.
+	 *
+	 * The shape is the COMPOSITOR's — `AWS_SHADOW_RADIUS` is this file's `fn_BAR_RADIUS` and the server clips the
+	 * surface to that arc with its own antialiasing — so ink drawn ON the silhouette has its antialiasing multiplied by
+	 * the clip's. Along a straight edge that product is a constant (MEASURED: every pixel of the top row read #AA);
+	 * around the corner's arc both ramps vary per pixel, so the line came out DASHED — MEASURED, seventeen pixels
+	 * spread between #95 and #D4 where the line is 1 point wide. One device pixel in, the clip's ramp cannot reach the
+	 * ink.
+	 *
+	 * AND THE WINDOW'S TOP EDGE IS A FRACTIONAL DEVICE ROW (MEASURED: 167 points on a 1.33203 output is 222.45 rows),
+	 * so an inset measured in points from that edge still straddles two pixels — the line rendered at 40% (#BB where
+	 * the ink is #93). The inset is measured from the edge's ROUNDED device row instead, which puts the band's own
+	 * edges on pixel boundaries: the straight run is then exactly the theme's #939393.
+	 *
+	 * The band is one POINT thick — the theme's border — which is 1 pixel at 1x and 1.33 pixels here; a 1-PIXEL band
+	 * on a curve would still be a staircase of partial pixels, which is the other half of what "raggedy" was. */
+	CGFloat snapped_top = (CGFloat)((int)(top * scale + 0.5));	/* the top edge's own device row */
+	CGFloat clearance_px = 1.0;					/* the air between the shape and the ink */
+	CGFloat border_px = fn_BAR_BORDER * scale;			/* the theme's one point, in device pixels */
+	CGFloat border_centre_px = clearance_px + border_px / 2.0;
+	CGFloat highlight_px = fn_BAR_BORDER * scale;			/* the light row is the same weight */
+	CGFloat highlight_centre_px = clearance_px + border_px + highlight_px / 2.0;
+	CGFloat edge_inset = top - (snapped_top - border_centre_px) / scale;
+	CGFloat highlight_inset = top - (snapped_top - highlight_centre_px) / scale;
 
-	if (width < 2.0 * radius) {
-		radius = width / 2.0;	/* a window narrower than its own corners gets an edge, not a folded path */
-	}
 	CGContextSaveGState(c);
 	CGContextSetShouldAntialias(c, true);
 
-	/* 1. THE OUTLINE, inset by half of itself so its one point lands ON the pixel instead of across two of them. */
+	/* 1. THE OUTLINE, recorded about its centre line and stroked one device pixel wide. */
 	CGContextBeginPath(c);
-	fn_chrome_edge_path(c, width, top, radius, w / 2.0);
-	CGContextSetLineWidth(c, w);
+	fn_chrome_edge_path(c, width, top, radius, edge_inset);
+	CGContextSetLineWidth(c, fn_BAR_BORDER);
 	CGContextSetStrokeColorWithColor(c, [[NSColor colorWithCalibratedWhite:fn_BAR_EDGE alpha:1.0] CGColor]);
 	CGContextStrokePath(c);
 
-	/* 2. AND THE LIGHT ROW UNDER IT, one point further in — STRAIGHT, because a second arc at the corner is a second
-	 * corner. It runs between the points where the outline's own arcs have come down to its height. */
+	/* 2. AND THE LIGHT ROW UNDER IT, one device pixel further in — STRAIGHT, because a second arc at the corner is a
+	 * second corner. It runs between the points where the outline's own arcs have come down to its height. */
 	CGContextBeginPath(c);
-	CGContextMoveToPoint(c, w * 1.5, top - w * 1.5);
-	CGContextAddLineToPoint(c, width - w * 1.5, top - w * 1.5);
-	CGContextSetLineWidth(c, w);
+	CGContextMoveToPoint(c, highlight_inset, top - highlight_inset);
+	CGContextAddLineToPoint(c, width - highlight_inset, top - highlight_inset);
+	CGContextSetLineWidth(c, fn_BAR_BORDER);
 	CGContextSetStrokeColorWithColor(c, [[NSColor whiteColor] CGColor]);
 	CGContextStrokePath(c);
 
@@ -2204,7 +2229,8 @@ static void fn_draw_chrome(CGContextRef c, NSWindow *w, NSRect content)
 		CGContextSetFillColorWithColor(c, [[NSColor cg_chromeFaceColor] CGColor]);
 		CGContextFillRect(c, CGRectMake(0.0, top, content.size.width, layout.height));
 		if (layout.height > 0.0) {
-			fn_draw_chrome_edges(c, content.size.width, top + layout.height);
+			fn_draw_chrome_edges(c, content.size.width, top + layout.height,
+					     [w userSpaceScaleFactor]);
 		}
 		for (i = 0; i < AGChromeButtonCount; i++) {
 			if (layout.present[i]) {
