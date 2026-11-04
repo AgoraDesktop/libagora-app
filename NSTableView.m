@@ -1520,14 +1520,19 @@ static NSString * const AGCoderTableVerticalMotionKey = @"verticalMotionCanBegin
 		NSRect rect = [self rectOfRow:(NSInteger)row];
 
 		if (NSIntersectsRect(rect, clipRect)) {
-			/* **A SELECTED ROW IS A SELECTION, SO IT WEARS THE PLATFORM'S ACCENT** — the menu's chip says the same
-			 * thing in a smaller shape, and its own note asks for the accent "on the whole row" in a list. The
-			 * SOURCE-LIST style is the exception and stays a grey, because that style is a sidebar's, not a
-			 * table's. The selected row's ink is `+selectedControlTextColor`, the white a text selection wears on
-			 * this accent; `+selectedControlColor`, the era's blue, is a different colour on purpose and nothing in
-			 * this tier paints a highlight with it any more. */
-			NSColor *selection = (_selectionHighlightStyle == NSTableViewSelectionHighlightStyleSourceList)
-				? [NSColor controlHighlightColor] : [NSColor cg_accentColor];
+			/* **A SELECTED ROW IS A SELECTION, SO IT WEARS THE PLATFORM'S ACCENT — IN A SIDEBAR TOO.** The menu's
+			 * chip says the same thing in a smaller shape, and its own note asks for the accent "on the whole row" in
+			 * a list. The SOURCE-LIST style used to be the exception, on a grey plate, because that is what a
+			 * sidebar's selection looked like on the reference desktop; MEASURED in Workspace's own places pane, that
+			 * plate plus the white ink the row already asked for came out as WHITE ON GREY — a highlight that reads
+			 * as a disabled row, and the one place in this tier where a selection did not wear the accent. The style
+			 * still changes the SHAPE of a drop's feedback (`-setSelectionHighlightStyle:` asks for the source-list
+			 * one); it no longer changes the colour of a selection.
+			 *
+			 * The selected row's ink is `+selectedControlTextColor`, the white a text selection wears on this accent;
+			 * `+selectedControlColor`, the era's blue, is a different colour on purpose and nothing in this tier
+			 * paints a highlight with it any more. */
+			NSColor *selection = [NSColor cg_accentColor];
 
 			[selection setFill];
 			[[NSBezierPath bezierPathWithRect:rect] fill];
