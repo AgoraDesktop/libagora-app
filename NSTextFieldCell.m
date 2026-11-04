@@ -381,6 +381,27 @@ static NSString * const AGCoderFieldPlaceholderAttributedKey = @"placeholderAttr
 	return NSMidY(cellFrame) + (transform.d >= 0.0 ? 1.0 : -1.0) * ((ascender - descent) / 2.0);
 }
 
+/* **WHERE A LINE OF THIS CELL'S TEXT STARTS, READ FROM THE CELL'S OWN ALIGNMENT.** `NSCell -alignment` was stored and
+ * never consulted while drawing: the words were pinned to the text rect's left edge whatever the cell had been told, so a
+ * status line asked to be centred came out flush left. Apple's contract is that a text field's alignment is what its
+ * CELL draws by — and the FIELD EDITOR has always honoured it (`-setUpFieldEditorAttributes:`), which is what made the
+ * bug visible: the same words jumped to the middle of the field the moment a person clicked into it and went back to the
+ * left when they clicked out.
+ *
+ * Left, centre and right, and natural/justified draw as left because a single line has nothing to distribute. */
+static CGFloat fn_text_origin_x(id cell, NSRect room, CGFloat width)
+{
+	NSTextAlignment alignment = [cell alignment];
+
+	if (alignment == NSCenterTextAlignment) {
+		return NSMinX(room) + (NSWidth(room) - width) / 2.0;
+	}
+	if (alignment == NSRightTextAlignment) {
+		return NSMaxX(room) - width;
+	}
+	return NSMinX(room);
+}
+
 /* **AND THE PLACEHOLDER IS DRAWN THE WAY THE STRING IS, BECAUSE IT IS THE SAME SORT OF THING.** Same text rect, same
  * left edge, same vertical centring on the field, same clip — so a hint and a value cannot sit at different heights in
  * the same box, which is the bug a second placement path always grows. What differs is the COLOUR, and that is the
@@ -407,15 +428,16 @@ static NSString * const AGCoderFieldPlaceholderAttributedKey = @"placeholderAttr
 		 * straight across the neighbouring view — the split view probe found it at a narrow pane.
 		 * The cell's own rectangle is a bound within the caller's region, which is `-addClip`. */
 		[[NSBezierPath bezierPathWithRect:cellFrame] addClip];
-		[text drawAtPoint:NSMakePoint(NSMinX(room), baseline)];
+		[text drawAtPoint:NSMakePoint(fn_text_origin_x(self, room, size.width), baseline)];
 		[NSGraphicsContext restoreGraphicsState];
 	}
 }
 
-/* **AND THE WORDS ARE LEFT-ALIGNED AND CLIPPED TO THE ROOM THE FIELD GIVES THEM.** `NSActionCell` draws nothing, so
- * everything here is this class's: the string is taken at its own height, placed at the text rect's left edge and
- * centred vertically on the field, and the drawing is clipped to the rect — so a string longer than its field stops
- * at the edge rather than running out of the control, which is what a field does at its far end. */
+/* **AND THE WORDS SIT ON THE LINE THE CELL'S ALIGNMENT ASKS FOR, CLIPPED TO THE ROOM THE FIELD GIVES THEM.**
+ * `NSActionCell` draws nothing, so everything here is this class's: the string is taken at its own height, placed at the
+ * text rect's left or middle or right edge (`fn_text_origin_x`) and centred vertically on the field, and the drawing is
+ * clipped to the rect — so a string longer than its field stops at the edge rather than running out of the control,
+ * which is what a field does at its far end. */
 - (void)drawInteriorWithFrame:(NSRect)cellFrame inView:(id)controlView
 {
 	/* **AND WHAT IS DRAWN IS `-cg_contentText`, THE SAME DOOR THE MEASUREMENT ASKS.** A field that measured its value
@@ -468,7 +490,7 @@ static NSString * const AGCoderFieldPlaceholderAttributedKey = @"placeholderAttr
 		/* THE SAME INTERSECTION THE PLACEHOLDER USES: the cell is a seam inside whatever clip the
 		 * control already established, not a replacement for it. */
 		[[NSBezierPath bezierPathWithRect:cellFrame] addClip];
-		[string drawAtPoint:NSMakePoint(NSMinX(room), baseline) withAttributes:attributes];
+		[string drawAtPoint:NSMakePoint(fn_text_origin_x(self, room, tsize.width), baseline) withAttributes:attributes];
 		[NSGraphicsContext restoreGraphicsState];
 	}
 }

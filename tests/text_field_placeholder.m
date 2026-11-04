@@ -116,6 +116,23 @@ static int first_column(NSBitmapImageRep *rep)
 	return -1;
 }
 
+/* THE LAST COLUMN CARRYING INK, so "where does what is written end" is a number too. */
+static int last_column(NSBitmapImageRep *rep)
+{
+	int x, y;
+
+	for (x = IN_X1 - 1; x >= IN_X0; x--) {
+		for (y = IN_Y0; y < IN_Y1; y++) {
+			NSColor *c = [rep colorAtX:x y:y];
+
+			if (c != nil && [c redComponent] < 0.80) {
+				return x;
+			}
+		}
+	}
+	return -1;
+}
+
 /* AND A RED PIXEL, WHICH THE DARKNESS THRESHOLD CANNOT SEE: pure red is 1.0 in its red channel, so an attributed
  * placeholder drawn red would be invisible to `-ink_in`. This asks the question directly. */
 static int has_red(NSBitmapImageRep *rep)
@@ -337,6 +354,50 @@ int main(void)
 		[field release];
 		[content release];
 		[window release];
+	}
+
+	/* 6. **AND THE ALIGNMENT IS THE CELL'S, NOT ONLY THE FIELD EDITOR'S.** A centred field used to draw its words
+	 * flush left and jump to the middle only while it was being edited — the editor honoured `-alignment`, the CELL
+	 * did not — which is what put a status line at a window's left edge when the window had asked for the middle.
+	 * The measurement is the ink's own middle against the cell's, for a VALUE and for a PLACEHOLDER, plus a
+	 * right-aligned field as the other end. */
+	{
+		NSTextFieldCell *aligned = [[NSTextFieldCell alloc] initTextCell:@"abcd"];
+		int left, right;
+		CGFloat cell_mid = (CGFloat)W / 2.0;
+		CGFloat ink_mid;
+
+		[aligned setBordered:YES];
+		[aligned setBezeled:YES];
+		[aligned setAlignment:NSCenterTextAlignment];
+		rep = draw_cell(aligned);
+		left = first_column(rep);
+		right = last_column(rep);
+		ink_mid = (CGFloat)(left + right) / 2.0;
+		printf("  (note: centred value — ink %d..%d, middle %.1f of a %d-wide cell)\n", left, right,
+		       (double)ink_mid, W);
+		check(left > IN_X0 + 8 && fabs((double)(ink_mid - cell_mid)) <= 2.0,
+		      "a CENTRED value is drawn in the middle of its field, not at the left edge");
+		[rep release];
+
+		[aligned setStringValue:@""];
+		[aligned setPlaceholderString:@"type here"];
+		rep = draw_cell(aligned);
+		left = first_column(rep);
+		right = last_column(rep);
+		ink_mid = (CGFloat)(left + right) / 2.0;
+		check(left > IN_X0 + 8 && fabs((double)(ink_mid - cell_mid)) <= 3.0,
+		      "and a centred PLACEHOLDER is centred the same way, because it is the same kind of thing");
+		[rep release];
+
+		[aligned setAlignment:NSRightTextAlignment];
+		[aligned setPlaceholderString:nil];
+		[aligned setStringValue:@"abcd"];
+		rep = draw_cell(aligned);
+		right = last_column(rep);
+		check(right > IN_X1 - 12, "and a RIGHT-aligned value ends at the field's right edge");
+		[rep release];
+		[aligned release];
 	}
 
 	[cell release];
