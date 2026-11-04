@@ -75,6 +75,13 @@
 # A header click used to set the descriptors and tell nobody, because a view that is both was told in the spelling it does
 # not implement. The hook is declared so the outline can override it; `cg_` marks it as this tree's own.
 #
+# **AND AN EIGHTH, FOR THE MENU SESSION'S TWO NEW DOORS**: `-[NSMenu cg_trackEventBurst:using:]` and
+# `-[NSMenu cg_sessionRepaintCount]`. Neither is Apple's (`sel:NSMenu` is unchanged) and both are this tree's own. The
+# first is one pass of the tracking loop — every event already queued, then one paint — because the loop took one event
+# and painted and a full menu paint is MEASURED at 3.6 ms over twelve rows, so an X11 pointer emitting faster than that
+# left a queue behind it and the highlight was drawn where the pointer had been. The second is the number that proves it:
+# a burst of five motion events costs ONE repaint, and a probe counts it rather than taking the comment's word.
+#
 classes-missing 20
 classes-offered 168
 classes-present 148
@@ -256,7 +263,7 @@ functions-defined-not-declared 0
 functions-missing 0
 functions-offered 86
 functions-present 86
-methods-declared 5460
+methods-declared 5462
 methods-declared-not-implemented 0
 methods-informal 0
 methods-external 0

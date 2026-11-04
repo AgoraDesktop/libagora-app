@@ -146,6 +146,14 @@ extern NSString *NSMenuDidEndTrackingNotification;
 	 * its panel could never reach an output, because A WINDOW PRESENTS ONLY IN ITS OWN DRAW PATH. */
 	id _menuView;
 	BOOL _tracking;
+	/* **A BURST OF MOTION EVENTS IS ONE REPAINT, NOT ONE PER EVENT.** The session's loop takes everything that has
+	 * already arrived before it paints, so a row's highlight follows the pointer instead of trailing it: a paint per
+	 * event cannot keep up with an X11 pointer, and every paint the loop fell behind by was a highlight drawn where the
+	 * pointer used to be. While a burst is being handled the repaint is DEFERRED (`_cgDeferRepaint`) and remembered
+	 * (`_cgRepaintPending`), and it is done once when the queue is empty. */
+	BOOL _cgDeferRepaint;
+	BOOL _cgRepaintPending;
+	NSInteger _cgSessionRepaints;	/* how many times this menu has painted its session: a probe's door */
 	id _highlightedItem;
 	NSRect _trackingFrame;
 	/* AND THE ONE POINTER THE SUBMENU NEEDS: WHICH SUBMENU IS OPEN, OR NIL. The child's own window, frame and
@@ -215,6 +223,16 @@ extern NSString *NSMenuDidEndTrackingNotification;
 @property (nullable, assign) id highlightedItem;
 - (void)setHighlightedItem:(nullable id)item;
 - (BOOL)cg_trackOneEvent:(nullable id)event;
+
+/* **ONE PASS OF THE SESSION'S LOOP: EVERYTHING ALREADY QUEUED, THEN ONE PAINT.** `-cg_trackOneEvent:` is the pass's
+ * body and this is its driver: the first event is the one the loop waited for, and every event already waiting behind
+ * it is taken without waiting. Motion events are the case this exists for — only the LAST position matters, and a pass
+ * that painted between every one of them fell further behind the pointer with each one. NO when the session ended. */
+- (BOOL)cg_trackEventBurst:(nullable id)firstEvent using:(id)application;
+
+/* How many times this menu has painted its session: a probe's door, and the number that says whether a burst of
+ * motion was one repaint or twenty. Nothing in the application asks. */
+- (NSInteger)cg_sessionRepaintCount;
 
 /* **AND WHETHER THE SESSION IS STILL UP**, which a caller driving one event at a time needs in order to stop. It is
  * also the door the test of "the menu is gone before its action runs" reads from inside the action. */

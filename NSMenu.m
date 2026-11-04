@@ -781,6 +781,7 @@ static const CGFloat NSMenuStateColumnWidth = 20.0;
  * parts. What is still hand-drawn here is the panel, the highlight and the separators. */
 - (void)cg_repaintSession
 {
+	_cgSessionRepaints++;
 	/* **THE REPAINT IS THE VIEW'S NOW, AND IT HAD TO BECOME SO.** This method used to paint the panel, the
 	 * highlight and the separators into a context taken over the tracking window with
 	 * `+graphicsContextWithWindow:` — WHICH REFUSES IN THIS TIER, because the only destination `NSGraphicsContext`
@@ -902,7 +903,12 @@ static const CGFloat NSMenuStateColumnWidth = 20.0;
 				_tracking ? "repainting" : "NOT TRACKING, so not repainting");
 		}
 		if (_tracking) {
-			[self cg_repaintSession];
+			/* A BURST PAINTS ONCE, AT ITS END; see `-cg_trackEventBurst:using:`. */
+			if (_cgDeferRepaint) {
+				_cgRepaintPending = YES;
+			} else {
+				[self cg_repaintSession];
+			}
 		}
 	}
 }
@@ -950,6 +956,54 @@ static const CGFloat NSMenuStateColumnWidth = 20.0;
 
 /* THE LOOP'S BODY. It takes ONE event and answers whether the session is still up — so a caller with a run loop
  * writes `while ([menu cg_trackOneEvent:[app nextEventMatchingMask:...]]) { }` and nothing else. */
+- (NSInteger)cg_sessionRepaintCount
+{
+	return _cgSessionRepaints;
+}
+
+/* **THE PASS ITSELF.** The loop used to take one event and paint, then take the next and paint again — which is one
+ * repaint per pointer sample, and a full menu paint is MEASURED at 3.6 ms over twelve rows. An X11 pointer emits far
+ * more than that per second, so the queue grew and the highlight was drawn at a position the pointer had already left:
+ * "the highlight lags behind the pointer" is exactly that, and the lag grew with the speed of the hand.
+ *
+ * So the events that have ALREADY ARRIVED are taken before anything is painted. Only the last motion in a burst can
+ * matter — the rows under the ones before it are history — so one paint at the end is not an optimisation of the
+ * picture, it is the same picture. The deferral is scoped to this call, so a menu that ends mid-burst still leaves
+ * `-setHighlightedItem:` painting normally. */
+- (BOOL)cg_trackEventBurst:(id)firstEvent using:(id)application
+{
+	BOOL more = YES;
+	id next = firstEvent;
+
+	_cgDeferRepaint = YES;
+	for (;;) {
+		if (next == nil) {
+			/* NOTHING WAITING ANY MORE: the burst is over. `-distantPast` is what makes this a question about
+			 * the queue rather than a second wait. */
+			next = [application nextEventMatchingMask:NSAnyEventMask
+							untilDate:[NSDate distantPast]
+							   inMode:nil
+							  dequeue:YES];
+			if (next == nil) {
+				break;
+			}
+		}
+		if (![self cg_trackOneEvent:next]) {
+			more = NO;
+			break;
+		}
+		next = nil;
+	}
+	_cgDeferRepaint = NO;
+	if (_cgRepaintPending) {
+		_cgRepaintPending = NO;
+		if (_tracking) {
+			[self cg_repaintSession];
+		}
+	}
+	return more;
+}
+
 - (BOOL)cg_trackOneEvent:(id)event
 {
 	NSUInteger type;
@@ -1349,8 +1403,12 @@ static const CGFloat NSMenuStateColumnWidth = 20.0;
 			 * moment it asked, and not the bar's highlighted title, which the click set a flag for and nothing ever
 			 * painted. A tracking loop that stops the world is not what a menu does on the Mac — there the loop
 			 * keeps updating, which is why a menu bar can repaint its title while the menu is down. */
+			/* **THE BURST GOES FIRST AND THE PAINT COMES AFTER IT.** The order used to be the other way round, which
+			 * cost one event of latency by itself: the highlight this pass's event asked for was painted at the top of
+			 * the NEXT pass, so a pointer that stopped left its last row unlit until something else happened. Handling
+			 * first means the pass ends by painting what the pointer just did. */
+			more = [self cg_trackEventBurst:next using:app];
 			[app updateWindows];
-			more = [self cg_trackOneEvent:next];
 
 			if (getenv("APPKIT_MENU_DIAG") != NULL) {
 				fprintf(stderr, "  DIAG menu: event type %ld -> %s\n", (long)(next != nil ? [next type] : -1),

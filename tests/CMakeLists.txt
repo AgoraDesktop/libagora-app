@@ -2040,6 +2040,14 @@ target_link_libraries(menu_pick_dismisses PRIVATE App)
 add_test(NAME appkit-menu-pick-dismisses COMMAND menu_pick_dismisses)
 set_tests_properties(appkit-menu-pick-dismisses PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
 
+# **A MOVING POINTER REPAINTS A MENU ONCE PER BURST, NOT ONCE PER EVENT.** The session's loop used to take one event and
+# paint, so an X11 pointer that emits faster than one paint per sample left a queue behind it and the highlight trailed
+# the pointer by however deep that queue was. This counts the paints: a burst of five motion events costs one.
+add_executable(menu_highlight_burst menu_highlight_burst.m)
+target_link_libraries(menu_highlight_burst PRIVATE App)
+add_test(NAME appkit-menu-highlight-burst COMMAND menu_highlight_burst)
+set_tests_properties(appkit-menu-highlight-burst PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
+
 add_executable(open_panel_accept open_panel_accept.m)
 target_link_libraries(open_panel_accept PRIVATE App)
 add_test(NAME appkit-open-panel-accept COMMAND open_panel_accept)
