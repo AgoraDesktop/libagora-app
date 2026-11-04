@@ -38,6 +38,26 @@ static void check(int ok, const char *name)
 	}
 }
 
+/* **THE BAR'S FACE, WHICH IS WHAT A BAR IS DRAWN ON.** A bar paints no panel of its own — the window's background is
+ * the menu bar's — so a test has to stand in for it, and the stand-in has to be the COLOUR IT REALLY IS: 235/255 grey.
+ * These two bitmaps used to be filled WHITE, which was fine while every title was dark and is not while a highlighted
+ * title is white. */
+#define BAR_FACE (235.0 / 255.0)
+
+/* **INK, ON A PANEL OR ON THE ACCENT CHIP.** A row's title is dark on the panel and WHITE on the chip, so "dark" is
+ * only half the question: white counts, the panel's own 0.92 face does not, and this is the criterion every count in
+ * this file uses. */
+static BOOL is_ink(NSColor *c)
+{
+	if (c == nil) {
+		return NO;
+	}
+	if ([c redComponent] < 0.5) {
+		return YES;
+	}
+	return [c redComponent] > 0.97 && [c greenComponent] > 0.97 && [c blueComponent] > 0.97;
+}
+
 /* Ink anywhere in a row's band, and whether the row carries the highlight colour. */
 static void scan(NSBitmapImageRep *rep, int top_row, int *ink, int *highlight)
 {
@@ -64,7 +84,10 @@ static void scan(NSBitmapImageRep *rep, int top_row, int *ink, int *highlight)
 			 * one was measuring. */
 			if ([c blueComponent] > 0.90 && [c blueComponent] - [c redComponent] > 0.20) {
 				(*highlight)++;
-			} else if ([c redComponent] < 0.5) {
+			} else if (is_ink(c)) {
+				/* **WHITE IS INK TOO, AND THIS COUNT USED TO MISS IT.** A highlighted row's title is
+				 * `+selectedMenuItemTextColor` — white on the accent chip — and ink used to be counted as "red below
+				 * 0.5", which white is not: the highlighted row's title would have counted ZERO. */
 				(*ink)++;
 			}
 		}
@@ -150,7 +173,7 @@ int main(void)
 		 * that drew a bar onto an untouched bitmap was measuring UNINITIALISED MEMORY. MEASURED: "ink" of 2046
 		 * pixels in a column 93 wide and 22 tall, which is the whole rectangle, because a zeroed bitmap is black
 		 * and black is ink. The fill stands in for the window's background, which is what a bar is drawn on. */
-		[[NSColor whiteColor] setFill];
+		[[NSColor colorWithCalibratedRed:BAR_FACE green:BAR_FACE blue:BAR_FACE alpha:1.0] setFill];
 		[[NSBezierPath bezierPathWithRect:[hv bounds]] fill];
 		[hv drawRect:[hv bounds]];
 
@@ -166,8 +189,8 @@ int main(void)
 					NSColor *c = [bar colorAtX:x y:y];
 
 					if (c == nil) { continue; }
-					if ([c blueComponent] > 0.6 && [c redComponent] < 0.4) { bar_hi[row]++; }
-					else if ([c redComponent] < 0.5) { bar_ink[row]++; }
+					if ([c blueComponent] > 0.90 && [c blueComponent] - [c redComponent] > 0.20) { bar_hi[row]++; }
+					else if (is_ink(c)) { bar_ink[row]++; }
 				}
 			}
 			x0f += wf[row];
@@ -207,16 +230,14 @@ int main(void)
 				bitsPerSample:8 samplesPerPixel:4 hasAlpha:YES isPlanar:NO
 				colorSpaceName:NSCalibratedRGBColorSpace bytesPerRow:400 * 4 bitsPerPixel:32];
 			[NSGraphicsContext setCurrentContext:[NSGraphicsContext graphicsContextWithBitmapImageRep:other]];
-			[[NSColor whiteColor] setFill];
+			[[NSColor colorWithCalibratedRed:BAR_FACE green:BAR_FACE blue:BAR_FACE alpha:1.0] setFill];
 			[[NSBezierPath bezierPathWithRect:NSMakeRect(0.0, 0.0, 400.0, 22.0)] fill];
 			[plain drawTitleWithFrame:NSMakeRect(0.0, 0.0, 400.0, 22.0) inView:nil];
 
 			plain_ink = 0.0;
 			for (y = 0; y < 22; y++) {
 				for (x = 0; x < 400; x++) {
-					NSColor *c = [other colorAtX:x y:y];
-
-					if (c != nil && [c redComponent] < 0.5) {
+					if (is_ink([other colorAtX:x y:y])) {
 						plain_ink += 1.0;
 					}
 				}
@@ -248,8 +269,7 @@ int main(void)
 				for (x = 0; x < 400; x++) {
 					NSColor *c = [bar colorAtX:x y:y];
 
-					if (c != nil && [c redComponent] < 0.5 && [c blueComponent] < 0.5
-					    && !([c blueComponent] > 0.6 && [c redComponent] < 0.4)) {
+					if (is_ink(c) && !([c blueComponent] > 0.90 && [c blueComponent] - [c redComponent] > 0.20)) {
 						row_ink++;
 					}
 				}

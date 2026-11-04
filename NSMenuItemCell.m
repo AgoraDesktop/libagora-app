@@ -440,7 +440,12 @@ static NSColor *fn_item_ink(BOOL enabled, BOOL highlighted)
 	if (!enabled) {
 		return [NSColor colorWithCalibratedRed:0.55 green:0.55 blue:0.55 alpha:1.0];
 	}
-	return highlighted ? [NSColor blackColor] : [NSColor controlTextColor];
+	/* **WHITE ON THE CHIP, WHICH IS THE PAIRING THE DESKTOP ASKED FOR.** It was black for one pass, on the argument
+	 * that the accent is a LIGHT periwinkle and black reads more strongly on it — true, and overruled: a highlighted row
+	 * is white on the accent everywhere else the desktop draws one (a pressed segment, a path component, a date picker's
+	 * selection), and a menu is not the place to be the exception. `+selectedMenuItemTextColor` is Apple's own name for
+	 * this ink and it is white. */
+	return highlighted ? [NSColor selectedMenuItemTextColor] : [NSColor controlTextColor];
 }
 
 - (void)drawStateImageWithFrame:(NSRect)cellFrame inView:(id)controlView

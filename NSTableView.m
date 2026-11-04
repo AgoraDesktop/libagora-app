@@ -1559,15 +1559,15 @@ static NSString * const AGCoderTableVerticalMotionKey = @"verticalMotionCanBegin
 		}
 		canSetInk = [cell respondsToSelector:@selector(setTextColor:)];
 		if (selected && canSetInk) {
-			/* **AND THE SELECTED ROW KEEPS THE DARK INK THE OTHER ROWS HAVE.** The plate is the platform's accent —
-			 * a LIGHT periwinkle — and white on it is a wash, MEASURED: the row was legible and read as faded. The
-			 * plate is what says "this row", the same division the segmented control's chip and the menu's chip
-			 * make; white is a pressed button's ink, for the moment it is held, and a selection is not that.
-			 *
-			 * IT WAS `+selectedControlTextColor` (white) while the plate was the era's BLUE, and that pairing was
-			 * right for a blue. A colour change is a whole pairing. */
+			/* **AND THE SELECTED ROW'S INK IS WHITE, ON THE PLATE THE ROW WEARS.** It went the other way for one pass —
+			 * dark ink kept, on the argument that white on a light periwinkle is a wash — and the owner asked for the
+			 * pairing back: white on the accent is what a highlighted row is everywhere else this desktop draws one (a
+			 * pressed segment, a path component, the date picker's selection), and the menu's chip says the same in a
+			 * smaller shape. The CONTRAST IS THE COST and it is a known one: the accent's luminance is about a third of
+			 * white's, so this is a row READ BY ITS PLATE'S EDGE as much as by its letters. If that ever has to be
+			 * paid down, the change is the PLATE's colour (a darker accent for selections), not this line. */
 			saved = [[(id)cell textColor] retain];
-			[(id)cell setTextColor:[NSColor controlTextColor]];
+			[(id)cell setTextColor:[NSColor selectedControlTextColor]];
 		}
 		[cell drawWithFrame:rect inView:self];
 		if (selected && canSetInk) {
