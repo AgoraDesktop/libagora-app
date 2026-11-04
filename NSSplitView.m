@@ -61,7 +61,12 @@ NSString *NSSplitViewDidResizeSubviewsNotification = @"NSSplitViewDidResizeSubvi
  * `-dividerThickness` or `-drawDividerInRect:` for anything else. */
 #define AG_SPLIT_THICK_THICKNESS	6.0
 #define AG_SPLIT_THIN_THICKNESS		1.0
-#define AG_SPLIT_PANE_THICKNESS		18.0
+/* **THE PANE SPLITTER'S GUTTER IS TWELVE POINTS, A THIRD NARROWER THAN THE EIGHTEEN IT WAS.** Eighteen is what the
+ * reference desktop gives a browser's column gutter, and at this tree's 96-dpi scale it reads as a band the width of a
+ * scroll bar — the owner asked for narrower twice over, once here and once for the browser, which draws its gap from
+ * this same number. The three rings still fit: they are two-point radii, so the gutter is air either side of a six-point
+ * mark whatever its width. */
+#define AG_SPLIT_PANE_THICKNESS		12.0
 #define AG_SPLIT_PANE_RING_RADIUS	2.0
 #define AG_SPLIT_PANE_RING_SPACING	8.0
 /* A collapsed pane opened by a double-click returns to its remembered size when that is at least this large; below

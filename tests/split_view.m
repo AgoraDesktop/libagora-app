@@ -276,10 +276,10 @@ int main(void)
 	[split setDividerStyle:NSSplitViewDividerStyleThin];
 	check(near([split dividerThickness], 1.0), "the thin style is a one-point hairline");
 	[split setDividerStyle:NSSplitViewDividerStylePaneSplitter];
-	check(near([split dividerThickness], 18.0), "and the pane splitter is an 18-point gutter");
+	check(near([split dividerThickness], 12.0), "and the pane splitter is a 12-point gutter");
 	[split setDividerStyle:NSSplitViewDividerStyleThick];
 	[split setIsPaneSplitter:YES];
-	check([split isPaneSplitter] && near([split dividerThickness], 18.0),
+	check([split isPaneSplitter] && near([split dividerThickness], 12.0),
 	      "the deprecated pane-splitter pair is the same style");
 	[split release];
 
@@ -632,6 +632,13 @@ int main(void)
 		int bandEnds[8];
 		int bandCount = 0;
 		BOOL inBand = NO;
+		/* **THE GUTTER'S OWN NUMBERS, ASKED OF THE VIEW.** They were written out for an eighteen-point divider at
+		 * x = 80; with a twelve-point one `adjustSubviews` gave pane 0 the room the divider no longer needed, so a
+		 * probe at 80 measured the PANE. The divider's rectangle is the answer, whatever the style's width is. */
+		int thickness = (int)[split dividerThickness];
+		int leftEdge = (int)NSMaxX([[[split subviews] objectAtIndex:0] frame]);	/* pane 0 ends here */
+		int rightEdge = leftEdge + thickness - 1;					/* the gutter's last column */
+		int middle = leftEdge + thickness / 2;
 
 		[NSGraphicsContext setCurrentContext:ctx];
 		[[NSColor whiteColor] setFill];
@@ -643,8 +650,8 @@ int main(void)
 			CGContextScaleCTM(cg, 1.0, -1.0);
 		}
 		[split displayRect:[split bounds]];
-		check(same_colour([rep colorAtX:90 y:10], [NSColor windowBackgroundColor], 0.03),
-		      "the 18-point gutter is the window's face, not ink");
+		check(same_colour([rep colorAtX:middle y:10], [NSColor windowBackgroundColor], 0.03),
+		      "the gutter is the window's face, not ink");
 		/* THE RINGS ARE THE ONLY DARK INK IN THE GUTTER, so each contiguous band of rows containing a
 		 * darker-than-gutter pixel is one ring. Scanning every x in the gutter makes a ring's whole outline
 		 * one band rather than the two crossings a single column would show. */
@@ -653,7 +660,7 @@ int main(void)
 
 			/* THE EDGE COLUMNS ARE EXCLUDED: the pane splitter draws a hairline down each side of its gutter, so
 			 * every row has dark ink at x = 80 and x = 97 and a scan over the whole gutter would read one band. */
-			for (x = 81; x < 97; x++) {
+			for (x = leftEdge + 1; x < rightEdge; x++) {
 				if (lum([rep colorAtX:x y:y]) < 0.85) {
 					dark = YES;
 					break;
@@ -689,19 +696,20 @@ int main(void)
 			probeY[1] = h / 2;
 			probeY[2] = h - 5;
 			for (i = 0; i < 3; i++) {
-				if (lum([rep colorAtX:80 y:probeY[i]]) > 0.8 || lum([rep colorAtX:97 y:probeY[i]]) > 0.8) {
+				if (lum([rep colorAtX:leftEdge y:probeY[i]]) > 0.8
+				    || lum([rep colorAtX:rightEdge y:probeY[i]]) > 0.8) {
 					ok = 0;
 				}
 			}
-			printf("  (note: gutter edges at x=80 and x=97, middle x=89 reads %g)\n",
-			       (double)lum([rep colorAtX:89 y:h / 2]));
+			printf("  (note: gutter edges at x=%d and x=%d, middle x=%d reads %g)\n",
+			       leftEdge, rightEdge, middle, (double)lum([rep colorAtX:middle y:h / 2]));
 			check(ok, "both sides of the gutter carry a one-point hairline, top to bottom");
-			check(lum([rep colorAtX:89 y:h / 2]) > 0.85,
+			check(lum([rep colorAtX:middle y:h / 2]) > 0.85,
 			      "and the middle of the gutter stays the window's face, so the grip still reads");
 		}
 		for (i = 0; i < bandCount && i < 3; i++) {
 			int center = (bandStarts[i] + bandEnds[i]) / 2;
-			int want = 52 + i * 8;
+			int want = h / 2 - 8 + i * 8;
 
 			check(fabs((double)(center - want)) <= 2.5,
 			      i == 0 ? "the top ring is eight points above the centre"

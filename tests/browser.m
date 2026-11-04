@@ -394,7 +394,7 @@ int main(void)
 				NSGraphicsContext *g = (rep != nil)
 					? [NSGraphicsContext graphicsContextWithBitmapImageRep:rep] : nil;
 
-				check(gutter.size.width == 18.0, "the browser gutter is the split view's eighteen points");
+				check(gutter.size.width == 12.0, "the browser gutter is the split view's twelve points");
 				if (g != nil) {
 					NSGraphicsContext *previous = [[NSGraphicsContext currentContext] retain];
 					unsigned char *px;

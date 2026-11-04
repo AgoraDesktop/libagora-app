@@ -51,7 +51,10 @@
  * spacing are the same numbers that class uses, and the fill/stroke pair is its pair: the window's face for the
  * band and `controlDarkShadowColor` for the rings. Keeping the numbers here rather than reaching into
  * `NSSplitView.m` is what lets the browser draw the gutter itself while the two still look like one tier. */
-#define AG_BROWSER_GUTTER_THICKNESS	18.0
+/* **THE COLUMN GUTTER IS TWELVE POINTS, THE SAME BAND THE PANE SPLITTER DRAWS** — it was eighteen, the reference
+ * desktop's width, and the owner asked for it narrower. The two numbers are the same one said twice, as the comment
+ * above says; see `NSSplitView.m`'s `AG_SPLIT_PANE_THICKNESS` for the reasoning. */
+#define AG_BROWSER_GUTTER_THICKNESS	12.0
 #define AG_BROWSER_GUTTER_RING_RADIUS	2.0
 #define AG_BROWSER_GUTTER_RING_SPACING	8.0
 #define AG_BROWSER_GAP			AG_BROWSER_GUTTER_THICKNESS
