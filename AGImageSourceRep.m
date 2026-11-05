@@ -55,7 +55,9 @@
 {
 	static NSString *const extensions[] = {
 		@"png", @"jpg", @"jpeg", @"jpe", @"tif", @"tiff", @"webp", @"gif", @"bmp", @"dib", @"ico", @"cur", @"icns",
-		@"tga", @"targa", @"icb", @"vda", @"vst"
+		@"tga", @"targa", @"icb", @"vda", @"vst", @"jp2", @"j2k", @"jpx", @"jpf", @"avif", @"heic", @"heif", @"hif",
+		@"exr", @"jxl", @"dng", @"cr2", @"cr3", @"nef", @"arw", @"orf", @"rw2", @"raf", @"pef", @"srw", @"x3f", @"mrw",
+		@"iiq"
 	};
 	NSMutableArray *types = [NSMutableArray array];
 	CFArrayRef utis = CGImageSourceCopyTypeIdentifiers();
