@@ -22,8 +22,7 @@
 
 #import <AppKit/NSSound.h>
 #import <AppKit/NSGraphics.h>
-#import <Foundation/NSBundle.h>
-#import <AppKit/NSBundleAdditions.h>
+#import <Foundation/NSBundle.h>	/* `+soundNamed:` asks the bundle; the door it uses is declared above */
 
 #include <AudioToolbox/AudioToolbox.h>
 
@@ -38,8 +37,14 @@ static void fn_sound_finished(void *userData, AudioQueueRef queue, AudioQueueBuf
 
 	(void)buffer;
 
+	sound->_inFlight = NO;
+
 	if ([sound loops]) {
-		AudioQueueEnqueueBuffer(queue, buffer, 0, NULL);
+		/* The same buffer goes straight back: a loop is one enqueue and a queue that keeps refilling it, not a
+		 * timer that restarts the sound (a timer would drift by the length of every gap). */
+		if (AudioQueueEnqueueBuffer(queue, buffer, 0, NULL) == 0) {
+			sound->_inFlight = YES;
+		}
 		return;
 	}
 
@@ -139,7 +144,17 @@ static void fn_sound_finished(void *userData, AudioQueueRef queue, AudioQueueBuf
 		return nil;
 	}
 
-	return [[[self alloc] initWithContentsOfFile:path byReference:NO] autorelease];
+	{
+		NSSound *sound = [[self alloc] initWithContentsOfFile:path byReference:NO];
+
+		/* THE NAME IS THE NAME IT WAS ASKED FOR, not the file's: `initWithContentsOfFile:` names a sound after
+		 * its file (which is right for a sound a caller opened), but `+soundNamed:` is a lookup, and a nib that
+		 * says `beep` and later asks its sound for `-name` must not be told `beep.wav`. */
+		if (sound != nil) {
+			[sound setName:name];
+		}
+		return [sound autorelease];
+	}
 }
 
 /* Read the header through `AudioFile`, without keeping a file open: the bytes are already in memory, so the
@@ -264,14 +279,19 @@ static SInt64 fn_data_size(void *client)
 		}
 
 		_buffer = buffer;
+		_inFlight = YES;
+	} else if (!_inFlight) {
+		/* THE SECOND CLICK AFTER THE FIRST SOUND ENDED. The completion callback was handed the buffer back and
+		 * did not re-enqueue it (it was not looping), so it is ours again and has to go back in — otherwise the
+		 * queue starts, finds nothing pending, and plays silence for as long as it is left running. */
+		status = AudioQueueEnqueueBuffer(queue, (AudioQueueBufferRef)_buffer, 0, NULL);
+		if (status != 0) {
+			return NO;
+		}
+		_inFlight = YES;
 	}
 
-	if (_paused) {
-		status = AudioQueueStart(queue, NULL);
-	} else {
-		status = AudioQueueStart(queue, NULL);
-	}
-
+	status = AudioQueueStart(queue, NULL);
 	if (status != 0) {
 		return NO;
 	}
@@ -290,6 +310,8 @@ static SInt64 fn_data_size(void *client)
 		AudioQueueReset((AudioQueueRef)_queue);
 	}
 
+	/* A reset drops what was queued, so the buffer is ours again and the next `-play` enqueues it. */
+	_inFlight = NO;
 	_playing = NO;
 	_paused = NO;
 
@@ -369,6 +391,38 @@ static SInt64 fn_data_size(void *client)
 - (void)setDelegate:(id)delegate
 {
 	_delegate = delegate;
+}
+
+/* ============================================================================================
+ * CODING: WHAT A BUTTON'S SOUND NEEDS TO SURVIVE AN ARCHIVE.
+ * ============================================================================ */
+/* The file's BYTES are the archive, not a path: a sound named by a nib is a resource inside the bundle, and an
+ * archive that recorded a path would play whatever that path names on the machine it is opened on. The bytes
+ * are also what makes `-initWithCoder:` a call to `-initWithData:` — one decoder, not a second one. */
+static NSString * const AGNSSoundNameKey = @"name";
+static NSString * const AGNSSoundDataKey = @"data";
+static NSString * const AGNSSoundVolumeKey = @"volume";
+static NSString * const AGNSSoundLoopsKey = @"loops";
+
+- (void)encodeWithCoder:(NSCoder *)aCoder
+{
+	[aCoder encodeObject:_data forKey:AGNSSoundDataKey];
+	[aCoder encodeObject:_name forKey:AGNSSoundNameKey];
+	[aCoder encodeFloat:_volume forKey:AGNSSoundVolumeKey];
+	[aCoder encodeBool:_loops forKey:AGNSSoundLoopsKey];
+}
+
+- (instancetype)initWithCoder:(NSCoder *)aDecoder
+{
+	NSData *data = [aDecoder decodeObjectForKey:AGNSSoundDataKey];
+
+	self = [self initWithData:data];	/* the format and the duration are re-read, not archived */
+	if (self != nil) {
+		[self setName:[aDecoder decodeObjectForKey:AGNSSoundNameKey]];
+		[self setVolume:[aDecoder decodeFloatForKey:AGNSSoundVolumeKey]];
+		[self setLoops:[aDecoder decodeBoolForKey:AGNSSoundLoopsKey]];
+	}
+	return self;
 }
 
 - (id)copyWithZone:(NSZone *)zone

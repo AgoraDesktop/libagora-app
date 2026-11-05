@@ -2100,3 +2100,14 @@ add_executable(image_template_ink image_template_ink.m)
 target_link_libraries(image_template_ink PRIVATE App m)
 add_test(NAME appkit-image-template-ink COMMAND image_template_ink)
 set_tests_properties(appkit-image-template-ink PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
+
+# **A SOUND, MEASURED RATHER THAN HEARD.** NSSound had no suite at all: it decoded a file, buffered it and handed
+# it to an AudioQueue, and nothing had ever played it. This one writes its own WAVs, plays them on the NULL device
+# (`AGORA_AUDIO_DRIVER` is libagora-audio's test door, set here so the build makes no noise), watches a delegate
+# fire exactly once at the end of a sound and never while it loops, and round-trips both a sound and a button cell
+# through an archive.
+add_executable(nssound nssound.m)
+target_link_libraries(nssound PRIVATE App)
+add_test(NAME appkit-nssound COMMAND nssound)
+set_tests_properties(appkit-nssound PROPERTIES
+  ENVIRONMENT "${_agora_app_test_env};AGORA_AUDIO_DRIVER=null")

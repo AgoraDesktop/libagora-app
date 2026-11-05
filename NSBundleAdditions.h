@@ -14,11 +14,12 @@
  * in Foundation unchallenged. They are AppKit's because what a "image resource" and a "sound resource" ARE is
  * decided by `NSImage` and `NSSound`, and neither class is Foundation's.
  *
- * ⚠ AND THEY LIVE IN ONE HEADER HERE WHERE APPLE SPLITS THEM ACROSS TWO, which is a NAMED DEVIATION rather
- * than an oversight: Apple puts the image pair in `NSImage.h` and the sound door in `NSSound.h`, and **this tier
- * has no `NSSound`** — inventing one to hold a one-line delegation would be inventing a class. The intended
- * home, and the reason, are written here so the split can happen when a real `NSSound` arrives.
- */
+ * ✅ AND THE SPLIT HAS HAPPENED: Apple puts the image pair in `NSImage.h` and the sound door in `NSSound.h`,
+ * and `-pathForSoundResource:` is now declared in `NSSound.h` (this header said it would move "when a real
+ * `NSSound` arrives"). What stays here is the *implementation*, because both doors share one lookup — a name
+ * with an optional extension, the literal name winning — and that lookup is not worth having twice. The image
+ * pair is still here rather than in `NSImage.h` for a smaller reason: `NSImage.h` is Foundation-adjacent and
+ * already large, and moving two declarations changes no behaviour. */
 
 #ifndef APPKIT_NSBUNDLEADDITIONS_H
 #define APPKIT_NSBUNDLEADDITIONS_H
@@ -27,14 +28,14 @@
 
 NS_ASSUME_NONNULL_BEGIN
 
-/* The name parameter is Apple's `NSImageName` / `NSSoundName`, both of which are `typedef`s of `NSString`. */
+/* The name parameter is Apple's `NSImageName`, a `typedef` of `NSString`. `-pathForSoundResource:` and its
+ * `NSSoundName` are declared in `NSSound.h`, which is where Apple declares them. */
 @interface NSBundle (NSBundleAppKitAdditions)
 
 /* THE NAME'S EXTENSION IS OPTIONAL, which is the whole point of the door: `@"pic"` finds `pic.png` and
  * `@"logo.png"` finds itself (the literal name wins). A miss is nil. */
 - (nullable NSString *)pathForImageResource:(NSString *)name;
 - (nullable NSURL *)URLForImageResource:(NSString *)name;
-- (nullable NSString *)pathForSoundResource:(NSString *)name;
 
 @end
 

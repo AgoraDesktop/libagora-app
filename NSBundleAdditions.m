@@ -18,6 +18,7 @@
  */
 
 #import <AppKit/NSBundleAdditions.h>
+#import <AppKit/NSSound.h>	/* declares -pathForSoundResource:, implemented below */
 #import <Foundation/NSFileManager.h>
 #import <Foundation/NSURL.h>
 
@@ -76,6 +77,13 @@ static NSString *fn_find_named_resource(NSBundle *bundle, NSString *name, NSArra
 
 	return (path != nil) ? [NSURL fileURLWithPath:path] : nil;
 }
+
+@end
+
+/* THE SOUND DOOR, DECLARED IN `NSSound.h` AND IMPLEMENTED HERE BECAUSE THE LOOKUP IS SHARED. Splitting the
+ * implementation too would mean two copies of `fn_find_named_resource`, and the day they disagree is the day
+ * `@"pic"` finds `pic.png` while `@"beep"` does not find `beep.wav`. */
+@implementation NSBundle (NSSoundAdditions)
 
 - (NSString * _Nullable)pathForSoundResource:(NSString *)name
 {

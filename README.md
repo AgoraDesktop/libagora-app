@@ -13,6 +13,31 @@ through `HANDOFF-5.md` are the earlier ones, and their instrument notes are stil
 
 ## Status
 
+**A SOUND HAD NO SUITE, AND THE SUITE FOUND THREE THINGS.** `NSSound` arrived built on `libagora-audio` and nothing
+had ever played one: `appkit-nssound` now writes its own WAVs (16-bit mono, 8 kHz, a tone rather than silence),
+plays them on the **null** device (`AGORA_AUDIO_DRIVER` is the audio library's own test door), and measures what a
+caller asks: `-duration` against the file's length, `-isPlaying` across `-play`/`-stop`/`-pause`/`-resume`, a
+delegate told exactly once when a sound ends and never while it loops, `+soundNamed:` through the bundle, and an
+archive round trip of both a sound and a button cell that carries one. It found:
+
+1. **A second `-play` after a sound finished played silence.** The queue hands a non-looping buffer *back* to the
+   completion callback, so `_buffer != NULL` never meant "queued"; `NSSound` now tracks `_inFlight` and enqueues
+   again. The suite's assertion is named for it.
+2. **A mono file could not be played at all.** `AudioConverterNew` refuses a channel-count change — Apple refuses it
+   too, because that is a channel map's job — so a queue asked to convert 16-bit mono 8 kHz into a float32 stereo
+   device failed at creation and `-play` answered NO. The queue now converts to the *client's* channel count and
+   fans the result out (or sums it down) on the way into the device buffer; `libagora-audio`'s `queue` suite has the
+   mono case, and `NSSound`'s WAVs are mono on purpose.
+3. **`+soundNamed:` reported `beep.wav` as the name of the sound a nib called `beep`.** A lookup names what was
+   looked up.
+
+**AND THE TWO DEBTS THE CLASS'S HEADER NAMED ARE PAID.** `-pathForSoundResource:` is declared in `NSSound.h` (its
+implementation stays beside the image pair's, because the lookup is shared — one name, extension optional, the
+literal name winning), and `NSButtonCell` archives its `_sound` under a key of its own: `NSSound` is `NSCoding`
+now, archiving the file's *bytes* rather than a path, so an archive plays the same sound on the machine that opens
+it. The censuses did not move for either: `sel:NSSound` was already 20 of 20, because the two coding selectors are
+the protocol's rather than the class's.
+
 **AND A COMMIT NAMES ITS DAMAGE, INSTEAD OF THE WHOLE BUFFER.** `AGEndFrame` used to damage `0, 0, width, height` on
 every frame, so a window that repainted one strip made the compositor blend the whole window. `AGWindowDamage` is the
 seam door that names rectangles instead (buffer pixels, top-down, clamped to the buffer, a budget of sixteen that

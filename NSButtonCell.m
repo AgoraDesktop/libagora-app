@@ -53,11 +53,12 @@
 /* ============================================================================================
  * ARCHIVING: A BUTTON'S TWO TITLES, ITS TWO IMAGES AND ITS BEZEL.
  * ============================================================================================ */
-/* **WHAT IS ABSENT: THE SOUND, AND ONLY FOR A NAMED REASON.** `_sound` is an `NSSound`, a class this tier does not ship
- * — an archive cannot carry a class the process has no implementation of, and inventing one would be a wrong value
- * rather than an unfinished feature. Everything else a button's FACE is, is here. `_periodicDelay` and
- * `_periodicInterval` are included because they are part of a design's feel rather than a measurement of a running
- * control. */
+/* **THE SOUND IS HERE NOW, BECAUSE THE REASON IT WAS NOT IS GONE.** This block used to exclude `_sound` with the
+ * note that an archive cannot carry a class the process has no implementation of — and `NSSound` is now a class
+ * this tier ships, which conforms to `NSCoding` by archiving the file's *bytes* (a path would name whatever that
+ * path is on the machine that opens the archive). A sound a design gives a button therefore survives a nib's
+ * archive like its titles and images do. `_periodicDelay` and `_periodicInterval` are included because they are
+ * part of a design's feel rather than a measurement of a running control. */
 static NSString * const AGCoderButtonTransparentKey = @"transparent";
 static NSString * const AGCoderButtonBorderOnlyInsideKey = @"showsBorderOnlyWhileMouseInside";
 static NSString * const AGCoderButtonImageDimsKey = @"imageDimsWhenDisabled";
@@ -79,6 +80,7 @@ static NSString * const AGCoderButtonPeriodicIntervalKey = @"periodicInterval";
 static NSString * const AGCoderButtonMaxAcceleratorKey = @"maxAcceleratorLevel";
 static NSString * const AGCoderButtonAlternateMnemonicKey = @"alternateMnemonicLocation";
 static NSString * const AGCoderButtonGradientKey = @"gradientType";
+static NSString * const AGCoderButtonSoundKey = @"sound";
 
 - (void)encodeWithCoder:(NSCoder *)aCoder
 {
@@ -104,6 +106,7 @@ static NSString * const AGCoderButtonGradientKey = @"gradientType";
 	[aCoder encodeInteger:_maxAcceleratorLevel forKey:AGCoderButtonMaxAcceleratorKey];
 	[aCoder encodeInteger:(NSInteger)_alternateMnemonicLocation forKey:AGCoderButtonAlternateMnemonicKey];
 	[aCoder encodeInteger:(NSInteger)_gradientType forKey:AGCoderButtonGradientKey];
+	[aCoder encodeObject:_sound forKey:AGCoderButtonSoundKey];
 }
 
 - (instancetype)initWithCoder:(NSCoder *)aDecoder
@@ -175,6 +178,9 @@ static NSString * const AGCoderButtonGradientKey = @"gradientType";
 	}
 	if ([aDecoder containsValueForKey:AGCoderButtonGradientKey]) {
 		_gradientType = (NSGradientType)[aDecoder decodeIntegerForKey:AGCoderButtonGradientKey];
+	}
+	if ([aDecoder containsValueForKey:AGCoderButtonSoundKey]) {
+		_sound = [[aDecoder decodeObjectForKey:AGCoderButtonSoundKey] retain];
 	}
 	return self;
 }
