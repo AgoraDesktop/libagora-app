@@ -77,6 +77,7 @@
 #import <AppKit/NSTrackingArea.h>
 #import <AppKit/NSDragging.h>
 #import <AppKit/NSPasteboard.h>
+#import <AppKit/NSSound.h>
 #import <AppKit/NSPasteboardItem.h>
 #import <AppKit/NSMenu.h>
 #import <AppKit/NSMenuItem.h>

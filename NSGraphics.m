@@ -39,6 +39,7 @@
  * `NSGraphics_internal.h` for why that is the honest place to put the switch.
  */
 #import <AppKit/NSGraphics.h>
+#import <AudioToolbox/AudioServices.h>
 #import <AppKit/NSColor.h>
 #import <AppKit/NSGraphicsContext.h>
 #import <AppKit/NSApplication.h>
@@ -530,12 +531,10 @@ void NSWindowListForContext(NSInteger context, NSInteger size, NSInteger list[])
 
 void NSBeep(void)
 {
-	static int refused = 0;
-
-	if (refused == 0) {
-		fn_refuse_window("NSBeep", "a sound device (and NSSound, which this tier has not got)");
-		refused = 1;
-	}
+	/* THE ALERT SOUND, FROM `libagora-audio`, AND NO LONGER ONE OF THE REFUSALS. This was the last of the six
+	 * to be a sound rather than a window, and it is now the one sound this tier is guaranteed to be able to
+	 * make: `kSystemSoundID_UserPreferredAlert` is generated, so it needs no asset and cannot be missing. */
+	AudioServicesPlayAlertSound(kSystemSoundID_UserPreferredAlert);
 }
 
 void NSCopyBits(NSInteger srcGState, NSRect srcRect, NSPoint destPoint)

@@ -76,6 +76,7 @@ find_package(AgoraIconServices CONFIG REQUIRED)
 # **CORE DATA, FOR THE ONE CLASS THAT IS THE APPkit'S** (§11): `NSPersistentDocument` names Core Data's types in its
 # header, so this is a PUBLIC dependency — a consumer of the AppKit reaches Core Data itself through it, exactly as it
 # reaches Foundation and Core Graphics.
+find_package(AgoraAudio CONFIG REQUIRED)
 find_package(AgoraData CONFIG REQUIRED)
 
 # ---------------------------------------------------------------------------
@@ -256,6 +257,7 @@ target_link_libraries(App
     Foundation::Foundation
     AgoraDrawing::Drawing
     AgoraText::Text
+    AgoraAudio::Audio
     AgoraData::Data
   PRIVATE
     AgoraLaunchServices::LaunchServices

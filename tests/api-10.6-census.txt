@@ -108,9 +108,9 @@
 # person to discover the submenu by hovering. The measurement asks the same two questions the drawing does, so the column
 # and the mark cannot come apart.
 #
-classes-missing 20
+classes-missing 19
 classes-offered 168
-classes-present 148
+classes-present 149
 fn:NSAccessibilityActionDescription 1
 fn:NSAccessibilityPostNotification 1
 fn:NSAccessibilityRaiseBadArgumentException 1
@@ -289,7 +289,7 @@ functions-defined-not-declared 0
 functions-missing 0
 functions-offered 86
 functions-present 86
-methods-declared 5471
+methods-declared 5491
 methods-declared-not-implemented 0
 methods-informal 0
 methods-external 0
@@ -328,7 +328,7 @@ proto:NSPathCellDelegate 1
 proto:NSPathControlDelegate 1
 proto:NSPrintPanelAccessorizing 1
 proto:NSRuleEditorDelegate 1
-proto:NSSoundDelegate 0
+proto:NSSoundDelegate 1
 proto:NSSpeechRecognizerDelegate 0
 proto:NSSpeechSynthesizerDelegate 0
 proto:NSSplitViewDelegate 1
@@ -349,9 +349,9 @@ proto:NSUserInterfaceItemSearching 0
 proto:NSUserInterfaceValidations 1
 proto:NSValidatedUserInterfaceItem 1
 proto:NSWindowDelegate 1
-protocols-missing 7
+protocols-missing 6
 protocols-offered 56
-protocols-present 49
+protocols-present 50
 sel:NSActionCell 6
 sel:NSAlert 27
 sel:NSAnimation 26
@@ -458,6 +458,7 @@ sel:NSSegmentedControl 21
 sel:NSShadow 8
 sel:NSSlider 30
 sel:NSSliderCell 35
+sel:NSSound 20
 sel:NSSpellChecker 39
 sel:NSSplitView 18
 sel:NSStatusBar 5
@@ -498,6 +499,6 @@ sel:NSViewController 13
 sel:NSWindow 261
 sel:NSWindowController 26
 sel:NSWorkspace 58
-selectors-missing 0
-selectors-offered 4836
-selectors-present 4836
+selectors-missing 10
+selectors-offered 4866
+selectors-present 4856

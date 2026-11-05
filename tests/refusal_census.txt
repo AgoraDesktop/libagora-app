@@ -92,7 +92,7 @@ NSFontManager.m                  1
 NSGlyphInfo.m                    2
 NSGlyphPacking.m                 1
 NSGradient.m                     5
-NSGraphics.m                     6
+NSGraphics.m                     5
 NSGraphicsContext.m              14
 NSImage.m                        5
 NSImageRep.m                     3
@@ -174,4 +174,4 @@ NSWindow.m                       23
 # place — a custom-selector criterion, which Foundation's `NSComparisonPredicate` refuses to build, so the rule editor
 # refuses the part by name rather than raising out of a getter.
 
-# total: 404
+# total: 403
