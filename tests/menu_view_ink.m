@@ -137,6 +137,57 @@ int main(void)
 	printf("  (note: ink %d/%d/%d, highlight %d/%d/%d, rows top to bottom)\n",
 	       ink[0], ink[1], ink[2], hi[0], hi[1], hi[2]);
 
+	/* ---- AND A ROW THAT OPENS A MENU WEARS THE TRIANGLE ------------------------------------------------
+	 *
+	 * The mark is the row's own, drawn in the trailing column the cell reserved for it; without one a menu asks a person
+	 * to discover the submenu by hovering. The rect is asked of the cell, which is what the drawing asks, and the ink is
+	 * counted inside it — which is also the check that the triangle is not drawn over the title. */
+	{
+		NSMenu *parent = [[NSMenu alloc] initWithTitle:@"Parent"];
+		NSMenu *child = [[NSMenu alloc] initWithTitle:@"Child"];
+		NSMenuView *withSubmenu;
+		NSBitmapImageRep *shot;
+		NSMenuItemCell *submenuCell;
+		NSMenuItem *more;
+		NSRect indicator;
+		int found = 0;
+		int x, y;
+
+		[child addItemWithTitle:@"Inside" action:NULL keyEquivalent:@""];
+		[parent addItemWithTitle:@"Plain" action:NULL keyEquivalent:@""];
+		more = [parent addItemWithTitle:@"More" action:NULL keyEquivalent:@""];
+		[more setSubmenu:child];
+		shot = [[NSBitmapImageRep alloc] initWithBitmapDataPlanes:NULL pixelsWide:240
+			pixelsHigh:2 * 22 + (int)(2 * NSMenuPanelPadding) bitsPerSample:8 samplesPerPixel:4 hasAlpha:YES isPlanar:NO
+			colorSpaceName:NSCalibratedRGBColorSpace bytesPerRow:240 * 4 bitsPerPixel:32];
+		withSubmenu = [[NSMenuView alloc] initWithFrame:NSMakeRect(0.0, 0.0, 240.0,
+									  2.0 * 22.0 + 2.0 * NSMenuPanelPadding)];
+		[withSubmenu setMenu:parent];
+		submenuCell = [withSubmenu cellForItemAtIndex:1];
+		check([submenuCell submenuWidth] > 0.0, "a row with a submenu reserves the indicator's column");
+		check([[withSubmenu cellForItemAtIndex:0] submenuWidth] == 0.0,
+		      "and a row without one reserves nothing");
+		check([submenuCell keyEquivalentWidth] == 0.0
+		      && NSMaxX([submenuCell submenuIndicatorRectForBounds:[withSubmenu rectForItemAtIndex:1]]) > 0.0,
+		      "the column sits at the trailing edge, where a shortcut would be");
+		indicator = [submenuCell submenuIndicatorRectForBounds:[withSubmenu rectForItemAtIndex:1]];
+		[NSGraphicsContext setCurrentContext:[NSGraphicsContext graphicsContextWithBitmapImageRep:shot]];
+		[withSubmenu drawRect:[withSubmenu bounds]];
+		for (y = (int)NSMinY(indicator); y < (int)NSMaxY(indicator); y++) {
+			/* **THE BITMAP IS NOT FLIPPED AND THE VIEW IS**, so a view's y counts from the other end here — the same
+			 * correction `-scan` makes for the rows. */
+			int row = (int)[shot pixelsHigh] - 1 - y;
+
+			for (x = (int)NSMinX(indicator); x < (int)NSMaxX(indicator); x++) {
+				if (is_ink([shot colorAtX:x y:row])) {
+					found++;
+				}
+			}
+		}
+		printf("  (note: %d ink pixels inside the indicator rect)\n", found);
+		check(found > 4, "and the row that opens a menu wears a triangle in it");
+	}
+
 	/* ---- AND THE SAME ITEMS AS A BAR ---------------------------------------------------------------
 	 * A MENU BAR IS THE SAME CLASS, and what changes is not the drawing but the ARRANGEMENT: columns running
 	 * RIGHT from the left edge, each as wide as its own title, instead of rows stacking down from the top. */

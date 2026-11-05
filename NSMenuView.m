@@ -223,6 +223,11 @@ static void apk_fill_vertical_gradient(NSRect rect, CGFloat radius,
 		if ([cell keyEquivalentWidth] > 0.0) {
 			width += APPKIT_MENU_ITEM_GAP + [cell keyEquivalentWidth];
 		}
+		/* **AND A SUBMENU'S TRIANGLE IS ROOM THE ROW KEEPS**, or the arrow would be drawn over the last character of a
+		 * title that measured to the edge. */
+		if ([cell submenuWidth] > 0.0) {
+			width += [cell submenuWidth];
+		}
 		return width;
 	}
 	{
@@ -660,6 +665,11 @@ static void apk_fill_vertical_gradient(NSRect rect, CGFloat radius,
 		 * menu. */
 		if (!_horizontal) {
 			[cell drawKeyEquivalentWithFrame:row inView:self];
+			/* **A BAR'S TITLES OPEN MENUS TOO, AND THE MAC STILL DRAWS NO TRIANGLE THERE** — the arrow is a dropdown's
+			 * mark, which is why it is inside the same orientation test as the shortcut. */
+			if ([cell submenuWidth] > 0.0) {
+				[cell drawSubmenuIndicatorWithFrame:row inView:self];
+			}
 		}
 	}
 }

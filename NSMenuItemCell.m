@@ -267,6 +267,10 @@ static NSString * const AGCoderMenuItemBoldKey = @"bold";
 	_imageWidth = 0.0;
 	_titleWidth = 0.0;
 	_keyEquivalentWidth = 0.0;
+	/* **AND THE TRIANGLE'S COLUMN IS MEASURED WITH THE REST**, from the one fact that decides it: whether the item has a
+	 * submenu. A row that opens a menu reserves the strip at its trailing edge, and the three rects below lay themselves
+	 * out around it. */
+	_submenuWidth = ([_menuItem submenu] != nil) ? APPKIT_MENU_SUBMENU_WIDTH : 0.0;
 	if (_menuItem != nil) {
 		id image = [_menuItem image];
 
@@ -361,6 +365,11 @@ static NSString * const AGCoderMenuItemBoldKey = @"bold";
 	return _keyEquivalentWidth;
 }
 
+- (CGFloat)submenuWidth
+{
+	return _submenuWidth;
+}
+
 /* ---- THE THREE RECTS: ONE SENTENCE, WRITTEN THREE TIMES ----------------------------------------- */
 
 - (NSRect)stateImageRectForBounds:(NSRect)cellFrame
@@ -380,7 +389,8 @@ static NSString * const AGCoderMenuItemBoldKey = @"bold";
 	 * CLAMPED AT ZERO so that a row narrower than its own parts produces an empty rect instead of a negative one
 	 * running off the left edge. */
 	NSRect rect = cellFrame;
-	CGFloat used = _stateImageWidth + _imageWidth + _keyEquivalentWidth;
+	CGFloat used = _stateImageWidth + _imageWidth + _keyEquivalentWidth +
+		((_submenuWidth > 0.0) ? _submenuWidth : 0.0);
 
 	rect.origin.x += _stateImageWidth + _imageWidth;
 	rect.size.width = (cellFrame.size.width > used) ? (cellFrame.size.width - used) : 0.0;
@@ -394,8 +404,20 @@ static NSString * const AGCoderMenuItemBoldKey = @"bold";
 	 * drawing — a rect that named the last pixel would put the ink against the panel's border. */
 	NSRect rect = cellFrame;
 
-	rect.origin.x += cellFrame.size.width - _keyEquivalentWidth - APPKIT_MENU_RIGHT_PADDING;
+	rect.origin.x += cellFrame.size.width - _keyEquivalentWidth - _submenuWidth - APPKIT_MENU_RIGHT_PADDING;
 	rect.size.width = _keyEquivalentWidth;
+	return rect;
+}
+
+/* **THE INDICATOR'S RECT IS THE TRAILING EDGE ITSELF**, inside the same right padding every other part keeps, and the
+ * key equivalent moves left by exactly its width — which is why the two are written one after the other here: they are
+ * one strip, split. */
+- (NSRect)submenuIndicatorRectForBounds:(NSRect)cellFrame
+{
+	NSRect rect = cellFrame;
+
+	rect.origin.x += cellFrame.size.width - _submenuWidth - APPKIT_MENU_RIGHT_PADDING;
+	rect.size.width = _submenuWidth;
 	return rect;
 }
 
@@ -693,6 +715,29 @@ static NSColor *fn_item_ink(BOOL enabled, BOOL highlighted)
 		 * missing while every shortcut in the tree drew nothing. */
 		[key drawAtPoint:NSMakePoint(x, baseline) withAttributes:attributes];
 	}
+}
+
+/* **THE TRIANGLE A SUBMENU'S ROW WEARS.** A right-facing one, drawn as a filled path rather than a glyph: it is a shape
+ * the row reserves room for and not text, and a glyph would be at the mercy of a face that has no such character. Its
+ * ink follows the row's — the item's own colour, and white on the highlight, exactly as the title and the shortcut do.
+ * The size is fixed at five points by four, which is Apple's own mark at this row height. */
+- (void)drawSubmenuIndicatorWithFrame:(NSRect)cellFrame inView:(id)controlView
+{
+	NSRect rect = [self submenuIndicatorRectForBounds:cellFrame];
+	CGFloat midY = rect.origin.y + rect.size.height / 2.0;
+	CGFloat midX = rect.origin.x + rect.size.width / 2.0;
+	NSBezierPath *triangle;
+
+	if (rect.size.width <= 0.0) {
+		return;
+	}
+	triangle = [NSBezierPath bezierPath];
+	[triangle moveToPoint:NSMakePoint(midX - 2.0, midY - 4.0)];
+	[triangle lineToPoint:NSMakePoint(midX + 3.0, midY)];
+	[triangle lineToPoint:NSMakePoint(midX - 2.0, midY + 4.0)];
+	[triangle closePath];
+	[fn_item_ink([_menuItem isEnabled], [self cg_isHighlightedInView:controlView]) set];
+	[triangle fill];
 }
 
 - (void)drawBorderAndBackgroundWithFrame:(NSRect)cellFrame inView:(id)controlView

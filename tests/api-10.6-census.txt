@@ -82,6 +82,13 @@
 # left a queue behind it and the highlight was drawn where the pointer had been. The second is the number that proves it:
 # a burst of five motion events costs ONE repaint, and a probe counts it rather than taking the comment's word.
 #
+# **AND A NINTH, FOR THE SUBMENU TRIANGLE'S THREE DOORS**: `-[NSMenuItemCell submenuWidth]`,
+# `-submenuIndicatorRectForBounds:` and `-drawSubmenuIndicatorWithFrame:inView:`. None is Apple's (`sel:NSMenuItemCell`
+# is unchanged) and all three are this tree's. A row whose item has a submenu now reserves the trailing column and draws
+# a right-facing triangle in it, which is the mark that says "there is more behind this row" — without it a menu asked a
+# person to discover the submenu by hovering. The measurement asks the same two questions the drawing does, so the column
+# and the mark cannot come apart.
+#
 classes-missing 20
 classes-offered 168
 classes-present 148
@@ -263,7 +270,7 @@ functions-defined-not-declared 0
 functions-missing 0
 functions-offered 86
 functions-present 86
-methods-declared 5462
+methods-declared 5465
 methods-declared-not-implemented 0
 methods-informal 0
 methods-external 0

@@ -53,6 +53,10 @@ NS_ASSUME_NONNULL_BEGIN
 #define APPKIT_MENU_LEFT_GUTTER    20.0
 #define APPKIT_MENU_RIGHT_PADDING  14.0
 #define APPKIT_MENU_ITEM_GAP       18.0
+/* **THE ROOM A SUBMENU'S TRIANGLE TAKES AT THE TRAILING EDGE.** Apple's is a small right-facing chevron a few points
+ * wide with air around it; the width here is the whole strip, so the triangle can sit centred in it and the key
+ * equivalent to its left. */
+#define APPKIT_MENU_SUBMENU_WIDTH  16.0
 
 @interface NSMenuItemCell : NSButtonCell <NSSecureCoding>
 {
@@ -68,6 +72,7 @@ NS_ASSUME_NONNULL_BEGIN
 	CGFloat _imageWidth;
 	CGFloat _titleWidth;
 	CGFloat _keyEquivalentWidth;
+	CGFloat _submenuWidth;
 	BOOL _needsSizing;
 	BOOL _needsDisplay;
 	/* **AND WHETHER THIS ROW'S TITLE IS SET IN THE BOLD SYSTEM FACE**, which is one item's due rather than a
@@ -111,6 +116,14 @@ NS_ASSUME_NONNULL_BEGIN
 @property (readonly) CGFloat imageWidth;
 @property (readonly) CGFloat titleWidth;
 @property (readonly) CGFloat keyEquivalentWidth;
+
+/* **THE SUBMENU INDICATOR'S COLUMN, AND WHERE IT SITS.** A row whose item HAS a submenu reserves this at the trailing
+ * edge and draws a right-facing triangle in it — the mark that says "there is more behind this row", which a menu
+ * without one asks a person to discover by hovering. Zero when the item has no submenu, so nothing is reserved for rows
+ * that do not need it. */
+- (CGFloat)submenuWidth;
+- (NSRect)submenuIndicatorRectForBounds:(NSRect)cellFrame;
+- (void)drawSubmenuIndicatorWithFrame:(NSRect)cellFrame inView:(nullable id)controlView;
 
 /* ============================================================================================ *
  * THE THREE RECTS, WHICH ARE PURE ARITHMETIC OVER THE FOUR WIDTHS — THIS CLASS'S REAL HALF.      *
