@@ -2740,6 +2740,15 @@ renderer that landed in `libagora-drawing`. `-CGImage` is the RENDERED FALLBACK 
 needs, at the page's own size, and the queue/`NSImage` path gets that. The class registers itself with `NSImageRep`
 and answers `%PDF-`, `pdf` and `NSPDFPboardType`, so the registry finds it the way it finds `NSBitmapImageRep`.
 
+**AND A THIRD REP ANSWERS FOR EVERY FORMAT COREGRAPHICS CAN DECODE: `AGImageSourceRep`.** `NSBitmapImageRep` decodes PNG and
+JPEG because those are the formats it implements; `AGImageSourceRep` holds a `CGImageSource` and draws its image, so TIFF,
+WebP, GIF, BMP, ICO, ICNS and TGA come through the drawing library's registry instead of through a second decoder per format
+in the AppKit. `+canInitWithData:` asks `CGImageSourceCreateWithData` and nothing else, which is why a format added to the
+drawing library is a format `NSImage` opens with no line changing here. It also carries FRAMES — `-frameCount`,
+`-frameDelay`, `-setFrame:` — because a GIF is several images in one file and a rep that could not say so would leave a
+viewer decoding the file a second time. MEASURED: `NSImage -imageWithContentsOfFile:` on a BMP, TIFF, GIF, ICO, ICNS and
+TGA fixture each produce a rep of the right size, and a two-frame GIF's `-setFrame:1` draws a different picture.
+
 **THE ORIENTATION RULE IS THE ONE THING A PDF REP CANNOT COPY FROM AN IMAGE REP.** `NSImageRep`'s draw chooses its
 mirror from the sign of the CTM's `d`, which works because a bitmap's device y runs down and its default user y runs
 up. A PDF page's device y runs UP, so the same sign means the opposite thing; the rep therefore asks

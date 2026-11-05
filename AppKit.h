@@ -217,4 +217,8 @@
 /* THE APPLICATION */
 #import <AppKit/NSApplication.h>
 
+/* THIS TREE'S OWN CLASSES THAT AN APPLICATION MAY USE. `AGImageSourceRep` is the one a viewer needs: every format
+ * CoreGraphics' `CGImageSource` decodes, as a representation `NSImage` can hold. */
+#import <AppKit/AGImageSourceRep.h>
+
 #endif /* APPKIT_APPKIT_H */
