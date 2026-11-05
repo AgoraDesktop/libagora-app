@@ -1911,14 +1911,23 @@ static void fn_chrome_frame_path(CGContextRef c, CGFloat width, CGFloat height, 
 	CGContextClosePath(c);
 }
 
-/* `top` IS THE WINDOW'S OWN TOP EDGE and `width` its width. `scale` is the window's DEVICE PIXELS PER POINT, because
- * every line below is measured in DEVICE PIXELS — see the note in the body. */
-static void fn_draw_chrome_edges(CGContextRef c, CGFloat width, CGFloat top, CGFloat scale)
+/* `top` IS THE WINDOW'S OWN TOP EDGE and `width` its width. **BOTH NUMBERS THIS PAINTER NEEDS ABOUT THE DEVICE — the
+ * pixels per point and the row the top edge is on — ARE ASKED OF THE CONTEXT**, because the context is the only thing
+ * that knows them for certain: `userSpaceScaleFactor` is what the window was told and the bitmap's height is what the
+ * platform actually made, and the two have to agree with the pixels being drawn, not with each other. A caller that
+ * hands this function a context has handed it everything; see the note in the body for the row that went wrong. */
+static void fn_draw_chrome_edges(CGContextRef c, CGFloat width, CGFloat top)
 {
+	CGAffineTransform ctm = CGContextGetCTM(c);
+	CGFloat scale = ctm.a;					/* device pixels per point, from the transform itself */
 	CGFloat radius = fn_BAR_RADIUS;
+
+	if (!(scale > 0.0)) {
+		scale = 1.0;
+	}
 	/* ONE DEVICE PIXEL, IN POINTS. A point is not a pixel: at this tree's 96-dpi panel a device pixel is 0.75 points, so
 	 * a line stated in points lands astride two pixels there. */
-	CGFloat px = (scale > 0.0) ? 1.0 / scale : 1.0;
+	CGFloat px = 1.0 / scale;
 	/* **THE OUTLINE IS DRAWN AS A STROKE **TWICE** AS WIDE AS IT SHOWS, CENTRED ON THE WINDOW'S OWN SHAPE.** The shape
 	 * is the COMPOSITOR's — `AWS_SHADOW_RADIUS` is this file's `fn_BAR_RADIUS`, and the server clips the surface to that
 	 * arc with its own antialiasing — so the outer half of the stroke is thrown away and the inner half is what a person
@@ -1931,13 +1940,27 @@ static void fn_draw_chrome_edges(CGContextRef c, CGFloat width, CGFloat top, CGF
 	 * INSIDE the arc — a pale stub half-clipped by the shape, which read as a second layer over the first. It now runs
 	 * between the corners' own tangent points, which is where the outline's arcs have come down to its height.
 	 *
-	 * Both lines are stated in DEVICE pixels and snapped to the window's top edge's ROUNDED device row: at a fractional
-	 * scale that edge is a fractional row (MEASURED: 167 points on a 1.33203 output is 222.45 rows), and a line placed
-	 * in points there straddles two rows and renders at 40%. */
-	CGFloat snapped_top = (CGFloat)((int)(top * scale + 0.5));	/* the top edge's own device row */
+	 * Both lines are stated in DEVICE pixels, because at a fractional scale the top edge is a fractional row
+	 * (MEASURED: 167 points on a 1.33203 output is 222.45 rows) and a line placed in points there straddles two rows
+	 * and renders at 40%.
+	 *
+	 * **AND THE ROW THEY ARE MEASURED FROM IS THE BITMAP'S OWN, WHICH IS NOT `round(top * scale)`.** The buffer's height
+	 * is the PLATFORM's arithmetic — a whole number of points times the scale — and the frame this painter is given is
+	 * the AppKit's, and the two need not round together. MEASURED on the Viewer at 1.33203: its frame is 525.52 points
+	 * inside a 701-ROW buffer, because 526 points of window round to 701 rows while 525.52 points of frame round to
+	 * 700. Deriving the top from `round(top * scale)` therefore put the stroke's centre ONE ROW too low whenever the
+	 * buffer had that spare row: the outer half of the stroke — the half that is supposed to be outside the buffer and
+	 * thrown away — landed inside the buffer's first row, so the bar read as a pale 75% row above its own outline, and
+	 * at the corner arcs as a second, lighter arc. Asking the bitmap for its height is the one number that cannot
+	 * disagree with the buffer, so that is what the two insets are measured from. */
+	CGFloat device_top = (CGFloat)CGBitmapContextGetHeight(c);
+
+	if (device_top <= 0.0) {
+		device_top = (CGFloat)((int)(top * scale + 0.5));	/* not a bitmap context: the frame's own edge */
+	}
 	CGFloat half = 0.5 * px;					/* half a device pixel, in points */
-	CGFloat top_inset = top - (snapped_top - 0.5) / scale;		/* the frame's top edge, half a pixel in */
-	CGFloat highlight_centre = top - (snapped_top - 1.5) / scale;	/* the light row: one pixel further in */
+	CGFloat top_inset = top - (device_top - 0.5) / scale;		/* the frame's top edge, half a pixel in */
+	CGFloat highlight_centre = top - (device_top - 1.5) / scale;	/* the light row: one pixel further in */
 
 	CGContextSaveGState(c);
 	CGContextSetShouldAntialias(c, true);
@@ -2254,8 +2277,7 @@ static void fn_draw_chrome(CGContextRef c, NSWindow *w, NSRect content)
 		CGContextSetFillColorWithColor(c, [[NSColor cg_chromeFaceColor] CGColor]);
 		CGContextFillRect(c, CGRectMake(0.0, top, content.size.width, layout.height));
 		if (layout.height > 0.0) {
-			fn_draw_chrome_edges(c, content.size.width, top + layout.height,
-					     [w userSpaceScaleFactor]);
+			fn_draw_chrome_edges(c, content.size.width, top + layout.height);
 		}
 		for (i = 0; i < AGChromeButtonCount; i++) {
 			if (layout.present[i]) {

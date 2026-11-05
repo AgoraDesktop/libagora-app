@@ -55,6 +55,9 @@
 #import <AppKit/NSEvent.h>
 #import <Foundation/Foundation.h>
 
+#include <CoreGraphics/CGBitmapContext.h>
+#include <CoreGraphics/CGColorSpace.h>
+
 #include <stdio.h>
 
 /* THE WINDOW THIS IS DRAWN FOR: a content rectangle, plus the 22-point strip above it. The rep is the FRAME's size,
@@ -192,6 +195,50 @@ static NSBitmapImageRep *draw_chrome(NSWindow *w)
 	return rep;
 }
 
+/* **THE SAME CHROME IN A DEVICE-RESOLVED BITMAP, WHICH IS THE BUFFER A SCALED SCREEN GETS.** A device-pixel bitmap scaled
+ * by the output's factor and wrapped exactly the way `-cg_ensureSurface` wraps a window's, so the window's own top edge is
+ * the bitmap's first row and every point the painter draws is `scale` device pixels. **THE SCALE GOES ON BEFORE THE WRAP,
+ * AND THAT IS NOT A DETAIL**: `+graphicsContextWithCGContext:flipped:NO` normalises the orientation, and a transform
+ * applied to the wrapped context afterwards is silently undone — MEASURED while writing this door, which is why the
+ * scale is set here and the flip is the wrapper's own.
+ *
+ * **`extra_rows` IS THE DOOR'S WHOLE POINT.** The platform sizes a buffer from ITS window height — a whole number of
+ * points times the scale — while the frame handed to the painter is the AppKit's and can be fractional. MEASURED: the
+ * Viewer's frame is 525.52 points inside a 701-row buffer, because 526 whole points of window round to 701 rows while
+ * 525.52 points of frame round to 700. The buffer therefore sits ONE ROW TALLER than `round(frame * scale)` and the
+ * row it gains is at the top — which is the row the outline is supposed to be on. */
+static NSBitmapImageRep *draw_chrome_at_scale(NSWindow *w, double scale, int extra_rows, int *outW, int *outH)
+{
+	int w_dev = (int)((double)CW * scale + 0.5);
+	int h_dev = (int)((double)FH * scale + 0.5) + extra_rows;
+	NSBitmapImageRep *rep = new_rep(w_dev, h_dev);
+	CGColorSpaceRef cs = CGColorSpaceCreateDeviceRGB();
+	CGContextRef c = CGBitmapContextCreate([rep bitmapData], (size_t)w_dev, (size_t)h_dev, 8,
+					       (size_t)[rep bytesPerRow], cs,
+					       (uint32_t)(kCGImageAlphaPremultipliedLast | kCGBitmapByteOrder32Big));
+
+	CGColorSpaceRelease(cs);
+	*outW = w_dev;
+	*outH = h_dev;
+	if (c == NULL) {
+		return rep;
+	}
+	/* THE WHOLE BITMAP IS WHITE FIRST, IN DEVICE SPACE — INCLUDING THE ROW THE FRAME DOES NOT REACH, so a check
+	 * about a row the painter did not ink is a check about the painter and not about the fill. */
+	CGContextSetRGBFillColor(c, 1.0, 1.0, 1.0, 1.0);
+	CGContextFillRect(c, CGRectMake(0.0, 0.0, (CGFloat)w_dev, (CGFloat)h_dev));
+	/* AND THEN THE SCALE, BEFORE THE WRAPPER — exactly where `-cg_ensureSurface` puts it. */
+	CGContextScaleCTM(c, (CGFloat)scale, (CGFloat)scale);
+	{
+		NSGraphicsContext *ctx = [NSGraphicsContext graphicsContextWithCGContext:c flipped:NO];
+
+		[NSGraphicsContext setCurrentContext:ctx];
+		[w cg_drawChromeInContext:ctx];
+	}
+	CGContextRelease(c);
+	return rep;
+}
+
 /* ONE STRING IN ONE FACE, in a rep of its own, so the SAME string can be measured in two fonts. This is what makes
  * the boldness claim a measurement instead of a number copied out of a header. */
 static int text_ink_width(NSFont *font, NSString *s)
@@ -273,6 +320,34 @@ int main(void)
 			check(is_colour(at(rep, CW / 2, STRIP + 6), [NSColor whiteColor], 0.02),
 			      "and the chrome does not run down into the content below it");
 			[rep release];
+		}
+
+		/* 1b. **AND THE OUTLINE IS ONE DEVICE ROW AT A FRACTIONAL SCALE, WHETHER OR NOT THE BUFFER GAINED A ROW.** This
+		 * is the edge that read as two layers on a real screen: at 1.33203 the outline's own row came out at 75% of the
+		 * ink with a pale row above it, because its position was worked out from `round(frame * scale)` instead of from
+		 * the bitmap's height — one row too low in any buffer the platform rounded up. Both cases are asked because the
+		 * row is only misplaced in ONE of them, and a fix that moved the edge in the other would be a second bug. */
+		{
+			static const double kChromeScale = 1.33203125;	/* this machine's panel, quantised to 1/256 */
+			int sample = (int)(60.0 * kChromeScale + 0.5);	/* past the three marks, clear of the title */
+			int spare_rows;
+
+			for (spare_rows = 0; spare_rows <= 1; spare_rows++) {
+				NSBitmapImageRep *rep = draw_chrome_at_scale(w, kChromeScale, spare_rows, &lo, &hi);
+				char name[160];
+
+				snprintf(name, sizeof name,
+					 "at 1.33203 with %d spare row(s), the top row IS the outline's ink (%s)",
+					 spare_rows, spare_rows ? "the buffer the platform rounds up" : "the frame's own rounding");
+				check(is_colour(at(rep, sample, 0), grey(EDGE_L), 0.02), name);
+				snprintf(name, sizeof name, "and with %d spare row(s) the light row is directly under it",
+					 spare_rows);
+				check(is_colour(at(rep, sample, 1), [NSColor whiteColor], 0.02), name);
+				snprintf(name, sizeof name, "and with %d spare row(s) the bottom edge is still the last row",
+					 spare_rows);
+				check(is_colour(at(rep, sample, hi - 1), grey(EDGE_L), 0.02), name);
+				[rep release];
+			}
 		}
 
 		/* 2. **THE THREE MARKS, AS SHAPES AND AT THE THEME'S SIZE.** Each check below is one shape's own geometry and

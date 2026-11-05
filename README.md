@@ -759,7 +759,11 @@ the compositor is really gone.
   over the face, round corners, an eight-by-nine X, an eight-by-two minus and an eight-by-eight plus in the
   theme's greys and its blue under a
   press, and a filled triangle at the far end. The pixels are asked, not the code: the marks' SHAPES, their
-  COLOURS per state, their crispness (two rows of ink, no blended row), and the title centred and bold.
+  COLOURS per state, their crispness (two rows of ink, no blended row), and the title centred and bold. **AND THE
+  OUTLINE'S ROW IS THE OUTLINE'S AT A FRACTIONAL SCALE, IN BOTH SHAPES THE BUFFER CAN TAKE** — a buffer the platform
+  rounds the window's height up to has one row more than the frame does, and the edge is measured from the buffer, so
+  the row above it is the shadow rather than a pale second line of ink (the two-layer edge that sent the owner
+  looking; see `fn_draw_chrome_edges`).
 - **The menu subsystem** (`ctest`): a target's `-validateMenuItem:` decides enablement and MAY CHANGE the item
   while it answers, an item that is ON draws a checkmark, and a disabled title is drawn dimmed.
 - **Activation** (`ctest`, against Agora's own server): the menu bar window is shown while the compositor says
