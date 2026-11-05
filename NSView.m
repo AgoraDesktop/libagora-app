@@ -2043,6 +2043,12 @@ NSString *NSDefinitionPresentationTypeOverlay = @"Overlay";
 	_bounds = NSMakeRect(_bounds.origin.x, _bounds.origin.y, frameRect.size.width,
 			     frameRect.size.height);
 	_needsDisplay = YES;
+	/* **A FRAME SET IS NOT A REARRANGEMENT, AND THAT IS DELIBERATE HERE.** `-setFrameSize:` calls
+	 * `-resizeSubviewsWithOldSize:` and this door does not, which is a split the classes that own their layout depend
+	 * on: `NSSplitView`'s override runs its DELEGATE's hook, and MEASURED, calling it from a frame set made a split
+	 * view come up the hook twice for one resize. A class that needs to hear about a frame set overrides this door;
+	 * `NSScrollView -tile` tells its document view its clip resized; and a window's content view is laid out by the
+	 * view that owns it. */
 	[self cg_frameDidChangeFrom:previousFrame];
 	/* **A FRAME SET IS A REQUEST, NOT A VERDICT, FOR A MANAGED VIEW.** If an active constraint names this view its
 	 * next layout pass will write the frame the equations want; if none does, the frame stands and the request is

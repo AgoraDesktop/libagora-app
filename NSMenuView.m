@@ -414,8 +414,29 @@ static void apk_fill_vertical_gradient(NSRect rect, CGFloat radius,
 						}
 						{
 							NSUInteger type = [next type];
-							NSPoint at = [self convertPoint:[next locationInWindow] fromView:nil];
-							NSInteger hit = [self cg_indexOfItemAtPoint:at];
+							NSPoint at;
+							NSInteger hit;
+
+							/* **A PRESS IN ANOTHER WINDOW ENDS THE SESSION, AND THAT IS DECIDED BY THE EVENT'S WINDOW
+							 * AND NOT BY ITS COORDINATES.** The point below is the press as THIS view's, which is only a
+							 * meaningful question for an event that landed in this window: a press in a document window
+							 * arrives with that window's own coordinates, and converting them as the bar's happened to
+							 * land inside the bar's strip for some windows and outside it for others — so a click on the
+							 * document left the menu up, and while a menu is up it holds the pointer, which made the whole
+							 * application look frozen. MEASURED as "the menu is open and nothing responds". */
+							if (type == NSLeftMouseDown &&
+							    [next respondsToSelector:@selector(windowNumber)] &&
+							    [next windowNumber] != [[self window] windowNumber]) {
+								if (getenv("APPKIT_MENU_DIAG") != NULL) {
+									fprintf(stderr, "  DIAG bar: a press in another window (win %ld) "
+										"ends the session\n", (long)[next windowNumber]);
+								}
+								[open cancelTracking];
+								ended = YES;
+								continue;
+							}
+							at = [self convertPoint:[next locationInWindow] fromView:nil];
+							hit = [self cg_indexOfItemAtPoint:at];
 
 						/* **WHICH EVENT, WHERE, AND WHAT IT HIT** — added because "the session ended on a move" says
 						 * nothing about WHY, and the two numbers that decide it are the point in this view's space and
@@ -495,6 +516,12 @@ static void apk_fill_vertical_gradient(NSRect rect, CGFloat radius,
 					if (![app isRunning] || [NSWindow cg_connectionIsGone]) {
 						if ([NSWindow cg_connectionIsGone]) {
 							fprintf(stderr, "APPKIT-NOTE: the window server has gone — ending the menu session\n");
+						}
+						if (getenv("APPKIT_MENU_DIAG") != NULL) {
+							fprintf(stderr, "  DIAG bar: LEAVING the session loop — ended %d, running %d, "
+								"gone %d, still tracking %d\n", (int)ended,
+								(int)[app isRunning], (int)[NSWindow cg_connectionIsGone],
+								(int)[open cg_isTracking]);
 						}
 						break;
 					}

@@ -710,6 +710,32 @@ static id fn_delegate_for_action(NSApplication *app, SEL anAction)
 	return _running;
 }
 
+/* **THE PAIR A CALLER-DRIVEN PUMP BRACKETS ITSELF WITH.** `-run` owns the flag for its own duration; a caller that
+ * pumps the loop itself owns it for its own. The counter is what keeps two of them from clearing the flag from under
+ * each other, and asking the SAME question — `_running` — is what makes `-isRunning` mean one thing. */
+static NSInteger s_callerDrivenRuns;
+/* WHETHER `-run` ITSELF IS TURNING. A bounded pump may be called from inside a run loop (a modal window's, a
+ * delegate's); the outer loop owns the flag then, and a guest that cleared it would stop every menu tracking. */
+static BOOL s_runLoopIsTurning;
+
+- (void)cg_beginCallerDrivenRun
+{
+	s_callerDrivenRuns++;
+	_running = YES;
+}
+
+- (void)cg_endCallerDrivenRun
+{
+	if (s_callerDrivenRuns > 0) {
+		s_callerDrivenRuns--;
+	}
+	/* ONLY THE OUTERMOST PUMP CLEARS IT, and never while `-run` itself is turning: a bounded run called from inside
+	 * a run loop is that run loop's guest. */
+	if (s_callerDrivenRuns == 0 && !s_runLoopIsTurning) {
+		_running = NO;
+	}
+}
+
 /* THE LOOP'S OWN COUNTERS, for the diagnostic above: a static rather than an ivar because they are instrumentation
  * and not state the application has. */
 static int s_passes;
@@ -742,6 +768,7 @@ static double s_last_report;
 	 * This is the second chance, and the door is idempotent: a bar that already exists is merely re-measured. */
 	[self cg_updateMenuBarWindow];
 	_running = YES;
+	s_runLoopIsTurning = YES;
 	_stopped = NO;
 	while (!_stopped) {
 		/* A POOL PER PASS, because a loop that runs for the life of a process and never drains its own
@@ -817,6 +844,7 @@ static double s_last_report;
 		fn_announce(self, NSApplicationDidUpdateNotification, @selector(applicationDidUpdate:));
 		[pool release];
 	}
+	s_runLoopIsTurning = NO;
 	_running = NO;
 }
 

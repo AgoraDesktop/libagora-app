@@ -2043,6 +2043,11 @@ set_tests_properties(appkit-menu-pick-dismisses PROPERTIES ENVIRONMENT "${_agora
 # **A MOVING POINTER REPAINTS A MENU ONCE PER BURST, NOT ONCE PER EVENT.** The session's loop used to take one event and
 # paint, so an X11 pointer that emits faster than one paint per sample left a queue behind it and the highlight trailed
 # the pointer by however deep that queue was. This counts the paints: a burst of five motion events costs one.
+add_executable(menu_caller_driven menu_caller_driven.m)
+target_link_libraries(menu_caller_driven PRIVATE App)
+add_test(NAME appkit-menu-caller-driven COMMAND menu_caller_driven)
+set_tests_properties(appkit-menu-caller-driven PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
+
 add_executable(menu_highlight_burst menu_highlight_burst.m)
 target_link_libraries(menu_highlight_burst PRIVATE App)
 add_test(NAME appkit-menu-highlight-burst COMMAND menu_highlight_burst)

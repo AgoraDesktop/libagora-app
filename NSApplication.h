@@ -366,6 +366,24 @@ typedef NSUInteger NSApplicationPresentationOptions;
 - (void)finishLaunching;
 - (void)run;
 - (BOOL)isRunning;
+
+/* **A LOOP THE CALLER DRIVES IS STILL THE APPLICATION RUNNING, AND THIS IS HOW IT SAYS SO.** `-run` is not the only
+ * shape a running application has: a bounded run — a probe that stops after N seconds, a session's own launcher —
+ * pumps `-nextEventMatchingMask:` and `-sendEvent:` itself, and on Apple's side that is a run loop method, not the
+ * application's. Here `-isRunning` is what the tracking loops ask ("is there an event source, will events be
+ * delivered"), so a caller-driven loop that never set it left every menu it opened UNDRIVEN: the bar began a
+ * session, its loop declined to run because `-isRunning` answered NO, and the session stayed up with its window and
+ * its pointer grab while every later attempt was refused with "cannot begin a session while one is already up".
+ * MEASURED: exactly that from `Preview file --seconds 900`, and the answer is `-isRunning` YES for the duration of
+ * the pump.
+ *
+ * The pair is COUNTED, so nested or overlapping pumps restore the flag rather than clearing it from under each
+ * other, and it does nothing when `-run` is already running (`-run` sets and clears the same flag itself). A pump
+ * that brackets itself with these two must also call `-updateWindows` each pass, or the stale-window paint and the
+ * drag's own once-per-pass application never happen. */
+- (void)cg_beginCallerDrivenRun;
+- (void)cg_endCallerDrivenRun;
+
 - (void)stop:(nullable id)sender;
 - (void)terminate:(nullable id)sender;
 

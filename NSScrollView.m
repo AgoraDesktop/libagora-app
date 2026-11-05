@@ -688,7 +688,20 @@ static Class gRulerViewClass = Nil;
 	 * artefact of the drawing layer that the shift walked into. A rendering fix is not this change's to make, so the
 	 * layout is untouched and the copy takes the fractional edges it is given — see `-cg_copyRect:from:stride:delta:`,
 	 * which rounds INWARD for that reason and leaves the sub-pixel sliver to the repaint. */
-	[_contentView setFrame:content];
+	{
+		NSSize oldClip = [_contentView frame].size;
+
+		[_contentView setFrame:content];
+		/* **AND THE DOCUMENT VIEW HEARS THAT ITS CLIP RESIZED, WHICH IS THE HOOK'S WHOLE PURPOSE.** The clip view
+		 * is the document view's superview, so `-resizeWithOldSuperviewSize:` is the door it answers — and this tier
+		 * calls that hook from `-setFrameSize:` and nowhere else, while the clip's frame is set with `-setFrame:`.
+		 * MEASURED: a viewer's canvas stayed the size of the window it was born in while the window grew around it,
+		 * leaving the scroll view's own background in the new space. A subclass that keeps geometry of its own (a
+		 * document that fits, a page in a canvas) re-measures here. */
+		if (!NSEqualSizes(oldClip, content.size) && [_contentView documentView] != nil) {
+			[[_contentView documentView] resizeWithOldSuperviewSize:oldClip];
+		}
+	}
 	/* **THE CORNER SQUARE BELONGS TO THE VERTICAL RULER.** It runs the full height of the content area — including the
 	 * strip the horizontal ruler takes — so the two never overlap and there is no fourth view to draw the corner. The
 	 * horizontal ruler starts to the right of it, which is what puts a text ruler's zero in line with the text. */
