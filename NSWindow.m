@@ -5839,6 +5839,13 @@ static const CGFloat AGFocusRingAlpha[] = { 0.85, 0.55, 0.32, 0.16 };
 	/* THE ANNOUNCEMENT COMES FIRST, because its whole purpose is to give a delegate the chance to change what the
 	 * window SHOWS before the pass that shows it runs. */
 	fn_announce(self, NSWindowDidUpdateNotification, @selector(windowDidUpdate:));
+	/* **AND THE TOOLBAR IS ASKED BEFORE THE PAINT, WHICH IS WHAT AN UPDATE PASS IS FOR.** `-validateVisibleItems` is
+	 * where an item's target says whether the command can act now; without this call the items kept the state they were
+	 * CREATED with — a viewer's Previous was disabled on page one and never enabled again. `NSApplication
+	 * -updateWindows` asks the same question on its own pass, because the run loop's pass is not this door. */
+	if (_toolbar != nil) {
+		[_toolbar validateVisibleItems];
+	}
 	if (_contentView != nil) {
 		[_contentView setNeedsDisplay:YES];
 	}

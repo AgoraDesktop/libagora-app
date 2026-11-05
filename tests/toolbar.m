@@ -505,6 +505,21 @@ int main(void)
 		target->validates = 0;
 		[toolbar validateVisibleItems];
 		check(target->validates > 0, "the toolbar validates its visible items");
+
+		/* **AND THE UPDATE PASS IS WHAT ASKS, WHICH NOTHING DID.** `-validateVisibleItems` was implemented and never
+		 * called from anywhere, so every item kept the state it was CREATED with: MEASURED, a viewer's Previous button
+		 * was made disabled on page one and stayed disabled on page two. The window's update pass and the application's
+		 * per-pass `-updateWindows` both ask now, so the contract the header states is one a caller can rely on. */
+		target->answer = NO;
+		target->validates = 0;
+		[item setEnabled:YES];
+		[window update];
+		check(target->validates > 0, "the window's update pass validates the band");
+		check(![item isEnabled], "so an item whose validator says no is disabled by the pass");
+		target->answer = YES;
+		target->validates = 0;
+		[window update];
+		check(target->validates > 0 && [item isEnabled], "and one whose validator says yes is enabled by it");
 	}
 
 	/* 6. A PRESS AND A RELEASE PERFORM THE ITEM AND TAKE THE SELECTION. */

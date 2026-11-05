@@ -2026,6 +2026,12 @@ static const struct {
 		/* AND A RESIZE'S AIM, WHICH IS THE SAME KIND OF DEFERRAL: one `set_frame` per pass, at the latest
 		 * position the hand reached, with the size the delegate last agreed to. */
 		[w cg_applyPendingResize];
+		/* **AND THE WINDOW'S TOOLBAR IS VALIDATED ONCE PER PASS, BEFORE IT IS PAINTED.** `-validateVisibleItems` is
+		 * the door that asks each item's target whether it can act, and NOTHING CALLED IT: MEASURED, a viewer's
+		 * Previous button was created disabled on page one and stayed disabled on page two, and Next stayed enabled on
+		 * the last page — the items kept whatever state they were made with, for the life of the window. The band is
+		 * painted below, so the enabled state is already right when its ink is drawn. */
+		[[w toolbar] validateVisibleItems];
 		[w displayIfNeeded];
 	}
 }
