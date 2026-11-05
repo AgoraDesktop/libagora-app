@@ -593,6 +593,34 @@ static Class gRulerViewClass = Nil;
  * one; and the content takes what is left inside the border. The frame is read in the SCROLL VIEW's own coordinates
  * and this view is not flipped, so the bottom is the smaller y — the clip view and the scrollers are flipped
  * internally and that does not change where their frames go. */
+/* **THE CLIP VIEW IS LAID OUT WHERE THE LAYOUT SAYS, NOT SNAPPED TO THE DEVICE GRID.** Snapping the content view's
+ * rectangle to whole device pixels made a scroll's copy exact — its edges became whole columns and rows — but it MOVES
+ * EVERY CONTROL in the document by up to one pixel, and MEASURED that is not free: at 1.332 the demo's gallery grew a
+ * one-pixel white line through the panel buttons and the caption above them, a latent sub-pixel artefact of the drawing
+ * layer that the shift walked into. A rendering fix is not this change's to make, so the layout is untouched and the copy
+ * takes the fractional edges it is given — see `-cg_copyRect:from:stride:delta:`, which rounds INWARD for that reason and
+ * leaves the sub-pixel sliver to the repaint.
+ *
+ * **AND THE DOCUMENT VIEW HEARS THAT ITS CLIP RESIZED, WHICH IS THE HOOK'S WHOLE PURPOSE.** The clip view is the
+ * document view's superview, so `-resizeWithOldSuperviewSize:` is the door it answers — and this tier calls that hook
+ * from `-setFrameSize:` and nowhere else, while the clip's frame is set with `-setFrame:`. MEASURED: a viewer's canvas
+ * stayed the size of the window it was born in while the window grew around it, leaving the scroll view's own background
+ * in the new space. A subclass that keeps geometry of its own (a document that fits, a page in a canvas) re-measures
+ * here — and its answer is what the second pass of `-tile`'s visibility decision reads. */
+- (void)cg_layoutClipView:(NSRect)rect
+{
+	NSSize oldClip;
+
+	if (_contentView == nil) {
+		return;
+	}
+	oldClip = [_contentView frame].size;
+	[_contentView setFrame:rect];
+	if (!NSEqualSizes(oldClip, rect.size) && [_contentView documentView] != nil) {
+		[[_contentView documentView] resizeWithOldSuperviewSize:oldClip];
+	}
+}
+
 - (void)tile
 {
 	NSRect frame = [self bounds];
@@ -635,73 +663,77 @@ static Class gRulerViewClass = Nil;
 			headerHeight = 0.0;
 		}
 	}
-	/* **A CONFIGURED BAR THAT THE DOCUMENT DOES NOT NEED STEPS ASIDE.** The visibility is decided against the
-	 * document's own frame, and it is decided as a PAIR because a vertical bar takes width that can make a
-	 * horizontal one necessary and vice versa; three passes are enough for those two to settle. */
-	[self cg_scrollerVisibility:&showV :&showH];
-	/* **A HIDDEN BAR LEAVES THE TREE, and its object is retained by this view while it is away.** A configured
-	 * scroller still answers `-hasVerticalScroller`/`-verticalScroller`, but a view that is not a subview cannot
-	 * leave ink behind, which is what a merely `-isHidden` bar did on the window. */
-	if (_vScroller != nil) {
-		BOOL changed = (([_vScroller superview] == self) != showV);
-		[_vScroller setHidden:!showV];
-		if (showV) {
-			if ([_vScroller superview] != self) {
-				[self addSubview:_vScroller];
+	/* **THE VISIBILITY IS DECIDED TWICE: BEFORE THE LAYOUT AND AFTER IT.** Once is not enough, because the document's
+	 * own frame is the other half of the question and a document that sizes itself to its clip (a viewer's page, a grid,
+	 * a canvas) only learns a new size when the clip is laid out — so a decision taken before the layout is a decision
+	 * about the PREVIOUS geometry. MEASURED, on a single monotone resize sweep of a viewer's window: 59 flips of the
+	 * vertical bar's visibility. The first pass lays the clip out and tells the document; the second asks again, now with
+	 * the document's answer for THIS geometry, and settles — a document that fits cannot fit and then not fit, because
+	 * adding a bar only ever makes the room smaller (see `-cg_scrollerVisibility:`). */
+	{
+		NSInteger attempt;
+		NSRect laidOut = NSZeroRect;
+
+		for (attempt = 0; attempt < 2; attempt++) {
+			BOOL decidedV = YES;
+			BOOL decidedH = YES;
+
+			[self cg_scrollerVisibility:&decidedV :&decidedH];
+			if (attempt > 0 && decidedV == showV && decidedH == showH) {
+				break;	/* the document's answer agrees with the geometry already laid out */
 			}
-		} else if ([_vScroller superview] == self) {
-			[_vScroller removeFromSuperview];
-		}
-		visibilityChanged = visibilityChanged || changed;
-	}
-	if (_hScroller != nil) {
-		BOOL changed = (([_hScroller superview] == self) != showH);
-		[_hScroller setHidden:!showH];
-		if (showH) {
-			if ([_hScroller superview] != self) {
-				[self addSubview:_hScroller];
+			showV = decidedV;
+			showH = decidedH;
+			/* **A HIDDEN BAR LEAVES THE TREE, and its object is retained by this view while it is away.** A configured
+			 * scroller still answers `-hasVerticalScroller`/`-verticalScroller`, but a view that is not a subview cannot
+			 * leave ink behind, which is what a merely `-isHidden` bar did on the window. */
+			if (_vScroller != nil) {
+				BOOL changed = (([_vScroller superview] == self) != showV);
+				[_vScroller setHidden:!showV];
+				if (showV) {
+					if ([_vScroller superview] != self) {
+						[self addSubview:_vScroller];
+					}
+				} else if ([_vScroller superview] == self) {
+					[_vScroller removeFromSuperview];
+				}
+				visibilityChanged = visibilityChanged || changed;
 			}
-		} else if ([_hScroller superview] == self) {
-			[_hScroller removeFromSuperview];
+			if (_hScroller != nil) {
+				BOOL changed = (([_hScroller superview] == self) != showH);
+				[_hScroller setHidden:!showH];
+				if (showH) {
+					if ([_hScroller superview] != self) {
+						[self addSubview:_hScroller];
+					}
+				} else if ([_hScroller superview] == self) {
+					[_hScroller removeFromSuperview];
+				}
+				visibilityChanged = visibilityChanged || changed;
+			}
+			usedVW = showV ? vw : 0.0;
+			usedHH = showH ? hh : 0.0;
+			/* **THE HEADER TAKES THE TOP STRIP; THE CLIP VIEW TAKES WHAT IS BELOW IT.** The header's height is already
+			 * subtracted from the content's, so the content starts at the bottom and ends at the header's bottom — NOT at
+			 * the scroll view's top. The first version also ADDED the header's height to the content's origin, which put the
+			 * header above the scroll view's own frame and clipped it away. */
+			laidOut = NSMakeRect(NSMinX(frame) + border + vrulerW, NSMinY(frame) + border + usedHH,
+					     NSWidth(frame) - 2.0 * border - usedVW - vrulerW,
+					     NSHeight(frame) - 2.0 * border - usedHH - headerHeight - hrulerH);
+			if (laidOut.size.width < 0.0) {
+				laidOut.size.width = 0.0;
+			}
+			if (laidOut.size.height < 0.0) {
+				laidOut.size.height = 0.0;
+			}
+			[self cg_layoutClipView:laidOut];
 		}
-		visibilityChanged = visibilityChanged || changed;
+		content = laidOut;
 	}
 	usedVW = showV ? vw : 0.0;
 	usedHH = showH ? hh : 0.0;
-	/* **THE HEADER TAKES THE TOP STRIP; THE CLIP VIEW TAKES WHAT IS BELOW IT.** The header's height is already
-	 * subtracted from the content's, so the content starts at the bottom and ends at the header's bottom — NOT at
-	 * the scroll view's top. The first version also ADDED the header's height to the content's origin, which put the
-	 * header above the scroll view's own frame and clipped it away. */
-	content = NSMakeRect(NSMinX(frame) + border + vrulerW, NSMinY(frame) + border + usedHH,
-			     NSWidth(frame) - 2.0 * border - usedVW - vrulerW,
-			     NSHeight(frame) - 2.0 * border - usedHH - headerHeight - hrulerH);
-	if (content.size.width < 0.0) {
-		content.size.width = 0.0;
-	}
-	if (content.size.height < 0.0) {
-		content.size.height = 0.0;
-	}
-	/* **AND THE CLIP VIEW IS LAID OUT WHERE THE LAYOUT SAYS, NOT SNAPPED TO THE DEVICE GRID.** Snapping the content
-	 * view's rectangle to whole device pixels made a scroll's copy exact — its edges became whole columns and rows — but
-	 * it MOVES EVERY CONTROL in the document by up to one pixel, and MEASURED that is not free: at 1.332 the demo's
-	 * gallery grew a one-pixel white line through the panel buttons and the caption above them, a latent sub-pixel
-	 * artefact of the drawing layer that the shift walked into. A rendering fix is not this change's to make, so the
-	 * layout is untouched and the copy takes the fractional edges it is given — see `-cg_copyRect:from:stride:delta:`,
-	 * which rounds INWARD for that reason and leaves the sub-pixel sliver to the repaint. */
-	{
-		NSSize oldClip = [_contentView frame].size;
-
-		[_contentView setFrame:content];
-		/* **AND THE DOCUMENT VIEW HEARS THAT ITS CLIP RESIZED, WHICH IS THE HOOK'S WHOLE PURPOSE.** The clip view
-		 * is the document view's superview, so `-resizeWithOldSuperviewSize:` is the door it answers — and this tier
-		 * calls that hook from `-setFrameSize:` and nowhere else, while the clip's frame is set with `-setFrame:`.
-		 * MEASURED: a viewer's canvas stayed the size of the window it was born in while the window grew around it,
-		 * leaving the scroll view's own background in the new space. A subclass that keeps geometry of its own (a
-		 * document that fits, a page in a canvas) re-measures here. */
-		if (!NSEqualSizes(oldClip, content.size) && [_contentView documentView] != nil) {
-			[[_contentView documentView] resizeWithOldSuperviewSize:oldClip];
-		}
-	}
+	/* THE CLIP VIEW ITSELF IS LAID OUT BY `-cg_layoutClipView:`, inside the pass above — it has to be, because
+	 * the document's answer is what the second visibility decision reads. */
 	/* **THE CORNER SQUARE BELONGS TO THE VERTICAL RULER.** It runs the full height of the content area — including the
 	 * strip the horizontal ruler takes — so the two never overlap and there is no fourth view to draw the corner. The
 	 * horizontal ruler starts to the right of it, which is what puts a text ruler's zero in line with the text. */
@@ -753,6 +785,20 @@ static Class gRulerViewClass = Nil;
 
 /* WHAT THE AUTOHIDE RULE WOULD SHOW. `-tile` uses it to lay the bars out; `-reflectScrolledClipView:` uses it
  * to notice that a document whose frame changed now fits (or no longer fits) and needs a re-tile. */
+/* **A DOCUMENT THAT IS A HAIR TALLER THAN THE VIEWPORT IS NOT ONE A SCROLLER CAN HELP.** A document view that sizes
+ * itself to its clip view — a viewer's page in fit mode, a canvas, a grid — computes its frame from the clip's, and any
+ * rounding at the edge makes it a FRACTION of a point larger. The strict `>` below then says "a scroller is needed", the
+ * scroller takes fifteen points of the viewport, the document re-fits itself to the smaller viewport, and the next pass
+ * decides the other way — MEASURED as scroll bars that BLINK in and out while a window is being resized.
+ *
+ * The comparison is against a sub-pixel threshold: a scroller exists to move the document by at least a pixel, so an
+ * overflow smaller than half a point is not scrollable content on any output this tree runs on (at 1.332 a half point
+ * is two thirds of a device pixel). Anything genuinely larger still gets its bar. */
+static BOOL fn_overflows(CGFloat document, CGFloat available)
+{
+	return document > available + 0.5;
+}
+
 - (void)cg_scrollerVisibility:(BOOL *)showVertical :(BOOL *)showHorizontal
 {
 	BOOL wantV = (_vScroller != nil);
@@ -780,16 +826,43 @@ static Class gRulerViewClass = Nil;
 	if (hh <= 0.0) {
 		hh = [NSScroller scrollerWidth];
 	}
-	showV = NO;
-	showH = NO;
-	for (pass = 0; pass < 3; pass++) {
-		CGFloat availW = NSWidth([self bounds]) - 2.0 * border - (showV ? vw : 0.0) - vrulerW;
-		CGFloat availH = NSHeight([self bounds]) - 2.0 * border - (showH ? hh : 0.0) - headerHeight - hrulerH;
-		BOOL needV = wantV && docSize.height > availH;
-		BOOL needH = wantH && docSize.width > availW;
+	/* **A DOCUMENT THAT SIZES ITSELF TO THE VIEWPORT CANNOT OVERFLOW IT, SO THE ANSWER IS NO BARS AND NOT AN ARITHMETIC
+	 * ONE.** The comparison below reads the document's CURRENT frame, and a self-sizing document's frame is a function of
+	 * the clip the bars just changed — so asking it every pass is a feedback loop, and MEASURED it flips the bars once
+	 * per resize step. The document knows the answer without being measured (see `NSView -cg_sizesToViewport`), and this
+	 * is where it is believed. */
+	if (doc != nil && [doc cg_sizesToViewport]) {
+		*showVertical = NO;
+		*showHorizontal = NO;
+		return;
+	}
+	/* **THE DECISION IS MADE AGAINST THE VIEWPORT, AND BARS ARE ONLY EVER ADDED, NEVER TAKEN AWAY.** The old loop
+	 * deducted each bar's own thickness from the axis it was deciding about, so a bar's presence could make the OTHER
+	 * axis decide differently — and, crucially, could make its own axis decide differently on the next pass: a document
+	 * that sizes itself to the clip (a viewer's page, a grid, a canvas) came back a fraction larger after every fit, the
+	 * strict comparison called for a bar, the bar took fifteen points, the document re-fitted to the smaller clip, and
+	 * the pass after that removed the bar again. MEASURED as scroll bars that BLINK while a window is dragged: 59 flips
+	 * over a single monotone resize sweep.
+	 *
+	 * Two properties fix it and both are needed:
+	 *
+	 *   1. THE FIRST ANSWER IS AGAINST THE FULL VIEWPORT, with no bar deducted. That is the honest question — "does the
+	 *      document fit in the space there is?" — and a document that fits it needs no bar and never causes one.
+	 *   2. THE SECOND PASS ONLY EVER ADDS. A horizontal bar takes height, and a document that fills the width may then
+	 *      need the vertical one too (a 205×195 document in a 200×200 viewport); so the pair is re-checked with the room
+	 *      the OTHER bar takes. That direction is monotone — adding a bar can only make the other one more likely — so
+	 *      the answer cannot oscillate, which the deduct-each-axis's-own-bar loop provably could. */
+	{
+		CGFloat availW = NSWidth([self bounds]) - 2.0 * border - vrulerW;
+		CGFloat availH = NSHeight([self bounds]) - 2.0 * border - headerHeight - hrulerH;
+		BOOL needV = wantV && fn_overflows(docSize.height, availH);
+		BOOL needH = wantH && fn_overflows(docSize.width, availW);
 
-		if (needV == showV && needH == showH) {
-			break;
+		if (needH) {
+			needV = wantV && fn_overflows(docSize.height, availH - hh);
+		}
+		if (needV) {
+			needH = wantH && fn_overflows(docSize.width, availW - vw);
 		}
 		showV = needV;
 		showH = needH;

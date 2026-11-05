@@ -3021,6 +3021,12 @@ const CGFloat NSFullScreenModeWindowLevel = 100.0;
 	(void)oldSize;
 }
 
+/* A DOCUMENT VIEW DOES NOT SIZE ITSELF TO ITS VIEWPORT UNLESS IT SAYS SO. See the header. */
+- (BOOL)cg_sizesToViewport
+{
+	return NO;
+}
+
 /* ============================================================================================ *
  * AUTO LAYOUT — THE STATE, THE ANCHORS, AND THE PASS.                                           *
  *                                                                                                *

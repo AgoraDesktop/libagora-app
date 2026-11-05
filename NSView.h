@@ -305,6 +305,16 @@ extern NSString *NSDefinitionPresentationTypeOverlay;
 + (void)cg_beginLayoutHold;
 + (void)cg_endLayoutHold;
 
+/* **WHETHER THIS VIEW SIZES ITSELF TO THE VIEWPORT, WHICH ONLY A SCROLL VIEW ASKS.** A document view that computes its
+ * frame FROM its clip view — a viewer's page in fit mode, a canvas, a grid — can be at most the viewport, so it can never
+ * be a document a scroll bar could scroll: the bar's whole question is "is the document bigger than the room?", and for
+ * this view the answer is "no, by construction". MEASURED, without this door: scroll bars that BLINK while a window is
+ * dragged, because each resize re-fitted the page to the clip the bars had just changed, which changed the answer again —
+ * the feedback loop lives in the size, so the fix has to be a statement about the size. NO is the answer for every view
+ * that does not override it, and a view that answers YES must keep its own frame within the scroll view's bounds or it
+ * will be clipped with no way to scroll. */
+- (BOOL)cg_sizesToViewport;
+
 /* **THE ONE METRIC THAT IS NOT A NUMBER.** Apple's intrinsic size has a sentinel for "this view has no opinion" —
  * -1 — and its 10.7 spelling was misspelled (`NSViewNoInstrinsicMetric`). Both names are defined so a ported caller
  * can use either; the value is the same and the engine compares against it rather than against zero, because a

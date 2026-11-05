@@ -48,6 +48,18 @@
 
 static int s_failed;
 
+/* A DOCUMENT VIEW THAT SIZES ITSELF TO ITS VIEWPORT — the statement `NSScrollView -cg_scrollerVisibility:` believes
+ * instead of measuring a frame that came from the clip in the first place. */
+@interface AGTestSelfSizingView : NSView
+@end
+
+@implementation AGTestSelfSizingView
+- (BOOL)cg_sizesToViewport
+{
+	return YES;
+}
+@end
+
 static void check(int ok, const char *name)
 {
 	printf("  %s   %s\n", ok ? "ok  " : "FAIL", name);
@@ -353,6 +365,37 @@ int main(void)
 			      "a document larger in both directions shows both bars");
 			check(near([autoView contentSize].width, 185.0) && near([autoView contentSize].height, 185.0),
 			      "and the content is what both of them leave");
+
+			/* **A DOCUMENT THAT SIZES ITSELF TO THE CLIP IS NOT OVERFLOWING.** A page in a viewer, a grid, a canvas —
+			 * each computes its frame from the clip's and any rounding makes it a fraction of a point larger. With a
+			 * strict comparison the bar appears, takes fifteen points, the document re-fits to the smaller clip and
+			 * comes out a fraction larger AGAIN: MEASURED as scroll bars that blink while a window is dragged. A
+			 * document that is a hair larger therefore needs NO bar, and one that is genuinely larger still gets one. */
+			[autoDoc setFrame:NSMakeRect(0.0, 0.0, 200.4, 200.4)];
+			check([[autoView verticalScroller] isHidden] && [[autoView horizontalScroller] isHidden],
+			      "a document a fraction of a point larger than the viewport needs no bar");
+			[autoDoc setFrame:NSMakeRect(0.0, 0.0, 204.0, 204.0)];
+			check(![[autoView verticalScroller] isHidden] && ![[autoView horizontalScroller] isHidden],
+			      "and one four points larger still gets both");
+
+			/* **AND A DOCUMENT THAT SIZES ITSELF TO THE VIEWPORT IS NEVER OVERFLOW, WHATEVER ITS FRAME READS.**
+			 * Its frame is a function of the clip the bars themselves change, so measuring it every pass is a feedback
+			 * loop: MEASURED as bars that blink once per resize step in a viewer. It says so instead. */
+			{
+				NSSize before = [autoView contentSize];
+				NSView *selfSizing = [[[AGTestSelfSizingView alloc]
+					initWithFrame:NSMakeRect(0.0, 0.0, 900.0, 900.0)] autorelease];
+
+				[autoDoc setFrame:NSMakeRect(0.0, 0.0, 100.0, 100.0)];
+				[autoView setDocumentView:selfSizing];
+				check([[autoView verticalScroller] isHidden] && [[autoView horizontalScroller] isHidden],
+				      "a document that sizes itself to the viewport needs no bar, though its frame is larger");
+				check(near([autoView contentSize].width, 200.0) && near([autoView contentSize].height, 200.0),
+				      "and the content keeps the whole viewport");
+				(void)before;
+				[autoView setDocumentView:autoDoc];
+				[autoDoc setFrame:NSMakeRect(0.0, 0.0, 100.0, 100.0)];
+			}
 
 			[autoView setAutohidesScrollers:NO];
 			[autoDoc setFrame:NSMakeRect(0.0, 0.0, 100.0, 100.0)];

@@ -863,6 +863,16 @@ the compositor is really gone.
   width can make a horizontal one necessary and the reverse — and `tests/scroll_view.m` drives a small document
   (both hidden), a wide one (horizontal only) and a square overflow (both shown), then turns autohide back off.
   The default stays NO, which is Apple's default; the browser's per-column bars opt in.
+  **AND THE DECISION CANNOT FEED BACK INTO ITSELF, WHICH TOOK TWO FIXES AND A MEASUREMENT.** The comparison reads the
+  document's CURRENT frame, and a document that sizes itself to its clip view — a viewer's page in fit mode, a canvas, a
+  grid — only learns a new size when the clip is laid out, so a pass was deciding from the PREVIOUS geometry: a bar
+  appeared, the document re-fitted to the smaller clip, and the next pass took the bar away. MEASURED in a viewer: **59
+  flips of the vertical bar's visibility over one monotone resize sweep**, which is bars blinking while a window is
+  dragged. Three things fix it and all three are needed: `-tile` decides, lays the clip out, TELLS THE DOCUMENT, and
+  decides again with the answer; the first answer is against the FULL viewport, with bars only ever ADDED by the second
+  pass (adding is monotone, so the pair cannot oscillate); and a document that sizes itself to the viewport says so
+  (`NSView -cg_sizesToViewport`), which is believed instead of measured. After: **0 flips** across the same sweep, with a
+  zoomed page still getting its bar.
 - **And the frame that joins them** (`ctest`, offscreen): `NSScrollView` tiles its content view and its two bars —
   a 200x200 frame with both scrollers gives the content `(0,15)` 185x185, the vertical bar the right column and the
   horizontal one the bottom row — and the two class conversions are EXACT INVERSES of each other and of `-tile`. The
