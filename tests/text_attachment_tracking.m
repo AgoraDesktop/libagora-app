@@ -158,9 +158,16 @@ static NSRect attachment_frame(NSTextView *view)
 	return NSMakeRect(x, NS_TEXT_INSET + baseline - BOX_H, BOX_W, BOX_H);
 }
 
+/* **THE POINT ARRIVES IN THE VIEW'S COORDINATES AND AN EVENT'S LOCATION IS IN THE WINDOW'S.** The text view is
+ * flipped (text is laid out downwards) and the window is not, so the two differ by a mirror about the window's height
+ * — MEASURED, this probe passed for years only because `-convertPoint:fromView:` did not apply that last flip, which
+ * meant every real pointer in a flipped view arrived mirrored. Converting here is what the reader of the test means
+ * anyway: "a press on the picture", not "whatever window coordinate happens to land on it". */
 static NSEvent *mouse(NSEventType type, NSPoint point, NSWindow *window)
 {
-	return [NSEvent mouseEventWithType:type location:point modifierFlags:0 timestamp:0.0
+	NSPoint inWindow = [[window contentView] convertPoint:point toView:nil];
+
+	return [NSEvent mouseEventWithType:type location:inWindow modifierFlags:0 timestamp:0.0
 			      windowNumber:[window windowNumber] context:nil eventNumber:0
 				clickCount:1 pressure:1.0f];
 }

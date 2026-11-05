@@ -129,6 +129,35 @@ static NSPoint fn_down_from_root(NSView *v, NSPoint p)
 	return fn_from_super(fn_down_from_root(s, p), v);
 }
 
+/* **THE WINDOW'S OWN DIRECTION, WHICH IS NOT THE ROOT VIEW'S BUSINESS TO ASSUME.** `fn_window_point` in NSWindow.m
+ * hands out a point measured UP from the window's bottom, so a ROOT VIEW THAT IS FLIPPED is the opposite direction
+ * from the window — and neither walk said so: `fn_same_y_direction` answers "same" for a view with no superview, and
+ * both walks stop AT the root. MEASURED, in a window whose content view is flipped (Amp's skin view is): every pointer
+ * y arrived mirrored about the window's height, so a click on a control hit the element vertically opposite it — the
+ * buttons did nothing, the title bar would not drag, and hover highlighted the wrong control. A transition between a
+ * view and the WINDOW is a transition between two y directions like any other, so it is written down once, here. */
+static NSPoint fn_root_mirror(NSView *root, NSPoint p)
+{
+	if (root != nil && [root isFlipped]) {
+		CGFloat height = [root bounds].size.height;
+
+		return NSMakePoint(p.x, height - p.y);
+	}
+	return p;
+}
+
+/* A VIEW'S POINT IN THE WINDOW'S SYSTEM: up through the frames, then across the root's boundary to the window's. */
+static NSPoint fn_view_to_window(NSPoint p, NSView *v)
+{
+	return fn_root_mirror(fn_root(v), fn_up_to_root(p, v));
+}
+
+/* AND BACK: the window's system into a view's, through the root and down the frames. */
+static NSPoint fn_window_to_view(NSPoint p, NSView *v)
+{
+	return fn_down_from_root(v, fn_root_mirror(fn_root(v), p));
+}
+
 /* HAND-WRITTEN BECAUSE THE INTERSECTION IS FOUR COMPARISONS and a Foundation function for it would be
  * one more thing this file depends on. A non-overlapping pair answers the empty rect. */
 static NSRect fn_intersect(NSRect a, NSRect b)
@@ -2341,20 +2370,26 @@ NSString *NSDefinitionPresentationTypeOverlay = @"Overlay";
 - (NSPoint)convertPoint:(NSPoint)point toView:(NSView *)view
 {
 	NSView *target = view != nil ? view : fn_root(self);
-	NSPoint p = fn_up_to_root(point, self);
+	NSPoint p = fn_view_to_window(point, self);
+
+	/* **A NIL VIEW IS THE WINDOW, AND THE POINT IS ALREADY THERE.** Crossing to the window is one mirror at the root's
+	 * boundary, and a caller that asked for the window is done after it — mirroring back into a view would undo it. */
+	if (view == nil) {
+		return p;
+	}
 
 	/* BOTH VIEWS ARE ASSUMED TO SHARE A ROOT. Two views in different trees have no common frame of
 	 * reference, and Apple leaves that case undefined; this one converts through each root's own space,
 	 * which is arithmetic rather than a raise. */
-	return fn_down_from_root(target, p);
+	return fn_window_to_view(p, target);
 }
 
 - (NSPoint)convertPoint:(NSPoint)point fromView:(NSView *)view
 {
-	NSView *src = view != nil ? view : fn_root(self);
-	NSPoint p = fn_up_to_root(point, src);
-
-	return fn_down_from_root(self, p);
+	if (view == nil) {
+		return fn_window_to_view(point, self);
+	}
+	return fn_window_to_view(fn_view_to_window(point, view), self);
 }
 
 - (NSRect)convertRect:(NSRect)rect fromView:(NSView *)view

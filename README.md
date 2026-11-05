@@ -2824,6 +2824,26 @@ change, a per-column stable sort, a prototype copied per position, the keyboard'
 pointer, a session on the right cell, and the ink — the accent on a selected plain cell, a cell background under it,
 the grid's background in the gap, and a form cell's label band stopping where the value band starts.
 
+### The last flip in a point's walk, and the window it crosses
+
+`-convertPoint:fromView:` walks the superview chain and stops at the root, so the boundary between the ROOT VIEW and
+the WINDOW was the one transition no walk owned: `fn_same_y_direction` answers "same" for a view with no superview, and
+both walks end there. A window's system is y-up — `NSWindow`'s own pointer translation (`fn_window_point`) hands out a
+point measured up from the window's bottom — so a **flipped root view is the opposite direction**, and the flip was
+simply never applied.
+
+MEASURED, from a nested session with an application whose content view is flipped (Amp's skin view is): every pointer y
+arrived mirrored about the window's height. A click on a control hit the element vertically opposite it, so the buttons
+did nothing, the title bar would not drag, and hover highlighted the wrong control — while *drawing* was perfect, because
+the drawing path converts each rectangle itself. The same press at layout y=157 arrived as y=68 in a 225-point window
+(225 − 157 = 68, to the point).
+
+The fix is one mirror at that boundary, written once (`fn_root_mirror`, applied by `fn_view_to_window` and
+`fn_window_to_view`) and used by both directions, with `nil` meaning the window's own system — one mirror, not two.
+`tests/view_flip.m` pins the arithmetic with no window object at all, and the app's own probes that fabricate window
+points (`scroller.m`, `text_attachment_tracking.m`, `text_view_wrapping.m`) now convert from the view they name instead
+of hard-coding a window coordinate that only worked because the flip was missing.
+
 ### The colour list, the well, and the panel that is one window
 
 **A COLOUR LIST IS A NAMED, ORDERED SET OF COLOURS, AND IT IS A FILE.** `NSColorList` keeps its keys in INSERTION

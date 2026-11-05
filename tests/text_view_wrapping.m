@@ -61,9 +61,14 @@ static void set_frame(NSTextView *view, CGFloat width)
 	[view setFrameSize:NSMakeSize(width, (CGFloat)REPH)];
 }
 
+/* **THE CALLER NAMES A POINT IN THE TEXT VIEW; AN EVENT CARRIES ONE IN THE WINDOW.** A text view is flipped and a
+ * window is not, so the two differ by a mirror about the window's height — MEASURED, this probe passed before that
+ * mirror existed, which is the same bug that made every real pointer in a flipped view arrive at the wrong y. */
 static void press(NSTextView *view, NSWindow *window, CGFloat x, CGFloat y)
 {
-	[view mouseDown:[NSEvent mouseEventWithType:NSLeftMouseDown location:NSMakePoint(x, y)
+	NSPoint inWindow = [[window contentView] convertPoint:NSMakePoint(x, y) toView:nil];
+
+	[view mouseDown:[NSEvent mouseEventWithType:NSLeftMouseDown location:inWindow
 					 modifierFlags:0 timestamp:0.0 windowNumber:[window windowNumber]
 					     context:nil eventNumber:0 clickCount:1 pressure:1.0f]];
 }

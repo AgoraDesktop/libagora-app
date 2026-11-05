@@ -537,6 +537,14 @@ set_tests_properties(appkit-text-attachment PROPERTIES ENVIRONMENT "${_agora_app
 # checked in EXACT POINTS rather than by drawing: where a short document sits, where a long one stops, and the
 # notification wire that re-constrains the scroll when the document's own frame or bounds changes. Offscreen, so it
 # runs anywhere — which is the property `NSClipView.h` claims for a clip view without an `NSScrollView`.
+# **THE LAST BOUNDARY IN THE CONVERSION WALK IS THE WINDOW'S.** A flipped root view is the opposite y direction from
+# the window (which is y-up, as `NSWindow`'s pointer translation states), and neither walk applied that flip: every
+# pointer y in such a window arrived mirrored about its height. This pins the arithmetic with no window object.
+add_executable(view_flip view_flip.m)
+target_link_libraries(view_flip PRIVATE App m)
+add_test(NAME appkit-view-flip COMMAND view_flip)
+set_tests_properties(appkit-view-flip PROPERTIES ENVIRONMENT "${_agora_app_test_env}")
+
 add_executable(clip_view clip_view.m)
 target_link_libraries(clip_view PRIVATE App m)
 add_test(NAME appkit-clip-view COMMAND clip_view)

@@ -455,8 +455,11 @@ int main(void)
 		 * part it names — `-hitPart` is the witness — and each runs the loop for one that did. There is no run loop here,
 		 * so the loop's own early return leaves exactly the state a press writes, which is what is being read. */
 		{
+			/* **THE TWO EVENTS ARE BUILT FROM POINTS IN THE SCROLLER, CONVERTED TO THE WINDOW**, because an event's
+			 * location is a WINDOW coordinate and the scroller is flipped: the mirror between them is exactly what
+			 * `-convertPoint:fromView:` applies, and hard-coding the window coordinate silently assumed it did not. */
 			NSEvent *on_knob = [NSEvent mouseEventWithType:NSLeftMouseDown
-							      location:NSMakePoint(7.0, 40.0)
+							      location:[s convertPoint:NSMakePoint(7.0, 40.0) toView:nil]
 							 modifierFlags:0
 							     timestamp:0.0
 							  windowNumber:0
@@ -465,7 +468,7 @@ int main(void)
 							    clickCount:1
 							      pressure:1.0];
 			NSEvent *on_line = [NSEvent mouseEventWithType:NSLeftMouseDown
-							      location:NSMakePoint(7.0, 92.0)
+							      location:[s convertPoint:NSMakePoint(7.0, 92.0) toView:nil]
 							 modifierFlags:0
 							     timestamp:0.0
 							  windowNumber:0
