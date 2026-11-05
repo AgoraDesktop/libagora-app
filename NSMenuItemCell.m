@@ -382,6 +382,14 @@ static NSString * const AGCoderMenuItemBoldKey = @"bold";
 	return rect;
 }
 
+/* **WHETHER THIS CELL IS DRAWING A MENU BAR'S COLUMN RATHER THAN A MENU'S ROW.** The view is the cell's own back-link
+ * (`-setMenuView:`, not retained), and it is the only thing that knows the orientation. */
+- (BOOL)cg_isInBar
+{
+	return _menuView != nil && [(id)_menuView respondsToSelector:@selector(isHorizontal)] &&
+	       [(NSMenuView *)_menuView isHorizontal];
+}
+
 - (NSRect)titleRectForBounds:(NSRect)cellFrame
 {
 	/* WHAT IS LEFT BETWEEN THE IMAGE AND THE KEY EQUIVALENT, which is why nothing names the gap: the title takes
@@ -389,7 +397,17 @@ static NSString * const AGCoderMenuItemBoldKey = @"bold";
 	 * CLAMPED AT ZERO so that a row narrower than its own parts produces an empty rect instead of a negative one
 	 * running off the left edge. */
 	NSRect rect = cellFrame;
-	CGFloat used = _stateImageWidth + _imageWidth + _keyEquivalentWidth +
+	CGFloat used;
+
+	/* **A BAR'S COLUMN IS ITS TITLE'S AND NOTHING ELSE'S.** The column was measured as the title plus the bar's own
+	 * padding, and a bar draws no key equivalent, no image and no triangle — so subtracting those columns centres the
+	 * ink in a rect narrower than the one the chip covers, and the title leans out of its chip. MEASURED: an item with a
+	 * key equivalent set drew centred 4 pixels in from its chip's edge with 28 on the other side, and the bar in a
+	 * session leaned three points left for the same reason. */
+	if ([self cg_isInBar]) {
+		return cellFrame;
+	}
+	used = _stateImageWidth + _imageWidth + _keyEquivalentWidth +
 		((_submenuWidth > 0.0) ? _submenuWidth : 0.0);
 
 	rect.origin.x += _stateImageWidth + _imageWidth;

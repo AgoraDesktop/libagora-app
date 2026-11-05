@@ -199,6 +199,11 @@ static void apk_fill_vertical_gradient(NSRect rect, CGFloat radius,
 		 * there by `NSApplication`, which is the only thing that knows the application's name — and a DROPDOWN's
 		 * first row is just its first row. */
 		[cell setBold:(_horizontal && index == 0)];
+		/* **AND THE CELL KNOWS WHICH VIEW IT IS IN BEFORE IT IS MEASURED.** `-titleRectForBounds:` asks the cell's own
+		 * back-link whether this is a bar, because a bar's column is its title's and nothing else's — and a cell created
+		 * here without it would measure and draw as a dropdown's row. That is the defect MEASURED as a bar title leaning
+		 * out of its chip. */
+		[cell setMenuView:self];
 		/* **MEASURED ONCE, HERE.** `-calcSize` reads `-needsSizing`, so this is the flag that makes the
 		 * measurement happen rather than a call that happens to work the first time. */
 		[cell setNeedsSizing:YES];

@@ -205,6 +205,20 @@ int main(void)
 
 		CGFloat x0f = 0.0;
 
+		/* **AND THE ITEMS WEAR SUBMENUS, BECAUSE A REAL BAR'S DO.** Every title in the menu bar opens a menu, so an item
+		 * that opens one is the ordinary case and not the exception — and it is what the alignment check below is for:
+		 * the submenu's trailing column is a DROPDOWN's, and subtracting it from a BAR's title rect is exactly the defect
+		 * that leaned every title in the session's bar eight points out of its chip. */
+		{
+			NSUInteger index;
+
+			for (index = 0; index < VIEW_ROWS; index++) {
+				NSMenu *inside = [[[NSMenu alloc] initWithTitle:@"Inside"] autorelease];
+
+				[inside addItemWithTitle:@"An Item" action:NULL keyEquivalent:@""];
+				[[menu itemAtIndex:(NSInteger)index] setSubmenu:inside];
+			}
+		}
 		[hv setMenu:menu];
 		[hv setHorizontal:YES];
 		[hv setHighlightedItem:[menu itemAtIndex:1]];
@@ -248,6 +262,47 @@ int main(void)
 		}
 		check(bar_ink[0] > 0 && bar_ink[1] > 0 && bar_ink[2] > 0,
 		      "every COLUMN was drawn, left to right, each with its own title");
+
+		/* **AND EVERY TITLE SITS IN THE MIDDLE OF ITS COLUMN, WHICH IS WHERE ITS CHIP IS.** A bar's column is its
+		 * title plus the bar's own padding, and the highlight chip is that column inset by a point — so a title drawn
+		 * from a rect NARROWER than the column leans out of its chip. MEASURED, and this is the defect the check is
+		 * for: the cells of a real bar carry submenus, the submenu's column was subtracted from the title's rect, and
+		 * every title in the session's menu bar leaned eight points to the left of the chip it sat in.
+		 *
+		 * The tolerance is the glyphs' own: the ink starts at the first stem's side bearing and stops before the last
+		 * glyph's, so the two edges are never equal. Three pixels either way is the bearing, not an alignment — and the
+		 * defect this catches put every title EIGHT pixels out, so the two cannot be confused. */
+		{
+			NSUInteger column;
+			BOOL centred = YES;
+
+			for (column = 0; column < VIEW_ROWS; column++) {
+				NSRect cellRect = [hv rectForItemAtIndex:(NSInteger)column];
+				NSRect titleRect = [[hv cellForItemAtIndex:(NSInteger)column] titleRectForBounds:cellRect];
+				int from = (int)NSMinX(cellRect);
+				int to = (int)NSMaxX(cellRect);
+				int first = -1, last = -1;
+				int at, y;
+
+				for (at = from; at < to; at++) {
+					for (y = 0; y < 22; y++) {
+						if (is_ink([bar colorAtX:at y:y])) {
+							if (first < 0) first = at;
+							last = at;
+							break;
+						}
+					}
+				}
+				if (first < 0 || last < 0) {
+					centred = NO;
+					continue;
+				}
+				if (fabs((double)((first + last) / 2.0) - (double)NSMidX(titleRect)) > 3.0) {
+					centred = NO;
+				}
+			}
+			check(centred, "and each title's ink is centred in the rect its own cell says it draws into");
+		}
 		/* **AND THE FIRST COLUMN OF A BAR IS SET IN BOLD, WHICH IS THE APPLICATION MENU'S DUE.**
 		 *
 		 * THE MEASURE IS THE SAME TITLE TWICE, AND IT HAD TO BE. The first version of this compared the first
